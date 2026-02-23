@@ -21,7 +21,43 @@
 	"navigation": {
 		"home": "Home",
 		"about": "About",
-		"contact": "Contact"
+		"contact": "Contact",
+		"movies": "Movies",
+		"tv": "TV Shows"
+	},
+	"movies": {
+		"title": "Movies",
+		"subtitle": "Search and discover movies from TMDB",
+		"searchPlaceholder": "Search movies...",
+		"nowPlaying": "Now Playing",
+		"popular": "Popular",
+		"upcoming": "Upcoming",
+		"topRated": "Top Rated",
+		"noResults": "No movies found.",
+		"backToMovies": "Back to Movies",
+		"director": "Director",
+		"overview": "Overview",
+		"budget": "Budget",
+		"revenue": "Revenue",
+		"viewOnImdb": "View on IMDb",
+		"cast": "Cast"
+	},
+	"tv": {
+		"title": "TV Shows",
+		"subtitle": "Search and discover TV shows from TMDB",
+		"searchPlaceholder": "Search TV shows...",
+		"onTheAir": "On The Air",
+		"popular": "Popular",
+		"airingToday": "Airing Today",
+		"topRated": "Top Rated",
+		"noResults": "No TV shows found.",
+		"backToTvShows": "Back to TV Shows",
+		"networks": "Networks",
+		"createdBy": "Created by",
+		"overview": "Overview",
+		"cast": "Cast",
+		"seasons": "Seasons",
+		"failedToLoadEpisodes": "Failed to load episodes"
 	},
 	"errors": {
 		"generic": "An error occurred",

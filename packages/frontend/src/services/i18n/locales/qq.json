@@ -21,7 +21,43 @@
 	"navigation": {
 		"home": "QQQQQ",
 		"about": "QQQQQ",
-		"contact": "QQQQQ"
+		"contact": "QQQQQ",
+		"movies": "QQQQQ",
+		"tv": "QQQQQ"
+	},
+	"movies": {
+		"title": "QQQQQ",
+		"subtitle": "QQQQQ",
+		"searchPlaceholder": "QQQQQ",
+		"nowPlaying": "QQQQQ",
+		"popular": "QQQQQ",
+		"upcoming": "QQQQQ",
+		"topRated": "QQQQQ",
+		"noResults": "QQQQQ",
+		"backToMovies": "QQQQQ",
+		"director": "QQQQQ",
+		"overview": "QQQQQ",
+		"budget": "QQQQQ",
+		"revenue": "QQQQQ",
+		"viewOnImdb": "QQQQQ",
+		"cast": "QQQQQ"
+	},
+	"tv": {
+		"title": "QQQQQ",
+		"subtitle": "QQQQQ",
+		"searchPlaceholder": "QQQQQ",
+		"onTheAir": "QQQQQ",
+		"popular": "QQQQQ",
+		"airingToday": "QQQQQ",
+		"topRated": "QQQQQ",
+		"noResults": "QQQQQ",
+		"backToTvShows": "QQQQQ",
+		"networks": "QQQQQ",
+		"createdBy": "QQQQQ",
+		"overview": "QQQQQ",
+		"cast": "QQQQQ",
+		"seasons": "QQQQQ",
+		"failedToLoadEpisodes": "QQQQQ"
 	},
 	"errors": {
 		"generic": "QQQQQ",
