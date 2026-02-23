@@ -1,24 +1,96 @@
-# Arktosmos Boilerplate - Development Guidelines
+# Arktosmos Mhaol - Development Guidelines
 
-This document guides Claude (and developers) on implementing features using this SvelteKit boilerplate. Follow these conventions strictly to maintain consistency across the codebase.
+This document guides Claude (and developers) on implementing features in this pnpm monorepo. Follow these conventions strictly to maintain consistency across the codebase.
 
-## Project Structure
+## Monorepo Structure
 
 ```
-src/
-├── adapters/classes/     # Data transformation logic
-├── components/core/      # Reusable UI components
-├── routes/               # SvelteKit pages and layouts
-├── services/classes/     # State management with localStorage persistence
-├── types/                # TypeScript type definitions
-├── utils/                # Pure utility functions
-├── css/                  # Global styles (Tailwind imports)
-└── services/i18n/        # Internationalization
+/ (root)
+├── .claude/               # Claude Code settings
+├── .gitignore             # Repository-wide git ignores
+├── .npmrc                 # pnpm configuration (engine-strict)
+├── CLAUDE.md              # This file - project guidelines
+├── package.json           # Root workspace scripts
+├── pnpm-workspace.yaml    # Workspace package definitions
+└── packages/
+    └── frontend/          # SvelteKit application
+        ├── .prettierrc
+        ├── .prettierignore
+        ├── eslint.config.js
+        ├── package.json
+        ├── scripts/
+        ├── src/
+        │   ├── adapters/classes/
+        │   ├── components/core/
+        │   ├── css/
+        │   ├── routes/
+        │   ├── services/classes/
+        │   ├── services/i18n/
+        │   ├── types/
+        │   └── utils/
+        ├── static/
+        ├── svelte.config.js
+        ├── test/
+        ├── tsconfig.json
+        ├── vite.config.ts
+        └── vitest.config.ts
 ```
+
+### Adding New Packages
+
+To add a new package to the monorepo:
+
+1. Create a directory under `packages/`
+2. Add a `package.json` with a unique name
+3. The package is automatically detected by `pnpm-workspace.yaml`
+
+---
+
+## Git Commit Conventions
+
+- After each discrete, self-contained change, create a git commit
+- Commit messages must be a single sentence
+- No emoji in commit messages
+- No co-authoring mentions in commit messages
+- Each commit must leave the repository in a consistent, working state
+- Use the default connected git account to author commits
+
+---
+
+## Running Commands
+
+From the repository root:
+
+```bash
+pnpm dev          # Start frontend dev server
+pnpm build        # Build frontend
+pnpm preview      # Preview frontend build
+pnpm test         # Run all tests across packages
+pnpm lint         # Lint all packages
+pnpm format       # Format all packages
+pnpm check        # Type-check all packages
+pnpm clean        # Clean build artifacts in all packages
+```
+
+From `packages/frontend/`:
+
+```bash
+pnpm dev          # Start dev server
+pnpm build        # Build
+pnpm test         # Run tests
+pnpm lint         # Lint
+pnpm format       # Format
+```
+
+---
+
+## Frontend Package (`packages/frontend/`)
+
+All frontend source code lives under `packages/frontend/`. The path aliases and architecture below are relative to that package.
 
 ### Path Aliases
 
-Use these import aliases throughout the codebase:
+Use these import aliases throughout the frontend codebase:
 
 ```typescript
 $components  → src/components/*
@@ -483,7 +555,7 @@ const name = capitalize(normalize(rawInput));
 
 ## Testing
 
-Tests are located in the `test/` directory mirroring the `src/` structure.
+Tests are located in `packages/frontend/test/` mirroring the `src/` structure.
 
 ```
 test/
@@ -496,9 +568,9 @@ test/
 ### Running Tests
 
 ```bash
-pnpm test           # Run all tests
-pnpm test:ui        # Interactive test UI
-pnpm test:coverage  # Coverage report
+pnpm test           # Run all tests (from root or from packages/frontend/)
+pnpm test:ui        # Interactive test UI (from packages/frontend/)
+pnpm test:coverage  # Coverage report (from packages/frontend/)
 ```
 
 ---
@@ -532,3 +604,4 @@ When implementing a new feature:
 - [ ] Components dispatch events, don't contain business logic
 - [ ] Write tests in `test/` directory
 - [ ] Use path aliases (`$services`, `$adapters`, etc.)
+- [ ] Commit after each discrete change with a single-sentence message, no emoji
