@@ -5,8 +5,8 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const enPath = join(__dirname, '../src/lib/i18n/locales/en.json');
-const qqPath = join(__dirname, '../src/lib/i18n/locales/qq.json');
+const enPath = join(__dirname, '../src/services/i18n/locales/en.json');
+const qqPath = join(__dirname, '../src/services/i18n/locales/qq.json');
 
 /**
  * Recursively replace all string values with 'QQQQQ'
