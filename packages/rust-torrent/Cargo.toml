@@ -1,0 +1,27 @@
+[package]
+name = "mhaol-torrent"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "mhaol-torrent-server"
+path = "src/server.rs"
+
+[dependencies]
+librqbit = { version = "8", default-features = false, features = ["rust-tls", "http-api", "tracing-subscriber-utils"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+anyhow = "1.0"
+parking_lot = "0.12"
+tokio = { version = "1", features = ["full"] }
+log = "0.4"
+url = "2"
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors"] }
+tokio-stream = "0.1"
+async-stream = "0.3"
+env_logger = "0.11"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["full", "test-util"] }

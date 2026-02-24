@@ -1,0 +1,26 @@
+[package]
+name = "mhaol-p2p-stream"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+gstreamer = "0.24"
+gstreamer-webrtc = "0.24"
+gstreamer-sdp = "0.24"
+gstreamer-rtp = "0.24"
+gstreamer-app = "0.24"
+gstreamer-video = "0.24"
+gstreamer-audio = "0.24"
+gstreamer-pbutils = "0.24"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
+thiserror = "2.0"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+parking_lot = "0.12"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

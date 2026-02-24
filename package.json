@@ -11,10 +11,21 @@
 		"lint": "pnpm -r run lint",
 		"format": "pnpm -r run format",
 		"check": "pnpm -r run check",
-		"clean": "pnpm -r run clean"
+		"clean": "pnpm -r run clean",
+		"torrent:build": "cargo build --manifest-path packages/rust-torrent/Cargo.toml",
+		"torrent:test": "cargo test --manifest-path packages/rust-torrent/Cargo.toml",
+		"torrent:check": "cargo check --manifest-path packages/rust-torrent/Cargo.toml",
+		"yt:test": "pnpm -r --filter yt-download test",
+		"db:test": "pnpm -r --filter database test",
+		"p2p-stream:build": "cargo build --manifest-path packages/p2p-stream/Cargo.toml",
+		"p2p-stream:test": "cargo test --manifest-path packages/p2p-stream/Cargo.toml",
+		"p2p-stream:check": "cargo check --manifest-path packages/p2p-stream/Cargo.toml"
 	},
 	"engines": {
 		"node": ">=18",
 		"pnpm": ">=9"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": ["better-sqlite3", "node-datachannel"]
 	}
 }

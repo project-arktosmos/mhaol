@@ -28,3 +28,11 @@ coverage/
 
 # Build output
 dist/
+
+# Rust
+target/
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm

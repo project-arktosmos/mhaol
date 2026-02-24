@@ -1,0 +1,78 @@
+<script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
+	import { youtubeService } from '$services/youtube.service';
+	import YouTubeUrlInput from '$components/youtube/YouTubeUrlInput.svelte';
+	import YouTubeVideoPreview from '$components/youtube/YouTubeVideoPreview.svelte';
+	import YouTubePlaylistPreview from '$components/youtube/YouTubePlaylistPreview.svelte';
+	import YouTubeDownloadSettings from '$components/youtube/YouTubeDownloadSettings.svelte';
+	import YouTubeDownloadQueue from '$components/youtube/YouTubeDownloadQueue.svelte';
+
+	const state = youtubeService.state;
+
+	onMount(async () => {
+		await youtubeService.initialize();
+	});
+
+	onDestroy(() => {
+		youtubeService.destroy();
+	});
+</script>
+
+<div class="flex flex-col gap-6 p-6">
+	<!-- Header -->
+	<div class="flex items-center justify-between">
+		<div>
+			<h1 class="text-2xl font-bold">YouTube Download</h1>
+			<p class="text-sm text-base-content/60">
+				Download audio or video from YouTube videos and playlists
+			</p>
+		</div>
+		{#if !$state.initialized && $state.loading}
+			<span class="loading loading-spinner loading-md"></span>
+		{/if}
+	</div>
+
+	<!-- Error display -->
+	{#if $state.error}
+		<div class="alert alert-error">
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				class="h-6 w-6 shrink-0 stroke-current"
+				fill="none"
+				viewBox="0 0 24 24"
+			>
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+				/>
+			</svg>
+			<span>{$state.error}</span>
+			<button
+				class="btn btn-sm btn-ghost"
+				on:click={() => youtubeService.state.update((s) => ({ ...s, error: null }))}
+			>
+				Dismiss
+			</button>
+		</div>
+	{/if}
+
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+		<!-- Left column: URL input and settings -->
+		<div class="flex flex-col gap-4 lg:col-span-1">
+			<YouTubeUrlInput />
+			<YouTubeDownloadSettings />
+		</div>
+
+		<!-- Right column: Preview and queue -->
+		<div class="flex flex-col gap-4 lg:col-span-2">
+			{#if $state.currentVideoInfo}
+				<YouTubeVideoPreview />
+			{:else if $state.currentPlaylistInfo}
+				<YouTubePlaylistPreview />
+			{/if}
+			<YouTubeDownloadQueue />
+		</div>
+	</div>
+</div>

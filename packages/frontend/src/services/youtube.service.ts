@@ -1,0 +1,587 @@
+import { writable, get, type Writable } from 'svelte/store';
+import { browser } from '$app/environment';
+import { ObjectServiceClass } from '$services/classes/object-service.class';
+import {
+	extractVideoId,
+	type YouTubeSettings,
+	type YouTubeServiceState,
+	type YouTubeDownloadProgress,
+	type YouTubeVideoInfo,
+	type YouTubePlaylistInfo,
+	type YouTubeManagerStats,
+	type YouTubeConfig,
+	type YtDlpStatus,
+	type AudioQuality,
+	type AudioFormat,
+	type DownloadMode,
+	type VideoQuality,
+	type VideoFormat
+} from '$types/youtube.type';
+
+const API_PREFIX = '/api/ytdl';
+
+// Default settings stored in localStorage
+const initialSettings: YouTubeSettings = {
+	id: 'youtube-settings',
+	downloadMode: 'audio',
+	defaultQuality: 'high',
+	defaultFormat: 'aac',
+	defaultVideoQuality: 'best',
+	defaultVideoFormat: 'mp4',
+	outputPath: ''
+};
+
+// Initial service state
+const initialState: YouTubeServiceState = {
+	initialized: false,
+	loading: false,
+	error: null,
+	outputPath: '',
+	downloads: [],
+	stats: null,
+	ytdlpStatus: null,
+	currentUrl: '',
+	currentVideoInfo: null,
+	currentPlaylistInfo: null,
+	fetchingInfo: false,
+	fetchingVideoInfo: false,
+	fetchingPlaylistInfo: false
+};
+
+class YouTubeService extends ObjectServiceClass<YouTubeSettings> {
+	public state: Writable<YouTubeServiceState> = writable(initialState);
+
+	private eventSource: EventSource | null = null;
+	private _initialized = false;
+
+	constructor() {
+		super('youtube-settings', initialSettings);
+	}
+
+	// ===== Initialization =====
+
+	async initialize(): Promise<void> {
+		if (!browser || this._initialized) return;
+
+		this.state.update((s) => ({ ...s, loading: true }));
+
+		try {
+			// Get status from server
+			const stats = await this.fetchJson<YouTubeManagerStats>('/api/ytdl/status');
+			const ytdlpStatus = await this.fetchJson<YtDlpStatus>('/api/ytdl/ytdlp/status');
+
+			// Get config from server
+			const config = await this.fetchJson<{
+				outputPath: string;
+				defaultQuality: AudioQuality;
+				defaultFormat: AudioFormat;
+			}>('/api/ytdl/config');
+
+			this.state.update((s) => ({
+				...s,
+				initialized: true,
+				loading: false,
+				outputPath: config.outputPath,
+				stats,
+				ytdlpStatus,
+				error: null
+			}));
+
+			this._initialized = true;
+
+			// Connect SSE for real-time updates
+			this.connectSSE();
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				loading: false,
+				error: `Failed to connect to yt-download server: ${errorMsg}`
+			}));
+		}
+	}
+
+	// ===== Video Info =====
+
+	async fetchVideoInfo(url: string): Promise<YouTubeVideoInfo | null> {
+		if (!browser) return null;
+
+		this.state.update((s) => ({
+			...s,
+			currentUrl: url,
+			fetchingInfo: true,
+			fetchingVideoInfo: true,
+			currentVideoInfo: null,
+			currentPlaylistInfo: null,
+			error: null
+		}));
+
+		try {
+			const info = await this.fetchJson<YouTubeVideoInfo>(
+				`/api/ytdl/info/video?url=${encodeURIComponent(url)}`
+			);
+
+			this.state.update((s) => ({
+				...s,
+				currentVideoInfo: info,
+				fetchingInfo: false,
+				fetchingVideoInfo: false
+			}));
+
+			return info;
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				fetchingInfo: false,
+				fetchingVideoInfo: false,
+				error: `Failed to fetch video info: ${errorMsg}`
+			}));
+			return null;
+		}
+	}
+
+	// ===== Playlist Info =====
+
+	async fetchPlaylistInfo(url: string): Promise<YouTubePlaylistInfo | null> {
+		if (!browser) return null;
+
+		this.state.update((s) => ({
+			...s,
+			currentUrl: url,
+			fetchingInfo: true,
+			fetchingPlaylistInfo: true,
+			currentVideoInfo: null,
+			currentPlaylistInfo: null,
+			error: null
+		}));
+
+		try {
+			const info = await this.fetchJson<YouTubePlaylistInfo>(
+				`/api/ytdl/info/playlist?url=${encodeURIComponent(url)}`
+			);
+
+			this.state.update((s) => ({
+				...s,
+				currentPlaylistInfo: info,
+				fetchingInfo: false,
+				fetchingPlaylistInfo: false
+			}));
+
+			return info;
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				fetchingInfo: false,
+				fetchingPlaylistInfo: false,
+				error: `Failed to fetch playlist info: ${errorMsg}`
+			}));
+			return null;
+		}
+	}
+
+	setCurrentUrl(url: string): void {
+		this.state.update((s) => ({
+			...s,
+			currentUrl: url,
+			currentVideoInfo: null,
+			currentPlaylistInfo: null,
+			error: null
+		}));
+	}
+
+	clearCurrentVideo(): void {
+		this.state.update((s) => ({
+			...s,
+			currentUrl: '',
+			currentVideoInfo: null,
+			currentPlaylistInfo: null,
+			error: null
+		}));
+	}
+
+	// ===== Downloads =====
+
+	async downloadAudio(): Promise<string | null> {
+		return this.download();
+	}
+
+	async download(): Promise<string | null> {
+		if (!browser) return null;
+
+		const currentState = get(this.state);
+		const settings = this.get();
+
+		if (!currentState.currentUrl) {
+			this.state.update((s) => ({ ...s, error: 'No URL provided' }));
+			return null;
+		}
+
+		const videoInfo = currentState.currentVideoInfo;
+
+		try {
+			const body: Record<string, unknown> = {
+				url: currentState.currentUrl,
+				videoId: videoInfo?.videoId || extractVideoId(currentState.currentUrl) || '',
+				title: videoInfo?.title || 'Unknown',
+				mode: settings.downloadMode,
+				quality: settings.defaultQuality,
+				format: settings.defaultFormat
+			};
+
+			if (settings.downloadMode === 'video') {
+				body.videoQuality = settings.defaultVideoQuality;
+				body.videoFormat = settings.defaultVideoFormat;
+			}
+
+			const result = await this.fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
+				method: 'POST',
+				body: JSON.stringify(body)
+			});
+
+			this.clearCurrentVideo();
+			return result.downloadId;
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				error: `Failed to start download: ${errorMsg}`
+			}));
+			return null;
+		}
+	}
+
+	async cancelDownload(downloadId: string): Promise<void> {
+		if (!browser) return;
+
+		try {
+			await this.fetchJson(`/api/ytdl/downloads/${downloadId}`, { method: 'DELETE' });
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				error: `Failed to cancel download: ${errorMsg}`
+			}));
+		}
+	}
+
+	async clearCompleted(): Promise<void> {
+		if (!browser) return;
+
+		try {
+			await this.fetchJson('/api/ytdl/downloads/completed', { method: 'DELETE' });
+			// Refresh downloads list since SSE might not trigger for removed items
+			const downloads = await this.fetchJson<YouTubeDownloadProgress[]>('/api/ytdl/downloads');
+			this.state.update((s) => ({ ...s, downloads }));
+		} catch (error) {
+			console.error('[YouTube] Failed to clear completed:', error);
+		}
+	}
+
+	// ===== Playlist Downloads =====
+
+	async downloadPlaylist(): Promise<string[] | null> {
+		if (!browser) return null;
+
+		const state = get(this.state);
+		const settings = this.get();
+
+		if (!state.currentPlaylistInfo) {
+			this.state.update((s) => ({ ...s, error: 'No playlist loaded' }));
+			return null;
+		}
+
+		const videos = state.currentPlaylistInfo.videos.map((v) => ({
+			url: `https://www.youtube.com/watch?v=${v.videoId}`,
+			videoId: v.videoId,
+			title: v.title
+		}));
+
+		const body: Record<string, unknown> = {
+			videos,
+			mode: settings.downloadMode,
+			quality: settings.defaultQuality,
+			format: settings.defaultFormat
+		};
+
+		if (settings.downloadMode === 'video') {
+			body.videoQuality = settings.defaultVideoQuality;
+			body.videoFormat = settings.defaultVideoFormat;
+		}
+
+		try {
+			const result = await this.fetchJson<{ downloadIds: string[] }>(
+				'/api/ytdl/downloads/playlist',
+				{
+					method: 'POST',
+					body: JSON.stringify(body)
+				}
+			);
+
+			this.clearCurrentVideo();
+			return result.downloadIds;
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				error: `Failed to queue playlist: ${errorMsg}`
+			}));
+			return null;
+		}
+	}
+
+	async queueSingleDownload(url: string, videoId: string, title: string): Promise<string | null> {
+		if (!browser) return null;
+
+		const settings = this.get();
+
+		const body: Record<string, unknown> = {
+			url,
+			videoId,
+			title,
+			mode: settings.downloadMode,
+			quality: settings.defaultQuality,
+			format: settings.defaultFormat
+		};
+
+		if (settings.downloadMode === 'video') {
+			body.videoQuality = settings.defaultVideoQuality;
+			body.videoFormat = settings.defaultVideoFormat;
+		}
+
+		try {
+			const result = await this.fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
+				method: 'POST',
+				body: JSON.stringify(body)
+			});
+
+			return result.downloadId;
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				error: `Failed to queue download: ${errorMsg}`
+			}));
+			return null;
+		}
+	}
+
+	async clearQueue(): Promise<void> {
+		if (!browser) return;
+
+		try {
+			await this.fetchJson('/api/ytdl/downloads/queue', { method: 'DELETE' });
+		} catch (error) {
+			console.error('[YouTube] Failed to clear queue:', error);
+		}
+	}
+
+	// ===== Output Path =====
+
+	async setOutputPath(outputPath: string): Promise<void> {
+		if (!browser) return;
+
+		try {
+			await this.fetchJson('/api/ytdl/config', {
+				method: 'PUT',
+				body: JSON.stringify({ outputPath })
+			});
+
+			this.updateSettings({ outputPath });
+			this.state.update((s) => ({ ...s, outputPath }));
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				error: `Failed to set output path: ${errorMsg}`
+			}));
+		}
+	}
+
+	// ===== Settings Management =====
+
+	updateSettings(updates: Partial<YouTubeSettings>): void {
+		const current = this.get();
+		this.set({ ...current, ...updates });
+	}
+
+	setDownloadMode(mode: DownloadMode): void {
+		this.updateSettings({ downloadMode: mode });
+	}
+
+	setDefaultQuality(quality: AudioQuality): void {
+		this.updateSettings({ defaultQuality: quality });
+	}
+
+	setDefaultFormat(format: AudioFormat): void {
+		this.updateSettings({ defaultFormat: format });
+	}
+
+	setDefaultVideoQuality(quality: VideoQuality): void {
+		this.updateSettings({ defaultVideoQuality: quality });
+	}
+
+	setDefaultVideoFormat(format: VideoFormat): void {
+		this.updateSettings({ defaultVideoFormat: format });
+	}
+
+	// ===== Getters =====
+
+	get isInitialized(): boolean {
+		return get(this.state).initialized;
+	}
+
+	get hasActiveDownloads(): boolean {
+		const stats = get(this.state).stats;
+		return stats ? stats.activeDownloads > 0 : false;
+	}
+
+	get hasPendingWork(): boolean {
+		const stats = get(this.state).stats;
+		return stats ? stats.activeDownloads > 0 || stats.queuedDownloads > 0 : false;
+	}
+
+	// ===== Authentication Config =====
+
+	async setConfig(config: YouTubeConfig): Promise<void> {
+		if (!browser) return;
+
+		try {
+			await this.fetchJson('/api/ytdl/config', {
+				method: 'PUT',
+				body: JSON.stringify({
+					poToken: config.poToken,
+					cookies: config.cookies
+				})
+			});
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				error: `Failed to set config: ${errorMsg}`
+			}));
+		}
+	}
+
+	async getConfig(): Promise<YouTubeConfig | null> {
+		if (!browser) return null;
+
+		try {
+			const config = await this.fetchJson<{
+				poToken: string | null;
+				cookies: string | null;
+			}>('/api/ytdl/config');
+			return { poToken: config.poToken, cookies: config.cookies };
+		} catch (error) {
+			console.error('[YouTube] Failed to get config:', error);
+			return null;
+		}
+	}
+
+	// ===== yt-dlp Binary Management =====
+
+	async refreshYtDlpStatus(): Promise<void> {
+		if (!browser) return;
+
+		try {
+			const status = await this.fetchJson<YtDlpStatus>('/api/ytdl/ytdlp/status');
+			this.state.update((s) => ({ ...s, ytdlpStatus: status }));
+		} catch {
+			// ignore
+		}
+	}
+
+	async downloadYtDlp(): Promise<string | null> {
+		if (!browser) return null;
+
+		try {
+			const result = await this.fetchJson<{ path: string }>('/api/ytdl/ytdlp/download', {
+				method: 'POST'
+			});
+			await this.refreshYtDlpStatus();
+			return result.path;
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				error: `Failed to download yt-dlp: ${errorMsg}`
+			}));
+			return null;
+		}
+	}
+
+	// ===== SSE Connection =====
+
+	private connectSSE(): void {
+		if (!browser) return;
+
+		this.eventSource = new EventSource(`${API_PREFIX}/downloads/events`);
+
+		this.eventSource.addEventListener('progress', (e: MessageEvent) => {
+			try {
+				const progress = JSON.parse(e.data) as YouTubeDownloadProgress;
+				this.state.update((s) => {
+					const idx = s.downloads.findIndex(
+						(d) => d.downloadId === progress.downloadId
+					);
+					const downloads = [...s.downloads];
+					if (idx >= 0) {
+						downloads[idx] = progress;
+					} else {
+						downloads.push(progress);
+					}
+					return { ...s, downloads };
+				});
+			} catch {
+				// ignore parse errors
+			}
+		});
+
+		this.eventSource.addEventListener('stats', (e: MessageEvent) => {
+			try {
+				const stats = JSON.parse(e.data) as YouTubeManagerStats;
+				this.state.update((s) => ({ ...s, stats }));
+			} catch {
+				// ignore parse errors
+			}
+		});
+
+		this.eventSource.onerror = () => {
+			// EventSource auto-reconnects, but we could update state
+			console.warn('[YouTube] SSE connection error, reconnecting...');
+		};
+	}
+
+	// ===== HTTP Helper =====
+
+	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+		const response = await fetch(path, {
+			...init,
+			headers: {
+				'Content-Type': 'application/json',
+				...init?.headers
+			}
+		});
+
+		if (!response.ok) {
+			const body = await response.json().catch(() => ({}));
+			throw new Error(
+				(body as { error?: string }).error ?? `HTTP ${response.status}`
+			);
+		}
+
+		return response.json() as Promise<T>;
+	}
+
+	// ===== Lifecycle =====
+
+	destroy(): void {
+		if (this.eventSource) {
+			this.eventSource.close();
+			this.eventSource = null;
+		}
+	}
+}
+
+export const youtubeService = new YouTubeService();
