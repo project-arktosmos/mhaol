@@ -1,5 +1,6 @@
 use anyhow::Result;
 use parking_lot::Mutex;
+use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER, USER_AGENT};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -120,8 +121,10 @@ impl DownloadPipeline {
             config.video_format.as_ref(),
         )?;
 
-        // Step 4: Build an HTTP client with headers matching the client that provided the URLs
-        let download_client = Self::build_download_client(client)?;
+        // Step 4: Build download headers matching the client that provided the stream URLs.
+        // Uses the same HTTP client as Innertube (shares cookie store) with per-request headers.
+        let download_headers = Self::build_download_headers(client);
+        let http_client = self.innertube.http_client();
 
         let safe_title = sanitize_title(&config.title);
         let output_dir = Path::new(&config.output_dir);
@@ -133,10 +136,10 @@ impl DownloadPipeline {
         }
 
         if selected.needs_muxing {
-            self.download_and_mux(config, &selected, output_dir, &final_output, &state_tx, cancel_rx, &download_client)
+            self.download_and_mux(config, &selected, output_dir, &final_output, &state_tx, cancel_rx, http_client, &download_headers)
                 .await?;
         } else {
-            self.download_single(&selected.audio, &final_output, config, &state_tx, cancel_rx, &download_client)
+            self.download_single(&selected.audio, &final_output, config, &state_tx, cancel_rx, http_client, &download_headers)
                 .await?;
         }
 
@@ -173,11 +176,8 @@ impl DownloadPipeline {
         Ok(output_str)
     }
 
-    /// Build an HTTP client with headers matching the Innertube client that provided the stream URLs.
-    /// YouTube's CDN validates that the User-Agent and Origin match the client that requested the streams.
-    fn build_download_client(client: &InnertubeClient) -> Result<reqwest::Client> {
-        use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER, USER_AGENT};
-
+    /// Build HTTP headers matching the Innertube client that provided the stream URLs.
+    fn build_download_headers(client: &InnertubeClient) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(
             USER_AGENT,
@@ -186,10 +186,7 @@ impl DownloadPipeline {
         );
         headers.insert(ORIGIN, HeaderValue::from_static("https://www.youtube.com"));
         headers.insert(REFERER, HeaderValue::from_static("https://www.youtube.com/"));
-
-        Ok(reqwest::Client::builder()
-            .default_headers(headers)
-            .build()?)
+        headers
     }
 
     async fn fetch_player_response(
@@ -247,7 +244,9 @@ impl DownloadPipeline {
             }
         }
 
-        // Second pass: handle signature ciphers if needed
+        // Second pass: handle signature ciphers and always load player.js for n-param.
+        // Player.js must be loaded even when all formats have direct URLs (e.g. Android client),
+        // because the n-parameter in every stream URL must be transformed to avoid throttling.
         if needs_js {
             match self.resolve_signature_formats(&raw_formats, video_id).await {
                 Ok(sig_formats) => resolved.extend(sig_formats),
@@ -255,6 +254,11 @@ impl DownloadPipeline {
                     log::warn!("Signature resolution failed: {}", e);
                     // Continue with whatever formats we already have
                 }
+            }
+        } else {
+            // No signature ciphers, but still need player.js for n-parameter transformation.
+            if let Err(e) = self.ensure_player_js_loaded(video_id).await {
+                log::warn!("Failed to load player.js for n-param transformation: {}", e);
             }
         }
 
@@ -328,7 +332,8 @@ impl DownloadPipeline {
         _config: &DownloadTaskConfig,
         state_tx: &watch::Sender<PipelineState>,
         cancel_rx: watch::Receiver<bool>,
-        download_client: &reqwest::Client,
+        http_client: &reqwest::Client,
+        download_headers: &HeaderMap,
     ) -> Result<()> {
         let (progress_tx, mut progress_rx) = watch::channel(DownloadProgressUpdate {
             downloaded_bytes: 0,
@@ -348,10 +353,11 @@ impl DownloadPipeline {
         });
 
         download_with_progress(
-            download_client,
+            http_client,
             &format.url,
             output_path,
             format.content_length,
+            download_headers,
             progress_tx,
             cancel_rx,
         )
@@ -369,7 +375,8 @@ impl DownloadPipeline {
         final_output: &Path,
         state_tx: &watch::Sender<PipelineState>,
         cancel_rx: watch::Receiver<bool>,
-        download_client: &reqwest::Client,
+        http_client: &reqwest::Client,
+        download_headers: &HeaderMap,
     ) -> Result<()> {
         let safe_title = sanitize_title(&config.title);
         let video_format = selected.video.as_ref().unwrap();
@@ -396,10 +403,11 @@ impl DownloadPipeline {
         });
 
         download_with_progress(
-            download_client,
+            http_client,
             &video_format.url,
             &video_tmp,
             video_format.content_length,
+            download_headers,
             progress_tx,
             cancel_rx.clone(),
         )
@@ -420,10 +428,11 @@ impl DownloadPipeline {
         });
 
         download_with_progress(
-            download_client,
+            http_client,
             &audio_format.url,
             &audio_tmp,
             audio_format.content_length,
+            download_headers,
             progress_tx2,
             cancel_rx,
         )

@@ -63,9 +63,9 @@ impl InnertubeClient {
 pub const ANDROID: InnertubeClient = InnertubeClient {
     name: "android",
     client_name: "ANDROID",
-    client_version: "19.29.37",
+    client_version: "20.03.02",
     api_key: "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w",
-    user_agent: "com.google.android.youtube/19.29.37 (Linux; U; Android 14; en_US; sdk_gphone64_arm64 Build/UE1A.230829.036.A1) gzip",
+    user_agent: "com.google.android.youtube/20.03.02 (Linux; U; Android 14; en_US; sdk_gphone64_arm64 Build/UE1A.230829.036.A1) gzip",
     requires_js: false,
     client_id: 3,
 };
@@ -74,9 +74,9 @@ pub const ANDROID: InnertubeClient = InnertubeClient {
 pub const WEB: InnertubeClient = InnertubeClient {
     name: "web",
     client_name: "WEB",
-    client_version: "2.20241126.01.00",
+    client_version: "2.20250117.01.00",
     api_key: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
-    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
     requires_js: true,
     client_id: 1,
 };
@@ -85,9 +85,9 @@ pub const WEB: InnertubeClient = InnertubeClient {
 pub const WEB_EMBEDDED: InnertubeClient = InnertubeClient {
     name: "web_embedded",
     client_name: "WEB_EMBEDDED_PLAYER",
-    client_version: "1.20241126.01.00",
+    client_version: "2.20250117.01.00",
     api_key: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
-    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
     requires_js: true,
     client_id: 56,
 };
@@ -96,9 +96,9 @@ pub const WEB_EMBEDDED: InnertubeClient = InnertubeClient {
 pub const IOS: InnertubeClient = InnertubeClient {
     name: "ios",
     client_name: "IOS",
-    client_version: "19.29.1",
+    client_version: "20.03.2",
     api_key: "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc",
-    user_agent: "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)",
+    user_agent: "com.google.ios.youtube/20.03.2 (iPhone16,2; U; CPU iOS 18_3 like Mac OS X;)",
     requires_js: false,
     client_id: 5,
 };
@@ -107,7 +107,7 @@ pub const IOS: InnertubeClient = InnertubeClient {
 pub const TV: InnertubeClient = InnertubeClient {
     name: "tv",
     client_name: "TVHTML5",
-    client_version: "7.20241126.12.00",
+    client_version: "7.20250117.12.00",
     api_key: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
     user_agent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version",
     requires_js: true,
