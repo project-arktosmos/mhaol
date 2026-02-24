@@ -34,7 +34,6 @@ export interface PlayerState {
 	currentFile: PlayableFile | null;
 	connectionState: PlayerConnectionState;
 	streamServerAvailable: boolean;
-	streamServerUrl: string;
 	sessionId: string | null;
 }
 

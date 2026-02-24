@@ -22,7 +22,6 @@ const initialState: PlayerState = {
 	currentFile: null,
 	connectionState: 'idle',
 	streamServerAvailable: false,
-	streamServerUrl: '',
 	sessionId: null
 };
 
@@ -45,9 +44,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		this.state.update((s) => ({ ...s, loading: true }));
 
 		try {
-			const status = await this.fetchJson<{ available: boolean; url: string }>(
-				'/api/player/stream-status'
-			);
+			const status = await this.fetchJson<{ available: boolean }>('/api/player/stream-status');
 
 			const files = await this.fetchJson<PlayableFile[]>('/api/player/playable');
 
@@ -57,7 +54,6 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				loading: false,
 				files,
 				streamServerAvailable: status.available,
-				streamServerUrl: status.url,
 				error: null
 			}));
 
@@ -109,11 +105,10 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		}));
 
 		try {
-			const serverUrl = currentState.streamServerUrl;
-			const session = await this.fetchJsonDirect<{
+			const session = await this.fetchJson<{
 				session_id: string;
 				ws_url: string;
-			}>(`${serverUrl}/sessions`, {
+			}>('/api/player/sessions', {
 				method: 'POST',
 				body: JSON.stringify({
 					file_path: file.outputPath,
@@ -127,9 +122,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				connectionState: 'signaling'
 			}));
 
-			const wsProtocol = serverUrl.startsWith('https') ? 'wss' : 'ws';
-			const wsHost = serverUrl.replace(/^https?:\/\//, '');
-			const wsUrl = `${wsProtocol}://${wsHost}${session.ws_url}`;
+			const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+			const wsUrl = `${wsProtocol}://${window.location.host}/api/player/ws/${session.session_id}`;
 
 			this.connectWebSocket(wsUrl);
 		} catch (error) {
@@ -280,12 +274,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		}
 
 		const currentState = get(this.state);
-		if (currentState.sessionId && currentState.streamServerUrl) {
+		if (currentState.sessionId) {
 			try {
-				await this.fetchJsonDirect(
-					`${currentState.streamServerUrl}/sessions/${currentState.sessionId}`,
-					{ method: 'DELETE' }
-				);
+				await fetch(`/api/player/sessions/${currentState.sessionId}`, {
+					method: 'DELETE'
+				});
 			} catch {
 				// Ignore cleanup errors
 			}
@@ -307,24 +300,10 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		this.set({ ...current, ...updates });
 	}
 
-	// ===== HTTP Helpers =====
+	// ===== HTTP Helper =====
 
 	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 		const response = await fetch(path, {
-			...init,
-			headers: { 'Content-Type': 'application/json', ...init?.headers }
-		});
-
-		if (!response.ok) {
-			const body = await response.json().catch(() => ({}));
-			throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
-		}
-
-		return response.json() as Promise<T>;
-	}
-
-	private async fetchJsonDirect<T>(url: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(url, {
 			...init,
 			headers: { 'Content-Type': 'application/json', ...init?.headers }
 		});

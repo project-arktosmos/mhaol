@@ -8,9 +8,9 @@ export const GET: RequestHandler = async () => {
 		const res = await fetch(`${STREAM_SERVER_URL}/health`, {
 			signal: AbortSignal.timeout(2000)
 		});
-		const data = await res.json();
-		return json({ available: true, url: STREAM_SERVER_URL, ...data });
+		await res.json();
+		return json({ available: true });
 	} catch {
-		return json({ available: false, url: STREAM_SERVER_URL });
+		return json({ available: false });
 	}
 };
