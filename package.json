@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm -r --filter frontend dev",
+		"dev": "pnpm p2p-server:build && pnpm -r --filter frontend dev",
 		"build": "pnpm -r --filter frontend build",
 		"preview": "pnpm -r --filter frontend preview",
 		"test": "pnpm -r run test",

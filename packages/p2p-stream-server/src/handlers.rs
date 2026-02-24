@@ -6,6 +6,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
+use futures_util::{SinkExt, StreamExt};
 use mhaol_p2p_stream::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant};
@@ -195,8 +196,6 @@ async fn forward_outgoing(
     mut signaling_rx: tokio::sync::mpsc::UnboundedReceiver<SignalingMessage>,
     mut ws_sender: futures_util::stream::SplitSink<WebSocket, Message>,
 ) {
-    use futures_util::SinkExt;
-
     while let Some(msg) = signaling_rx.recv().await {
         match serde_json::to_string(&msg) {
             Ok(json) => {
@@ -217,8 +216,6 @@ async fn forward_incoming(
     peer_id: String,
     state: Arc<AppState>,
 ) {
-    use futures_util::StreamExt;
-
     while let Some(Ok(msg)) = ws_receiver.next().await {
         let text = match msg {
             Message::Text(t) => t,
