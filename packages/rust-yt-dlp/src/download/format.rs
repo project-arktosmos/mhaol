@@ -40,8 +40,14 @@ fn select_audio_format(
     quality: &AudioQuality,
     format: &AudioFormat,
 ) -> Result<SelectedFormats, YtDlpError> {
-    let audio_formats: Vec<&ResolvedFormat> =
-        formats.iter().filter(|f| f.is_audio_only).collect();
+    // Only use audio-only formats whose URLs include ratebypass=yes.
+    // ANDROID adaptive streams (itag=139/140/251) lack this parameter and are CDN-throttled
+    // to the first 1 MB, making them unusable for full downloads.
+    // WEB/browser client adaptive streams carry the parameter, so they are fine.
+    let audio_formats: Vec<&ResolvedFormat> = formats
+        .iter()
+        .filter(|f| f.is_audio_only && f.url.contains("ratebypass=yes"))
+        .collect();
 
     if !audio_formats.is_empty() {
         // Prefer the codec matching the requested format
