@@ -1,4 +1,8 @@
-import type { YtDlpService, DownloadManagerService, SSEBroadcasterService } from 'yt-download/services';
+import type {
+	YtDlpService,
+	DownloadManagerService,
+	SSEBroadcasterService
+} from 'yt-download/services';
 import type {
 	TorrentManagerService,
 	SSEBroadcasterService as TorrentBroadcasterService
@@ -7,7 +11,8 @@ import type {
 	SettingsRepository,
 	MetadataRepository,
 	YouTubeDownloadRepository,
-	TorrentDownloadRepository
+	TorrentDownloadRepository,
+	LibraryRepository
 } from 'database/repositories';
 
 declare global {
@@ -22,6 +27,8 @@ declare global {
 			torrentDownloadRepo: TorrentDownloadRepository;
 			torrentManager: TorrentManagerService;
 			torrentBroadcaster: TorrentBroadcasterService;
+			libraryRepo: LibraryRepository;
+			streamServerAvailable: boolean;
 		}
 	}
 }
