@@ -1,12 +1,9 @@
 use anyhow::Result;
+use reqwest::header::HeaderMap;
 use std::path::Path;
-use tokio::fs::OpenOptions;
+use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
-
-/// 1 MB chunk size for range requests.
-/// YouTube's CDN rejects range requests larger than ~1 MB for some videos.
-const CHUNK_SIZE: u64 = 1024 * 1024;
 
 /// Progress update for a download.
 #[derive(Debug, Clone)]
@@ -15,133 +12,70 @@ pub struct DownloadProgressUpdate {
     pub total_bytes: u64,
 }
 
-/// Download a file using HTTP range requests with progress reporting.
+/// Download a file by streaming the full response in one connection.
+///
+/// YouTube's CDN returns 403 for arbitrary mid-file range requests (it only accepts
+/// requests that start from byte 0). Chunked range downloads therefore break on
+/// any resume scenario. Streaming the whole file avoids this entirely.
 pub async fn download_with_progress(
     client: &reqwest::Client,
     url: &str,
     output_path: &Path,
     total_bytes: Option<u64>,
+    extra_headers: &HeaderMap,
     progress_tx: watch::Sender<DownloadProgressUpdate>,
     cancel_rx: watch::Receiver<bool>,
 ) -> Result<()> {
-    // Create parent directory if needed
     if let Some(parent) = output_path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
 
-    // Check if we can resume
-    let resume_from = if output_path.exists() {
-        tokio::fs::metadata(output_path).await?.len()
-    } else {
-        0
-    };
-
-    // If total_bytes is known and we've already downloaded everything
-    if let Some(total) = total_bytes {
-        if resume_from >= total {
-            let _ = progress_tx.send(DownloadProgressUpdate {
-                downloaded_bytes: total,
-                total_bytes: total,
-            });
-            return Ok(());
-        }
+    // Remove any stale partial file — YouTube CDN 403s on range requests that do
+    // not start at byte 0, so resume is not supported for these stream URLs.
+    if output_path.exists() {
+        tokio::fs::remove_file(output_path).await?;
     }
 
-    // Determine total size if not provided
-    let total = if let Some(t) = total_bytes {
-        t
-    } else {
-        // HEAD request to get content length
-        let resp = client
-            .head(url)
-            .header("Accept-Encoding", "identity")
-            .send()
-            .await?;
-        resp.content_length().unwrap_or(0)
-    };
+    if *cancel_rx.borrow() {
+        anyhow::bail!("Download cancelled");
+    }
 
-    let mut downloaded = resume_from;
+    log::debug!("Starting download from host: {}", url::Url::parse(url).map(|u| u.host_str().unwrap_or("?").to_string()).unwrap_or_default());
 
-    // Open file in append mode for resume support
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(output_path)
+    let mut response = client
+        .get(url)
+        .headers(extra_headers.clone())
+        .header("Accept-Encoding", "identity")
+        .send()
         .await?;
 
-    // Download in chunks using range requests
-    while downloaded < total || total == 0 {
-        // Check for cancellation
+    let status = response.status();
+    log::debug!("Download response status: {}", status);
+    if !status.is_success() {
+        anyhow::bail!("HTTP error: {}", status);
+    }
+
+    let total = total_bytes
+        .or_else(|| response.content_length())
+        .unwrap_or(0);
+
+    let mut file = File::create(output_path).await?;
+    let mut downloaded = 0u64;
+
+    while let Some(chunk) = response.chunk().await? {
         if *cancel_rx.borrow() {
+            drop(file);
+            let _ = tokio::fs::remove_file(output_path).await;
             anyhow::bail!("Download cancelled");
         }
 
-        let range_start = downloaded;
-        let range_end = if total > 0 {
-            std::cmp::min(downloaded + CHUNK_SIZE - 1, total - 1)
-        } else {
-            downloaded + CHUNK_SIZE - 1
-        };
-
-        let response = client
-            .get(url)
-            .header("Range", format!("bytes={}-{}", range_start, range_end))
-            .header("Accept-Encoding", "identity")
-            .send()
-            .await?;
-
-        let status = response.status();
-
-        if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
-            // We've downloaded everything
-            break;
-        }
-
-        if status == reqwest::StatusCode::OK && downloaded > 0 {
-            // Server doesn't support range requests; need to re-download from start
-            log::warn!("Server doesn't support range requests, restarting download");
-            downloaded = 0;
-            file = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(output_path)
-                .await?;
-        }
-
-        if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
-            anyhow::bail!("HTTP error: {}", status);
-        }
-
-        // If the server returned 200 (full content) instead of 206
-        let is_full_response = status == reqwest::StatusCode::OK;
-
-        // Update total from content-length if we didn't know it
-        let actual_total = if is_full_response {
-            response.content_length().unwrap_or(total)
-        } else {
-            total
-        };
-
-        let bytes = response.bytes().await?;
-        let chunk_len = bytes.len() as u64;
-
-        if chunk_len == 0 {
-            break;
-        }
-
-        file.write_all(&bytes).await?;
-        downloaded += chunk_len;
+        file.write_all(&chunk).await?;
+        downloaded += chunk.len() as u64;
 
         let _ = progress_tx.send(DownloadProgressUpdate {
             downloaded_bytes: downloaded,
-            total_bytes: if actual_total > 0 { actual_total } else { downloaded },
+            total_bytes: if total > 0 { total } else { downloaded },
         });
-
-        // If we got the full file in one response, we're done
-        if is_full_response {
-            break;
-        }
     }
 
     file.flush().await?;
@@ -154,7 +88,7 @@ pub async fn download_with_progress(
     Ok(())
 }
 
-/// Simple download without range requests (for smaller files or when range isn't supported).
+/// Simple download without progress reporting.
 pub async fn download_simple(
     client: &reqwest::Client,
     url: &str,

@@ -29,19 +29,35 @@ impl SignatureResolver {
     }
 
     /// Load and parse a player.js source, extracting the signature and n-param functions.
+    ///
+    /// The n-parameter function is always required (used by every stream URL for throttle bypass).
+    /// The signature function is optional — it is only needed when stream URLs carry a cipher
+    /// (e.g. WEB client). Clients that return direct URLs (e.g. Android) do not need it, so a
+    /// failure to extract the signature function is logged as a warning rather than an error.
     pub fn load_player_js(&mut self, player_js_url: &str, source: &str) -> Result<()> {
-        let sig_func = extract_signature_function(source)?;
         let n_func = extract_n_function(source)?;
-        let helper = extract_helper_object(source, &sig_func)?;
+
+        let sig_func = match extract_signature_function(source) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                log::warn!("Could not extract signature function from player.js (will skip cipher decryption): {}", e);
+                None
+            }
+        };
+
+        let helper = sig_func
+            .as_deref()
+            .and_then(|f| extract_helper_object(source, f).ok());
 
         self.player_js_url = Some(player_js_url.to_string());
-        self.sig_function = Some(sig_func);
         self.n_function = Some(n_func);
-        self.helper_code = Some(helper);
+        self.sig_function = sig_func;
+        self.helper_code = helper;
 
         log::info!(
-            "Loaded player.js signature functions from {}",
-            player_js_url
+            "Loaded player.js from {} (n-param: ok, sig-cipher: {})",
+            player_js_url,
+            if self.sig_function.is_some() { "ok" } else { "unavailable" }
         );
         Ok(())
     }

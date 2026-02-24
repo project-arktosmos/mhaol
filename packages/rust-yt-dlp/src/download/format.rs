@@ -9,24 +9,11 @@ pub struct SelectedFormats {
     pub audio: ResolvedFormat,
     pub needs_muxing: bool,
     pub output_extension: String,
+    /// True when the selected audio is actually a muxed (video+audio) stream because
+    /// no suitable audio-only format was available (e.g. ANDROID CDN throttles adaptive
+    /// streams). ffmpeg will extract the audio track after download.
+    pub needs_audio_extraction: bool,
 }
-
-/// Known itag to quality mappings for audio formats.
-struct AudioItag {
-    itag: u32,
-    codec: &'static str,
-    bitrate: u32,
-}
-
-const AUDIO_ITAGS: &[AudioItag] = &[
-    AudioItag { itag: 140, codec: "aac", bitrate: 128 },
-    AudioItag { itag: 141, codec: "aac", bitrate: 256 },
-    AudioItag { itag: 256, codec: "aac", bitrate: 192 },
-    AudioItag { itag: 258, codec: "aac", bitrate: 384 },
-    AudioItag { itag: 251, codec: "opus", bitrate: 160 },
-    AudioItag { itag: 250, codec: "opus", bitrate: 70 },
-    AudioItag { itag: 249, codec: "opus", bitrate: 50 },
-];
 
 /// Select the best format(s) for the given mode and quality preferences.
 pub fn select_formats(
@@ -56,60 +43,84 @@ fn select_audio_format(
     let audio_formats: Vec<&ResolvedFormat> =
         formats.iter().filter(|f| f.is_audio_only).collect();
 
-    if audio_formats.is_empty() {
+    if !audio_formats.is_empty() {
+        // Prefer the codec matching the requested format
+        let preferred_codec = match format {
+            AudioFormat::Aac => "mp4a",
+            AudioFormat::Mp3 => "mp4a", // Download as AAC, convert to MP3 later
+            AudioFormat::Opus => "opus",
+        };
+
+        let target_bitrate = match quality {
+            AudioQuality::Best => u64::MAX,
+            AudioQuality::High => 160_000,
+            AudioQuality::Medium => 128_000,
+            AudioQuality::Low => 64_000,
+        };
+
+        // Sort: prefer matching codec, then closest bitrate
+        let mut candidates: Vec<&&ResolvedFormat> = audio_formats.iter().collect();
+        candidates.sort_by(|a, b| {
+            let a_codec_match = a.codec == preferred_codec;
+            let b_codec_match = b.codec == preferred_codec;
+
+            if a_codec_match != b_codec_match {
+                return b_codec_match.cmp(&a_codec_match);
+            }
+
+            if *quality == AudioQuality::Best {
+                b.bitrate.cmp(&a.bitrate)
+            } else {
+                let a_dist = (a.bitrate as i64 - target_bitrate as i64).unsigned_abs();
+                let b_dist = (b.bitrate as i64 - target_bitrate as i64).unsigned_abs();
+                a_dist.cmp(&b_dist)
+            }
+        });
+
+        if let Some(selected) = candidates.first() {
+            let ext = match format {
+                AudioFormat::Aac => "m4a",
+                AudioFormat::Mp3 => "mp3",
+                AudioFormat::Opus => "opus",
+            };
+            return Ok(SelectedFormats {
+                video: None,
+                audio: (**selected).clone(),
+                needs_muxing: false,
+                output_extension: ext.to_string(),
+                needs_audio_extraction: false,
+            });
+        }
+    }
+
+    // Fallback: use a muxed (combined video+audio) format and extract audio via ffmpeg.
+    // Muxed formats from the ANDROID client include ratebypass=yes in their signed URL,
+    // making them fully downloadable — unlike adaptive-only formats which are CDN-throttled
+    // to the first 1 MB.
+    let mut muxed: Vec<&ResolvedFormat> = formats
+        .iter()
+        .filter(|f| !f.is_audio_only && !f.is_video_only)
+        .collect();
+
+    if muxed.is_empty() {
         return Err(YtDlpError::NoSuitableFormat);
     }
 
-    // Prefer the codec matching the requested format
-    let preferred_codec = match format {
-        AudioFormat::Aac => "mp4a",
-        AudioFormat::Mp3 => "mp4a", // Download as AAC, convert to MP3 later
-        AudioFormat::Opus => "opus",
-    };
+    muxed.sort_by(|a, b| b.bitrate.cmp(&a.bitrate));
+    let selected = muxed.first().ok_or(YtDlpError::NoSuitableFormat)?;
 
-    let target_bitrate = match quality {
-        AudioQuality::Best => u64::MAX,
-        AudioQuality::High => 160_000,
-        AudioQuality::Medium => 128_000,
-        AudioQuality::Low => 64_000,
-    };
-
-    // Sort: prefer matching codec, then closest bitrate
-    let mut candidates: Vec<&&ResolvedFormat> = audio_formats.iter().collect();
-    candidates.sort_by(|a, b| {
-        let a_codec_match = a.codec == preferred_codec;
-        let b_codec_match = b.codec == preferred_codec;
-
-        // Prefer matching codec
-        if a_codec_match != b_codec_match {
-            return b_codec_match.cmp(&a_codec_match);
-        }
-
-        // Then prefer closest bitrate (higher is better up to target)
-        if *quality == AudioQuality::Best {
-            b.bitrate.cmp(&a.bitrate)
-        } else {
-            let a_dist = (a.bitrate as i64 - target_bitrate as i64).unsigned_abs();
-            let b_dist = (b.bitrate as i64 - target_bitrate as i64).unsigned_abs();
-            a_dist.cmp(&b_dist)
-        }
-    });
-
-    let selected = candidates
-        .first()
-        .ok_or(YtDlpError::NoSuitableFormat)?;
-
-    let ext = match format {
-        AudioFormat::Aac => "m4a",
-        AudioFormat::Mp3 => "mp3",
-        AudioFormat::Opus => "opus",
-    };
+    log::info!(
+        "No audio-only format available; falling back to muxed itag {} for audio extraction",
+        selected.itag
+    );
 
     Ok(SelectedFormats {
         video: None,
-        audio: (**selected).clone(),
+        audio: (*selected).clone(),
         needs_muxing: false,
-        output_extension: ext.to_string(),
+        // Use the muxed container extension for the download temp file
+        output_extension: selected.container.clone(),
+        needs_audio_extraction: true,
     })
 }
 
@@ -117,7 +128,7 @@ fn select_video_formats(
     formats: &[ResolvedFormat],
     quality: &VideoQuality,
     format: &VideoFormat,
-    audio_quality: &AudioQuality,
+    _audio_quality: &AudioQuality,
 ) -> Result<SelectedFormats, YtDlpError> {
     let video_formats: Vec<&ResolvedFormat> =
         formats.iter().filter(|f| f.is_video_only).collect();
@@ -191,6 +202,7 @@ fn select_video_formats(
             audio: (**audio).clone(),
             needs_muxing: true,
             output_extension: ext.to_string(),
+            needs_audio_extraction: false,
         });
     }
 
@@ -224,5 +236,6 @@ fn select_video_formats(
         audio: (**best_muxed).clone(),
         needs_muxing: false,
         output_extension: best_muxed.container.clone(),
+        needs_audio_extraction: false,
     })
 }

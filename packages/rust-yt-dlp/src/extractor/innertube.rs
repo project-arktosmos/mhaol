@@ -21,6 +21,11 @@ impl InnertubeApi {
         Self { http }
     }
 
+    /// Get a reference to the underlying HTTP client (shares cookie store).
+    pub fn http_client(&self) -> &reqwest::Client {
+        &self.http
+    }
+
     /// Fetch player response for a video using the specified client context.
     pub async fn player(
         &self,

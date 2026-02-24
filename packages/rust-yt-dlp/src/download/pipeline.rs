@@ -143,11 +143,36 @@ impl DownloadPipeline {
                 .await?;
         }
 
-        // Step 5: Handle format conversion if needed (e.g., AAC → MP3)
-        let actual_output = if config.mode == DownloadMode::Audio
+        // Step 5: Handle post-download processing (audio extraction or format conversion).
+        let actual_output = if selected.needs_audio_extraction {
+            // We downloaded a muxed (video+audio) container; extract the audio track.
+            let audio_ext = match config.audio_format {
+                AudioFormat::Aac => "m4a",
+                AudioFormat::Mp3 => "mp3",
+                AudioFormat::Opus => "opus",
+            };
+            let audio_path = output_dir.join(format!("{}.{}", safe_title, audio_ext));
+            if self.muxer.is_available() {
+                let _ = state_tx.send(PipelineState::Muxing);
+                self.muxer
+                    .convert_audio(
+                        &final_output,
+                        &audio_path,
+                        &config.audio_format,
+                        &config.audio_quality,
+                    )
+                    .await?;
+                let _ = tokio::fs::remove_file(&final_output).await;
+                audio_path
+            } else {
+                log::warn!("FFmpeg not available; returning muxed file instead of audio-only");
+                final_output
+            }
+        } else if config.mode == DownloadMode::Audio
             && config.audio_format == AudioFormat::Mp3
             && selected.audio.codec != "mp3"
         {
+            // Convert adaptive AAC/Opus → MP3
             let mp3_path = output_dir.join(format!("{}.mp3", safe_title));
             if self.muxer.is_available() {
                 self.muxer
@@ -158,7 +183,6 @@ impl DownloadPipeline {
                         &config.audio_quality,
                     )
                     .await?;
-                // Remove the intermediate file
                 let _ = tokio::fs::remove_file(&final_output).await;
                 mp3_path
             } else {
@@ -177,6 +201,10 @@ impl DownloadPipeline {
     }
 
     /// Build HTTP headers matching the Innertube client that provided the stream URLs.
+    ///
+    /// Browser clients (WEB, TV, etc.) need Origin/Referer on CDN requests.
+    /// Native app clients (Android, iOS) must NOT send them — YouTube detects
+    /// the mismatch between an app user-agent and browser-style headers as a bot.
     fn build_download_headers(client: &InnertubeClient) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -184,8 +212,10 @@ impl DownloadPipeline {
             HeaderValue::from_str(client.user_agent)
                 .unwrap_or_else(|_| HeaderValue::from_static("Mozilla/5.0")),
         );
-        headers.insert(ORIGIN, HeaderValue::from_static("https://www.youtube.com"));
-        headers.insert(REFERER, HeaderValue::from_static("https://www.youtube.com/"));
+        if client.is_browser {
+            headers.insert(ORIGIN, HeaderValue::from_static("https://www.youtube.com"));
+            headers.insert(REFERER, HeaderValue::from_static("https://www.youtube.com/"));
+        }
         headers
     }
 
@@ -265,8 +295,18 @@ impl DownloadPipeline {
         // Apply n-parameter transformation to all resolved URLs
         let resolver = self.sig_resolver.lock();
         for fmt in &mut resolved {
-            if let Ok(new_url) = signatures::apply_n_param(&fmt.url, &resolver) {
-                fmt.url = new_url;
+            match signatures::apply_n_param(&fmt.url, &resolver) {
+                Ok(new_url) => {
+                    if new_url != fmt.url {
+                        log::debug!("n-param transformed for itag {}", fmt.itag);
+                    } else {
+                        log::debug!("n-param unchanged for itag {} (no n param or same value)", fmt.itag);
+                    }
+                    fmt.url = new_url;
+                }
+                Err(e) => {
+                    log::warn!("n-param transformation failed for itag {}: {}", fmt.itag, e);
+                }
             }
         }
 

@@ -10,6 +10,9 @@ pub struct InnertubeClient {
     pub user_agent: &'static str,
     pub requires_js: bool,
     pub client_id: u32,
+    /// Whether this is a browser-based client. Browser clients expect Origin/Referer
+    /// headers on stream requests; native app clients (Android, iOS) must not send them.
+    pub is_browser: bool,
 }
 
 impl InnertubeClient {
@@ -68,6 +71,7 @@ pub const ANDROID: InnertubeClient = InnertubeClient {
     user_agent: "com.google.android.youtube/20.03.02 (Linux; U; Android 14; en_US; sdk_gphone64_arm64 Build/UE1A.230829.036.A1) gzip",
     requires_js: false,
     client_id: 3,
+    is_browser: false,
 };
 
 /// Web client - primary client, may require JS for signature decryption.
@@ -79,6 +83,7 @@ pub const WEB: InnertubeClient = InnertubeClient {
     user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
     requires_js: true,
     client_id: 1,
+    is_browser: true,
 };
 
 /// Web embedded player - useful for bypassing age restrictions.
@@ -90,6 +95,7 @@ pub const WEB_EMBEDDED: InnertubeClient = InnertubeClient {
     user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
     requires_js: true,
     client_id: 56,
+    is_browser: true,
 };
 
 /// iOS client - returns HLS manifests.
@@ -101,6 +107,7 @@ pub const IOS: InnertubeClient = InnertubeClient {
     user_agent: "com.google.ios.youtube/20.03.2 (iPhone16,2; U; CPU iOS 18_3 like Mac OS X;)",
     requires_js: false,
     client_id: 5,
+    is_browser: false,
 };
 
 /// TV HTML5 client.
@@ -112,6 +119,7 @@ pub const TV: InnertubeClient = InnertubeClient {
     user_agent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version",
     requires_js: true,
     client_id: 7,
+    is_browser: true,
 };
 
 /// The ordered list of clients to try. ANDROID first (no JS needed), then WEB, then fallbacks.
