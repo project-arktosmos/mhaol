@@ -19,7 +19,9 @@
 		"db:test": "pnpm -r --filter database test",
 		"p2p-stream:build": "cargo build --manifest-path packages/p2p-stream/Cargo.toml",
 		"p2p-stream:test": "cargo test --manifest-path packages/p2p-stream/Cargo.toml",
-		"p2p-stream:check": "cargo check --manifest-path packages/p2p-stream/Cargo.toml"
+		"p2p-stream:check": "cargo check --manifest-path packages/p2p-stream/Cargo.toml",
+		"p2p-server:build": "cargo build --manifest-path packages/p2p-stream-server/Cargo.toml",
+		"p2p-server:run": "cargo run --manifest-path packages/p2p-stream-server/Cargo.toml"
 	},
 	"engines": {
 		"node": ">=18",
