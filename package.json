@@ -23,7 +23,9 @@
 		"p2p-server:build": "cargo build --manifest-path packages/p2p-stream-server/Cargo.toml",
 		"ytdl-rust:build": "cargo build --manifest-path packages/rust-yt-dlp/Cargo.toml",
 		"ytdl-rust:test": "cargo test --manifest-path packages/rust-yt-dlp/Cargo.toml",
-		"ytdl-rust:check": "cargo check --manifest-path packages/rust-yt-dlp/Cargo.toml"
+		"ytdl-rust:check": "cargo check --manifest-path packages/rust-yt-dlp/Cargo.toml",
+		"tauri:dev": "pnpm -r --filter tauri dev",
+		"tauri:build": "pnpm -r --filter tauri build"
 	},
 	"engines": {
 		"node": ">=18",
