@@ -18,6 +18,10 @@ export interface ServerStatus {
 	checking: boolean;
 	lastChecked: string | null;
 	error: string | null;
+	// Live WebSocket presence in the lobby room
+	wsConnected: boolean;
+	ownPeerId: string | null;
+	lobbyPeers: string[];
 }
 
 export interface SignalingState {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import classNames from 'classnames';
 	import { createEventDispatcher } from 'svelte';
 	import SignalingStatus from '$components/signaling/SignalingStatus.svelte';
 	import type { SignalingServer, ServerStatus } from '$types/signaling.type';
@@ -14,13 +15,21 @@
 	$: isDefault = server.id === 'local-default';
 	$: online = status?.online ?? false;
 	$: checking = status?.checking ?? false;
+	$: wsConnected = status?.wsConnected ?? false;
+	$: ownPeerId = status?.ownPeerId ?? null;
+	$: lobbyPeers = status?.lobbyPeers ?? [];
 	$: lastChecked = status?.lastChecked
 		? new Date(status.lastChecked).toLocaleTimeString()
 		: null;
+
+	function shortId(id: string): string {
+		return id.slice(0, 8);
+	}
 </script>
 
 <div class="card bg-base-200">
 	<div class="card-body gap-3 p-4">
+		<!-- Header row -->
 		<div class="flex items-start justify-between gap-2">
 			<div class="flex min-w-0 flex-col gap-1">
 				<div class="flex items-center gap-2">
@@ -68,22 +77,54 @@
 							stroke="currentColor"
 							stroke-width="2"
 						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M6 18L18 6M6 6l12 12"
-							/>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 						</svg>
 					</button>
 				{/if}
 			</div>
 		</div>
 
+		<!-- Live peer presence section -->
+		{#if wsConnected && ownPeerId}
+			<div class="flex flex-col gap-2 rounded-lg bg-base-300 p-3">
+				<div class="flex items-center gap-1.5 text-xs font-medium text-base-content/70">
+					<div class="h-1.5 w-1.5 rounded-full bg-success"></div>
+					Lobby ({lobbyPeers.length + 1} connected)
+				</div>
+
+				<!-- Own entry -->
+				<div class="flex items-center gap-2 text-xs">
+					<span class="badge badge-primary badge-xs">you</span>
+					<span class="font-mono text-base-content/60">{shortId(ownPeerId)}…</span>
+				</div>
+
+				<!-- Other peers -->
+				{#each lobbyPeers as peerId (peerId)}
+					<div class="flex items-center gap-2 text-xs">
+						<span class="badge badge-ghost badge-xs">peer</span>
+						<span class="font-mono text-base-content/60">{shortId(peerId)}…</span>
+					</div>
+				{/each}
+
+				{#if lobbyPeers.length === 0}
+					<p class="text-xs text-base-content/40">No other browsers in this lobby yet</p>
+				{/if}
+			</div>
+		{:else if online && !wsConnected}
+			<p class="text-xs text-base-content/40">Connecting to lobby…</p>
+		{/if}
+
+		<!-- HTTP stats row (shown when connected) -->
 		{#if online && status}
 			<div class="flex flex-wrap gap-2">
-				<span class="badge badge-ghost badge-sm">
+				<span
+					class={classNames('badge badge-sm', {
+						'badge-ghost': status.totalPeers === 0,
+						'badge-info': status.totalPeers > 0
+					})}
+				>
 					{status.totalPeers}
-					{status.totalPeers === 1 ? 'peer' : 'peers'}
+					{status.totalPeers === 1 ? 'peer' : 'peers'} total
 				</span>
 				<span class="badge badge-ghost badge-sm">
 					{status.rooms.length}

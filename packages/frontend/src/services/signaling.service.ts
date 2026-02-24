@@ -8,6 +8,8 @@ import type {
 	SignalingStatusResponse
 } from '$types/signaling.type';
 
+const LOBBY_ROOM = 'signaling-page-lobby';
+
 const DEFAULT_SERVER: SignalingServer = {
 	id: 'local-default',
 	name: 'Local',
@@ -27,13 +29,17 @@ const defaultStatus = (): ServerStatus => ({
 	rooms: [],
 	checking: false,
 	lastChecked: null,
-	error: null
+	error: null,
+	wsConnected: false,
+	ownPeerId: null,
+	lobbyPeers: []
 });
 
 class SignalingService extends ArrayServiceClass<SignalingServer> {
 	public state: Writable<SignalingState> = writable(initialState);
 
 	private pollInterval: ReturnType<typeof setInterval> | null = null;
+	private connections: Map<string, WebSocket> = new Map();
 	private _initialized = false;
 
 	constructor() {
@@ -53,9 +59,12 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 		this._initialized = true;
 		this.state.update((s) => ({ ...s, initialized: true }));
 
-		await this.refreshAllStatuses();
+		// Check HTTP status and open WebSocket for each server
+		const servers = this.all();
+		await Promise.all(servers.map((s) => this.checkServerStatus(s)));
+		servers.forEach((s) => this.connectToServer(s));
 
-		// Poll every 30 seconds
+		// Re-check HTTP status every 30 seconds
 		this.pollInterval = setInterval(() => {
 			this.refreshAllStatuses();
 		}, 30_000);
@@ -75,9 +84,11 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 		this.add(server);
 		this.closeAddForm();
 		await this.checkServerStatus(server);
+		this.connectToServer(server);
 	}
 
 	removeServer(server: SignalingServer): void {
+		this.disconnectFromServer(String(server.id));
 		this.remove(server);
 		this.state.update((s) => {
 			const { [String(server.id)]: _removed, ...rest } = s.serverStatuses;
@@ -85,7 +96,7 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 		});
 	}
 
-	// ===== Status checking =====
+	// ===== HTTP status checking =====
 
 	async refreshAllStatuses(): Promise<void> {
 		const servers = this.all();
@@ -95,13 +106,7 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 	async checkServerStatus(server: SignalingServer): Promise<void> {
 		const id = String(server.id);
 
-		this.state.update((s) => ({
-			...s,
-			serverStatuses: {
-				...s.serverStatuses,
-				[id]: { ...(s.serverStatuses[id] ?? defaultStatus()), checking: true }
-			}
-		}));
+		this.patchServerStatus(id, { checking: true });
 
 		try {
 			const encodedUrl = encodeURIComponent(server.url);
@@ -111,7 +116,7 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 
 			if (!res.ok) {
 				const body = (await res.json().catch(() => ({}))) as { error?: string };
-				this.setServerStatus(id, {
+				this.patchServerStatus(id, {
 					online: false,
 					totalPeers: 0,
 					rooms: [],
@@ -123,7 +128,7 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 			}
 
 			const data = (await res.json()) as SignalingStatusResponse;
-			this.setServerStatus(id, {
+			this.patchServerStatus(id, {
 				online: true,
 				totalPeers: data.totalPeers,
 				rooms: data.rooms,
@@ -133,7 +138,7 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 			});
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Connection failed';
-			this.setServerStatus(id, {
+			this.patchServerStatus(id, {
 				online: false,
 				totalPeers: 0,
 				rooms: [],
@@ -144,10 +149,117 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 		}
 	}
 
-	private setServerStatus(id: string, status: ServerStatus): void {
+	// ===== WebSocket lobby connection =====
+
+	private connectToServer(server: SignalingServer): void {
+		const id = String(server.id);
+
+		// Don't open a second connection if one already exists
+		const existing = this.connections.get(id);
+		if (existing && existing.readyState <= WebSocket.OPEN) return;
+
+		const wsUrl = server.url.replace(/^http/, 'ws');
+		let ws: WebSocket;
+		try {
+			ws = new WebSocket(wsUrl);
+		} catch {
+			return;
+		}
+
+		this.connections.set(id, ws);
+
+		ws.onopen = () => {
+			ws.send(JSON.stringify({ type: 'join-room', room_id: LOBBY_ROOM }));
+		};
+
+		ws.onmessage = (event) => {
+			try {
+				const msg = JSON.parse(event.data as string) as {
+					type: string;
+					peer_id?: string;
+					peers?: string[];
+					room_id?: string;
+				};
+
+				switch (msg.type) {
+					case 'connected':
+						this.patchServerStatus(id, {
+							wsConnected: true,
+							ownPeerId: msg.peer_id ?? null
+						});
+						break;
+					case 'room-peers':
+						if (msg.room_id === LOBBY_ROOM) {
+							this.patchServerStatus(id, { lobbyPeers: msg.peers ?? [] });
+						}
+						break;
+					case 'peer-joined':
+						if (msg.room_id === LOBBY_ROOM && msg.peer_id) {
+							this.state.update((s) => {
+								const current = s.serverStatuses[id] ?? defaultStatus();
+								return {
+									...s,
+									serverStatuses: {
+										...s.serverStatuses,
+										[id]: {
+											...current,
+											lobbyPeers: [...current.lobbyPeers, msg.peer_id!]
+										}
+									}
+								};
+							});
+						}
+						break;
+					case 'peer-left':
+						if (msg.room_id === LOBBY_ROOM && msg.peer_id) {
+							this.state.update((s) => {
+								const current = s.serverStatuses[id] ?? defaultStatus();
+								return {
+									...s,
+									serverStatuses: {
+										...s.serverStatuses,
+										[id]: {
+											...current,
+											lobbyPeers: current.lobbyPeers.filter((p) => p !== msg.peer_id)
+										}
+									}
+								};
+							});
+						}
+						break;
+				}
+			} catch {
+				// Ignore unparseable messages
+			}
+		};
+
+		ws.onclose = () => {
+			this.connections.delete(id);
+			this.patchServerStatus(id, { wsConnected: false, ownPeerId: null, lobbyPeers: [] });
+		};
+
+		ws.onerror = () => {
+			this.patchServerStatus(id, { wsConnected: false });
+		};
+	}
+
+	private disconnectFromServer(id: string): void {
+		const ws = this.connections.get(id);
+		if (ws) {
+			ws.close();
+			this.connections.delete(id);
+		}
+	}
+
+	// ===== State helpers =====
+
+	private patchServerStatus(id: string, patch: Partial<ServerStatus>): void {
 		this.state.update((s) => ({
 			...s,
-			serverStatuses: { ...s.serverStatuses, [id]: status }
+			serverStatuses: {
+				...s.serverStatuses,
+				[id]: { ...(s.serverStatuses[id] ?? defaultStatus()), ...patch }
+			}
 		}));
 	}
 
@@ -172,6 +284,10 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 			clearInterval(this.pollInterval);
 			this.pollInterval = null;
 		}
+		for (const id of this.connections.keys()) {
+			this.disconnectFromServer(id);
+		}
+		this._initialized = false;
 	}
 }
 
