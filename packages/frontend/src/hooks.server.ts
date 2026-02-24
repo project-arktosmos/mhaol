@@ -177,6 +177,57 @@ if (existsSync(P2P_STREAM_BIN)) {
 	console.warn(`[p2p-stream] Run 'pnpm p2p-server:build' to build it`);
 }
 
+// Initialize signaling server
+const SIGNALING_PORT = process.env.SIGNALING_PORT ?? '3002';
+const SIGNALING_DIST =
+	process.env.SIGNALING_BIN ??
+	join(PACKAGE_ROOT, '..', 'signaling', 'dist', 'index.js');
+
+let signalingServerProcess: ChildProcess | null = null;
+let signalingServerAvailable = false;
+const signalingBaseUrl = `http://localhost:${SIGNALING_PORT}`;
+
+if (existsSync(SIGNALING_DIST)) {
+	signalingServerProcess = spawn('node', [SIGNALING_DIST], {
+		env: {
+			...process.env,
+			SIGNALING_PORT
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
+
+	signalingServerProcess.stdout?.on('data', (data: Buffer) => {
+		for (const line of data.toString().trimEnd().split('\n')) {
+			console.log(`[signaling] ${line}`);
+		}
+	});
+
+	signalingServerProcess.stderr?.on('data', (data: Buffer) => {
+		for (const line of data.toString().trimEnd().split('\n')) {
+			console.error(`[signaling] ${line}`);
+		}
+	});
+
+	signalingServerProcess.on('error', (err) => {
+		console.error(`[signaling] Failed to start: ${err.message}`);
+		signalingServerAvailable = false;
+	});
+
+	signalingServerProcess.on('exit', (code) => {
+		console.log(`[signaling] Process exited with code ${code}`);
+		signalingServerAvailable = false;
+		signalingServerProcess = null;
+	});
+
+	signalingServerAvailable = true;
+	console.log(
+		`[signaling] Started on port ${SIGNALING_PORT} (pid: ${signalingServerProcess.pid})`
+	);
+} else {
+	console.warn(`[signaling] Compiled server not found at ${SIGNALING_DIST}, signaling disabled`);
+	console.warn(`[signaling] Run 'pnpm signaling:build' to build it`);
+}
+
 // Cleanup on process exit
 function cleanupChildProcesses() {
 	if (ytdlServerProcess) {
@@ -186,6 +237,10 @@ function cleanupChildProcesses() {
 	if (streamServerProcess) {
 		streamServerProcess.kill();
 		streamServerProcess = null;
+	}
+	if (signalingServerProcess) {
+		signalingServerProcess.kill();
+		signalingServerProcess = null;
 	}
 }
 process.on('exit', cleanupChildProcesses);
@@ -209,6 +264,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.torrentBroadcaster = torrentBroadcaster;
 	event.locals.libraryRepo = libraryRepo;
 	event.locals.streamServerAvailable = streamServerAvailable;
+	event.locals.signalingBaseUrl = signalingBaseUrl;
+	event.locals.signalingServerAvailable = signalingServerAvailable;
 	event.locals.ytdlOutputDir = OUTPUT_DIR;
 
 	return resolve(event);
