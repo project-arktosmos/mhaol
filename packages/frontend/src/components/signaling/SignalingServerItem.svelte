@@ -23,6 +23,11 @@
 		: null;
 
 	function shortId(id: string): string {
+		// Ethereum address: 0x1234…abcd
+		if (id.startsWith('0x') && id.length >= 10) {
+			return `${id.slice(0, 6)}…${id.slice(-4)}`;
+		}
+		// Fallback for non-address IDs
 		return id.slice(0, 8);
 	}
 </script>

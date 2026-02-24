@@ -1,14 +1,18 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { signalingService } from '$services/signaling.service';
+	import { walletService } from '$services/wallet.service';
 	import type { SignalingServer } from '$types/signaling.type';
 	import SignalingServerList from '$components/signaling/SignalingServerList.svelte';
 	import SignalingAddServer from '$components/signaling/SignalingAddServer.svelte';
+	import WalletDisplay from '$components/signaling/WalletDisplay.svelte';
 
 	const state = signalingService.state;
 	const servers = signalingService.store;
 
 	onMount(async () => {
+		// Wallet must be ready before signaling connects (needs it to sign challenges)
+		await walletService.initialize();
 		await signalingService.initialize();
 	});
 
@@ -45,6 +49,12 @@
 				</button>
 			{/if}
 		</div>
+	</div>
+
+	<!-- Wallet identity -->
+	<div class="flex items-center gap-3">
+		<span class="text-sm text-base-content/50">Your wallet</span>
+		<WalletDisplay />
 	</div>
 
 	{#if $state.showAddForm}

@@ -1,6 +1,7 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { ArrayServiceClass } from '$services/classes/array-service.class';
+import { walletService } from '$services/wallet.service';
 import type {
 	SignalingServer,
 	SignalingState,
@@ -59,7 +60,7 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 		this._initialized = true;
 		this.state.update((s) => ({ ...s, initialized: true }));
 
-		// Check HTTP status and open WebSocket for each server
+		// Check HTTP status and open authenticated WebSocket for each server
 		const servers = this.all();
 		await Promise.all(servers.map((s) => this.checkServerStatus(s)));
 		servers.forEach((s) => this.connectToServer(s));
@@ -149,12 +150,18 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 		}
 	}
 
-	// ===== WebSocket lobby connection =====
+	// ===== Authenticated WebSocket lobby connection =====
 
 	private connectToServer(server: SignalingServer): void {
 		const id = String(server.id);
 
-		// Don't open a second connection if one already exists
+		const address = walletService.getAddress();
+		if (!address) {
+			console.warn('[signaling] Wallet not initialized, skipping connection to', server.url);
+			return;
+		}
+
+		// Don't open a second connection if one already exists and is open
 		const existing = this.connections.get(id);
 		if (existing && existing.readyState <= WebSocket.OPEN) return;
 
@@ -168,31 +175,53 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 
 		this.connections.set(id, ws);
 
-		ws.onopen = () => {
-			ws.send(JSON.stringify({ type: 'join-room', room_id: LOBBY_ROOM }));
-		};
-
-		ws.onmessage = (event) => {
+		ws.onmessage = async (event) => {
 			try {
 				const msg = JSON.parse(event.data as string) as {
 					type: string;
+					nonce?: string;
 					peer_id?: string;
 					peers?: string[];
 					room_id?: string;
+					message?: string;
 				};
 
 				switch (msg.type) {
+					// ===== Auth handshake =====
+					case 'challenge': {
+						const nonce = msg.nonce;
+						if (!nonce) break;
+						const signature = await walletService.sign(nonce);
+						if (!signature) break;
+						ws.send(
+							JSON.stringify({ type: 'authenticate', address, signature })
+						);
+						break;
+					}
+					case 'auth-failed':
+						console.error(`[signaling] Auth failed for ${server.url}: ${msg.message}`);
+						this.patchServerStatus(id, {
+							wsConnected: false,
+							error: `Auth failed: ${msg.message}`
+						});
+						break;
+
+					// ===== Normal signaling =====
 					case 'connected':
 						this.patchServerStatus(id, {
 							wsConnected: true,
 							ownPeerId: msg.peer_id ?? null
 						});
+						// Join the shared lobby room after successful auth
+						ws.send(JSON.stringify({ type: 'join-room', room_id: LOBBY_ROOM }));
 						break;
+
 					case 'room-peers':
 						if (msg.room_id === LOBBY_ROOM) {
 							this.patchServerStatus(id, { lobbyPeers: msg.peers ?? [] });
 						}
 						break;
+
 					case 'peer-joined':
 						if (msg.room_id === LOBBY_ROOM && msg.peer_id) {
 							this.state.update((s) => {
@@ -210,6 +239,7 @@ class SignalingService extends ArrayServiceClass<SignalingServer> {
 							});
 						}
 						break;
+
 					case 'peer-left':
 						if (msg.room_id === LOBBY_ROOM && msg.peer_id) {
 							this.state.update((s) => {

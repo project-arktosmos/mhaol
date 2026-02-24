@@ -1,16 +1,23 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'node:crypto';
+import { recoverMessageAddress } from 'viem';
 import type {
 	Room,
 	ClientMessage,
 	ServerMessage,
+	AuthenticateMessage,
 	StatusResponse
 } from './types.js';
 
+const AUTH_TIMEOUT_MS = 15_000;
+
 export class SignalingServer {
 	private rooms: Map<string, Room> = new Map();
+	// peerId (lowercase Ethereum address) → set of room IDs
 	private peerRooms: Map<string, Set<string>> = new Map();
+	// peerId → active WebSocket (for evicting duplicate connections)
+	private peerConnections: Map<string, WebSocket> = new Map();
 	private port: number;
 
 	constructor(port: number = 3002) {
@@ -76,27 +83,92 @@ export class SignalingServer {
 	// ===== WebSocket handler =====
 
 	private handleConnection(ws: WebSocket): void {
-		const peerId = randomUUID();
-		this.peerRooms.set(peerId, new Set());
+		const nonce = randomUUID();
 
-		this.send(ws, { type: 'connected', peer_id: peerId });
+		// Send the challenge immediately on connect
+		this.send(ws, { type: 'challenge', nonce });
 
-		ws.on('message', (data) => {
+		// Disconnect unauthenticated clients after timeout
+		const authTimeout = setTimeout(() => {
+			this.send(ws, { type: 'auth-failed', message: 'Authentication timeout' });
+			ws.close();
+		}, AUTH_TIMEOUT_MS);
+
+		// The very first message must be `authenticate`
+		ws.once('message', async (data) => {
+			clearTimeout(authTimeout);
+
+			let msg: AuthenticateMessage;
 			try {
-				const msg = JSON.parse(data.toString()) as ClientMessage;
-				this.handleMessage(peerId, ws, msg);
+				const parsed = JSON.parse(data.toString()) as { type?: string; address?: string; signature?: string };
+				if (parsed.type !== 'authenticate' || !parsed.address || !parsed.signature) {
+					this.send(ws, { type: 'auth-failed', message: 'Expected authenticate message' });
+					ws.close();
+					return;
+				}
+				msg = parsed as AuthenticateMessage;
 			} catch {
-				this.send(ws, { type: 'error', message: 'Invalid message format' });
+				this.send(ws, { type: 'auth-failed', message: 'Invalid message format' });
+				ws.close();
+				return;
 			}
+
+			// Verify the signature — the recovered address must match the claimed one
+			let recovered: string;
+			try {
+				recovered = await recoverMessageAddress({
+					message: nonce,
+					signature: msg.signature as `0x${string}`
+				});
+			} catch {
+				this.send(ws, { type: 'auth-failed', message: 'Signature recovery failed' });
+				ws.close();
+				return;
+			}
+
+			if (recovered.toLowerCase() !== msg.address.toLowerCase()) {
+				this.send(ws, { type: 'auth-failed', message: 'Signature does not match address' });
+				ws.close();
+				return;
+			}
+
+			// Auth passed — use the verified address as the canonical peer ID
+			const peerId = recovered.toLowerCase();
+
+			// Evict any existing connection for this address
+			const existing = this.peerConnections.get(peerId);
+			if (existing && existing.readyState <= WebSocket.OPEN) {
+				existing.close();
+			}
+
+			this.peerConnections.set(peerId, ws);
+			this.peerRooms.set(peerId, new Set());
+
+			this.send(ws, { type: 'connected', peer_id: peerId });
+
+			// Register normal message and lifecycle handlers
+			ws.on('message', (msgData) => {
+				try {
+					const clientMsg = JSON.parse(msgData.toString()) as ClientMessage;
+					this.handleMessage(peerId, ws, clientMsg);
+				} catch {
+					this.send(ws, { type: 'error', message: 'Invalid message format' });
+				}
+			});
+
+			ws.on('close', () => {
+				this.peerConnections.delete(peerId);
+				this.handleDisconnect(peerId);
+			});
+
+			ws.on('error', () => {
+				this.peerConnections.delete(peerId);
+				this.handleDisconnect(peerId);
+			});
 		});
 
-		ws.on('close', () => {
-			this.handleDisconnect(peerId);
-		});
-
-		ws.on('error', () => {
-			this.handleDisconnect(peerId);
-		});
+		// If the connection drops before auth completes, clean up the timeout
+		ws.once('close', () => clearTimeout(authTimeout));
 	}
 
 	private handleMessage(peerId: string, ws: WebSocket, msg: ClientMessage): void {
@@ -143,18 +215,15 @@ export class SignalingServer {
 		const room = this.rooms.get(roomId)!;
 		const existingPeers = Array.from(room.peers.keys());
 
-		// Notify existing peers that a new peer joined
 		for (const [existingPeerId, existingWs] of room.peers) {
 			if (existingPeerId !== peerId) {
 				this.send(existingWs, { type: 'peer-joined', room_id: roomId, peer_id: peerId });
 			}
 		}
 
-		// Add peer to room
 		room.peers.set(peerId, ws);
 		this.peerRooms.get(peerId)?.add(roomId);
 
-		// Send the current peers list to the joining peer
 		this.send(ws, { type: 'room-peers', room_id: roomId, peers: existingPeers });
 	}
 
@@ -165,12 +234,10 @@ export class SignalingServer {
 		room.peers.delete(peerId);
 		this.peerRooms.get(peerId)?.delete(roomId);
 
-		// Notify remaining peers
 		for (const remainingWs of room.peers.values()) {
 			this.send(remainingWs, { type: 'peer-left', room_id: roomId, peer_id: peerId });
 		}
 
-		// Clean up empty rooms
 		if (room.peers.size === 0) {
 			this.rooms.delete(roomId);
 		}
@@ -192,7 +259,6 @@ export class SignalingServer {
 	): void {
 		const room = this.rooms.get(roomId);
 		if (!room) return;
-
 		if (!room.peers.has(fromPeerId)) return;
 
 		const targetWs = room.peers.get(targetPeerId);

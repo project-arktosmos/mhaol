@@ -20,9 +20,10 @@
 	"dependencies": {
 		"@sveltejs/adapter-node": "^5.5.3",
 		"classnames": "^2.5.1",
-		"svelte-i18n": "^4.0.1",
 		"database": "workspace:*",
-		"torrent": "workspace:*"
+		"svelte-i18n": "^4.0.1",
+		"torrent": "workspace:*",
+		"viem": "^2.46.3"
 	},
 	"devDependencies": {
 		"@sveltejs/kit": "^2.22.0",

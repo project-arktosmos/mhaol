@@ -7,6 +7,24 @@ export interface Room {
 	peers: Map<string, WebSocket>;
 }
 
+// ===== Auth Handshake Messages =====
+
+export interface ChallengeMessage {
+	type: 'challenge';
+	nonce: string;
+}
+
+export interface AuthenticateMessage {
+	type: 'authenticate';
+	address: string;
+	signature: string;
+}
+
+export interface AuthFailedMessage {
+	type: 'auth-failed';
+	message: string;
+}
+
 // ===== Client → Server Messages =====
 
 export interface JoinRoomMessage {
@@ -101,6 +119,8 @@ export interface ErrorMessage {
 }
 
 export type ServerMessage =
+	| ChallengeMessage
+	| AuthFailedMessage
 	| ConnectedMessage
 	| PeerJoinedMessage
 	| PeerLeftMessage
