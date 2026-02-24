@@ -22,7 +22,6 @@
 		"classnames": "^2.5.1",
 		"svelte-i18n": "^4.0.1",
 		"database": "workspace:*",
-		"yt-download": "workspace:*",
 		"torrent": "workspace:*"
 	},
 	"devDependencies": {

@@ -8,7 +8,7 @@ use crate::download::format::{select_formats, SelectedFormats};
 use crate::download::http::{download_with_progress, DownloadProgressUpdate};
 use crate::download::muxer::FfmpegMuxer;
 use crate::error::YtDlpError;
-use crate::extractor::clients::CLIENT_PRIORITY;
+use crate::extractor::clients::{InnertubeClient, CLIENT_PRIORITY};
 use crate::extractor::innertube::InnertubeApi;
 use crate::extractor::player::{PlayerResponse, ResolvedFormat, StreamFormat, extract_player_js_url};
 use crate::extractor::signatures::{self, SignatureResolver};
@@ -43,7 +43,6 @@ pub struct DownloadPipeline {
     innertube: Arc<InnertubeApi>,
     sig_resolver: Arc<Mutex<SignatureResolver>>,
     muxer: Arc<FfmpegMuxer>,
-    http_client: reqwest::Client,
 }
 
 impl DownloadPipeline {
@@ -52,14 +51,10 @@ impl DownloadPipeline {
         sig_resolver: Arc<Mutex<SignatureResolver>>,
         muxer: Arc<FfmpegMuxer>,
     ) -> Self {
-        let http_client = reqwest::Client::builder()
-            .build()
-            .expect("Failed to build HTTP client");
         Self {
             innertube,
             sig_resolver,
             muxer,
-            http_client,
         }
     }
 
@@ -69,7 +64,7 @@ impl DownloadPipeline {
         video_id: &str,
         po_token: Option<&str>,
     ) -> Result<VideoInfo> {
-        let player_response = self.fetch_player_response(video_id, po_token).await?;
+        let (player_response, _client) = self.fetch_player_response(video_id, po_token).await?;
 
         let details = player_response
             .video_details
@@ -96,8 +91,8 @@ impl DownloadPipeline {
     ) -> Result<String> {
         let _ = state_tx.send(PipelineState::Fetching);
 
-        // Step 1: Get player response
-        let player_response = self.fetch_player_response(&config.video_id, None).await?;
+        // Step 1: Get player response (also returns which client succeeded)
+        let (player_response, client) = self.fetch_player_response(&config.video_id, None).await?;
 
         if !player_response.is_playable() {
             let reason = player_response
@@ -125,7 +120,9 @@ impl DownloadPipeline {
             config.video_format.as_ref(),
         )?;
 
-        // Step 4: Download
+        // Step 4: Build an HTTP client with headers matching the client that provided the URLs
+        let download_client = Self::build_download_client(client)?;
+
         let safe_title = sanitize_title(&config.title);
         let output_dir = Path::new(&config.output_dir);
         let final_output = output_dir.join(format!("{}.{}", safe_title, selected.output_extension));
@@ -136,10 +133,10 @@ impl DownloadPipeline {
         }
 
         if selected.needs_muxing {
-            self.download_and_mux(config, &selected, output_dir, &final_output, &state_tx, cancel_rx)
+            self.download_and_mux(config, &selected, output_dir, &final_output, &state_tx, cancel_rx, &download_client)
                 .await?;
         } else {
-            self.download_single(&selected.audio, &final_output, config, &state_tx, cancel_rx)
+            self.download_single(&selected.audio, &final_output, config, &state_tx, cancel_rx, &download_client)
                 .await?;
         }
 
@@ -176,11 +173,30 @@ impl DownloadPipeline {
         Ok(output_str)
     }
 
+    /// Build an HTTP client with headers matching the Innertube client that provided the stream URLs.
+    /// YouTube's CDN validates that the User-Agent and Origin match the client that requested the streams.
+    fn build_download_client(client: &InnertubeClient) -> Result<reqwest::Client> {
+        use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER, USER_AGENT};
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            USER_AGENT,
+            HeaderValue::from_str(client.user_agent)
+                .unwrap_or_else(|_| HeaderValue::from_static("Mozilla/5.0")),
+        );
+        headers.insert(ORIGIN, HeaderValue::from_static("https://www.youtube.com"));
+        headers.insert(REFERER, HeaderValue::from_static("https://www.youtube.com/"));
+
+        Ok(reqwest::Client::builder()
+            .default_headers(headers)
+            .build()?)
+    }
+
     async fn fetch_player_response(
         &self,
         video_id: &str,
         po_token: Option<&str>,
-    ) -> Result<PlayerResponse> {
+    ) -> Result<(PlayerResponse, &'static InnertubeClient)> {
         // Try clients in priority order
         for client in CLIENT_PRIORITY {
             match self.innertube.player(video_id, client, po_token).await {
@@ -190,7 +206,7 @@ impl DownloadPipeline {
                         client.name,
                         video_id
                     );
-                    return Ok(resp);
+                    return Ok((resp, client));
                 }
                 Ok(resp) => {
                     let reason = resp.unplayable_reason().unwrap_or_default();
@@ -312,6 +328,7 @@ impl DownloadPipeline {
         _config: &DownloadTaskConfig,
         state_tx: &watch::Sender<PipelineState>,
         cancel_rx: watch::Receiver<bool>,
+        download_client: &reqwest::Client,
     ) -> Result<()> {
         let (progress_tx, mut progress_rx) = watch::channel(DownloadProgressUpdate {
             downloaded_bytes: 0,
@@ -331,7 +348,7 @@ impl DownloadPipeline {
         });
 
         download_with_progress(
-            &self.http_client,
+            download_client,
             &format.url,
             output_path,
             format.content_length,
@@ -352,6 +369,7 @@ impl DownloadPipeline {
         final_output: &Path,
         state_tx: &watch::Sender<PipelineState>,
         cancel_rx: watch::Receiver<bool>,
+        download_client: &reqwest::Client,
     ) -> Result<()> {
         let safe_title = sanitize_title(&config.title);
         let video_format = selected.video.as_ref().unwrap();
@@ -378,7 +396,7 @@ impl DownloadPipeline {
         });
 
         download_with_progress(
-            &self.http_client,
+            download_client,
             &video_format.url,
             &video_tmp,
             video_format.content_length,
@@ -402,7 +420,7 @@ impl DownloadPipeline {
         });
 
         download_with_progress(
-            &self.http_client,
+            download_client,
             &audio_format.url,
             &audio_tmp,
             audio_format.content_length,

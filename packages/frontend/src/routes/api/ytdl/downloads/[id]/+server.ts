@@ -1,13 +1,14 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { proxyToYtdl } from '$lib/server/ytdl-proxy';
 
 export const GET: RequestHandler = async ({ params, locals }) => {
-	const progress = locals.downloadManager.getProgress(params.id);
-	if (!progress) return json({ error: 'Download not found' }, { status: 404 });
-	return json(progress);
+	return proxyToYtdl(locals.ytdlBaseUrl, `/api/downloads/${params.id}`);
 };
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {
-	locals.downloadManager.cancelDownload(params.id);
-	return json({ ok: true });
+	const res = await proxyToYtdl(locals.ytdlBaseUrl, `/api/downloads/${params.id}`, {
+		method: 'DELETE'
+	});
+	locals.youtubeDownloadRepo.delete(params.id);
+	return res;
 };

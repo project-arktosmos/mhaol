@@ -4,6 +4,8 @@ use crate::pipeline::bus::{spawn_bus_monitor, BusEvent};
 use crate::pipeline::elements::make_element;
 use gstreamer as gst;
 use gstreamer::prelude::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::info;
 
@@ -158,6 +160,8 @@ impl PipelineBuilder {
         let codec_config = self.codec_config.clone();
         let pipeline_weak = pipeline.downgrade();
         let webrtcbin_weak = webrtcbin.downgrade();
+        let video_linked = Arc::new(AtomicBool::new(false));
+        let audio_linked = Arc::new(AtomicBool::new(false));
 
         decodebin.connect_pad_added(move |_decodebin, src_pad| {
             let Some(pipeline) = pipeline_weak.upgrade() else {
@@ -178,19 +182,29 @@ impl PipelineBuilder {
             info!("decodebin pad-added: {media_type}");
 
             if media_type.starts_with("video/") {
+                if video_linked.swap(true, Ordering::SeqCst) {
+                    info!("Skipping additional video pad");
+                    return;
+                }
                 if let Some(video_codec) = &codec_config.video {
                     if let Err(e) =
                         Self::link_video_branch(&pipeline, src_pad, video_codec, &webrtcbin)
                     {
                         tracing::error!("Failed to link video branch: {e}");
+                        video_linked.store(false, Ordering::SeqCst);
                     }
                 }
             } else if media_type.starts_with("audio/") {
+                if audio_linked.swap(true, Ordering::SeqCst) {
+                    info!("Skipping additional audio pad");
+                    return;
+                }
                 if let Some(audio_codec) = &codec_config.audio {
                     if let Err(e) =
                         Self::link_audio_branch(&pipeline, src_pad, audio_codec, &webrtcbin)
                     {
                         tracing::error!("Failed to link audio branch: {e}");
+                        audio_linked.store(false, Ordering::SeqCst);
                     }
                 }
             }
@@ -273,19 +287,27 @@ impl PipelineBuilder {
         let queue = make_element("queue", Some("audio_queue"))?;
         let convert = make_element("audioconvert", Some("audioconvert"))?;
         let resample = make_element("audioresample", Some("audioresample"))?;
+        let capsfilter = make_element("capsfilter", Some("audio_capsfilter"))?;
         let encoder = make_element(codec.encoder_element(), Some("audio_encoder"))?;
         let payloader = make_element(codec.rtp_payloader(), Some("audio_payloader"))?;
 
+        // Force fixed caps so opusenc can negotiate properly
+        let audio_caps =
+            gst::Caps::builder("audio/x-raw")
+                .field("rate", 48000i32)
+                .field("channels", 2i32)
+                .build();
+        capsfilter.set_property("caps", &audio_caps);
+
         pipeline
-            .add_many([&queue, &convert, &resample, &encoder, &payloader])
+            .add_many([&queue, &convert, &resample, &capsfilter, &encoder, &payloader])
             .map_err(|e| Error::PipelineConstruction(e.to_string()))?;
 
-        gst::Element::link_many([&queue, &convert, &resample, &encoder, &payloader]).map_err(
-            |_| Error::ElementLinkFailed {
+        gst::Element::link_many([&queue, &convert, &resample, &capsfilter, &encoder, &payloader])
+            .map_err(|_| Error::ElementLinkFailed {
                 source_element: "audio chain".into(),
                 sink_element: "audio chain".into(),
-            },
-        )?;
+            })?;
 
         payloader
             .link(webrtcbin)
@@ -294,7 +316,7 @@ impl PipelineBuilder {
                 sink_element: "webrtcbin".into(),
             })?;
 
-        for el in [&queue, &convert, &resample, &encoder, &payloader] {
+        for el in [&queue, &convert, &resample, &capsfilter, &encoder, &payloader] {
             el.sync_state_with_parent()
                 .map_err(|e| Error::StateChange(e.to_string()))?;
         }

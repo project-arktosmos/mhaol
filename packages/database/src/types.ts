@@ -59,3 +59,13 @@ export interface TorrentDownloadRow {
 	created_at: string;
 	updated_at: string;
 }
+
+export interface LibraryRow {
+	id: string;
+	name: string;
+	path: string;
+	media_types: string;
+	date_added: number;
+	created_at: string;
+	updated_at: string;
+}

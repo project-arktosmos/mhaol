@@ -1,9 +1,14 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { libraryService } from '$services/library.service';
 	import LibraryList from '$components/libraries/LibraryList.svelte';
 	import LibraryAddForm from '$components/libraries/LibraryAddForm.svelte';
 
 	const state = libraryService.state;
+
+	onMount(() => {
+		libraryService.initialize();
+	});
 </script>
 
 <div class="flex flex-col gap-6 p-6">

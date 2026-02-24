@@ -19,10 +19,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		});
 
 		if (!response.ok) {
-			return json(
-				{ error: `PirateBay API returned ${response.status}` },
-				{ status: 502 }
-			);
+			return json({ error: `PirateBay API returned ${response.status}` }, { status: 502 });
 		}
 
 		const data = await response.json();

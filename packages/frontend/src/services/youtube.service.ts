@@ -1,6 +1,5 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { ObjectServiceClass } from '$services/classes/object-service.class';
 import {
 	extractVideoId,
 	type YouTubeSettings,
@@ -20,7 +19,7 @@ import {
 
 const API_PREFIX = '/api/ytdl';
 
-// Default settings stored in localStorage
+// Default settings (used before server fetch completes)
 const initialSettings: YouTubeSettings = {
 	id: 'youtube-settings',
 	downloadMode: 'audio',
@@ -28,7 +27,9 @@ const initialSettings: YouTubeSettings = {
 	defaultFormat: 'aac',
 	defaultVideoQuality: 'best',
 	defaultVideoFormat: 'mp4',
-	outputPath: ''
+	outputPath: '',
+	poToken: '',
+	cookies: ''
 };
 
 // Initial service state
@@ -48,14 +49,17 @@ const initialState: YouTubeServiceState = {
 	fetchingPlaylistInfo: false
 };
 
-class YouTubeService extends ObjectServiceClass<YouTubeSettings> {
+class YouTubeService {
+	public store: Writable<YouTubeSettings> = writable(initialSettings);
 	public state: Writable<YouTubeServiceState> = writable(initialState);
 
 	private eventSource: EventSource | null = null;
 	private _initialized = false;
 
-	constructor() {
-		super('youtube-settings', initialSettings);
+	// ===== Settings Access =====
+
+	get(): YouTubeSettings {
+		return get(this.store);
 	}
 
 	// ===== Initialization =====
@@ -63,25 +67,26 @@ class YouTubeService extends ObjectServiceClass<YouTubeSettings> {
 	async initialize(): Promise<void> {
 		if (!browser || this._initialized) return;
 
+		// Clean up legacy localStorage entry
+		localStorage.removeItem('object-service:youtube-settings');
+
 		this.state.update((s) => ({ ...s, loading: true }));
 
 		try {
-			// Get status from server
-			const stats = await this.fetchJson<YouTubeManagerStats>('/api/ytdl/status');
-			const ytdlpStatus = await this.fetchJson<YtDlpStatus>('/api/ytdl/ytdlp/status');
+			const [stats, ytdlpStatus, settings] = await Promise.all([
+				this.fetchJson<YouTubeManagerStats>('/api/ytdl/status'),
+				this.fetchJson<YtDlpStatus>('/api/ytdl/ytdlp/status'),
+				this.fetchJson<Omit<YouTubeSettings, 'id'>>('/api/ytdl/settings')
+			]);
 
-			// Get config from server
-			const config = await this.fetchJson<{
-				outputPath: string;
-				defaultQuality: AudioQuality;
-				defaultFormat: AudioFormat;
-			}>('/api/ytdl/config');
+			// Populate the settings store from database
+			this.store.set({ ...settings, id: 'youtube-settings' });
 
 			this.state.update((s) => ({
 				...s,
 				initialized: true,
 				loading: false,
-				outputPath: config.outputPath,
+				outputPath: settings.outputPath,
 				stats,
 				ytdlpStatus,
 				error: null
@@ -377,33 +382,39 @@ class YouTubeService extends ObjectServiceClass<YouTubeSettings> {
 		}
 	}
 
-	// ===== Output Path =====
+	// ===== Settings Management (database-backed) =====
 
-	async setOutputPath(outputPath: string): Promise<void> {
+	async updateSettings(updates: Partial<YouTubeSettings>): Promise<void> {
 		if (!browser) return;
 
+		const current = this.get();
+		const merged = { ...current, ...updates };
+
+		// Optimistic update
+		this.store.set(merged);
+
+		// Strip 'id' before sending to server
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { id, ...payload } = updates as Partial<YouTubeSettings> & { id?: unknown };
+
 		try {
-			await this.fetchJson('/api/ytdl/config', {
+			await this.fetchJson('/api/ytdl/settings', {
 				method: 'PUT',
-				body: JSON.stringify({ outputPath })
+				body: JSON.stringify(payload)
 			});
 
-			this.updateSettings({ outputPath });
-			this.state.update((s) => ({ ...s, outputPath }));
+			if (updates.outputPath !== undefined) {
+				this.state.update((s) => ({ ...s, outputPath: updates.outputPath! }));
+			}
 		} catch (error) {
+			// Revert on failure
+			this.store.set(current);
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
 				...s,
-				error: `Failed to set output path: ${errorMsg}`
+				error: `Failed to save settings: ${errorMsg}`
 			}));
 		}
-	}
-
-	// ===== Settings Management =====
-
-	updateSettings(updates: Partial<YouTubeSettings>): void {
-		const current = this.get();
-		this.set({ ...current, ...updates });
 	}
 
 	setDownloadMode(mode: DownloadMode): void {
@@ -424,6 +435,10 @@ class YouTubeService extends ObjectServiceClass<YouTubeSettings> {
 
 	setDefaultVideoFormat(format: VideoFormat): void {
 		this.updateSettings({ defaultVideoFormat: format });
+	}
+
+	setOutputPath(outputPath: string): void {
+		this.updateSettings({ outputPath });
 	}
 
 	// ===== Getters =====
@@ -448,11 +463,11 @@ class YouTubeService extends ObjectServiceClass<YouTubeSettings> {
 		if (!browser) return;
 
 		try {
-			await this.fetchJson('/api/ytdl/config', {
+			await this.fetchJson('/api/ytdl/settings', {
 				method: 'PUT',
 				body: JSON.stringify({
-					poToken: config.poToken,
-					cookies: config.cookies
+					poToken: config.poToken ?? '',
+					cookies: config.cookies ?? ''
 				})
 			});
 		} catch (error) {
@@ -464,19 +479,12 @@ class YouTubeService extends ObjectServiceClass<YouTubeSettings> {
 		}
 	}
 
-	async getConfig(): Promise<YouTubeConfig | null> {
-		if (!browser) return null;
-
-		try {
-			const config = await this.fetchJson<{
-				poToken: string | null;
-				cookies: string | null;
-			}>('/api/ytdl/config');
-			return { poToken: config.poToken, cookies: config.cookies };
-		} catch (error) {
-			console.error('[YouTube] Failed to get config:', error);
-			return null;
-		}
+	getAuthConfig(): YouTubeConfig {
+		const settings = this.get();
+		return {
+			poToken: settings.poToken || null,
+			cookies: settings.cookies || null
+		};
 	}
 
 	// ===== yt-dlp Binary Management =====
@@ -522,9 +530,7 @@ class YouTubeService extends ObjectServiceClass<YouTubeSettings> {
 			try {
 				const progress = JSON.parse(e.data) as YouTubeDownloadProgress;
 				this.state.update((s) => {
-					const idx = s.downloads.findIndex(
-						(d) => d.downloadId === progress.downloadId
-					);
+					const idx = s.downloads.findIndex((d) => d.downloadId === progress.downloadId);
 					const downloads = [...s.downloads];
 					if (idx >= 0) {
 						downloads[idx] = progress;
@@ -566,9 +572,7 @@ class YouTubeService extends ObjectServiceClass<YouTubeSettings> {
 
 		if (!response.ok) {
 			const body = await response.json().catch(() => ({}));
-			throw new Error(
-				(body as { error?: string }).error ?? `HTTP ${response.status}`
-			);
+			throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
 		}
 
 		return response.json() as Promise<T>;

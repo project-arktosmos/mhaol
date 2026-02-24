@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { torrentService } from '$services/torrent.service';
+	import { libraryService } from '$services/library.service';
 	import TorrentAddInput from '$components/torrent/TorrentAddInput.svelte';
 	import TorrentSettings from '$components/torrent/TorrentSettings.svelte';
 	import TorrentStats from '$components/torrent/TorrentStats.svelte';
@@ -10,7 +11,7 @@
 	const state = torrentService.state;
 
 	onMount(async () => {
-		await torrentService.initialize();
+		await Promise.all([torrentService.initialize(), libraryService.initialize()]);
 	});
 
 	onDestroy(() => {

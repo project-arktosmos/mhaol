@@ -3,7 +3,6 @@ import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { YtDlpService, DownloadManagerService, SSEBroadcasterService } from 'yt-download/services';
 import {
 	TorrentManagerService,
 	SSEBroadcasterService as TorrentBroadcasterService
@@ -19,7 +18,8 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(__dirname, '..');
-const OUTPUT_DIR = process.env.YTDL_OUTPUT_DIR ?? join(PACKAGE_ROOT, 'downloads');
+const OUTPUT_DIR =
+	process.env.YTDL_OUTPUT_DIR ?? join(process.env.HOME ?? '/tmp', 'Downloads', 'youtube');
 const TORRENT_DIR =
 	process.env.TORRENT_DOWNLOAD_DIR ?? join(process.env.HOME ?? '/tmp', 'Downloads', 'torrents');
 
@@ -32,47 +32,72 @@ const youtubeDownloadRepo = new YouTubeDownloadRepository(db);
 const torrentDownloadRepo = new TorrentDownloadRepository(db);
 const libraryRepo = new LibraryRepository(db);
 
+// Seed YouTube default output path if not yet in database
+if (!settingsRepo.exists('youtube.outputPath')) {
+	settingsRepo.set('youtube.outputPath', OUTPUT_DIR);
+}
+
 console.log(`[database] Initialized`);
 
-// Initialize YouTube download services
-const ytdlp = new YtDlpService();
-ytdlp.initialize(OUTPUT_DIR);
+// Initialize Rust YouTube download server
+const YTDL_PORT = process.env.YTDL_PORT ?? '3040';
+const YTDL_BIN =
+	process.env.YTDL_BIN ??
+	join(PACKAGE_ROOT, '..', 'rust-yt-dlp', 'target', 'debug', 'mhaol-yt-dlp-server');
 
-const broadcaster = new SSEBroadcasterService();
-const downloadManager = new DownloadManagerService(ytdlp, broadcaster);
-downloadManager.initialize(OUTPUT_DIR);
+let ytdlServerProcess: ChildProcess | null = null;
+let ytdlServerAvailable = false;
+const ytdlBaseUrl = `http://localhost:${YTDL_PORT}`;
 
-// Wire YouTube persistence
-downloadManager.setPersistenceCallback((progress) => {
-	youtubeDownloadRepo.upsert({
-		download_id: progress.downloadId,
-		url: progress.url,
-		video_id: progress.videoId,
-		title: progress.title,
-		state: progress.state,
-		progress: progress.progress,
-		downloaded_bytes: progress.downloadedBytes,
-		total_bytes: progress.totalBytes,
-		output_path: progress.outputPath,
-		error: progress.error,
-		mode: progress.mode,
-		quality: progress.quality,
-		format: progress.format,
-		video_quality: progress.videoQuality,
-		video_format: progress.videoFormat,
-		thumbnail_url: progress.thumbnailUrl,
-		duration_seconds: progress.durationSeconds
+// Read persisted auth config to pass to Rust server on startup
+const persistedPoToken = settingsRepo.get('youtube.poToken') ?? undefined;
+const persistedCookies = settingsRepo.get('youtube.cookies') ?? undefined;
+// Read persisted output path (may differ from env default if user changed it)
+const persistedOutputPath = settingsRepo.get('youtube.outputPath') ?? OUTPUT_DIR;
+
+if (existsSync(YTDL_BIN)) {
+	ytdlServerProcess = spawn(YTDL_BIN, [], {
+		env: {
+			...process.env,
+			YTDL_PORT,
+			YTDL_OUTPUT_DIR: persistedOutputPath,
+			YTDL_CORS_ORIGIN: 'http://localhost:1530',
+			RUST_LOG: process.env.RUST_LOG ?? 'info',
+			...(persistedPoToken ? { YTDL_PO_TOKEN: persistedPoToken } : {}),
+			...(persistedCookies ? { YTDL_COOKIES: persistedCookies } : {})
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
 	});
-});
 
-downloadManager.setDeleteCallback((downloadIds) => {
-	for (const id of downloadIds) {
-		youtubeDownloadRepo.delete(id);
-	}
-});
+	ytdlServerProcess.stdout?.on('data', (data: Buffer) => {
+		for (const line of data.toString().trimEnd().split('\n')) {
+			console.log(`[ytdl-rust] ${line}`);
+		}
+	});
 
-console.log(`[ytdl] Output directory: ${OUTPUT_DIR}`);
-console.log(`[ytdl] yt-dlp available: ${ytdlp.isAvailable()}`);
+	ytdlServerProcess.stderr?.on('data', (data: Buffer) => {
+		for (const line of data.toString().trimEnd().split('\n')) {
+			console.error(`[ytdl-rust] ${line}`);
+		}
+	});
+
+	ytdlServerProcess.on('error', (err) => {
+		console.error(`[ytdl-rust] Failed to start: ${err.message}`);
+		ytdlServerAvailable = false;
+	});
+
+	ytdlServerProcess.on('exit', (code) => {
+		console.log(`[ytdl-rust] Process exited with code ${code}`);
+		ytdlServerAvailable = false;
+		ytdlServerProcess = null;
+	});
+
+	ytdlServerAvailable = true;
+	console.log(`[ytdl-rust] Started on port ${YTDL_PORT} (pid: ${ytdlServerProcess.pid})`);
+} else {
+	console.warn(`[ytdl-rust] Binary not found at ${YTDL_BIN}, YouTube downloads disabled`);
+	console.warn(`[ytdl-rust] Run 'pnpm ytdl-rust:build' to build it`);
+}
 
 // Initialize torrent services
 const torrentBroadcaster = new TorrentBroadcasterService();
@@ -153,26 +178,29 @@ if (existsSync(P2P_STREAM_BIN)) {
 }
 
 // Cleanup on process exit
-function cleanupStreamServer() {
+function cleanupChildProcesses() {
+	if (ytdlServerProcess) {
+		ytdlServerProcess.kill();
+		ytdlServerProcess = null;
+	}
 	if (streamServerProcess) {
 		streamServerProcess.kill();
 		streamServerProcess = null;
 	}
 }
-process.on('exit', cleanupStreamServer);
+process.on('exit', cleanupChildProcesses);
 process.on('SIGINT', () => {
-	cleanupStreamServer();
+	cleanupChildProcesses();
 	process.exit(0);
 });
 process.on('SIGTERM', () => {
-	cleanupStreamServer();
+	cleanupChildProcesses();
 	process.exit(0);
 });
 
 export const handle: Handle = async ({ event, resolve }) => {
-	event.locals.ytdlp = ytdlp;
-	event.locals.downloadManager = downloadManager;
-	event.locals.sseBroadcaster = broadcaster;
+	event.locals.ytdlBaseUrl = ytdlBaseUrl;
+	event.locals.ytdlAvailable = ytdlServerAvailable;
 	event.locals.settingsRepo = settingsRepo;
 	event.locals.metadataRepo = metadataRepo;
 	event.locals.youtubeDownloadRepo = youtubeDownloadRepo;
@@ -181,6 +209,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.torrentBroadcaster = torrentBroadcaster;
 	event.locals.libraryRepo = libraryRepo;
 	event.locals.streamServerAvailable = streamServerAvailable;
+	event.locals.ytdlOutputDir = OUTPUT_DIR;
 
 	return resolve(event);
 };

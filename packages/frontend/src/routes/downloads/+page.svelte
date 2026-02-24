@@ -4,9 +4,42 @@
 	import type { UnifiedDownload } from '$types/download.type';
 	import { formatBytes } from '$types/torrent.type';
 
+	interface FileEntry {
+		name: string;
+		size: number;
+		isDirectory: boolean;
+	}
+
+	interface TorrentFilesResponse {
+		type: 'torrent';
+		name: string;
+		directory: string | null;
+		files: FileEntry[];
+	}
+
+	interface YoutubeFilesResponse {
+		type: 'youtube';
+		thumbnailUrl: string | null;
+		title: string;
+		url: string;
+		videoId: string;
+		mode: string;
+		quality: string;
+		format: string;
+		durationSeconds: number | null;
+		outputPath: string | null;
+	}
+
+	type FilesResponse = TorrentFilesResponse | YoutubeFilesResponse;
+
 	let downloads = $state<UnifiedDownload[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
+
+	let modalOpen = $state(false);
+	let modalLoading = $state(false);
+	let modalData = $state<FilesResponse | null>(null);
+	let modalDownload = $state<UnifiedDownload | null>(null);
 
 	onMount(() => {
 		loadDownloads();
@@ -25,6 +58,31 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function openFiles(dl: UnifiedDownload) {
+		modalDownload = dl;
+		modalData = null;
+		modalOpen = true;
+		modalLoading = true;
+
+		try {
+			const res = await fetch(
+				`/api/downloads/${encodeURIComponent(dl.id)}/files?type=${dl.type}`
+			);
+			if (!res.ok) throw new Error('Failed to load files');
+			modalData = await res.json();
+		} catch {
+			modalData = null;
+		} finally {
+			modalLoading = false;
+		}
+	}
+
+	function closeModal() {
+		modalOpen = false;
+		modalData = null;
+		modalDownload = null;
 	}
 
 	function stateColor(state: string): string {
@@ -62,6 +120,13 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		});
+	}
+
+	function formatDuration(seconds: number | null): string {
+		if (!seconds) return '--';
+		const m = Math.floor(seconds / 60);
+		const s = Math.floor(seconds % 60);
+		return `${m}:${s.toString().padStart(2, '0')}`;
 	}
 </script>
 
@@ -107,6 +172,7 @@
 						<th>Size</th>
 						<th>Directory</th>
 						<th>Date</th>
+						<th></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -161,6 +227,11 @@
 							<td class="text-xs opacity-70">
 								{formatDate(dl.updatedAt)}
 							</td>
+							<td>
+								<button class="btn btn-ghost btn-xs" onclick={() => openFiles(dl)}>
+									Files
+								</button>
+							</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -172,3 +243,88 @@
 		</div>
 	{/if}
 </div>
+
+{#if modalOpen}
+	<div class="modal modal-open">
+		<div class="modal-box max-w-lg">
+			<button
+				class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+				onclick={closeModal}
+			>
+				x
+			</button>
+			<h3 class="text-lg font-bold">{modalDownload?.name ?? 'Files'}</h3>
+
+			{#if modalLoading}
+				<div class="flex justify-center py-8">
+					<span class="loading loading-spinner loading-md"></span>
+				</div>
+			{:else if modalData?.type === 'torrent'}
+				{#if modalData.directory}
+					<p class="mb-3 mt-1 truncate text-xs opacity-50" title={modalData.directory}>
+						{modalData.directory}
+					</p>
+				{/if}
+				{#if modalData.files.length === 0}
+					<p class="py-4 opacity-50">No files found in this directory.</p>
+				{:else}
+					<div class="max-h-72 overflow-y-auto">
+						<table class="table table-xs">
+							<thead>
+								<tr>
+									<th>Name</th>
+									<th class="text-right">Size</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each modalData.files as file (file.name)}
+									<tr class="hover:bg-base-200/50">
+										<td class="max-w-xs truncate" title={file.name}>
+											{file.name}
+										</td>
+										<td class="whitespace-nowrap text-right text-xs opacity-70">
+											{#if file.isDirectory}
+												--
+											{:else}
+												{formatBytes(file.size)}
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			{:else if modalData?.type === 'youtube'}
+				<div class="mt-3 flex flex-col gap-3">
+					{#if modalData.thumbnailUrl}
+						<img
+							src={modalData.thumbnailUrl}
+							alt={modalData.title}
+							class="w-full rounded-lg"
+						/>
+					{/if}
+					<div class="grid grid-cols-2 gap-2 text-sm">
+						<span class="opacity-50">Mode</span>
+						<span>{modalData.mode}</span>
+						<span class="opacity-50">Quality</span>
+						<span>{modalData.quality}</span>
+						<span class="opacity-50">Format</span>
+						<span>{modalData.format}</span>
+						<span class="opacity-50">Duration</span>
+						<span>{formatDuration(modalData.durationSeconds)}</span>
+						{#if modalData.outputPath}
+							<span class="opacity-50">File</span>
+							<span class="truncate" title={modalData.outputPath}>
+								{modalData.outputPath}
+							</span>
+						{/if}
+					</div>
+				</div>
+			{:else}
+				<p class="py-4 opacity-50">Could not load details.</p>
+			{/if}
+		</div>
+		<div class="modal-backdrop" onclick={closeModal}></div>
+	</div>
+{/if}

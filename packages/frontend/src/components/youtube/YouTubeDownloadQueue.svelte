@@ -70,7 +70,8 @@
 									<span
 										class={classNames('badge badge-sm', {
 											'badge-neutral': download.state === 'pending',
-											'badge-info': download.state === 'fetching',
+											'badge-info':
+											download.state === 'fetching' || download.state === 'muxing',
 											'badge-primary': download.state === 'downloading',
 											'badge-success': download.state === 'completed',
 											'badge-error': download.state === 'failed',
@@ -79,14 +80,14 @@
 									>
 										{getStateLabel(download.state)}
 									</span>
-									{#if download.state === 'downloading'}
+									{#if download.state === 'downloading' || download.state === 'muxing'}
 										<span class="text-sm text-base-content/60">
 											{getProgressPercent(download)}%
 										</span>
 									{/if}
 								</div>
 
-								{#if download.state === 'downloading'}
+								{#if download.state === 'downloading' || download.state === 'muxing'}
 									<progress
 										class="progress progress-primary mt-2 w-full"
 										value={getProgressPercent(download)}
@@ -136,7 +137,7 @@
 									</button>
 								{/if}
 
-								{#if download.state === 'downloading' || download.state === 'fetching' || download.state === 'pending'}
+								{#if download.state === 'downloading' || download.state === 'fetching' || download.state === 'pending' || download.state === 'muxing'}
 									<button
 										class="btn btn-ghost btn-sm"
 										on:click={() => handleCancel(download.downloadId)}

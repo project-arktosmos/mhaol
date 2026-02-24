@@ -83,10 +83,27 @@ CREATE TRIGGER IF NOT EXISTS torrent_downloads_updated_at
 BEGIN
     UPDATE torrent_downloads SET updated_at = datetime('now') WHERE info_hash = OLD.info_hash;
 END;
+
+CREATE TABLE IF NOT EXISTS libraries (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    path TEXT NOT NULL,
+    media_types TEXT NOT NULL DEFAULT '[]',
+    date_added INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS libraries_updated_at
+    AFTER UPDATE ON libraries
+    FOR EACH ROW
+BEGIN
+    UPDATE libraries SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
 `;
 
 const SEED_SQL = `
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '2', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '3', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 `;
 

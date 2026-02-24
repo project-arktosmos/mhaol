@@ -1,7 +1,10 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { proxyToYtdl } from '$lib/server/ytdl-proxy';
 
 export const DELETE: RequestHandler = async ({ locals }) => {
-	locals.downloadManager.clearQueue();
-	return json({ ok: true });
+	const res = await proxyToYtdl(locals.ytdlBaseUrl, '/api/downloads/queue', {
+		method: 'DELETE'
+	});
+	locals.youtubeDownloadRepo.deleteByStates(['pending']);
+	return res;
 };

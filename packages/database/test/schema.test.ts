@@ -60,7 +60,7 @@ describe('schema initialization', () => {
 			type: string;
 		};
 		expect(row).toBeDefined();
-		expect(row.value).toBe('2');
+		expect(row.value).toBe('3');
 		expect(row.type).toBe('number');
 	});
 

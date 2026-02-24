@@ -31,6 +31,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	private ws: WebSocket | null = null;
 	private pc: RTCPeerConnection | null = null;
 	private _initialized = false;
+	private remoteDescriptionSet = false;
+	private pendingCandidates: RTCIceCandidateInit[] = [];
 
 	constructor() {
 		super('player-settings', initialSettings);
@@ -139,6 +141,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	// ===== WebSocket + WebRTC signaling =====
 
 	private connectWebSocket(url: string): void {
+		this.remoteDescriptionSet = false;
+		this.pendingCandidates = [];
 		this.ws = new WebSocket(url);
 
 		this.ws.onopen = () => {
@@ -148,13 +152,18 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		this.ws.onmessage = (event) => {
 			try {
 				const msg: SignalingMessage = JSON.parse(event.data);
-				this.handleSignalingMessage(msg);
+				if (msg.type === 'IceCandidate') {
+					this.handleIceCandidate(msg.payload);
+				} else {
+					this.handleSignalingMessage(msg);
+				}
 			} catch {
 				console.error('[Player] Failed to parse signaling message');
 			}
 		};
 
-		this.ws.onerror = () => {
+		this.ws.onerror = (e) => {
+			console.error('[Player] WebSocket error:', e);
 			this.state.update((s) => ({
 				...s,
 				connectionState: 'error',
@@ -206,6 +215,19 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		};
 	}
 
+	private handleIceCandidate(payload: { sdp_m_line_index: number; candidate: string }): void {
+		const candidateInit: RTCIceCandidateInit = {
+			sdpMLineIndex: payload.sdp_m_line_index,
+			candidate: payload.candidate
+		};
+
+		if (this.remoteDescriptionSet && this.pc) {
+			this.pc.addIceCandidate(new RTCIceCandidate(candidateInit)).catch(() => {});
+		} else {
+			this.pendingCandidates.push(candidateInit);
+		}
+	}
+
 	private async handleSignalingMessage(msg: SignalingMessage): Promise<void> {
 		if (!this.pc) return;
 
@@ -213,29 +235,37 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			case 'SessionDescription': {
 				const { sdp_type, sdp } = msg.payload;
 				if (sdp_type === 'offer') {
-					await this.pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
-					const answer = await this.pc.createAnswer();
-					await this.pc.setLocalDescription(answer);
+					try {
+						// Strip a=rtcp-mux-only — Firefox doesn't support it (Bug 1339203)
+						// and it breaks ICE gathering. a=rtcp-mux is kept and sufficient.
+						const cleanedSdp = sdp.replace(/a=rtcp-mux-only\r?\n/g, '');
 
-					const answerMsg: SignalingMessage = {
-						type: 'SessionDescription',
-						payload: {
-							sdp_type: 'answer',
-							sdp: answer.sdp!
+						await this.pc.setRemoteDescription(
+							new RTCSessionDescription({ type: 'offer', sdp: cleanedSdp })
+						);
+						this.remoteDescriptionSet = true;
+
+						// Flush any ICE candidates that arrived before remote description was set
+						for (const candidate of this.pendingCandidates) {
+							await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
 						}
-					};
-					this.ws?.send(JSON.stringify(answerMsg));
+						this.pendingCandidates = [];
+
+						const answer = await this.pc.createAnswer();
+						await this.pc.setLocalDescription(answer);
+
+						const answerMsg: SignalingMessage = {
+							type: 'SessionDescription',
+							payload: {
+								sdp_type: 'answer',
+								sdp: answer.sdp!
+							}
+						};
+						this.ws?.send(JSON.stringify(answerMsg));
+					} catch (err) {
+						console.error('[Player] SDP negotiation error:', err);
+					}
 				}
-				break;
-			}
-			case 'IceCandidate': {
-				const { sdp_m_line_index, candidate } = msg.payload;
-				await this.pc.addIceCandidate(
-					new RTCIceCandidate({
-						sdpMLineIndex: sdp_m_line_index,
-						candidate
-					})
-				);
 				break;
 			}
 			case 'IceGatheringComplete':

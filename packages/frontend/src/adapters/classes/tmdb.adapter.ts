@@ -30,10 +30,7 @@ export class TMDBAdapter extends AdapterClass {
 		return `${this.baseImageUrl}/${size}${path}`;
 	}
 
-	getBackdropUrl(
-		path: string | null,
-		size: 'w780' | 'w1280' | 'original' = 'w780'
-	): string | null {
+	getBackdropUrl(path: string | null, size: 'w780' | 'w1280' | 'original' = 'w780'): string | null {
 		if (!path) return null;
 		return `${this.baseImageUrl}/${size}${path}`;
 	}

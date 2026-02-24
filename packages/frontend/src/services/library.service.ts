@@ -1,6 +1,5 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { ArrayServiceClass } from '$services/classes/array-service.class';
 import type { Library, DirectoryEntry, BrowseDirectoryResponse } from '$types/library.type';
 import { type MediaType } from '$types/library.type';
 
@@ -28,11 +27,22 @@ const initialState: LibraryServiceState = {
 	selectedMediaTypes: []
 };
 
-class LibraryService extends ArrayServiceClass<Library> {
+class LibraryService {
+	public store: Writable<Library[]> = writable([]);
 	public state: Writable<LibraryServiceState> = writable(initialState);
 
-	constructor() {
-		super('libraries', []);
+	private initialized = false;
+
+	async initialize(): Promise<void> {
+		if (!browser || this.initialized) return;
+
+		try {
+			const libraries = await this.fetchJson<Library[]>('/api/libraries');
+			this.store.set(libraries);
+			this.initialized = true;
+		} catch (error) {
+			console.error('[library] Failed to initialize:', error);
+		}
 	}
 
 	async browseDirectory(path?: string): Promise<void> {
@@ -63,21 +73,31 @@ class LibraryService extends ArrayServiceClass<Library> {
 		}
 	}
 
-	addLibrary(name: string, path: string, mediaTypes: MediaType[]): Library {
-		const library: Library = {
-			id: crypto.randomUUID(),
-			name,
-			path,
-			mediaTypes,
-			dateAdded: Date.now()
-		};
-		this.add(library);
-		this.resetForm();
-		return library;
+	async addLibrary(name: string, path: string, mediaTypes: MediaType[]): Promise<void> {
+		if (!browser) return;
+
+		try {
+			const library = await this.fetchJson<Library>('/api/libraries', {
+				method: 'POST',
+				body: JSON.stringify({ name, path, mediaTypes })
+			});
+
+			this.store.update((items) => [...items, library]);
+			this.resetForm();
+		} catch (error) {
+			console.error('[library] Failed to add library:', error);
+		}
 	}
 
-	removeLibrary(library: Library): void {
-		this.remove(library);
+	async removeLibrary(library: Library): Promise<void> {
+		if (!browser) return;
+
+		try {
+			await this.fetchJson(`/api/libraries/${library.id}`, { method: 'DELETE' });
+			this.store.update((items) => items.filter((i) => i.id !== library.id));
+		} catch (error) {
+			console.error('[library] Failed to remove library:', error);
+		}
 	}
 
 	openAddForm(): void {

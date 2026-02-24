@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { youtubeService } from '$services/youtube.service';
 	import {
@@ -32,17 +31,12 @@
 	let outputPathInput = '';
 	let editingPath = false;
 
-	onMount(async () => {
-		const config = await youtubeService.getConfig();
-		if (config) {
-			poToken = config.poToken || '';
-			cookies = config.cookies || '';
-		}
-		outputPathInput = $state.outputPath;
-	});
+	// Sync auth fields from settings store
+	$: if ($settings.poToken !== undefined) poToken = $settings.poToken;
+	$: if ($settings.cookies !== undefined) cookies = $settings.cookies;
 
-	$: if ($state.outputPath && !editingPath) {
-		outputPathInput = $state.outputPath;
+	$: if ($settings.outputPath && !editingPath) {
+		outputPathInput = $settings.outputPath;
 	}
 
 	function handleModeChange(mode: DownloadMode) {
@@ -69,9 +63,9 @@
 		youtubeService.setDefaultVideoFormat(target.value as VideoFormat);
 	}
 
-	async function handleSetOutputPath() {
+	function handleSetOutputPath() {
 		if (outputPathInput.trim()) {
-			await youtubeService.setOutputPath(outputPathInput.trim());
+			youtubeService.setOutputPath(outputPathInput.trim());
 			editingPath = false;
 		}
 	}
@@ -302,7 +296,7 @@
 					bind:value={outputPathInput}
 					on:focus={() => (editingPath = true)}
 					placeholder="/path/to/downloads"
-					title={$state.outputPath}
+					title={$settings.outputPath}
 				/>
 				<button class="btn btn-outline btn-sm" on:click={handleSetOutputPath}> Set </button>
 			</div>

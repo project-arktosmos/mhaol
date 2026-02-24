@@ -6,6 +6,7 @@ export type YouTubeDownloadState =
 	| 'pending'
 	| 'fetching'
 	| 'downloading'
+	| 'muxing'
 	| 'completed'
 	| 'failed'
 	| 'cancelled';
@@ -144,7 +145,7 @@ export interface YouTubeServiceState {
 	fetchingPlaylistInfo: boolean;
 }
 
-// ===== Settings (localStorage) =====
+// ===== Settings (database) =====
 
 export interface YouTubeSettings {
 	id: ID;
@@ -154,6 +155,8 @@ export interface YouTubeSettings {
 	defaultVideoQuality: VideoQuality;
 	defaultVideoFormat: VideoFormat;
 	outputPath: string;
+	poToken: string;
+	cookies: string;
 }
 
 // ===== Authentication Config =====
@@ -186,6 +189,8 @@ export function getStateColor(state: YouTubeDownloadState): string {
 			return 'info';
 		case 'downloading':
 			return 'primary';
+		case 'muxing':
+			return 'info';
 		case 'completed':
 			return 'success';
 		case 'failed':
@@ -205,6 +210,8 @@ export function getStateLabel(state: YouTubeDownloadState): string {
 			return 'Fetching Info';
 		case 'downloading':
 			return 'Downloading';
+		case 'muxing':
+			return 'Muxing';
 		case 'completed':
 			return 'Completed';
 		case 'failed':

@@ -1,12 +1,18 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { torrentService } from '$services/torrent.service';
+	import { libraryService } from '$services/library.service';
+	import type { Library } from '$types/library.type';
+	import LibraryAddForm from '$components/libraries/LibraryAddForm.svelte';
 
 	const state = torrentService.state;
+	const libraries = libraryService.store;
+	const libraryState = libraryService.state;
 
-	// Download path editing
-	let downloadPathInput = '';
-	let editingPath = false;
+	// Library selection
+	let selectedLibraryId: string = '';
+	let showInlineAddForm = false;
+	let previousLibraryCount = 0;
 
 	// Debug info
 	let showDebug = false;
@@ -16,15 +22,42 @@
 	// Clear storage confirmation
 	let confirmClear = false;
 
-	$: if ($state.downloadPath && !editingPath) {
-		downloadPathInput = $state.downloadPath;
+	// Auto-select library matching current download path
+	$: if ($libraries.length > 0 && $state.downloadPath) {
+		const match = $libraries.find((lib: Library) => lib.path === $state.downloadPath);
+		if (match) {
+			selectedLibraryId = String(match.id);
+		}
 	}
 
-	async function handleSetDownloadPath() {
-		if (downloadPathInput.trim()) {
-			await torrentService.setDownloadPath(downloadPathInput.trim());
-			editingPath = false;
+	// Detect when inline add form closes (cancel or successful add)
+	$: if (showInlineAddForm && !$libraryState.showAddForm) {
+		showInlineAddForm = false;
+		// If a new library was added, auto-select it
+		if ($libraries.length > previousLibraryCount) {
+			const newest = $libraries[$libraries.length - 1];
+			selectedLibraryId = String(newest.id);
+			torrentService.setDownloadPath(newest.path);
 		}
+	}
+
+	$: previousLibraryCount = $libraries.length;
+
+	async function handleLibrarySelect(event: Event) {
+		const target = event.target as HTMLSelectElement;
+		const libraryId = target.value;
+		if (!libraryId) return;
+
+		const library = $libraries.find((lib: Library) => String(lib.id) === libraryId);
+		if (library) {
+			selectedLibraryId = String(library.id);
+			await torrentService.setDownloadPath(library.path);
+		}
+	}
+
+	function handleShowAddForm() {
+		showInlineAddForm = true;
+		libraryService.openAddForm();
 	}
 
 	async function handleFetchDebug() {
@@ -71,26 +104,65 @@
 			</div>
 		</div>
 
-		<!-- Download Path -->
+		<!-- Download Library -->
 		<div class="form-control">
-			<label class="label" for="download-path">
-				<span class="label-text">Download Path</span>
+			<label class="label" for="library-select">
+				<span class="label-text">Download Library</span>
 			</label>
-			<div class="flex items-center gap-2">
-				<input
-					id="download-path"
-					type="text"
-					class="input input-bordered flex-1"
-					bind:value={downloadPathInput}
-					on:focus={() => (editingPath = true)}
-					placeholder="/path/to/downloads"
-					title={$state.downloadPath}
-				/>
-				<button class="btn btn-outline btn-sm" on:click={handleSetDownloadPath}>
-					Set
-				</button>
-			</div>
+
+			{#if $libraries.length > 0}
+				<div class="flex items-center gap-2">
+					<select
+						id="library-select"
+						class="select select-bordered flex-1"
+						value={selectedLibraryId}
+						on:change={handleLibrarySelect}
+					>
+						<option value="" disabled>Select a library...</option>
+						{#each $libraries as library (library.id)}
+							<option value={String(library.id)}>
+								{library.name}
+							</option>
+						{/each}
+					</select>
+					<button
+						class="btn btn-ghost btn-sm"
+						on:click={handleShowAddForm}
+						title="Add new library"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							class="h-4 w-4"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+							stroke-width="2"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+						</svg>
+					</button>
+				</div>
+				{#if $state.downloadPath}
+					<span class="label">
+						<span class="label-text-alt truncate font-mono text-base-content/50"
+							>{$state.downloadPath}</span
+						>
+					</span>
+				{/if}
+			{:else}
+				<div class="rounded-lg bg-base-300 p-4 text-center">
+					<p class="mb-2 text-sm text-base-content/60">No libraries configured</p>
+					<button class="btn btn-primary btn-sm" on:click={handleShowAddForm}>
+						Create Library
+					</button>
+				</div>
+			{/if}
 		</div>
+
+		<!-- Inline Library Add Form -->
+		{#if showInlineAddForm && $libraryState.showAddForm}
+			<LibraryAddForm />
+		{/if}
 
 		<!-- Clear Storage -->
 		<div class="form-control">

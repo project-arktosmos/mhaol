@@ -75,7 +75,17 @@ pub async fn create_session(
         FileSource::new(&path)
     };
 
-    let manager = SessionManager::new(|| PipelineBuilder::new(), file_source);
+    let manager = SessionManager::new(
+        move || {
+            let builder = PipelineBuilder::new();
+            if is_audio_only {
+                builder.no_video()
+            } else {
+                builder
+            }
+        },
+        file_source,
+    );
 
     let session_id = Uuid::new_v4().to_string();
 

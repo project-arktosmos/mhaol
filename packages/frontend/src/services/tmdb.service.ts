@@ -30,10 +30,7 @@ class TMDBService {
 		return this.apiKey !== null && this.apiKey.length > 0;
 	}
 
-	private async fetch<T>(
-		endpoint: string,
-		params: Record<string, string> = {}
-	): Promise<T | null> {
+	private async fetch<T>(endpoint: string, params: Record<string, string> = {}): Promise<T | null> {
 		if (!this.apiKey) {
 			throw new Error('TMDB API key not configured');
 		}
@@ -177,10 +174,7 @@ class TMDBService {
 		return this.fetch<TMDBSeasonDetails>(`/tv/${tvShowId}/season/${seasonNumber}`);
 	}
 
-	async fetchAllSeasons(
-		tvShowId: number,
-		seasonNumbers: number[]
-	): Promise<TMDBSeasonDetails[]> {
+	async fetchAllSeasons(tvShowId: number, seasonNumbers: number[]): Promise<TMDBSeasonDetails[]> {
 		const results: TMDBSeasonDetails[] = [];
 		for (const seasonNumber of seasonNumbers) {
 			const season = await this.fetchSeasonDetails(tvShowId, seasonNumber);

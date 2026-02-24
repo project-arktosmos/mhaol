@@ -23,9 +23,7 @@ export class TorrentSearchAdapter extends AdapterClass {
 
 	isNoResults(results: PirateBayApiResult[]): boolean {
 		return (
-			results.length === 1 &&
-			results[0].id === '0' &&
-			results[0].name === 'No results returned'
+			results.length === 1 && results[0].id === '0' && results[0].name === 'No results returned'
 		);
 	}
 

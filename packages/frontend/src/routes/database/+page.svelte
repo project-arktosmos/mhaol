@@ -106,92 +106,97 @@
 			<p class="opacity-50">No tables found in the database.</p>
 		</div>
 	{:else}
-		<div class="mb-4 flex flex-wrap gap-2">
-			{#each tables as table (table.name)}
-				<button
-					class={classNames('btn btn-sm', {
-						'btn-primary': activeTable === table.name,
-						'btn-ghost': activeTable !== table.name
-					})}
-					onclick={() => selectTable(table.name)}
-				>
-					{table.name}
-					<span class="badge badge-sm ml-1">{table.rowCount}</span>
-				</button>
-			{/each}
-		</div>
-
-		{#if tableLoading}
-			<div class="flex justify-center py-12">
-				<span class="loading loading-spinner loading-lg"></span>
-			</div>
-		{:else if tableData}
-			<div class="mb-2 flex items-center justify-between">
-				<h2 class="text-lg font-semibold">{tableData.table}</h2>
-				<span class="text-sm opacity-70">
-					{tableData.pagination.total} row{tableData.pagination.total !== 1 ? 's' : ''}
-				</span>
-			</div>
-
-			{#if tableData.rows.length === 0}
-				<div class="rounded-lg bg-base-200 p-8 text-center">
-					<p class="opacity-50">This table is empty.</p>
-				</div>
-			{:else}
-				<div class="overflow-x-auto rounded-lg border border-base-300">
-					<table class="table table-sm">
-						<thead>
-							<tr class="bg-base-200">
-								{#each tableData.columns as col (col.name)}
-									<th>
-										<div>{col.name}</div>
-										<div class="text-xs font-normal opacity-50">{col.type}</div>
-									</th>
-								{/each}
-							</tr>
-						</thead>
-						<tbody>
-							{#each tableData.rows as row, i (i)}
-								<tr class="hover:bg-base-200/50">
-									{#each tableData.columns as col (col.name)}
-										<td
-											class={classNames('max-w-xs', {
-												'italic opacity-40':
-													row[col.name] === null || row[col.name] === undefined
-											})}
-											title={formatCell(row[col.name])}
-										>
-											{truncateCell(formatCell(row[col.name]))}
-										</td>
-									{/each}
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-
-				{#if tableData.pagination.totalPages > 1}
-					<div class="mt-4 flex justify-center gap-2">
+		<div class="flex gap-4">
+			<ul class="menu w-56 shrink-0 rounded-lg bg-base-200">
+				{#each tables as table (table.name)}
+					<li>
 						<button
-							class="btn btn-sm"
-							disabled={tableData.pagination.page <= 1}
-							onclick={() => handlePageChange(tableData!.pagination.page - 1)}
+							class={classNames('justify-between', {
+								active: activeTable === table.name
+							})}
+							onclick={() => selectTable(table.name)}
 						>
-							Previous
+							{table.name}
+							<span class="badge badge-sm">{table.rowCount}</span>
 						</button>
-						<span class="flex items-center px-4 text-sm">
-							Page {tableData.pagination.page} of {tableData.pagination.totalPages}
-						</span>
-						<button
-							class="btn btn-sm"
-							disabled={tableData.pagination.page >= tableData.pagination.totalPages}
-							onclick={() => handlePageChange(tableData!.pagination.page + 1)}
-						>
-							Next
-						</button>
+					</li>
+				{/each}
+			</ul>
+
+			<div class="min-w-0 flex-1">
+				{#if tableLoading}
+					<div class="flex justify-center py-12">
+						<span class="loading loading-spinner loading-lg"></span>
 					</div>
+				{:else if tableData}
+					<div class="mb-2 flex items-center justify-between">
+						<h2 class="text-lg font-semibold">{tableData.table}</h2>
+						<span class="text-sm opacity-70">
+							{tableData.pagination.total} row{tableData.pagination.total !== 1 ? 's' : ''}
+						</span>
+					</div>
+
+					{#if tableData.rows.length === 0}
+						<div class="rounded-lg bg-base-200 p-8 text-center">
+							<p class="opacity-50">This table is empty.</p>
+						</div>
+					{:else}
+						<div class="overflow-x-auto rounded-lg border border-base-300">
+							<table class="table table-sm">
+								<thead>
+									<tr class="bg-base-200">
+										{#each tableData.columns as col (col.name)}
+											<th>
+												<div>{col.name}</div>
+												<div class="text-xs font-normal opacity-50">{col.type}</div>
+											</th>
+										{/each}
+									</tr>
+								</thead>
+								<tbody>
+									{#each tableData.rows as row, i (i)}
+										<tr class="hover:bg-base-200/50">
+											{#each tableData.columns as col (col.name)}
+												<td
+													class={classNames('max-w-xs', {
+														'italic opacity-40':
+															row[col.name] === null || row[col.name] === undefined
+													})}
+													title={formatCell(row[col.name])}
+												>
+													{truncateCell(formatCell(row[col.name]))}
+												</td>
+											{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+
+						{#if tableData.pagination.totalPages > 1}
+							<div class="mt-4 flex justify-center gap-2">
+								<button
+									class="btn btn-sm"
+									disabled={tableData.pagination.page <= 1}
+									onclick={() => handlePageChange(tableData!.pagination.page - 1)}
+								>
+									Previous
+								</button>
+								<span class="flex items-center px-4 text-sm">
+									Page {tableData.pagination.page} of {tableData.pagination.totalPages}
+								</span>
+								<button
+									class="btn btn-sm"
+									disabled={tableData.pagination.page >= tableData.pagination.totalPages}
+									onclick={() => handlePageChange(tableData!.pagination.page + 1)}
+								>
+									Next
+								</button>
+							</div>
+						{/if}
+					{/if}
 				{/if}
-			{/if}
-		{/if}
+			</div>
+		</div>
 	{/if}
 </div>

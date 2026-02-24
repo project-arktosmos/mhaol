@@ -5,6 +5,7 @@ export class SettingsRepository {
 	private stmts: {
 		get: Statement<[string], SettingRow>;
 		getAll: Statement<[], SettingRow>;
+		getByPrefix: Statement<[string], SettingRow>;
 		set: Statement<[{ key: string; value: string }]>;
 		delete: Statement<[string]>;
 		exists: Statement<[string]>;
@@ -14,6 +15,7 @@ export class SettingsRepository {
 		this.stmts = {
 			get: db.prepare('SELECT * FROM settings WHERE key = ?'),
 			getAll: db.prepare('SELECT * FROM settings ORDER BY key'),
+			getByPrefix: db.prepare('SELECT * FROM settings WHERE key LIKE ? ORDER BY key'),
 			set: db.prepare(`
 				INSERT INTO settings (key, value) VALUES (@key, @value)
 				ON CONFLICT(key) DO UPDATE SET value = @value
@@ -34,6 +36,10 @@ export class SettingsRepository {
 
 	getAll(): SettingRow[] {
 		return this.stmts.getAll.all();
+	}
+
+	getByPrefix(prefix: string): SettingRow[] {
+		return this.stmts.getByPrefix.all(prefix + '%');
 	}
 
 	set(key: string, value: string): void {

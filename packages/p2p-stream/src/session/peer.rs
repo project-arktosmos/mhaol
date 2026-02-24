@@ -142,6 +142,12 @@ impl PeerSession {
 
                     let sdp_text = offer.sdp().to_string();
 
+                    // Skip offers with no media descriptions (fires before pads are linked)
+                    if !sdp_text.contains("m=") {
+                        info!("Skipping SDP offer with no media descriptions");
+                        return;
+                    }
+
                     webrtcbin_inner.emit_by_name::<()>(
                         "set-local-description",
                         &[&offer, &None::<gst::Promise>],

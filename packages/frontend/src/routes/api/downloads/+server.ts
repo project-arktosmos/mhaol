@@ -19,7 +19,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 		updatedAt: row.updated_at,
 		url: row.url,
 		mode: row.mode,
-		format: row.format
+		format: row.format,
+		thumbnailUrl: row.thumbnail_url
 	}));
 
 	const torrentDownloads: UnifiedDownload[] = torrentRows.map((row) => ({

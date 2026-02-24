@@ -4,8 +4,9 @@ use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 
-/// 10 MB chunk size for range requests.
-const CHUNK_SIZE: u64 = 10 * 1024 * 1024;
+/// 1 MB chunk size for range requests.
+/// YouTube's CDN rejects range requests larger than ~1 MB for some videos.
+const CHUNK_SIZE: u64 = 1024 * 1024;
 
 /// Progress update for a download.
 #[derive(Debug, Clone)]

@@ -13,6 +13,7 @@ export interface UnifiedDownload {
 	url?: string;
 	mode?: string;
 	format?: string;
+	thumbnailUrl?: string | null;
 	// Torrent-specific
 	downloadSpeed?: number;
 	uploadSpeed?: number;
