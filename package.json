@@ -8,6 +8,7 @@
 		"build": "pnpm -r --filter frontend build",
 		"preview": "pnpm -r --filter frontend preview",
 		"test": "pnpm -r run test",
+		"test:e2e": "pnpm -r --filter frontend test:e2e",
 		"lint": "pnpm -r run lint",
 		"format": "pnpm -r run format",
 		"check": "pnpm -r run check",
