@@ -23,14 +23,16 @@ pub fn select_formats(
     audio_format: &AudioFormat,
     video_quality: Option<&VideoQuality>,
     video_format: Option<&VideoFormat>,
+    has_po_token: bool,
 ) -> Result<SelectedFormats, YtDlpError> {
     match mode {
-        DownloadMode::Audio => select_audio_format(formats, audio_quality, audio_format),
+        DownloadMode::Audio => select_audio_format(formats, audio_quality, audio_format, has_po_token),
         DownloadMode::Video => select_video_formats(
             formats,
             video_quality.unwrap_or(&VideoQuality::Best),
             video_format.unwrap_or(&VideoFormat::Mp4),
             audio_quality,
+            has_po_token,
         ),
     }
 }
@@ -39,15 +41,39 @@ fn select_audio_format(
     formats: &[ResolvedFormat],
     _quality: &AudioQuality,
     _format: &AudioFormat,
+    has_po_token: bool,
 ) -> Result<SelectedFormats, YtDlpError> {
-    // ANDROID client adaptive audio streams (itag=139/140/251) require a GVS PO Token for
-    // full download access. Without that token, YouTube CDN returns HTTP 403 regardless of
-    // whether the URL contains ratebypass=yes. Muxed formats (itag=18, etc.) are explicitly
-    // exempt from the GVS PO Token requirement and download without restriction.
-    //
-    // To avoid 403 failures we always use a muxed format and extract the audio track via
-    // ffmpeg afterward. When GVS PO Token support is added in the future, the adaptive path
-    // can be restored here.
+    // When a PO token is available, use adaptive audio-only streams for best quality.
+    if has_po_token {
+        let mut audio_only: Vec<&ResolvedFormat> = formats
+            .iter()
+            .filter(|f| f.is_audio_only)
+            .collect();
+
+        if !audio_only.is_empty() {
+            audio_only.sort_by(|a, b| b.bitrate.cmp(&a.bitrate));
+            let selected = audio_only[0];
+
+            log::info!(
+                "Audio download: using adaptive audio itag={} ({} codec, {} container, {} kbps)",
+                selected.itag,
+                selected.codec,
+                selected.container,
+                selected.bitrate / 1000,
+            );
+
+            return Ok(SelectedFormats {
+                video: None,
+                audio: selected.clone(),
+                needs_muxing: false,
+                output_extension: selected.container.clone(),
+                needs_audio_extraction: false,
+            });
+        }
+        log::warn!("No adaptive audio formats found despite having PO token, falling back to muxed");
+    }
+
+    // Fallback: use muxed format and extract audio via ffmpeg
     let mut muxed: Vec<&ResolvedFormat> = formats
         .iter()
         .filter(|f| !f.is_audio_only && !f.is_video_only)
@@ -78,98 +104,80 @@ fn select_audio_format(
 
 fn select_video_formats(
     formats: &[ResolvedFormat],
-    quality: &VideoQuality,
+    _quality: &VideoQuality,
     format: &VideoFormat,
     _audio_quality: &AudioQuality,
+    has_po_token: bool,
 ) -> Result<SelectedFormats, YtDlpError> {
-    let video_formats: Vec<&ResolvedFormat> =
-        formats.iter().filter(|f| f.is_video_only).collect();
-    let audio_formats: Vec<&ResolvedFormat> =
-        formats.iter().filter(|f| f.is_audio_only).collect();
+    let ext = match format {
+        VideoFormat::Mp4 => "mp4",
+        VideoFormat::Mkv => "mkv",
+        VideoFormat::Webm => "webm",
+    };
 
-    // If we have separate video+audio adaptive formats, use those
-    if !video_formats.is_empty() && !audio_formats.is_empty() {
-        let target_height = match quality {
-            VideoQuality::Best => u32::MAX,
-            VideoQuality::P1080 => 1080,
-            VideoQuality::P720 => 720,
-            VideoQuality::P480 => 480,
-        };
+    // When a PO token is available, use adaptive video-only + audio-only for best quality.
+    if has_po_token {
+        let mut video_only: Vec<&ResolvedFormat> = formats
+            .iter()
+            .filter(|f| f.is_video_only)
+            .collect();
 
-        let preferred_container = match format {
-            VideoFormat::Mp4 => "mp4",
-            VideoFormat::Mkv => "mp4", // Download as mp4, mux to mkv
-            VideoFormat::Webm => "webm",
-        };
+        let mut audio_only: Vec<&ResolvedFormat> = formats
+            .iter()
+            .filter(|f| f.is_audio_only)
+            .collect();
 
-        // Select video: prefer matching container, then best quality within target
-        let mut video_candidates: Vec<&&ResolvedFormat> = video_formats.iter().collect();
-        video_candidates.sort_by(|a, b| {
-            let a_height = a.height.unwrap_or(0);
-            let b_height = b.height.unwrap_or(0);
-
-            // Filter out formats above target (unless target is Best)
-            if *quality != VideoQuality::Best {
-                let a_over = a_height > target_height;
-                let b_over = b_height > target_height;
-                if a_over != b_over {
-                    return a_over.cmp(&b_over); // Prefer not-over
+        if !video_only.is_empty() && !audio_only.is_empty() {
+            // Sort video by height (desc), then bitrate (desc)
+            video_only.sort_by(|a, b| {
+                let a_height = a.height.unwrap_or(0);
+                let b_height = b.height.unwrap_or(0);
+                if a_height != b_height {
+                    b_height.cmp(&a_height)
+                } else {
+                    b.bitrate.cmp(&a.bitrate)
                 }
-            }
+            });
 
-            // Prefer matching container
-            let a_container_match = a.container == preferred_container;
-            let b_container_match = b.container == preferred_container;
-            if a_container_match != b_container_match {
-                return b_container_match.cmp(&a_container_match);
-            }
+            // Sort audio by bitrate (desc)
+            audio_only.sort_by(|a, b| b.bitrate.cmp(&a.bitrate));
 
-            // Prefer higher resolution, then higher bitrate
-            if a_height != b_height {
-                return b_height.cmp(&a_height);
-            }
-            b.bitrate.cmp(&a.bitrate)
-        });
+            let video = video_only[0];
+            let audio = audio_only[0];
 
-        let video = video_candidates
-            .first()
-            .ok_or(YtDlpError::NoSuitableFormat)?;
+            log::info!(
+                "Video download: adaptive video itag={} ({}x{}, {} kbps) + audio itag={} ({} kbps), will mux to {}",
+                video.itag,
+                video.width.unwrap_or(0),
+                video.height.unwrap_or(0),
+                video.bitrate / 1000,
+                audio.itag,
+                audio.bitrate / 1000,
+                ext,
+            );
 
-        // Select best audio
-        let mut audio_candidates: Vec<&&ResolvedFormat> = audio_formats.iter().collect();
-        audio_candidates.sort_by(|a, b| b.bitrate.cmp(&a.bitrate));
-
-        let audio = audio_candidates
-            .first()
-            .ok_or(YtDlpError::NoSuitableFormat)?;
-
-        let ext = match format {
-            VideoFormat::Mp4 => "mp4",
-            VideoFormat::Mkv => "mkv",
-            VideoFormat::Webm => "webm",
-        };
-
-        return Ok(SelectedFormats {
-            video: Some((**video).clone()),
-            audio: (**audio).clone(),
-            needs_muxing: true,
-            output_extension: ext.to_string(),
-            needs_audio_extraction: false,
-        });
+            return Ok(SelectedFormats {
+                video: Some(video.clone()),
+                audio: audio.clone(),
+                needs_muxing: true,
+                output_extension: ext.to_string(),
+                needs_audio_extraction: false,
+            });
+        }
+        log::warn!("No adaptive video+audio formats found despite having PO token, falling back to muxed");
     }
 
-    // Fallback to muxed formats (video+audio combined)
-    let muxed_formats: Vec<&ResolvedFormat> = formats
+    // Fallback: use muxed formats (max ~720p but no token needed)
+    let mut muxed: Vec<&ResolvedFormat> = formats
         .iter()
         .filter(|f| !f.is_audio_only && !f.is_video_only)
         .collect();
 
-    if muxed_formats.is_empty() {
+    if muxed.is_empty() {
         return Err(YtDlpError::NoSuitableFormat);
     }
 
-    let mut muxed_candidates: Vec<&&ResolvedFormat> = muxed_formats.iter().collect();
-    muxed_candidates.sort_by(|a, b| {
+    muxed.sort_by(|a, b| {
         let a_height = a.height.unwrap_or(0);
         let b_height = b.height.unwrap_or(0);
         if a_height != b_height {
@@ -179,15 +187,28 @@ fn select_video_formats(
         }
     });
 
-    let best_muxed = muxed_candidates
-        .first()
-        .ok_or(YtDlpError::NoSuitableFormat)?;
+    let selected = muxed.first().ok_or(YtDlpError::NoSuitableFormat)?;
+    let needs_remux = selected.container != ext;
+
+    log::info!(
+        "Video download: using muxed itag={} ({}x{}, {} container, {} kbps){}",
+        selected.itag,
+        selected.width.unwrap_or(0),
+        selected.height.unwrap_or(0),
+        selected.container,
+        selected.bitrate / 1000,
+        if needs_remux {
+            format!(", will remux to {}", ext)
+        } else {
+            String::new()
+        },
+    );
 
     Ok(SelectedFormats {
         video: None,
-        audio: (**best_muxed).clone(),
+        audio: (*selected).clone(),
         needs_muxing: false,
-        output_extension: best_muxed.container.clone(),
+        output_extension: ext.to_string(),
         needs_audio_extraction: false,
     })
 }

@@ -32,13 +32,14 @@ impl InnertubeApi {
         video_id: &str,
         client: &InnertubeClient,
         po_token: Option<&str>,
+        visitor_data: Option<&str>,
     ) -> Result<PlayerResponse> {
         let url = format!(
             "{}/player?key={}&prettyPrint=false",
             INNERTUBE_BASE_URL, client.api_key
         );
 
-        let body = client.build_player_request(video_id, None, po_token);
+        let body = client.build_player_request(video_id, None, po_token, visitor_data);
 
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -84,7 +85,7 @@ impl InnertubeApi {
         );
 
         let body = serde_json::json!({
-            "context": super::clients::WEB.build_context(),
+            "context": super::clients::WEB.build_context(None),
             "browseId": format!("VL{}", playlist_id)
         });
 
@@ -157,7 +158,7 @@ impl InnertubeApi {
         );
 
         let body = serde_json::json!({
-            "context": super::clients::WEB.build_context(),
+            "context": super::clients::WEB.build_context(None),
             "continuation": continuation_token
         });
 

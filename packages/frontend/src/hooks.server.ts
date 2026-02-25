@@ -15,6 +15,7 @@ import {
 	TorrentDownloadRepository,
 	LibraryRepository
 } from 'database/repositories';
+import { getPoToken } from '$lib/server/po-token';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(__dirname, '..');
@@ -94,6 +95,59 @@ if (existsSync(YTDL_BIN)) {
 
 	ytdlServerAvailable = true;
 	console.log(`[ytdl-rust] Started on port ${YTDL_PORT} (pid: ${ytdlServerProcess.pid})`);
+
+	// Auto-generate and sync PO token to Rust server (only if no manual token is set)
+	if (!persistedPoToken) {
+		const syncPoToken = async () => {
+			// Wait for Rust server to be ready
+			for (let i = 0; i < 20; i++) {
+				try {
+					const res = await fetch(`${ytdlBaseUrl}/api/status`);
+					if (res.ok) break;
+				} catch {
+					// Server not ready yet
+				}
+				await new Promise((r) => setTimeout(r, 500));
+			}
+
+			try {
+				const { poToken, visitorData } = await getPoToken();
+				await fetch(`${ytdlBaseUrl}/api/config`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ poToken, visitorData })
+				});
+				settingsRepo.set('youtube.poToken', poToken);
+				settingsRepo.set('youtube.visitorData', visitorData);
+				console.log('[po-token] Auto-generated and synced to Rust server');
+			} catch (e) {
+				console.warn(`[po-token] Failed to auto-generate: ${e}`);
+			}
+		};
+
+		syncPoToken();
+
+		// Refresh PO token every 6 hours
+		setInterval(
+			async () => {
+				try {
+					const { refreshPoToken } = await import('$lib/server/po-token');
+					const { poToken, visitorData } = await refreshPoToken();
+					await fetch(`${ytdlBaseUrl}/api/config`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ poToken, visitorData })
+					});
+					settingsRepo.set('youtube.poToken', poToken);
+					settingsRepo.set('youtube.visitorData', visitorData);
+					console.log('[po-token] Refreshed and synced to Rust server');
+				} catch (e) {
+					console.warn(`[po-token] Failed to refresh: ${e}`);
+				}
+			},
+			6 * 60 * 60 * 1000
+		);
+	}
 } else {
 	console.warn(`[ytdl-rust] Binary not found at ${YTDL_BIN}, YouTube downloads disabled`);
 	console.warn(`[ytdl-rust] Run 'pnpm ytdl-rust:build' to build it`);

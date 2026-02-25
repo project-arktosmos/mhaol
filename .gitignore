@@ -26,6 +26,10 @@ vite.config.ts.timestamp-*
 coverage/
 .vitest/
 
+# Playwright
+playwright-report/
+test-results/
+
 # Build output
 dist/
 
@@ -36,3 +40,6 @@ target/
 *.db
 *.db-wal
 *.db-shm
+
+# Prebuilt binaries
+packages/frontend/bin/

@@ -17,16 +17,20 @@ pub struct InnertubeClient {
 
 impl InnertubeClient {
     /// Build the Innertube context JSON for API requests.
-    pub fn build_context(&self) -> Value {
-        json!({
-            "client": {
-                "clientName": self.client_name,
-                "clientVersion": self.client_version,
-                "hl": "en",
-                "timeZone": "UTC",
-                "utcOffsetMinutes": 0
-            }
-        })
+    pub fn build_context(&self, visitor_data: Option<&str>) -> Value {
+        let mut client = json!({
+            "clientName": self.client_name,
+            "clientVersion": self.client_version,
+            "hl": "en",
+            "timeZone": "UTC",
+            "utcOffsetMinutes": 0
+        });
+
+        if let Some(vd) = visitor_data {
+            client["visitorData"] = json!(vd);
+        }
+
+        json!({ "client": client })
     }
 
     /// Build a full player request body.
@@ -35,9 +39,10 @@ impl InnertubeClient {
         video_id: &str,
         sts: Option<u64>,
         po_token: Option<&str>,
+        visitor_data: Option<&str>,
     ) -> Value {
         let mut body = json!({
-            "context": self.build_context(),
+            "context": self.build_context(visitor_data),
             "videoId": video_id,
             "contentCheckOk": true,
             "racyCheckOk": true

@@ -113,6 +113,8 @@ impl DownloadManager {
             video_quality: request.video_quality,
             video_format: request.video_format,
             output_dir: config.output_path.clone(),
+            po_token: config.po_token.clone(),
+            visitor_data: config.visitor_data.clone(),
         };
 
         self.spawn_download(download_id.clone(), task_config);
@@ -126,6 +128,8 @@ impl DownloadManager {
         let quality = request.quality.unwrap_or(config.default_quality.clone());
         let format = request.format.unwrap_or(config.default_format.clone());
         let output_path = config.output_path.clone();
+        let po_token = config.po_token.clone();
+        let visitor_data = config.visitor_data.clone();
         drop(config);
 
         let mut ids = Vec::new();
@@ -171,6 +175,8 @@ impl DownloadManager {
                 video_quality: request.video_quality.clone(),
                 video_format: request.video_format.clone(),
                 output_dir: output_path.clone(),
+                po_token: po_token.clone(),
+                visitor_data: visitor_data.clone(),
             };
 
             self.spawn_download(download_id.clone(), task_config);
@@ -271,6 +277,13 @@ impl DownloadManager {
                 Some(token.to_string())
             };
         }
+        if let Some(visitor_data) = updates.get("visitorData").and_then(|v| v.as_str()) {
+            config.visitor_data = if visitor_data.is_empty() {
+                None
+            } else {
+                Some(visitor_data.to_string())
+            };
+        }
         if let Some(cookies) = updates.get("cookies").and_then(|v| v.as_str()) {
             config.cookies = if cookies.is_empty() {
                 None
@@ -288,9 +301,12 @@ impl DownloadManager {
     /// Fetch video info (delegates to pipeline).
     pub async fn fetch_video_info(&self, url: &str) -> anyhow::Result<VideoInfo> {
         let video_id = extract_video_id(url)?;
-        let po_token = self.config.read().po_token.clone();
+        let (po_token, visitor_data) = {
+            let config = self.config.read();
+            (config.po_token.clone(), config.visitor_data.clone())
+        };
         self.pipeline
-            .fetch_video_info(&video_id, po_token.as_deref())
+            .fetch_video_info(&video_id, po_token.as_deref(), visitor_data.as_deref())
             .await
     }
 

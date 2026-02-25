@@ -27,6 +27,8 @@ pub struct DownloadTaskConfig {
     pub video_quality: Option<VideoQuality>,
     pub video_format: Option<VideoFormat>,
     pub output_dir: String,
+    pub po_token: Option<String>,
+    pub visitor_data: Option<String>,
 }
 
 /// Describes the progress of the pipeline stages.
@@ -64,8 +66,9 @@ impl DownloadPipeline {
         &self,
         video_id: &str,
         po_token: Option<&str>,
+        visitor_data: Option<&str>,
     ) -> Result<VideoInfo> {
-        let (player_response, _client) = self.fetch_player_response(video_id, po_token).await?;
+        let (player_response, _client, _token_used) = self.fetch_player_response(video_id, po_token, visitor_data).await?;
 
         let details = player_response
             .video_details
@@ -92,8 +95,13 @@ impl DownloadPipeline {
     ) -> Result<String> {
         let _ = state_tx.send(PipelineState::Fetching);
 
-        // Step 1: Get player response (also returns which client succeeded)
-        let (player_response, client) = self.fetch_player_response(&config.video_id, None).await?;
+        // Step 1: Get player response (also returns which client succeeded and whether
+        // the PO token was actually used for that client).
+        let (player_response, client, po_token_was_used) = self.fetch_player_response(
+            &config.video_id,
+            config.po_token.as_deref(),
+            config.visitor_data.as_deref(),
+        ).await?;
 
         if !player_response.is_playable() {
             let reason = player_response
@@ -103,7 +111,7 @@ impl DownloadPipeline {
         }
 
         // Step 2: Resolve format URLs (handle signatures if needed)
-        let resolved_formats = self
+        let mut resolved_formats = self
             .resolve_formats(&player_response, &config.video_id)
             .await?;
 
@@ -111,7 +119,32 @@ impl DownloadPipeline {
             return Err(YtDlpError::NoSuitableFormat.into());
         }
 
-        // Step 3: Select formats
+        // Step 2.5: Append pot=TOKEN to all stream URLs — but ONLY when the PO token
+        // was actually used for the successful client request.  When we fell back to
+        // ANDROID (a non-browser client), the BotGuard token is meaningless and would
+        // just be ignored (or worse, cause an error) on the CDN.
+        if po_token_was_used {
+            if let Some(ref token) = config.po_token {
+                for fmt in &mut resolved_formats {
+                    if fmt.url.contains('?') {
+                        fmt.url = format!("{}&pot={}", fmt.url, token);
+                    } else {
+                        fmt.url = format!("{}?pot={}", fmt.url, token);
+                    }
+                }
+                log::info!("Appended pot= parameter to {} format URLs", resolved_formats.len());
+            }
+        } else if config.po_token.is_some() {
+            log::info!(
+                "Skipping pot= parameter — PO token was not used with {} client",
+                client.name,
+            );
+        }
+
+        // Step 3: Select formats.
+        // Only use adaptive formats when the PO token was actually sent to the client
+        // that returned the response. Otherwise, adaptive streams will 403.
+        let has_po_token = po_token_was_used;
         let selected = select_formats(
             &resolved_formats,
             &config.mode,
@@ -119,6 +152,7 @@ impl DownloadPipeline {
             &config.audio_format,
             config.video_quality.as_ref(),
             config.video_format.as_ref(),
+            has_po_token,
         )?;
 
         // Step 4: Build download headers matching the client that provided the stream URLs.
@@ -219,21 +253,46 @@ impl DownloadPipeline {
         headers
     }
 
+    /// Returns (player_response, client, po_token_was_used).
+    /// `po_token_was_used` is true only when the successful client is a browser client
+    /// that actually received the PO token — i.e. adaptive streams can be downloaded
+    /// with `pot=TOKEN`. When an app client (ANDROID) succeeds, this is false because
+    /// BotGuard tokens don't work with non-browser clients.
     async fn fetch_player_response(
         &self,
         video_id: &str,
         po_token: Option<&str>,
-    ) -> Result<(PlayerResponse, &'static InnertubeClient)> {
-        // Try clients in priority order
-        for client in CLIENT_PRIORITY {
-            match self.innertube.player(video_id, client, po_token).await {
+        visitor_data: Option<&str>,
+    ) -> Result<(PlayerResponse, &'static InnertubeClient, bool)> {
+        // When a BotGuard PO token is available, prefer WEB clients (the token is
+        // generated via BotGuard which is web-only; it won't work with ANDROID).
+        use crate::extractor::clients::{WEB, WEB_EMBEDDED, ANDROID, IOS, TV};
+        let web_priority: &[&InnertubeClient] = &[&WEB, &WEB_EMBEDDED, &TV, &ANDROID, &IOS];
+
+        let clients: &[&InnertubeClient] = if po_token.is_some() {
+            web_priority
+        } else {
+            CLIENT_PRIORITY
+        };
+
+        for client in clients {
+            // Only pass PO token + visitorData to browser-based clients
+            let (token, vd) = if client.is_browser {
+                (po_token, visitor_data)
+            } else {
+                (None, None)
+            };
+
+            match self.innertube.player(video_id, client, token, vd).await {
                 Ok(resp) if resp.is_playable() => {
+                    let token_used = token.is_some();
                     log::info!(
-                        "Got playable response from {} client for {}",
+                        "Got playable response from {} client for {}{}",
                         client.name,
-                        video_id
+                        video_id,
+                        if token_used { " (with PO token)" } else { "" },
                     );
-                    return Ok((resp, client));
+                    return Ok((resp, client, token_used));
                 }
                 Ok(resp) => {
                     let reason = resp.unplayable_reason().unwrap_or_default();
