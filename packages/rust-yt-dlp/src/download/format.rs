@@ -37,72 +37,17 @@ pub fn select_formats(
 
 fn select_audio_format(
     formats: &[ResolvedFormat],
-    quality: &AudioQuality,
-    format: &AudioFormat,
+    _quality: &AudioQuality,
+    _format: &AudioFormat,
 ) -> Result<SelectedFormats, YtDlpError> {
-    // Only use audio-only formats whose URLs include ratebypass=yes.
-    // ANDROID adaptive streams (itag=139/140/251) lack this parameter and are CDN-throttled
-    // to the first 1 MB, making them unusable for full downloads.
-    // WEB/browser client adaptive streams carry the parameter, so they are fine.
-    let audio_formats: Vec<&ResolvedFormat> = formats
-        .iter()
-        .filter(|f| f.is_audio_only && f.url.contains("ratebypass=yes"))
-        .collect();
-
-    if !audio_formats.is_empty() {
-        // Prefer the codec matching the requested format
-        let preferred_codec = match format {
-            AudioFormat::Aac => "mp4a",
-            AudioFormat::Mp3 => "mp4a", // Download as AAC, convert to MP3 later
-            AudioFormat::Opus => "opus",
-        };
-
-        let target_bitrate = match quality {
-            AudioQuality::Best => u64::MAX,
-            AudioQuality::High => 160_000,
-            AudioQuality::Medium => 128_000,
-            AudioQuality::Low => 64_000,
-        };
-
-        // Sort: prefer matching codec, then closest bitrate
-        let mut candidates: Vec<&&ResolvedFormat> = audio_formats.iter().collect();
-        candidates.sort_by(|a, b| {
-            let a_codec_match = a.codec == preferred_codec;
-            let b_codec_match = b.codec == preferred_codec;
-
-            if a_codec_match != b_codec_match {
-                return b_codec_match.cmp(&a_codec_match);
-            }
-
-            if *quality == AudioQuality::Best {
-                b.bitrate.cmp(&a.bitrate)
-            } else {
-                let a_dist = (a.bitrate as i64 - target_bitrate as i64).unsigned_abs();
-                let b_dist = (b.bitrate as i64 - target_bitrate as i64).unsigned_abs();
-                a_dist.cmp(&b_dist)
-            }
-        });
-
-        if let Some(selected) = candidates.first() {
-            let ext = match format {
-                AudioFormat::Aac => "m4a",
-                AudioFormat::Mp3 => "mp3",
-                AudioFormat::Opus => "opus",
-            };
-            return Ok(SelectedFormats {
-                video: None,
-                audio: (**selected).clone(),
-                needs_muxing: false,
-                output_extension: ext.to_string(),
-                needs_audio_extraction: false,
-            });
-        }
-    }
-
-    // Fallback: use a muxed (combined video+audio) format and extract audio via ffmpeg.
-    // Muxed formats from the ANDROID client include ratebypass=yes in their signed URL,
-    // making them fully downloadable — unlike adaptive-only formats which are CDN-throttled
-    // to the first 1 MB.
+    // ANDROID client adaptive audio streams (itag=139/140/251) require a GVS PO Token for
+    // full download access. Without that token, YouTube CDN returns HTTP 403 regardless of
+    // whether the URL contains ratebypass=yes. Muxed formats (itag=18, etc.) are explicitly
+    // exempt from the GVS PO Token requirement and download without restriction.
+    //
+    // To avoid 403 failures we always use a muxed format and extract the audio track via
+    // ffmpeg afterward. When GVS PO Token support is added in the future, the adaptive path
+    // can be restored here.
     let mut muxed: Vec<&ResolvedFormat> = formats
         .iter()
         .filter(|f| !f.is_audio_only && !f.is_video_only)
@@ -116,15 +61,16 @@ fn select_audio_format(
     let selected = muxed.first().ok_or(YtDlpError::NoSuitableFormat)?;
 
     log::info!(
-        "No audio-only format available; falling back to muxed itag {} for audio extraction",
-        selected.itag
+        "Audio download: using muxed itag={} ({} container, {} kbps) for audio extraction",
+        selected.itag,
+        selected.container,
+        selected.bitrate / 1000,
     );
 
     Ok(SelectedFormats {
         video: None,
         audio: (*selected).clone(),
         needs_muxing: false,
-        // Use the muxed container extension for the download temp file
         output_extension: selected.container.clone(),
         needs_audio_extraction: true,
     })

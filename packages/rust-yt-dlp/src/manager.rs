@@ -380,6 +380,12 @@ impl DownloadManager {
                     }
                     Err(e) => {
                         if progress.state != DownloadState::Cancelled {
+                            log::error!(
+                                "Download {} ({}) failed: {}",
+                                &dl_id,
+                                progress.title,
+                                e
+                            );
                             progress.state = DownloadState::Failed;
                             progress.error = Some(e.to_string());
                         }
