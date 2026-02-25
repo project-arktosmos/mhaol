@@ -7,6 +7,7 @@ use gstreamer::prelude::*;
 use gstreamer_sdp as gst_sdp;
 use gstreamer_webrtc as gst_webrtc;
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
@@ -20,6 +21,7 @@ pub struct PeerSession {
     state: Arc<Mutex<SessionState>>,
     stream_pipeline: StreamPipeline,
     signaling_tx: mpsc::UnboundedSender<SignalingMessage>,
+    shutdown: Arc<AtomicBool>,
 }
 
 impl PeerSession {
@@ -35,6 +37,7 @@ impl PeerSession {
             state,
             stream_pipeline,
             signaling_tx,
+            shutdown: Arc::new(AtomicBool::new(false)),
         };
 
         session.connect_webrtcbin_signals()?;
@@ -50,8 +53,15 @@ impl PeerSession {
     pub fn start(&self) -> Result<()> {
         *self.state.lock() = SessionState::Connecting;
         self.stream_pipeline.play()?;
+        self.start_position_ticker();
         info!("Session {} started", self.id);
         Ok(())
+    }
+
+    /// Seek the pipeline to a position in seconds.
+    pub fn seek(&self, position_secs: f64) -> Result<()> {
+        info!("Session {} seeking to {:.2}s", self.id, position_secs);
+        self.stream_pipeline.seek(position_secs)
     }
 
     /// Handle an incoming SDP answer from the remote peer.
@@ -102,10 +112,61 @@ impl PeerSession {
     /// Stop the session and clean up resources.
     pub fn stop(&self) -> Result<()> {
         *self.state.lock() = SessionState::Disconnecting;
+        self.shutdown.store(true, Ordering::Relaxed);
         self.stream_pipeline.stop()?;
         *self.state.lock() = SessionState::Closed;
         info!("Session {} stopped", self.id);
         Ok(())
+    }
+
+    fn start_position_ticker(&self) {
+        let pipeline = self.stream_pipeline.pipeline().clone();
+        let signaling_tx = self.signaling_tx.clone();
+        let shutdown = self.shutdown.clone();
+        let session_id = self.id.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
+
+            // Send initial media info once duration is available
+            let mut sent_media_info = false;
+
+            loop {
+                interval.tick().await;
+
+                if shutdown.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                let duration_secs = pipeline
+                    .query_duration::<gst::ClockTime>()
+                    .map(|t| t.nseconds() as f64 / 1_000_000_000.0);
+
+                if !sent_media_info {
+                    if duration_secs.is_some() {
+                        let _ = signaling_tx.send(SignalingMessage::MediaInfo(
+                            MediaInfoPayload { duration_secs },
+                        ));
+                        sent_media_info = true;
+                    }
+                }
+
+                let position_secs = pipeline
+                    .query_position::<gst::ClockTime>()
+                    .map(|t| t.nseconds() as f64 / 1_000_000_000.0)
+                    .unwrap_or(0.0);
+
+                let msg = SignalingMessage::PositionUpdate(PositionPayload {
+                    position_secs,
+                    duration_secs,
+                });
+
+                if signaling_tx.send(msg).is_err() {
+                    debug!("Session {session_id} position ticker: channel closed");
+                    break;
+                }
+            }
+        });
     }
 
     fn connect_webrtcbin_signals(&self) -> Result<()> {

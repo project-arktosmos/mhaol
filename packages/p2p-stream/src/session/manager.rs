@@ -81,6 +81,11 @@ impl SessionManager {
             SignalingMessage::IceCandidate(candidate) => session.handle_ice_candidate(&candidate),
             SignalingMessage::IceGatheringComplete => Ok(()),
             SignalingMessage::PeerDisconnected { .. } => self.remove_session(peer_id),
+            SignalingMessage::Seek(cmd) => session.seek(cmd.position_secs),
+            SignalingMessage::MediaInfo(_) | SignalingMessage::PositionUpdate(_) => {
+                warn!("Received server-only message from peer {peer_id}, ignoring");
+                Ok(())
+            }
         }
     }
 

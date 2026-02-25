@@ -25,6 +25,25 @@ pub struct IceCandidate {
     pub candidate: String,
 }
 
+/// Seek command from the browser.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SeekCommand {
+    pub position_secs: f64,
+}
+
+/// One-time media info sent when the pipeline discovers media metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaInfoPayload {
+    pub duration_secs: Option<f64>,
+}
+
+/// Periodic position update from the server.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionPayload {
+    pub position_secs: f64,
+    pub duration_secs: Option<f64>,
+}
+
 /// Messages that flow through the signaling channel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
@@ -33,4 +52,7 @@ pub enum SignalingMessage {
     IceCandidate(IceCandidate),
     IceGatheringComplete,
     PeerDisconnected { peer_id: PeerId },
+    Seek(SeekCommand),
+    MediaInfo(MediaInfoPayload),
+    PositionUpdate(PositionPayload),
 }

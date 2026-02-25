@@ -35,6 +35,9 @@ export interface PlayerState {
 	connectionState: PlayerConnectionState;
 	streamServerAvailable: boolean;
 	sessionId: string | null;
+	positionSecs: number;
+	durationSecs: number | null;
+	isSeeking: boolean;
 }
 
 // ===== Player Settings (localStorage) =====
@@ -60,8 +63,24 @@ export interface IceCandidate {
 	candidate: string;
 }
 
+export interface SeekCommand {
+	position_secs: number;
+}
+
+export interface MediaInfoPayload {
+	duration_secs: number | null;
+}
+
+export interface PositionPayload {
+	position_secs: number;
+	duration_secs: number | null;
+}
+
 export type SignalingMessage =
 	| { type: 'SessionDescription'; payload: SessionDescription }
 	| { type: 'IceCandidate'; payload: IceCandidate }
 	| { type: 'IceGatheringComplete' }
-	| { type: 'PeerDisconnected'; payload: { peer_id: string } };
+	| { type: 'PeerDisconnected'; payload: { peer_id: string } }
+	| { type: 'Seek'; payload: SeekCommand }
+	| { type: 'MediaInfo'; payload: MediaInfoPayload }
+	| { type: 'PositionUpdate'; payload: PositionPayload };

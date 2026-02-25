@@ -2,9 +2,12 @@
 	import { onDestroy } from 'svelte';
 	import { playerService } from '$services/player.service';
 	import type { PlayableFile, PlayerConnectionState } from '$types/player.type';
+	import PlayerSeekBar from './PlayerSeekBar.svelte';
 
 	export let file: PlayableFile | null = null;
 	export let connectionState: PlayerConnectionState = 'idle';
+	export let positionSecs: number = 0;
+	export let durationSecs: number | null = null;
 
 	let videoElement: HTMLVideoElement | null = null;
 	let audioElement: HTMLAudioElement | null = null;
@@ -36,6 +39,19 @@
 	function handleStop(): void {
 		playerService.stop();
 		streamAttached = false;
+	}
+
+	function handleSeek(event: CustomEvent<{ positionSecs: number }>): void {
+		playerService.seek(event.detail.positionSecs);
+	}
+
+	function handleSeekStart(): void {
+		playerService.setSeeking(true);
+	}
+
+	function handleSeekEnd(): void {
+		// isSeeking is cleared by playerService.seek() via a timeout
+		// to absorb any in-flight position updates from before the seek
 	}
 
 	function getStatusLabel(state: PlayerConnectionState): string {
@@ -119,6 +135,19 @@
 					</div>
 				{/if}
 			</div>
+
+			{#if connectionState === 'streaming'}
+				<div class="mt-2">
+					<PlayerSeekBar
+						{positionSecs}
+						{durationSecs}
+						disabled={connectionState !== 'streaming'}
+						on:seek={handleSeek}
+						on:seekstart={handleSeekStart}
+						on:seekend={handleSeekEnd}
+					/>
+				</div>
+			{/if}
 
 			<div class="mt-2 flex items-center justify-between">
 				<div class="overflow-hidden">

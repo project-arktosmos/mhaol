@@ -7,7 +7,7 @@ export class PlayerAdapter extends AdapterClass {
 	}
 
 	formatDuration(seconds: number | null): string {
-		if (seconds === null || seconds <= 0) return '--';
+		if (seconds === null || seconds < 0) return '--';
 		const h = Math.floor(seconds / 3600);
 		const m = Math.floor((seconds % 3600) / 60);
 		const s = Math.floor(seconds % 60);

@@ -5,7 +5,9 @@ import type {
 	PlayerSettings,
 	PlayerState,
 	PlayableFile,
-	SignalingMessage
+	SignalingMessage,
+	MediaInfoPayload,
+	PositionPayload
 } from '$types/player.type';
 
 const initialSettings: PlayerSettings = {
@@ -22,7 +24,10 @@ const initialState: PlayerState = {
 	currentFile: null,
 	connectionState: 'idle',
 	streamServerAvailable: false,
-	sessionId: null
+	sessionId: null,
+	positionSecs: 0,
+	durationSecs: null,
+	isSeeking: false
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -33,6 +38,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	private _initialized = false;
 	private remoteDescriptionSet = false;
 	private pendingCandidates: RTCIceCandidateInit[] = [];
+	private seekTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	constructor() {
 		super('player-settings', initialSettings);
@@ -103,7 +109,9 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			...s,
 			currentFile: file,
 			connectionState: 'connecting',
-			error: null
+			error: null,
+			positionSecs: 0,
+			durationSecs: file.durationSeconds
 		}));
 
 		try {
@@ -152,10 +160,19 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		this.ws.onmessage = (event) => {
 			try {
 				const msg: SignalingMessage = JSON.parse(event.data);
-				if (msg.type === 'IceCandidate') {
-					this.handleIceCandidate(msg.payload);
-				} else {
-					this.handleSignalingMessage(msg);
+				switch (msg.type) {
+					case 'IceCandidate':
+						this.handleIceCandidate(msg.payload);
+						break;
+					case 'PositionUpdate':
+						this.handlePositionUpdate(msg.payload);
+						break;
+					case 'MediaInfo':
+						this.handleMediaInfo(msg.payload);
+						break;
+					default:
+						this.handleSignalingMessage(msg);
+						break;
 				}
 			} catch {
 				console.error('[Player] Failed to parse signaling message');
@@ -290,9 +307,67 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		return stream;
 	}
 
+	// ===== Seeking =====
+
+	seek(positionSecs: number): void {
+		if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+		const msg: SignalingMessage = {
+			type: 'Seek',
+			payload: { position_secs: positionSecs }
+		};
+		this.ws.send(JSON.stringify(msg));
+
+		if (this.seekTimeout !== null) {
+			clearTimeout(this.seekTimeout);
+		}
+
+		this.state.update((s) => ({
+			...s,
+			positionSecs,
+			isSeeking: true
+		}));
+
+		this.seekTimeout = setTimeout(() => {
+			this.seekTimeout = null;
+			this.state.update((s) => ({ ...s, isSeeking: false }));
+		}, 500);
+	}
+
+	setSeeking(isSeeking: boolean): void {
+		if (isSeeking && this.seekTimeout !== null) {
+			clearTimeout(this.seekTimeout);
+			this.seekTimeout = null;
+		}
+		this.state.update((s) => ({ ...s, isSeeking }));
+	}
+
+	private handlePositionUpdate(payload: PositionPayload): void {
+		const current = get(this.state);
+		if (current.isSeeking) return;
+
+		this.state.update((s) => ({
+			...s,
+			positionSecs: payload.position_secs,
+			durationSecs: payload.duration_secs ?? s.durationSecs
+		}));
+	}
+
+	private handleMediaInfo(payload: MediaInfoPayload): void {
+		this.state.update((s) => ({
+			...s,
+			durationSecs: payload.duration_secs
+		}));
+	}
+
 	// ===== Stop playback =====
 
 	async stop(): Promise<void> {
+		if (this.seekTimeout !== null) {
+			clearTimeout(this.seekTimeout);
+			this.seekTimeout = null;
+		}
+
 		if (this.ws) {
 			this.ws.close();
 			this.ws = null;
@@ -319,7 +394,10 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			currentFile: null,
 			connectionState: 'idle',
 			sessionId: null,
-			error: null
+			error: null,
+			positionSecs: 0,
+			durationSecs: null,
+			isSeeking: false
 		}));
 	}
 

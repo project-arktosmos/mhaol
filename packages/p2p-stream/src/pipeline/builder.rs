@@ -62,6 +62,46 @@ impl StreamPipeline {
         Ok(())
     }
 
+    pub fn seek(&self, position_secs: f64) -> Result<()> {
+        let position =
+            gst::ClockTime::from_nseconds((position_secs * 1_000_000_000.0) as u64);
+        self.pipeline
+            .seek_simple(
+                gst::SeekFlags::FLUSH | gst::SeekFlags::KEY_UNIT,
+                position,
+            )
+            .map_err(|e| Error::StateChange(format!("Seek failed: {e}")))?;
+        Ok(())
+    }
+
+    pub fn query_position_secs(&self) -> Option<f64> {
+        // webrtcbin doesn't answer position queries (it's a real-time RTP element),
+        // so query the processing queue elements which propagate upstream to filesrc.
+        for name in &["video_queue", "audio_queue"] {
+            if let Some(element) = self.pipeline.by_name(name) {
+                if let Some(pos) = element.query_position::<gst::ClockTime>() {
+                    return Some(pos.nseconds() as f64 / 1_000_000_000.0);
+                }
+            }
+        }
+        self.pipeline
+            .query_position::<gst::ClockTime>()
+            .map(|t| t.nseconds() as f64 / 1_000_000_000.0)
+    }
+
+    pub fn query_duration_secs(&self) -> Option<f64> {
+        for name in &["video_queue", "audio_queue"] {
+            if let Some(element) = self.pipeline.by_name(name) {
+                if let Some(dur) = element.query_duration::<gst::ClockTime>() {
+                    return Some(dur.nseconds() as f64 / 1_000_000_000.0);
+                }
+            }
+        }
+        self.pipeline
+            .query_duration::<gst::ClockTime>()
+            .map(|t| t.nseconds() as f64 / 1_000_000_000.0)
+    }
+
     pub async fn next_bus_event(&mut self) -> Option<BusEvent> {
         self.bus_events.recv().await
     }

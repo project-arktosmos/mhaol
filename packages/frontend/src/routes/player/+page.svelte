@@ -87,7 +87,12 @@
 		</div>
 
 		<div class="flex flex-col gap-4 lg:col-span-2">
-			<PlayerVideo file={$state.currentFile} connectionState={$state.connectionState} />
+			<PlayerVideo
+				file={$state.currentFile}
+				connectionState={$state.connectionState}
+				positionSecs={$state.positionSecs}
+				durationSecs={$state.durationSecs}
+			/>
 		</div>
 	</div>
 </div>
