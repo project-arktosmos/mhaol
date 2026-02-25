@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { youtubeService } from '$services/youtube.service';
+	import { libraryService } from '$services/library.service';
 	import YouTubeUrlInput from '$components/youtube/YouTubeUrlInput.svelte';
 	import YouTubeVideoPreview from '$components/youtube/YouTubeVideoPreview.svelte';
 	import YouTubePlaylistPreview from '$components/youtube/YouTubePlaylistPreview.svelte';
@@ -11,6 +12,7 @@
 
 	onMount(async () => {
 		await youtubeService.initialize();
+		await libraryService.initialize();
 	});
 
 	onDestroy(() => {

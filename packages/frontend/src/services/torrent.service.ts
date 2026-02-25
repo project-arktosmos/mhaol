@@ -22,7 +22,8 @@ const initialState: TorrentServiceState = {
 	error: null,
 	torrents: [],
 	stats: null,
-	downloadPath: ''
+	downloadPath: '',
+	libraryId: ''
 };
 
 class TorrentService extends ObjectServiceClass<TorrentSettings> {
@@ -43,13 +44,17 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 		this.state.update((s) => ({ ...s, loading: true }));
 
 		try {
-			const status = await this.fetchJson<TorrentStatusResponse>('/api/torrent/status');
+			const [status, config] = await Promise.all([
+				this.fetchJson<TorrentStatusResponse>('/api/torrent/status'),
+				this.fetchJson<{ download_path: string; library_id: string }>('/api/torrent/config')
+			]);
 
 			this.state.update((s) => ({
 				...s,
 				initialized: status.initialized,
 				loading: false,
 				downloadPath: status.download_path,
+				libraryId: config.library_id || '',
 				stats: status.stats,
 				error: null
 			}));
@@ -158,22 +163,21 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 
 	// ===== Config =====
 
-	async setDownloadPath(path: string): Promise<void> {
+	async setLibrary(libraryId: string): Promise<void> {
 		if (!browser) return;
 
 		try {
-			await this.fetchJson('/api/torrent/config', {
+			const result = await this.fetchJson<{ download_path: string }>('/api/torrent/config', {
 				method: 'PUT',
-				body: JSON.stringify({ download_path: path })
+				body: JSON.stringify({ library_id: libraryId })
 			});
 
-			this.updateSettings({ downloadPath: path });
-			this.state.update((s) => ({ ...s, downloadPath: path }));
+			this.state.update((s) => ({ ...s, downloadPath: result.download_path, libraryId }));
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
 				...s,
-				error: `Failed to set download path: ${errorMsg}`
+				error: `Failed to set library: ${errorMsg}`
 			}));
 		}
 	}

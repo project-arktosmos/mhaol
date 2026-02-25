@@ -23,9 +23,6 @@ declare global {
 			torrentBroadcaster: TorrentBroadcasterService;
 			libraryRepo: LibraryRepository;
 			streamServerAvailable: boolean;
-			signalingBaseUrl: string;
-			signalingServerAvailable: boolean;
-			ytdlOutputDir: string;
 		}
 	}
 }

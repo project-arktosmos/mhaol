@@ -6,6 +6,7 @@ import { routeDiscovery } from './vite-plugin-routes.js';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), routeDiscovery()],
 	server: {
+		host: true,
 		port: 1530,
 		proxy: {
 			'/api/player/ws': {

@@ -38,6 +38,7 @@ export interface PlayerState {
 	positionSecs: number;
 	durationSecs: number | null;
 	isSeeking: boolean;
+	isPaused: boolean;
 }
 
 // ===== Player Settings (localStorage) =====

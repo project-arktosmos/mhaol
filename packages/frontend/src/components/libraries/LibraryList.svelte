@@ -4,9 +4,18 @@
 	import LibraryListItem from './LibraryListItem.svelte';
 
 	const store = libraryService.store;
+	const state = libraryService.state;
 
 	function handleRemove(library: Library) {
 		libraryService.removeLibrary(library);
+	}
+
+	function handleToggle(library: Library) {
+		libraryService.toggleLibraryFiles(library.id as string);
+	}
+
+	function handleRefresh(library: Library) {
+		libraryService.fetchLibraryFiles(library.id as string);
 	}
 </script>
 
@@ -30,7 +39,16 @@
 		{:else}
 			<div class="flex flex-col gap-2">
 				{#each $store as library (library.id)}
-					<LibraryListItem {library} onremove={handleRemove} />
+					<LibraryListItem
+						{library}
+						expanded={$state.expandedLibraryId === library.id}
+						files={$state.libraryFiles[library.id] ?? []}
+						filesLoading={$state.libraryFilesLoading[library.id] ?? false}
+						filesError={$state.libraryFilesError[library.id] ?? null}
+						onremove={handleRemove}
+						ontoggle={handleToggle}
+						onrefresh={handleRefresh}
+					/>
 				{/each}
 			</div>
 		{/if}

@@ -2,7 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import { playerService } from '$services/player.service';
 	import type { PlayableFile, PlayerConnectionState } from '$types/player.type';
-	import PlayerSeekBar from './PlayerSeekBar.svelte';
+	import PlayerControls from './PlayerControls.svelte';
 
 	export let file: PlayableFile | null = null;
 	export let connectionState: PlayerConnectionState = 'idle';
@@ -11,6 +11,7 @@
 
 	let videoElement: HTMLVideoElement | null = null;
 	let audioElement: HTMLAudioElement | null = null;
+	let containerElement: HTMLElement | null = null;
 	let streamAttached = false;
 
 	$: if (connectionState === 'streaming' && !streamAttached) {
@@ -20,6 +21,9 @@
 	$: if (connectionState === 'idle') {
 		streamAttached = false;
 	}
+
+	$: isVideo = file?.mode !== 'audio';
+	$: activeMediaElement = (isVideo ? videoElement : audioElement) as HTMLMediaElement | null;
 
 	function attachStream(): void {
 		const stream = playerService.getMediaStream();
@@ -49,9 +53,13 @@
 		playerService.setSeeking(true);
 	}
 
-	function handleSeekEnd(): void {
-		// isSeeking is cleared by playerService.seek() via a timeout
-		// to absorb any in-flight position updates from before the seek
+	function handleVideoClick(): void {
+		if (!activeMediaElement || connectionState !== 'streaming') return;
+		if (activeMediaElement.paused) {
+			activeMediaElement.play().catch(console.error);
+		} else {
+			activeMediaElement.pause();
+		}
 	}
 
 	function getStatusLabel(state: PlayerConnectionState): string {
@@ -75,7 +83,6 @@
 		streamAttached = false;
 	});
 
-	$: isVideo = file?.mode !== 'audio';
 	$: statusLabel = getStatusLabel(connectionState);
 </script>
 
@@ -86,9 +93,14 @@
 				<p class="opacity-50">Select a file to play</p>
 			</div>
 		{:else}
-			<div class="relative">
+			<div class="relative" bind:this={containerElement}>
 				{#if isVideo}
-					<video bind:this={videoElement} class="w-full rounded-lg bg-black" controls playsinline>
+					<video
+						bind:this={videoElement}
+						class="w-full cursor-pointer rounded-lg bg-black"
+						playsinline
+						on:click={handleVideoClick}
+					>
 						<track kind="captions" />
 					</video>
 				{:else}
@@ -108,7 +120,7 @@
 							/>
 						</svg>
 					</div>
-					<audio bind:this={audioElement} class="mt-2 w-full" controls></audio>
+					<audio bind:this={audioElement} class="hidden"></audio>
 				{/if}
 
 				{#if connectionState !== 'streaming' && connectionState !== 'idle'}
@@ -138,13 +150,17 @@
 
 			{#if connectionState === 'streaming'}
 				<div class="mt-2">
-					<PlayerSeekBar
+					<PlayerControls
+						mediaElement={activeMediaElement}
+						{isVideo}
 						{positionSecs}
 						{durationSecs}
-						disabled={connectionState !== 'streaming'}
+						{connectionState}
+						{containerElement}
 						on:seek={handleSeek}
 						on:seekstart={handleSeekStart}
-						on:seekend={handleSeekEnd}
+						on:seekend
+						on:stop={handleStop}
 					/>
 				</div>
 			{/if}
@@ -153,9 +169,6 @@
 				<div class="overflow-hidden">
 					<p class="truncate font-medium">{file.name}</p>
 				</div>
-				{#if connectionState === 'streaming'}
-					<button class="btn btn-ghost btn-sm" on:click={handleStop}> Stop </button>
-				{/if}
 			</div>
 		{/if}
 	</div>

@@ -60,6 +60,7 @@ export interface TorrentServiceState {
 	torrents: TorrentInfo[];
 	stats: TorrentStats | null;
 	downloadPath: string;
+	libraryId: string;
 }
 
 // ===== Settings (localStorage) =====

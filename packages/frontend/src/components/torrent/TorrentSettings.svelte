@@ -22,11 +22,18 @@
 	// Clear storage confirmation
 	let confirmClear = false;
 
-	// Auto-select library matching current download path
-	$: if ($libraries.length > 0 && $state.downloadPath) {
-		const match = $libraries.find((lib: Library) => lib.path === $state.downloadPath);
-		if (match) {
-			selectedLibraryId = String(match.id);
+	// Auto-select library matching current libraryId, or first library if none matches
+	$: if ($libraries.length > 0) {
+		if ($state.libraryId) {
+			const match = $libraries.find((lib: Library) => String(lib.id) === $state.libraryId);
+			if (match) {
+				selectedLibraryId = String(match.id);
+			}
+		}
+		if (!selectedLibraryId) {
+			const first = $libraries[0];
+			selectedLibraryId = String(first.id);
+			torrentService.setLibrary(String(first.id));
 		}
 	}
 
@@ -37,7 +44,7 @@
 		if ($libraries.length > previousLibraryCount) {
 			const newest = $libraries[$libraries.length - 1];
 			selectedLibraryId = String(newest.id);
-			torrentService.setDownloadPath(newest.path);
+			torrentService.setLibrary(String(newest.id));
 		}
 	}
 
@@ -51,7 +58,7 @@
 		const library = $libraries.find((lib: Library) => String(lib.id) === libraryId);
 		if (library) {
 			selectedLibraryId = String(library.id);
-			await torrentService.setDownloadPath(library.path);
+			await torrentService.setLibrary(String(library.id));
 		}
 	}
 
@@ -142,13 +149,6 @@
 						</svg>
 					</button>
 				</div>
-				{#if $state.downloadPath}
-					<span class="label">
-						<span class="label-text-alt truncate font-mono text-base-content/50"
-							>{$state.downloadPath}</span
-						>
-					</span>
-				{/if}
 			{:else}
 				<div class="rounded-lg bg-base-300 p-4 text-center">
 					<p class="mb-2 text-sm text-base-content/60">No libraries configured</p>

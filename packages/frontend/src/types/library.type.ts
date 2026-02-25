@@ -30,3 +30,17 @@ export interface BrowseDirectoryResponse {
 	parent: string | null;
 	directories: DirectoryEntry[];
 }
+
+export interface LibraryFile {
+	name: string;
+	path: string;
+	size: number;
+	extension: string;
+	mediaType: MediaType;
+}
+
+export interface LibraryFilesResponse {
+	libraryId: string;
+	libraryPath: string;
+	files: LibraryFile[];
+}

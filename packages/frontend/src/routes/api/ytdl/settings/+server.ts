@@ -7,34 +7,29 @@ const YOUTUBE_SETTINGS_KEYS = [
 	'youtube.defaultFormat',
 	'youtube.defaultVideoQuality',
 	'youtube.defaultVideoFormat',
-	'youtube.outputPath',
 	'youtube.poToken',
 	'youtube.cookies'
 ] as const;
 
-function getDefaults(outputDir: string): Record<string, string> {
-	return {
-		'youtube.downloadMode': 'audio',
-		'youtube.defaultQuality': 'high',
-		'youtube.defaultFormat': 'aac',
-		'youtube.defaultVideoQuality': 'best',
-		'youtube.defaultVideoFormat': 'mp4',
-		'youtube.outputPath': outputDir,
-		'youtube.poToken': '',
-		'youtube.cookies': ''
-	};
-}
+const DEFAULTS: Record<string, string> = {
+	'youtube.downloadMode': 'audio',
+	'youtube.defaultQuality': 'high',
+	'youtube.defaultFormat': 'aac',
+	'youtube.defaultVideoQuality': 'best',
+	'youtube.defaultVideoFormat': 'mp4',
+	'youtube.poToken': '',
+	'youtube.cookies': ''
+};
 
 export const GET: RequestHandler = async ({ locals }) => {
 	const rows = locals.settingsRepo.getByPrefix('youtube.');
-	const defaults = getDefaults(locals.ytdlOutputDir);
 
 	// Seed missing keys with defaults
 	const existing = new Map(rows.map((r) => [r.key, r.value]));
 	const missing: Record<string, string> = {};
 	for (const key of YOUTUBE_SETTINGS_KEYS) {
 		if (!existing.has(key)) {
-			missing[key] = defaults[key];
+			missing[key] = DEFAULTS[key];
 		}
 	}
 
@@ -42,17 +37,20 @@ export const GET: RequestHandler = async ({ locals }) => {
 		locals.settingsRepo.setMany(missing);
 	}
 
+	// Read libraryId from metadata
+	const libraryId = (locals.metadataRepo.getValue<string>('youtube.libraryId') ?? '') as string;
+
 	return json({
-		downloadMode: existing.get('youtube.downloadMode') ?? defaults['youtube.downloadMode'],
-		defaultQuality: existing.get('youtube.defaultQuality') ?? defaults['youtube.defaultQuality'],
-		defaultFormat: existing.get('youtube.defaultFormat') ?? defaults['youtube.defaultFormat'],
+		downloadMode: existing.get('youtube.downloadMode') ?? DEFAULTS['youtube.downloadMode'],
+		defaultQuality: existing.get('youtube.defaultQuality') ?? DEFAULTS['youtube.defaultQuality'],
+		defaultFormat: existing.get('youtube.defaultFormat') ?? DEFAULTS['youtube.defaultFormat'],
 		defaultVideoQuality:
-			existing.get('youtube.defaultVideoQuality') ?? defaults['youtube.defaultVideoQuality'],
+			existing.get('youtube.defaultVideoQuality') ?? DEFAULTS['youtube.defaultVideoQuality'],
 		defaultVideoFormat:
-			existing.get('youtube.defaultVideoFormat') ?? defaults['youtube.defaultVideoFormat'],
-		outputPath: existing.get('youtube.outputPath') ?? defaults['youtube.outputPath'],
-		poToken: existing.get('youtube.poToken') ?? defaults['youtube.poToken'],
-		cookies: existing.get('youtube.cookies') ?? defaults['youtube.cookies']
+			existing.get('youtube.defaultVideoFormat') ?? DEFAULTS['youtube.defaultVideoFormat'],
+		libraryId,
+		poToken: existing.get('youtube.poToken') ?? DEFAULTS['youtube.poToken'],
+		cookies: existing.get('youtube.cookies') ?? DEFAULTS['youtube.cookies']
 	});
 };
 
@@ -67,19 +65,24 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
 		entries['youtube.defaultVideoQuality'] = body.defaultVideoQuality;
 	if (body.defaultVideoFormat !== undefined)
 		entries['youtube.defaultVideoFormat'] = body.defaultVideoFormat;
-	if (body.outputPath !== undefined) entries['youtube.outputPath'] = body.outputPath;
 	if (body.poToken !== undefined) entries['youtube.poToken'] = body.poToken;
 	if (body.cookies !== undefined) entries['youtube.cookies'] = body.cookies;
 
-	if (Object.keys(entries).length === 0) {
-		return json({ error: 'No valid settings provided' }, { status: 400 });
+	if (Object.keys(entries).length > 0) {
+		locals.settingsRepo.setMany(entries);
 	}
 
-	locals.settingsRepo.setMany(entries);
-
-	// Sync relevant config to the Rust server
+	// Handle libraryId — stored in metadata, path synced to Rust
 	const rustConfig: Record<string, unknown> = {};
-	if (body.outputPath !== undefined) rustConfig.outputPath = body.outputPath;
+
+	if (body.libraryId !== undefined) {
+		locals.metadataRepo.set('youtube.libraryId', body.libraryId as string);
+		const lib = locals.libraryRepo.get(body.libraryId as string);
+		if (lib) {
+			rustConfig.outputPath = lib.path;
+		}
+	}
+
 	if (body.poToken !== undefined) rustConfig.poToken = body.poToken;
 	if (body.cookies !== undefined) rustConfig.cookies = body.cookies;
 
@@ -93,6 +96,10 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
 		} catch {
 			console.warn('[ytdl-settings] Failed to sync config to Rust server');
 		}
+	}
+
+	if (Object.keys(entries).length === 0 && body.libraryId === undefined) {
+		return json({ error: 'No valid settings provided' }, { status: 400 });
 	}
 
 	return json({ ok: true });

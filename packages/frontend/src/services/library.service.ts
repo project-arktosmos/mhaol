@@ -1,6 +1,12 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import type { Library, DirectoryEntry, BrowseDirectoryResponse } from '$types/library.type';
+import type {
+	Library,
+	DirectoryEntry,
+	BrowseDirectoryResponse,
+	LibraryFile,
+	LibraryFilesResponse
+} from '$types/library.type';
 import { type MediaType } from '$types/library.type';
 
 export interface LibraryServiceState {
@@ -13,6 +19,10 @@ export interface LibraryServiceState {
 	selectedPath: string;
 	selectedName: string;
 	selectedMediaTypes: MediaType[];
+	expandedLibraryId: string | null;
+	libraryFiles: Record<string, LibraryFile[]>;
+	libraryFilesLoading: Record<string, boolean>;
+	libraryFilesError: Record<string, string | null>;
 }
 
 const initialState: LibraryServiceState = {
@@ -24,7 +34,11 @@ const initialState: LibraryServiceState = {
 	browseParent: null,
 	selectedPath: '',
 	selectedName: '',
-	selectedMediaTypes: []
+	selectedMediaTypes: [],
+	expandedLibraryId: null,
+	libraryFiles: {},
+	libraryFilesLoading: {},
+	libraryFilesError: {}
 };
 
 class LibraryService {
@@ -145,6 +159,50 @@ class LibraryService {
 				: [...s.selectedMediaTypes, mediaType];
 			return { ...s, selectedMediaTypes: types };
 		});
+	}
+
+	async toggleLibraryFiles(libraryId: string): Promise<void> {
+		let currentExpanded: string | null = null;
+		const unsubscribe = this.state.subscribe((s) => {
+			currentExpanded = s.expandedLibraryId;
+		});
+		unsubscribe();
+
+		if (currentExpanded === libraryId) {
+			this.state.update((s) => ({ ...s, expandedLibraryId: null }));
+			return;
+		}
+
+		this.state.update((s) => ({ ...s, expandedLibraryId: libraryId }));
+		await this.fetchLibraryFiles(libraryId);
+	}
+
+	async fetchLibraryFiles(libraryId: string): Promise<void> {
+		if (!browser) return;
+
+		this.state.update((s) => ({
+			...s,
+			libraryFilesLoading: { ...s.libraryFilesLoading, [libraryId]: true },
+			libraryFilesError: { ...s.libraryFilesError, [libraryId]: null }
+		}));
+
+		try {
+			const response = await this.fetchJson<LibraryFilesResponse>(
+				`/api/libraries/${libraryId}/files`
+			);
+			this.state.update((s) => ({
+				...s,
+				libraryFiles: { ...s.libraryFiles, [libraryId]: response.files },
+				libraryFilesLoading: { ...s.libraryFilesLoading, [libraryId]: false }
+			}));
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				libraryFilesLoading: { ...s.libraryFilesLoading, [libraryId]: false },
+				libraryFilesError: { ...s.libraryFilesError, [libraryId]: errorMsg }
+			}));
+		}
 	}
 
 	private resetForm(): void {

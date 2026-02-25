@@ -132,7 +132,7 @@ export interface YouTubeServiceState {
 	initialized: boolean;
 	loading: boolean;
 	error: string | null;
-	outputPath: string;
+	libraryId: string;
 	downloads: YouTubeDownloadProgress[];
 	stats: YouTubeManagerStats | null;
 	ytdlpStatus: YtDlpStatus | null;
@@ -154,7 +154,7 @@ export interface YouTubeSettings {
 	defaultFormat: AudioFormat;
 	defaultVideoQuality: VideoQuality;
 	defaultVideoFormat: VideoFormat;
-	outputPath: string;
+	libraryId: string;
 	poToken: string;
 	cookies: string;
 }

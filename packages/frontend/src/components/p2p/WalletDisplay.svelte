@@ -8,9 +8,24 @@
 	async function copyAddress() {
 		const address = $state.address;
 		if (!address) return;
-		await navigator.clipboard.writeText(address);
-		copied = true;
-		setTimeout(() => (copied = false), 1500);
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(address);
+			} else {
+				const textarea = document.createElement('textarea');
+				textarea.value = address;
+				textarea.style.position = 'fixed';
+				textarea.style.opacity = '0';
+				document.body.appendChild(textarea);
+				textarea.select();
+				document.execCommand('copy');
+				document.body.removeChild(textarea);
+			}
+			copied = true;
+			setTimeout(() => (copied = false), 1500);
+		} catch {
+			// Copy failed silently
+		}
 	}
 
 	function shortAddress(addr: string): string {

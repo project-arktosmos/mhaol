@@ -33,9 +33,17 @@ const youtubeDownloadRepo = new YouTubeDownloadRepository(db);
 const torrentDownloadRepo = new TorrentDownloadRepository(db);
 const libraryRepo = new LibraryRepository(db);
 
-// Seed YouTube default output path if not yet in database
-if (!settingsRepo.exists('youtube.outputPath')) {
-	settingsRepo.set('youtube.outputPath', OUTPUT_DIR);
+// Seed a default Downloads library if none exist
+if (libraryRepo.getAll().length === 0) {
+	const defaultDownloadsPath = join(process.env.HOME ?? '/tmp', 'Downloads');
+	libraryRepo.insert({
+		id: crypto.randomUUID(),
+		name: 'Downloads',
+		path: defaultDownloadsPath,
+		media_types: JSON.stringify(['video', 'images', 'music']),
+		date_added: Date.now()
+	});
+	console.log(`[database] Created default library at ${defaultDownloadsPath}`);
 }
 
 console.log(`[database] Initialized`);
@@ -53,8 +61,21 @@ const ytdlBaseUrl = `http://localhost:${YTDL_PORT}`;
 // Read persisted auth config to pass to Rust server on startup
 const persistedPoToken = settingsRepo.get('youtube.poToken') ?? undefined;
 const persistedCookies = settingsRepo.get('youtube.cookies') ?? undefined;
-// Read persisted output path (may differ from env default if user changed it)
-const persistedOutputPath = settingsRepo.get('youtube.outputPath') ?? OUTPUT_DIR;
+
+// Resolve YouTube output path from library
+function resolveLibraryPath(metaKey: string, fallback: string): string {
+	const libId = metadataRepo.getValue<string>(metaKey) as string | undefined;
+	if (libId) {
+		const lib = libraryRepo.get(libId);
+		if (lib) return lib.path;
+	}
+	// Fallback: use first library if available
+	const allLibs = libraryRepo.getAll();
+	if (allLibs.length > 0) return allLibs[0].path;
+	return fallback;
+}
+
+const persistedOutputPath = resolveLibraryPath('youtube.libraryId', OUTPUT_DIR);
 
 if (existsSync(YTDL_BIN)) {
 	ytdlServerProcess = spawn(YTDL_BIN, [], {
@@ -156,7 +177,8 @@ if (existsSync(YTDL_BIN)) {
 // Initialize torrent services
 const torrentBroadcaster = new TorrentBroadcasterService();
 const torrentManager = new TorrentManagerService(torrentBroadcaster);
-torrentManager.initialize({ downloadPath: TORRENT_DIR });
+const torrentDownloadPath = resolveLibraryPath('torrent.libraryId', TORRENT_DIR);
+torrentManager.initialize({ downloadPath: torrentDownloadPath });
 
 // Wire torrent persistence
 torrentManager.setPersistenceCallback((torrents) => {
@@ -231,57 +253,6 @@ if (existsSync(P2P_STREAM_BIN)) {
 	console.warn(`[p2p-stream] Run 'pnpm p2p-server:build' to build it`);
 }
 
-// Initialize signaling server
-const SIGNALING_PORT = process.env.SIGNALING_PORT ?? '3002';
-const SIGNALING_DIST =
-	process.env.SIGNALING_BIN ??
-	join(PACKAGE_ROOT, '..', 'signaling', 'dist', 'index.js');
-
-let signalingServerProcess: ChildProcess | null = null;
-let signalingServerAvailable = false;
-const signalingBaseUrl = `http://localhost:${SIGNALING_PORT}`;
-
-if (existsSync(SIGNALING_DIST)) {
-	signalingServerProcess = spawn('node', [SIGNALING_DIST], {
-		env: {
-			...process.env,
-			SIGNALING_PORT
-		},
-		stdio: ['ignore', 'pipe', 'pipe']
-	});
-
-	signalingServerProcess.stdout?.on('data', (data: Buffer) => {
-		for (const line of data.toString().trimEnd().split('\n')) {
-			console.log(`[signaling] ${line}`);
-		}
-	});
-
-	signalingServerProcess.stderr?.on('data', (data: Buffer) => {
-		for (const line of data.toString().trimEnd().split('\n')) {
-			console.error(`[signaling] ${line}`);
-		}
-	});
-
-	signalingServerProcess.on('error', (err) => {
-		console.error(`[signaling] Failed to start: ${err.message}`);
-		signalingServerAvailable = false;
-	});
-
-	signalingServerProcess.on('exit', (code) => {
-		console.log(`[signaling] Process exited with code ${code}`);
-		signalingServerAvailable = false;
-		signalingServerProcess = null;
-	});
-
-	signalingServerAvailable = true;
-	console.log(
-		`[signaling] Started on port ${SIGNALING_PORT} (pid: ${signalingServerProcess.pid})`
-	);
-} else {
-	console.warn(`[signaling] Compiled server not found at ${SIGNALING_DIST}, signaling disabled`);
-	console.warn(`[signaling] Run 'pnpm signaling:build' to build it`);
-}
-
 // Cleanup on process exit
 function cleanupChildProcesses() {
 	if (ytdlServerProcess) {
@@ -291,10 +262,6 @@ function cleanupChildProcesses() {
 	if (streamServerProcess) {
 		streamServerProcess.kill();
 		streamServerProcess = null;
-	}
-	if (signalingServerProcess) {
-		signalingServerProcess.kill();
-		signalingServerProcess = null;
 	}
 }
 process.on('exit', cleanupChildProcesses);
@@ -318,9 +285,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.torrentBroadcaster = torrentBroadcaster;
 	event.locals.libraryRepo = libraryRepo;
 	event.locals.streamServerAvailable = streamServerAvailable;
-	event.locals.signalingBaseUrl = signalingBaseUrl;
-	event.locals.signalingServerAvailable = signalingServerAvailable;
-	event.locals.ytdlOutputDir = OUTPUT_DIR;
 
 	return resolve(event);
 };

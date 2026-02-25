@@ -27,7 +27,7 @@ const initialSettings: YouTubeSettings = {
 	defaultFormat: 'aac',
 	defaultVideoQuality: 'best',
 	defaultVideoFormat: 'mp4',
-	outputPath: '',
+	libraryId: '',
 	poToken: '',
 	cookies: ''
 };
@@ -37,7 +37,7 @@ const initialState: YouTubeServiceState = {
 	initialized: false,
 	loading: false,
 	error: null,
-	outputPath: '',
+	libraryId: '',
 	downloads: [],
 	stats: null,
 	ytdlpStatus: null,
@@ -86,7 +86,7 @@ class YouTubeService {
 				...s,
 				initialized: true,
 				loading: false,
-				outputPath: settings.outputPath,
+				libraryId: settings.libraryId,
 				stats,
 				ytdlpStatus,
 				error: null
@@ -403,8 +403,8 @@ class YouTubeService {
 				body: JSON.stringify(payload)
 			});
 
-			if (updates.outputPath !== undefined) {
-				this.state.update((s) => ({ ...s, outputPath: updates.outputPath! }));
+			if (updates.libraryId !== undefined) {
+				this.state.update((s) => ({ ...s, libraryId: updates.libraryId! }));
 			}
 		} catch (error) {
 			// Revert on failure
@@ -437,8 +437,8 @@ class YouTubeService {
 		this.updateSettings({ defaultVideoFormat: format });
 	}
 
-	setOutputPath(outputPath: string): void {
-		this.updateSettings({ outputPath });
+	setLibrary(libraryId: string): void {
+		this.updateSettings({ libraryId });
 	}
 
 	// ===== Getters =====

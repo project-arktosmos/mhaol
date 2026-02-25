@@ -1,6 +1,7 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { ObjectServiceClass } from '$services/classes/object-service.class';
+import { p2pStreamService } from '$services/p2p-stream.service';
 import type {
 	PlayerSettings,
 	PlayerState,
@@ -27,7 +28,8 @@ const initialState: PlayerState = {
 	sessionId: null,
 	positionSecs: 0,
 	durationSecs: null,
-	isSeeking: false
+	isSeeking: false,
+	isPaused: true
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -198,7 +200,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	private setupPeerConnection(): void {
 		this.pc = new RTCPeerConnection({
-			iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+			iceServers: p2pStreamService.getIceServers()
 		});
 
 		this.pc.ontrack = () => {
@@ -342,9 +344,23 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		this.state.update((s) => ({ ...s, isSeeking }));
 	}
 
+	// ===== Playback controls =====
+
+	setPaused(isPaused: boolean): void {
+		this.state.update((s) => ({ ...s, isPaused }));
+	}
+
+	setVolume(volume: number): void {
+		this.updateSettings({ preferredVolume: volume });
+	}
+
+	getVolume(): number {
+		return this.get().preferredVolume;
+	}
+
 	private handlePositionUpdate(payload: PositionPayload): void {
 		const current = get(this.state);
-		if (current.isSeeking) return;
+		if (current.isSeeking || current.isPaused) return;
 
 		this.state.update((s) => ({
 			...s,
@@ -397,7 +413,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			error: null,
 			positionSecs: 0,
 			durationSecs: null,
-			isSeeking: false
+			isSeeking: false,
+			isPaused: true
 		}));
 	}
 

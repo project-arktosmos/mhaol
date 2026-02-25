@@ -1,6 +1,9 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { youtubeService } from '$services/youtube.service';
+	import { libraryService } from '$services/library.service';
+	import type { Library } from '$types/library.type';
+	import LibraryAddForm from '$components/libraries/LibraryAddForm.svelte';
 	import {
 		AUDIO_QUALITY_OPTIONS,
 		AUDIO_FORMAT_OPTIONS,
@@ -17,6 +20,8 @@
 
 	const state = youtubeService.state;
 	const settings = youtubeService.store;
+	const libraries = libraryService.store;
+	const libraryState = libraryService.state;
 
 	// Advanced config state
 	let showAdvanced = false;
@@ -27,17 +32,42 @@
 	// yt-dlp state
 	let ytdlpDownloading = false;
 
-	// Output path editing
-	let outputPathInput = '';
-	let editingPath = false;
+	// Library selection
+	let selectedLibraryId: string = '';
+	let showInlineAddForm = false;
+	let previousLibraryCount = 0;
 
 	// Sync auth fields from settings store
 	$: if ($settings.poToken !== undefined) poToken = $settings.poToken;
 	$: if ($settings.cookies !== undefined) cookies = $settings.cookies;
 
-	$: if ($settings.outputPath && !editingPath) {
-		outputPathInput = $settings.outputPath;
+	// Auto-select library matching current libraryId, or first library if none matches
+	$: if ($libraries.length > 0) {
+		if ($settings.libraryId) {
+			const match = $libraries.find((lib: Library) => String(lib.id) === $settings.libraryId);
+			if (match) {
+				selectedLibraryId = String(match.id);
+			}
+		}
+		if (!selectedLibraryId) {
+			const first = $libraries[0];
+			selectedLibraryId = String(first.id);
+			youtubeService.setLibrary(String(first.id));
+		}
 	}
+
+	// Detect when inline add form closes (cancel or successful add)
+	$: if (showInlineAddForm && !$libraryState.showAddForm) {
+		showInlineAddForm = false;
+		// If a new library was added, auto-select it
+		if ($libraries.length > previousLibraryCount) {
+			const newest = $libraries[$libraries.length - 1];
+			selectedLibraryId = String(newest.id);
+			youtubeService.setLibrary(String(newest.id));
+		}
+	}
+
+	$: previousLibraryCount = $libraries.length;
 
 	function handleModeChange(mode: DownloadMode) {
 		youtubeService.setDownloadMode(mode);
@@ -63,11 +93,21 @@
 		youtubeService.setDefaultVideoFormat(target.value as VideoFormat);
 	}
 
-	function handleSetOutputPath() {
-		if (outputPathInput.trim()) {
-			youtubeService.setOutputPath(outputPathInput.trim());
-			editingPath = false;
+	async function handleLibrarySelect(event: Event) {
+		const target = event.target as HTMLSelectElement;
+		const libraryId = target.value;
+		if (!libraryId) return;
+
+		const library = $libraries.find((lib: Library) => String(lib.id) === libraryId);
+		if (library) {
+			selectedLibraryId = String(library.id);
+			youtubeService.setLibrary(String(library.id));
 		}
+	}
+
+	function handleShowAddForm() {
+		showInlineAddForm = true;
+		libraryService.openAddForm();
 	}
 
 	async function handleSaveConfig() {
@@ -83,14 +123,6 @@
 		ytdlpDownloading = true;
 		await youtubeService.downloadYtDlp();
 		ytdlpDownloading = false;
-	}
-
-	// Truncate path for display
-	function truncatePath(path: string, maxLength: number = 40): string {
-		if (path.length <= maxLength) return path;
-		const parts = path.split('/');
-		if (parts.length <= 2) return path;
-		return `.../${parts.slice(-2).join('/')}`;
 	}
 
 	// Reactive yt-dlp status
@@ -283,24 +315,58 @@
 			</div>
 		{/if}
 
-		<!-- Output Folder -->
+		<!-- Download Library -->
 		<div class="form-control">
-			<label class="label" for="output-folder">
-				<span class="label-text">Output Folder</span>
+			<label class="label" for="library-select">
+				<span class="label-text">Download Library</span>
 			</label>
-			<div class="flex items-center gap-2">
-				<input
-					id="output-folder"
-					type="text"
-					class="input input-bordered flex-1"
-					bind:value={outputPathInput}
-					on:focus={() => (editingPath = true)}
-					placeholder="/path/to/downloads"
-					title={$settings.outputPath}
-				/>
-				<button class="btn btn-outline btn-sm" on:click={handleSetOutputPath}> Set </button>
-			</div>
+
+			{#if $libraries.length > 0}
+				<div class="flex items-center gap-2">
+					<select
+						id="library-select"
+						class="select select-bordered flex-1"
+						value={selectedLibraryId}
+						on:change={handleLibrarySelect}
+					>
+						<option value="" disabled>Select a library...</option>
+						{#each $libraries as library (library.id)}
+							<option value={String(library.id)}>
+								{library.name}
+							</option>
+						{/each}
+					</select>
+					<button
+						class="btn btn-ghost btn-sm"
+						on:click={handleShowAddForm}
+						title="Add new library"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							class="h-4 w-4"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+							stroke-width="2"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+						</svg>
+					</button>
+				</div>
+			{:else}
+				<div class="rounded-lg bg-base-300 p-4 text-center">
+					<p class="mb-2 text-sm text-base-content/60">No libraries configured</p>
+					<button class="btn btn-primary btn-sm" on:click={handleShowAddForm}>
+						Create Library
+					</button>
+				</div>
+			{/if}
 		</div>
+
+		<!-- Inline Library Add Form -->
+		{#if showInlineAddForm && $libraryState.showAddForm}
+			<LibraryAddForm />
+		{/if}
 
 		<!-- Stats -->
 		{#if $state.stats}
