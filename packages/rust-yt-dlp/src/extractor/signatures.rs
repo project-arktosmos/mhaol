@@ -30,12 +30,27 @@ impl SignatureResolver {
 
     /// Load and parse a player.js source, extracting the signature and n-param functions.
     ///
-    /// The n-parameter function is always required (used by every stream URL for throttle bypass).
-    /// The signature function is optional — it is only needed when stream URLs carry a cipher
-    /// (e.g. WEB client). Clients that return direct URLs (e.g. Android) do not need it, so a
-    /// failure to extract the signature function is logged as a warning rather than an error.
+    /// Both functions are optional:
+    /// - n-param function: only present in player versions that use the classic cipher-style
+    ///   n-parameter transform (older players). Newer players (2026+) perform no client-side
+    ///   n-transform, so the extraction returns None and URLs are left unchanged.
+    /// - sig function: only needed for WEB client stream ciphers. Android client streams have
+    ///   direct URLs so this is not required.
+    ///
+    /// Applying a *wrong* extracted function is worse than skipping transformation entirely —
+    /// a bad n-transform corrupts the URL and returns HTTP 403, while no transform at most
+    /// causes CDN speed throttling.
     pub fn load_player_js(&mut self, player_js_url: &str, source: &str) -> Result<()> {
-        let n_func = extract_n_function(source)?;
+        let n_func = match extract_n_function(source) {
+            Ok(f) => {
+                log::info!("player.js: n-param transform function found");
+                Some(f)
+            }
+            Err(e) => {
+                log::info!("player.js: n-param transform function not found (URLs left unchanged): {}", e);
+                None
+            }
+        };
 
         let sig_func = match extract_signature_function(source) {
             Ok(f) => Some(f),
@@ -50,13 +65,14 @@ impl SignatureResolver {
             .and_then(|f| extract_helper_object(source, f).ok());
 
         self.player_js_url = Some(player_js_url.to_string());
-        self.n_function = Some(n_func);
+        self.n_function = n_func;
         self.sig_function = sig_func;
         self.helper_code = helper;
 
         log::info!(
-            "Loaded player.js from {} (n-param: ok, sig-cipher: {})",
+            "Loaded player.js from {} (n-param: {}, sig-cipher: {})",
             player_js_url,
+            if self.n_function.is_some() { "ok" } else { "unavailable" },
             if self.sig_function.is_some() { "ok" } else { "unavailable" }
         );
         Ok(())
@@ -88,19 +104,24 @@ impl SignatureResolver {
         Ok(result)
     }
 
-    /// Transform the n-parameter to bypass throttling.
+    /// Transform the n-parameter to bypass CDN throttling.
+    ///
+    /// Returns the original value unchanged if no n-function was found in player.js.
+    /// This is safe: untransformed n-params may cause speed throttling but not HTTP 403.
+    /// Applying a *wrong* extracted function would corrupt the URL and return 403.
     pub fn transform_n_param(&self, n_value: &str) -> Result<String> {
-        let n_func = self
-            .n_function
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("N-parameter function not loaded"))?;
+        let n_func = match self.n_function.as_ref() {
+            Some(f) => f,
+            None => return Ok(n_value.to_string()),
+        };
 
         let mut engine = JsEngine::new();
         let result = engine.call_function(n_func, n_value)?;
 
-        // If the result looks like the original, it might have failed silently
         if result == n_value {
-            log::warn!("N-parameter transformation returned the same value, may be broken");
+            log::debug!("n-param transform returned same value — function may be a no-op for this player");
+        } else {
+            log::debug!("n-param transformed: {} chars → {} chars", n_value.len(), result.len());
         }
 
         Ok(result)
@@ -177,31 +198,29 @@ fn extract_signature_function(source: &str) -> Result<String> {
 }
 
 /// Extract the n-parameter transformation function from player.js.
+///
+/// Only uses the reliable first-party pattern that matches the exact call site where
+/// YouTube's player invokes the n-cipher function. Fallback patterns that could
+/// match arbitrary unrelated functions are intentionally absent: applying a wrong
+/// function corrupts stream URLs (HTTP 403) which is worse than no transformation.
+///
+/// Returns Err when the pattern is not found (e.g. player versions that moved to
+/// path-based n-params or no longer use a client-side n-cipher at all).
 fn extract_n_function(source: &str) -> Result<String> {
-    // Pattern to find n-param function reference
-    let patterns = [
-        r#"\.get\("n"\)\)&&\(b=([a-zA-Z0-9$]+)(?:\[(\d+)\])?\([a-zA-Z0-9]\)"#,
-        r#"([a-zA-Z0-9$]+)\s*=\s*function\([a-zA-Z]\)\s*\{[^}]*?join\(""\)"#,
-        r#"\b([a-zA-Z0-9$]{2,})\s*=\s*function\(a\)\s*\{a=a\.split\(""\)"#,
-    ];
+    // This pattern matches the exact call site:
+    //   .get("n"))&&(b=VARNAME[IDX](a)  or  .get("n"))&&(b=FUNCNAME(a)
+    let pattern = r#"\.get\("n"\)\)&&\(b=([a-zA-Z0-9$]+)(?:\[(\d+)\])?\([a-zA-Z0-9]\)"#;
 
-    let mut func_name = None;
-    let mut array_index = None;
+    let re = Regex::new(pattern)?;
+    let cap = re
+        .captures(source)
+        .ok_or_else(|| anyhow::anyhow!("n-param call site pattern not found in player.js"))?;
 
-    for pattern in &patterns {
-        if let Ok(re) = Regex::new(pattern) {
-            if let Some(cap) = re.captures(source) {
-                func_name = Some(cap[1].to_string());
-                array_index = cap.get(2).and_then(|m| m.as_str().parse::<usize>().ok());
-                break;
-            }
-        }
-    }
+    let func_name = cap[1].to_string();
+    let array_index = cap.get(2).and_then(|m| m.as_str().parse::<usize>().ok());
 
-    let func_name =
-        func_name.ok_or_else(|| anyhow::anyhow!("Could not find n-param function in player.js"))?;
-
-    // If it's an array reference like b=arr[0](a), find the array and get the function
+    // If it's an array reference like b=arr[0](a), look up the array and extract the
+    // function at the given index.
     if let Some(idx) = array_index {
         let escaped_name = regex::escape(&func_name);
         let array_pattern = format!(r#"var\s+{}\s*=\s*\[([^\]]+)\]"#, escaped_name);
