@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const apiUrl = `${PIRATEBAY_API}/q.php?q=${encodeURIComponent(query.trim())}&cat=${encodeURIComponent(category)}`;
 		const response = await fetch(apiUrl, {
 			headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Mhaol/1.0)' },
-			signal: AbortSignal.timeout(10000)
+			signal: AbortSignal.timeout(30000)
 		});
 
 		if (!response.ok) {
