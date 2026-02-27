@@ -17,6 +17,7 @@
 	export let results: TorrentSearchResult[] = [];
 	export let sort: TorrentSearchSort;
 	export let addingTorrents: Set<string> = new Set();
+	export let disableAdd: boolean = false;
 
 	const dispatch = createEventDispatcher<{
 		add: { magnetLink: string; infoHash: string; name: string };
@@ -117,7 +118,7 @@
 							<button
 								class="btn btn-primary btn-xs"
 								on:click={() => handleAdd(result)}
-								disabled={isAdding}
+								disabled={isAdding || disableAdd}
 							>
 								{#if isAdding}
 									<span class="loading loading-spinner loading-xs"></span>

@@ -8,6 +8,8 @@
 	const searchState = torrentSearchService.state;
 	const torrentState = torrentService.state;
 
+	$: canAddTorrents = $torrentState.initialized;
+
 	$: hasResults = $searchState.results.length > 0;
 	$: showResults = hasResults || $searchState.error;
 
@@ -49,7 +51,6 @@
 			bind:query={$searchState.query}
 			bind:category={$searchState.category}
 			searching={$searchState.searching}
-			disabled={!$torrentState.initialized}
 			on:search={handleSearch}
 		/>
 
@@ -68,6 +69,7 @@
 				results={$searchState.results}
 				sort={$searchState.sort}
 				addingTorrents={$searchState.addingTorrents}
+				disableAdd={!canAddTorrents}
 				on:add={handleAdd}
 				on:sort={handleSort}
 			/>
