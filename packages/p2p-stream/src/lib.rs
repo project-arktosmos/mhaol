@@ -22,7 +22,7 @@ pub fn init() -> Result<(), error::Error> {
 
 pub mod prelude {
     pub use crate::error::Error;
-    pub use crate::media::{CodecConfig, FileSource, MediaSource, VideoCodec, AudioCodec};
+    pub use crate::media::{AudioCodec, CodecConfig, FileSource, MediaSource, VideoCodec, VideoQuality};
     pub use crate::pipeline::{BusEvent, PipelineBuilder, StreamPipeline};
     pub use crate::session::{PeerSession, SessionManager, SessionState};
     pub use crate::signaling::{IceCandidate, SessionDescription, SignalingMessage};

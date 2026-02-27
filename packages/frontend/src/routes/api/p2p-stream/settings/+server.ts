@@ -6,7 +6,8 @@ const P2P_STREAM_SETTINGS_KEYS = [
 	'p2p-stream.turnServers',
 	'p2p-stream.videoCodec',
 	'p2p-stream.audioCodec',
-	'p2p-stream.defaultStreamMode'
+	'p2p-stream.defaultStreamMode',
+	'p2p-stream.videoQuality'
 ] as const;
 
 const DEFAULTS: Record<string, string> = {
@@ -14,7 +15,8 @@ const DEFAULTS: Record<string, string> = {
 	'p2p-stream.turnServers': '[]',
 	'p2p-stream.videoCodec': 'vp8',
 	'p2p-stream.audioCodec': 'opus',
-	'p2p-stream.defaultStreamMode': 'video'
+	'p2p-stream.defaultStreamMode': 'video',
+	'p2p-stream.videoQuality': 'native'
 };
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -48,7 +50,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 		videoCodec: existing.get('p2p-stream.videoCodec') ?? DEFAULTS['p2p-stream.videoCodec'],
 		audioCodec: existing.get('p2p-stream.audioCodec') ?? DEFAULTS['p2p-stream.audioCodec'],
 		defaultStreamMode:
-			existing.get('p2p-stream.defaultStreamMode') ?? DEFAULTS['p2p-stream.defaultStreamMode']
+			existing.get('p2p-stream.defaultStreamMode') ?? DEFAULTS['p2p-stream.defaultStreamMode'],
+		videoQuality: existing.get('p2p-stream.videoQuality') ?? DEFAULTS['p2p-stream.videoQuality']
 	});
 };
 
@@ -63,6 +66,7 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
 	if (body.audioCodec !== undefined) entries['p2p-stream.audioCodec'] = body.audioCodec;
 	if (body.defaultStreamMode !== undefined)
 		entries['p2p-stream.defaultStreamMode'] = body.defaultStreamMode;
+	if (body.videoQuality !== undefined) entries['p2p-stream.videoQuality'] = body.videoQuality;
 
 	if (Object.keys(entries).length === 0) {
 		return json({ error: 'No valid settings provided' }, { status: 400 });

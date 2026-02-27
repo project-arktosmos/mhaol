@@ -32,6 +32,8 @@ pub struct AppState {
 pub struct CreateSessionRequest {
     pub file_path: String,
     pub mode: Option<String>,
+    pub video_codec: Option<String>,
+    pub video_quality: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -69,6 +71,18 @@ pub async fn create_session(
 
     let is_audio_only = req.mode.as_deref() == Some("audio");
 
+    let video_codec = req
+        .video_codec
+        .as_deref()
+        .and_then(parse_video_codec)
+        .unwrap_or(VideoCodec::Vp8);
+
+    let video_quality = req
+        .video_quality
+        .as_deref()
+        .and_then(parse_video_quality)
+        .unwrap_or(VideoQuality::Native);
+
     let file_source = if is_audio_only {
         FileSource::new(&path).audio_only()
     } else {
@@ -77,7 +91,9 @@ pub async fn create_session(
 
     let manager = SessionManager::new(
         move || {
-            let builder = PipelineBuilder::new();
+            let builder = PipelineBuilder::new()
+                .video_codec(video_codec)
+                .video_quality(video_quality);
             if is_audio_only {
                 builder.no_video()
             } else {
@@ -254,6 +270,28 @@ async fn forward_incoming(
         } else {
             break;
         }
+    }
+}
+
+// ===== Parsing Helpers =====
+
+fn parse_video_codec(s: &str) -> Option<VideoCodec> {
+    match s {
+        "vp8" => Some(VideoCodec::Vp8),
+        "vp9" => Some(VideoCodec::Vp9),
+        "h264" => Some(VideoCodec::H264),
+        _ => None,
+    }
+}
+
+fn parse_video_quality(s: &str) -> Option<VideoQuality> {
+    match s {
+        "native" => Some(VideoQuality::Native),
+        "1080p" => Some(VideoQuality::Q1080p),
+        "720p" => Some(VideoQuality::Q720p),
+        "480p" => Some(VideoQuality::Q480p),
+        "360p" => Some(VideoQuality::Q360p),
+        _ => None,
     }
 }
 

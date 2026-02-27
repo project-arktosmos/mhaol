@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { p2pStreamService } from '$services/p2p-stream.service';
-	import { P2P_VIDEO_CODEC_OPTIONS } from '$types/p2p-stream.type';
-	import type { P2pVideoCodec, P2pStreamMode } from '$types/p2p-stream.type';
+	import { P2P_VIDEO_CODEC_OPTIONS, P2P_VIDEO_QUALITY_OPTIONS } from '$types/p2p-stream.type';
+	import type { P2pVideoCodec, P2pVideoQuality, P2pStreamMode } from '$types/p2p-stream.type';
 
 	const settings = p2pStreamService.store;
 	const state = p2pStreamService.state;
@@ -29,6 +29,11 @@
 	function handleVideoCodecChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
 		p2pStreamService.setVideoCodec(target.value as P2pVideoCodec);
+	}
+
+	function handleVideoQualityChange(event: Event) {
+		const target = event.target as HTMLSelectElement;
+		p2pStreamService.setVideoQuality(target.value as P2pVideoQuality);
 	}
 
 	function handleAddTurnServer() {
@@ -157,6 +162,30 @@
 					Audio Only
 				</button>
 			</div>
+		</div>
+
+		<!-- Stream Quality -->
+		<div class="form-control">
+			<label class="label" for="video-quality-select">
+				<span class="label-text">Stream Quality</span>
+			</label>
+			<select
+				id="video-quality-select"
+				class="select select-bordered w-full"
+				value={$settings.videoQuality}
+				on:change={handleVideoQualityChange}
+			>
+				{#each P2P_VIDEO_QUALITY_OPTIONS as option}
+					<option value={option.value}>
+						{option.label} - {option.description}
+					</option>
+				{/each}
+			</select>
+			<label class="label" for="video-quality-select">
+				<span class="label-text-alt text-base-content/50">
+					Controls resolution and bitrate. Lower quality uses less bandwidth.
+				</span>
+			</label>
 		</div>
 
 		<!-- Video Codec -->

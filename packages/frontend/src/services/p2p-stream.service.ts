@@ -4,6 +4,7 @@ import type {
 	P2pStreamSettings,
 	P2pStreamServiceState,
 	P2pVideoCodec,
+	P2pVideoQuality,
 	P2pStreamMode
 } from '$types/p2p-stream.type';
 
@@ -13,7 +14,8 @@ const initialSettings: P2pStreamSettings = {
 	turnServers: [],
 	videoCodec: 'vp8',
 	audioCodec: 'opus',
-	defaultStreamMode: 'video'
+	defaultStreamMode: 'video',
+	videoQuality: 'native'
 };
 
 const initialState: P2pStreamServiceState = {
@@ -104,6 +106,18 @@ class P2pStreamService {
 
 	setDefaultStreamMode(mode: P2pStreamMode): void {
 		this.updateSettings({ defaultStreamMode: mode });
+	}
+
+	setVideoQuality(quality: P2pVideoQuality): void {
+		this.updateSettings({ videoQuality: quality });
+	}
+
+	getSessionConfig(): { video_codec: string; video_quality: string } {
+		const settings = this.get();
+		return {
+			video_codec: settings.videoCodec,
+			video_quality: settings.videoQuality
+		};
 	}
 
 	async checkHealth(): Promise<boolean> {

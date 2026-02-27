@@ -117,6 +117,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		}));
 
 		try {
+			const streamConfig = p2pStreamService.getSessionConfig();
+
 			const session = await this.fetchJson<{
 				session_id: string;
 				ws_url: string;
@@ -124,7 +126,9 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				method: 'POST',
 				body: JSON.stringify({
 					file_path: file.outputPath,
-					mode: file.mode
+					mode: file.mode,
+					video_codec: streamConfig.video_codec,
+					video_quality: streamConfig.video_quality
 				})
 			});
 

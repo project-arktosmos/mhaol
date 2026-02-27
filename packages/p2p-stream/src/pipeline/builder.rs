@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::media::{AudioCodec, CodecConfig, MediaSource, VideoCodec};
+use crate::media::{AudioCodec, CodecConfig, MediaSource, VideoCodec, VideoQuality};
 use crate::pipeline::bus::{spawn_bus_monitor, BusEvent};
 use crate::pipeline::elements::make_element;
 use gstreamer as gst;
@@ -161,6 +161,11 @@ impl PipelineBuilder {
         self
     }
 
+    pub fn video_quality(mut self, quality: VideoQuality) -> Self {
+        self.codec_config.video_quality = quality;
+        self
+    }
+
     pub fn stun_server(mut self, url: impl Into<String>) -> Self {
         self.ice_config.stun_server = Some(url.into());
         self
@@ -228,7 +233,7 @@ impl PipelineBuilder {
                 }
                 if let Some(video_codec) = &codec_config.video {
                     if let Err(e) =
-                        Self::link_video_branch(&pipeline, src_pad, video_codec, &webrtcbin)
+                        Self::link_video_branch(&pipeline, src_pad, video_codec, &codec_config.video_quality, &webrtcbin)
                     {
                         tracing::error!("Failed to link video branch: {e}");
                         video_linked.store(false, Ordering::SeqCst);
@@ -263,6 +268,7 @@ impl PipelineBuilder {
         pipeline: &gst::Pipeline,
         src_pad: &gst::Pad,
         codec: &VideoCodec,
+        quality: &VideoQuality,
         webrtcbin: &gst::Element,
     ) -> Result<()> {
         let queue = make_element("queue", Some("video_queue"))?;
@@ -270,23 +276,55 @@ impl PipelineBuilder {
         let encoder = make_element(codec.encoder_element(), Some("video_encoder"))?;
         let payloader = make_element(codec.rtp_payloader(), Some("video_payloader"))?;
 
+        // Set bitrate target on the encoder
+        let bitrate = quality.target_bitrate(codec);
+
         match codec {
             VideoCodec::Vp8 => {
                 encoder.set_property("deadline", 1i64);
                 encoder.set_property_from_str("error-resilient", "partitions");
+                encoder.set_property("target-bitrate", bitrate as i32);
             }
             VideoCodec::H264 => {
                 encoder.set_property_from_str("tune", "zerolatency");
                 encoder.set_property_from_str("speed-preset", "ultrafast");
+                // x264enc uses bitrate in kbit/sec
+                encoder.set_property("bitrate", (bitrate / 1000) as u32);
             }
-            VideoCodec::Vp9 => {}
+            VideoCodec::Vp9 => {
+                encoder.set_property("target-bitrate", bitrate as i32);
+            }
         }
 
+        // Build the video processing chain:
+        //   queue → videoconvert [→ videoscale → capsfilter] → encoder → payloader
+        let mut chain: Vec<gst::Element> = vec![queue.clone(), convert.clone()];
+
+        // Insert videoscale + capsfilter for non-native quality
+        if let Some(height) = quality.target_height() {
+            let videoscale = make_element("videoscale", Some("videoscale"))?;
+            let capsfilter = make_element("capsfilter", Some("video_capsfilter"))?;
+
+            let caps = gst::Caps::builder("video/x-raw")
+                .field("height", height)
+                .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
+                .build();
+            capsfilter.set_property("caps", &caps);
+
+            chain.push(videoscale);
+            chain.push(capsfilter);
+        }
+
+        chain.push(encoder.clone());
+        chain.push(payloader.clone());
+
+        // Add all elements to the pipeline and link them
+        let refs: Vec<&gst::Element> = chain.iter().collect();
         pipeline
-            .add_many([&queue, &convert, &encoder, &payloader])
+            .add_many(&refs)
             .map_err(|e| Error::PipelineConstruction(e.to_string()))?;
 
-        gst::Element::link_many([&queue, &convert, &encoder, &payloader]).map_err(|_| {
+        gst::Element::link_many(&refs).map_err(|_| {
             Error::ElementLinkFailed {
                 source_element: "video chain".into(),
                 sink_element: "video chain".into(),
@@ -300,7 +338,7 @@ impl PipelineBuilder {
                 sink_element: "webrtcbin".into(),
             })?;
 
-        for el in [&queue, &convert, &encoder, &payloader] {
+        for el in &chain {
             el.sync_state_with_parent()
                 .map_err(|e| Error::StateChange(e.to_string()))?;
         }

@@ -72,11 +72,60 @@ impl AudioCodec {
     }
 }
 
+/// Video quality/resolution preset.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoQuality {
+    Native,
+    #[serde(rename = "1080p")]
+    Q1080p,
+    #[serde(rename = "720p")]
+    Q720p,
+    #[serde(rename = "480p")]
+    Q480p,
+    #[serde(rename = "360p")]
+    Q360p,
+}
+
+impl VideoQuality {
+    /// Returns the target height for scaling, or `None` for native (no scaling).
+    pub fn target_height(&self) -> Option<i32> {
+        match self {
+            VideoQuality::Native => None,
+            VideoQuality::Q1080p => Some(1080),
+            VideoQuality::Q720p => Some(720),
+            VideoQuality::Q480p => Some(480),
+            VideoQuality::Q360p => Some(360),
+        }
+    }
+
+    /// Target bitrate in bits/sec for a given video codec.
+    pub fn target_bitrate(&self, codec: &VideoCodec) -> u32 {
+        match (self, codec) {
+            (VideoQuality::Native | VideoQuality::Q1080p, VideoCodec::Vp9) => 3_000_000,
+            (VideoQuality::Native | VideoQuality::Q1080p, _) => 4_000_000,
+            (VideoQuality::Q720p, VideoCodec::Vp9) => 1_800_000,
+            (VideoQuality::Q720p, _) => 2_500_000,
+            (VideoQuality::Q480p, VideoCodec::Vp9) => 900_000,
+            (VideoQuality::Q480p, _) => 1_200_000,
+            (VideoQuality::Q360p, VideoCodec::Vp9) => 500_000,
+            (VideoQuality::Q360p, _) => 700_000,
+        }
+    }
+}
+
+impl Default for VideoQuality {
+    fn default() -> Self {
+        VideoQuality::Native
+    }
+}
+
 /// Codec configuration for a streaming session.
 #[derive(Debug, Clone)]
 pub struct CodecConfig {
     pub video: Option<VideoCodec>,
     pub audio: Option<AudioCodec>,
+    pub video_quality: VideoQuality,
 }
 
 impl Default for CodecConfig {
@@ -84,6 +133,7 @@ impl Default for CodecConfig {
         Self {
             video: Some(VideoCodec::Vp8),
             audio: Some(AudioCodec::Opus),
+            video_quality: VideoQuality::default(),
         }
     }
 }
