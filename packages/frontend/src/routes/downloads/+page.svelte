@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import classNames from 'classnames';
 	import type { UnifiedDownload } from '$types/download.type';
 	import { formatBytes } from '$types/torrent.type';
@@ -32,9 +32,12 @@
 
 	type FilesResponse = TorrentFilesResponse | YoutubeFilesResponse;
 
+	const POLL_INTERVAL_MS = 2000;
+
 	let downloads = $state<UnifiedDownload[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 	let modalOpen = $state(false);
 	let modalLoading = $state(false);
@@ -43,6 +46,11 @@
 
 	onMount(() => {
 		loadDownloads();
+		pollTimer = setInterval(pollDownloads, POLL_INTERVAL_MS);
+	});
+
+	onDestroy(() => {
+		if (pollTimer) clearInterval(pollTimer);
 	});
 
 	async function loadDownloads() {
@@ -58,6 +66,43 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function pollDownloads() {
+		try {
+			const res = await fetch('/api/downloads');
+			if (!res.ok) return;
+			const fresh: UnifiedDownload[] = await res.json();
+			mergeDownloads(fresh);
+		} catch {
+			// Silently ignore poll failures to avoid UI noise
+		}
+	}
+
+	function mergeDownloads(fresh: UnifiedDownload[]) {
+		const existingById = new Map(downloads.map((dl) => [dl.id, dl]));
+		const freshIds = new Set(fresh.map((dl) => dl.id));
+
+		// Update existing items in-place and collect new ones
+		const newItems: UnifiedDownload[] = [];
+		for (const item of fresh) {
+			const existing = existingById.get(item.id);
+			if (existing) {
+				Object.assign(existing, item);
+			} else {
+				newItems.push(item);
+			}
+		}
+
+		// Remove items no longer present and prepend new ones
+		const merged = [...newItems, ...downloads.filter((dl) => freshIds.has(dl.id))];
+
+		// Re-sort by updatedAt descending to match server order
+		merged.sort(
+			(a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+		);
+
+		downloads = merged;
 	}
 
 	async function openFiles(dl: UnifiedDownload) {
