@@ -177,20 +177,6 @@ impl PeerSession {
             webrtcbin.connect("on-negotiation-needed", false, move |_values| {
                 info!("Session {session_id}: negotiation needed");
 
-                // Guard: do not call create-offer until at least one media branch
-                // has been linked to webrtcbin.  Calling create-offer with no
-                // transceivers produces an empty SDP and may consume the internal
-                // negotiation-needed state, preventing the signal from re-firing
-                // when an audio-only pad is linked later.
-                let has_sink_pads = webrtcbin_clone
-                    .pads()
-                    .iter()
-                    .any(|p| p.direction() == gst::PadDirection::Sink);
-                if !has_sink_pads {
-                    info!("Session {session_id}: no sink pads yet, deferring negotiation");
-                    return None;
-                }
-
                 let signaling_tx = signaling_tx.clone();
                 let state = state.clone();
                 let webrtcbin_inner = webrtcbin_clone.clone();

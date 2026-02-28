@@ -60,7 +60,7 @@ describe('schema initialization', () => {
 			type: string;
 		};
 		expect(row).toBeDefined();
-		expect(row.value).toBe('3');
+		expect(row.value).toBe('15');
 		expect(row.type).toBe('number');
 	});
 
@@ -78,5 +78,33 @@ describe('schema initialization', () => {
 	it('should be safe to call initializeSchema multiple times', () => {
 		db = createTestDb();
 		expect(() => initializeSchema(db)).not.toThrow();
+	});
+
+	it('should create the media_types table with seed data', () => {
+		db = createTestDb();
+		const rows = db.prepare('SELECT * FROM media_types ORDER BY id ASC').all() as { id: string; label: string }[];
+		expect(rows).toHaveLength(3);
+		expect(rows.map((r) => r.id)).toEqual(['audio', 'image', 'video']);
+	});
+
+	it('should create the categories table with video categories', () => {
+		db = createTestDb();
+		const rows = db.prepare("SELECT * FROM categories WHERE media_type_id = 'video' ORDER BY id ASC").all() as { id: string; label: string }[];
+		expect(rows).toHaveLength(4);
+		expect(rows.map((r) => r.id).sort()).toEqual(['movies', 'tv', 'video-uncategorized', 'youtube']);
+	});
+
+	it('should create the categories table with audio categories', () => {
+		db = createTestDb();
+		const rows = db.prepare("SELECT * FROM categories WHERE media_type_id = 'audio' ORDER BY id ASC").all() as { id: string; label: string }[];
+		expect(rows).toHaveLength(3);
+		expect(rows.map((r) => r.id).sort()).toEqual(['audio-uncategorized', 'music', 'podcast']);
+	});
+
+	it('should create the categories table with image categories', () => {
+		db = createTestDb();
+		const rows = db.prepare("SELECT * FROM categories WHERE media_type_id = 'image' ORDER BY id ASC").all() as { id: string; label: string }[];
+		expect(rows).toHaveLength(3);
+		expect(rows.map((r) => r.id).sort()).toEqual(['image-uncategorized', 'memes', 'photos']);
 	});
 });

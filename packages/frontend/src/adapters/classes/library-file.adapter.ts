@@ -17,8 +17,8 @@ export class LibraryFileAdapter extends AdapterClass {
 	getMediaTypeBadgeClass(mediaType: MediaType): string {
 		const map: Record<MediaType, string> = {
 			[MediaType.Video]: 'badge-primary',
-			[MediaType.Images]: 'badge-secondary',
-			[MediaType.Music]: 'badge-accent'
+			[MediaType.Image]: 'badge-secondary',
+			[MediaType.Audio]: 'badge-accent'
 		};
 		return map[mediaType];
 	}
@@ -26,10 +26,30 @@ export class LibraryFileAdapter extends AdapterClass {
 	getMediaTypeLabel(mediaType: MediaType): string {
 		const map: Record<MediaType, string> = {
 			[MediaType.Video]: 'Video',
-			[MediaType.Images]: 'Image',
-			[MediaType.Music]: 'Music'
+			[MediaType.Image]: 'Image',
+			[MediaType.Audio]: 'Audio'
 		};
 		return map[mediaType];
+	}
+
+	getCategoryBadgeClass(categoryId: string): string {
+		const map: Record<string, string> = {
+			tv: 'badge-info',
+			movies: 'badge-warning',
+			youtube: 'badge-error',
+			uncategorized: 'badge-ghost'
+		};
+		return map[categoryId] ?? 'badge-ghost';
+	}
+
+	getCategoryLabel(categoryId: string): string {
+		const map: Record<string, string> = {
+			tv: 'TV',
+			movies: 'Movies',
+			youtube: 'YouTube',
+			uncategorized: 'Uncategorized'
+		};
+		return map[categoryId] ?? categoryId;
 	}
 }
 

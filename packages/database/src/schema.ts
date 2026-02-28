@@ -1,4 +1,4 @@
-import type { Database as DatabaseType } from 'better-sqlite3';
+import type { Database as DatabaseType } from "better-sqlite3";
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS settings (
@@ -30,59 +30,16 @@ BEGIN
     UPDATE metadata SET updated_at = datetime('now') WHERE key = OLD.key;
 END;
 
-CREATE TABLE IF NOT EXISTS youtube_downloads (
-    download_id TEXT PRIMARY KEY,
-    url TEXT NOT NULL,
-    video_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    state TEXT NOT NULL DEFAULT 'pending',
-    progress REAL NOT NULL DEFAULT 0,
-    downloaded_bytes INTEGER NOT NULL DEFAULT 0,
-    total_bytes INTEGER NOT NULL DEFAULT 0,
-    output_path TEXT,
-    error TEXT,
-    mode TEXT NOT NULL DEFAULT 'audio',
-    quality TEXT NOT NULL DEFAULT 'high',
-    format TEXT NOT NULL DEFAULT 'aac',
-    video_quality TEXT,
-    video_format TEXT,
-    thumbnail_url TEXT,
-    duration_seconds REAL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS media_types (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL
 );
 
-CREATE TRIGGER IF NOT EXISTS youtube_downloads_updated_at
-    AFTER UPDATE ON youtube_downloads
-    FOR EACH ROW
-BEGIN
-    UPDATE youtube_downloads SET updated_at = datetime('now') WHERE download_id = OLD.download_id;
-END;
-
-CREATE TABLE IF NOT EXISTS torrent_downloads (
-    info_hash TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    size INTEGER NOT NULL DEFAULT 0,
-    progress REAL NOT NULL DEFAULT 0,
-    state TEXT NOT NULL DEFAULT 'initializing',
-    download_speed INTEGER NOT NULL DEFAULT 0,
-    upload_speed INTEGER NOT NULL DEFAULT 0,
-    peers INTEGER NOT NULL DEFAULT 0,
-    seeds INTEGER NOT NULL DEFAULT 0,
-    added_at INTEGER NOT NULL,
-    eta INTEGER,
-    output_path TEXT,
-    source TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS categories (
+    id TEXT PRIMARY KEY,
+    media_type_id TEXT NOT NULL REFERENCES media_types(id),
+    label TEXT NOT NULL
 );
-
-CREATE TRIGGER IF NOT EXISTS torrent_downloads_updated_at
-    AFTER UPDATE ON torrent_downloads
-    FOR EACH ROW
-BEGIN
-    UPDATE torrent_downloads SET updated_at = datetime('now') WHERE info_hash = OLD.info_hash;
-END;
 
 CREATE TABLE IF NOT EXISTS libraries (
     id TEXT PRIMARY KEY,
@@ -100,14 +57,211 @@ CREATE TRIGGER IF NOT EXISTS libraries_updated_at
 BEGIN
     UPDATE libraries SET updated_at = datetime('now') WHERE id = OLD.id;
 END;
+
+CREATE TABLE IF NOT EXISTS library_items (
+    id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    path TEXT NOT NULL UNIQUE,
+    extension TEXT NOT NULL,
+    media_type TEXT NOT NULL REFERENCES media_types(id),
+    category_id TEXT REFERENCES categories(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS library_items_updated_at
+    AFTER UPDATE ON library_items
+    FOR EACH ROW
+BEGIN
+    UPDATE library_items SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
+
+CREATE TABLE IF NOT EXISTS library_item_links (
+    id TEXT PRIMARY KEY,
+    library_item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+    service TEXT NOT NULL,
+    service_id TEXT NOT NULL,
+    season_number INTEGER,
+    episode_number INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(library_item_id, service)
+);
+
+CREATE TABLE IF NOT EXISTS link_sources (
+    id TEXT PRIMARY KEY,
+    plugin TEXT NOT NULL,
+    service TEXT NOT NULL,
+    label TEXT NOT NULL,
+    media_type_id TEXT NOT NULL REFERENCES media_types(id),
+    category_id TEXT REFERENCES categories(id),
+    UNIQUE(service, media_type_id, category_id)
+);
+
 `;
 
 const SEED_SQL = `
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '3', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '15', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
+
+INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
+INSERT OR IGNORE INTO media_types (id, label) VALUES ('image', 'Image');
+INSERT OR IGNORE INTO media_types (id, label) VALUES ('audio', 'Audio');
+
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('tv', 'video', 'TV');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('movies', 'video', 'Movies');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('youtube', 'video', 'YouTube');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('video-uncategorized', 'video', 'Uncategorized');
+
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('music', 'audio', 'Music');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('podcast', 'audio', 'Podcast');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('audio-uncategorized', 'audio', 'Uncategorized');
+
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('photos', 'image', 'Photos');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('memes', 'image', 'Memes');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('image-uncategorized', 'image', 'Uncategorized');
 `;
 
+function runMigrations(db: DatabaseType): void {
+  const hasColumn = (table: string, column: string): boolean => {
+    const columns = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+    return columns.some((c) => c.name === column);
+  };
+
+  const hasTable = (name: string): boolean => {
+    const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name) as { name: string } | undefined;
+    return !!row;
+  };
+
+  // Migration: add youtube_id to library_items (added in db_version 7)
+  if (!hasColumn('library_items', 'youtube_id')) {
+    db.exec('ALTER TABLE library_items ADD COLUMN youtube_id TEXT');
+  }
+
+  // Migration: add musicbrainz_id to library_items (added in db_version 9)
+  if (!hasColumn('library_items', 'musicbrainz_id')) {
+    db.exec('ALTER TABLE library_items ADD COLUMN musicbrainz_id TEXT');
+  }
+
+  // Migration: add media_types and categories reference tables (db_version 12)
+  if (!hasTable('media_types')) {
+    db.exec(`
+      CREATE TABLE media_types (
+        id TEXT PRIMARY KEY,
+        label TEXT NOT NULL
+      );
+      CREATE TABLE categories (
+        id TEXT PRIMARY KEY,
+        media_type_id TEXT NOT NULL REFERENCES media_types(id),
+        label TEXT NOT NULL
+      );
+    `);
+  }
+
+  // Migration: rename 'images' → 'image' and 'music' → 'audio' in library_items
+  db.exec("UPDATE library_items SET media_type = 'image' WHERE media_type = 'images'");
+  db.exec("UPDATE library_items SET media_type = 'audio' WHERE media_type = 'music'");
+
+  // Migration: rename in libraries.media_types JSON arrays
+  db.exec("UPDATE libraries SET media_types = REPLACE(REPLACE(media_types, '\"images\"', '\"image\"'), '\"music\"', '\"audio\"')");
+
+  // Migration: add category_id to library_items (db_version 12)
+  if (!hasColumn('library_items', 'category_id')) {
+    db.exec('ALTER TABLE library_items ADD COLUMN category_id TEXT REFERENCES categories(id)');
+    db.exec("UPDATE library_items SET category_id = 'video-uncategorized' WHERE media_type = 'video' AND category_id IS NULL");
+  }
+
+  // Migration: rename 'uncategorized' category to 'video-uncategorized' (db_version 13)
+  const oldCat = db.prepare("SELECT id FROM categories WHERE id = 'uncategorized'").get() as { id: string } | undefined;
+  if (oldCat) {
+    db.exec("UPDATE library_items SET category_id = 'video-uncategorized' WHERE category_id = 'uncategorized'");
+    db.exec("DELETE FROM categories WHERE id = 'uncategorized'");
+  }
+
+  // Migration: extract external service links into library_item_links table (db_version 14)
+  if (!hasTable('library_item_links')) {
+    db.exec(`
+      CREATE TABLE library_item_links (
+        id TEXT PRIMARY KEY,
+        library_item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+        service TEXT NOT NULL,
+        service_id TEXT NOT NULL,
+        season_number INTEGER,
+        episode_number INTEGER,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(library_item_id, service)
+      );
+    `);
+  }
+
+  // Migration: add link_sources table (db_version 15)
+  if (!hasTable('link_sources')) {
+    db.exec(`
+      CREATE TABLE link_sources (
+        id TEXT PRIMARY KEY,
+        plugin TEXT NOT NULL,
+        service TEXT NOT NULL,
+        label TEXT NOT NULL,
+        media_type_id TEXT NOT NULL REFERENCES media_types(id),
+        category_id TEXT REFERENCES categories(id),
+        UNIQUE(service, media_type_id, category_id)
+      );
+    `);
+  }
+
+  if (hasColumn('library_items', 'tmdb_id')) {
+    // Migrate tmdb links
+    db.exec(`
+      INSERT OR IGNORE INTO library_item_links (id, library_item_id, service, service_id, season_number, episode_number)
+      SELECT lower(hex(randomblob(16))), id, 'tmdb', CAST(tmdb_id AS TEXT), tmdb_season_number, tmdb_episode_number
+      FROM library_items WHERE tmdb_id IS NOT NULL;
+    `);
+
+    // Migrate youtube links
+    db.exec(`
+      INSERT OR IGNORE INTO library_item_links (id, library_item_id, service, service_id)
+      SELECT lower(hex(randomblob(16))), id, 'youtube', youtube_id
+      FROM library_items WHERE youtube_id IS NOT NULL;
+    `);
+
+    // Migrate musicbrainz links
+    db.exec(`
+      INSERT OR IGNORE INTO library_item_links (id, library_item_id, service, service_id)
+      SELECT lower(hex(randomblob(16))), id, 'musicbrainz', musicbrainz_id
+      FROM library_items WHERE musicbrainz_id IS NOT NULL;
+    `);
+
+    // Rebuild library_items without the old columns
+    db.exec(`
+      CREATE TABLE library_items_new (
+        id TEXT PRIMARY KEY,
+        library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+        path TEXT NOT NULL UNIQUE,
+        extension TEXT NOT NULL,
+        media_type TEXT NOT NULL REFERENCES media_types(id),
+        category_id TEXT REFERENCES categories(id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO library_items_new (id, library_id, path, extension, media_type, category_id, created_at, updated_at)
+      SELECT id, library_id, path, extension, media_type, category_id, created_at, updated_at
+      FROM library_items;
+
+      DROP TABLE library_items;
+      ALTER TABLE library_items_new RENAME TO library_items;
+
+      CREATE TRIGGER IF NOT EXISTS library_items_updated_at
+        AFTER UPDATE ON library_items
+        FOR EACH ROW
+      BEGIN
+        UPDATE library_items SET updated_at = datetime('now') WHERE id = OLD.id;
+      END;
+    `);
+  }
+}
+
 export function initializeSchema(db: DatabaseType): void {
-	db.exec(SCHEMA_SQL);
-	db.exec(SEED_SQL);
+  db.exec(SCHEMA_SQL);
+  runMigrations(db);
+  db.exec(SEED_SQL);
 }

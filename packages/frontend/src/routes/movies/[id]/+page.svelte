@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import type { DisplayTMDBMovieDetails } from '$types/tmdb.type';
-	import { tmdbService } from '$services/tmdb.service';
-	import { tmdbAdapter } from '$adapters/classes/tmdb.adapter';
+	import type { DisplayTMDBMovieDetails } from 'tmdb/types';
+	import { movieDetailsToDisplay } from 'tmdb/transform';
 
 	let movie = $state<DisplayTMDBMovieDetails | null>(null);
 	let loading = $state(true);
@@ -18,12 +17,13 @@
 		}
 
 		try {
-			const data = await tmdbService.fetchMovie(id);
-			if (data) {
-				movie = tmdbAdapter.movieDetailsToDisplay(data);
-			} else {
-				error = 'Movie not found';
+			const res = await fetch(`/api/tmdb/movies/${id}`);
+			const data = await res.json();
+			if (!res.ok) {
+				error = data.error ?? 'Movie not found';
+				return;
 			}
+			movie = movieDetailsToDisplay(data);
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		} finally {

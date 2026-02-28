@@ -1,0 +1,30 @@
+{
+	"name": "p2p-stream",
+	"version": "1.0.0",
+	"description": "P2P streaming server for media playback",
+	"compatibility": {
+		"mobile": true,
+		"computer": true
+	},
+	"processes": [
+		{
+			"id": "p2p-stream-server",
+			"binary": "../p2p-stream-server/target/debug/p2p-stream-server",
+			"binaryEnv": "P2P_STREAM_BIN",
+			"port": 3001,
+			"portEnv": "P2P_STREAM_PORT",
+			"env": {
+				"P2P_STREAM_ALLOWED_ORIGINS": "http://localhost:1530",
+				"RUST_LOG": "info"
+			},
+			"logPrefix": "p2p-stream"
+		}
+	],
+	"locals": [
+		{
+			"key": "streamServerAvailable",
+			"source": "processAvailable",
+			"processId": "p2p-stream-server"
+		}
+	]
+}

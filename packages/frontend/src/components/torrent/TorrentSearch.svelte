@@ -3,7 +3,7 @@
 	import { torrentService } from '$services/torrent.service';
 	import TorrentSearchInput from './TorrentSearchInput.svelte';
 	import TorrentSearchResults from './TorrentSearchResults.svelte';
-	import type { TorrentCategory, TorrentSearchSortField } from '$types/torrent-search.type';
+	import type { TorrentCategory, TorrentSearchSortField } from 'torrent-search/types';
 
 	const searchState = torrentSearchService.state;
 	const torrentState = torrentService.state;

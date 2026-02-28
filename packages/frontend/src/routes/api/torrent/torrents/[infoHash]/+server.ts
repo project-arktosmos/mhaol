@@ -1,12 +1,8 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { proxyToTorrent } from '$lib/server/torrent-proxy';
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {
-	try {
-		await locals.torrentManager.remove(params.infoHash);
-		return json({ ok: true });
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		return json({ error: message }, { status: 404 });
-	}
+	return proxyToTorrent(locals.torrentBaseUrl, `/torrents/${params.infoHash}`, {
+		method: 'DELETE'
+	});
 };

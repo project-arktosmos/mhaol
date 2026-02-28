@@ -1,0 +1,27 @@
+{
+	"name": "signaling",
+	"version": "1.0.0",
+	"description": "WebRTC signaling server (PartyKit)",
+	"compatibility": {
+		"mobile": false,
+		"computer": true
+	},
+	"processes": [
+		{
+			"id": "signaling-server",
+			"binary": "npx",
+			"args": ["partykit", "dev", "--port", "1999"],
+			"port": 1999,
+			"portEnv": "SIGNALING_PORT",
+			"env": {},
+			"logPrefix": "signaling"
+		}
+	],
+	"settings": [
+		{ "key": "signaling.partyUrl", "default": "" }
+	],
+	"locals": [
+		{ "key": "signalingDevUrl", "source": "processUrl", "processId": "signaling-server" },
+		{ "key": "signalingDevAvailable", "source": "processAvailable", "processId": "signaling-server" }
+	]
+}

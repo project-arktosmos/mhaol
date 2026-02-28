@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { libraryService } from '$services/library.service';
-	import type { Library } from '$types/library.type';
+	import type { Library, LibraryFile } from '$types/library.type';
 	import LibraryListItem from './LibraryListItem.svelte';
 
 	const store = libraryService.store;
@@ -10,12 +10,46 @@
 		libraryService.removeLibrary(library);
 	}
 
-	function handleToggle(library: Library) {
-		libraryService.toggleLibraryFiles(library.id as string);
+	function handleScan(library: Library) {
+		libraryService.scanLibraryFiles(library.id as string);
 	}
 
-	function handleRefresh(library: Library) {
-		libraryService.fetchLibraryFiles(library.id as string);
+	function handleLink(library: Library, file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null) {
+		libraryService.linkTmdb(library.id as string, file.id, tmdbId, seasonNumber, episodeNumber);
+	}
+
+	function handleUnlink(library: Library, file: LibraryFile) {
+		libraryService.unlinkTmdb(library.id as string, file.id);
+	}
+
+	function handleYoutubeLink(library: Library, file: LibraryFile, youtubeId: string) {
+		libraryService.linkYoutube(library.id as string, file.id, youtubeId);
+	}
+
+	function handleYoutubeUnlink(library: Library, file: LibraryFile) {
+		libraryService.unlinkYoutube(library.id as string, file.id);
+	}
+
+	function handleMusicBrainzLink(library: Library, file: LibraryFile, musicbrainzId: string) {
+		libraryService.linkMusicBrainz(library.id as string, file.id, musicbrainzId);
+	}
+
+	function handleMusicBrainzUnlink(library: Library, file: LibraryFile) {
+		libraryService.unlinkMusicBrainz(library.id as string, file.id);
+	}
+
+	async function handleEditType(library: Library, file: LibraryFile, mediaType: string, categoryId: string | null) {
+		const libraryId = library.id as string;
+		if (mediaType !== file.mediaType) {
+			await libraryService.updateMediaType(libraryId, file.id, mediaType);
+		}
+		if (categoryId !== file.categoryId) {
+			if (categoryId) {
+				await libraryService.updateCategory(libraryId, file.id, categoryId);
+			} else {
+				await libraryService.clearCategory(libraryId, file.id);
+			}
+		}
 	}
 </script>
 
@@ -41,13 +75,18 @@
 				{#each $store as library (library.id)}
 					<LibraryListItem
 						{library}
-						expanded={$state.expandedLibraryId === library.id}
 						files={$state.libraryFiles[library.id] ?? []}
 						filesLoading={$state.libraryFilesLoading[library.id] ?? false}
 						filesError={$state.libraryFilesError[library.id] ?? null}
 						onremove={handleRemove}
-						ontoggle={handleToggle}
-						onrefresh={handleRefresh}
+						onscan={handleScan}
+						onlink={(file, tmdbId, season, episode) => handleLink(library, file, tmdbId, season, episode)}
+						onunlink={(file) => handleUnlink(library, file)}
+						onyoutubelink={(file, ytId) => handleYoutubeLink(library, file, ytId)}
+						onyoutubeunlink={(file) => handleYoutubeUnlink(library, file)}
+						onmusicbrainzlink={(file, mbId) => handleMusicBrainzLink(library, file, mbId)}
+						onmusicbrainzunlink={(file) => handleMusicBrainzUnlink(library, file)}
+						onedittype={(file, mediaType, categoryId) => handleEditType(library, file, mediaType, categoryId)}
 					/>
 				{/each}
 			</div>

@@ -27,10 +27,30 @@ async function initializeServer() {
 	if (initialized || isStaticBuild) return;
 	initialized = true;
 
-	const { join } = await import('node:path');
+	const { join, dirname } = await import('node:path');
+	const { readFileSync, existsSync } = await import('node:fs');
+	const { fileURLToPath } = await import('node:url');
 	const { getDatabase } = await import('database');
 	const repos = await import('database/repositories');
 	const { PluginConnector } = await import('$lib/server/plugins/connector');
+
+	// Load .env.app from repo root (non-VITE env vars for addons/plugins)
+	const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+	const envAppPath = join(repoRoot, '.env.app');
+	if (existsSync(envAppPath)) {
+		const content = readFileSync(envAppPath, 'utf-8');
+		for (const line of content.split('\n')) {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith('#')) continue;
+			const eqIndex = trimmed.indexOf('=');
+			if (eqIndex === -1) continue;
+			const key = trimmed.slice(0, eqIndex).trim();
+			const value = trimmed.slice(eqIndex + 1).trim();
+			if (!process.env[key]) {
+				process.env[key] = value;
+			}
+		}
+	}
 
 	const dbPath = process.env.DB_PATH ?? undefined;
 	const db = getDatabase(dbPath ? { dbPath } : undefined);
@@ -72,8 +92,8 @@ async function initializeServer() {
 	const { signalingCompanion } = await import('$lib/server/plugins/definitions/signaling.plugin');
 	const torrentSearchManifest = (await import('$lib/server/plugins/definitions/torrent-search.plugin.json')).default as unknown as Manifest;
 	const { torrentSearchCompanion } = await import('$lib/server/plugins/definitions/torrent-search.plugin');
-	const tmdbManifest = (await import('$lib/server/plugins/definitions/tmdb.plugin.json')).default as unknown as Manifest;
-	const { tmdbCompanion } = await import('$lib/server/plugins/definitions/tmdb.plugin');
+	const tmdbManifest = (await import('../../../addons/tmdb/addon.json')).default as unknown as Manifest;
+	const { tmdbCompanion } = await import('../../../addons/tmdb/addon');
 
 	connector.register(ytDownloadManifest, ytDownloadCompanion);
 	connector.register(p2pStreamManifest);

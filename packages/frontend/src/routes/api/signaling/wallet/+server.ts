@@ -1,18 +1,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { ensureIdentity, regenerate } from '$lib/server/identities';
 
-const WALLET_KEY = 'signaling.wallet.privateKey';
+const IDENTITY_NAME = 'SIGNALING_WALLET';
 
-export const GET: RequestHandler = async ({ locals }) => {
-	let privateKey = locals.settingsRepo.get(WALLET_KEY);
+export const GET: RequestHandler = async () => {
+	const address = ensureIdentity(IDENTITY_NAME);
+	return json({ name: IDENTITY_NAME, address });
+};
 
-	if (!privateKey) {
-		privateKey = generatePrivateKey();
-		locals.settingsRepo.set(WALLET_KEY, privateKey);
-	}
-
-	const account = privateKeyToAccount(privateKey as `0x${string}`);
-
-	return json({ privateKey, address: account.address });
+export const DELETE: RequestHandler = async () => {
+	const address = regenerate(IDENTITY_NAME);
+	return json({ name: IDENTITY_NAME, address });
 };

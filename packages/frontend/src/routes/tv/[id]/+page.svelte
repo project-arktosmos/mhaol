@@ -2,9 +2,8 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { page } from '$app/stores';
-	import type { DisplayTMDBTvShowDetails, DisplayTMDBSeasonDetails } from '$types/tmdb.type';
-	import { tmdbService } from '$services/tmdb.service';
-	import { tmdbAdapter } from '$adapters/classes/tmdb.adapter';
+	import type { DisplayTMDBTvShowDetails, DisplayTMDBSeasonDetails } from 'tmdb/types';
+	import { tvShowDetailsToDisplay, seasonDetailsToDisplay } from 'tmdb/transform';
 
 	let show = $state<DisplayTMDBTvShowDetails | null>(null);
 	let loading = $state(true);
@@ -24,12 +23,13 @@
 		}
 
 		try {
-			const data = await tmdbService.fetchTvShow(id);
-			if (data) {
-				show = tmdbAdapter.tvShowDetailsToDisplay(data);
-			} else {
-				error = 'TV show not found';
+			const res = await fetch(`/api/tmdb/tv/${id}`);
+			const data = await res.json();
+			if (!res.ok) {
+				error = data.error ?? 'TV show not found';
+				return;
 			}
+			show = tvShowDetailsToDisplay(data);
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -57,10 +57,11 @@
 			loadingSeasons = newLoading;
 
 			try {
-				const data = await tmdbService.fetchSeasonDetails(showId, seasonNumber);
-				if (data) {
+				const res = await fetch(`/api/tmdb/tv/${showId}/season/${seasonNumber}`);
+				const data = await res.json();
+				if (res.ok) {
 					const newDetails = new Map(seasonDetails);
-					newDetails.set(seasonNumber, tmdbAdapter.seasonDetailsToDisplay(data));
+					newDetails.set(seasonNumber, seasonDetailsToDisplay(data));
 					seasonDetails = newDetails;
 				}
 			} catch (e) {

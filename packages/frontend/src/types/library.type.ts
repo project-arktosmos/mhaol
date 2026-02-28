@@ -2,15 +2,26 @@ import type { ID } from '$types/core.type';
 
 export enum MediaType {
 	Video = 'video',
-	Images = 'images',
-	Music = 'music'
+	Image = 'image',
+	Audio = 'audio'
 }
 
 export const MEDIA_TYPE_OPTIONS: { value: MediaType; label: string }[] = [
 	{ value: MediaType.Video, label: 'Video' },
-	{ value: MediaType.Images, label: 'Images' },
-	{ value: MediaType.Music, label: 'Music' }
+	{ value: MediaType.Image, label: 'Image' },
+	{ value: MediaType.Audio, label: 'Audio' }
 ];
+
+export interface MediaTypeOption {
+	id: string;
+	label: string;
+}
+
+export interface CategoryOption {
+	id: string;
+	mediaTypeId: string;
+	label: string;
+}
 
 export interface Library {
 	id: ID;
@@ -31,12 +42,20 @@ export interface BrowseDirectoryResponse {
 	directories: DirectoryEntry[];
 }
 
+export interface LibraryFileLink {
+	serviceId: string;
+	seasonNumber: number | null;
+	episodeNumber: number | null;
+}
+
 export interface LibraryFile {
+	id: string;
 	name: string;
 	path: string;
-	size: number;
 	extension: string;
 	mediaType: MediaType;
+	categoryId: string | null;
+	links: Record<string, LibraryFileLink>;
 }
 
 export interface LibraryFilesResponse {

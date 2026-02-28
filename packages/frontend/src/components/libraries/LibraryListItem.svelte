@@ -6,51 +6,38 @@
 
 	interface Props {
 		library: Library;
-		expanded: boolean;
 		files: LibraryFile[];
 		filesLoading: boolean;
 		filesError: string | null;
 		onremove: (library: Library) => void;
-		ontoggle: (library: Library) => void;
-		onrefresh: (library: Library) => void;
+		onscan: (library: Library) => void;
+		onlink: (file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null) => void;
+		onunlink: (file: LibraryFile) => void;
+		onyoutubelink: (file: LibraryFile, youtubeId: string) => void;
+		onyoutubeunlink: (file: LibraryFile) => void;
+		onmusicbrainzlink: (file: LibraryFile, musicbrainzId: string) => void;
+		onmusicbrainzunlink: (file: LibraryFile) => void;
+		onedittype: (file: LibraryFile, mediaType: string, categoryId: string | null) => void;
 	}
 
-	let { library, expanded, files, filesLoading, filesError, onremove, ontoggle, onrefresh }: Props =
-		$props();
+	let { library, files, filesLoading, filesError, onremove, onscan, onlink, onunlink, onyoutubelink, onyoutubeunlink, onmusicbrainzlink, onmusicbrainzunlink, onedittype }: Props = $props();
 
 	const mediaTypeBadge: Record<MediaType, string> = {
 		[MediaType.Video]: 'badge-primary',
-		[MediaType.Images]: 'badge-secondary',
-		[MediaType.Music]: 'badge-accent'
+		[MediaType.Image]: 'badge-secondary',
+		[MediaType.Audio]: 'badge-accent'
 	};
 
 	const mediaTypeLabel: Record<MediaType, string> = {
 		[MediaType.Video]: 'Video',
-		[MediaType.Images]: 'Images',
-		[MediaType.Music]: 'Music'
+		[MediaType.Image]: 'Image',
+		[MediaType.Audio]: 'Audio'
 	};
 </script>
 
 <div class="rounded-lg bg-base-100 p-4">
 	<div class="flex items-center gap-4">
-		<button
-			class="btn btn-ghost btn-sm btn-square"
-			onclick={() => ontoggle(library)}
-			title={expanded ? 'Collapse' : 'Expand to show files'}
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				class={classNames('h-4 w-4 transition-transform', { 'rotate-90': expanded })}
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-			</svg>
-		</button>
-
-		<button class="flex-1 min-w-0 text-left" onclick={() => ontoggle(library)}>
+		<div class="flex-1 min-w-0">
 			<div class="flex items-center gap-2">
 				<h3 class="font-semibold truncate">{library.name}</h3>
 				<div class="flex gap-1">
@@ -62,7 +49,7 @@
 				</div>
 			</div>
 			<p class="text-xs text-base-content/50 truncate font-mono mt-1">{library.path}</p>
-		</button>
+		</div>
 
 		<button
 			class="btn btn-ghost btn-sm text-error"
@@ -86,12 +73,17 @@
 		</button>
 	</div>
 
-	{#if expanded}
-		<LibraryFileList
-			{files}
-			loading={filesLoading}
-			error={filesError}
-			onrefresh={() => onrefresh(library)}
-		/>
-	{/if}
+	<LibraryFileList
+		{files}
+		loading={filesLoading}
+		error={filesError}
+		onscan={() => onscan(library)}
+		{onlink}
+		{onunlink}
+		{onyoutubelink}
+		{onyoutubeunlink}
+		{onmusicbrainzlink}
+		{onmusicbrainzunlink}
+		{onedittype}
+	/>
 </div>

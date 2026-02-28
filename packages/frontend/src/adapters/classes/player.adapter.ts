@@ -31,8 +31,15 @@ export class PlayerAdapter extends AdapterClass {
 		return 'Unknown';
 	}
 
-	getSourceBadgeClass(type: 'youtube' | 'torrent'): string {
-		return type === 'youtube' ? 'badge-secondary' : 'badge-accent';
+	getSourceBadgeClass(type: PlayableFile['type']): string {
+		switch (type) {
+			case 'youtube':
+				return 'badge-secondary';
+			case 'torrent':
+				return 'badge-accent';
+			case 'library':
+				return 'badge-info';
+		}
 	}
 }
 

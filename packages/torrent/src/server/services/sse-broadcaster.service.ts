@@ -1,7 +1,9 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { TorrentInfo, TorrentStats, SSEEventType } from '../../shared/types.js';
 
 interface SSEClient {
-	controller: ReadableStreamDefaultController;
+	write: (data: string) => void;
+	close: () => void;
 	closed: boolean;
 }
 
@@ -18,11 +20,16 @@ export class SSEBroadcasterService {
 	createStream(request: Request): Response {
 		const stream = new ReadableStream({
 			start: (controller) => {
-				const client: SSEClient = { controller, closed: false };
+				const encoder = new TextEncoder();
+				const client: SSEClient = {
+					write: (data) => controller.enqueue(encoder.encode(data)),
+					close: () => controller.close(),
+					closed: false
+				};
 				this.clients.add(client);
 
 				const data = `event: connected\ndata: ${JSON.stringify({ message: 'Connected to torrent events' })}\n\n`;
-				controller.enqueue(new TextEncoder().encode(data));
+				client.write(data);
 
 				request.signal.addEventListener('abort', () => {
 					client.closed = true;
@@ -43,6 +50,29 @@ export class SSEBroadcasterService {
 		});
 	}
 
+	createNodeStream(req: IncomingMessage, res: ServerResponse): void {
+		res.writeHead(200, {
+			'Content-Type': 'text/event-stream',
+			'Cache-Control': 'no-cache',
+			Connection: 'keep-alive'
+		});
+
+		const client: SSEClient = {
+			write: (data) => res.write(data),
+			close: () => res.end(),
+			closed: false
+		};
+		this.clients.add(client);
+
+		const data = `event: connected\ndata: ${JSON.stringify({ message: 'Connected to torrent events' })}\n\n`;
+		res.write(data);
+
+		req.on('close', () => {
+			client.closed = true;
+			this.clients.delete(client);
+		});
+	}
+
 	broadcastTorrents(torrents: TorrentInfo[]): void {
 		this.send('torrents', torrents);
 	}
@@ -57,14 +87,13 @@ export class SSEBroadcasterService {
 	}
 
 	private sendRaw(message: string): void {
-		const encoded = new TextEncoder().encode(message);
 		for (const client of this.clients) {
 			if (client.closed) {
 				this.clients.delete(client);
 				continue;
 			}
 			try {
-				client.controller.enqueue(encoded);
+				client.write(message);
 			} catch {
 				client.closed = true;
 				this.clients.delete(client);
@@ -79,7 +108,7 @@ export class SSEBroadcasterService {
 		}
 		for (const client of this.clients) {
 			try {
-				client.controller.close();
+				client.close();
 			} catch {
 				// ignore
 			}

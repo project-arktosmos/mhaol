@@ -1,22 +1,12 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
 	import { playerService } from '$services/player.service';
 	import type { PlayableFile } from '$types/player.type';
 	import PlayerFileList from '$components/player/PlayerFileList.svelte';
-	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import PlayerStatus from '$components/player/PlayerStatus.svelte';
 
 	const state = playerService.state;
 
 	let filter: 'all' | 'audio' | 'video' = 'all';
-
-	onMount(async () => {
-		await playerService.initialize();
-	});
-
-	onDestroy(() => {
-		playerService.destroy();
-	});
 
 	function handlePlay(event: CustomEvent<{ file: PlayableFile }>) {
 		playerService.play(event.detail.file);
@@ -73,26 +63,13 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-		<div class="flex flex-col gap-4 lg:col-span-1">
-			<PlayerFileList
-				files={$state.files}
-				currentFileId={$state.currentFile?.id ?? null}
-				loading={$state.loading}
-				{filter}
-				on:play={handlePlay}
-				on:refresh={handleRefresh}
-				on:filterChange={handleFilterChange}
-			/>
-		</div>
-
-		<div class="flex flex-col gap-4 lg:col-span-2">
-			<PlayerVideo
-				file={$state.currentFile}
-				connectionState={$state.connectionState}
-				positionSecs={$state.positionSecs}
-				durationSecs={$state.durationSecs}
-			/>
-		</div>
-	</div>
+	<PlayerFileList
+		files={$state.files}
+		currentFileId={$state.currentFile?.id ?? null}
+		loading={$state.loading}
+		{filter}
+		on:play={handlePlay}
+		on:refresh={handleRefresh}
+		on:filterChange={handleFilterChange}
+	/>
 </div>

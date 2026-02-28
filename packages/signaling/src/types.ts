@@ -1,70 +1,31 @@
-import type { WebSocket } from 'ws';
+// ===== Connection State =====
 
-// ===== Room State =====
-
-export interface Room {
-	id: string;
-	peers: Map<string, WebSocket>;
-}
-
-// ===== Auth Handshake Messages =====
-
-export interface ChallengeMessage {
-	type: 'challenge';
-	nonce: string;
-}
-
-export interface AuthenticateMessage {
-	type: 'authenticate';
-	address: string;
-	signature: string;
-}
-
-export interface AuthFailedMessage {
-	type: 'auth-failed';
-	message: string;
+export interface PeerConnectionState {
+	peerId: string;
 }
 
 // ===== Client → Server Messages =====
 
-export interface JoinRoomMessage {
-	type: 'join-room';
-	room_id: string;
-}
-
-export interface LeaveRoomMessage {
-	type: 'leave-room';
-	room_id: string;
-}
-
 export interface OfferMessage {
 	type: 'offer';
-	room_id: string;
 	target_peer_id: string;
 	sdp: string;
 }
 
 export interface AnswerMessage {
 	type: 'answer';
-	room_id: string;
 	target_peer_id: string;
 	sdp: string;
 }
 
 export interface IceCandidateMessage {
 	type: 'ice-candidate';
-	room_id: string;
 	target_peer_id: string;
 	candidate: string;
 	sdp_m_line_index: number;
 }
 
-export type ClientMessage =
-	| JoinRoomMessage
-	| LeaveRoomMessage
-	| OfferMessage
-	| AnswerMessage
-	| IceCandidateMessage;
+export type ClientMessage = OfferMessage | AnswerMessage | IceCandidateMessage;
 
 // ===== Server → Client Messages =====
 
@@ -119,8 +80,6 @@ export interface ErrorMessage {
 }
 
 export type ServerMessage =
-	| ChallengeMessage
-	| AuthFailedMessage
 	| ConnectedMessage
 	| PeerJoinedMessage
 	| PeerLeftMessage
@@ -133,11 +92,7 @@ export type ServerMessage =
 // ===== HTTP Status Response =====
 
 export interface RoomStatus {
-	id: string;
+	room_id: string;
+	peers: string[];
 	peerCount: number;
-}
-
-export interface StatusResponse {
-	rooms: RoomStatus[];
-	totalPeers: number;
 }

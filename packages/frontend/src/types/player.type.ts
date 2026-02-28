@@ -4,7 +4,7 @@ import type { ID } from '$types/core.type';
 
 export interface PlayableFile {
 	id: string;
-	type: 'youtube' | 'torrent';
+	type: 'youtube' | 'torrent' | 'library';
 	name: string;
 	outputPath: string;
 	mode: 'audio' | 'video';

@@ -1,0 +1,9 @@
+{
+	"name": "torrent-search",
+	"version": "1.0.0",
+	"description": "Torrent search via PirateBay API",
+	"compatibility": {
+		"mobile": true,
+		"computer": true
+	}
+}

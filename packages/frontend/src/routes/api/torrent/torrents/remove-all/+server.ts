@@ -1,7 +1,8 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { proxyToTorrent } from '$lib/server/torrent-proxy';
 
 export const POST: RequestHandler = async ({ locals }) => {
-	const count = await locals.torrentManager.removeAll();
-	return json({ removed: count });
+	return proxyToTorrent(locals.torrentBaseUrl, '/torrents/remove-all', {
+		method: 'POST'
+	});
 };

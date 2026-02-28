@@ -91,5 +91,5 @@ export class RateLimiter {
 	}
 }
 
-/** Rate limiter for TMDB API (4 requests per second = 250ms between requests) */
-export const tmdbRateLimiter = new RateLimiter(4, 3);
+/** Rate limiter for MusicBrainz API (0.8 requests per second = 1250ms between requests) */
+export const musicBrainzRateLimiter = new RateLimiter(0.8, 3);

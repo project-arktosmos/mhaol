@@ -1,10 +1,6 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { proxyToTorrent } from '$lib/server/torrent-proxy';
 
 export const GET: RequestHandler = async ({ locals }) => {
-	return json({
-		initialized: locals.torrentManager.isInitialized(),
-		download_path: locals.torrentManager.getConfig().downloadPath,
-		stats: locals.torrentManager.stats()
-	});
+	return proxyToTorrent(locals.torrentBaseUrl, '/status');
 };

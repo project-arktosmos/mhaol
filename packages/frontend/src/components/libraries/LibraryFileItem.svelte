@@ -1,66 +1,191 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import type { LibraryFile } from '$types/library.type';
-	import { MediaType } from '$types/library.type';
 	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
 
 	interface Props {
 		file: LibraryFile;
+		onlinkclick: (file: LibraryFile) => void;
+		onunlinkclick: (file: LibraryFile) => void;
+		onyoutubelink: (file: LibraryFile, youtubeId: string) => void;
+		onyoutubeunlink: (file: LibraryFile) => void;
+		onmusicbrainzlinkclick: (file: LibraryFile) => void;
+		onmusicbrainzunlink: (file: LibraryFile) => void;
+		onedittype: (file: LibraryFile) => void;
 	}
 
-	let { file }: Props = $props();
+	let { file, onlinkclick, onunlinkclick, onyoutubelink, onyoutubeunlink, onmusicbrainzlinkclick, onmusicbrainzunlink, onedittype }: Props = $props();
+
+	let tmdbLink = $derived(file.links.tmdb ?? null);
+	let tmdbLabel = $derived.by(() => {
+		if (!tmdbLink) return '';
+		let label = `TMDB ${tmdbLink.serviceId}`;
+		if (tmdbLink.seasonNumber != null) label += ` S${tmdbLink.seasonNumber}`;
+		if (tmdbLink.episodeNumber != null) label += `E${tmdbLink.episodeNumber}`;
+		return label;
+	});
+
+	let editingYoutube = $state(false);
+	let youtubeInput = $state('');
+
+	function startYoutubeEdit() {
+		youtubeInput = '';
+		editingYoutube = true;
+	}
+
+	function submitYoutubeId() {
+		const trimmed = youtubeInput.trim();
+		if (trimmed) {
+			onyoutubelink(file, trimmed);
+		}
+		editingYoutube = false;
+	}
+
+	function cancelYoutubeEdit() {
+		editingYoutube = false;
+	}
+
+	function handleYoutubeKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			submitYoutubeId();
+		} else if (event.key === 'Escape') {
+			cancelYoutubeEdit();
+		}
+	}
 </script>
 
-<div class="flex items-center gap-3 rounded-lg bg-base-100 px-3 py-2">
-	<div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-base-300">
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			class="h-4 w-4 opacity-40"
-			fill="none"
-			viewBox="0 0 24 24"
-			stroke="currentColor"
-			stroke-width="2"
+<tr class="hover">
+	<td class="max-w-0">
+		<span class="truncate block" title={file.path}>{file.name}</span>
+	</td>
+	<td>
+		<button
+			class="btn btn-ghost btn-xs px-0"
+			title="Edit type & category"
+			onclick={() => onedittype(file)}
 		>
-			{#if file.mediaType === MediaType.Video}
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-				/>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-				/>
-			{:else if file.mediaType === MediaType.Music}
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
-				/>
-			{:else}
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-				/>
-			{/if}
-		</svg>
-	</div>
-
-	<div class="flex-1 min-w-0">
-		<p class="truncate text-sm font-medium" title={file.name}>{file.name}</p>
-		<div class="flex items-center gap-2">
 			<span
-				class={classNames(
-					'badge badge-xs',
-					libraryFileAdapter.getMediaTypeBadgeClass(file.mediaType)
-				)}
+				class={classNames('badge badge-xs', libraryFileAdapter.getMediaTypeBadgeClass(file.mediaType))}
 			>
 				{libraryFileAdapter.getMediaTypeLabel(file.mediaType)}
 			</span>
-			<span class="text-xs uppercase opacity-60">{file.extension}</span>
-			<span class="text-xs opacity-60">{libraryFileAdapter.formatSize(file.size)}</span>
-		</div>
-	</div>
-</div>
+		</button>
+	</td>
+	<td>
+		{#if file.categoryId}
+			<button
+				class="btn btn-ghost btn-xs px-0"
+				title="Edit type & category"
+				onclick={() => onedittype(file)}
+			>
+				<span class={classNames('badge badge-xs', libraryFileAdapter.getCategoryBadgeClass(file.categoryId))}>
+					{libraryFileAdapter.getCategoryLabel(file.categoryId)}
+				</span>
+			</button>
+		{:else}
+			<button
+				class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100"
+				title="Set category"
+				onclick={() => onedittype(file)}
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+				</svg>
+			</button>
+		{/if}
+	</td>
+	<td>
+		<span class="uppercase opacity-60">{file.extension}</span>
+	</td>
+	<td>
+		{#if tmdbLink}
+			<div class="flex items-center gap-1">
+				<span class="badge badge-xs badge-info" title={tmdbLabel}>{tmdbLink.serviceId}</span>
+				<button
+					class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100 hover:text-error"
+					title="Unlink TMDB"
+					onclick={() => onunlinkclick(file)}
+				>
+					&times;
+				</button>
+			</div>
+		{:else}
+			<button
+				class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100"
+				title="Link TMDB"
+				onclick={() => onlinkclick(file)}
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+				</svg>
+			</button>
+		{/if}
+	</td>
+	<td>
+		{#if file.mediaType === 'video'}
+			{#if editingYoutube}
+				<div class="flex items-center gap-1">
+					<input
+						type="text"
+						class="input input-xs input-bordered w-24"
+						placeholder="Video ID"
+						bind:value={youtubeInput}
+						onkeydown={handleYoutubeKeydown}
+						onblur={cancelYoutubeEdit}
+					/>
+				</div>
+			{:else if file.links.youtube}
+				<div class="flex items-center gap-1">
+					<span class="badge badge-xs badge-secondary" title={file.links.youtube.serviceId}>{file.links.youtube.serviceId}</span>
+					<button
+						class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100 hover:text-error"
+						title="Remove YouTube ID"
+						onclick={() => onyoutubeunlink(file)}
+					>
+						&times;
+					</button>
+				</div>
+			{:else}
+				<button
+					class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100"
+					title="Set YouTube ID"
+					onclick={startYoutubeEdit}
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+					</svg>
+				</button>
+			{/if}
+		{:else}
+			<span class="opacity-30">—</span>
+		{/if}
+	</td>
+	<td>
+		{#if file.mediaType === 'audio'}
+			{#if file.links.musicbrainz}
+				<div class="flex items-center gap-1">
+					<span class="badge badge-xs badge-accent truncate max-w-20" title={file.links.musicbrainz.serviceId}>{file.links.musicbrainz.serviceId}</span>
+					<button
+						class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100 hover:text-error"
+						title="Unlink MusicBrainz"
+						onclick={() => onmusicbrainzunlink(file)}
+					>
+						&times;
+					</button>
+				</div>
+			{:else}
+				<button
+					class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100"
+					title="Link MusicBrainz"
+					onclick={() => onmusicbrainzlinkclick(file)}
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+					</svg>
+				</button>
+			{/if}
+		{:else}
+			<span class="opacity-30">—</span>
+		{/if}
+	</td>
+</tr>

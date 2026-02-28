@@ -71,15 +71,15 @@ describe('LibraryRepository', () => {
 			media_types: '["video"]',
 			date_added: 1
 		});
-		repo.update('lib-1', { name: 'New', path: '/new', media_types: '["music","video"]' });
+		repo.update('lib-1', { name: 'New', path: '/new', media_types: '["audio","video"]' });
 		const lib = repo.get('lib-1');
 		expect(lib!.name).toBe('New');
 		expect(lib!.path).toBe('/new');
-		expect(JSON.parse(lib!.media_types)).toEqual(['music', 'video']);
+		expect(JSON.parse(lib!.media_types)).toEqual(['audio', 'video']);
 	});
 
 	it('should store multiple media types as JSON', () => {
-		const types = ['video', 'images', 'music'];
+		const types = ['video', 'image', 'audio'];
 		repo.insert({
 			id: 'lib-1',
 			name: 'All Media',

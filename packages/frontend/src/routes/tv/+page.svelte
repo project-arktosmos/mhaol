@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import type { DisplayTMDBTvShow } from '$types/tmdb.type';
-	import { tmdbService } from '$services/tmdb.service';
-	import { tmdbAdapter } from '$adapters/classes/tmdb.adapter';
+	import type { DisplayTMDBTvShow } from 'tmdb/types';
+	import { tvShowsToDisplay } from 'tmdb/transform';
 
 	type DiscoverCategory = 'on_the_air' | 'popular' | 'airing_today' | 'top_rated';
 
@@ -18,10 +17,6 @@
 	let searchQuery = $state('');
 	let searchActive = $state(false);
 
-	// API key fallback
-	let tmdbApiKey = $state('');
-	let apiKeyFromEnv = $state(false);
-
 	const categoryLabels: Record<DiscoverCategory, string> = {
 		on_the_air: 'On The Air',
 		popular: 'Popular',
@@ -30,50 +25,24 @@
 	};
 
 	onMount(() => {
-		if (tmdbService.isConfigured()) {
-			apiKeyFromEnv = true;
-		} else {
-			const savedKey = localStorage.getItem('tmdb_api_key');
-			if (savedKey) {
-				tmdbApiKey = savedKey;
-				tmdbService.setApiKey(savedKey);
-			}
-		}
 		loadShows(discoverCategory, 1);
 	});
 
 	async function loadShows(category: DiscoverCategory, p: number = 1) {
-		if (!tmdbService.isConfigured()) {
-			error = 'TMDB API key not configured';
-			return;
-		}
-
 		loading = true;
 		error = null;
 		searchActive = false;
 
 		try {
-			let response;
-			switch (category) {
-				case 'on_the_air':
-					response = await tmdbService.getTvOnTheAir(p);
-					break;
-				case 'popular':
-					response = await tmdbService.getTvPopular(p);
-					break;
-				case 'airing_today':
-					response = await tmdbService.getTvAiringToday(p);
-					break;
-				case 'top_rated':
-					response = await tmdbService.getTvTopRated(p);
-					break;
+			const res = await fetch(`/api/tmdb/tv?category=${category}&page=${p}`);
+			const data = await res.json();
+			if (!res.ok) {
+				error = data.error ?? 'Failed to load TV shows';
+				return;
 			}
-
-			if (response) {
-				shows = tmdbAdapter.tvShowsToDisplay(response.results);
-				page = response.page;
-				totalPages = response.total_pages;
-			}
+			shows = tvShowsToDisplay(data.results);
+			page = data.page;
+			totalPages = data.total_pages;
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -88,22 +57,21 @@
 			return;
 		}
 
-		if (!tmdbService.isConfigured()) {
-			error = 'TMDB API key not configured';
-			return;
-		}
-
 		loading = true;
 		error = null;
 		searchActive = true;
 
 		try {
-			const response = await tmdbService.searchTvShows(searchQuery.trim(), p);
-			if (response) {
-				shows = tmdbAdapter.tvShowsToDisplay(response.results);
-				page = response.page;
-				totalPages = response.total_pages;
+			const params = new URLSearchParams({ q: searchQuery.trim(), page: p.toString() });
+			const res = await fetch(`/api/tmdb/search/tv?${params}`);
+			const data = await res.json();
+			if (!res.ok) {
+				error = data.error ?? 'Search failed';
+				return;
 			}
+			shows = tvShowsToDisplay(data.results);
+			page = data.page;
+			totalPages = data.total_pages;
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -134,14 +102,6 @@
 			searchShows(1);
 		}
 	}
-
-	function saveApiKey() {
-		if (tmdbApiKey.trim()) {
-			localStorage.setItem('tmdb_api_key', tmdbApiKey.trim());
-			tmdbService.setApiKey(tmdbApiKey.trim());
-			loadShows(discoverCategory, 1);
-		}
-	}
 </script>
 
 <div class="container mx-auto p-4">
@@ -149,38 +109,6 @@
 		<h1 class="text-3xl font-bold">TV Shows</h1>
 		<p class="text-sm opacity-70">Search and discover TV shows from TMDB</p>
 	</div>
-
-	{#if !apiKeyFromEnv && !tmdbService.isConfigured()}
-		<div class="collapse collapse-arrow mb-4 bg-base-200">
-			<input type="checkbox" checked />
-			<div class="collapse-title text-sm font-medium">
-				TMDB API Key Configuration
-				<span class="badge badge-warning badge-sm ml-2">Not Set</span>
-			</div>
-			<div class="collapse-content">
-				<p class="mb-2 text-sm opacity-70">
-					Get your free API key from
-					<a
-						href="https://www.themoviedb.org/settings/api"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="link link-primary"
-					>
-						TMDB
-					</a>
-				</p>
-				<div class="flex gap-2">
-					<input
-						type="password"
-						placeholder="Enter your TMDB API key"
-						class="input input-bordered input-sm flex-1"
-						bind:value={tmdbApiKey}
-					/>
-					<button class="btn btn-primary btn-sm" onclick={saveApiKey}>Save</button>
-				</div>
-			</div>
-		</div>
-	{/if}
 
 	<!-- Search Bar -->
 	<div class="mb-4">

@@ -4,12 +4,14 @@
 	"type": "module",
 	"exports": {
 		"./shared": "./src/shared/index.ts",
-		"./services": "./src/server/services/index.ts"
+		"./services": "./src/server/services/index.ts",
+		"./server-entry": "./src/server/server.ts"
 	},
 	"scripts": {
 		"test": "vitest run"
 	},
 	"dependencies": {
+		"database": "workspace:*",
 		"webtorrent": "^2.8.5"
 	},
 	"devDependencies": {

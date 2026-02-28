@@ -6,6 +6,9 @@ import { getDatabase, initializeSchema } from 'database';
 export const POST: RequestHandler = async ({ locals }) => {
 	const db = getDatabase();
 
+	// Temporarily disable FK constraints so tables can be dropped in any order
+	db.pragma('foreign_keys = OFF');
+
 	const triggers = db
 		.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'")
 		.all() as { name: string }[];
@@ -22,6 +25,8 @@ export const POST: RequestHandler = async ({ locals }) => {
 		db.exec(`DROP TABLE IF EXISTS "${table.name}"`);
 	}
 
+	db.pragma('foreign_keys = ON');
+
 	initializeSchema(db);
 
 	// Re-seed default library
@@ -31,7 +36,7 @@ export const POST: RequestHandler = async ({ locals }) => {
 		id: libraryId,
 		name: 'Downloads',
 		path: defaultDownloadsPath,
-		media_types: JSON.stringify(['video', 'images', 'music']),
+		media_types: JSON.stringify(['video', 'image', 'audio']),
 		date_added: Date.now()
 	});
 

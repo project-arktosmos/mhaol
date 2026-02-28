@@ -5,14 +5,14 @@
 		TorrentSearchResult,
 		TorrentSearchSort,
 		TorrentSearchSortField
-	} from '$types/torrent-search.type';
+	} from 'torrent-search/types';
+	import { sortSearchResults } from 'torrent-search';
 	import {
 		formatSearchSize,
 		formatSeeders,
 		getSeedersColor,
 		formatUploadDate
 	} from '$utils/torrent-search/format';
-	import { sortSearchResults } from '$utils/torrent-search/sort';
 
 	export let results: TorrentSearchResult[] = [];
 	export let sort: TorrentSearchSort;

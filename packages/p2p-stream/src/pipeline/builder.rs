@@ -253,6 +253,7 @@ impl PipelineBuilder {
                     }
                 }
             }
+
         });
 
         let bus_events = spawn_bus_monitor(&pipeline);

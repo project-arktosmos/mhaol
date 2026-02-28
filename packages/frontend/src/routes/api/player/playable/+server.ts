@@ -97,6 +97,38 @@ export const GET: RequestHandler = async ({ locals }) => {
 		}
 	}
 
+	// Library items (video and music only)
+	const existingPaths = new Set(playable.map((p) => p.outputPath));
+	const libraries = locals.libraryRepo.getAll();
+	for (const library of libraries) {
+		const items = locals.libraryItemRepo.getByLibrary(library.id);
+		for (const item of items) {
+			if (item.media_type === 'image') continue;
+			if (existingPaths.has(item.path)) continue;
+
+			let fileSize = 0;
+			try {
+				fileSize = statSync(item.path).size;
+			} catch {
+				continue;
+			}
+
+			playable.push({
+				id: item.id,
+				type: 'library',
+				name: basename(item.path),
+				outputPath: item.path,
+				mode: item.media_type === 'audio' ? 'audio' : 'video',
+				format: item.extension,
+				videoFormat: null,
+				thumbnailUrl: null,
+				durationSeconds: null,
+				size: fileSize,
+				completedAt: item.created_at
+			});
+		}
+	}
+
 	playable.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
 
 	return json(playable);

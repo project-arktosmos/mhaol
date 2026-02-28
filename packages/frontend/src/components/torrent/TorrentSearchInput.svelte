@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { createEventDispatcher } from 'svelte';
-	import { TorrentCategory, TORRENT_CATEGORY_LABELS } from '$types/torrent-search.type';
+	import { TorrentCategory, TORRENT_CATEGORY_LABELS } from 'torrent-search/types';
 
 	export let query: string = '';
 	export let category: TorrentCategory = TorrentCategory.All;
