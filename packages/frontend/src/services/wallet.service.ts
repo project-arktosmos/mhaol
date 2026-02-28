@@ -1,18 +1,18 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { privateKeyToAccount } from 'viem/accounts';
+import { apiUrl } from '$lib/api-base';
 
 export interface WalletState {
 	loading: boolean;
+	name: string | null;
 	address: string | null;
-	privateKey: string | null;
 	error: string | null;
 }
 
 const initialState: WalletState = {
 	loading: false,
+	name: null,
 	address: null,
-	privateKey: null,
 	error: null
 };
 
@@ -27,16 +27,16 @@ class WalletService {
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 
 		try {
-			const res = await fetch('/api/signaling/wallet');
+			const res = await fetch(apiUrl('/api/signaling/wallet'));
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-			const data = (await res.json()) as { privateKey: string; address: string };
+			const data = (await res.json()) as { name: string; address: string };
 
 			this._initialized = true;
 			this.state.update((s) => ({
 				...s,
 				loading: false,
-				privateKey: data.privateKey,
+				name: data.name,
 				address: data.address
 			}));
 		} catch (err) {
@@ -45,12 +45,41 @@ class WalletService {
 		}
 	}
 
-	async sign(message: string): Promise<string | null> {
-		const { privateKey } = get(this.state);
-		if (!privateKey) return null;
+	async regenerate(): Promise<void> {
+		this.state.update((s) => ({ ...s, loading: true, error: null }));
 
-		const account = privateKeyToAccount(privateKey as `0x${string}`);
-		return account.signMessage({ message });
+		try {
+			const res = await fetch(apiUrl('/api/signaling/wallet'), { method: 'DELETE' });
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+			const data = (await res.json()) as { name: string; address: string };
+
+			this.state.update((s) => ({
+				...s,
+				loading: false,
+				name: data.name,
+				address: data.address
+			}));
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Failed to regenerate wallet';
+			this.state.update((s) => ({ ...s, loading: false, error: message }));
+		}
+	}
+
+	async sign(message: string): Promise<string | null> {
+		try {
+			const res = await fetch(apiUrl('/api/signaling/wallet/sign'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ message })
+			});
+			if (!res.ok) return null;
+
+			const data = (await res.json()) as { signature: string };
+			return data.signature;
+		} catch {
+			return null;
+		}
 	}
 
 	getAddress(): string | null {

@@ -1,5 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { apiUrl } from '$lib/api-base';
 import { ObjectServiceClass } from '$services/classes/object-service.class';
 import { p2pStreamService } from '$services/p2p-stream.service';
 import type {
@@ -401,7 +402,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		const currentState = get(this.state);
 		if (currentState.sessionId) {
 			try {
-				await fetch(`/api/player/sessions/${currentState.sessionId}`, {
+				await fetch(apiUrl(`/api/player/sessions/${currentState.sessionId}`), {
 					method: 'DELETE'
 				});
 			} catch {
@@ -432,7 +433,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	// ===== HTTP Helper =====
 
 	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(path, {
+		const response = await fetch(apiUrl(path), {
 			...init,
 			headers: { 'Content-Type': 'application/json', ...init?.headers }
 		});

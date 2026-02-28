@@ -10,7 +10,6 @@
 		"frontendDist": "./loading"
 	},
 	"app": {
-		"title": "Mhaol",
 		"windows": [
 			{
 				"title": "Mhaol",

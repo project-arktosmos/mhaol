@@ -1,11 +1,14 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { apiUrl } from '$lib/api-base';
 import type {
 	Library,
 	DirectoryEntry,
 	BrowseDirectoryResponse,
 	LibraryFile,
-	LibraryFilesResponse
+	LibraryFilesResponse,
+	MediaTypeOption,
+	CategoryOption
 } from '$types/library.type';
 import { type MediaType } from '$types/library.type';
 
@@ -19,7 +22,6 @@ export interface LibraryServiceState {
 	selectedPath: string;
 	selectedName: string;
 	selectedMediaTypes: MediaType[];
-	expandedLibraryId: string | null;
 	libraryFiles: Record<string, LibraryFile[]>;
 	libraryFilesLoading: Record<string, boolean>;
 	libraryFilesError: Record<string, string | null>;
@@ -35,7 +37,6 @@ const initialState: LibraryServiceState = {
 	selectedPath: '',
 	selectedName: '',
 	selectedMediaTypes: [],
-	expandedLibraryId: null,
 	libraryFiles: {},
 	libraryFilesLoading: {},
 	libraryFilesError: {}
@@ -54,6 +55,10 @@ class LibraryService {
 			const libraries = await this.fetchJson<Library[]>('/api/libraries');
 			this.store.set(libraries);
 			this.initialized = true;
+
+			for (const library of libraries) {
+				this.fetchLibraryFiles(library.id as string);
+			}
 		} catch (error) {
 			console.error('[library] Failed to initialize:', error);
 		}
@@ -161,22 +166,6 @@ class LibraryService {
 		});
 	}
 
-	async toggleLibraryFiles(libraryId: string): Promise<void> {
-		let currentExpanded: string | null = null;
-		const unsubscribe = this.state.subscribe((s) => {
-			currentExpanded = s.expandedLibraryId;
-		});
-		unsubscribe();
-
-		if (currentExpanded === libraryId) {
-			this.state.update((s) => ({ ...s, expandedLibraryId: null }));
-			return;
-		}
-
-		this.state.update((s) => ({ ...s, expandedLibraryId: libraryId }));
-		await this.fetchLibraryFiles(libraryId);
-	}
-
 	async fetchLibraryFiles(libraryId: string): Promise<void> {
 		if (!browser) return;
 
@@ -205,6 +194,261 @@ class LibraryService {
 		}
 	}
 
+	async scanLibraryFiles(libraryId: string): Promise<void> {
+		if (!browser) return;
+
+		this.state.update((s) => ({
+			...s,
+			libraryFilesLoading: { ...s.libraryFilesLoading, [libraryId]: true },
+			libraryFilesError: { ...s.libraryFilesError, [libraryId]: null }
+		}));
+
+		try {
+			const response = await this.fetchJson<LibraryFilesResponse>(
+				`/api/libraries/${libraryId}/scan`,
+				{ method: 'POST' }
+			);
+			this.state.update((s) => ({
+				...s,
+				libraryFiles: { ...s.libraryFiles, [libraryId]: response.files },
+				libraryFilesLoading: { ...s.libraryFilesLoading, [libraryId]: false }
+			}));
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				libraryFilesLoading: { ...s.libraryFilesLoading, [libraryId]: false },
+				libraryFilesError: { ...s.libraryFilesError, [libraryId]: errorMsg }
+			}));
+		}
+	}
+
+	async linkTmdb(
+		libraryId: string,
+		itemId: string,
+		tmdbId: number,
+		seasonNumber: number | null = null,
+		episodeNumber: number | null = null
+	): Promise<void> {
+		if (!browser) return;
+
+		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/tmdb`, {
+			method: 'PUT',
+			body: JSON.stringify({ tmdbId, seasonNumber, episodeNumber })
+		});
+
+		this.state.update((s) => {
+			const files = s.libraryFiles[libraryId];
+			if (!files) return s;
+			return {
+				...s,
+				libraryFiles: {
+					...s.libraryFiles,
+					[libraryId]: files.map((f) =>
+						f.id === itemId
+							? { ...f, links: { ...f.links, tmdb: { serviceId: String(tmdbId), seasonNumber, episodeNumber } } }
+							: f
+					)
+				}
+			};
+		});
+	}
+
+	async unlinkTmdb(libraryId: string, itemId: string): Promise<void> {
+		if (!browser) return;
+
+		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/tmdb`, {
+			method: 'DELETE'
+		});
+
+		this.state.update((s) => {
+			const files = s.libraryFiles[libraryId];
+			if (!files) return s;
+			return {
+				...s,
+				libraryFiles: {
+					...s.libraryFiles,
+					[libraryId]: files.map((f) => {
+						if (f.id !== itemId) return f;
+						const { tmdb: _, ...rest } = f.links;
+						return { ...f, links: rest };
+					})
+				}
+			};
+		});
+	}
+
+	async linkYoutube(libraryId: string, itemId: string, youtubeId: string): Promise<void> {
+		if (!browser) return;
+
+		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/youtube`, {
+			method: 'PUT',
+			body: JSON.stringify({ youtubeId })
+		});
+
+		this.state.update((s) => {
+			const files = s.libraryFiles[libraryId];
+			if (!files) return s;
+			return {
+				...s,
+				libraryFiles: {
+					...s.libraryFiles,
+					[libraryId]: files.map((f) =>
+						f.id === itemId
+							? { ...f, links: { ...f.links, youtube: { serviceId: youtubeId, seasonNumber: null, episodeNumber: null } } }
+							: f
+					)
+				}
+			};
+		});
+	}
+
+	async unlinkYoutube(libraryId: string, itemId: string): Promise<void> {
+		if (!browser) return;
+
+		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/youtube`, {
+			method: 'DELETE'
+		});
+
+		this.state.update((s) => {
+			const files = s.libraryFiles[libraryId];
+			if (!files) return s;
+			return {
+				...s,
+				libraryFiles: {
+					...s.libraryFiles,
+					[libraryId]: files.map((f) => {
+						if (f.id !== itemId) return f;
+						const { youtube: _, ...rest } = f.links;
+						return { ...f, links: rest };
+					})
+				}
+			};
+		});
+	}
+
+	async linkMusicBrainz(libraryId: string, itemId: string, musicbrainzId: string): Promise<void> {
+		if (!browser) return;
+
+		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/musicbrainz`, {
+			method: 'PUT',
+			body: JSON.stringify({ musicbrainzId })
+		});
+
+		this.state.update((s) => {
+			const files = s.libraryFiles[libraryId];
+			if (!files) return s;
+			return {
+				...s,
+				libraryFiles: {
+					...s.libraryFiles,
+					[libraryId]: files.map((f) =>
+						f.id === itemId
+							? { ...f, links: { ...f.links, musicbrainz: { serviceId: musicbrainzId, seasonNumber: null, episodeNumber: null } } }
+							: f
+					)
+				}
+			};
+		});
+	}
+
+	async unlinkMusicBrainz(libraryId: string, itemId: string): Promise<void> {
+		if (!browser) return;
+
+		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/musicbrainz`, {
+			method: 'DELETE'
+		});
+
+		this.state.update((s) => {
+			const files = s.libraryFiles[libraryId];
+			if (!files) return s;
+			return {
+				...s,
+				libraryFiles: {
+					...s.libraryFiles,
+					[libraryId]: files.map((f) => {
+						if (f.id !== itemId) return f;
+						const { musicbrainz: _, ...rest } = f.links;
+						return { ...f, links: rest };
+					})
+				}
+			};
+		});
+	}
+
+	async updateCategory(libraryId: string, itemId: string, categoryId: string): Promise<void> {
+		if (!browser) return;
+
+		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/category`, {
+			method: 'PUT',
+			body: JSON.stringify({ categoryId })
+		});
+
+		this.state.update((s) => {
+			const files = s.libraryFiles[libraryId];
+			if (!files) return s;
+			return {
+				...s,
+				libraryFiles: {
+					...s.libraryFiles,
+					[libraryId]: files.map((f) => (f.id === itemId ? { ...f, categoryId } : f))
+				}
+			};
+		});
+	}
+
+	async clearCategory(libraryId: string, itemId: string): Promise<void> {
+		if (!browser) return;
+
+		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/category`, {
+			method: 'DELETE'
+		});
+
+		this.state.update((s) => {
+			const files = s.libraryFiles[libraryId];
+			if (!files) return s;
+			return {
+				...s,
+				libraryFiles: {
+					...s.libraryFiles,
+					[libraryId]: files.map((f) => (f.id === itemId ? { ...f, categoryId: null } : f))
+				}
+			};
+		});
+	}
+
+	async updateMediaType(libraryId: string, itemId: string, mediaTypeId: string): Promise<void> {
+		if (!browser) return;
+
+		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/media-type`, {
+			method: 'PUT',
+			body: JSON.stringify({ mediaTypeId })
+		});
+
+		this.state.update((s) => {
+			const files = s.libraryFiles[libraryId];
+			if (!files) return s;
+			return {
+				...s,
+				libraryFiles: {
+					...s.libraryFiles,
+					[libraryId]: files.map((f) =>
+						f.id === itemId ? { ...f, mediaType: mediaTypeId as MediaType, categoryId: null } : f
+					)
+				}
+			};
+		});
+	}
+
+	async fetchMediaTypes(): Promise<MediaTypeOption[]> {
+		return this.fetchJson<MediaTypeOption[]>('/api/libraries/media-types');
+	}
+
+	async fetchCategories(mediaType?: string): Promise<CategoryOption[]> {
+		const params = mediaType ? `?mediaType=${encodeURIComponent(mediaType)}` : '';
+		return this.fetchJson<CategoryOption[]>(`/api/libraries/categories${params}`);
+	}
+
 	private resetForm(): void {
 		this.state.update((s) => ({
 			...s,
@@ -220,7 +464,7 @@ class LibraryService {
 	}
 
 	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(path, {
+		const response = await fetch(apiUrl(path), {
 			...init,
 			headers: {
 				'Content-Type': 'application/json',

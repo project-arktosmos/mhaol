@@ -1,12 +1,21 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { apiUrl } from '$lib/api-base';
 import {
 	TorrentCategory,
-	type TorrentSearchState,
-	type TorrentSearchSort,
-	type PirateBayApiResult
-} from '$types/torrent-search.type';
-import { torrentSearchAdapter } from '$adapters/classes/torrent-search.adapter';
+	type TorrentSearchResult,
+	type TorrentSearchSort
+} from 'torrent-search/types';
+
+interface TorrentSearchState {
+	query: string;
+	category: TorrentCategory;
+	searching: boolean;
+	results: TorrentSearchResult[];
+	sort: TorrentSearchSort;
+	error: string | null;
+	addingTorrents: Set<string>;
+}
 
 const initialState: TorrentSearchState = {
 	query: '',
@@ -38,15 +47,19 @@ class TorrentSearchService {
 				q: query.trim(),
 				cat: category
 			});
-			const response = await fetch(`/api/torrent/search?${params}`);
+			const response = await fetch(apiUrl(`/api/torrent/search?${params}`));
 
 			if (!response.ok) {
 				const body = await response.json().catch(() => ({}));
 				throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
 			}
 
-			const rawResults: PirateBayApiResult[] = await response.json();
-			const results = torrentSearchAdapter.fromApiResults(rawResults);
+			const results: TorrentSearchResult[] = (await response.json()).map(
+				(r: TorrentSearchResult) => ({
+					...r,
+					uploadedAt: new Date(r.uploadedAt)
+				})
+			);
 
 			this.state.update((s) => ({
 				...s,

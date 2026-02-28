@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm p2p-server:build && pnpm ytdl-rust:build && pnpm signaling:build && pnpm -r --filter frontend dev",
+		"dev": "pnpm p2p-server:build && pnpm ytdl-rust:build && pnpm -r --filter frontend dev",
 		"build": "pnpm -r --filter frontend build",
 		"preview": "pnpm -r --filter frontend preview",
 		"test": "pnpm -r run test",
@@ -13,9 +13,8 @@
 		"format": "pnpm -r run format",
 		"check": "pnpm -r run check",
 		"clean": "pnpm -r run clean",
-		"signaling:build": "pnpm --filter signaling build",
-		"signaling:start": "pnpm --filter signaling start",
 		"signaling:dev": "pnpm --filter signaling dev",
+		"signaling:deploy": "pnpm --filter signaling deploy",
 		"torrent:build": "cargo build --manifest-path packages/rust-torrent/Cargo.toml",
 		"torrent:test": "cargo test --manifest-path packages/rust-torrent/Cargo.toml",
 		"torrent:check": "cargo check --manifest-path packages/rust-torrent/Cargo.toml",
@@ -28,13 +27,16 @@
 		"ytdl-rust:test": "cargo test --manifest-path packages/rust-yt-dlp/Cargo.toml",
 		"ytdl-rust:check": "cargo check --manifest-path packages/rust-yt-dlp/Cargo.toml",
 		"tauri:dev": "pnpm -r --filter tauri dev",
-		"tauri:build": "pnpm -r --filter tauri build"
+		"tauri:build": "pnpm -r --filter tauri build",
+		"tauri:android:dev": "pnpm -r --filter tauri tauri android dev",
+		"tauri:android:build": "pnpm -r --filter tauri tauri android build --apk",
+		"frontend:build:static": "BUILD_ADAPTER=static pnpm -r --filter frontend build"
 	},
 	"engines": {
 		"node": ">=18",
 		"pnpm": ">=9"
 	},
 	"pnpm": {
-		"onlyBuiltDependencies": ["better-sqlite3", "node-datachannel"]
+		"onlyBuiltDependencies": ["better-sqlite3", "esbuild", "node-datachannel", "workerd"]
 	}
 }

@@ -1,5 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { apiUrl } from '$lib/api-base';
 import {
 	extractVideoId,
 	type YouTubeSettings,
@@ -524,7 +525,7 @@ class YouTubeService {
 	private connectSSE(): void {
 		if (!browser) return;
 
-		this.eventSource = new EventSource(`${API_PREFIX}/downloads/events`);
+		this.eventSource = new EventSource(apiUrl(`${API_PREFIX}/downloads/events`));
 
 		this.eventSource.addEventListener('progress', (e: MessageEvent) => {
 			try {
@@ -562,7 +563,7 @@ class YouTubeService {
 	// ===== HTTP Helper =====
 
 	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(path, {
+		const response = await fetch(apiUrl(path), {
 			...init,
 			headers: {
 				'Content-Type': 'application/json',

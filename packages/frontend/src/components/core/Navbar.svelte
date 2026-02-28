@@ -2,6 +2,7 @@
 	import classNames from 'classnames';
 	import routes from 'virtual:routes';
 	import type { RouteEntry } from '$types/route.type';
+	import { isMobile } from '$lib/platform';
 	import NavbarLink from './NavbarLink.svelte';
 	import NavbarDropdown from './NavbarDropdown.svelte';
 
@@ -11,11 +12,17 @@
 
 	let { classes = '' }: Props = $props();
 
+	const DESKTOP_ONLY_ROUTES = ['/torrent', '/images', '/signaling'];
+
 	function hasNavigableChildren(route: RouteEntry): boolean {
 		return route.children.some((c) => !c.isDynamic);
 	}
 
-	let navRoutes = $derived(routes.filter((r) => !r.isDynamic));
+	let navRoutes = $derived(
+		routes.filter(
+			(r) => !r.isDynamic && !(isMobile && DESKTOP_ONLY_ROUTES.includes(r.path))
+		)
+	);
 
 	let wrapperClasses = $derived(classNames('navbar bg-base-100 shadow-sm', classes));
 </script>

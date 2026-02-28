@@ -1,5 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { apiUrl } from '$lib/api-base';
 import { ObjectServiceClass } from '$services/classes/object-service.class';
 import type {
 	TorrentSettings,
@@ -222,7 +223,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	private connectSSE(): void {
 		if (!browser) return;
 
-		this.eventSource = new EventSource('/api/torrent/torrents/events');
+		this.eventSource = new EventSource(apiUrl('/api/torrent/torrents/events'));
 
 		this.eventSource.addEventListener('torrents', (e: MessageEvent) => {
 			try {
@@ -250,7 +251,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	// ===== HTTP Helper =====
 
 	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(path, {
+		const response = await fetch(apiUrl(path), {
 			...init,
 			headers: {
 				'Content-Type': 'application/json',

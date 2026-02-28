@@ -1,5 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { apiUrl } from '$lib/api-base';
 import type {
 	P2pStreamSettings,
 	P2pStreamServiceState,
@@ -144,7 +145,7 @@ class P2pStreamService {
 	}
 
 	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(path, {
+		const response = await fetch(apiUrl(path), {
 			...init,
 			headers: { 'Content-Type': 'application/json', ...init?.headers }
 		});
