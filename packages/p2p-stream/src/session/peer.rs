@@ -138,9 +138,7 @@ impl PeerSession {
                     break;
                 }
 
-                let duration_secs = pipeline
-                    .query_duration::<gst::ClockTime>()
-                    .map(|t| t.nseconds() as f64 / 1_000_000_000.0);
+                let duration_secs = query_pipeline_duration(&pipeline);
 
                 if !sent_media_info {
                     if duration_secs.is_some() {
@@ -151,10 +149,7 @@ impl PeerSession {
                     }
                 }
 
-                let position_secs = pipeline
-                    .query_position::<gst::ClockTime>()
-                    .map(|t| t.nseconds() as f64 / 1_000_000_000.0)
-                    .unwrap_or(0.0);
+                let position_secs = query_pipeline_position(&pipeline).unwrap_or(0.0);
 
                 let msg = SignalingMessage::PositionUpdate(PositionPayload {
                     position_secs,
@@ -182,6 +177,17 @@ impl PeerSession {
             webrtcbin.connect("on-negotiation-needed", false, move |_values| {
                 info!("Session {session_id}: negotiation needed");
 
+                // Guard: do not call create-offer until at least one media branch
+                // has been linked to webrtcbin.  Calling create-offer with no
+                // transceivers produces an empty SDP and may consume the internal
+                // negotiation-needed state, preventing the signal from re-firing
+                // when an audio-only pad is linked later.
+                let n_sink: u32 = webrtcbin_clone.property("num-sink-pads");
+                if n_sink == 0 {
+                    info!("Session {session_id}: no sink pads yet, deferring negotiation");
+                    return None;
+                }
+
                 let signaling_tx = signaling_tx.clone();
                 let state = state.clone();
                 let webrtcbin_inner = webrtcbin_clone.clone();
@@ -203,7 +209,7 @@ impl PeerSession {
 
                     let sdp_text = offer.sdp().to_string();
 
-                    // Skip offers with no media descriptions (fires before pads are linked)
+                    // Safety net: skip offers with no media descriptions
                     if !sdp_text.contains("m=") {
                         info!("Skipping SDP offer with no media descriptions");
                         return;
@@ -297,4 +303,35 @@ impl PeerSession {
 
         Ok(())
     }
+}
+
+/// Query position from named queue elements first (they propagate upstream
+/// to filesrc), falling back to the pipeline.  webrtcbin itself cannot
+/// answer position queries, so the direct pipeline query may miss for
+/// audio-only pipelines that lack a video_queue.
+fn query_pipeline_position(pipeline: &gst::Pipeline) -> Option<f64> {
+    for name in &["video_queue", "audio_queue"] {
+        if let Some(el) = pipeline.by_name(name) {
+            if let Some(pos) = el.query_position::<gst::ClockTime>() {
+                return Some(pos.nseconds() as f64 / 1_000_000_000.0);
+            }
+        }
+    }
+    pipeline
+        .query_position::<gst::ClockTime>()
+        .map(|t| t.nseconds() as f64 / 1_000_000_000.0)
+}
+
+/// Query duration from named queue elements first, falling back to the pipeline.
+fn query_pipeline_duration(pipeline: &gst::Pipeline) -> Option<f64> {
+    for name in &["video_queue", "audio_queue"] {
+        if let Some(el) = pipeline.by_name(name) {
+            if let Some(dur) = el.query_duration::<gst::ClockTime>() {
+                return Some(dur.nseconds() as f64 / 1_000_000_000.0);
+            }
+        }
+    }
+    pipeline
+        .query_duration::<gst::ClockTime>()
+        .map(|t| t.nseconds() as f64 / 1_000_000_000.0)
 }
