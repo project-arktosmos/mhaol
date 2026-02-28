@@ -33,6 +33,7 @@ async function initializeServer() {
 	const { getDatabase } = await import('database');
 	const repos = await import('database/repositories');
 	const { PluginConnector } = await import('$lib/server/plugins/connector');
+	const { extractManifest } = await import('$lib/server/plugins/manifest');
 
 	// Load .env.app from repo root (non-VITE env vars for addons/plugins)
 	const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -85,23 +86,30 @@ async function initializeServer() {
 	const ytDownloadManifest = (await import('$lib/server/plugins/definitions/yt-download.plugin.json')).default as unknown as Manifest;
 	const { ytDownloadCompanion } = await import('$lib/server/plugins/definitions/yt-download.plugin');
 	const p2pStreamManifest = (await import('$lib/server/plugins/definitions/p2p-stream.plugin.json')).default as unknown as Manifest;
+	const { p2pStreamCompanion } = await import('$lib/server/plugins/definitions/p2p-stream.plugin');
 	const torrentManifest = (await import('$lib/server/plugins/definitions/torrent.plugin.json')).default as unknown as Manifest;
 	const { torrentCompanion } = await import('$lib/server/plugins/definitions/torrent.plugin');
 	const imageTaggerManifest = (await import('$lib/server/plugins/definitions/image-tagger.plugin.json')).default as unknown as Manifest;
 	const signalingManifest = (await import('$lib/server/plugins/definitions/signaling.plugin.json')).default as unknown as Manifest;
 	const { signalingCompanion } = await import('$lib/server/plugins/definitions/signaling.plugin');
-	const torrentSearchManifest = (await import('$lib/server/plugins/definitions/torrent-search.plugin.json')).default as unknown as Manifest;
-	const { torrentSearchCompanion } = await import('$lib/server/plugins/definitions/torrent-search.plugin');
-	const tmdbManifest = (await import('../../../addons/tmdb/addon.json')).default as unknown as Manifest;
+	const torrentSearchManifest = extractManifest((await import('../../../addons/torrent-search-thepiratebay/package.json')).default);
+	const { torrentSearchCompanion } = await import('../../../addons/torrent-search-thepiratebay/addon');
+	const tmdbManifest = extractManifest((await import('../../../addons/tmdb/package.json')).default);
 	const { tmdbCompanion } = await import('../../../addons/tmdb/addon');
+	const musicbrainzManifest = extractManifest((await import('../../../addons/musicbrainz/package.json')).default);
+	const { musicbrainzCompanion } = await import('../../../addons/musicbrainz/addon');
+	const youtubeManifest = extractManifest((await import('../../../addons/youtube/package.json')).default);
+	const { youtubeCompanion } = await import('../../../addons/youtube/addon');
 
 	connector.register(ytDownloadManifest, ytDownloadCompanion);
-	connector.register(p2pStreamManifest);
+	connector.register(p2pStreamManifest, p2pStreamCompanion);
 	connector.register(torrentManifest, torrentCompanion);
 	connector.register(imageTaggerManifest);
 	connector.register(signalingManifest, signalingCompanion);
 	connector.register(torrentSearchManifest, torrentSearchCompanion);
 	connector.register(tmdbManifest, tmdbCompanion);
+	connector.register(musicbrainzManifest, musicbrainzCompanion);
+	connector.register(youtubeManifest, youtubeCompanion);
 	await connector.initialize();
 
 	// Cleanup on process exit

@@ -3,6 +3,7 @@ use crate::pipeline::StreamPipeline;
 use crate::session::state::SessionState;
 use crate::signaling::*;
 use gstreamer as gst;
+use gstreamer::glib;
 use gstreamer::prelude::*;
 use gstreamer_sdp as gst_sdp;
 use gstreamer_webrtc as gst_webrtc;
@@ -10,19 +11,31 @@ use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// A single WebRTC peer session.
 ///
 /// Manages the GStreamer pipeline and webrtcbin for one peer connection.
-/// Communicates with the external signaling layer via channels.
+/// SDP/ICE signaling flows through `signaling_tx`. Media control messages
+/// (Seek, MediaInfo, PositionUpdate) flow through a WebRTC data channel
+/// named "media-control".
 pub struct PeerSession {
     pub id: String,
     state: Arc<Mutex<SessionState>>,
     stream_pipeline: StreamPipeline,
     signaling_tx: mpsc::UnboundedSender<SignalingMessage>,
+    data_channel: glib::Object,
+    data_channel_open: Arc<AtomicBool>,
     shutdown: Arc<AtomicBool>,
 }
+
+// Safety: glib::Object is a reference-counted GObject which is inherently
+// thread-safe (g_object_ref/unref are atomic). GStreamer elements like
+// webrtcbin data channels are routinely accessed from multiple threads.
+// All other fields are Send+Sync. The previous PeerSession (without
+// data_channel) was already Send+Sync implicitly via StreamPipeline.
+unsafe impl Send for PeerSession {}
+unsafe impl Sync for PeerSession {}
 
 impl PeerSession {
     pub(crate) fn new(
@@ -32,15 +45,27 @@ impl PeerSession {
     ) -> Result<Self> {
         let state = Arc::new(Mutex::new(SessionState::New));
 
+        // Create data channel before connecting signals so it is included in
+        // the SDP offer that webrtcbin generates on negotiation-needed.
+        let data_channel = stream_pipeline
+            .webrtcbin()
+            .emit_by_name::<glib::Object>(
+                "create-data-channel",
+                &[&"media-control", &None::<gst::Structure>],
+            );
+
         let session = Self {
             id,
             state,
             stream_pipeline,
             signaling_tx,
+            data_channel,
+            data_channel_open: Arc::new(AtomicBool::new(false)),
             shutdown: Arc::new(AtomicBool::new(false)),
         };
 
         session.connect_webrtcbin_signals()?;
+        session.connect_data_channel_signals();
 
         Ok(session)
     }
@@ -119,50 +144,133 @@ impl PeerSession {
         Ok(())
     }
 
-    fn start_position_ticker(&self) {
-        let pipeline = self.stream_pipeline.pipeline().clone();
-        let signaling_tx = self.signaling_tx.clone();
-        let shutdown = self.shutdown.clone();
-        let session_id = self.id.clone();
+    // ===== Data channel =====
 
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
+    fn connect_data_channel_signals(&self) {
+        let dc = &self.data_channel;
 
-            // Send initial media info once duration is available
-            let mut sent_media_info = false;
+        // on-open: mark data channel as ready
+        {
+            let open_flag = self.data_channel_open.clone();
+            let session_id = self.id.clone();
 
-            loop {
-                interval.tick().await;
+            dc.connect("on-open", false, move |_| {
+                info!("Session {session_id}: data channel opened");
+                open_flag.store(true, Ordering::Relaxed);
+                None
+            });
+        }
 
-                if shutdown.load(Ordering::Relaxed) {
-                    break;
-                }
+        // on-close: mark data channel as closed
+        {
+            let open_flag = self.data_channel_open.clone();
+            let session_id = self.id.clone();
 
-                let duration_secs = query_pipeline_duration(&pipeline);
+            dc.connect("on-close", false, move |_| {
+                info!("Session {session_id}: data channel closed");
+                open_flag.store(false, Ordering::Relaxed);
+                None
+            });
+        }
 
-                if !sent_media_info {
-                    if duration_secs.is_some() {
-                        let _ = signaling_tx.send(SignalingMessage::MediaInfo(
-                            MediaInfoPayload { duration_secs },
-                        ));
-                        sent_media_info = true;
+        // on-message-string: handle Seek commands from the browser
+        {
+            let pipeline = self.stream_pipeline.pipeline().clone();
+            let session_id = self.id.clone();
+
+            dc.connect("on-message-string", false, move |values| {
+                let msg_str = values[1].get::<&str>().unwrap_or_default();
+
+                let value: serde_json::Value = match serde_json::from_str(msg_str) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("Session {session_id}: invalid data channel message: {e}");
+                        return None;
+                    }
+                };
+
+                if value.get("type").and_then(|t| t.as_str()) == Some("Seek") {
+                    if let Some(pos_secs) = value
+                        .get("payload")
+                        .and_then(|p| p.get("position_secs"))
+                        .and_then(|p| p.as_f64())
+                    {
+                        info!("Session {session_id}: seeking to {pos_secs:.2}s via data channel");
+                        let position = gst::ClockTime::from_nseconds(
+                            (pos_secs * 1_000_000_000.0) as u64,
+                        );
+                        if let Err(e) = pipeline.seek_simple(
+                            gst::SeekFlags::FLUSH | gst::SeekFlags::KEY_UNIT,
+                            position,
+                        ) {
+                            error!("Session {session_id}: seek failed: {e}");
+                        }
                     }
                 }
 
-                let position_secs = query_pipeline_position(&pipeline).unwrap_or(0.0);
+                None
+            });
+        }
+    }
 
-                let msg = SignalingMessage::PositionUpdate(PositionPayload {
-                    position_secs,
-                    duration_secs,
-                });
+    /// Send a JSON message through the data channel.
+    fn send_data_channel_message(dc: &glib::Object, msg: &serde_json::Value) {
+        let json = msg.to_string();
+        dc.emit_by_name::<()>("send-string", &[&json]);
+    }
 
-                if signaling_tx.send(msg).is_err() {
-                    debug!("Session {session_id} position ticker: channel closed");
-                    break;
+    // ===== Position ticker (sends via data channel) =====
+
+    fn start_position_ticker(&self) {
+        let pipeline = self.stream_pipeline.pipeline().clone();
+        let dc = self.data_channel.clone();
+        let dc_open = self.data_channel_open.clone();
+        let shutdown = self.shutdown.clone();
+        let session_id = self.id.clone();
+
+        // Run the ticker on the GLib main context so we can directly access
+        // the data channel (glib::Object is not Send).
+        let mut sent_media_info = false;
+
+        glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
+            if shutdown.load(Ordering::Relaxed) {
+                debug!("Session {session_id}: position ticker stopped");
+                return glib::ControlFlow::Break;
+            }
+
+            if !dc_open.load(Ordering::Relaxed) {
+                return glib::ControlFlow::Continue;
+            }
+
+            let duration_secs = query_pipeline_duration(&pipeline);
+
+            if !sent_media_info {
+                if duration_secs.is_some() {
+                    let msg = serde_json::json!({
+                        "type": "MediaInfo",
+                        "payload": { "duration_secs": duration_secs }
+                    });
+                    Self::send_data_channel_message(&dc, &msg);
+                    sent_media_info = true;
                 }
             }
+
+            let position_secs = query_pipeline_position(&pipeline).unwrap_or(0.0);
+
+            let msg = serde_json::json!({
+                "type": "PositionUpdate",
+                "payload": {
+                    "position_secs": position_secs,
+                    "duration_secs": duration_secs
+                }
+            });
+            Self::send_data_channel_message(&dc, &msg);
+
+            glib::ControlFlow::Continue
         });
     }
+
+    // ===== WebRTC signaling (SDP/ICE only) =====
 
     fn connect_webrtcbin_signals(&self) -> Result<()> {
         let webrtcbin = self.stream_pipeline.webrtcbin();
@@ -176,6 +284,20 @@ impl PeerSession {
 
             webrtcbin.connect("on-negotiation-needed", false, move |_values| {
                 info!("Session {session_id}: negotiation needed");
+
+                // Guard: do not call create-offer until at least one media branch
+                // has been linked to webrtcbin.  Calling create-offer with no
+                // transceivers produces an empty SDP and may consume the internal
+                // negotiation-needed state, preventing the signal from re-firing
+                // when an audio-only pad is linked later.
+                let has_sink_pads = webrtcbin_clone
+                    .pads()
+                    .iter()
+                    .any(|p| p.direction() == gst::PadDirection::Sink);
+                if !has_sink_pads {
+                    info!("Session {session_id}: no sink pads yet, deferring negotiation");
+                    return None;
+                }
 
                 let signaling_tx = signaling_tx.clone();
                 let state = state.clone();

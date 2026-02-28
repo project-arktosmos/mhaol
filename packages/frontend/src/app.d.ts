@@ -11,8 +11,11 @@ import type {
 	CategoryRepository
 } from 'database/repositories';
 import type { TmdbCacheRepository } from 'tmdb/cache-repository';
+import type { MusicBrainzCacheRepository } from 'musicbrainz/cache-repository';
+import type { YouTubeCacheRepository } from 'youtube/cache-repository';
 import type { PluginConnector } from '$lib/server/plugins/connector';
-import type { search } from 'torrent-search';
+import type { WorkerBridge } from '$lib/server/worker-bridge';
+import type { search } from 'torrent-search-thepiratebay';
 
 declare global {
 	namespace App {
@@ -35,11 +38,14 @@ declare global {
 			imageTaggerBaseUrl: string;
 			imageTaggerAvailable: boolean;
 			streamServerAvailable: boolean;
+			p2pWorkerBridge: WorkerBridge | null;
 			signalingDevUrl: string;
 			signalingDevAvailable: boolean;
 			signalingPartyUrl: string;
 			torrentSearch: typeof search;
 			tmdbCacheRepo: TmdbCacheRepository;
+			musicbrainzCacheRepo: MusicBrainzCacheRepository;
+			youtubeCacheRepo: YouTubeCacheRepository;
 			tmdbApiKey: () => string;
 		}
 	}

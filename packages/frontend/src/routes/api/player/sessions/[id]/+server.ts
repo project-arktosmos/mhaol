@@ -1,17 +1,16 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const STREAM_SERVER_URL = process.env.P2P_STREAM_URL ?? 'http://localhost:3001';
+export const DELETE: RequestHandler = async ({ params, locals }) => {
+	const bridge = locals.p2pWorkerBridge;
+	if (!bridge?.isAvailable()) {
+		return json({ error: 'Streaming worker is not available' }, { status: 503 });
+	}
 
-export const DELETE: RequestHandler = async ({ params }) => {
 	try {
-		const res = await fetch(`${STREAM_SERVER_URL}/sessions/${params.id}`, {
-			method: 'DELETE',
-			signal: AbortSignal.timeout(5000)
-		});
-
-		return new Response(null, { status: res.status });
+		await bridge.deleteSession(params.id);
+		return new Response(null, { status: 204 });
 	} catch {
-		return json({ error: 'Streaming server is not available' }, { status: 503 });
+		return json({ error: 'Failed to delete session' }, { status: 500 });
 	}
 };

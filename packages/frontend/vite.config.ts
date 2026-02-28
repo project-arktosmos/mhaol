@@ -7,16 +7,6 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), routeDiscovery()],
 	server: {
 		host: true,
-		port: 1530,
-		proxy: {
-			'/api/player/ws': {
-				target: 'http://localhost:3001',
-				ws: true,
-				rewrite: (path) => {
-					const sessionId = path.replace('/api/player/ws/', '');
-					return `/sessions/${sessionId}/ws`;
-				}
-			}
-		}
+		port: 1530
 	}
 });
