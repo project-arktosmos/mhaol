@@ -182,8 +182,11 @@ impl PeerSession {
                 // transceivers produces an empty SDP and may consume the internal
                 // negotiation-needed state, preventing the signal from re-firing
                 // when an audio-only pad is linked later.
-                let n_sink: u32 = webrtcbin_clone.property("num-sink-pads");
-                if n_sink == 0 {
+                let has_sink_pads = webrtcbin_clone
+                    .pads()
+                    .iter()
+                    .any(|p| p.direction() == gst::PadDirection::Sink);
+                if !has_sink_pads {
                     info!("Session {session_id}: no sink pads yet, deferring negotiation");
                     return None;
                 }
