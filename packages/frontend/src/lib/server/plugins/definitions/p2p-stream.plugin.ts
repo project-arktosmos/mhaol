@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { PluginCompanion } from '../types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PACKAGE_ROOT = join(__dirname, '..', '..', '..', '..');
+const PACKAGE_ROOT = join(__dirname, '..', '..', '..', '..', '..');
 
 let workerBridge: WorkerBridge | null = null;
 

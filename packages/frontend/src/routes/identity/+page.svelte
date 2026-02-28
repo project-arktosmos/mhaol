@@ -1,12 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-
-	interface Identity {
-		name: string;
-		address: string;
-		passport: string;
-	}
+	import type { Identity } from '$types/identity.type';
+	import { identityService } from '$services/identity.service';
 
 	let identities = $state<Identity[]>([]);
 	let loading = $state(true);
@@ -32,6 +28,7 @@
 			const res = await fetch('/api/identities');
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			identities = await res.json();
+			await identityService.refresh();
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		} finally {

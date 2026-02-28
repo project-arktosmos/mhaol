@@ -9,7 +9,7 @@ interface MappedLink {
 	episodeNumber: number | null;
 }
 
-function mapItem(r: LibraryItemRow, linkRows: LibraryItemLinkRow[]) {
+function mapItem(r: LibraryItemRow, linkRows: LibraryItemLinkRow[], mediaTypeId: string) {
 	const links: Record<string, MappedLink> = {};
 	for (const link of linkRows) {
 		links[link.service] = {
@@ -26,6 +26,7 @@ function mapItem(r: LibraryItemRow, linkRows: LibraryItemLinkRow[]) {
 		extension: r.extension,
 		path: r.path,
 		categoryId: r.category_id,
+		mediaTypeId,
 		createdAt: r.created_at,
 		links
 	};
@@ -70,10 +71,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 		}
 	}
 
-	function mapRows(rows: LibraryItemRow[]) {
+	function mapRows(rows: LibraryItemRow[], mediaTypeId: string) {
 		return rows.map((r) => {
 			const linkRows = locals.libraryItemLinkRepo.getByItem(r.id);
-			return mapItem(r, linkRows);
+			return mapItem(r, linkRows, mediaTypeId);
 		});
 	}
 
@@ -87,14 +88,14 @@ export const GET: RequestHandler = async ({ locals }) => {
 			const uncategorized = locals.libraryItemRepo.getUncategorizedByMediaType(
 				category.mediaTypeId
 			);
-			itemsByCategory[category.id] = mapRows([...rows, ...uncategorized]);
+			itemsByCategory[category.id] = mapRows([...rows, ...uncategorized], category.mediaTypeId);
 		} else {
-			itemsByCategory[category.id] = mapRows(rows);
+			itemsByCategory[category.id] = mapRows(rows, category.mediaTypeId);
 		}
 	}
 
 	for (const mt of mediaTypes) {
-		itemsByType[mt.id] = mapRows(locals.libraryItemRepo.getByMediaType(mt.id));
+		itemsByType[mt.id] = mapRows(locals.libraryItemRepo.getByMediaType(mt.id), mt.id);
 	}
 
 	return json({ mediaTypes, categories, linkSources, itemsByCategory, itemsByType });

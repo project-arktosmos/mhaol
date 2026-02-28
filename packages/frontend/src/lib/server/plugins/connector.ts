@@ -317,8 +317,10 @@ export class PluginConnector {
 			resolvedEnv[proc.portEnv] = port;
 		}
 
+		const processCwd = proc.cwd ? join(PACKAGE_ROOT, proc.cwd) : PACKAGE_ROOT;
+
 		const child = spawn(binaryPath, proc.args ?? [], {
-			cwd: PACKAGE_ROOT,
+			cwd: processCwd,
 			env: resolvedEnv,
 			stdio: ['ignore', 'pipe', 'pipe']
 		});

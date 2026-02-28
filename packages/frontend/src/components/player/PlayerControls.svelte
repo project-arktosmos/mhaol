@@ -137,17 +137,17 @@
 		on:seekend
 	/>
 
-	<div class="flex items-center gap-1">
+	<div class="flex items-center gap-0.5">
 		<!-- Play/Pause -->
 		<button
-			class="btn btn-ghost btn-sm btn-square"
+			class="btn btn-ghost btn-xs btn-square"
 			on:click={togglePlayPause}
 			aria-label={isPaused ? 'Play' : 'Pause'}
 		>
 			{#if isPaused}
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
-					class="h-5 w-5"
+					class="h-4 w-4"
 					fill="none"
 					viewBox="0 0 24 24"
 					stroke="currentColor"
@@ -168,7 +168,7 @@
 			{:else}
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
-					class="h-5 w-5"
+					class="h-4 w-4"
 					fill="none"
 					viewBox="0 0 24 24"
 					stroke="currentColor"
@@ -184,102 +184,90 @@
 		</button>
 
 		<!-- Volume -->
-		<div class="group relative flex items-center">
-			<button
-				class="btn btn-ghost btn-sm btn-square"
-				on:click={toggleMute}
-				aria-label={isMuted ? 'Unmute' : 'Mute'}
-			>
-				{#if volumeDisplay === 'muted'}
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-5 w-5"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-						/>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
-						/>
-					</svg>
-				{:else if volumeDisplay === 'low'}
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-5 w-5"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-						/>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M15.536 8.464a5 5 0 010 7.072"
-						/>
-					</svg>
-				{:else}
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-5 w-5"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-						/>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728"
-						/>
-					</svg>
-				{/if}
-			</button>
-			<input
-				type="range"
-				min="0"
-				max="1"
-				step="0.01"
-				value={isMuted ? 0 : volume}
-				class="h-1 w-0 cursor-pointer appearance-none rounded-full bg-base-300 opacity-0 transition-all group-hover:w-20 group-hover:opacity-100"
-				on:input={handleVolumeInput}
-				aria-label="Volume"
-			/>
-		</div>
+		<button
+			class="btn btn-ghost btn-xs btn-square"
+			on:click={toggleMute}
+			aria-label={isMuted ? 'Unmute' : 'Mute'}
+		>
+			{#if volumeDisplay === 'muted'}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+					/>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+					/>
+				</svg>
+			{:else if volumeDisplay === 'low'}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+					/>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M15.536 8.464a5 5 0 010 7.072"
+					/>
+				</svg>
+			{:else}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+					/>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728"
+					/>
+				</svg>
+			{/if}
+		</button>
 
 		<div class="flex-1"></div>
 
 		<!-- Fullscreen (video only) -->
 		{#if isVideo}
 			<button
-				class="btn btn-ghost btn-sm btn-square"
+				class="btn btn-ghost btn-xs btn-square"
 				on:click={toggleFullscreen}
 				aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
 			>
 				{#if isFullscreen}
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
-						class="h-5 w-5"
+						class="h-4 w-4"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke="currentColor"
@@ -294,7 +282,7 @@
 				{:else}
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
-						class="h-5 w-5"
+						class="h-4 w-4"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke="currentColor"
@@ -312,13 +300,13 @@
 
 		<!-- Stop -->
 		<button
-			class="btn btn-ghost btn-sm btn-square"
+			class="btn btn-ghost btn-xs btn-square"
 			on:click={() => dispatch('stop')}
 			aria-label="Stop"
 		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
-				class="h-5 w-5"
+				class="h-4 w-4"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"

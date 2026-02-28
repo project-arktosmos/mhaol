@@ -1,70 +1,80 @@
 <script lang="ts">
 	import classNames from 'classnames';
+	import { onMount } from 'svelte';
 	import { apiUrl } from '$lib/api-base';
+	import { playerService } from '$services/player.service';
+	import { playerAdapter } from '$adapters/classes/player.adapter';
 	import TmdbLinkModal from '$components/libraries/TmdbLinkModal.svelte';
 	import MusicBrainzLinkModal from '$components/libraries/MusicBrainzLinkModal.svelte';
+	import MediaCard from '$components/media/MediaCard.svelte';
 	import type { LibraryFile } from '$types/library.type';
+	import type { MediaItem, MediaItemLink, MediaLinkSource, MediaCategory } from '$types/media-card.type';
+	import type { ImageTag, ImagesResponse } from '$types/image-tagger.type';
 	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'tmdb/types';
+	import type { YouTubeOEmbedResponse } from 'youtube/oembed';
+	import type { DisplayMusicBrainzRecording } from 'musicbrainz/types';
 	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'tmdb/transform';
-
-	interface ItemLink {
-		serviceId: string;
-		seasonNumber: number | null;
-		episodeNumber: number | null;
-	}
-
-	interface LibraryItem {
-		id: string;
-		libraryId: string;
-		name: string;
-		extension: string;
-		path: string;
-		categoryId: string | null;
-		createdAt: string;
-		links: Record<string, ItemLink>;
-	}
-
-	interface LinkSource {
-		id: string;
-		service: string;
-		label: string;
-		mediaTypeId: string;
-		categoryId: string | null;
-	}
-
-	interface Category {
-		id: string;
-		mediaTypeId: string;
-		label: string;
-	}
 
 	interface Props {
 		data: {
 			mediaTypes: Array<{ id: string; label: string }>;
-			categories: Category[];
-			linkSources: LinkSource[];
-			itemsByCategory: Record<string, LibraryItem[]>;
-			itemsByType: Record<string, LibraryItem[]>;
+			categories: MediaCategory[];
+			linkSources: MediaLinkSource[];
+			itemsByCategory: Record<string, MediaItem[]>;
+			itemsByType: Record<string, MediaItem[]>;
 		};
 	}
 
-	const ALL = '__all__';
+	const ALL_CATEGORY = '__all__';
+	const ALL_TYPE = '__all_type__';
 
 	let { data }: Props = $props();
 
-	let activeTypeId = $state('');
-	let activeCategoryId = $state(ALL);
-	let linkModalItem: LibraryItem | null = $state(null);
+	let activeTypeId = $state(ALL_TYPE);
+	let activeCategoryId = $state(ALL_CATEGORY);
+	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
 
 	// Track link overrides so we can update without full page reload
-	let linkOverrides: Record<string, Record<string, ItemLink | null>> = $state({});
+	let linkOverrides: Record<string, Record<string, MediaItemLink | null>> = $state({});
 
 	// TMDB metadata state
 	let tmdbMetadata: Record<string, DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails> = $state({});
 	let tmdbLoading: Set<string> = $state(new Set());
 
-	function getItemLinks(item: LibraryItem): Record<string, ItemLink> {
+	// YouTube metadata state
+	let youtubeMetadata: Record<string, YouTubeOEmbedResponse> = $state({});
+	let youtubeLoading: Set<string> = $state(new Set());
+
+	// MusicBrainz metadata state
+	let musicbrainzMetadata: Record<string, DisplayMusicBrainzRecording> = $state({});
+	let musicbrainzLoading: Set<string> = $state(new Set());
+
+	// Merged loading state
+	let metadataLoading = $derived(new Set([...tmdbLoading, ...youtubeLoading, ...musicbrainzLoading]));
+
+	// Image tags state
+	let imageTagsMap: Record<string, ImageTag[]> = $state({});
+
+	onMount(async () => {
+		try {
+			const res = await fetch(apiUrl('/api/images'));
+			if (res.ok) {
+				const data: ImagesResponse = await res.json();
+				const map: Record<string, ImageTag[]> = {};
+				for (const img of data.images) {
+					if (img.tags.length > 0) {
+						map[img.id] = img.tags;
+					}
+				}
+				imageTagsMap = map;
+			}
+		} catch {
+			// Image tags are non-critical, fail silently
+		}
+	});
+
+	function getItemLinks(item: MediaItem): Record<string, MediaItemLink> {
 		const overrides = linkOverrides[item.id];
 		if (!overrides) return item.links;
 		const merged = { ...item.links };
@@ -78,68 +88,64 @@
 		return merged;
 	}
 
-	let activeType = $derived(activeTypeId || data.mediaTypes[0]?.id || '');
+	let isAllType = $derived(activeTypeId === ALL_TYPE);
+
+	let activeType = $derived(activeTypeId === ALL_TYPE ? ALL_TYPE : (activeTypeId || data.mediaTypes[0]?.id || ''));
 
 	let categoriesForType = $derived(
-		data.categories.filter((c) => c.mediaTypeId === activeType)
+		isAllType
+			? data.categories
+			: data.categories.filter((c) => c.mediaTypeId === activeType)
 	);
 
 	let activeCategory = $derived.by(() => {
-		if (activeCategoryId === ALL) return ALL;
+		if (activeCategoryId === ALL_CATEGORY) return ALL_CATEGORY;
 		if (categoriesForType.some((c) => c.id === activeCategoryId)) return activeCategoryId;
-		return ALL;
+		return ALL_CATEGORY;
 	});
 
-	let isAllView = $derived(activeCategory === ALL);
+	let isAllCategoryView = $derived(activeCategory === ALL_CATEGORY);
 
-	let items = $derived(
-		isAllView
-			? data.itemsByType[activeType] ?? []
-			: data.itemsByCategory[activeCategory] ?? []
-	);
+	let items = $derived.by(() => {
+		if (isAllType && isAllCategoryView) {
+			return Object.values(data.itemsByType).flat();
+		}
+		if (isAllType && !isAllCategoryView) {
+			return data.itemsByCategory[activeCategory] ?? [];
+		}
+		if (isAllCategoryView) {
+			return data.itemsByType[activeType] ?? [];
+		}
+		return data.itemsByCategory[activeCategory] ?? [];
+	});
 
-	let categoryLabelMap = $derived(
-		Object.fromEntries(data.categories.map((c) => [c.id, c.label]))
-	);
-
-	let activeLinkSources = $derived.by(() => {
-		const seen = new Set<string>();
-		const sources: LinkSource[] = [];
-
-		for (const ls of data.linkSources) {
-			if (ls.mediaTypeId !== activeType) continue;
-			if (seen.has(ls.service)) continue;
-
-			if (isAllView) {
-				if (ls.categoryId === null) {
-					seen.add(ls.service);
-					sources.push(ls);
+	// Apply link overrides to items for card rendering
+	let itemsWithOverrides = $derived(
+		items.map((item) => {
+			const overrides = linkOverrides[item.id];
+			if (!overrides) return item;
+			const merged = { ...item.links };
+			for (const [service, link] of Object.entries(overrides)) {
+				if (link === null) {
+					delete merged[service];
 				} else {
-					// In "All" view, show sources registered for any category (deduplicated)
-					seen.add(ls.service);
-					sources.push(ls);
-				}
-			} else {
-				if (ls.categoryId === null || ls.categoryId === activeCategory) {
-					seen.add(ls.service);
-					sources.push(ls);
+					merged[service] = link;
 				}
 			}
-		}
-
-		return sources;
-	});
+			return { ...item, links: merged };
+		})
+	);
 
 	function selectType(id: string) {
 		activeTypeId = id;
-		activeCategoryId = ALL;
+		activeCategoryId = ALL_CATEGORY;
 	}
 
 	function selectCategory(id: string) {
 		activeCategoryId = id;
 	}
 
-	function updateItemLinks(itemId: string, service: string, link: ItemLink | null) {
+	function updateItemLinks(itemId: string, service: string, link: MediaItemLink | null) {
 		if (!linkOverrides[itemId]) {
 			linkOverrides[itemId] = {};
 		}
@@ -157,20 +163,24 @@
 		});
 
 		if (res.ok) {
+			const categoryId = type === 'movie' ? 'movies' : 'tv';
+			const needsCategoryUpdate = item.categoryId !== categoryId;
+
+			// Set categoryId before triggering reactive update so cardType routes correctly
+			item.categoryId = categoryId;
+
 			updateItemLinks(item.id, 'tmdb', {
 				serviceId: String(tmdbId),
 				seasonNumber,
 				episodeNumber
 			});
 
-			const categoryId = type === 'movie' ? 'movies' : 'tv';
-			if (item.categoryId !== categoryId) {
-				await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/category`), {
+			if (needsCategoryUpdate) {
+				fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/category`), {
 					method: 'PUT',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ categoryId })
 				});
-				item.categoryId = categoryId;
 			}
 		}
 
@@ -200,7 +210,7 @@
 		linkModalService = null;
 	}
 
-	async function handleUnlink(item: LibraryItem, service: string) {
+	async function handleUnlink(item: MediaItem, service: string) {
 		const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/${service}`), {
 			method: 'DELETE'
 		});
@@ -210,24 +220,34 @@
 			if (service === 'tmdb') {
 				delete tmdbMetadata[item.id];
 			}
+			if (service === 'youtube') {
+				delete youtubeMetadata[item.id];
+			}
+			if (service === 'musicbrainz') {
+				delete musicbrainzMetadata[item.id];
+			}
 		}
 	}
 
-	function itemAsLibraryFile(item: LibraryItem): LibraryFile {
+	function handlePlay(item: MediaItem) {
+		const playableFile = playerAdapter.fromMediaItem(item);
+		playerService.play(playableFile);
+	}
+
+	function itemAsLibraryFile(item: MediaItem): LibraryFile {
 		return {
 			id: item.id,
 			name: item.name,
 			path: item.path,
 			extension: item.extension,
-			mediaType: activeType as LibraryFile['mediaType'],
+			mediaType: item.mediaTypeId as LibraryFile['mediaType'],
 			categoryId: item.categoryId,
 			links: getItemLinks(item)
 		};
 	}
 
-	async function fetchTmdbMetadata(item: LibraryItem) {
-		const links = getItemLinks(item);
-		const tmdbLink = links.tmdb;
+	async function fetchTmdbMetadata(item: MediaItem) {
+		const tmdbLink = item.links.tmdb;
 		if (!tmdbLink || tmdbMetadata[item.id] || tmdbLoading.has(item.id)) return;
 
 		tmdbLoading = new Set([...tmdbLoading, item.id]);
@@ -254,20 +274,59 @@
 		}
 	}
 
+	async function fetchYoutubeMetadata(item: MediaItem) {
+		const youtubeLink = item.links.youtube;
+		if (!youtubeLink || youtubeMetadata[item.id] || youtubeLoading.has(item.id)) return;
+
+		youtubeLoading = new Set([...youtubeLoading, item.id]);
+
+		try {
+			const res = await fetch(apiUrl(`/api/youtube/oembed?videoId=${youtubeLink.serviceId}`));
+			if (res.ok) {
+				youtubeMetadata[item.id] = await res.json();
+			}
+		} catch (e) {
+			console.error('Failed to load YouTube metadata:', e);
+		} finally {
+			const next = new Set(youtubeLoading);
+			next.delete(item.id);
+			youtubeLoading = next;
+		}
+	}
+
+	async function fetchMusicbrainzMetadata(item: MediaItem) {
+		const mbLink = item.links.musicbrainz;
+		if (!mbLink || musicbrainzMetadata[item.id] || musicbrainzLoading.has(item.id)) return;
+
+		musicbrainzLoading = new Set([...musicbrainzLoading, item.id]);
+
+		try {
+			const res = await fetch(apiUrl(`/api/musicbrainz/recording/${mbLink.serviceId}`));
+			if (res.ok) {
+				musicbrainzMetadata[item.id] = await res.json();
+			}
+		} catch (e) {
+			console.error('Failed to load MusicBrainz metadata:', e);
+		} finally {
+			const next = new Set(musicbrainzLoading);
+			next.delete(item.id);
+			musicbrainzLoading = next;
+		}
+	}
+
 	$effect(() => {
-		for (const item of items) {
-			const links = getItemLinks(item);
-			if (links.tmdb) {
+		for (const item of itemsWithOverrides) {
+			if (item.links.tmdb) {
 				fetchTmdbMetadata(item);
+			}
+			if (item.links.youtube) {
+				fetchYoutubeMetadata(item);
+			}
+			if (item.links.musicbrainz) {
+				fetchMusicbrainzMetadata(item);
 			}
 		}
 	});
-
-	function isTmdbMovieDetails(
-		meta: DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails
-	): meta is DisplayTMDBMovieDetails {
-		return 'title' in meta;
-	}
 </script>
 
 <div class="container mx-auto p-4">
@@ -276,8 +335,17 @@
 		<p class="text-sm opacity-70">Browse your media library</p>
 	</div>
 
-	<!-- Tier 1: Media Types -->
+	<!-- Tier 1: All + Media Types -->
 	<div class="mb-3 flex flex-wrap gap-2">
+		<button
+			class={classNames('btn btn-sm', {
+				'btn-primary': isAllType,
+				'btn-ghost': !isAllType
+			})}
+			onclick={() => selectType(ALL_TYPE)}
+		>
+			All
+		</button>
 		{#each data.mediaTypes as type}
 			<button
 				class={classNames('btn btn-sm', {
@@ -296,10 +364,10 @@
 		<div class="mb-6 flex flex-wrap gap-2">
 			<button
 				class={classNames('btn btn-xs', {
-					'btn-secondary': isAllView,
-					'btn-ghost': !isAllView
+					'btn-secondary': isAllCategoryView,
+					'btn-ghost': !isAllCategoryView
 				})}
-				onclick={() => selectCategory(ALL)}
+				onclick={() => selectCategory(ALL_CATEGORY)}
 			>
 				All
 			</button>
@@ -317,174 +385,22 @@
 		</div>
 	{/if}
 
-	<!-- Items table -->
-	{#if items.length > 0}
-		<div class="overflow-x-auto">
-			<table class="table table-zebra w-full">
-				<thead>
-					<tr>
-						<th>Name</th>
-						<th>Extension</th>
-						{#if isAllView}
-							<th>Category</th>
-						{/if}
-						{#each activeLinkSources as source (source.service)}
-							<th>{source.label}</th>
-						{/each}
-						<th>Path</th>
-						<th>Added</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each items as item (item.id)}
-						{@const itemLinks = getItemLinks(item)}
-						<tr>
-							<td class="font-medium">{item.name}</td>
-							<td><span class="badge badge-ghost badge-sm">{item.extension}</span></td>
-							{#if isAllView}
-								<td>
-									<span class="badge badge-outline badge-sm">
-										{item.categoryId ? (categoryLabelMap[item.categoryId] ?? item.categoryId) : 'Uncategorized'}
-									</span>
-								</td>
-							{/if}
-							{#each activeLinkSources as source (source.service)}
-								{@const link = itemLinks[source.service]}
-								<td>
-									{#if link}
-										<span class="badge badge-info badge-sm gap-1">
-											{link.serviceId}
-											<button
-												class="cursor-pointer opacity-60 hover:opacity-100"
-												onclick={() => handleUnlink(item, source.service)}
-												title="Unlink"
-											>&times;</button>
-										</span>
-									{:else}
-										<button
-											class="btn btn-ghost btn-xs"
-											onclick={() => { linkModalItem = item; linkModalService = source.service; }}
-										>
-											Link
-										</button>
-									{/if}
-								</td>
-							{/each}
-							<td class="max-w-xs truncate text-sm opacity-70" title={item.path}>{item.path}</td>
-							<td class="text-sm opacity-70">{new Date(item.createdAt).toLocaleDateString()}</td>
-						</tr>
-						{#if itemLinks.tmdb}
-							{@const colSpan = 4 + activeLinkSources.length + (isAllView ? 1 : 0)}
-							<tr>
-								<td colspan={colSpan} class="bg-base-200 p-0">
-									{#if tmdbLoading.has(item.id)}
-										<div class="flex justify-center py-6">
-											<span class="loading loading-spinner loading-md"></span>
-										</div>
-									{:else if tmdbMetadata[item.id]}
-										{@const meta = tmdbMetadata[item.id]}
-										<div class="flex gap-4 p-4">
-											{#if isTmdbMovieDetails(meta)}
-												{#if meta.posterUrl}
-													<img
-														src={meta.posterUrl}
-														alt={meta.title}
-														class="h-36 w-24 flex-shrink-0 rounded object-cover"
-													/>
-												{/if}
-												<div class="min-w-0 flex-1">
-													<div class="flex flex-wrap items-center gap-2">
-														<h3 class="text-lg font-bold">{meta.title}</h3>
-														<span class="text-sm opacity-70">{meta.releaseYear}</span>
-														{#if meta.runtime}
-															<span class="badge badge-outline badge-sm">{meta.runtime}</span>
-														{/if}
-														{#if meta.voteAverage > 0}
-															<span class="flex items-center gap-1">
-																<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4 text-yellow-500">
-																	<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
-																</svg>
-																<span class="text-sm font-semibold">{meta.voteAverage.toFixed(1)}</span>
-															</span>
-														{/if}
-													</div>
-													{#if meta.genres.length > 0}
-														<div class="mt-1 flex flex-wrap gap-1">
-															{#each meta.genres as genre}
-																<span class="badge badge-primary badge-outline badge-xs">{genre}</span>
-															{/each}
-														</div>
-													{/if}
-													{#if meta.director}
-														<div class="mt-2 text-sm">
-															<span class="font-semibold">Director:</span> {meta.director}
-														</div>
-													{/if}
-													{#if meta.overview}
-														<p class="mt-2 line-clamp-3 text-sm opacity-80">{meta.overview}</p>
-													{/if}
-												</div>
-											{:else}
-												{#if meta.posterUrl}
-													<img
-														src={meta.posterUrl}
-														alt={meta.name}
-														class="h-36 w-24 flex-shrink-0 rounded object-cover"
-													/>
-												{/if}
-												<div class="min-w-0 flex-1">
-													<div class="flex flex-wrap items-center gap-2">
-														<h3 class="text-lg font-bold">{meta.name}</h3>
-														<span class="text-sm opacity-70">
-															{meta.firstAirYear}{meta.lastAirYear ? ` - ${meta.lastAirYear}` : ''}
-														</span>
-														{#if meta.status}
-															<span class="badge badge-outline badge-sm">{meta.status}</span>
-														{/if}
-														{#if meta.voteAverage > 0}
-															<span class="flex items-center gap-1">
-																<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4 text-yellow-500">
-																	<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
-																</svg>
-																<span class="text-sm font-semibold">{meta.voteAverage.toFixed(1)}</span>
-															</span>
-														{/if}
-													</div>
-													{#if meta.genres.length > 0}
-														<div class="mt-1 flex flex-wrap gap-1">
-															{#each meta.genres as genre}
-																<span class="badge badge-primary badge-outline badge-xs">{genre}</span>
-															{/each}
-														</div>
-													{/if}
-													{#if meta.numberOfSeasons || meta.numberOfEpisodes}
-														<div class="mt-2 flex gap-3 text-sm opacity-70">
-															{#if meta.numberOfSeasons}
-																<span>{meta.numberOfSeasons} season{meta.numberOfSeasons !== 1 ? 's' : ''}</span>
-															{/if}
-															{#if meta.numberOfEpisodes}
-																<span>{meta.numberOfEpisodes} episode{meta.numberOfEpisodes !== 1 ? 's' : ''}</span>
-															{/if}
-														</div>
-													{/if}
-													{#if meta.createdBy.length > 0}
-														<div class="mt-2 text-sm">
-															<span class="font-semibold">Created by:</span> {meta.createdBy.join(', ')}
-														</div>
-													{/if}
-													{#if meta.overview}
-														<p class="mt-2 line-clamp-3 text-sm opacity-80">{meta.overview}</p>
-													{/if}
-												</div>
-											{/if}
-										</div>
-									{/if}
-								</td>
-							</tr>
-						{/if}
-					{/each}
-				</tbody>
-			</table>
+	<!-- Items grid -->
+	{#if itemsWithOverrides.length > 0}
+		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+			{#each itemsWithOverrides as item (item.id)}
+				<MediaCard
+					{item}
+					tmdbMetadata={tmdbMetadata[item.id] ?? null}
+					youtubeMetadata={youtubeMetadata[item.id] ?? null}
+					musicbrainzMetadata={musicbrainzMetadata[item.id] ?? null}
+					metadataLoading={metadataLoading.has(item.id)}
+					imageTags={imageTagsMap[item.id] ?? []}
+					onlink={(i, service) => { linkModalItem = i; linkModalService = service; }}
+					onunlink={(i, service) => handleUnlink(i, service)}
+					onplay={(i) => handlePlay(i)}
+				/>
+			{/each}
 		</div>
 	{:else}
 		<div class="rounded-lg bg-base-200 p-8 text-center">

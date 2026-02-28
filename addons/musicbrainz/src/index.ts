@@ -2,6 +2,7 @@ export {
 	searchArtists,
 	searchReleaseGroups,
 	searchRecordings,
+	fetchRecording,
 	fetchArtist,
 	fetchReleaseGroup,
 	fetchReleasesForReleaseGroup,

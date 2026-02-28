@@ -12,6 +12,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	// Use dev signaling URL or deployed PartyKit URL
 	const signalingUrl = locals.signalingDevUrl || locals.signalingPartyUrl;
+	console.log(`[player] Signaling URL: ${signalingUrl || '(none)'} (dev: ${locals.signalingDevUrl || '(none)'}, deployed: ${locals.signalingPartyUrl || '(none)'})`);
 	if (!signalingUrl) {
 		return json({ error: 'No signaling server available' }, { status: 503 });
 	}
@@ -32,6 +33,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			signaling_url: signalingUrl
 		});
 	} catch (e) {
+		console.error('[player] Session creation failed:', e);
 		const message = e instanceof Error ? e.message : 'Unknown error';
 		return json({ error: message }, { status: 500 });
 	}

@@ -111,10 +111,10 @@
 				<track kind="captions" />
 			</video>
 		{:else}
-			<div class="flex h-32 items-center justify-center rounded-lg bg-base-300">
+			<div class="flex h-20 items-center justify-center rounded-lg bg-base-300">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
-					class="h-16 w-16 opacity-30"
+					class="h-10 w-10 opacity-30"
 					fill="none"
 					viewBox="0 0 24 24"
 					stroke="currentColor"
@@ -136,19 +136,19 @@
 			>
 				{#if connectionState === 'connecting' || connectionState === 'signaling'}
 					<div class="text-center">
-						<span class="loading loading-spinner loading-lg"></span>
-						<p class="mt-2 text-sm">{statusLabel}</p>
+						<span class="loading loading-spinner loading-sm"></span>
+						<p class="mt-1 text-xs">{statusLabel}</p>
 					</div>
 				{:else if connectionState === 'error'}
 					<div class="text-center text-error">
-						<p class="font-medium">Connection failed</p>
-						<button class="btn btn-sm btn-error mt-2" on:click={handleStop}>
+						<p class="text-xs font-medium">Connection failed</p>
+						<button class="btn btn-xs btn-error mt-1" on:click={handleStop}>
 							Close
 						</button>
 					</div>
 				{:else if connectionState === 'closed'}
 					<div class="text-center">
-						<p class="opacity-70">Stream ended</p>
+						<p class="text-xs opacity-70">Stream ended</p>
 					</div>
 				{/if}
 			</div>
@@ -156,7 +156,7 @@
 	</div>
 
 	{#if connectionState === 'streaming'}
-		<div class="mt-2">
+		<div class="mt-1">
 			<PlayerControls
 				mediaElement={activeMediaElement}
 				{isVideo}

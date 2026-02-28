@@ -21,25 +21,7 @@
 	"navigation": {
 		"home": "QQQQQ",
 		"about": "QQQQQ",
-		"contact": "QQQQQ",
-		"movies": "QQQQQ"
-	},
-	"movies": {
-		"title": "QQQQQ",
-		"subtitle": "QQQQQ",
-		"searchPlaceholder": "QQQQQ",
-		"nowPlaying": "QQQQQ",
-		"popular": "QQQQQ",
-		"upcoming": "QQQQQ",
-		"topRated": "QQQQQ",
-		"noResults": "QQQQQ",
-		"backToMovies": "QQQQQ",
-		"director": "QQQQQ",
-		"overview": "QQQQQ",
-		"budget": "QQQQQ",
-		"revenue": "QQQQQ",
-		"viewOnImdb": "QQQQQ",
-		"cast": "QQQQQ"
+		"contact": "QQQQQ"
 	},
 	"errors": {
 		"generic": "QQQQQ",

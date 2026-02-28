@@ -3,15 +3,15 @@
 	import '$services/i18n';
 	import { onMount, onDestroy } from 'svelte';
 	import { playerService } from '$services/player.service';
+	import { identityService } from '$services/identity.service';
 	import Navbar from '$components/core/Navbar.svelte';
-	import PlayerModal from '$components/player/PlayerModal.svelte';
+	import IdentitySidebar from '$components/core/IdentitySidebar.svelte';
 
 	let { children } = $props();
 
-	const playerState = playerService.state;
-
 	onMount(async () => {
 		await playerService.initialize();
+		await identityService.initialize();
 	});
 
 	onDestroy(() => {
@@ -21,17 +21,10 @@
 
 <div class="flex min-h-screen flex-col">
 	<Navbar />
-	<main class="flex-1">
-		{@render children?.()}
-	</main>
+	<div class="flex flex-1">
+		<main class="min-w-0 flex-1">
+			{@render children?.()}
+		</main>
+		<IdentitySidebar />
+	</div>
 </div>
-
-{#if $playerState.currentFile}
-	<PlayerModal
-		file={$playerState.currentFile}
-		connectionState={$playerState.connectionState}
-		positionSecs={$playerState.positionSecs}
-		durationSecs={$playerState.durationSecs}
-		onclose={() => playerService.stop()}
-	/>
-{/if}

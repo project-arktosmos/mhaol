@@ -5,9 +5,10 @@
 	interface Props {
 		tag: string;
 		score: number;
+		readonly?: boolean;
 	}
 
-	let { tag, score }: Props = $props();
+	let { tag, score, readonly: isReadonly = false }: Props = $props();
 
 	const dispatch = createEventDispatcher<{ remove: { tag: string } }>();
 
@@ -21,11 +22,13 @@
 <span class={classNames('badge badge-sm gap-1', badgeClass)} title={`${tag}: ${percentage}%`}>
 	{tag}
 	<span class="opacity-60">{percentage}%</span>
-	<button
-		class="ml-0.5 opacity-40 hover:opacity-100 cursor-pointer"
-		onclick={() => dispatch('remove', { tag })}
-		title="Remove tag"
-	>
-		&times;
-	</button>
+	{#if !isReadonly}
+		<button
+			class="ml-0.5 opacity-40 hover:opacity-100 cursor-pointer"
+			onclick={() => dispatch('remove', { tag })}
+			title="Remove tag"
+		>
+			&times;
+		</button>
+	{/if}
 </span>

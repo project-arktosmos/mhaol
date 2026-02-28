@@ -1,4 +1,5 @@
 import { AdapterClass } from '$adapters/classes/adapter.class';
+import type { MediaItem } from '$types/media-card.type';
 import type { PlayableFile } from '$types/player.type';
 
 export class PlayerAdapter extends AdapterClass {
@@ -29,6 +30,22 @@ export class PlayerAdapter extends AdapterClass {
 		if (file.videoFormat) return file.videoFormat.toUpperCase();
 		if (file.format) return file.format.toUpperCase();
 		return 'Unknown';
+	}
+
+	fromMediaItem(item: MediaItem): PlayableFile {
+		return {
+			id: item.id,
+			type: 'library',
+			name: item.name,
+			outputPath: item.path,
+			mode: item.mediaTypeId === 'audio' ? 'audio' : 'video',
+			format: item.extension,
+			videoFormat: null,
+			thumbnailUrl: null,
+			durationSeconds: null,
+			size: 0,
+			completedAt: item.createdAt
+		};
 	}
 
 	getSourceBadgeClass(type: PlayableFile['type']): string {

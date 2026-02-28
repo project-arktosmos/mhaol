@@ -9,8 +9,9 @@
 	"processes": [
 		{
 			"id": "signaling-server",
-			"binary": "npx",
-			"args": ["partykit", "dev", "--port", "1999"],
+			"binary": "../signaling/node_modules/.bin/partykit",
+			"args": ["dev", "--port", "1999"],
+			"cwd": "../signaling",
 			"port": 1999,
 			"portEnv": "SIGNALING_PORT",
 			"env": {},

@@ -61,10 +61,10 @@
 	});
 </script>
 
-<div class={classNames('flex flex-col gap-1', { 'pointer-events-none opacity-50': disabled })}>
+<div class={classNames('flex flex-col gap-0.5', { 'pointer-events-none opacity-50': disabled })}>
 	<div
 		bind:this={trackElement}
-		class="group relative h-2 cursor-pointer rounded-full bg-base-300"
+		class="group relative h-1.5 cursor-pointer rounded-full bg-base-300"
 		role="slider"
 		aria-label="Seek"
 		aria-valuemin={0}
@@ -80,7 +80,7 @@
 
 		<div
 			class={classNames(
-				'absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-md',
+				'absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-md',
 				{
 					'scale-100': isDragging,
 					'scale-0 group-hover:scale-100': !isDragging
@@ -90,7 +90,7 @@
 		></div>
 	</div>
 
-	<div class="flex justify-between text-xs opacity-60">
+	<div class="flex justify-between font-mono text-[10px] leading-tight opacity-60">
 		<span>{playerAdapter.formatDuration(displayPosition)}</span>
 		<span>{playerAdapter.formatDuration(durationSecs)}</span>
 	</div>

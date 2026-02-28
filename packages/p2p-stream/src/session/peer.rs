@@ -47,12 +47,41 @@ impl PeerSession {
 
         // Create data channel before connecting signals so it is included in
         // the SDP offer that webrtcbin generates on negotiation-needed.
-        let data_channel = stream_pipeline
-            .webrtcbin()
-            .emit_by_name::<glib::Object>(
+        //
+        // GStreamer 1.28 requires the pipeline to be in at least READY state
+        // for create-data-channel to succeed (returns null in NULL state).
+        // We transition to READY here; PeerSession::start() will move to PLAYING.
+        stream_pipeline
+            .pipeline()
+            .set_state(gst::State::Ready)
+            .map_err(|e| Error::StateChange(format!("Failed to set READY: {e}")))?;
+
+        // GStreamer 1.28 changed the return type of "create-data-channel"
+        // from GObject to GstWebRTCDataChannel (a GstObject subclass).
+        // We use emit_by_name_with_values and extract via Value::get which
+        // handles GType hierarchy correctly (GstWebRTCDataChannel → GstObject → GObject).
+        let data_channel: glib::Object = {
+            let webrtcbin = stream_pipeline.webrtcbin();
+            let ret: Option<glib::Value> = webrtcbin.emit_by_name_with_values(
                 "create-data-channel",
-                &[&"media-control", &None::<gst::Structure>],
+                &["media-control".to_value(), None::<gst::Structure>.to_value()],
             );
+            let ret = ret.expect("create-data-channel must return a value");
+            ret.get::<glib::Object>().unwrap_or_else(|e| {
+                // Value::get failed (strict GType mismatch) — fall back to
+                // raw pointer extraction which is less strict about subtypes.
+                warn!("Value::get::<Object> failed ({e}), using raw pointer extraction");
+                unsafe {
+                    use glib::translate::FromGlibPtrNone;
+                    let ptr = glib::gobject_ffi::g_value_get_object(
+                        ret.as_ptr() as *const _,
+                    ) as *mut glib::gobject_ffi::GObject;
+                    assert!(!ptr.is_null(), "create-data-channel returned null");
+                    glib::Object::from_glib_none(ptr)
+                }
+            })
+        };
+        debug!("Data channel created, GType: {}", data_channel.type_().name());
 
         let session = Self {
             id,
@@ -213,61 +242,73 @@ impl PeerSession {
         }
     }
 
-    /// Send a JSON message through the data channel.
-    fn send_data_channel_message(dc: &glib::Object, msg: &serde_json::Value) {
-        let json = msg.to_string();
-        dc.emit_by_name::<()>("send-string", &[&json]);
-    }
-
     // ===== Position ticker (sends via data channel) =====
 
     fn start_position_ticker(&self) {
         let pipeline = self.stream_pipeline.pipeline().clone();
-        let dc = self.data_channel.clone();
         let dc_open = self.data_channel_open.clone();
         let shutdown = self.shutdown.clone();
         let session_id = self.id.clone();
 
-        // Run the ticker on the GLib main context so we can directly access
-        // the data channel (glib::Object is not Send).
-        let mut sent_media_info = false;
+        // glib::Object is !Send, so we pass the raw pointer as a usize to
+        // cross the thread boundary.
+        // Safety: GstWebRTCDataChannel is a ref-counted GObject. The
+        // send-string action signal is thread-safe (GStreamer emits data
+        // channel signals from streaming threads already).  We add a ref
+        // here and release it when the thread exits.
+        let dc_addr = self.data_channel.as_ptr() as usize;
+        unsafe {
+            glib::gobject_ffi::g_object_ref(dc_addr as *mut _);
+        }
 
-        glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
-            if shutdown.load(Ordering::Relaxed) {
-                debug!("Session {session_id}: position ticker stopped");
-                return glib::ControlFlow::Break;
-            }
+        std::thread::Builder::new()
+            .name("position-ticker".into())
+            .spawn(move || {
+                let mut sent_media_info = false;
 
-            if !dc_open.load(Ordering::Relaxed) {
-                return glib::ControlFlow::Continue;
-            }
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
 
-            let duration_secs = query_pipeline_duration(&pipeline);
+                    if shutdown.load(Ordering::Relaxed) {
+                        debug!("Session {session_id}: position ticker stopped");
+                        break;
+                    }
 
-            if !sent_media_info {
-                if duration_secs.is_some() {
+                    if !dc_open.load(Ordering::Relaxed) {
+                        continue;
+                    }
+
+                    let duration_secs = query_pipeline_duration(&pipeline);
+
+                    if !sent_media_info {
+                        if duration_secs.is_some() {
+                            let msg = serde_json::json!({
+                                "type": "MediaInfo",
+                                "payload": { "duration_secs": duration_secs }
+                            });
+                            send_string_on_dc(dc_addr, &msg.to_string());
+                            sent_media_info = true;
+                        }
+                    }
+
+                    let position_secs = query_pipeline_position(&pipeline).unwrap_or(0.0);
+
                     let msg = serde_json::json!({
-                        "type": "MediaInfo",
-                        "payload": { "duration_secs": duration_secs }
+                        "type": "PositionUpdate",
+                        "payload": {
+                            "position_secs": position_secs,
+                            "duration_secs": duration_secs
+                        }
                     });
-                    Self::send_data_channel_message(&dc, &msg);
-                    sent_media_info = true;
+                    send_string_on_dc(dc_addr, &msg.to_string());
                 }
-            }
 
-            let position_secs = query_pipeline_position(&pipeline).unwrap_or(0.0);
-
-            let msg = serde_json::json!({
-                "type": "PositionUpdate",
-                "payload": {
-                    "position_secs": position_secs,
-                    "duration_secs": duration_secs
+                // Release the ref we added above
+                unsafe {
+                    glib::gobject_ffi::g_object_unref(dc_addr as *mut _);
                 }
-            });
-            Self::send_data_channel_message(&dc, &msg);
-
-            glib::ControlFlow::Continue
-        });
+            })
+            .expect("Failed to spawn position ticker thread");
     }
 
     // ===== WebRTC signaling (SDP/ICE only) =====
@@ -302,6 +343,7 @@ impl PeerSession {
                 let signaling_tx = signaling_tx.clone();
                 let state = state.clone();
                 let webrtcbin_inner = webrtcbin_clone.clone();
+                let session_id = session_id.clone();
 
                 let promise = gst::Promise::with_change_func(move |reply| {
                     let reply = match reply {
@@ -324,6 +366,12 @@ impl PeerSession {
                     if !sdp_text.contains("m=") {
                         info!("Skipping SDP offer with no media descriptions");
                         return;
+                    }
+
+                    if sdp_text.contains("m=application") {
+                        debug!("Session {session_id}: SDP offer includes data channel");
+                    } else {
+                        warn!("Session {session_id}: SDP offer MISSING data channel!");
                     }
 
                     webrtcbin_inner.emit_by_name::<()>(
@@ -413,6 +461,20 @@ impl PeerSession {
             .emit_by_name::<()>("create-answer", &[&None::<gst::Structure>, &promise]);
 
         Ok(())
+    }
+}
+
+/// Emit the "send-string" action signal on a GstWebRTCDataChannel.
+///
+/// `ptr_addr` is the GObject pointer cast to usize (to cross thread
+/// boundaries — the caller must ensure the pointee is ref-counted and
+/// alive).
+fn send_string_on_dc(ptr_addr: usize, json: &str) {
+    unsafe {
+        let ptr = ptr_addr as *mut glib::gobject_ffi::GObject;
+        let obj: glib::Object = glib::translate::from_glib_none(ptr);
+        obj.emit_by_name::<()>("send-string", &[&json]);
+        std::mem::forget(obj); // Don't unref — we don't own this reference
     }
 }
 

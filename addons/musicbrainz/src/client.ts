@@ -79,6 +79,12 @@ export async function searchRecordings(
 
 // Lookup functions
 
+export async function fetchRecording(id: string): Promise<MusicBrainzRecording | null> {
+	return musicbrainzFetch<MusicBrainzRecording>(`/recording/${id}`, {
+		inc: 'artist-credits+releases+release-groups'
+	});
+}
+
 export async function fetchArtist(id: string): Promise<MusicBrainzArtist | null> {
 	return musicbrainzFetch<MusicBrainzArtist>(`/artist/${id}`, {
 		inc: 'tags+release-groups'

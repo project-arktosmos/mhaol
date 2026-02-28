@@ -37,6 +37,7 @@ export interface PluginProcessManifest {
 	binary: string;
 	binaryEnv?: string;
 	args?: string[];
+	cwd?: string;
 	port: number;
 	portEnv?: string;
 	env?: Record<string, string | PluginEnvResolver>;

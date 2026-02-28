@@ -101,16 +101,20 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	async play(file: PlayableFile): Promise<void> {
 		if (!browser) return;
 
-		const currentState = get(this.state);
-		if (!currentState.streamServerAvailable) {
+		const { streamServerAvailable } = get(this.state);
+
+		await this.stop();
+
+		if (!streamServerAvailable) {
+			console.error('[Player] Stream server not available');
 			this.state.update((s) => ({
 				...s,
+				currentFile: file,
+				connectionState: 'error',
 				error: 'Streaming server is not available'
 			}));
 			return;
 		}
-
-		await this.stop();
 
 		this.state.update((s) => ({
 			...s,
@@ -138,6 +142,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				})
 			});
 
+			console.log('[Player] Session created:', session.session_id, 'signaling:', session.signaling_url, 'room:', session.room_id);
+
 			this.state.update((s) => ({
 				...s,
 				sessionId: session.session_id,
@@ -146,6 +152,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 			await this.connectToSignalingRoom(session.signaling_url, session.room_id);
 		} catch (error) {
+			console.error('[Player] Playback error:', error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
 				...s,
@@ -172,7 +179,12 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		const params = new URLSearchParams({ address, signature, timestamp });
 		const fullUrl = `${wsUrl}?${params.toString()}`;
 
+		console.log('[Player] Connecting to signaling:', fullUrl);
 		this.ws = new WebSocket(fullUrl);
+
+		this.ws.onopen = () => {
+			console.log('[Player] Signaling WebSocket connected');
+		};
 
 		this.ws.onmessage = (event) => {
 			try {
@@ -183,7 +195,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			}
 		};
 
-		this.ws.onerror = () => {
+		this.ws.onerror = (event) => {
+			console.error('[Player] Signaling WebSocket error:', event);
 			this.state.update((s) => ({
 				...s,
 				connectionState: 'error',
@@ -191,7 +204,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			}));
 		};
 
-		this.ws.onclose = () => {
+		this.ws.onclose = (event) => {
+			console.log('[Player] Signaling WebSocket closed:', event.code, event.reason);
 			const current = get(this.state);
 			if (current.connectionState === 'streaming') {
 				this.state.update((s) => ({ ...s, connectionState: 'closed' }));
@@ -201,6 +215,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	private handlePartyKitMessage(msg: Record<string, unknown>): void {
 		const type = msg.type as string;
+		console.log('[Player] Signaling message:', type);
 
 		switch (type) {
 			case 'connected':
@@ -309,6 +324,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		});
 
 		this.pc.ontrack = () => {
+			console.log('[Player] Track received, streaming');
 			this.state.update((s) => ({ ...s, connectionState: 'streaming' }));
 		};
 
@@ -324,6 +340,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		};
 
 		this.pc.oniceconnectionstatechange = () => {
+			console.log('[Player] ICE state:', this.pc?.iceConnectionState);
 			if (
 				this.pc?.iceConnectionState === 'disconnected' ||
 				this.pc?.iceConnectionState === 'failed'
@@ -338,6 +355,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 		// Listen for the data channel created by the Rust worker
 		this.pc.ondatachannel = (event) => {
+			console.log('[Player] Data channel received:', event.channel.label, 'state:', event.channel.readyState);
 			if (event.channel.label === 'media-control') {
 				this.dataChannel = event.channel;
 				this.setupDataChannel();
@@ -347,6 +365,18 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	private setupDataChannel(): void {
 		if (!this.dataChannel) return;
+
+		this.dataChannel.onopen = () => {
+			console.log('[Player] Data channel open');
+		};
+
+		this.dataChannel.onclose = () => {
+			console.log('[Player] Data channel closed');
+		};
+
+		this.dataChannel.onerror = (event) => {
+			console.error('[Player] Data channel error:', event);
+		};
 
 		this.dataChannel.onmessage = (event) => {
 			try {
@@ -358,8 +388,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				} else if (type === 'PositionUpdate') {
 					this.handlePositionUpdate(msg.payload as PositionPayload);
 				}
-			} catch {
-				// Ignore malformed data channel messages
+			} catch (e) {
+				console.warn('[Player] Data channel message parse error:', e);
 			}
 		};
 	}
