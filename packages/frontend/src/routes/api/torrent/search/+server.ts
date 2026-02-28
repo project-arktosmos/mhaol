@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { TorrentCategory } from 'torrent-search/types';
+import type { TorrentCategory } from 'torrent-search-thepiratebay/types';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
 	const query = url.searchParams.get('q');

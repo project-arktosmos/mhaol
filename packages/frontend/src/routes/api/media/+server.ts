@@ -51,6 +51,25 @@ export const GET: RequestHandler = async ({ locals }) => {
 		categoryId: ls.category_id
 	}));
 
+	// Auto-link completed YouTube downloads to library items
+	const completedDownloads = locals.youtubeDownloadRepo.getByState('completed');
+	for (const dl of completedDownloads) {
+		if (!dl.output_path) continue;
+		const itemId = locals.libraryItemRepo.existsByPath(dl.output_path);
+		if (!itemId) continue;
+		const existing = locals.libraryItemLinkRepo.getByItemAndService(itemId, 'youtube');
+		if (!existing) {
+			locals.libraryItemLinkRepo.upsert({
+				id: crypto.randomUUID(),
+				library_item_id: itemId,
+				service: 'youtube',
+				service_id: dl.video_id,
+				season_number: null,
+				episode_number: null
+			});
+		}
+	}
+
 	function mapRows(rows: LibraryItemRow[]) {
 		return rows.map((r) => {
 			const linkRows = locals.libraryItemLinkRepo.getByItem(r.id);

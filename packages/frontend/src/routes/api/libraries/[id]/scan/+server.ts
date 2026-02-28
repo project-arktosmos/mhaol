@@ -109,6 +109,34 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
 	// Return the freshly inserted items
 	const items = locals.libraryItemRepo.getByLibrary(params.id);
+
+	// Auto-link YouTube downloads to library items
+	const completedDownloads = locals.youtubeDownloadRepo.getByState('completed');
+	if (completedDownloads.length > 0) {
+		const outputPathMap = new Map(
+			completedDownloads
+				.filter((d) => d.output_path)
+				.map((d) => [d.output_path!, d.video_id])
+		);
+
+		for (const item of items) {
+			if (outputPathMap.has(item.path)) {
+				const videoId = outputPathMap.get(item.path)!;
+				const existing = locals.libraryItemLinkRepo.getByItemAndService(item.id, 'youtube');
+				if (!existing) {
+					locals.libraryItemLinkRepo.upsert({
+						id: crypto.randomUUID(),
+						library_item_id: item.id,
+						service: 'youtube',
+						service_id: videoId,
+						season_number: null,
+						episode_number: null
+					});
+				}
+			}
+		}
+	}
+
 	const files: LibraryFile[] = items.map((item) => {
 		const linkRows = locals.libraryItemLinkRepo.getByItem(item.id);
 		const links: Record<string, LibraryFileLink> = {};

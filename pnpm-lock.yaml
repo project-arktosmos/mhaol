@@ -8,17 +8,77 @@ importers:
 
   .: {}
 
+  addons/common:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.19.11
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.6
+        version: 4.0.18(@types/node@22.19.11)(@vitest/ui@4.0.18)(happy-dom@20.7.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(tsx@4.21.0)
+
+  addons/musicbrainz:
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.12
+        version: 7.6.13
+      better-sqlite3:
+        specifier: ^11.7.0
+        version: 11.10.0
+      common:
+        specifier: workspace:*
+        version: link:../common
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.6
+        version: 4.0.18(@types/node@22.19.11)(@vitest/ui@4.0.18)(happy-dom@20.7.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(tsx@4.21.0)
+
   addons/tmdb:
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.12
         version: 7.6.13
-      '@types/node':
-        specifier: ^22.15.3
-        version: 22.19.11
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0
+      common:
+        specifier: workspace:*
+        version: link:../common
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.6
+        version: 4.0.18(@types/node@22.19.11)(@vitest/ui@4.0.18)(happy-dom@20.7.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(tsx@4.21.0)
+
+  addons/torrent-search-thepiratebay:
+    devDependencies:
+      common:
+        specifier: workspace:*
+        version: link:../common
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.6
+        version: 4.0.18(@types/node@22.19.11)(@vitest/ui@4.0.18)(happy-dom@20.7.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(tsx@4.21.0)
+
+  addons/youtube:
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.12
+        version: 7.6.13
+      better-sqlite3:
+        specifier: ^11.7.0
+        version: 11.10.0
+      common:
+        specifier: workspace:*
+        version: link:../common
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -71,6 +131,9 @@ importers:
       image-tagger:
         specifier: workspace:*
         version: link:../image-tagger
+      musicbrainz:
+        specifier: workspace:*
+        version: link:../../addons/musicbrainz
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
@@ -83,15 +146,18 @@ importers:
       torrent:
         specifier: workspace:*
         version: link:../torrent
-      torrent-search:
+      torrent-search-thepiratebay:
         specifier: workspace:*
-        version: link:../torrent-search
+        version: link:../../addons/torrent-search-thepiratebay
       tsx:
         specifier: ^4.19.4
         version: 4.21.0
       viem:
         specifier: ^2.46.3
         version: 2.46.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)
+      youtube:
+        specifier: workspace:*
+        version: link:../../addons/youtube
     devDependencies:
       '@playwright/test':
         specifier: ^1.58.2
@@ -210,18 +276,6 @@ importers:
       '@types/webtorrent':
         specifier: ^0.110.1
         version: 0.110.1
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.6
-        version: 4.0.18(@types/node@22.19.11)(@vitest/ui@4.0.18)(happy-dom@20.7.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(tsx@4.21.0)
-
-  packages/torrent-search:
-    devDependencies:
-      '@types/node':
-        specifier: ^22.15.3
-        version: 22.19.11
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

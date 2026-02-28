@@ -22,8 +22,7 @@
 		"home": "QQQQQ",
 		"about": "QQQQQ",
 		"contact": "QQQQQ",
-		"movies": "QQQQQ",
-		"tv": "QQQQQ"
+		"movies": "QQQQQ"
 	},
 	"movies": {
 		"title": "QQQQQ",
@@ -41,23 +40,6 @@
 		"revenue": "QQQQQ",
 		"viewOnImdb": "QQQQQ",
 		"cast": "QQQQQ"
-	},
-	"tv": {
-		"title": "QQQQQ",
-		"subtitle": "QQQQQ",
-		"searchPlaceholder": "QQQQQ",
-		"onTheAir": "QQQQQ",
-		"popular": "QQQQQ",
-		"airingToday": "QQQQQ",
-		"topRated": "QQQQQ",
-		"noResults": "QQQQQ",
-		"backToTvShows": "QQQQQ",
-		"networks": "QQQQQ",
-		"createdBy": "QQQQQ",
-		"overview": "QQQQQ",
-		"cast": "QQQQQ",
-		"seasons": "QQQQQ",
-		"failedToLoadEpisodes": "QQQQQ"
 	},
 	"errors": {
 		"generic": "QQQQQ",

@@ -4,9 +4,9 @@
 	import type {
 		DisplayMusicBrainzArtistDetails,
 		DisplayMusicBrainzRelease
-	} from '$types/musicbrainz.type';
-	import { musicBrainzService } from '$services/musicbrainz.service';
-	import { musicBrainzAdapter } from '$adapters/classes/musicbrainz.adapter';
+	} from 'musicbrainz/types';
+	import { fetchArtist, fetchReleasesForReleaseGroup, fetchArtistImage } from 'musicbrainz';
+	import { artistDetailsToDisplay, releaseToDisplay } from 'musicbrainz/transform';
 
 	let artist = $state<DisplayMusicBrainzArtistDetails | null>(null);
 	let artistImageUrl = $state<string | null>(null);
@@ -46,11 +46,11 @@
 
 		try {
 			const response =
-				await musicBrainzService.fetchReleasesForReleaseGroup(releaseGroupId);
+				await fetchReleasesForReleaseGroup(releaseGroupId);
 			if (response && response.releases && response.releases.length > 0) {
 				releaseDetails = {
 					...releaseDetails,
-					[releaseGroupId]: musicBrainzAdapter.releaseToDisplay(response.releases[0])
+					[releaseGroupId]: releaseToDisplay(response.releases[0])
 				};
 			}
 		} catch {
@@ -71,10 +71,10 @@
 		}
 
 		try {
-			const data = await musicBrainzService.fetchArtist(id);
+			const data = await fetchArtist(id);
 			if (data) {
-				artist = musicBrainzAdapter.artistDetailsToDisplay(data);
-				musicBrainzService.fetchArtistImage(id).then((url) => {
+				artist = artistDetailsToDisplay(data);
+				fetchArtistImage(id).then((url) => {
 					artistImageUrl = url;
 				});
 			} else {

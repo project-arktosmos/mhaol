@@ -203,6 +203,18 @@ export class PluginConnector {
 
 			const scheduledTasks = (companion?.scheduledTasks ?? []).map((t) => t.id);
 
+			const linkSources = companion?.linkSources ?? [];
+
+			const schemaTables = manifest.schema?.sql
+				? [...manifest.schema.sql.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([^)]+)\)/gi)].map(m => ({
+					name: m[1],
+					columns: m[2]
+						.split(',')
+						.map(c => c.trim().split(/\s+/)[0])
+						.filter(c => c && !c.toUpperCase().startsWith('PRIMARY') && !c.toUpperCase().startsWith('FOREIGN') && !c.toUpperCase().startsWith('UNIQUE') && !c.toUpperCase().startsWith('CHECK') && !c.toUpperCase().startsWith('CONSTRAINT'))
+				}))
+				: [];
+
 			return {
 				name: manifest.name,
 				version: manifest.version,
@@ -212,7 +224,8 @@ export class PluginConnector {
 				processes,
 				settings,
 				scheduledTasks,
-				hasSchema: !!manifest.schema?.sql
+				schemaTables,
+				linkSources
 			};
 		});
 	}

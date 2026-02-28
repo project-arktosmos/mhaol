@@ -9,12 +9,13 @@
 		onunlinkclick: (file: LibraryFile) => void;
 		onyoutubelink: (file: LibraryFile, youtubeId: string) => void;
 		onyoutubeunlink: (file: LibraryFile) => void;
+		onyoutubepreview: (file: LibraryFile) => void;
 		onmusicbrainzlinkclick: (file: LibraryFile) => void;
 		onmusicbrainzunlink: (file: LibraryFile) => void;
 		onedittype: (file: LibraryFile) => void;
 	}
 
-	let { file, onlinkclick, onunlinkclick, onyoutubelink, onyoutubeunlink, onmusicbrainzlinkclick, onmusicbrainzunlink, onedittype }: Props = $props();
+	let { file, onlinkclick, onunlinkclick, onyoutubelink, onyoutubeunlink, onyoutubepreview, onmusicbrainzlinkclick, onmusicbrainzunlink, onedittype }: Props = $props();
 
 	let tmdbLink = $derived(file.links.tmdb ?? null);
 	let tmdbLabel = $derived.by(() => {
@@ -98,31 +99,35 @@
 		<span class="uppercase opacity-60">{file.extension}</span>
 	</td>
 	<td>
-		{#if tmdbLink}
-			<div class="flex items-center gap-1">
-				<span class="badge badge-xs badge-info" title={tmdbLabel}>{tmdbLink.serviceId}</span>
+		{#if file.mediaType === 'video'}
+			{#if tmdbLink}
+				<div class="flex items-center gap-1">
+					<span class="badge badge-xs badge-info" title={tmdbLabel}>{tmdbLink.serviceId}</span>
+					<button
+						class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100 hover:text-error"
+						title="Unlink TMDB"
+						onclick={() => onunlinkclick(file)}
+					>
+						&times;
+					</button>
+				</div>
+			{:else}
 				<button
-					class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100 hover:text-error"
-					title="Unlink TMDB"
-					onclick={() => onunlinkclick(file)}
+					class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100"
+					title="Link TMDB"
+					onclick={() => onlinkclick(file)}
 				>
-					&times;
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+					</svg>
 				</button>
-			</div>
+			{/if}
 		{:else}
-			<button
-				class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100"
-				title="Link TMDB"
-				onclick={() => onlinkclick(file)}
-			>
-				<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-				</svg>
-			</button>
+			<span class="opacity-30">—</span>
 		{/if}
 	</td>
 	<td>
-		{#if file.mediaType === 'video'}
+		{#if file.mediaType === 'video' || file.mediaType === 'audio'}
 			{#if editingYoutube}
 				<div class="flex items-center gap-1">
 					<input
@@ -136,7 +141,13 @@
 				</div>
 			{:else if file.links.youtube}
 				<div class="flex items-center gap-1">
-					<span class="badge badge-xs badge-secondary" title={file.links.youtube.serviceId}>{file.links.youtube.serviceId}</span>
+					<button
+						class="btn btn-ghost btn-xs px-0"
+						title="Preview YouTube video"
+						onclick={() => onyoutubepreview(file)}
+					>
+						<span class="badge badge-xs badge-secondary" title={file.links.youtube.serviceId}>{file.links.youtube.serviceId}</span>
+					</button>
 					<button
 						class="btn btn-ghost btn-xs px-1 opacity-40 hover:opacity-100 hover:text-error"
 						title="Remove YouTube ID"

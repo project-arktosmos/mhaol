@@ -2,7 +2,10 @@
 	import classNames from 'classnames';
 	import { apiUrl } from '$lib/api-base';
 	import TmdbLinkModal from '$components/libraries/TmdbLinkModal.svelte';
+	import MusicBrainzLinkModal from '$components/libraries/MusicBrainzLinkModal.svelte';
 	import type { LibraryFile } from '$types/library.type';
+	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'tmdb/types';
+	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'tmdb/transform';
 
 	interface ItemLink {
 		serviceId: string;
@@ -52,9 +55,14 @@
 	let activeTypeId = $state('');
 	let activeCategoryId = $state(ALL);
 	let linkModalItem: LibraryItem | null = $state(null);
+	let linkModalService: string | null = $state(null);
 
 	// Track link overrides so we can update without full page reload
 	let linkOverrides: Record<string, Record<string, ItemLink | null>> = $state({});
+
+	// TMDB metadata state
+	let tmdbMetadata: Record<string, DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails> = $state({});
+	let tmdbLoading: Set<string> = $state(new Set());
 
 	function getItemLinks(item: LibraryItem): Record<string, ItemLink> {
 		const overrides = linkOverrides[item.id];
@@ -138,7 +146,7 @@
 		linkOverrides[itemId][service] = link;
 	}
 
-	async function handleLink(tmdbId: number, seasonNumber: number | null, episodeNumber: number | null) {
+	async function handleLink(tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') {
 		if (!linkModalItem) return;
 		const item = linkModalItem;
 
@@ -154,9 +162,42 @@
 				seasonNumber,
 				episodeNumber
 			});
+
+			const categoryId = type === 'movie' ? 'movies' : 'tv';
+			if (item.categoryId !== categoryId) {
+				await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/category`), {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ categoryId })
+				});
+				item.categoryId = categoryId;
+			}
 		}
 
 		linkModalItem = null;
+		linkModalService = null;
+	}
+
+	async function handleMusicBrainzLink(musicbrainzId: string) {
+		if (!linkModalItem) return;
+		const item = linkModalItem;
+
+		const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/musicbrainz`), {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ musicbrainzId })
+		});
+
+		if (res.ok) {
+			updateItemLinks(item.id, 'musicbrainz', {
+				serviceId: musicbrainzId,
+				seasonNumber: null,
+				episodeNumber: null
+			});
+		}
+
+		linkModalItem = null;
+		linkModalService = null;
 	}
 
 	async function handleUnlink(item: LibraryItem, service: string) {
@@ -166,6 +207,9 @@
 
 		if (res.ok) {
 			updateItemLinks(item.id, service, null);
+			if (service === 'tmdb') {
+				delete tmdbMetadata[item.id];
+			}
 		}
 	}
 
@@ -179,6 +223,50 @@
 			categoryId: item.categoryId,
 			links: getItemLinks(item)
 		};
+	}
+
+	async function fetchTmdbMetadata(item: LibraryItem) {
+		const links = getItemLinks(item);
+		const tmdbLink = links.tmdb;
+		if (!tmdbLink || tmdbMetadata[item.id] || tmdbLoading.has(item.id)) return;
+
+		tmdbLoading = new Set([...tmdbLoading, item.id]);
+
+		const isTv = item.categoryId === 'tv';
+		const endpoint = isTv
+			? `/api/tmdb/tv/${tmdbLink.serviceId}`
+			: `/api/tmdb/movies/${tmdbLink.serviceId}`;
+
+		try {
+			const res = await fetch(apiUrl(endpoint));
+			if (res.ok) {
+				const data = await res.json();
+				tmdbMetadata[item.id] = isTv
+					? tvShowDetailsToDisplay(data)
+					: movieDetailsToDisplay(data);
+			}
+		} catch (e) {
+			console.error('Failed to load TMDB metadata:', e);
+		} finally {
+			const next = new Set(tmdbLoading);
+			next.delete(item.id);
+			tmdbLoading = next;
+		}
+	}
+
+	$effect(() => {
+		for (const item of items) {
+			const links = getItemLinks(item);
+			if (links.tmdb) {
+				fetchTmdbMetadata(item);
+			}
+		}
+	});
+
+	function isTmdbMovieDetails(
+		meta: DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails
+	): meta is DisplayTMDBMovieDetails {
+		return 'title' in meta;
 	}
 </script>
 
@@ -249,6 +337,7 @@
 				</thead>
 				<tbody>
 					{#each items as item (item.id)}
+						{@const itemLinks = getItemLinks(item)}
 						<tr>
 							<td class="font-medium">{item.name}</td>
 							<td><span class="badge badge-ghost badge-sm">{item.extension}</span></td>
@@ -260,7 +349,7 @@
 								</td>
 							{/if}
 							{#each activeLinkSources as source (source.service)}
-								{@const link = getItemLinks(item)[source.service]}
+								{@const link = itemLinks[source.service]}
 								<td>
 									{#if link}
 										<span class="badge badge-info badge-sm gap-1">
@@ -274,7 +363,7 @@
 									{:else}
 										<button
 											class="btn btn-ghost btn-xs"
-											onclick={() => { linkModalItem = item; }}
+											onclick={() => { linkModalItem = item; linkModalService = source.service; }}
 										>
 											Link
 										</button>
@@ -284,6 +373,115 @@
 							<td class="max-w-xs truncate text-sm opacity-70" title={item.path}>{item.path}</td>
 							<td class="text-sm opacity-70">{new Date(item.createdAt).toLocaleDateString()}</td>
 						</tr>
+						{#if itemLinks.tmdb}
+							{@const colSpan = 4 + activeLinkSources.length + (isAllView ? 1 : 0)}
+							<tr>
+								<td colspan={colSpan} class="bg-base-200 p-0">
+									{#if tmdbLoading.has(item.id)}
+										<div class="flex justify-center py-6">
+											<span class="loading loading-spinner loading-md"></span>
+										</div>
+									{:else if tmdbMetadata[item.id]}
+										{@const meta = tmdbMetadata[item.id]}
+										<div class="flex gap-4 p-4">
+											{#if isTmdbMovieDetails(meta)}
+												{#if meta.posterUrl}
+													<img
+														src={meta.posterUrl}
+														alt={meta.title}
+														class="h-36 w-24 flex-shrink-0 rounded object-cover"
+													/>
+												{/if}
+												<div class="min-w-0 flex-1">
+													<div class="flex flex-wrap items-center gap-2">
+														<h3 class="text-lg font-bold">{meta.title}</h3>
+														<span class="text-sm opacity-70">{meta.releaseYear}</span>
+														{#if meta.runtime}
+															<span class="badge badge-outline badge-sm">{meta.runtime}</span>
+														{/if}
+														{#if meta.voteAverage > 0}
+															<span class="flex items-center gap-1">
+																<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4 text-yellow-500">
+																	<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
+																</svg>
+																<span class="text-sm font-semibold">{meta.voteAverage.toFixed(1)}</span>
+															</span>
+														{/if}
+													</div>
+													{#if meta.genres.length > 0}
+														<div class="mt-1 flex flex-wrap gap-1">
+															{#each meta.genres as genre}
+																<span class="badge badge-primary badge-outline badge-xs">{genre}</span>
+															{/each}
+														</div>
+													{/if}
+													{#if meta.director}
+														<div class="mt-2 text-sm">
+															<span class="font-semibold">Director:</span> {meta.director}
+														</div>
+													{/if}
+													{#if meta.overview}
+														<p class="mt-2 line-clamp-3 text-sm opacity-80">{meta.overview}</p>
+													{/if}
+												</div>
+											{:else}
+												{#if meta.posterUrl}
+													<img
+														src={meta.posterUrl}
+														alt={meta.name}
+														class="h-36 w-24 flex-shrink-0 rounded object-cover"
+													/>
+												{/if}
+												<div class="min-w-0 flex-1">
+													<div class="flex flex-wrap items-center gap-2">
+														<h3 class="text-lg font-bold">{meta.name}</h3>
+														<span class="text-sm opacity-70">
+															{meta.firstAirYear}{meta.lastAirYear ? ` - ${meta.lastAirYear}` : ''}
+														</span>
+														{#if meta.status}
+															<span class="badge badge-outline badge-sm">{meta.status}</span>
+														{/if}
+														{#if meta.voteAverage > 0}
+															<span class="flex items-center gap-1">
+																<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4 text-yellow-500">
+																	<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
+																</svg>
+																<span class="text-sm font-semibold">{meta.voteAverage.toFixed(1)}</span>
+															</span>
+														{/if}
+													</div>
+													{#if meta.genres.length > 0}
+														<div class="mt-1 flex flex-wrap gap-1">
+															{#each meta.genres as genre}
+																<span class="badge badge-primary badge-outline badge-xs">{genre}</span>
+															{/each}
+														</div>
+													{/if}
+													{#if meta.numberOfSeasons || meta.numberOfEpisodes}
+														<div class="mt-2 flex gap-3 text-sm opacity-70">
+															{#if meta.numberOfSeasons}
+																<span>{meta.numberOfSeasons} season{meta.numberOfSeasons !== 1 ? 's' : ''}</span>
+															{/if}
+															{#if meta.numberOfEpisodes}
+																<span>{meta.numberOfEpisodes} episode{meta.numberOfEpisodes !== 1 ? 's' : ''}</span>
+															{/if}
+														</div>
+													{/if}
+													{#if meta.createdBy.length > 0}
+														<div class="mt-2 text-sm">
+															<span class="font-semibold">Created by:</span> {meta.createdBy.join(', ')}
+														</div>
+													{/if}
+													{#if meta.overview}
+														<p class="mt-2 line-clamp-3 text-sm opacity-80">{meta.overview}</p>
+													{/if}
+												</div>
+											{/if}
+										</div>
+									{/if}
+								</td>
+							</tr>
+						{/if}
 					{/each}
 				</tbody>
 			</table>
@@ -295,10 +493,18 @@
 	{/if}
 </div>
 
-{#if linkModalItem}
+{#if linkModalItem && linkModalService === 'tmdb'}
 	<TmdbLinkModal
 		file={itemAsLibraryFile(linkModalItem)}
 		onlink={handleLink}
-		onclose={() => { linkModalItem = null; }}
+		onclose={() => { linkModalItem = null; linkModalService = null; }}
+	/>
+{/if}
+
+{#if linkModalItem && linkModalService === 'musicbrainz'}
+	<MusicBrainzLinkModal
+		file={itemAsLibraryFile(linkModalItem)}
+		onlink={handleMusicBrainzLink}
+		onclose={() => { linkModalItem = null; linkModalService = null; }}
 	/>
 {/if}

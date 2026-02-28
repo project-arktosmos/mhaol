@@ -148,7 +148,8 @@ export interface PluginStatus {
 	processes: PluginProcessStatus[];
 	settings: PluginSettingStatus[];
 	scheduledTasks: string[];
-	hasSchema: boolean;
+	schemaTables: { name: string; columns: string[] }[];
+	linkSources: PluginLinkSource[];
 }
 
 // --- Internal: combined registration ---

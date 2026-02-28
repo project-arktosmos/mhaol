@@ -1,0 +1,32 @@
+{
+	"name": "musicbrainz",
+	"version": "1.0.0",
+	"description": "MusicBrainz music metadata search and lookup",
+	"type": "module",
+	"addon": {
+		"source": "addon",
+		"compatibility": {
+			"mobile": true,
+			"computer": true
+		},
+		"schema": {
+			"sql": "CREATE TABLE IF NOT EXISTS musicbrainz_artists (\n    mbid TEXT PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS musicbrainz_release_groups (\n    mbid TEXT PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS musicbrainz_recordings (\n    mbid TEXT PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);"
+		}
+	},
+	"exports": {
+		".": "./src/index.ts",
+		"./types": "./src/types.ts",
+		"./transform": "./src/transform.ts",
+		"./cache-repository": "./src/cache-repository.ts"
+	},
+	"scripts": {
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.12",
+		"better-sqlite3": "^11.7.0",
+		"common": "workspace:*",
+		"typescript": "^5.8.3",
+		"vitest": "^4.0.6"
+	}
+}

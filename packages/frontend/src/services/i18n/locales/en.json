@@ -22,8 +22,7 @@
 		"home": "Home",
 		"about": "About",
 		"contact": "Contact",
-		"movies": "Movies",
-		"tv": "TV Shows"
+		"movies": "Movies"
 	},
 	"movies": {
 		"title": "Movies",
@@ -41,23 +40,6 @@
 		"revenue": "Revenue",
 		"viewOnImdb": "View on IMDb",
 		"cast": "Cast"
-	},
-	"tv": {
-		"title": "TV Shows",
-		"subtitle": "Search and discover TV shows from TMDB",
-		"searchPlaceholder": "Search TV shows...",
-		"onTheAir": "On The Air",
-		"popular": "Popular",
-		"airingToday": "Airing Today",
-		"topRated": "Top Rated",
-		"noResults": "No TV shows found.",
-		"backToTvShows": "Back to TV Shows",
-		"networks": "Networks",
-		"createdBy": "Created by",
-		"overview": "Overview",
-		"cast": "Cast",
-		"seasons": "Seasons",
-		"failedToLoadEpisodes": "Failed to load episodes"
 	},
 	"errors": {
 		"generic": "An error occurred",

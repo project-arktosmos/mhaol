@@ -1,7 +1,21 @@
 {
 	"name": "tmdb",
 	"version": "1.0.0",
+	"description": "The Movie Database (TMDB) metadata with local SQLite caching",
 	"type": "module",
+	"addon": {
+		"source": "addon",
+		"compatibility": {
+			"mobile": true,
+			"computer": true
+		},
+		"schema": {
+			"sql": "CREATE TABLE IF NOT EXISTS tmdb_movies (\n    tmdb_id INTEGER PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS tmdb_tv_shows (\n    tmdb_id INTEGER PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS tmdb_seasons (\n    tmdb_id INTEGER NOT NULL,\n    season_number INTEGER NOT NULL,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),\n    PRIMARY KEY (tmdb_id, season_number)\n);"
+		},
+		"settings": [
+			{ "key": "tmdb.apiKey", "default": "", "envKey": "TMDB_API_KEY" }
+		]
+	},
 	"exports": {
 		".": "./src/index.ts",
 		"./types": "./src/types.ts",
@@ -13,8 +27,8 @@
 	},
 	"devDependencies": {
 		"@types/better-sqlite3": "^7.6.12",
-		"@types/node": "^22.15.3",
 		"better-sqlite3": "^11.7.0",
+		"common": "workspace:*",
 		"typescript": "^5.8.3",
 		"vitest": "^4.0.6"
 	}

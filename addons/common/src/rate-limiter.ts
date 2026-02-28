@@ -1,8 +1,3 @@
-/**
- * Queue-based rate limiter for API calls.
- * Ensures requests are spaced by a minimum interval with retry support.
- */
-
 type QueuedRequest<T> = {
 	fn: () => Promise<T>;
 	resolve: (value: T) => void;
@@ -36,10 +31,6 @@ export class RateLimiter {
 
 	get queueLength(): number {
 		return this.queue.length;
-	}
-
-	get isProcessing(): boolean {
-		return this.processing;
 	}
 
 	private async process(): Promise<void> {
@@ -90,6 +81,3 @@ export class RateLimiter {
 		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 }
-
-/** Rate limiter for MusicBrainz API (0.8 requests per second = 1250ms between requests) */
-export const musicBrainzRateLimiter = new RateLimiter(0.8, 3);

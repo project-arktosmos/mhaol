@@ -11,7 +11,7 @@
 		filesError: string | null;
 		onremove: (library: Library) => void;
 		onscan: (library: Library) => void;
-		onlink: (file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null) => void;
+		onlink: (file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') => void;
 		onunlink: (file: LibraryFile) => void;
 		onyoutubelink: (file: LibraryFile, youtubeId: string) => void;
 		onyoutubeunlink: (file: LibraryFile) => void;

@@ -1,0 +1,35 @@
+{
+	"name": "youtube",
+	"version": "1.0.0",
+	"description": "YouTube video linking and iframe preview",
+	"type": "module",
+	"addon": {
+		"source": "addon",
+		"compatibility": {
+			"mobile": true,
+			"computer": true
+		},
+		"schema": {
+			"sql": "CREATE TABLE IF NOT EXISTS youtube_videos (\n    video_id TEXT PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);"
+		}
+	},
+	"exports": {
+		".": "./src/index.ts",
+		"./types": "./src/types.ts",
+		"./embed": "./src/embed.ts",
+		"./cache-repository": "./src/cache-repository.ts",
+		"./oembed": "./src/oembed.ts",
+		"./channel": "./src/channel.ts",
+		"./rss": "./src/rss.ts"
+	},
+	"scripts": {
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.12",
+		"better-sqlite3": "^11.7.0",
+		"common": "workspace:*",
+		"typescript": "^5.8.3",
+		"vitest": "^4.0.6"
+	}
+}

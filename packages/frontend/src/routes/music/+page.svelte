@@ -4,9 +4,9 @@
 	import type {
 		DisplayMusicBrainzArtist,
 		DisplayMusicBrainzReleaseGroup
-	} from '$types/musicbrainz.type';
-	import { musicBrainzService } from '$services/musicbrainz.service';
-	import { musicBrainzAdapter } from '$adapters/classes/musicbrainz.adapter';
+	} from 'musicbrainz/types';
+	import { searchArtists as mbSearchArtists, searchReleaseGroups as mbSearchReleaseGroups, fetchArtistImage } from 'musicbrainz';
+	import { artistsToDisplay, releaseGroupsToDisplay } from 'musicbrainz/transform';
 
 	type SearchMode = 'artists' | 'albums';
 
@@ -29,7 +29,7 @@
 	async function loadArtistImages(artistList: DisplayMusicBrainzArtist[]) {
 		for (const artist of artistList) {
 			if (artistImages[artist.id] !== undefined) continue;
-			musicBrainzService.fetchArtistImage(artist.id).then((url) => {
+			fetchArtistImage(artist.id).then((url) => {
 				artistImages = { ...artistImages, [artist.id]: url };
 			});
 		}
@@ -44,9 +44,9 @@
 
 		try {
 			const offset = (p - 1) * limit;
-			const response = await musicBrainzService.searchArtists(searchQuery.trim(), limit, offset);
+			const response = await mbSearchArtists(searchQuery.trim(), limit, offset);
 			if (response && response.artists) {
-				artists = musicBrainzAdapter.artistsToDisplay(response.artists);
+				artists = artistsToDisplay(response.artists);
 				totalResults = response.count;
 				page = p;
 				loadArtistImages(artists);
@@ -67,13 +67,13 @@
 
 		try {
 			const offset = (p - 1) * limit;
-			const response = await musicBrainzService.searchReleaseGroups(
+			const response = await mbSearchReleaseGroups(
 				searchQuery.trim(),
 				limit,
 				offset
 			);
 			if (response && response['release-groups']) {
-				albums = musicBrainzAdapter.releaseGroupsToDisplay(response['release-groups']);
+				albums = releaseGroupsToDisplay(response['release-groups']);
 				totalResults = response.count;
 				page = p;
 			}

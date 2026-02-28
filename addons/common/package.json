@@ -1,0 +1,15 @@
+{
+	"name": "common",
+	"version": "1.0.0",
+	"description": "Shared utilities and configuration for addons",
+	"type": "module",
+	"exports": {
+		"./rate-limiter": "./src/rate-limiter.ts",
+		"./utils": "./src/utils.ts"
+	},
+	"devDependencies": {
+		"@types/node": "^22.15.3",
+		"typescript": "^5.8.3",
+		"vitest": "^4.0.6"
+	}
+}

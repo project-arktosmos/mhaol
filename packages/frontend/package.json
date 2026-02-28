@@ -30,10 +30,12 @@
 		"image-tagger": "workspace:*",
 		"qrcode": "^1.5.4",
 		"svelte-i18n": "^4.0.1",
+		"musicbrainz": "workspace:*",
 		"tmdb": "workspace:*",
 		"torrent": "workspace:*",
-		"torrent-search": "workspace:*",
+		"torrent-search-thepiratebay": "workspace:*",
 		"tsx": "^4.19.4",
+		"youtube": "workspace:*",
 		"viem": "^2.46.3"
 	},
 	"devDependencies": {

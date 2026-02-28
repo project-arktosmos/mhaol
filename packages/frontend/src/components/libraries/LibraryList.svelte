@@ -14,8 +14,13 @@
 		libraryService.scanLibraryFiles(library.id as string);
 	}
 
-	function handleLink(library: Library, file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null) {
-		libraryService.linkTmdb(library.id as string, file.id, tmdbId, seasonNumber, episodeNumber);
+	async function handleLink(library: Library, file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') {
+		const libraryId = library.id as string;
+		await libraryService.linkTmdb(libraryId, file.id, tmdbId, seasonNumber, episodeNumber);
+		const categoryId = type === 'movie' ? 'movies' : 'tv';
+		if (file.categoryId !== categoryId) {
+			await libraryService.updateCategory(libraryId, file.id, categoryId);
+		}
 	}
 
 	function handleUnlink(library: Library, file: LibraryFile) {
@@ -80,7 +85,7 @@
 						filesError={$state.libraryFilesError[library.id] ?? null}
 						onremove={handleRemove}
 						onscan={handleScan}
-						onlink={(file, tmdbId, season, episode) => handleLink(library, file, tmdbId, season, episode)}
+						onlink={(file, tmdbId, season, episode, type) => handleLink(library, file, tmdbId, season, episode, type)}
 						onunlink={(file) => handleUnlink(library, file)}
 						onyoutubelink={(file, ytId) => handleYoutubeLink(library, file, ytId)}
 						onyoutubeunlink={(file) => handleYoutubeUnlink(library, file)}

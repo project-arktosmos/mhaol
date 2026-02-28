@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import classNames from 'classnames';
 
 	interface AddonSetting {
 		key: string;
@@ -13,6 +12,13 @@
 		computer: boolean;
 	}
 
+	interface AddonLinkSource {
+		service: string;
+		label: string;
+		mediaTypeId: string;
+		categoryId?: string | null;
+	}
+
 	interface Addon {
 		name: string;
 		version: string;
@@ -20,13 +26,13 @@
 		compatibility: AddonCompatibility;
 		settings: AddonSetting[];
 		scheduledTasks: string[];
-		hasSchema: boolean;
+		schemaTables: { name: string; columns: string[] }[];
+		linkSources: AddonLinkSource[];
 	}
 
 	let addons = $state<Addon[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let expandedAddon = $state<string | null>(null);
 	let editingKey = $state<string | null>(null);
 	let editValue = $state('');
 	let saving = $state(false);
@@ -47,11 +53,6 @@
 		} finally {
 			loading = false;
 		}
-	}
-
-	function toggleExpand(name: string) {
-		expandedAddon = expandedAddon === name ? null : name;
-		editingKey = null;
 	}
 
 	function startEdit(setting: AddonSetting) {
@@ -127,20 +128,13 @@
 	{:else}
 		<div class="flex flex-col gap-4">
 			{#each addons as addon (addon.name)}
-				{@const isExpanded = expandedAddon === addon.name}
-
 				<div class="card bg-base-200">
 					<div class="card-body p-4">
-						<!-- Addon header -->
-						<button
-							class="flex w-full cursor-pointer items-center justify-between text-left"
-							onclick={() => toggleExpand(addon.name)}
-						>
-							<div class="flex items-center gap-3">
-								<div>
-									<h2 class="card-title text-lg">{addon.name}</h2>
-									<p class="text-sm opacity-70">{addon.description}</p>
-								</div>
+						<!-- Header -->
+						<div class="flex items-center justify-between">
+							<div>
+								<h2 class="card-title text-lg">{addon.name}</h2>
+								<p class="text-sm opacity-70">{addon.description}</p>
 							</div>
 							<div class="flex items-center gap-2">
 								<span class="badge badge-ghost badge-sm">v{addon.version}</span>
@@ -150,168 +144,170 @@
 								{#if addon.compatibility.computer}
 									<span class="badge badge-outline badge-sm">computer</span>
 								{/if}
-								<span class="badge badge-info badge-sm">addon</span>
-								<svg
-									class={classNames('h-4 w-4 transition-transform', {
-										'rotate-180': isExpanded
-									})}
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M19 9l-7 7-7-7"
-									/>
-								</svg>
 							</div>
-						</button>
+						</div>
 
-						<!-- Expanded details -->
-						{#if isExpanded}
-							<div class="mt-4 flex flex-col gap-4">
-								<!-- Settings -->
-								{#if addon.settings.length > 0}
-									<div>
-										<h3
-											class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60"
-										>
-											Settings
-										</h3>
-										<div class="overflow-x-auto">
-											<table class="table table-sm">
-												<thead>
-													<tr class="bg-base-300/50">
-														<th>Setting</th>
-														<th>Value</th>
-														<th>Default</th>
-														<th></th>
-													</tr>
-												</thead>
-												<tbody>
-													{#each addon.settings as setting (setting.key)}
-														<tr>
-															<td>
-																<span class="text-sm"
-																	>{formatSettingLabel(setting.key)}</span
-																>
-																<br />
-																<span class="font-mono text-xs opacity-50"
-																	>{setting.key}</span
-																>
-															</td>
-															<td>
-																{#if editingKey === setting.key}
-																	<input
-																		type={isSensitive(setting.key)
-																			? 'password'
-																			: 'text'}
-																		class="input input-bordered input-sm w-full max-w-xs font-mono"
-																		bind:value={editValue}
-																		onkeydown={(e) => {
-																			if (e.key === 'Enter')
-																				saveSetting(
-																					addon.name,
-																					setting.key
-																				);
-																			if (e.key === 'Escape')
-																				cancelEdit();
-																		}}
-																	/>
-																{:else}
-																	<span class="font-mono text-sm">
-																		{#if isSensitive(setting.key) && setting.value}
-																			{'*'.repeat(
-																				Math.min(
-																					setting.value.length,
-																					16
-																				)
-																			)}
-																		{:else}
-																			{setting.value || '-'}
-																		{/if}
-																	</span>
-																{/if}
-															</td>
-															<td class="font-mono text-sm opacity-50"
-																>{setting.default || '-'}</td
-															>
-															<td>
-																{#if editingKey === setting.key}
-																	<div class="flex gap-1">
-																		<button
-																			class="btn btn-success btn-xs"
-																			disabled={saving}
-																			onclick={() =>
-																				saveSetting(
-																					addon.name,
-																					setting.key
-																				)}
-																		>
-																			{#if saving}
-																				<span
-																					class="loading loading-spinner loading-xs"
-																				></span>
-																			{:else}
-																				Save
-																			{/if}
-																		</button>
-																		<button
-																			class="btn btn-ghost btn-xs"
-																			onclick={cancelEdit}
-																		>
-																			Cancel
-																		</button>
-																	</div>
-																{:else}
-																	<button
-																		class="btn btn-ghost btn-xs"
-																		onclick={() => startEdit(setting)}
-																	>
-																		Edit
-																	</button>
-																{/if}
-															</td>
-														</tr>
-													{/each}
-												</tbody>
-											</table>
+						<!-- Link sources -->
+						{#if addon.linkSources.length > 0}
+							<div class="mt-3">
+								<h3
+									class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60"
+								>
+									Link Sources
+								</h3>
+								<div class="flex flex-wrap gap-2">
+									{#each addon.linkSources as ls}
+										<span class="badge badge-outline badge-sm">
+											{ls.label} &middot; {ls.mediaTypeId}{#if ls.categoryId}/{ls.categoryId}{/if}
+										</span>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						<!-- Database tables -->
+						{#if addon.schemaTables.length > 0}
+							<div class="mt-3">
+								<h3
+									class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60"
+								>
+									Database Tables
+								</h3>
+								<div class="flex flex-col gap-2">
+									{#each addon.schemaTables as table}
+										<div>
+											<span class="font-mono text-sm font-semibold">{table.name}</span>
+											<span class="ml-2 text-xs opacity-50">
+												{table.columns.join(', ')}
+											</span>
 										</div>
-									</div>
-								{/if}
+									{/each}
+								</div>
+							</div>
+						{/if}
 
-								<!-- Capabilities summary -->
-								<div>
-									<h3
-										class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60"
-									>
-										Capabilities
-									</h3>
-									<div class="flex flex-wrap gap-2">
-										{#if addon.hasSchema}
-											<span class="badge badge-outline badge-sm"
-												>Database Tables</span
-											>
-										{/if}
-										{#if addon.settings.length > 0}
-											<span class="badge badge-outline badge-sm">
-												{addon.settings.length} Setting{addon.settings
-													.length !== 1
-													? 's'
-													: ''}
-											</span>
-										{/if}
-										{#if addon.scheduledTasks.length > 0}
-											<span class="badge badge-outline badge-sm">
-												{addon.scheduledTasks.length} Scheduled Task{addon
-													.scheduledTasks.length !== 1
-													? 's'
-													: ''}
-											</span>
-										{/if}
-									</div>
+						<!-- Scheduled tasks -->
+						{#if addon.scheduledTasks.length > 0}
+							<div class="mt-3">
+								<h3
+									class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60"
+								>
+									Scheduled Tasks
+								</h3>
+								<div class="flex flex-wrap gap-2">
+									{#each addon.scheduledTasks as task}
+										<span class="badge badge-outline badge-sm font-mono">{task}</span>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						<!-- Settings -->
+						{#if addon.settings.length > 0}
+							<div class="mt-3">
+								<h3
+									class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60"
+								>
+									Settings
+								</h3>
+								<div class="overflow-x-auto">
+									<table class="table table-sm">
+										<thead>
+											<tr class="bg-base-300/50">
+												<th>Setting</th>
+												<th>Value</th>
+												<th>Default</th>
+												<th></th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each addon.settings as setting (setting.key)}
+												<tr>
+													<td>
+														<span class="text-sm"
+															>{formatSettingLabel(setting.key)}</span
+														>
+														<br />
+														<span class="font-mono text-xs opacity-50"
+															>{setting.key}</span
+														>
+													</td>
+													<td>
+														{#if editingKey === setting.key}
+															<input
+																type={isSensitive(setting.key)
+																	? 'password'
+																	: 'text'}
+																class="input input-bordered input-sm w-full max-w-xs font-mono"
+																bind:value={editValue}
+																onkeydown={(e) => {
+																	if (e.key === 'Enter')
+																		saveSetting(
+																			addon.name,
+																			setting.key
+																		);
+																	if (e.key === 'Escape')
+																		cancelEdit();
+																}}
+															/>
+														{:else}
+															<span class="font-mono text-sm">
+																{#if isSensitive(setting.key) && setting.value}
+																	{'*'.repeat(
+																		Math.min(
+																			setting.value.length,
+																			16
+																		)
+																	)}
+																{:else}
+																	{setting.value || '-'}
+																{/if}
+															</span>
+														{/if}
+													</td>
+													<td class="font-mono text-sm opacity-50"
+														>{setting.default || '-'}</td
+													>
+													<td>
+														{#if editingKey === setting.key}
+															<div class="flex gap-1">
+																<button
+																	class="btn btn-success btn-xs"
+																	disabled={saving}
+																	onclick={() =>
+																		saveSetting(
+																			addon.name,
+																			setting.key
+																		)}
+																>
+																	{#if saving}
+																		<span
+																			class="loading loading-spinner loading-xs"
+																		></span>
+																	{:else}
+																		Save
+																	{/if}
+																</button>
+																<button
+																	class="btn btn-ghost btn-xs"
+																	onclick={cancelEdit}
+																>
+																	Cancel
+																</button>
+															</div>
+														{:else}
+															<button
+																class="btn btn-ghost btn-xs"
+																onclick={() => startEdit(setting)}
+															>
+																Edit
+															</button>
+														{/if}
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
 								</div>
 							</div>
 						{/if}

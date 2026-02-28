@@ -1,9 +1,9 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import type { LibraryFile } from '$types/library.type';
-	import type { DisplayMusicBrainzRecording, DisplayMusicBrainzArtist, DisplayMusicBrainzReleaseGroup } from '$types/musicbrainz.type';
-	import { musicBrainzService } from '$services/musicbrainz.service';
-	import { musicBrainzAdapter } from '$adapters/classes/musicbrainz.adapter';
+	import type { DisplayMusicBrainzRecording, DisplayMusicBrainzArtist, DisplayMusicBrainzReleaseGroup } from 'musicbrainz/types';
+	import { searchRecordings, searchArtists, searchReleaseGroups } from 'musicbrainz';
+	import { recordingsToDisplay, artistsToDisplay, releaseGroupsToDisplay } from 'musicbrainz/transform';
 
 	interface Props {
 		file: LibraryFile;
@@ -50,19 +50,19 @@
 
 		try {
 			if (searchMode === 'track') {
-				const response = await musicBrainzService.searchRecordings(query.trim());
+				const response = await searchRecordings(query.trim());
 				if (response?.recordings) {
-					trackResults = musicBrainzAdapter.recordingsToDisplay(response.recordings);
+					trackResults = recordingsToDisplay(response.recordings);
 				}
 			} else if (searchMode === 'artist') {
-				const response = await musicBrainzService.searchArtists(query.trim());
+				const response = await searchArtists(query.trim());
 				if (response?.artists) {
-					artistResults = musicBrainzAdapter.artistsToDisplay(response.artists);
+					artistResults = artistsToDisplay(response.artists);
 				}
 			} else {
-				const response = await musicBrainzService.searchReleaseGroups(query.trim());
+				const response = await searchReleaseGroups(query.trim());
 				if (response?.['release-groups']) {
-					albumResults = musicBrainzAdapter.releaseGroupsToDisplay(response['release-groups']);
+					albumResults = releaseGroupsToDisplay(response['release-groups']);
 				}
 			}
 		} catch (e) {

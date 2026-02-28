@@ -16,6 +16,9 @@ import type {
 	DisplayTMDBSeasonDetails,
 	DisplayTMDBEpisode
 } from './types.js';
+import { extractYear } from 'common/utils';
+
+export { extractYear };
 
 const BASE_IMAGE_URL = 'https://image.tmdb.org/t/p';
 
@@ -72,11 +75,6 @@ export function formatCurrency(amount: number | undefined): string | null {
 		currency: 'USD',
 		maximumFractionDigits: 0
 	}).format(amount);
-}
-
-export function extractYear(dateString: string | undefined): string {
-	if (!dateString) return 'Unknown';
-	return dateString.split('-')[0] || 'Unknown';
 }
 
 // Movie transforms

@@ -5,7 +5,7 @@ import {
 	TorrentCategory,
 	type TorrentSearchResult,
 	type TorrentSearchSort
-} from 'torrent-search/types';
+} from 'torrent-search-thepiratebay/types';
 
 interface TorrentSearchState {
 	query: string;

@@ -4,9 +4,11 @@
 	import type { TMDBMovie, TMDBTvShow } from 'tmdb/types';
 	import { getPosterUrl, extractYear } from 'tmdb/transform';
 
+	type TmdbType = 'movie' | 'tv';
+
 	interface Props {
 		file: LibraryFile;
-		onlink: (tmdbId: number, seasonNumber: number | null, episodeNumber: number | null) => void;
+		onlink: (tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: TmdbType) => void;
 		onclose: () => void;
 	}
 
@@ -63,11 +65,11 @@
 	}
 
 	function selectMovie(movie: TMDBMovie) {
-		onlink(movie.id, null, null);
+		onlink(movie.id, null, null, 'movie');
 	}
 
 	function selectTvShow(show: TMDBTvShow) {
-		onlink(show.id, null, null);
+		onlink(show.id, null, null, 'tv');
 	}
 
 	function handleKeydown(event: KeyboardEvent) {

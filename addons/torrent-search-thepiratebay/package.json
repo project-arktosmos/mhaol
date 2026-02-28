@@ -1,7 +1,15 @@
 {
-	"name": "torrent-search",
-	"version": "0.0.1",
+	"name": "torrent-search-thepiratebay",
+	"version": "1.0.0",
+	"description": "Torrent search via PirateBay API",
 	"type": "module",
+	"addon": {
+		"source": "addon",
+		"compatibility": {
+			"mobile": true,
+			"computer": true
+		}
+	},
 	"exports": {
 		".": "./src/index.ts",
 		"./types": "./src/types.ts"
@@ -10,7 +18,7 @@
 		"test": "vitest run"
 	},
 	"devDependencies": {
-		"@types/node": "^22.15.3",
+		"common": "workspace:*",
 		"typescript": "^5.8.3",
 		"vitest": "^4.0.6"
 	}

@@ -30,7 +30,7 @@
 		processes: PluginProcess[];
 		settings: PluginSetting[];
 		scheduledTasks: string[];
-		hasSchema: boolean;
+		schemaTables: { name: string; columns: string[] }[];
 	}
 
 	let plugins = $state<Plugin[]>([]);
@@ -297,8 +297,10 @@
 								<div>
 									<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60">Capabilities</h3>
 									<div class="flex flex-wrap gap-2">
-										{#if plugin.hasSchema}
-											<span class="badge badge-outline badge-sm">Database Tables</span>
+										{#if plugin.schemaTables.length > 0}
+											<span class="badge badge-outline badge-sm">
+												{plugin.schemaTables.length} Database Table{plugin.schemaTables.length !== 1 ? 's' : ''}
+											</span>
 										{/if}
 										{#if plugin.processes.length > 0}
 											<span class="badge badge-outline badge-sm">

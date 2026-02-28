@@ -3,6 +3,7 @@
 	import LibraryFileItem from './LibraryFileItem.svelte';
 	import TmdbLinkModal from './TmdbLinkModal.svelte';
 	import MusicBrainzLinkModal from './MusicBrainzLinkModal.svelte';
+	import YouTubePreviewModal from './YouTubePreviewModal.svelte';
 	import MediaTypeCategoryModal from './MediaTypeCategoryModal.svelte';
 
 	interface Props {
@@ -10,7 +11,7 @@
 		loading: boolean;
 		error: string | null;
 		onscan: () => void;
-		onlink: (file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null) => void;
+		onlink: (file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') => void;
 		onunlink: (file: LibraryFile) => void;
 		onyoutubelink: (file: LibraryFile, youtubeId: string) => void;
 		onyoutubeunlink: (file: LibraryFile) => void;
@@ -23,6 +24,7 @@
 
 	let modalFile: LibraryFile | null = $state(null);
 	let musicbrainzModalFile: LibraryFile | null = $state(null);
+	let youtubePreviewFile: LibraryFile | null = $state(null);
 	let typeCategoryModalFile: LibraryFile | null = $state(null);
 
 	function openModal(file: LibraryFile) {
@@ -33,9 +35,9 @@
 		modalFile = null;
 	}
 
-	function handleLink(tmdbId: number, seasonNumber: number | null, episodeNumber: number | null) {
+	function handleLink(tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') {
 		if (modalFile) {
-			onlink(modalFile, tmdbId, seasonNumber, episodeNumber);
+			onlink(modalFile, tmdbId, seasonNumber, episodeNumber, type);
 			closeModal();
 		}
 	}
@@ -53,6 +55,14 @@
 			onmusicbrainzlink(musicbrainzModalFile, musicbrainzId);
 			closeMusicBrainzModal();
 		}
+	}
+
+	function openYoutubePreview(file: LibraryFile) {
+		youtubePreviewFile = file;
+	}
+
+	function closeYoutubePreview() {
+		youtubePreviewFile = null;
 	}
 
 	function openTypeCategoryModal(file: LibraryFile) {
@@ -119,6 +129,7 @@
 							onunlinkclick={(f) => onunlink(f)}
 							onyoutubelink={(f, ytId) => onyoutubelink(f, ytId)}
 							onyoutubeunlink={(f) => onyoutubeunlink(f)}
+							onyoutubepreview={openYoutubePreview}
 							onmusicbrainzlinkclick={openMusicBrainzModal}
 							onmusicbrainzunlink={(f) => onmusicbrainzunlink(f)}
 							onedittype={openTypeCategoryModal}
@@ -136,6 +147,14 @@
 
 {#if musicbrainzModalFile}
 	<MusicBrainzLinkModal file={musicbrainzModalFile} onlink={handleMusicBrainzLink} onclose={closeMusicBrainzModal} />
+{/if}
+
+{#if youtubePreviewFile && youtubePreviewFile.links.youtube}
+	<YouTubePreviewModal
+		file={youtubePreviewFile}
+		videoId={youtubePreviewFile.links.youtube.serviceId}
+		onclose={closeYoutubePreview}
+	/>
 {/if}
 
 {#if typeCategoryModalFile}

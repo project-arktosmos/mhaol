@@ -2,13 +2,17 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { youtubeService } from '$services/youtube.service';
-	import { extractVideoId, extractPlaylistId } from '$types/youtube.type';
+	import { extractVideoId, extractPlaylistId, type YouTubeOEmbedData } from '$types/youtube.type';
+	import { apiUrl } from '$lib/api-base';
 
 	export let initialUrl: string = '';
 
 	const state = youtubeService.state;
 
 	let urlInput = initialUrl;
+	let oembedData: YouTubeOEmbedData | null = null;
+	let oembedLoading = false;
+	let lastOembedVideoId: string | null = null;
 
 	// Auto-fetch when initialUrl is provided
 	onMount(() => {
@@ -71,6 +75,30 @@
 				handleFetchInfo();
 			}
 		}, 100);
+	}
+
+	async function fetchOEmbedData(id: string) {
+		if (id === lastOembedVideoId) return;
+		lastOembedVideoId = id;
+		oembedLoading = true;
+		oembedData = null;
+		try {
+			const response = await fetch(apiUrl(`/api/youtube/oembed?videoId=${id}`));
+			if (response.ok) {
+				oembedData = await response.json();
+			}
+		} catch {
+			// ignore fetch errors
+		} finally {
+			oembedLoading = false;
+		}
+	}
+
+	$: if (videoId) {
+		fetchOEmbedData(videoId);
+	} else {
+		oembedData = null;
+		lastOembedVideoId = null;
 	}
 </script>
 
@@ -144,6 +172,42 @@
 					allowfullscreen
 				></iframe>
 			</div>
+
+			<!-- oEmbed Metadata Preview -->
+			{#if oembedLoading}
+				<div class="flex items-center gap-2 text-sm text-base-content/60">
+					<span class="loading loading-spinner loading-xs"></span>
+					Loading metadata...
+				</div>
+			{:else if oembedData}
+				<div class="rounded-lg bg-base-300 p-3">
+					<h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+						Video Metadata
+					</h3>
+					<div class="flex flex-col gap-1 text-sm">
+						<div class="line-clamp-2 font-medium">{oembedData.title}</div>
+						<div class="flex items-center gap-1 text-base-content/70">
+							<span>by</span>
+							<a
+								href={oembedData.author_url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="link link-primary"
+							>
+								{oembedData.author_name}
+							</a>
+						</div>
+						<div class="mt-1 flex flex-wrap gap-2">
+							<span class="badge badge-sm badge-ghost">
+								{oembedData.thumbnail_width}x{oembedData.thumbnail_height}
+							</span>
+							<span class="badge badge-sm badge-ghost">
+								embed {oembedData.width}x{oembedData.height}
+							</span>
+						</div>
+					</div>
+				</div>
+			{/if}
 		{/if}
 
 		<p class="text-xs text-base-content/50">
