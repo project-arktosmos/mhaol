@@ -19,7 +19,6 @@
 		"torrent:build": "cargo build --manifest-path packages/rust-torrent/Cargo.toml",
 		"torrent:test": "cargo test --manifest-path packages/rust-torrent/Cargo.toml",
 		"torrent:check": "cargo check --manifest-path packages/rust-torrent/Cargo.toml",
-		"yt:test": "pnpm -r --filter yt-download test",
 		"db:test": "pnpm -r --filter database test",
 		"p2p-stream:build": "cargo build --manifest-path packages/p2p-stream/Cargo.toml",
 		"p2p-stream:test": "cargo test --manifest-path packages/p2p-stream/Cargo.toml",
