@@ -1,5 +1,6 @@
 {
 	"build": {
+		"beforeBuildCommand": "TAURI_ENV_PLATFORM=android pnpm --filter frontend build",
 		"frontendDist": "../../frontend/dist-static"
 	},
 	"bundle": {
