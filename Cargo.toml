@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = [
+    "packages/backend",
+    "packages/rust-yt-dlp",
+    "packages/rust-torrent",
+    "packages/p2p-stream",
+    "packages/tauri/src-tauri",
+]
