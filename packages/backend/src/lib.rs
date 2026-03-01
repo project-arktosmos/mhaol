@@ -1,9 +1,14 @@
 pub mod api;
 pub mod db;
+pub mod identity;
+pub mod modules;
 
 use db::repo::*;
 use db::DbPool;
-use std::path::Path;
+use identity::IdentityManager;
+use modules::ModuleRegistry;
+use parking_lot::RwLock;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Shared application state available to all API handlers and modules.
@@ -21,17 +26,20 @@ pub struct AppState {
     pub youtube_downloads: YouTubeDownloadRepo,
     pub torrent_downloads: TorrentDownloadRepo,
     pub image_tags: ImageTagRepo,
+    pub identity_manager: IdentityManager,
+    pub module_registry: Arc<RwLock<ModuleRegistry>>,
 }
 
 impl AppState {
     /// Create a new AppState with a database at the given path (or in-memory if None).
     pub fn new(db_path: Option<&Path>) -> Result<Self, rusqlite::Error> {
         let db = db::open_database(db_path)?;
-        Ok(Self::from_pool(db))
+        let identities_path = identity::default_identities_path();
+        Ok(Self::from_pool(db, identities_path))
     }
 
-    /// Create AppState from an existing database pool.
-    pub fn from_pool(db: DbPool) -> Self {
+    /// Create AppState from an existing database pool with a custom identities file path.
+    pub fn from_pool(db: DbPool, identities_path: PathBuf) -> Self {
         Self {
             settings: SettingsRepo::new(Arc::clone(&db)),
             metadata: MetadataRepo::new(Arc::clone(&db)),
@@ -44,6 +52,8 @@ impl AppState {
             youtube_downloads: YouTubeDownloadRepo::new(Arc::clone(&db)),
             torrent_downloads: TorrentDownloadRepo::new(Arc::clone(&db)),
             image_tags: ImageTagRepo::new(Arc::clone(&db)),
+            identity_manager: IdentityManager::new(identities_path),
+            module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
             db,
         }
     }
