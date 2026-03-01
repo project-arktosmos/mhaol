@@ -1,4 +1,8 @@
+pub mod database;
+pub mod downloads;
 pub mod libraries;
+pub mod media;
+pub mod p2p_stream;
 
 use crate::AppState;
 use axum::Router;
@@ -13,6 +17,10 @@ pub fn build_router(state: AppState) -> Router {
 
     Router::new()
         .nest("/api/libraries", libraries::router())
+        .nest("/api/media", media::router())
+        .nest("/api/downloads", downloads::router())
+        .nest("/api/database", database::router())
+        .nest("/api/p2p-stream", p2p_stream::router())
         .with_state(state)
         .layer(cors)
 }

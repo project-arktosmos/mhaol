@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use serde::Deserialize;
@@ -17,6 +17,18 @@ pub fn router() -> Router<AppState> {
         .route(
             "/{id}/items/{item_id}/media-type",
             post(update_item_media_type),
+        )
+        .route(
+            "/{id}/items/{item_id}/tmdb",
+            put(link_tmdb).delete(unlink_tmdb),
+        )
+        .route(
+            "/{id}/items/{item_id}/youtube",
+            put(link_youtube).delete(unlink_youtube),
+        )
+        .route(
+            "/{id}/items/{item_id}/musicbrainz",
+            put(link_musicbrainz).delete(unlink_musicbrainz),
         )
         .route("/{id}/files", get(get_library_files))
         .route("/{id}/scan", get(scan_library))
@@ -163,6 +175,109 @@ async fn get_media_types(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn get_categories(State(state): State<AppState>) -> impl IntoResponse {
     Json(state.categories.get_all())
+}
+
+// --- Library item link handlers ---
+
+fn validate_item(state: &AppState, lib_id: &str, item_id: &str) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    match state.library_items.get(item_id) {
+        Some(item) if item.library_id == lib_id => Ok(()),
+        _ => Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Library item not found" })))),
+    }
+}
+
+#[derive(Deserialize)]
+struct LinkTmdbBody {
+    #[serde(rename = "tmdbId")]
+    tmdb_id: i64,
+    #[serde(rename = "seasonNumber")]
+    season_number: Option<i64>,
+    #[serde(rename = "episodeNumber")]
+    episode_number: Option<i64>,
+}
+
+async fn link_tmdb(
+    State(state): State<AppState>,
+    Path((lib_id, item_id)): Path<(String, String)>,
+    Json(body): Json<LinkTmdbBody>,
+) -> impl IntoResponse {
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+    state.library_item_links.upsert(
+        &uuid::Uuid::new_v4().to_string(), &item_id, "tmdb",
+        &body.tmdb_id.to_string(), body.season_number, body.episode_number,
+    );
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn unlink_tmdb(
+    State(state): State<AppState>,
+    Path((lib_id, item_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+    state.library_item_links.delete(&item_id, "tmdb");
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+#[derive(Deserialize)]
+struct LinkYoutubeBody {
+    #[serde(rename = "youtubeId")]
+    youtube_id: String,
+}
+
+async fn link_youtube(
+    State(state): State<AppState>,
+    Path((lib_id, item_id)): Path<(String, String)>,
+    Json(body): Json<LinkYoutubeBody>,
+) -> impl IntoResponse {
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+    let yt_id = body.youtube_id.trim();
+    if yt_id.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "youtubeId must be a non-empty string" }))).into_response();
+    }
+    state.library_item_links.upsert(
+        &uuid::Uuid::new_v4().to_string(), &item_id, "youtube", yt_id, None, None,
+    );
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn unlink_youtube(
+    State(state): State<AppState>,
+    Path((lib_id, item_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+    state.library_item_links.delete(&item_id, "youtube");
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+#[derive(Deserialize)]
+struct LinkMusicbrainzBody {
+    #[serde(rename = "musicbrainzId")]
+    musicbrainz_id: String,
+}
+
+async fn link_musicbrainz(
+    State(state): State<AppState>,
+    Path((lib_id, item_id)): Path<(String, String)>,
+    Json(body): Json<LinkMusicbrainzBody>,
+) -> impl IntoResponse {
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+    let mb_id = body.musicbrainz_id.trim();
+    if mb_id.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "musicbrainzId must be a non-empty string" }))).into_response();
+    }
+    state.library_item_links.upsert(
+        &uuid::Uuid::new_v4().to_string(), &item_id, "musicbrainz", mb_id, None, None,
+    );
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn unlink_musicbrainz(
+    State(state): State<AppState>,
+    Path((lib_id, item_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+    state.library_item_links.delete(&item_id, "musicbrainz");
+    Json(serde_json::json!({ "ok": true })).into_response()
 }
 
 // --- Scan helpers (ported from packages/tauri/src-tauri/src/commands/db.rs) ---
