@@ -1,0 +1,19 @@
+import type { MediaItem } from '$types/media-card.type';
+import type { ImageTag } from '$types/image-tagger.type';
+import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'tmdb/types';
+import type { YouTubeOEmbedResponse } from 'youtube/oembed';
+import type { DisplayMusicBrainzRecording } from 'musicbrainz/types';
+
+export type MediaDetailCardType = 'movie' | 'tv' | 'youtube' | 'audio' | 'image' | 'video';
+
+export interface MediaDetailSelection {
+	item: MediaItem;
+	cardType: MediaDetailCardType;
+	tmdbMetadata: DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails | null;
+	youtubeMetadata: YouTubeOEmbedResponse | null;
+	musicbrainzMetadata: DisplayMusicBrainzRecording | null;
+	imageTags: ImageTag[];
+	onplay?: (item: MediaItem) => void;
+	onlink?: (item: MediaItem, service: string) => void;
+	onunlink?: (item: MediaItem, service: string) => void;
+}

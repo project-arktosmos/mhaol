@@ -7,16 +7,14 @@
 		item: MediaItem;
 		metadata?: DisplayMusicBrainzRecording | null;
 		loading?: boolean;
-		onlink?: (item: MediaItem, service: string) => void;
-		onunlink?: (item: MediaItem, service: string) => void;
+		selected?: boolean;
+		onselect?: (item: MediaItem) => void;
 	}
 
-	let { item, metadata = null, loading = false, onlink, onunlink }: Props = $props();
-
-	let isLinked = $derived(!!item.links.musicbrainz);
+	let { item, metadata = null, loading = false, selected = false, onselect }: Props = $props();
 </script>
 
-<MediaCardBase {item} imageUrl={metadata?.coverArtUrl ?? null} imageAlt={metadata?.title ?? item.name} {loading}>
+<MediaCardBase {item} imageUrl={metadata?.coverArtUrl ?? null} imageAlt={metadata?.title ?? item.name} {loading} {selected} onclick={() => onselect?.(item)}>
 	{#if metadata}
 		<p class="truncate text-xs font-medium" title={metadata.title}>{metadata.title}</p>
 		<p class="truncate text-xs opacity-60">{metadata.artistCredits}</p>
@@ -26,11 +24,4 @@
 	{:else}
 		<p class="truncate text-xs opacity-60" title={item.path}>{item.path}</p>
 	{/if}
-	{#snippet actions()}
-		{#if isLinked}
-			<button class="btn btn-ghost btn-xs" onclick={() => onunlink?.(item, 'musicbrainz')}>Unlink</button>
-		{:else}
-			<button class="btn btn-primary btn-xs" onclick={() => onlink?.(item, 'musicbrainz')}>Link metadata</button>
-		{/if}
-	{/snippet}
 </MediaCardBase>

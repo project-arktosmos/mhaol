@@ -165,5 +165,6 @@ export interface DisplayMusicBrainzRecording {
 	artistCredits: string;
 	disambiguation: string | null;
 	coverArtUrl: string | null;
+	firstReleaseTitle: string | null;
 	score: number;
 }

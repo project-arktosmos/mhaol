@@ -30,7 +30,8 @@
 		"tauri:build": "pnpm -r --filter tauri build",
 		"tauri:android:dev": "pnpm -r --filter tauri tauri android dev",
 		"tauri:android:build": "pnpm -r --filter tauri tauri android build --apk",
-		"frontend:build:static": "BUILD_ADAPTER=static pnpm -r --filter frontend build"
+		"frontend:build:static": "BUILD_ADAPTER=static pnpm -r --filter frontend build",
+		"dev:android": "pnpm -r --filter tauri android:dev"
 	},
 	"engines": {
 		"node": ">=18",

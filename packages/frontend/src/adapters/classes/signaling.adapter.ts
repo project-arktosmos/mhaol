@@ -1,5 +1,6 @@
 import { AdapterClass } from '$adapters/classes/adapter.class';
 import type { SignalingChatMessage, SignalingConnectionPhase } from '$types/signaling.type';
+import type { PlayerConnectionState } from '$types/player.type';
 
 export class SignalingAdapter extends AdapterClass {
 	constructor() {
@@ -50,6 +51,30 @@ export class SignalingAdapter extends AdapterClass {
 			content,
 			timestamp: new Date().toISOString()
 		};
+	}
+
+	playerConnectionLabel(state: PlayerConnectionState): string {
+		const labels: Record<PlayerConnectionState, string> = {
+			idle: 'Idle',
+			connecting: 'Connecting...',
+			signaling: 'Signaling...',
+			streaming: 'Streaming',
+			error: 'Error',
+			closed: 'Closed'
+		};
+		return labels[state];
+	}
+
+	playerConnectionBadgeClass(state: PlayerConnectionState): string {
+		const map: Record<PlayerConnectionState, string> = {
+			idle: 'badge-ghost',
+			connecting: 'badge-info',
+			signaling: 'badge-info',
+			streaming: 'badge-success',
+			error: 'badge-error',
+			closed: 'badge-ghost'
+		};
+		return map[state];
 	}
 
 	buildWsUrl(baseUrl: string, roomId: string): string {

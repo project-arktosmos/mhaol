@@ -7,11 +7,11 @@
 		item: MediaItem;
 		metadata?: DisplayTMDBMovieDetails | null;
 		loading?: boolean;
-		onplay?: (item: MediaItem) => void;
-		onunlink?: (item: MediaItem, service: string) => void;
+		selected?: boolean;
+		onselect?: (item: MediaItem) => void;
 	}
 
-	let { item, metadata = null, loading = false, onplay, onunlink }: Props = $props();
+	let { item, metadata = null, loading = false, selected = false, onselect }: Props = $props();
 </script>
 
 <MediaCardBase
@@ -19,6 +19,8 @@
 	imageUrl={metadata?.posterUrl ?? null}
 	imageAlt={metadata?.title ?? item.name}
 	{loading}
+	{selected}
+	onclick={() => onselect?.(item)}
 >
 	{#if metadata}
 		<div class="flex flex-wrap items-center gap-1 text-xs">
@@ -47,8 +49,4 @@
 			<p class="line-clamp-2 text-xs opacity-60">{metadata.overview}</p>
 		{/if}
 	{/if}
-	{#snippet actions()}
-		<button class="btn btn-accent btn-xs" onclick={() => onplay?.(item)}>Play</button>
-		<button class="btn btn-ghost btn-xs" onclick={() => onunlink?.(item, 'tmdb')}>Unlink</button>
-	{/snippet}
 </MediaCardBase>

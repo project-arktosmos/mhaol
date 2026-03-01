@@ -11,14 +11,24 @@
 		imageAlt?: string;
 		loading?: boolean;
 		classes?: string;
+		selected?: boolean;
+		onclick?: () => void;
 		children?: Snippet;
-		actions?: Snippet;
 	}
 
-	let { item, imageUrl = null, imageAlt = '', loading = false, classes = '', children, actions }: Props = $props();
+	let { item, imageUrl = null, imageAlt = '', loading = false, classes = '', selected = false, onclick, children }: Props = $props();
 </script>
 
-<div class={classNames('card card-compact bg-base-200 shadow-sm', classes)}>
+<div
+	class={classNames('card card-compact bg-base-200 shadow-sm', {
+		'ring-2 ring-primary': selected,
+		'cursor-pointer hover:shadow-md transition-shadow': !!onclick
+	}, classes)}
+	onclick={onclick}
+	role={onclick ? 'button' : undefined}
+	tabindex={onclick ? 0 : undefined}
+	onkeydown={onclick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onclick?.(); } } : undefined}
+>
 	<figure class="relative h-48 overflow-hidden bg-base-300">
 		{#if loading}
 			<div class="flex h-full w-full items-center justify-center">
@@ -54,11 +64,6 @@
 		</div>
 		{#if children}
 			{@render children()}
-		{/if}
-		{#if actions}
-			<div class="card-actions mt-1 justify-end">
-				{@render actions()}
-			</div>
 		{/if}
 	</div>
 </div>

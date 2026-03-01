@@ -4,11 +4,7 @@
 	"description": "Torrent search via PirateBay API",
 	"type": "module",
 	"addon": {
-		"source": "addon",
-		"compatibility": {
-			"mobile": true,
-			"computer": true
-		}
+		"source": "addon"
 	},
 	"exports": {
 		".": "./src/index.ts",

@@ -100,6 +100,8 @@ async function initializeServer() {
 	const { musicbrainzCompanion } = await import('../../../addons/musicbrainz/addon');
 	const youtubeManifest = extractManifest((await import('../../../addons/youtube/package.json')).default);
 	const { youtubeCompanion } = await import('../../../addons/youtube/addon');
+	const lyricsManifest = extractManifest((await import('../../../addons/lyrics/package.json')).default);
+	const { lyricsCompanion } = await import('../../../addons/lyrics/addon');
 
 	connector.register(ytDownloadManifest, ytDownloadCompanion);
 	connector.register(p2pStreamManifest, p2pStreamCompanion);
@@ -110,6 +112,7 @@ async function initializeServer() {
 	connector.register(tmdbManifest, tmdbCompanion);
 	connector.register(musicbrainzManifest, musicbrainzCompanion);
 	connector.register(youtubeManifest, youtubeCompanion);
+	connector.register(lyricsManifest, lyricsCompanion);
 	await connector.initialize();
 
 	// Cleanup on process exit

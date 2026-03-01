@@ -151,10 +151,10 @@
 							</div>
 							<div class="flex items-center gap-2">
 								<span class="badge badge-ghost badge-sm">v{plugin.version}</span>
-								{#if plugin.compatibility.mobile}
+								{#if plugin.compatibility?.mobile}
 									<span class="badge badge-outline badge-sm">mobile</span>
 								{/if}
-								{#if plugin.compatibility.computer}
+								{#if plugin.compatibility?.computer}
 									<span class="badge badge-outline badge-sm">computer</span>
 								{/if}
 								{#if noProcesses}

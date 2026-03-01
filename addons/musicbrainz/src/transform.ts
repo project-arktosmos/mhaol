@@ -132,6 +132,7 @@ export function recordingToDisplay(recording: MusicBrainzRecording): DisplayMusi
 		artistCredits: formatArtistCredits(recording['artist-credit']),
 		disambiguation: recording.disambiguation || null,
 		coverArtUrl: releaseGroupId ? getCoverArtUrl(releaseGroupId) : null,
+		firstReleaseTitle: recording.releases?.[0]?.title ?? null,
 		score: recording.score || 0
 	};
 }

@@ -145,7 +145,7 @@ export interface PluginStatus {
 	version: string;
 	description: string;
 	source: 'plugin' | 'addon';
-	compatibility: PluginCompatibility;
+	compatibility?: PluginCompatibility;
 	processes: PluginProcessStatus[];
 	settings: PluginSettingStatus[];
 	scheduledTasks: string[];

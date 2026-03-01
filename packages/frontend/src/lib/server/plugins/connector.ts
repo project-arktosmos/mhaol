@@ -220,7 +220,10 @@ export class PluginConnector {
 				version: manifest.version,
 				description: manifest.description,
 				source: manifest.source ?? 'plugin',
-				compatibility: manifest.compatibility ?? { mobile: false, computer: true },
+				compatibility:
+				manifest.source !== 'addon'
+					? (manifest.compatibility ?? { mobile: false, computer: true })
+					: undefined,
 				processes,
 				settings,
 				scheduledTasks,

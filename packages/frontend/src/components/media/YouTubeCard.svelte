@@ -8,11 +8,11 @@
 		item: MediaItem;
 		metadata?: YouTubeOEmbedResponse | null;
 		loading?: boolean;
-		onplay?: (item: MediaItem) => void;
-		onunlink?: (item: MediaItem, service: string) => void;
+		selected?: boolean;
+		onselect?: (item: MediaItem) => void;
 	}
 
-	let { item, metadata = null, loading = false, onplay, onunlink }: Props = $props();
+	let { item, metadata = null, loading = false, selected = false, onselect }: Props = $props();
 
 	let videoId = $derived(item.links.youtube?.serviceId ?? '');
 	let thumbnailUrl = $derived(videoId ? getThumbnailUrl(videoId) : null);
@@ -23,13 +23,11 @@
 	imageUrl={thumbnailUrl}
 	imageAlt={metadata?.title ?? item.name}
 	{loading}
+	{selected}
+	onclick={() => onselect?.(item)}
 >
 	{#if metadata}
 		<p class="truncate text-xs font-semibold">{metadata.title}</p>
 		<p class="text-xs opacity-60">{metadata.author_name}</p>
 	{/if}
-	{#snippet actions()}
-		<button class="btn btn-accent btn-xs" onclick={() => onplay?.(item)}>Play</button>
-		<button class="btn btn-ghost btn-xs" onclick={() => onunlink?.(item, 'youtube')}>Unlink</button>
-	{/snippet}
 </MediaCardBase>

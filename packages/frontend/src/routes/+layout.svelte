@@ -6,6 +6,8 @@
 	import { identityService } from '$services/identity.service';
 	import Navbar from '$components/core/Navbar.svelte';
 	import IdentitySidebar from '$components/core/IdentitySidebar.svelte';
+	import DownloadsModal from '$components/downloads/DownloadsModal.svelte';
+	import TorrentModal from '$components/torrent/TorrentModal.svelte';
 
 	let { children } = $props();
 
@@ -28,3 +30,6 @@
 		<IdentitySidebar />
 	</div>
 </div>
+
+<DownloadsModal />
+<TorrentModal />

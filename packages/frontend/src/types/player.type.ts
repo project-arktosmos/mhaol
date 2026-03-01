@@ -35,6 +35,8 @@ export interface PlayerState {
 	connectionState: PlayerConnectionState;
 	streamServerAvailable: boolean;
 	sessionId: string | null;
+	localPeerId: string | null;
+	remotePeerId: string | null;
 	positionSecs: number;
 	durationSecs: number | null;
 	isSeeking: boolean;

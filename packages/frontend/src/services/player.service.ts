@@ -28,6 +28,8 @@ const initialState: PlayerState = {
 	connectionState: 'idle',
 	streamServerAvailable: false,
 	sessionId: null,
+	localPeerId: null,
+	remotePeerId: null,
 	positionSecs: 0,
 	durationSecs: null,
 	isSeeking: false,
@@ -220,6 +222,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		switch (type) {
 			case 'connected':
 				this.localPeerId = msg.peer_id as string;
+				this.state.update((s) => ({ ...s, localPeerId: this.localPeerId }));
 				break;
 
 			case 'room-peers':
@@ -255,6 +258,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		const fromPeerId = msg.from_peer_id as string;
 		const sdp = msg.sdp as string;
 
+		this.state.update((s) => ({ ...s, remotePeerId: fromPeerId }));
 		this.setupPeerConnection(fromPeerId);
 
 		if (!this.pc) return;
@@ -522,6 +526,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			currentFile: null,
 			connectionState: 'idle',
 			sessionId: null,
+			localPeerId: null,
+			remotePeerId: null,
 			error: null,
 			positionSecs: 0,
 			durationSecs: null,

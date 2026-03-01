@@ -18,12 +18,11 @@
 		musicbrainzMetadata?: DisplayMusicBrainzRecording | null;
 		metadataLoading?: boolean;
 		imageTags?: ImageTag[];
-		onlink?: (item: MediaItem, service: string) => void;
-		onunlink?: (item: MediaItem, service: string) => void;
-		onplay?: (item: MediaItem) => void;
+		selected?: boolean;
+		onselect?: (item: MediaItem) => void;
 	}
 
-	let { item, tmdbMetadata = null, youtubeMetadata = null, musicbrainzMetadata = null, metadataLoading = false, imageTags = [], onlink, onunlink, onplay }: Props = $props();
+	let { item, tmdbMetadata = null, youtubeMetadata = null, musicbrainzMetadata = null, metadataLoading = false, imageTags = [], selected = false, onselect }: Props = $props();
 
 	let cardType = $derived.by(() => {
 		if (item.categoryId === 'movies' && item.links.tmdb) return 'movie';
@@ -36,15 +35,15 @@
 </script>
 
 {#if cardType === 'movie'}
-	<MovieCard {item} metadata={tmdbMetadata as DisplayTMDBMovieDetails | null} loading={metadataLoading} {onplay} {onunlink} />
+	<MovieCard {item} metadata={tmdbMetadata as DisplayTMDBMovieDetails | null} loading={metadataLoading} {onselect} {selected} />
 {:else if cardType === 'tv'}
-	<TvShowCard {item} metadata={tmdbMetadata as DisplayTMDBTvShowDetails | null} loading={metadataLoading} {onplay} {onunlink} />
+	<TvShowCard {item} metadata={tmdbMetadata as DisplayTMDBTvShowDetails | null} loading={metadataLoading} {onselect} {selected} />
 {:else if cardType === 'youtube'}
-	<YouTubeCard {item} metadata={youtubeMetadata} loading={metadataLoading} {onplay} {onunlink} />
+	<YouTubeCard {item} metadata={youtubeMetadata} loading={metadataLoading} {onselect} {selected} />
 {:else if cardType === 'audio'}
-	<AudioUncategorizedCard {item} metadata={musicbrainzMetadata} loading={metadataLoading} {onlink} {onunlink} />
+	<AudioUncategorizedCard {item} metadata={musicbrainzMetadata} loading={metadataLoading} {onselect} {selected} />
 {:else if cardType === 'image'}
-	<ImageUncategorizedCard {item} tags={imageTags} />
+	<ImageUncategorizedCard {item} tags={imageTags} {onselect} {selected} />
 {:else}
-	<VideoUncategorizedCard {item} {onplay} {onlink} />
+	<VideoUncategorizedCard {item} {onselect} {selected} />
 {/if}

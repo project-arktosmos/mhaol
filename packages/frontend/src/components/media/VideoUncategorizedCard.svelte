@@ -4,17 +4,13 @@
 
 	interface Props {
 		item: MediaItem;
-		onplay?: (item: MediaItem) => void;
-		onlink?: (item: MediaItem, service: string) => void;
+		selected?: boolean;
+		onselect?: (item: MediaItem) => void;
 	}
 
-	let { item, onplay, onlink }: Props = $props();
+	let { item, selected = false, onselect }: Props = $props();
 </script>
 
-<MediaCardBase {item} imageAlt={item.name}>
+<MediaCardBase {item} imageAlt={item.name} {selected} onclick={() => onselect?.(item)}>
 	<p class="truncate text-xs opacity-60" title={item.path}>{item.path}</p>
-	{#snippet actions()}
-		<button class="btn btn-accent btn-xs" onclick={() => onplay?.(item)}>Play</button>
-		<button class="btn btn-primary btn-xs" onclick={() => onlink?.(item, 'tmdb')}>Link metadata</button>
-	{/snippet}
 </MediaCardBase>

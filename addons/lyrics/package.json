@@ -1,0 +1,27 @@
+{
+	"name": "lyrics",
+	"version": "1.0.0",
+	"description": "Song lyrics from LRCLIB with synced and plain lyric support",
+	"type": "module",
+	"addon": {
+		"source": "addon",
+		"schema": {
+			"sql": "CREATE TABLE IF NOT EXISTS lrclib_lyrics (\n    lrclib_id INTEGER PRIMARY KEY,\n    track_name TEXT NOT NULL,\n    artist_name TEXT NOT NULL,\n    album_name TEXT NOT NULL DEFAULT '',\n    duration REAL NOT NULL DEFAULT 0,\n    instrumental INTEGER NOT NULL DEFAULT 0,\n    plain_lyrics TEXT,\n    synced_lyrics TEXT,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS lrclib_lookups (\n    library_item_id TEXT PRIMARY KEY,\n    lrclib_id INTEGER REFERENCES lrclib_lyrics(lrclib_id),\n    status TEXT NOT NULL CHECK (status IN ('found', 'not_found')),\n    looked_up_at TEXT NOT NULL DEFAULT (datetime('now'))\n);"
+		}
+	},
+	"exports": {
+		".": "./src/index.ts",
+		"./types": "./src/types.ts",
+		"./client": "./src/client.ts",
+		"./cache-repository": "./src/cache-repository.ts"
+	},
+	"scripts": {
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.12",
+		"better-sqlite3": "^11.7.0",
+		"typescript": "^5.8.3",
+		"vitest": "^4.0.6"
+	}
+}

@@ -3,7 +3,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev --port 1530",
+		"dev": "vite dev --port 1530 --strictPort",
 		"dev:qq": "node scripts/generate-qq-locale.js",
 		"build": "vite build",
 		"preview": "vite preview",
@@ -30,6 +30,7 @@
 		"image-tagger": "workspace:*",
 		"qrcode": "^1.5.4",
 		"svelte-i18n": "^4.0.1",
+		"lyrics": "workspace:*",
 		"musicbrainz": "workspace:*",
 		"tmdb": "workspace:*",
 		"torrent": "workspace:*",

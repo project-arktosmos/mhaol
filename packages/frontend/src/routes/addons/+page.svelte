@@ -7,11 +7,6 @@
 		default: string;
 	}
 
-	interface AddonCompatibility {
-		mobile: boolean;
-		computer: boolean;
-	}
-
 	interface AddonLinkSource {
 		service: string;
 		label: string;
@@ -23,7 +18,6 @@
 		name: string;
 		version: string;
 		description: string;
-		compatibility: AddonCompatibility;
 		settings: AddonSetting[];
 		scheduledTasks: string[];
 		schemaTables: { name: string; columns: string[] }[];
@@ -138,12 +132,6 @@
 							</div>
 							<div class="flex items-center gap-2">
 								<span class="badge badge-ghost badge-sm">v{addon.version}</span>
-								{#if addon.compatibility.mobile}
-									<span class="badge badge-outline badge-sm">mobile</span>
-								{/if}
-								{#if addon.compatibility.computer}
-									<span class="badge badge-outline badge-sm">computer</span>
-								{/if}
 							</div>
 						</div>
 

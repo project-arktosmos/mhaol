@@ -1,9 +1,13 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { apiUrl } from '$lib/api-base';
 	import { playerService } from '$services/player.service';
 	import { playerAdapter } from '$adapters/classes/player.adapter';
+	import { mediaDetailService } from '$services/media-detail.service';
+	import { torrentModalService } from '$services/torrent-modal.service';
+	import { downloadsService } from '$services/downloads.service';
+	import type { MediaDetailCardType } from '$types/media-detail.type';
 	import TmdbLinkModal from '$components/libraries/TmdbLinkModal.svelte';
 	import MusicBrainzLinkModal from '$components/libraries/MusicBrainzLinkModal.svelte';
 	import MediaCard from '$components/media/MediaCard.svelte';
@@ -136,20 +140,80 @@
 		})
 	);
 
+	// Media detail selection
+	const mediaDetailStore = mediaDetailService.store;
+	let selectedItemId = $derived(($mediaDetailStore)?.item.id ?? null);
+
+	function resolveCardType(item: MediaItem): MediaDetailCardType {
+		if (item.categoryId === 'movies' && item.links.tmdb) return 'movie';
+		if (item.categoryId === 'tv' && item.links.tmdb) return 'tv';
+		if (item.links.youtube) return 'youtube';
+		if (item.mediaTypeId === 'audio') return 'audio';
+		if (item.mediaTypeId === 'image') return 'image';
+		return 'video';
+	}
+
+	function handleSelect(item: MediaItem) {
+		mediaDetailService.select({
+			item,
+			cardType: resolveCardType(item),
+			tmdbMetadata: tmdbMetadata[item.id] ?? null,
+			youtubeMetadata: youtubeMetadata[item.id] ?? null,
+			musicbrainzMetadata: musicbrainzMetadata[item.id] ?? null,
+			imageTags: imageTagsMap[item.id] ?? [],
+			onplay: (i) => handlePlay(i),
+			onlink: (i, service) => { linkModalItem = i; linkModalService = service; },
+			onunlink: (i, service) => handleUnlink(i, service)
+		});
+	}
+
+	// Sync metadata updates into the active selection
+	$effect(() => {
+		const sel = $mediaDetailStore;
+		if (!sel) return;
+		const id = sel.item.id;
+		const updatedItem = itemsWithOverrides.find((i) => i.id === id);
+		if (!updatedItem) return;
+		const newTmdb = tmdbMetadata[id] ?? null;
+		const newYt = youtubeMetadata[id] ?? null;
+		const newMb = musicbrainzMetadata[id] ?? null;
+		const newTags = imageTagsMap[id] ?? [];
+		if (newTmdb !== sel.tmdbMetadata || newYt !== sel.youtubeMetadata || newMb !== sel.musicbrainzMetadata || updatedItem !== sel.item) {
+			mediaDetailService.select({
+				...sel,
+				item: updatedItem,
+				cardType: resolveCardType(updatedItem),
+				tmdbMetadata: newTmdb,
+				youtubeMetadata: newYt,
+				musicbrainzMetadata: newMb,
+				imageTags: newTags
+			});
+		}
+	});
+
+	onDestroy(() => {
+		mediaDetailService.clear();
+	});
+
 	function selectType(id: string) {
 		activeTypeId = id;
 		activeCategoryId = ALL_CATEGORY;
+		mediaDetailService.clear();
 	}
 
 	function selectCategory(id: string) {
 		activeCategoryId = id;
+		mediaDetailService.clear();
 	}
 
 	function updateItemLinks(itemId: string, service: string, link: MediaItemLink | null) {
-		if (!linkOverrides[itemId]) {
-			linkOverrides[itemId] = {};
-		}
-		linkOverrides[itemId][service] = link;
+		linkOverrides = {
+			...linkOverrides,
+			[itemId]: {
+				...linkOverrides[itemId],
+				[service]: link
+			}
+		};
 	}
 
 	async function handleLink(tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') {
@@ -218,13 +282,16 @@
 		if (res.ok) {
 			updateItemLinks(item.id, service, null);
 			if (service === 'tmdb') {
-				delete tmdbMetadata[item.id];
+				const { [item.id]: _, ...rest } = tmdbMetadata;
+				tmdbMetadata = rest;
 			}
 			if (service === 'youtube') {
-				delete youtubeMetadata[item.id];
+				const { [item.id]: _, ...rest } = youtubeMetadata;
+				youtubeMetadata = rest;
 			}
 			if (service === 'musicbrainz') {
-				delete musicbrainzMetadata[item.id];
+				const { [item.id]: _, ...rest } = musicbrainzMetadata;
+				musicbrainzMetadata = rest;
 			}
 		}
 	}
@@ -314,6 +381,20 @@
 		}
 	}
 
+	// Pre-fetched lyrics items tracker (prevents duplicate fetches)
+	let lyricsFetched: Set<string> = $state(new Set());
+
+	async function fetchLyrics(item: MediaItem) {
+		if (!item.links.musicbrainz || lyricsFetched.has(item.id)) return;
+		lyricsFetched = new Set([...lyricsFetched, item.id]);
+
+		try {
+			await fetch(apiUrl(`/api/lyrics/${item.id}`));
+		} catch {
+			// Lyrics pre-fetch is best-effort
+		}
+	}
+
 	$effect(() => {
 		for (const item of itemsWithOverrides) {
 			if (item.links.tmdb) {
@@ -324,15 +405,28 @@
 			}
 			if (item.links.musicbrainz) {
 				fetchMusicbrainzMetadata(item);
+				if (item.mediaTypeId === 'audio') {
+					fetchLyrics(item);
+				}
 			}
 		}
 	});
 </script>
 
 <div class="container mx-auto p-4">
-	<div class="mb-6">
-		<h1 class="text-3xl font-bold">Media</h1>
-		<p class="text-sm opacity-70">Browse your media library</p>
+	<div class="mb-6 flex items-center justify-between">
+		<div>
+			<h1 class="text-3xl font-bold">Media</h1>
+			<p class="text-sm opacity-70">Browse your media library</p>
+		</div>
+		<div class="flex gap-2">
+			<button class="btn btn-sm btn-primary" onclick={() => torrentModalService.open()}>
+				Torrent
+			</button>
+			<button class="btn btn-sm btn-secondary" onclick={() => downloadsService.openModal()}>
+				Downloads
+			</button>
+		</div>
 	</div>
 
 	<!-- Tier 1: All + Media Types -->
@@ -396,9 +490,8 @@
 					musicbrainzMetadata={musicbrainzMetadata[item.id] ?? null}
 					metadataLoading={metadataLoading.has(item.id)}
 					imageTags={imageTagsMap[item.id] ?? []}
-					onlink={(i, service) => { linkModalItem = i; linkModalService = service; }}
-					onunlink={(i, service) => handleUnlink(i, service)}
-					onplay={(i) => handlePlay(i)}
+					selected={selectedItemId === item.id}
+					onselect={(i) => handleSelect(i)}
 				/>
 			{/each}
 		</div>

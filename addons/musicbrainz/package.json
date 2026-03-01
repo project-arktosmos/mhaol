@@ -5,10 +5,6 @@
 	"type": "module",
 	"addon": {
 		"source": "addon",
-		"compatibility": {
-			"mobile": true,
-			"computer": true
-		},
 		"schema": {
 			"sql": "CREATE TABLE IF NOT EXISTS musicbrainz_artists (\n    mbid TEXT PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS musicbrainz_release_groups (\n    mbid TEXT PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS musicbrainz_recordings (\n    mbid TEXT PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);"
 		}
