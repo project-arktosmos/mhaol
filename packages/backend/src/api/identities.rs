@@ -1,6 +1,6 @@
 use crate::AppState;
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
@@ -9,8 +9,12 @@ use axum::{
 use serde::Deserialize;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/", get(list_identities).post(create_identity))
+    Router::new()
+        .route("/", get(list_identities).post(create_identity))
+        .route("/{name}", put(regenerate_identity).delete(delete_identity))
 }
+
+use axum::routing::put;
 
 async fn list_identities(State(state): State<AppState>) -> impl IntoResponse {
     let identities = state.identity_manager.get_all();
@@ -83,4 +87,36 @@ async fn create_identity(
         Json(serde_json::json!({ "name": name, "address": address })),
     )
         .into_response()
+}
+
+/// PUT /api/identities/{name} — regenerate identity keypair
+async fn regenerate_identity(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    if state.identity_manager.get_address(&name).is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Identity not found" })),
+        )
+            .into_response();
+    }
+    let address = state.identity_manager.regenerate(&name);
+    Json(serde_json::json!({ "name": name, "address": address })).into_response()
+}
+
+/// DELETE /api/identities/{name} — delete identity
+async fn delete_identity(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    if state.identity_manager.remove(&name) {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Identity not found" })),
+        )
+            .into_response()
+    }
 }
