@@ -1,4 +1,4 @@
-import { writable, type Writable } from 'svelte/store';
+import { get, writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { apiUrl } from '$lib/api-base';
 import type {
@@ -223,6 +223,12 @@ class LibraryService {
 		}
 	}
 
+	async scanAllLibraries(): Promise<void> {
+		if (!browser) return;
+		const libraries = get(this.store);
+		await Promise.all(libraries.map((lib) => this.scanLibraryFiles(lib.id as string)));
+	}
+
 	async linkTmdb(
 		libraryId: string,
 		itemId: string,
@@ -246,7 +252,13 @@ class LibraryService {
 					...s.libraryFiles,
 					[libraryId]: files.map((f) =>
 						f.id === itemId
-							? { ...f, links: { ...f.links, tmdb: { serviceId: String(tmdbId), seasonNumber, episodeNumber } } }
+							? {
+									...f,
+									links: {
+										...f.links,
+										tmdb: { serviceId: String(tmdbId), seasonNumber, episodeNumber }
+									}
+								}
 							: f
 					)
 				}
@@ -295,7 +307,13 @@ class LibraryService {
 					...s.libraryFiles,
 					[libraryId]: files.map((f) =>
 						f.id === itemId
-							? { ...f, links: { ...f.links, youtube: { serviceId: youtubeId, seasonNumber: null, episodeNumber: null } } }
+							? {
+									...f,
+									links: {
+										...f.links,
+										youtube: { serviceId: youtubeId, seasonNumber: null, episodeNumber: null }
+									}
+								}
 							: f
 					)
 				}
@@ -344,7 +362,17 @@ class LibraryService {
 					...s.libraryFiles,
 					[libraryId]: files.map((f) =>
 						f.id === itemId
-							? { ...f, links: { ...f.links, musicbrainz: { serviceId: musicbrainzId, seasonNumber: null, episodeNumber: null } } }
+							? {
+									...f,
+									links: {
+										...f.links,
+										musicbrainz: {
+											serviceId: musicbrainzId,
+											seasonNumber: null,
+											episodeNumber: null
+										}
+									}
+								}
 							: f
 					)
 				}

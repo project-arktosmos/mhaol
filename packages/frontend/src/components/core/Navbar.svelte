@@ -12,7 +12,7 @@
 
 	let { classes = '' }: Props = $props();
 
-	const DESKTOP_ONLY_ROUTES = ['/torrent', '/images', '/signaling'];
+	const DESKTOP_ONLY_ROUTES = ['/images', '/signaling'];
 
 	function hasNavigableChildren(route: RouteEntry): boolean {
 		return route.children.some((c) => !c.isDynamic);

@@ -7,6 +7,7 @@
 	import { mediaDetailService } from '$services/media-detail.service';
 	import { torrentModalService } from '$services/torrent-modal.service';
 	import { downloadsService } from '$services/downloads.service';
+	import { libraryService } from '$services/library.service';
 	import type { MediaDetailCardType } from '$types/media-detail.type';
 	import TmdbLinkModal from '$components/libraries/TmdbLinkModal.svelte';
 	import MusicBrainzLinkModal from '$components/libraries/MusicBrainzLinkModal.svelte';
@@ -60,7 +61,20 @@
 	// Image tags state
 	let imageTagsMap: Record<string, ImageTag[]> = $state({});
 
+	// Scan all libraries state
+	let scanning = $state(false);
+
+	async function handleScanAll() {
+		scanning = true;
+		try {
+			await libraryService.scanAllLibraries();
+		} finally {
+			scanning = false;
+		}
+	}
+
 	onMount(async () => {
+		libraryService.initialize();
 		try {
 			const res = await fetch(apiUrl('/api/images'));
 			if (res.ok) {
@@ -420,6 +434,13 @@
 			<p class="text-sm opacity-70">Browse your media library</p>
 		</div>
 		<div class="flex gap-2">
+			<button class="btn btn-sm btn-accent" onclick={handleScanAll} disabled={scanning}>
+				{#if scanning}
+					<span class="loading loading-spinner loading-xs"></span>
+				{:else}
+					Scan
+				{/if}
+			</button>
 			<button class="btn btn-sm btn-primary" onclick={() => torrentModalService.open()}>
 				Torrent
 			</button>
