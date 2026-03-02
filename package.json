@@ -4,8 +4,8 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "cargo run -p mhaol-backend --bin mhaol-server & pnpm -r --filter frontend dev",
-		"dev:backend": "cargo run -p mhaol-backend --bin mhaol-server",
+		"dev": "PORT=1530 cargo run -p mhaol-backend --bin mhaol-server & BACKEND_PID=$!; trap 'kill $BACKEND_PID 2>/dev/null' EXIT; pnpm -r --filter frontend dev",
+		"dev:backend": "PORT=1530 cargo run -p mhaol-backend --bin mhaol-server",
 		"dev:frontend": "pnpm -r --filter frontend dev",
 		"build": "pnpm -r --filter frontend build",
 		"build:backend": "cargo build -p mhaol-backend --release",
