@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "PORT=1530 cargo run -p mhaol-backend --bin mhaol-server & BACKEND_PID=$!; trap 'kill $BACKEND_PID 2>/dev/null' EXIT; pnpm -r --filter frontend dev",
+		"dev": "cargo build -p mhaol-backend --bin mhaol-server && PORT=1530 cargo run -p mhaol-backend --bin mhaol-server & BACKEND_PID=$!; trap 'kill $BACKEND_PID 2>/dev/null' EXIT; echo 'Waiting for backend on port 1530...'; until curl -s http://localhost:1530/api/ytdl/status > /dev/null 2>&1; do sleep 0.5; done; echo 'Backend ready.'; pnpm -r --filter frontend dev",
 		"dev:backend": "PORT=1530 cargo run -p mhaol-backend --bin mhaol-server",
 		"dev:frontend": "pnpm -r --filter frontend dev",
 		"build": "pnpm -r --filter frontend build",

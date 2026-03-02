@@ -114,15 +114,15 @@ export interface YouTubeManagerStats {
 	completedDownloads: number;
 	failedDownloads: number;
 	ytdlpAvailable: boolean;
-	ytdlpVersion: string | null;
+	ytdlpVersion: string | null; // native-rust-{version}
 }
 
-export interface YtDlpStatus {
-	/** Whether yt-dlp binary is available */
+export interface DownloaderStatus {
+	/** Whether the native download engine is available */
 	available: boolean;
-	/** yt-dlp version if available */
+	/** Download engine version if available */
 	version: string | null;
-	/** Whether download is in progress */
+	/** Whether the engine is initializing */
 	downloading: boolean;
 }
 
@@ -135,7 +135,7 @@ export interface YouTubeServiceState {
 	libraryId: string;
 	downloads: YouTubeDownloadProgress[];
 	stats: YouTubeManagerStats | null;
-	ytdlpStatus: YtDlpStatus | null;
+	downloaderStatus: DownloaderStatus | null;
 	// Current input state
 	currentUrl: string;
 	currentVideoInfo: YouTubeVideoInfo | null;

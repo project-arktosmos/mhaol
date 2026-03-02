@@ -53,7 +53,15 @@
 			const res = await fetch(apiUrl('/api/plugins'));
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const all: Plugin[] = await res.json();
-			plugins = all.filter((p) => p.source !== 'addon');
+			plugins = all
+				.filter((p) => p.source !== 'addon')
+				.map((p) => ({
+					...p,
+					processes: p.processes ?? [],
+					settings: p.settings ?? [],
+					scheduledTasks: p.scheduledTasks ?? [],
+					schemaTables: p.schemaTables ?? []
+				}));
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		} finally {

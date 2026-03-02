@@ -1,3 +1,4 @@
+pub mod image_tagger;
 pub mod lyrics;
 pub mod musicbrainz;
 pub mod p2p_stream;

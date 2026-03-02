@@ -24,6 +24,7 @@ pub fn run() {
                 let state = mhaol_backend::AppState::new(Some(db_path.as_path()))
                     .expect("failed to initialize backend");
                 state.seed_default_library();
+                state.initialize_modules();
                 let router = mhaol_backend::api::build_router(state);
                 let addr = format!("{}:{}", SERVER_HOST, SERVER_PORT);
                 let listener = tokio::net::TcpListener::bind(&addr)

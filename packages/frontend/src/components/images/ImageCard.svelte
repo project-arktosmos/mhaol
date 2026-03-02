@@ -2,6 +2,7 @@
 	import classNames from 'classnames';
 	import { createEventDispatcher } from 'svelte';
 	import type { ImageItem } from '$types/image-tagger.type';
+	import { apiUrl } from '$lib/api-base';
 	import TagPill from './TagPill.svelte';
 
 	interface Props {
@@ -17,7 +18,7 @@
 		removeTag: { id: string; tag: string };
 	}>();
 
-	let imageUrl = $derived(`/api/images/serve?path=${encodeURIComponent(image.path)}`);
+	let imageUrl = $derived(apiUrl(`/api/images/serve?path=${encodeURIComponent(image.path)}`));
 	let newTag = $state('');
 
 	function handleAddTag() {

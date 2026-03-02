@@ -3,6 +3,7 @@
 	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
 	import { getThumbnailUrl } from 'youtube/embed';
 	import TagPill from '$components/images/TagPill.svelte';
+	import { apiUrl } from '$lib/api-base';
 	import { lyricsService } from '$services/lyrics.service';
 	import type { MediaDetailSelection } from '$types/media-detail.type';
 	import type { MediaType } from '$types/library.type';
@@ -43,7 +44,7 @@
 			return musicbrainzMetadata?.coverArtUrl ?? null;
 		}
 		if (cardType === 'image') {
-			return `/api/images/serve?path=${encodeURIComponent(item.path)}`;
+			return apiUrl(`/api/images/serve?path=${encodeURIComponent(item.path)}`);
 		}
 		return null;
 	});

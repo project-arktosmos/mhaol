@@ -105,10 +105,16 @@ async fn stream_status(State(_state): State<AppState>) -> impl IntoResponse {
 #[derive(Deserialize)]
 struct CreateSessionBody {
     file_path: String,
+    #[allow(dead_code)]
+    mode: Option<String>,
+    #[allow(dead_code)]
+    video_codec: Option<String>,
+    #[allow(dead_code)]
+    video_quality: Option<String>,
 }
 
 async fn create_session(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(body): Json<CreateSessionBody>,
 ) -> impl IntoResponse {
     if !std::path::Path::new(&body.file_path).exists() {
@@ -119,12 +125,28 @@ async fn create_session(
             .into_response();
     }
 
+    let signaling_url = state
+        .settings
+        .get("signaling.partyUrl")
+        .unwrap_or_default();
+
+    if signaling_url.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Signaling server URL is not configured" })),
+        )
+            .into_response();
+    }
+
     let session_id = uuid::Uuid::new_v4().to_string();
+    let room_id = format!("player-{}", session_id);
+
     (
         StatusCode::CREATED,
         Json(serde_json::json!({
-            "sessionId": session_id,
-            "filePath": body.file_path,
+            "session_id": session_id,
+            "room_id": room_id,
+            "signaling_url": signaling_url,
         })),
     )
         .into_response()

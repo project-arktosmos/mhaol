@@ -29,9 +29,6 @@
 	let cookies = '';
 	let configSaving = false;
 
-	// yt-dlp state
-	let ytdlpDownloading = false;
-
 	// Library selection
 	let selectedLibraryId: string = '';
 	let showInlineAddForm = false;
@@ -119,66 +116,49 @@
 		configSaving = false;
 	}
 
-	async function handleDownloadYtDlp() {
-		ytdlpDownloading = true;
-		await youtubeService.downloadYtDlp();
-		ytdlpDownloading = false;
-	}
 
-	// Reactive yt-dlp status
-	$: ytdlpStatus = $state.ytdlpStatus;
-	$: ytdlpAvailable = ytdlpStatus?.available ?? false;
+	// Reactive downloader status
+	$: downloaderStatus = $state.downloaderStatus;
+	$: downloaderAvailable = downloaderStatus?.available ?? false;
 </script>
 
 <div class="card bg-base-200">
 	<div class="card-body gap-4">
 		<h2 class="card-title text-lg">Download Settings</h2>
 
-		<!-- yt-dlp Status -->
+		<!-- Downloader Status -->
 		<div
 			class={classNames('rounded-lg p-3', {
-				'bg-success/10': ytdlpAvailable,
-				'bg-warning/10': !ytdlpAvailable
+				'bg-success/10': downloaderAvailable,
+				'bg-warning/10': !downloaderAvailable
 			})}
 		>
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-2">
 					<div
 						class={classNames('h-2 w-2 rounded-full', {
-							'bg-success': ytdlpAvailable,
-							'bg-warning': !ytdlpAvailable
+							'bg-success': downloaderAvailable,
+							'bg-warning': !downloaderAvailable
 						})}
 					></div>
 					<span class="text-sm font-medium">
-						{#if ytdlpAvailable}
-							yt-dlp Ready
+						{#if downloaderAvailable}
+							Downloader Ready
 						{:else}
-							yt-dlp Not Installed
+							Downloader Unavailable
 						{/if}
 					</span>
 				</div>
 
-				{#if ytdlpAvailable && ytdlpStatus?.version}
-					<span class="text-xs text-base-content/60">{ytdlpStatus.version}</span>
+				{#if downloaderAvailable && downloaderStatus?.version}
+					<span class="text-xs text-base-content/60">{downloaderStatus.version}</span>
 				{/if}
 			</div>
 
-			{#if !ytdlpAvailable}
+			{#if !downloaderAvailable}
 				<p class="mt-2 text-xs text-base-content/70">
-					Install yt-dlp for reliable downloads. Without it, downloads will not work.
+					Could not connect to the download service. Make sure the backend is running.
 				</p>
-				<button
-					class="btn btn-primary btn-sm mt-2"
-					on:click={handleDownloadYtDlp}
-					disabled={ytdlpDownloading}
-				>
-					{#if ytdlpDownloading}
-						<span class="loading loading-spinner loading-xs"></span>
-						Downloading...
-					{:else}
-						Download yt-dlp
-					{/if}
-				</button>
 			{/if}
 		</div>
 
@@ -405,16 +385,7 @@
 		{#if showAdvanced}
 			<div class="mt-2 flex flex-col gap-3 rounded-lg bg-base-300 p-3">
 				<p class="text-xs text-base-content/60">
-					You can provide authentication to bypass bot detection. See the
-					<a
-						href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#po-token-guide"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="link link-primary"
-					>
-						PO Token Guide
-					</a>
-					for instructions.
+					You can provide authentication to bypass bot detection.
 				</p>
 
 				<!-- PO Token -->

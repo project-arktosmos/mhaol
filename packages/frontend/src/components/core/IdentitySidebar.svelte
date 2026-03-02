@@ -30,14 +30,39 @@
 
 	let signalingStatus = $state<SignalingServerStatus | null>(null);
 
-	onMount(async () => {
+	let editValue = $state('');
+	let savingUrl = $state(false);
+
+	async function fetchSignalingStatus() {
 		try {
 			const res = await fetch(apiUrl('/api/signaling/status'));
 			if (res.ok) signalingStatus = await res.json();
 		} catch {
 			// Ignore
 		}
+	}
+
+	onMount(() => {
+		fetchSignalingStatus();
 	});
+
+	async function savePartyUrl() {
+		savingUrl = true;
+		try {
+			const res = await fetch(apiUrl('/api/plugins/settings'), {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ plugin: 'signaling', key: 'signaling.partyUrl', value: editValue })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			editingPartyUrl = false;
+			await fetchSignalingStatus();
+		} catch {
+			// Ignore
+		} finally {
+			savingUrl = false;
+		}
+	}
 
 	let serverAvailable = $derived(
 		signalingStatus ? signalingStatus.devAvailable || signalingStatus.deployedAvailable : false
@@ -130,10 +155,28 @@
 
 		{#if !signalingStatus}
 			<p class="text-xs opacity-50">Loading...</p>
+		{:else if !serverAvailable}
+			<div class="flex flex-col gap-2">
+				<span class="text-xs text-base-content/60">Not configured</span>
+				<div class="flex flex-col gap-1">
+					<input
+						type="text"
+						class="input input-bordered input-xs w-full font-mono"
+						placeholder="https://your-server.partykit.dev"
+						bind:value={editValue}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') savePartyUrl();
+						}}
+					/>
+					<button class="btn btn-primary btn-xs" disabled={savingUrl || !editValue} onclick={savePartyUrl}>
+						{#if savingUrl}<span class="loading loading-spinner loading-xs"></span>{:else}Save{/if}
+					</button>
+				</div>
+			</div>
 		{:else}
 			<div class="flex flex-col gap-2">
 				<span class="truncate font-mono text-xs text-base-content/60" title={serverUrl ?? ''}>
-					{serverUrl || 'Not configured'}
+					{serverUrl}
 				</span>
 				<div class="flex items-center gap-2">
 					<span

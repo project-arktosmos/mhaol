@@ -8,6 +8,7 @@ use db::DbPool;
 use identity::IdentityManager;
 use mhaol_torrent::TorrentManager;
 use mhaol_yt_dlp::DownloadManager;
+use modules::image_tagger::ImageTaggerManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
 use std::path::{Path, PathBuf};
@@ -32,6 +33,7 @@ pub struct AppState {
     pub module_registry: Arc<RwLock<ModuleRegistry>>,
     pub ytdl_manager: Arc<DownloadManager>,
     pub torrent_manager: Arc<TorrentManager>,
+    pub image_tagger_manager: Arc<ImageTaggerManager>,
 }
 
 impl AppState {
@@ -68,8 +70,43 @@ impl AppState {
             module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
             ytdl_manager,
             torrent_manager,
+            image_tagger_manager: Arc::new(ImageTaggerManager::new()),
             db,
         }
+    }
+
+    /// Register and initialize all built-in modules (addons + core modules).
+    pub fn initialize_modules(&self) {
+        use modules::{
+            image_tagger::ImageTaggerModule, lyrics::LyricsModule,
+            musicbrainz::MusicbrainzModule, p2p_stream::P2pStreamModule, tmdb::TmdbModule,
+            torrent::TorrentModule, torrent_search::TorrentSearchModule,
+            youtube_meta::YoutubeMetaModule, ytdl::YtdlModule,
+        };
+
+        let mut registry = self.module_registry.write();
+
+        // Addons
+        registry.register(Box::new(TmdbModule));
+        registry.register(Box::new(MusicbrainzModule));
+        registry.register(Box::new(YoutubeMetaModule));
+        registry.register(Box::new(LyricsModule));
+        registry.register(Box::new(TorrentSearchModule));
+
+        // Core modules - share Arc references with AppState
+        registry.register(Box::new(YtdlModule {
+            manager: Arc::clone(&self.ytdl_manager),
+        }));
+        registry.register(Box::new(TorrentModule {
+            manager: Arc::clone(&self.torrent_manager),
+        }));
+        registry.register(Box::new(P2pStreamModule::new()));
+        registry.register(Box::new(ImageTaggerModule {
+            manager: Arc::clone(&self.image_tagger_manager),
+        }));
+
+        // Initialize all registered modules (applies schemas, seeds settings, registers link sources)
+        registry.initialize(self);
     }
 
     /// Seed a default "Downloads" library if no libraries exist.

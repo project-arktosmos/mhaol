@@ -24,6 +24,7 @@ async fn main() {
         .expect("Failed to initialize database");
 
     state.seed_default_library();
+    state.initialize_modules();
 
     let app = api::build_router(state);
 

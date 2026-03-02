@@ -232,10 +232,10 @@ async fn get_settings(State(state): State<AppState>) -> impl IntoResponse {
         .unwrap_or_default();
     let settings = serde_json::json!({
         "downloadMode": state.settings.get("ytdl.downloadMode").unwrap_or_else(|| "audio".to_string()),
-        "quality": state.settings.get("ytdl.quality").unwrap_or_else(|| "best".to_string()),
-        "format": state.settings.get("ytdl.format").unwrap_or_else(|| "opus".to_string()),
-        "videoQuality": state.settings.get("ytdl.videoQuality").unwrap_or_else(|| "best".to_string()),
-        "videoFormat": state.settings.get("ytdl.videoFormat").unwrap_or_else(|| "mp4".to_string()),
+        "defaultQuality": state.settings.get("ytdl.quality").unwrap_or_else(|| "best".to_string()),
+        "defaultFormat": state.settings.get("ytdl.format").unwrap_or_else(|| "opus".to_string()),
+        "defaultVideoQuality": state.settings.get("ytdl.videoQuality").unwrap_or_else(|| "best".to_string()),
+        "defaultVideoFormat": state.settings.get("ytdl.videoFormat").unwrap_or_else(|| "mp4".to_string()),
         "poToken": state.settings.get("ytdl.poToken").unwrap_or_default(),
         "visitorData": state.settings.get("ytdl.visitorData").unwrap_or_default(),
         "cookies": state.settings.get("ytdl.cookies").unwrap_or_default(),
@@ -254,17 +254,26 @@ async fn update_settings(
                 serde_json::Value::String(s) => s.clone(),
                 other => other.to_string(),
             };
-            match key.as_str() {
+            // Map frontend field names to internal storage keys
+            let storage_key = match key.as_str() {
+                "defaultQuality" => "quality",
+                "defaultFormat" => "format",
+                "defaultVideoQuality" => "videoQuality",
+                "defaultVideoFormat" => "videoFormat",
+                other => other,
+            };
+
+            match storage_key {
                 "libraryId" => {
                     state.metadata.set_string("youtube.libraryId", &str_val);
                 }
                 "poToken" | "visitorData" | "cookies" => {
-                    state.settings.set(&format!("ytdl.{}", key), &str_val);
-                    let config_update = serde_json::json!({ key: str_val });
+                    state.settings.set(&format!("ytdl.{}", storage_key), &str_val);
+                    let config_update = serde_json::json!({ storage_key: str_val });
                     state.ytdl_manager.update_config(config_update);
                 }
                 _ => {
-                    state.settings.set(&format!("ytdl.{}", key), &str_val);
+                    state.settings.set(&format!("ytdl.{}", storage_key), &str_val);
                 }
             }
         }
@@ -276,6 +285,10 @@ async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
     Json(serde_json::to_value(state.ytdl_manager.get_stats()).unwrap())
 }
 
-async fn ytdlp_status(State(state): State<AppState>) -> impl IntoResponse {
-    Json(serde_json::to_value(state.ytdl_manager.get_stats()).unwrap())
+async fn ytdlp_status(State(_state): State<AppState>) -> impl IntoResponse {
+    Json(serde_json::json!({
+        "available": true,
+        "version": format!("native-rust-{}", env!("CARGO_PKG_VERSION")),
+        "downloading": false,
+    }))
 }

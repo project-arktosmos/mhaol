@@ -10,7 +10,7 @@ import {
 	type YouTubePlaylistInfo,
 	type YouTubeManagerStats,
 	type YouTubeConfig,
-	type YtDlpStatus,
+	type DownloaderStatus,
 	type AudioQuality,
 	type AudioFormat,
 	type DownloadMode,
@@ -41,7 +41,7 @@ const initialState: YouTubeServiceState = {
 	libraryId: '',
 	downloads: [],
 	stats: null,
-	ytdlpStatus: null,
+	downloaderStatus: null,
 	currentUrl: '',
 	currentVideoInfo: null,
 	currentPlaylistInfo: null,
@@ -74,9 +74,9 @@ class YouTubeService {
 		this.state.update((s) => ({ ...s, loading: true }));
 
 		try {
-			const [stats, ytdlpStatus, settings] = await Promise.all([
+			const [stats, downloaderStatus, settings] = await Promise.all([
 				this.fetchJson<YouTubeManagerStats>('/api/ytdl/status'),
-				this.fetchJson<YtDlpStatus>('/api/ytdl/ytdlp/status'),
+				this.fetchJson<DownloaderStatus>('/api/ytdl/ytdlp/status'),
 				this.fetchJson<Omit<YouTubeSettings, 'id'>>('/api/ytdl/settings')
 			]);
 
@@ -89,7 +89,7 @@ class YouTubeService {
 				loading: false,
 				libraryId: settings.libraryId,
 				stats,
-				ytdlpStatus,
+				downloaderStatus,
 				error: null
 			}));
 
@@ -102,7 +102,7 @@ class YouTubeService {
 			this.state.update((s) => ({
 				...s,
 				loading: false,
-				error: `Failed to connect to yt-download server: ${errorMsg}`
+				error: `Failed to connect to download server: ${errorMsg}`
 			}));
 		}
 	}
@@ -488,35 +488,16 @@ class YouTubeService {
 		};
 	}
 
-	// ===== yt-dlp Binary Management =====
+	// ===== Downloader Status =====
 
-	async refreshYtDlpStatus(): Promise<void> {
+	async refreshDownloaderStatus(): Promise<void> {
 		if (!browser) return;
 
 		try {
-			const status = await this.fetchJson<YtDlpStatus>('/api/ytdl/ytdlp/status');
-			this.state.update((s) => ({ ...s, ytdlpStatus: status }));
+			const status = await this.fetchJson<DownloaderStatus>('/api/ytdl/ytdlp/status');
+			this.state.update((s) => ({ ...s, downloaderStatus: status }));
 		} catch {
 			// ignore
-		}
-	}
-
-	async downloadYtDlp(): Promise<string | null> {
-		if (!browser) return null;
-
-		try {
-			const result = await this.fetchJson<{ path: string }>('/api/ytdl/ytdlp/download', {
-				method: 'POST'
-			});
-			await this.refreshYtDlpStatus();
-			return result.path;
-		} catch (error) {
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			this.state.update((s) => ({
-				...s,
-				error: `Failed to download yt-dlp: ${errorMsg}`
-			}));
-			return null;
 		}
 	}
 

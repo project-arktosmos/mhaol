@@ -290,6 +290,34 @@ async fn scan_library(
         state.library_items.sync_library(&id, &scanned_files);
     }
 
+    // Spawn background task to pre-fetch YouTube oEmbed metadata
+    {
+        let db = state.db.clone();
+        let items = state.library_items.get_by_library(&id);
+        let links_repo = state.library_item_links.clone();
+        tokio::spawn(async move {
+            let mut video_ids: Vec<String> = Vec::new();
+            for item in &items {
+                if let Some(link) = links_repo.get_by_item_and_service(&item.id, "youtube") {
+                    if link.service_id.len() == 11 && !video_ids.contains(&link.service_id) {
+                        video_ids.push(link.service_id);
+                    }
+                }
+            }
+            if !video_ids.is_empty() {
+                tracing::info!(
+                    "Pre-fetching YouTube metadata for {} video(s)",
+                    video_ids.len()
+                );
+                for vid in &video_ids {
+                    if super::youtube::fetch_and_cache_oembed(&db, vid).await.is_none() {
+                        tracing::warn!("Failed to pre-fetch YouTube metadata for {}", vid);
+                    }
+                }
+            }
+        });
+    }
+
     let files = map_library_files(&state, &id);
     Json(LibraryFilesResponse {
         library_id: id,

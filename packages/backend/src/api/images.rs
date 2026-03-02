@@ -1,7 +1,7 @@
 use crate::AppState;
 use axum::{
-    extract::State,
-    http::StatusCode,
+    extract::{Query, State},
+    http::{header, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -11,10 +11,69 @@ use serde::Deserialize;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_images))
+        .route("/serve", get(serve_image))
         .route("/tagger-status", get(tagger_status))
         .route("/tag", post(tag_image))
         .route("/tag-batch", post(tag_batch))
         .route("/tags", post(add_tag).delete(remove_tag))
+}
+
+#[derive(Deserialize)]
+struct ServeQuery {
+    path: String,
+}
+
+/// GET /api/images/serve?path=... — serve an image file from disk
+async fn serve_image(
+    State(state): State<AppState>,
+    Query(query): Query<ServeQuery>,
+) -> impl IntoResponse {
+    // Verify the path exists in the library
+    if state.library_items.exists_by_path(&query.path).is_none() {
+        return (
+            StatusCode::FORBIDDEN,
+            "Path not found in library",
+        )
+            .into_response();
+    }
+
+    let file_path = std::path::Path::new(&query.path);
+    if !file_path.exists() {
+        return (StatusCode::NOT_FOUND, "File not found on disk").into_response();
+    }
+
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let mime_type = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "tiff" | "tif" => "image/tiff",
+        "heic" => "image/heic",
+        "heif" => "image/heif",
+        "avif" => "image/avif",
+        _ => "application/octet-stream",
+    };
+
+    match tokio::fs::read(&query.path).await {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, mime_type),
+                (header::CACHE_CONTROL, "public, max-age=3600"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read file").into_response(),
+    }
 }
 
 /// GET /api/images — list all image library items with their tags
@@ -46,44 +105,126 @@ async fn list_images(State(state): State<AppState>) -> impl IntoResponse {
     Json(serde_json::json!({ "images": images }))
 }
 
-/// GET /api/images/tagger-status — image tagger is not available in Rust backend
-async fn tagger_status() -> impl IntoResponse {
+/// GET /api/images/tagger-status — current state of the image tagger
+async fn tagger_status(State(state): State<AppState>) -> impl IntoResponse {
+    let (ready, status, progress, error) = state.image_tagger_manager.get_status();
     Json(serde_json::json!({
-        "ready": false,
-        "status": "idle",
-        "overallProgress": 0,
-        "error": serde_json::Value::Null,
+        "ready": ready,
+        "status": status,
+        "overallProgress": progress,
+        "error": error,
     }))
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 struct TagImageBody {
     #[serde(rename = "libraryItemId")]
     library_item_id: String,
 }
 
-/// POST /api/images/tag — tag a single image (not implemented without tagger process)
-async fn tag_image(Json(_body): Json<TagImageBody>) -> impl IntoResponse {
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(serde_json::json!({ "error": "Image tagger not available" })),
-    )
+/// POST /api/images/tag — tag a single image using the SigLIP model
+async fn tag_image(
+    State(state): State<AppState>,
+    Json(body): Json<TagImageBody>,
+) -> impl IntoResponse {
+    let item = match state.library_items.get(&body.library_item_id) {
+        Some(item) => item,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Library item not found" })),
+            )
+                .into_response()
+        }
+    };
+
+    let threshold = state
+        .settings
+        .get("image-tagger.threshold")
+        .and_then(|v| v.parse::<f64>().ok());
+
+    match state
+        .image_tagger_manager
+        .tag_image(&item.path, threshold)
+        .await
+    {
+        Ok(tags) => {
+            let tag_pairs: Vec<(&str, f64)> =
+                tags.iter().map(|t| (t.tag.as_str(), t.score)).collect();
+            state
+                .image_tags
+                .replace_for_item(&body.library_item_id, &tag_pairs);
+
+            Json(serde_json::json!({
+                "libraryItemId": body.library_item_id,
+                "tags": tags.iter().map(|t| serde_json::json!({
+                    "tag": t.tag,
+                    "score": t.score,
+                })).collect::<Vec<_>>(),
+            }))
+            .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 struct TagBatchBody {
     #[serde(rename = "libraryItemIds")]
     library_item_ids: Vec<String>,
 }
 
-/// POST /api/images/tag-batch — tag multiple images (not implemented without tagger process)
-async fn tag_batch(Json(_body): Json<TagBatchBody>) -> impl IntoResponse {
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(serde_json::json!({ "error": "Image tagger not available" })),
-    )
+/// POST /api/images/tag-batch — tag multiple images sequentially
+async fn tag_batch(
+    State(state): State<AppState>,
+    Json(body): Json<TagBatchBody>,
+) -> impl IntoResponse {
+    let threshold = state
+        .settings
+        .get("image-tagger.threshold")
+        .and_then(|v| v.parse::<f64>().ok());
+
+    let mut results = serde_json::Map::new();
+
+    for item_id in &body.library_item_ids {
+        let item = match state.library_items.get(item_id) {
+            Some(item) => item,
+            None => {
+                results.insert(item_id.clone(), serde_json::json!([]));
+                continue;
+            }
+        };
+
+        match state
+            .image_tagger_manager
+            .tag_image(&item.path, threshold)
+            .await
+        {
+            Ok(tags) => {
+                let tag_pairs: Vec<(&str, f64)> =
+                    tags.iter().map(|t| (t.tag.as_str(), t.score)).collect();
+                state.image_tags.replace_for_item(item_id, &tag_pairs);
+
+                results.insert(
+                    item_id.clone(),
+                    serde_json::json!(tags.iter().map(|t| serde_json::json!({
+                        "tag": t.tag,
+                        "score": t.score,
+                    })).collect::<Vec<_>>()),
+                );
+            }
+            Err(e) => {
+                tracing::error!("[image-tagger] Failed to tag {}: {}", item_id, e);
+                results.insert(item_id.clone(), serde_json::json!([]));
+            }
+        }
+    }
+
+    Json(serde_json::json!({ "results": results }))
 }
 
 #[derive(Deserialize)]
