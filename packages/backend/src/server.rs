@@ -16,7 +16,7 @@ async fn main() {
         .and_then(|p| p.parse().ok())
         .unwrap_or(1530);
 
-    let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
 
     let db_path = std::env::var("DB_PATH").ok().map(PathBuf::from);
 
