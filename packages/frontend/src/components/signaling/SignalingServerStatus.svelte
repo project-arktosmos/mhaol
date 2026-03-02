@@ -1,6 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount } from 'svelte';
+	import { apiUrl } from '$lib/api-base';
 	import type { SignalingServerStatus } from '$types/signaling.type';
 
 	let status = $state<SignalingServerStatus | null>(null);
@@ -33,7 +34,7 @@
 
 	async function checkDeployStatus() {
 		try {
-			const res = await fetch('/api/signaling/deploy', { method: 'HEAD' });
+			const res = await fetch(apiUrl('/api/signaling/deploy'), { method: 'HEAD' });
 			if (res.status === 409) {
 				deploying = true;
 			}
@@ -46,7 +47,7 @@
 		loading = true;
 		error = null;
 		try {
-			const res = await fetch('/api/signaling/status');
+			const res = await fetch(apiUrl('/api/signaling/status'));
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			status = await res.json();
 		} catch (e) {
@@ -70,7 +71,7 @@
 	async function savePartyUrl() {
 		saving = true;
 		try {
-			const res = await fetch('/api/plugins/settings', {
+			const res = await fetch(apiUrl('/api/plugins/settings'), {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ plugin: 'signaling', key: 'signaling.partyUrl', value: editValue })
@@ -92,7 +93,7 @@
 		deployError = null;
 
 		try {
-			const res = await fetch('/api/signaling/deploy');
+			const res = await fetch(apiUrl('/api/signaling/deploy'));
 
 			if (res.status === 409) {
 				deployError = 'A deploy is already in progress';
@@ -168,7 +169,7 @@
 
 	async function saveDeployedUrl(url: string) {
 		try {
-			const res = await fetch('/api/plugins/settings', {
+			const res = await fetch(apiUrl('/api/plugins/settings'), {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ plugin: 'signaling', key: 'signaling.partyUrl', value: url })
@@ -184,7 +185,7 @@
 		testing = true;
 		testResult = null;
 		try {
-			const res = await fetch('/api/signaling/status');
+			const res = await fetch(apiUrl('/api/signaling/status'));
 			if (!res.ok) throw new Error();
 			const data = await res.json();
 			testResult = data.deployedAvailable;

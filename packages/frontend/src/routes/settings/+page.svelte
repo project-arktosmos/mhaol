@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { apiUrl } from '$lib/api-base';
 	import { p2pStreamService } from '$services/p2p-stream.service';
 	import P2pStreamSettings from '$components/p2p-stream/P2pStreamSettings.svelte';
 
@@ -15,7 +16,7 @@
 		error = null;
 
 		try {
-			const res = await fetch('/api/database/reset', { method: 'POST' });
+			const res = await fetch(apiUrl('/api/database/reset'), { method: 'POST' });
 			if (!res.ok) {
 				const body = await res.json().catch(() => ({}));
 				throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);

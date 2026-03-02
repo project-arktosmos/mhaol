@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
+	import { apiUrl } from '$lib/api-base';
 	import type { Identity } from '$types/identity.type';
 	import { identityService } from '$services/identity.service';
 
@@ -25,7 +26,7 @@
 		loading = true;
 		error = null;
 		try {
-			const res = await fetch('/api/identities');
+			const res = await fetch(apiUrl('/api/identities'));
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			identities = await res.json();
 			await identityService.refresh();
@@ -41,7 +42,7 @@
 		creating = true;
 		error = null;
 		try {
-			const res = await fetch('/api/identities', {
+			const res = await fetch(apiUrl('/api/identities'), {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ name: newName.trim() })
@@ -69,12 +70,12 @@
 		const { name, action } = confirmTarget;
 		try {
 			if (action === 'regenerate') {
-				const res = await fetch(`/api/identities/${encodeURIComponent(name)}`, {
+				const res = await fetch(apiUrl(`/api/identities/${encodeURIComponent(name)}`), {
 					method: 'PUT'
 				});
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			} else {
-				const res = await fetch(`/api/identities/${encodeURIComponent(name)}`, {
+				const res = await fetch(apiUrl(`/api/identities/${encodeURIComponent(name)}`), {
 					method: 'DELETE'
 				});
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);

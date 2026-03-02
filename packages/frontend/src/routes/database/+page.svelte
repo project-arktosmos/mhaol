@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
+	import { apiUrl } from '$lib/api-base';
 
 	interface TableInfo {
 		name: string;
@@ -36,7 +37,7 @@
 		error = null;
 
 		try {
-			const res = await fetch('/api/database/tables');
+			const res = await fetch(apiUrl('/api/database/tables'));
 			if (!res.ok) throw new Error('Failed to load tables');
 			tables = await res.json();
 
@@ -56,7 +57,7 @@
 		error = null;
 
 		try {
-			const res = await fetch(`/api/database/tables/${encodeURIComponent(name)}?page=${page}&limit=20`);
+			const res = await fetch(apiUrl(`/api/database/tables/${encodeURIComponent(name)}?page=${page}&limit=20`));
 			if (!res.ok) throw new Error(`Failed to load table "${name}"`);
 			tableData = await res.json();
 		} catch (e) {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount } from 'svelte';
+	import { apiUrl } from '$lib/api-base';
 	import { identityService } from '$services/identity.service';
 	import { identityAdapter } from '$adapters/classes/identity.adapter';
 	import { playerService } from '$services/player.service';
@@ -31,7 +32,7 @@
 
 	onMount(async () => {
 		try {
-			const res = await fetch('/api/signaling/status');
+			const res = await fetch(apiUrl('/api/signaling/status'));
 			if (res.ok) signalingStatus = await res.json();
 		} catch {
 			// Ignore

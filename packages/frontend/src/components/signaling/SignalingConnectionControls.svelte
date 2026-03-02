@@ -1,6 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount } from 'svelte';
+	import { apiUrl } from '$lib/api-base';
 	import { signalingChatService } from '$services/signaling-chat.service';
 	import { signalingAdapter } from '$adapters/classes/signaling.adapter';
 	import type { SignalingServerTarget, SignalingServerStatus } from '$types/signaling.type';
@@ -13,7 +14,7 @@
 
 	onMount(async () => {
 		try {
-			const res = await fetch('/api/signaling/status');
+			const res = await fetch(apiUrl('/api/signaling/status'));
 			if (res.ok) serverStatus = await res.json();
 		} catch {
 			// Ignore
