@@ -12,8 +12,10 @@ pub mod player;
 pub mod plugins;
 pub mod signaling;
 pub mod tmdb;
+#[cfg(not(target_os = "android"))]
 pub mod torrent;
 pub mod youtube;
+#[cfg(not(target_os = "android"))]
 pub mod ytdl;
 
 use crate::AppState;
@@ -27,7 +29,7 @@ pub fn build_router(state: AppState) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    Router::new()
+    let router = Router::new()
         .nest("/api/libraries", libraries::router())
         .nest("/api/media", media::router())
         .nest("/api/downloads", downloads::router())
@@ -35,8 +37,6 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/p2p-stream", p2p_stream::router())
         .nest("/api/identities", identities::router())
         .nest("/api/plugins", plugins::router())
-        .nest("/api/ytdl", ytdl::router())
-        .nest("/api/torrent", torrent::router())
         .nest("/api/player", player::router())
         .nest("/api/tmdb", tmdb::router())
         .nest("/api/musicbrainz", musicbrainz::router())
@@ -44,7 +44,12 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/lyrics", lyrics::router())
         .nest("/api/addons", addons::router())
         .nest("/api/signaling", signaling::router())
-        .nest("/api/images", images::router())
-        .with_state(state)
-        .layer(cors)
+        .nest("/api/images", images::router());
+
+    #[cfg(not(target_os = "android"))]
+    let router = router
+        .nest("/api/ytdl", ytdl::router())
+        .nest("/api/torrent", torrent::router());
+
+    router.with_state(state).layer(cors)
 }

@@ -9,13 +9,18 @@ use axum::{
 use serde::Deserialize;
 
 pub fn router() -> Router<AppState> {
-    Router::new()
+    let router = Router::new()
         .route("/", get(list_images))
         .route("/serve", get(serve_image))
+        .route("/tags", post(add_tag).delete(remove_tag));
+
+    #[cfg(not(target_os = "android"))]
+    let router = router
         .route("/tagger-status", get(tagger_status))
         .route("/tag", post(tag_image))
-        .route("/tag-batch", post(tag_batch))
-        .route("/tags", post(add_tag).delete(remove_tag))
+        .route("/tag-batch", post(tag_batch));
+
+    router
 }
 
 #[derive(Deserialize)]
@@ -105,6 +110,7 @@ async fn list_images(State(state): State<AppState>) -> impl IntoResponse {
     Json(serde_json::json!({ "images": images }))
 }
 
+#[cfg(not(target_os = "android"))]
 /// GET /api/images/tagger-status — current state of the image tagger
 async fn tagger_status(State(state): State<AppState>) -> impl IntoResponse {
     let (ready, status, progress, error) = state.image_tagger_manager.get_status();
@@ -116,12 +122,14 @@ async fn tagger_status(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
+#[cfg(not(target_os = "android"))]
 #[derive(Deserialize)]
 struct TagImageBody {
     #[serde(rename = "libraryItemId")]
     library_item_id: String,
 }
 
+#[cfg(not(target_os = "android"))]
 /// POST /api/images/tag — tag a single image using the SigLIP model
 async fn tag_image(
     State(state): State<AppState>,
@@ -172,12 +180,14 @@ async fn tag_image(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[derive(Deserialize)]
 struct TagBatchBody {
     #[serde(rename = "libraryItemIds")]
     library_item_ids: Vec<String>,
 }
 
+#[cfg(not(target_os = "android"))]
 /// POST /api/images/tag-batch — tag multiple images sequentially
 async fn tag_batch(
     State(state): State<AppState>,

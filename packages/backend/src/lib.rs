@@ -8,14 +8,17 @@ pub mod worker_bridge;
 use db::repo::*;
 use db::DbPool;
 use identity::IdentityManager;
+#[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
+#[cfg(not(target_os = "android"))]
 use mhaol_yt_dlp::DownloadManager;
+#[cfg(not(target_os = "android"))]
 use modules::image_tagger::ImageTaggerManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
 use signaling_dev::SignalingDevServer;
 use worker_bridge::WorkerBridge;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 /// Shared application state available to all API handlers and modules.
@@ -35,8 +38,11 @@ pub struct AppState {
     pub image_tags: ImageTagRepo,
     pub identity_manager: IdentityManager,
     pub module_registry: Arc<RwLock<ModuleRegistry>>,
+    #[cfg(not(target_os = "android"))]
     pub ytdl_manager: Arc<DownloadManager>,
+    #[cfg(not(target_os = "android"))]
     pub torrent_manager: Arc<TorrentManager>,
+    #[cfg(not(target_os = "android"))]
     pub image_tagger_manager: Arc<ImageTaggerManager>,
     pub signaling_dev: Arc<SignalingDevServer>,
     pub worker_bridge: Arc<WorkerBridge>,
@@ -47,20 +53,8 @@ impl AppState {
     pub fn new(db_path: Option<&Path>) -> Result<Self, rusqlite::Error> {
         let db = db::open_database(db_path)?;
         let identities_path = identity::default_identities_path();
-        let ytdl_config = mhaol_yt_dlp::YtDownloadConfig::from_env();
-        let ytdl_manager = Arc::new(DownloadManager::new(ytdl_config));
-        let torrent_manager = Arc::new(TorrentManager::new());
-        Ok(Self::from_pool(db, identities_path, ytdl_manager, torrent_manager))
-    }
 
-    /// Create AppState from an existing database pool with pre-configured managers.
-    pub fn from_pool(
-        db: DbPool,
-        identities_path: PathBuf,
-        ytdl_manager: Arc<DownloadManager>,
-        torrent_manager: Arc<TorrentManager>,
-    ) -> Self {
-        Self {
+        Ok(Self {
             settings: SettingsRepo::new(Arc::clone(&db)),
             metadata: MetadataRepo::new(Arc::clone(&db)),
             libraries: LibraryRepo::new(Arc::clone(&db)),
@@ -74,22 +68,31 @@ impl AppState {
             image_tags: ImageTagRepo::new(Arc::clone(&db)),
             identity_manager: IdentityManager::new(identities_path),
             module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
-            ytdl_manager,
-            torrent_manager,
+            #[cfg(not(target_os = "android"))]
+            ytdl_manager: {
+                let config = mhaol_yt_dlp::YtDownloadConfig::from_env();
+                Arc::new(DownloadManager::new(config))
+            },
+            #[cfg(not(target_os = "android"))]
+            torrent_manager: Arc::new(TorrentManager::new()),
+            #[cfg(not(target_os = "android"))]
             image_tagger_manager: Arc::new(ImageTaggerManager::new()),
             signaling_dev: Arc::new(SignalingDevServer::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
             db,
-        }
+        })
     }
 
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {
         use modules::{
-            image_tagger::ImageTaggerModule, lyrics::LyricsModule,
-            musicbrainz::MusicbrainzModule, p2p_stream::P2pStreamModule, tmdb::TmdbModule,
-            torrent::TorrentModule, torrent_search::TorrentSearchModule,
-            youtube_meta::YoutubeMetaModule, ytdl::YtdlModule,
+            lyrics::LyricsModule, musicbrainz::MusicbrainzModule, tmdb::TmdbModule,
+            torrent_search::TorrentSearchModule, youtube_meta::YoutubeMetaModule,
+        };
+        #[cfg(not(target_os = "android"))]
+        use modules::{
+            image_tagger::ImageTaggerModule, p2p_stream::P2pStreamModule,
+            torrent::TorrentModule, ytdl::YtdlModule,
         };
 
         let mut registry = self.module_registry.write();
@@ -101,17 +104,20 @@ impl AppState {
         registry.register(Box::new(LyricsModule));
         registry.register(Box::new(TorrentSearchModule));
 
-        // Core modules - share Arc references with AppState
-        registry.register(Box::new(YtdlModule {
-            manager: Arc::clone(&self.ytdl_manager),
-        }));
-        registry.register(Box::new(TorrentModule {
-            manager: Arc::clone(&self.torrent_manager),
-        }));
-        registry.register(Box::new(P2pStreamModule::new()));
-        registry.register(Box::new(ImageTaggerModule {
-            manager: Arc::clone(&self.image_tagger_manager),
-        }));
+        // Core modules (desktop only)
+        #[cfg(not(target_os = "android"))]
+        {
+            registry.register(Box::new(YtdlModule {
+                manager: Arc::clone(&self.ytdl_manager),
+            }));
+            registry.register(Box::new(TorrentModule {
+                manager: Arc::clone(&self.torrent_manager),
+            }));
+            registry.register(Box::new(P2pStreamModule::new()));
+            registry.register(Box::new(ImageTaggerModule {
+                manager: Arc::clone(&self.image_tagger_manager),
+            }));
+        }
 
         // Initialize all registered modules (applies schemas, seeds settings, registers link sources)
         registry.initialize(self);

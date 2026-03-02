@@ -1,11 +1,15 @@
+#[cfg(not(target_os = "android"))]
 pub mod image_tagger;
 pub mod lyrics;
 pub mod musicbrainz;
+#[cfg(not(target_os = "android"))]
 pub mod p2p_stream;
 pub mod tmdb;
+#[cfg(not(target_os = "android"))]
 pub mod torrent;
 pub mod torrent_search;
 pub mod youtube_meta;
+#[cfg(not(target_os = "android"))]
 pub mod ytdl;
 
 use crate::AppState;

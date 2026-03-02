@@ -98,7 +98,10 @@ async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 async fn stream_status(State(_state): State<AppState>) -> impl IntoResponse {
+    #[cfg(not(target_os = "android"))]
     let available = mhaol_p2p_stream::init().is_ok();
+    #[cfg(target_os = "android")]
+    let available = false;
     Json(serde_json::json!({ "available": available }))
 }
 
@@ -122,15 +125,12 @@ async fn create_session(
             .into_response();
     }
 
-    let mut signaling_url = state
-        .settings
-        .get("signaling.partyUrl")
-        .unwrap_or_default();
-
-    // Fall back to local dev signaling server
-    if signaling_url.is_empty() && state.signaling_dev.is_available() {
-        signaling_url = state.signaling_dev.dev_url();
-    }
+    // Prefer local dev signaling server
+    let signaling_url = if state.signaling_dev.is_available() {
+        state.signaling_dev.dev_url()
+    } else {
+        state.settings.get("signaling.partyUrl").unwrap_or_default()
+    };
 
     if signaling_url.is_empty() {
         return (

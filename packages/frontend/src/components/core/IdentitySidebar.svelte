@@ -139,17 +139,15 @@
 		}
 	}
 
-	let serverAvailable = $derived(
-		signalingStatus ? signalingStatus.devAvailable || signalingStatus.deployedAvailable : false
-	);
+	let localAvailable = $derived(signalingStatus?.devAvailable ?? false);
+	let localUrl = $derived(signalingStatus?.devUrl ?? 'http://127.0.0.1:1999');
 
-	let serverUrl = $derived(
-		signalingStatus
-			? signalingStatus.deployedAvailable
-				? signalingStatus.partyUrl
-				: signalingStatus.devUrl
-			: null
-	);
+	let remoteAvailable = $derived(signalingStatus?.deployedAvailable ?? false);
+	let remoteUrl = $derived(signalingStatus?.partyUrl ?? '');
+
+	let remoteExpanded = $state(false);
+
+	let serverAvailable = $derived(localAvailable || remoteAvailable);
 
 	const widthClasses: Record<SidebarWidthMode, string> = {
 		wide: 'w-[80vw]',
@@ -230,135 +228,179 @@
 
 		{#if !signalingStatus}
 			<p class="text-xs opacity-50">Loading...</p>
-		{:else if !serverAvailable}
+		{:else}
+			<!-- LOCAL SERVER (always visible, primary) -->
 			<div class="flex flex-col gap-2">
-				<span class="text-xs text-base-content/60">Not configured</span>
-
-				{#if editingPartyUrl}
-					<div class="flex flex-col gap-1">
-						<input
-							type="text"
-							class="input input-bordered input-xs w-full font-mono"
-							placeholder="https://your-server.partykit.dev"
-							bind:value={editValue}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') savePartyUrl();
-								if (e.key === 'Escape') { editingPartyUrl = false; editValue = ''; }
-							}}
-						/>
-						<div class="flex gap-1">
-							<button class="btn btn-success btn-xs flex-1" disabled={savingUrl} onclick={savePartyUrl}>
-								{#if savingUrl}<span class="loading loading-spinner loading-xs"></span>{:else}Save{/if}
-							</button>
-							<button class="btn btn-ghost btn-xs" onclick={() => { editingPartyUrl = false; editValue = ''; }}>
-								Cancel
-							</button>
-						</div>
-					</div>
-				{:else}
-					<div class="flex gap-1">
-						<button
-							class="btn btn-primary btn-xs flex-1"
-							disabled={deploying}
-							onclick={deploySignaling}
-						>
-							{#if deploying}
-								<span class="loading loading-spinner loading-xs"></span>
-								Deploying...
-							{:else}
-								Deploy
-							{/if}
-						</button>
-						<button class="btn btn-ghost btn-xs" onclick={() => { editingPartyUrl = true; editValue = signalingStatus?.partyUrl ?? ''; }}>
-							Set URL
-						</button>
-					</div>
-				{/if}
-
-				{#if deployLogs.length > 0 || deployError}
-					<div class="max-h-32 overflow-y-auto rounded bg-base-300 p-2 font-mono text-xs">
-						{#each deployLogs as line}
-							<div class="whitespace-pre-wrap">{line}</div>
-						{/each}
-						{#if deployError}
-							<div class="text-error">{deployError}</div>
-						{/if}
-					</div>
-				{/if}
-				{#if deployResult}
+				<div class="flex items-center justify-between">
+					<span class="text-xs font-semibold text-base-content/60">Local</span>
 					<span
-						class={classNames('badge badge-sm', {
-							'badge-success': deployResult.success,
-							'badge-error': !deployResult.success
+						class={classNames('badge badge-xs', {
+							'badge-success': localAvailable,
+							'badge-error': !localAvailable
 						})}
 					>
-						{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
-					</span>
-				{/if}
-			</div>
-		{:else}
-			<div class="flex flex-col gap-2">
-				<span class="truncate font-mono text-xs text-base-content/60" title={serverUrl ?? ''}>
-					{serverUrl}
-				</span>
-				<div class="flex items-center gap-2">
-					<span
-						class={classNames(
-							'badge badge-sm',
-							signalingAdapter.playerConnectionBadgeClass($playerState.connectionState)
-						)}
-					>
-						{signalingAdapter.playerConnectionLabel($playerState.connectionState)}
+						{localAvailable ? 'running' : 'stopped'}
 					</span>
 				</div>
+				<span class="truncate font-mono text-xs text-base-content/60" title={localUrl}>
+					{localUrl}
+				</span>
 
-				<!-- Server WebRTC endpoint (streaming worker) -->
-				{#if $playerState.localPeerId || $playerState.remotePeerId}
-					<div class="flex flex-col gap-1">
-						<span class="text-xs font-semibold text-base-content/50">Stream Peers</span>
-						{#if $playerState.localPeerId}
-							<div class="flex items-center gap-1">
-								<span class="text-xs text-base-content/40">You:</span>
-								<span class="font-mono text-xs text-base-content/60">
-									{signalingAdapter.shortAddress($playerState.localPeerId)}
-								</span>
-							</div>
-						{/if}
-						{#if $playerState.remotePeerId}
-							<div class="flex items-center gap-1">
-								<span class="text-xs text-base-content/40">Worker:</span>
-								<span class="badge badge-outline badge-sm font-mono">
-									{signalingAdapter.shortAddress($playerState.remotePeerId)}
-								</span>
-							</div>
-						{/if}
-					</div>
-				{/if}
-
-				<!-- Browser WebRTC endpoint (signaling chat peers) -->
-				{#if $chatState.phase !== 'disconnected'}
-					<div class="flex flex-col gap-1">
-						<span class="text-xs font-semibold text-base-content/50">
-							Chat Peers ({$chatState.peerIds.length})
+				{#if localAvailable}
+					<div class="flex items-center gap-2">
+						<span
+							class={classNames(
+								'badge badge-sm',
+								signalingAdapter.playerConnectionBadgeClass($playerState.connectionState)
+							)}
+						>
+							{signalingAdapter.playerConnectionLabel($playerState.connectionState)}
 						</span>
-						{#if $chatState.localPeerId}
-							<div class="flex items-center gap-1">
-								<span class="text-xs text-base-content/40">You:</span>
-								<span class="font-mono text-xs text-base-content/60">
-									{signalingAdapter.shortAddress($chatState.localPeerId)}
-								</span>
-							</div>
-						{/if}
-						{#if $chatState.peerIds.length > 0}
-							<div class="flex flex-wrap gap-1">
-								{#each $chatState.peerIds as peerId (peerId)}
-									<span class="badge badge-outline badge-sm font-mono">
-										{signalingAdapter.shortAddress(peerId)}
+					</div>
+
+					{#if $playerState.localPeerId || $playerState.remotePeerId}
+						<div class="flex flex-col gap-1">
+							<span class="text-xs font-semibold text-base-content/50">Stream Peers</span>
+							{#if $playerState.localPeerId}
+								<div class="flex items-center gap-1">
+									<span class="text-xs text-base-content/40">You:</span>
+									<span class="font-mono text-xs text-base-content/60">
+										{signalingAdapter.shortAddress($playerState.localPeerId)}
 									</span>
-								{/each}
+								</div>
+							{/if}
+							{#if $playerState.remotePeerId}
+								<div class="flex items-center gap-1">
+									<span class="text-xs text-base-content/40">Worker:</span>
+									<span class="badge badge-outline badge-sm font-mono">
+										{signalingAdapter.shortAddress($playerState.remotePeerId)}
+									</span>
+								</div>
+							{/if}
+						</div>
+					{/if}
+
+					{#if $chatState.phase !== 'disconnected'}
+						<div class="flex flex-col gap-1">
+							<span class="text-xs font-semibold text-base-content/50">
+								Chat Peers ({$chatState.peerIds.length})
+							</span>
+							{#if $chatState.localPeerId}
+								<div class="flex items-center gap-1">
+									<span class="text-xs text-base-content/40">You:</span>
+									<span class="font-mono text-xs text-base-content/60">
+										{signalingAdapter.shortAddress($chatState.localPeerId)}
+									</span>
+								</div>
+							{/if}
+							{#if $chatState.peerIds.length > 0}
+								<div class="flex flex-wrap gap-1">
+									{#each $chatState.peerIds as peerId (peerId)}
+										<span class="badge badge-outline badge-sm font-mono">
+											{signalingAdapter.shortAddress(peerId)}
+										</span>
+									{/each}
+								</div>
+							{:else}
+								<span class="text-xs opacity-40">No peers</span>
+							{/if}
+						</div>
+					{/if}
+				{/if}
+			</div>
+
+			<!-- REMOTE SERVER (collapsible, secondary) -->
+			<div class="mt-3 border-t border-base-300/50 pt-2">
+				<button
+					class="flex w-full items-center justify-between text-xs font-semibold text-base-content/60"
+					onclick={() => (remoteExpanded = !remoteExpanded)}
+				>
+					<span class="flex items-center gap-2">
+						Remote
+						{#if remoteUrl}
+							<span
+								class={classNames('h-1.5 w-1.5 rounded-full', {
+									'bg-success': remoteAvailable,
+									'bg-error': !remoteAvailable
+								})}
+							></span>
+						{/if}
+					</span>
+					<span class={classNames('transition-transform', { 'rotate-180': remoteExpanded })}>
+						&#9662;
+					</span>
+				</button>
+
+				{#if remoteExpanded}
+					<div class="mt-2 flex flex-col gap-2">
+						{#if remoteUrl}
+							<span class="truncate font-mono text-xs text-base-content/60" title={remoteUrl}>
+								{remoteUrl}
+							</span>
+						{:else}
+							<span class="text-xs text-base-content/40">Not configured</span>
+						{/if}
+
+						{#if editingPartyUrl}
+							<div class="flex flex-col gap-1">
+								<input
+									type="text"
+									class="input input-bordered input-xs w-full font-mono"
+									placeholder="https://your-server.partykit.dev"
+									bind:value={editValue}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') savePartyUrl();
+										if (e.key === 'Escape') { editingPartyUrl = false; editValue = ''; }
+									}}
+								/>
+								<div class="flex gap-1">
+									<button class="btn btn-success btn-xs flex-1" disabled={savingUrl} onclick={savePartyUrl}>
+										{#if savingUrl}<span class="loading loading-spinner loading-xs"></span>{:else}Save{/if}
+									</button>
+									<button class="btn btn-ghost btn-xs" onclick={() => { editingPartyUrl = false; editValue = ''; }}>
+										Cancel
+									</button>
+								</div>
 							</div>
 						{:else}
-							<span class="text-xs opacity-40">No peers</span>
+							<div class="flex gap-1">
+								<button
+									class="btn btn-primary btn-xs flex-1"
+									disabled={deploying}
+									onclick={deploySignaling}
+								>
+									{#if deploying}
+										<span class="loading loading-spinner loading-xs"></span>
+										Deploying...
+									{:else}
+										Deploy
+									{/if}
+								</button>
+								<button class="btn btn-ghost btn-xs" onclick={() => { editingPartyUrl = true; editValue = signalingStatus?.partyUrl ?? ''; }}>
+									Set URL
+								</button>
+							</div>
+						{/if}
+
+						{#if deployLogs.length > 0 || deployError}
+							<div class="max-h-32 overflow-y-auto rounded bg-base-300 p-2 font-mono text-xs">
+								{#each deployLogs as line}
+									<div class="whitespace-pre-wrap">{line}</div>
+								{/each}
+								{#if deployError}
+									<div class="text-error">{deployError}</div>
+								{/if}
+							</div>
+						{/if}
+						{#if deployResult}
+							<span
+								class={classNames('badge badge-sm', {
+									'badge-success': deployResult.success,
+									'badge-error': !deployResult.success
+								})}
+							>
+								{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
+							</span>
 						{/if}
 					</div>
 				{/if}

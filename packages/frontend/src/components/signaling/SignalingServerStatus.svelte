@@ -216,7 +216,7 @@
 			<div class="card bg-base-200">
 				<div class="card-body gap-3 p-4">
 					<div class="flex items-center justify-between">
-						<h3 class="text-sm font-semibold">Dev Server</h3>
+						<h3 class="text-sm font-semibold">Local Server</h3>
 						<span
 							class={classNames('badge badge-sm', {
 								'badge-success': status.devAvailable,
@@ -237,7 +237,7 @@
 			<div class="card bg-base-200">
 				<div class="card-body gap-3 p-4">
 					<div class="flex items-center justify-between">
-						<h3 class="text-sm font-semibold">Deployed Server</h3>
+						<h3 class="text-sm font-semibold">Remote Server</h3>
 						{#if status.partyUrl}
 							<span
 								class={classNames('badge badge-sm', {

@@ -64,14 +64,14 @@
 				onclick={() => (serverTarget = 'dev')}
 				disabled={$chatStore.phase !== 'disconnected'}
 			>
-				Dev Server
+				Local
 			</button>
 			<button
 				class={classNames('tab', { 'tab-active': serverTarget === 'deployed' })}
 				onclick={() => (serverTarget = 'deployed')}
 				disabled={$chatStore.phase !== 'disconnected'}
 			>
-				Deployed
+				Remote
 			</button>
 		</div>
 
