@@ -5,9 +5,9 @@
 	"identifier": "com.arktosmos.mhaol",
 	"build": {
 		"beforeDevCommand": "pnpm --filter frontend dev",
-		"devUrl": "http://localhost:1530",
+		"devUrl": "http://localhost:1531",
 		"beforeBuildCommand": "pnpm --filter frontend build",
-		"frontendDist": "./loading"
+		"frontendDist": "../../frontend/dist-static"
 	},
 	"app": {
 		"windows": [
@@ -32,9 +32,6 @@
 			"icons/128x128@2x.png",
 			"icons/icon.icns",
 			"icons/icon.ico"
-		],
-		"resources": {
-			"../../frontend/dist": "server/"
-		}
+		]
 	}
 }
