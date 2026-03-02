@@ -4,7 +4,10 @@ pub mod identities;
 pub mod libraries;
 pub mod media;
 pub mod p2p_stream;
+pub mod player;
 pub mod plugins;
+pub mod torrent;
+pub mod ytdl;
 
 use crate::AppState;
 use axum::Router;
@@ -25,6 +28,9 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/p2p-stream", p2p_stream::router())
         .nest("/api/identities", identities::router())
         .nest("/api/plugins", plugins::router())
+        .nest("/api/ytdl", ytdl::router())
+        .nest("/api/torrent", torrent::router())
+        .nest("/api/player", player::router())
         .with_state(state)
         .layer(cors)
 }

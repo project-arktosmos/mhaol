@@ -6,6 +6,8 @@ pub mod modules;
 use db::repo::*;
 use db::DbPool;
 use identity::IdentityManager;
+use mhaol_torrent::TorrentManager;
+use mhaol_yt_dlp::DownloadManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
 use std::path::{Path, PathBuf};
@@ -28,6 +30,8 @@ pub struct AppState {
     pub image_tags: ImageTagRepo,
     pub identity_manager: IdentityManager,
     pub module_registry: Arc<RwLock<ModuleRegistry>>,
+    pub ytdl_manager: Arc<DownloadManager>,
+    pub torrent_manager: Arc<TorrentManager>,
 }
 
 impl AppState {
@@ -35,11 +39,19 @@ impl AppState {
     pub fn new(db_path: Option<&Path>) -> Result<Self, rusqlite::Error> {
         let db = db::open_database(db_path)?;
         let identities_path = identity::default_identities_path();
-        Ok(Self::from_pool(db, identities_path))
+        let ytdl_config = mhaol_yt_dlp::YtDownloadConfig::from_env();
+        let ytdl_manager = Arc::new(DownloadManager::new(ytdl_config));
+        let torrent_manager = Arc::new(TorrentManager::new());
+        Ok(Self::from_pool(db, identities_path, ytdl_manager, torrent_manager))
     }
 
-    /// Create AppState from an existing database pool with a custom identities file path.
-    pub fn from_pool(db: DbPool, identities_path: PathBuf) -> Self {
+    /// Create AppState from an existing database pool with pre-configured managers.
+    pub fn from_pool(
+        db: DbPool,
+        identities_path: PathBuf,
+        ytdl_manager: Arc<DownloadManager>,
+        torrent_manager: Arc<TorrentManager>,
+    ) -> Self {
         Self {
             settings: SettingsRepo::new(Arc::clone(&db)),
             metadata: MetadataRepo::new(Arc::clone(&db)),
@@ -54,6 +66,8 @@ impl AppState {
             image_tags: ImageTagRepo::new(Arc::clone(&db)),
             identity_manager: IdentityManager::new(identities_path),
             module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
+            ytdl_manager,
+            torrent_manager,
             db,
         }
     }

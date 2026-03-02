@@ -1,3 +1,7 @@
+pub mod p2p_stream;
+pub mod torrent;
+pub mod ytdl;
+
 use crate::AppState;
 use serde::Serialize;
 use std::collections::HashMap;
