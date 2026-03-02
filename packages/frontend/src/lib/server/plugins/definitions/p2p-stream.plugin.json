@@ -1,9 +1,0 @@
-{
-	"name": "p2p-stream",
-	"version": "1.0.0",
-	"description": "P2P streaming worker for media playback",
-	"compatibility": {
-		"mobile": true,
-		"computer": true
-	}
-}

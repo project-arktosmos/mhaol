@@ -2,7 +2,7 @@ import { browser } from '$app/environment';
 
 function getApiBase(): string {
 	if (!browser) return '';
-	return localStorage.getItem('api-server-url') ?? '';
+	return localStorage.getItem('api-server-url') ?? 'http://localhost:1530';
 }
 
 export const apiBase = getApiBase();
