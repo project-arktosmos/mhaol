@@ -14,7 +14,6 @@ use crate::extractor::innertube::InnertubeApi;
 use crate::extractor::player::{PlayerResponse, ResolvedFormat, StreamFormat, extract_player_js_url};
 use crate::extractor::signatures::{self, SignatureResolver};
 use crate::types::{AudioFormat, AudioQuality, DownloadMode, VideoFormat, VideoQuality, VideoInfo};
-use crate::util::sanitize_title;
 
 /// Configuration for a single download task.
 #[derive(Debug, Clone)]
@@ -160,9 +159,9 @@ impl DownloadPipeline {
         let download_headers = Self::build_download_headers(client);
         let http_client = self.innertube.http_client();
 
-        let safe_title = sanitize_title(&config.title);
+        let file_stem = &config.video_id;
         let output_dir = Path::new(&config.output_dir);
-        let final_output = output_dir.join(format!("{}.{}", safe_title, selected.output_extension));
+        let final_output = output_dir.join(format!("{}.{}", file_stem, selected.output_extension));
 
         // Check cancellation
         if *cancel_rx.borrow() {
@@ -185,7 +184,7 @@ impl DownloadPipeline {
                 AudioFormat::Mp3 => "mp3",
                 AudioFormat::Opus => "opus",
             };
-            let audio_path = output_dir.join(format!("{}.{}", safe_title, audio_ext));
+            let audio_path = output_dir.join(format!("{}.{}", file_stem, audio_ext));
             if self.muxer.is_available() {
                 let _ = state_tx.send(PipelineState::Muxing);
                 self.muxer
@@ -207,7 +206,7 @@ impl DownloadPipeline {
             && selected.audio.codec != "mp3"
         {
             // Convert adaptive AAC/Opus → MP3
-            let mp3_path = output_dir.join(format!("{}.mp3", safe_title));
+            let mp3_path = output_dir.join(format!("{}.mp3", file_stem));
             if self.muxer.is_available() {
                 self.muxer
                     .convert_audio(
@@ -477,12 +476,12 @@ impl DownloadPipeline {
         http_client: &reqwest::Client,
         download_headers: &HeaderMap,
     ) -> Result<()> {
-        let safe_title = sanitize_title(&config.title);
+        let file_stem = &config.video_id;
         let video_format = selected.video.as_ref().unwrap();
         let audio_format = &selected.audio;
 
-        let video_tmp = output_dir.join(format!("{}.video.tmp.{}", safe_title, video_format.container));
-        let audio_tmp = output_dir.join(format!("{}.audio.tmp.{}", safe_title, audio_format.container));
+        let video_tmp = output_dir.join(format!("{}.video.tmp.{}", file_stem, video_format.container));
+        let audio_tmp = output_dir.join(format!("{}.audio.tmp.{}", file_stem, audio_format.container));
 
         // Download video
         let (progress_tx, mut progress_rx) = watch::channel(DownloadProgressUpdate {

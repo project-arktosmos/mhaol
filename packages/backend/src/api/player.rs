@@ -105,11 +105,8 @@ async fn stream_status(State(_state): State<AppState>) -> impl IntoResponse {
 #[derive(Deserialize)]
 struct CreateSessionBody {
     file_path: String,
-    #[allow(dead_code)]
     mode: Option<String>,
-    #[allow(dead_code)]
     video_codec: Option<String>,
-    #[allow(dead_code)]
     video_quality: Option<String>,
 }
 
@@ -125,10 +122,15 @@ async fn create_session(
             .into_response();
     }
 
-    let signaling_url = state
+    let mut signaling_url = state
         .settings
         .get("signaling.partyUrl")
         .unwrap_or_default();
+
+    // Fall back to local dev signaling server
+    if signaling_url.is_empty() && state.signaling_dev.is_available() {
+        signaling_url = state.signaling_dev.dev_url();
+    }
 
     if signaling_url.is_empty() {
         return (
@@ -138,23 +140,61 @@ async fn create_session(
             .into_response();
     }
 
-    let session_id = uuid::Uuid::new_v4().to_string();
-    let room_id = format!("player-{}", session_id);
+    if !state.worker_bridge.is_ready() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": "Streaming worker is not running" })),
+        )
+            .into_response();
+    }
 
-    (
-        StatusCode::CREATED,
-        Json(serde_json::json!({
-            "session_id": session_id,
-            "room_id": room_id,
-            "signaling_url": signaling_url,
-        })),
-    )
-        .into_response()
+    let session_id = uuid::Uuid::new_v4().to_string();
+
+    match state
+        .worker_bridge
+        .create_session(
+            &session_id,
+            &body.file_path,
+            &signaling_url,
+            body.mode,
+            body.video_codec,
+            body.video_quality,
+        )
+        .await
+    {
+        Ok(crate::worker_bridge::WorkerEvent::SessionCreated { session_id, room_id }) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "session_id": session_id,
+                "room_id": room_id,
+                "signaling_url": signaling_url,
+            })),
+        )
+            .into_response(),
+        Ok(crate::worker_bridge::WorkerEvent::Error { error, .. }) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": error })),
+        )
+            .into_response(),
+        Ok(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": "Unexpected worker response" })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e })),
+        )
+            .into_response(),
+    }
 }
 
 async fn delete_session(
-    State(_state): State<AppState>,
-    Path(_id): Path<String>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
 ) -> impl IntoResponse {
+    if state.worker_bridge.is_ready() {
+        let _ = state.worker_bridge.delete_session(&id).await;
+    }
     Json(serde_json::json!({ "ok": true }))
 }

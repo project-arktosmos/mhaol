@@ -30,8 +30,13 @@
 
 	let signalingStatus = $state<SignalingServerStatus | null>(null);
 
+	let editingPartyUrl = $state(false);
 	let editValue = $state('');
 	let savingUrl = $state(false);
+	let deploying = $state(false);
+	let deployLogs = $state<string[]>([]);
+	let deployError = $state<string | null>(null);
+	let deployResult = $state<{ success: boolean; code: number | null; url?: string } | null>(null);
 
 	async function fetchSignalingStatus() {
 		try {
@@ -45,6 +50,76 @@
 	onMount(() => {
 		fetchSignalingStatus();
 	});
+
+	async function deploySignaling() {
+		deploying = true;
+		deployLogs = [];
+		deployResult = null;
+		deployError = null;
+
+		try {
+			const res = await fetch(apiUrl('/api/signaling/deploy'));
+
+			if (res.status === 409) {
+				deployError = 'A deploy is already in progress';
+				deploying = false;
+				return;
+			}
+
+			if (!res.ok || !res.body) {
+				const body = await res.json().catch(() => null);
+				deployError = body?.error ?? `Deploy failed: HTTP ${res.status}`;
+				deploying = false;
+				return;
+			}
+
+			const reader = res.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = '';
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n');
+				buffer = lines.pop() ?? '';
+
+				let currentEvent = '';
+				let currentData = '';
+
+				for (const line of lines) {
+					if (line.startsWith('event:')) {
+						currentEvent = line.slice(6).trim();
+					} else if (line.startsWith('data:')) {
+						currentData = line.slice(5).trim();
+					} else if (line === '' && currentEvent && currentData) {
+						try {
+							const data = JSON.parse(currentData);
+							if (currentEvent === 'log') {
+								deployLogs = [...deployLogs, data.text];
+							} else if (currentEvent === 'done') {
+								deployResult = data;
+								if (data.success) {
+									await fetchSignalingStatus();
+								}
+							} else if (currentEvent === 'error') {
+								deployError = data.message;
+							}
+						} catch {
+							// ignore parse errors
+						}
+						currentEvent = '';
+						currentData = '';
+					}
+				}
+			}
+		} catch (e) {
+			deployError = e instanceof Error ? e.message : 'Deploy failed';
+		} finally {
+			deploying = false;
+		}
+	}
 
 	async function savePartyUrl() {
 		savingUrl = true;
@@ -158,20 +233,68 @@
 		{:else if !serverAvailable}
 			<div class="flex flex-col gap-2">
 				<span class="text-xs text-base-content/60">Not configured</span>
-				<div class="flex flex-col gap-1">
-					<input
-						type="text"
-						class="input input-bordered input-xs w-full font-mono"
-						placeholder="https://your-server.partykit.dev"
-						bind:value={editValue}
-						onkeydown={(e) => {
-							if (e.key === 'Enter') savePartyUrl();
-						}}
-					/>
-					<button class="btn btn-primary btn-xs" disabled={savingUrl || !editValue} onclick={savePartyUrl}>
-						{#if savingUrl}<span class="loading loading-spinner loading-xs"></span>{:else}Save{/if}
-					</button>
-				</div>
+
+				{#if editingPartyUrl}
+					<div class="flex flex-col gap-1">
+						<input
+							type="text"
+							class="input input-bordered input-xs w-full font-mono"
+							placeholder="https://your-server.partykit.dev"
+							bind:value={editValue}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') savePartyUrl();
+								if (e.key === 'Escape') { editingPartyUrl = false; editValue = ''; }
+							}}
+						/>
+						<div class="flex gap-1">
+							<button class="btn btn-success btn-xs flex-1" disabled={savingUrl} onclick={savePartyUrl}>
+								{#if savingUrl}<span class="loading loading-spinner loading-xs"></span>{:else}Save{/if}
+							</button>
+							<button class="btn btn-ghost btn-xs" onclick={() => { editingPartyUrl = false; editValue = ''; }}>
+								Cancel
+							</button>
+						</div>
+					</div>
+				{:else}
+					<div class="flex gap-1">
+						<button
+							class="btn btn-primary btn-xs flex-1"
+							disabled={deploying}
+							onclick={deploySignaling}
+						>
+							{#if deploying}
+								<span class="loading loading-spinner loading-xs"></span>
+								Deploying...
+							{:else}
+								Deploy
+							{/if}
+						</button>
+						<button class="btn btn-ghost btn-xs" onclick={() => { editingPartyUrl = true; editValue = signalingStatus?.partyUrl ?? ''; }}>
+							Set URL
+						</button>
+					</div>
+				{/if}
+
+				{#if deployLogs.length > 0 || deployError}
+					<div class="max-h-32 overflow-y-auto rounded bg-base-300 p-2 font-mono text-xs">
+						{#each deployLogs as line}
+							<div class="whitespace-pre-wrap">{line}</div>
+						{/each}
+						{#if deployError}
+							<div class="text-error">{deployError}</div>
+						{/if}
+					</div>
+				{/if}
+				{#if deployResult}
+					<span
+						class={classNames('badge badge-sm', {
+							'badge-success': deployResult.success,
+							'badge-error': !deployResult.success
+						})}
+					>
+						{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
+					</span>
+				{/if}
 			</div>
 		{:else}
 			<div class="flex flex-col gap-2">

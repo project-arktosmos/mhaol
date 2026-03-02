@@ -26,6 +26,14 @@ async fn main() {
     state.seed_default_library();
     state.initialize_modules();
 
+    // Start local signaling dev server and p2p-stream worker in the background
+    let signaling_dev = state.signaling_dev.clone();
+    let worker_bridge = state.worker_bridge.clone();
+    tokio::spawn(async move {
+        signaling_dev.start().await;
+        worker_bridge.start().await;
+    });
+
     let app = api::build_router(state);
 
     let addr = format!("{}:{}", host, port);

@@ -2,6 +2,8 @@ pub mod api;
 pub mod db;
 pub mod identity;
 pub mod modules;
+pub mod signaling_dev;
+pub mod worker_bridge;
 
 use db::repo::*;
 use db::DbPool;
@@ -11,6 +13,8 @@ use mhaol_yt_dlp::DownloadManager;
 use modules::image_tagger::ImageTaggerManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
+use signaling_dev::SignalingDevServer;
+use worker_bridge::WorkerBridge;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -34,6 +38,8 @@ pub struct AppState {
     pub ytdl_manager: Arc<DownloadManager>,
     pub torrent_manager: Arc<TorrentManager>,
     pub image_tagger_manager: Arc<ImageTaggerManager>,
+    pub signaling_dev: Arc<SignalingDevServer>,
+    pub worker_bridge: Arc<WorkerBridge>,
 }
 
 impl AppState {
@@ -71,6 +77,8 @@ impl AppState {
             ytdl_manager,
             torrent_manager,
             image_tagger_manager: Arc::new(ImageTaggerManager::new()),
+            signaling_dev: Arc::new(SignalingDevServer::new()),
+            worker_bridge: Arc::new(WorkerBridge::new()),
             db,
         }
     }
