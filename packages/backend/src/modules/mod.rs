@@ -1,5 +1,10 @@
+pub mod lyrics;
+pub mod musicbrainz;
 pub mod p2p_stream;
+pub mod tmdb;
 pub mod torrent;
+pub mod torrent_search;
+pub mod youtube_meta;
 pub mod ytdl;
 
 use crate::AppState;

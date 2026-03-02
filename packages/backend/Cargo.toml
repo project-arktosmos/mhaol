@@ -36,6 +36,7 @@ mhaol-yt-dlp = { path = "../rust-yt-dlp" }
 mhaol-torrent = { path = "../rust-torrent" }
 mhaol-p2p-stream = { path = "../p2p-stream" }
 anyhow = "1"
+urlencoding = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

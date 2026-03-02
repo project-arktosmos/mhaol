@@ -1,12 +1,17 @@
+pub mod addons;
 pub mod database;
 pub mod downloads;
 pub mod identities;
 pub mod libraries;
+pub mod lyrics;
 pub mod media;
+pub mod musicbrainz;
 pub mod p2p_stream;
 pub mod player;
 pub mod plugins;
+pub mod tmdb;
 pub mod torrent;
+pub mod youtube;
 pub mod ytdl;
 
 use crate::AppState;
@@ -31,6 +36,11 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/ytdl", ytdl::router())
         .nest("/api/torrent", torrent::router())
         .nest("/api/player", player::router())
+        .nest("/api/tmdb", tmdb::router())
+        .nest("/api/musicbrainz", musicbrainz::router())
+        .nest("/api/youtube", youtube::router())
+        .nest("/api/lyrics", lyrics::router())
+        .nest("/api/addons", addons::router())
         .with_state(state)
         .layer(cors)
 }

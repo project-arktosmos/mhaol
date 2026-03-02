@@ -1,6 +1,6 @@
 use crate::AppState;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{
         sse::{Event, KeepAlive},
@@ -9,12 +9,14 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
+use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/config", get(get_config))
         .route("/debug", get(debug_info))
+        .route("/search", get(search_torrents))
         .route("/status", get(get_status))
         .route("/storage/clear", post(clear_storage))
         .route("/torrents", get(list_torrents).post(add_torrent))
@@ -267,6 +269,125 @@ async fn torrent_events(
     };
 
     Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+const TRACKERS: &[&str] = &[
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://tracker.openbittorrent.com:6969/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://tracker.dler.org:6969/announce",
+    "udp://opentracker.i2p.rocks:6969/announce",
+];
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: Option<String>,
+    cat: Option<String>,
+}
+
+#[derive(Serialize)]
+struct SearchResult {
+    id: String,
+    name: String,
+    #[serde(rename = "infoHash")]
+    info_hash: String,
+    seeders: i64,
+    leechers: i64,
+    size: i64,
+    #[serde(rename = "fileCount")]
+    file_count: i64,
+    uploader: String,
+    #[serde(rename = "uploadedAt")]
+    uploaded_at: i64,
+    category: String,
+    #[serde(rename = "magnetUri")]
+    magnet_uri: String,
+}
+
+async fn search_torrents(
+    Query(query): Query<SearchQuery>,
+) -> impl IntoResponse {
+    let q = match &query.q {
+        Some(q) if !q.is_empty() => q,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "Missing query parameter 'q'" })),
+            )
+                .into_response()
+        }
+    };
+
+    let cat = query.cat.as_deref().unwrap_or("0");
+    let url = format!(
+        "https://apibay.org/q.php?q={}&cat={}",
+        urlencoding::encode(q),
+        cat
+    );
+
+    match reqwest::get(&url).await {
+        Ok(resp) if resp.status().is_success() => {
+            match resp.json::<Vec<serde_json::Value>>().await {
+                Ok(results) => {
+                    // Check for "no results" response
+                    if results.len() == 1 {
+                        if let Some(name) = results[0]["name"].as_str() {
+                            if name == "No results returned" {
+                                return Json(serde_json::json!([])).into_response();
+                            }
+                        }
+                    }
+
+                    let search_results: Vec<SearchResult> = results
+                        .iter()
+                        .filter_map(|r| {
+                            let info_hash = r["info_hash"].as_str()?.to_string();
+                            let name = r["name"].as_str()?.to_string();
+
+                            // Build magnet URI
+                            let trackers: String = TRACKERS
+                                .iter()
+                                .map(|t| format!("&tr={}", urlencoding::encode(t)))
+                                .collect();
+                            let magnet_uri = format!(
+                                "magnet:?xt=urn:btih:{}&dn={}{}",
+                                info_hash,
+                                urlencoding::encode(&name),
+                                trackers
+                            );
+
+                            Some(SearchResult {
+                                id: r["id"].as_str().unwrap_or("0").to_string(),
+                                name,
+                                info_hash,
+                                seeders: r["seeders"].as_str()?.parse().ok()?,
+                                leechers: r["leechers"].as_str()?.parse().ok()?,
+                                size: r["size"].as_str()?.parse().ok()?,
+                                file_count: r["num_files"].as_str()?.parse().unwrap_or(0),
+                                uploader: r["username"].as_str().unwrap_or("").to_string(),
+                                uploaded_at: r["added"].as_str()?.parse().ok()?,
+                                category: r["category"].as_str().unwrap_or("0").to_string(),
+                                magnet_uri,
+                            })
+                        })
+                        .collect();
+
+                    Json(serde_json::to_value(search_results).unwrap()).into_response()
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response(),
+            }
+        }
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": "PirateBay API unavailable" })),
+        )
+            .into_response(),
+    }
 }
 
 async fn find_torrent_id(state: &AppState, info_hash: &str) -> Option<usize> {
