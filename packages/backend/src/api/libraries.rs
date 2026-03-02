@@ -31,7 +31,7 @@ pub fn router() -> Router<AppState> {
             put(link_musicbrainz).delete(unlink_musicbrainz),
         )
         .route("/{id}/files", get(get_library_files))
-        .route("/{id}/scan", get(scan_library))
+        .route("/{id}/scan", get(scan_library).post(scan_library))
         .route("/browse", get(browse_directory))
         .route("/media-types", get(get_media_types))
         .route("/categories", get(get_categories))

@@ -2,6 +2,7 @@ pub mod addons;
 pub mod database;
 pub mod downloads;
 pub mod identities;
+pub mod images;
 pub mod libraries;
 pub mod lyrics;
 pub mod media;
@@ -9,6 +10,7 @@ pub mod musicbrainz;
 pub mod p2p_stream;
 pub mod player;
 pub mod plugins;
+pub mod signaling;
 pub mod tmdb;
 pub mod torrent;
 pub mod youtube;
@@ -41,6 +43,8 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/youtube", youtube::router())
         .nest("/api/lyrics", lyrics::router())
         .nest("/api/addons", addons::router())
+        .nest("/api/signaling", signaling::router())
+        .nest("/api/images", images::router())
         .with_state(state)
         .layer(cors)
 }
