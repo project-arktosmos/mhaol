@@ -41,13 +41,10 @@
 		</svg>
 	</div>
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-	<ul tabindex="0" class="menu dropdown-content z-50 mt-1 w-52 rounded-box bg-base-200 p-2 shadow">
+	<ul tabindex="0" class="dropdown-content menu z-50 mt-1 w-52 rounded-box bg-base-200 p-2 shadow">
 		{#each navigableChildren as child (child.path)}
 			<li>
-				<a
-					href={child.path}
-					class={classNames({ active: $page.url.pathname === child.path })}
-				>
+				<a href={child.path} class={classNames({ active: $page.url.pathname === child.path })}>
 					{child.label}
 				</a>
 			</li>

@@ -22,7 +22,7 @@
 	<p class="truncate text-xs opacity-60" title={item.path}>{item.path}</p>
 	{#if tagging}
 		<div class="flex items-center gap-2 text-xs opacity-70">
-			<span class="loading loading-spinner loading-xs"></span>
+			<span class="loading loading-xs loading-spinner"></span>
 			Tagging...
 		</div>
 	{:else if tags.length > 0}

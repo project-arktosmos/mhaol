@@ -195,12 +195,11 @@
 			testing = false;
 		}
 	}
-
 </script>
 
 <div class="flex flex-col gap-4">
 	{#if error}
-		<div class="alert alert-error text-sm">
+		<div class="alert text-sm alert-error">
 			<span>{error}</span>
 			<button class="btn btn-ghost btn-xs" onclick={() => (error = null)}>x</button>
 		</div>
@@ -208,7 +207,7 @@
 
 	{#if loading}
 		<div class="flex justify-center py-4">
-			<span class="loading loading-spinner loading-md"></span>
+			<span class="loading loading-md loading-spinner"></span>
 		</div>
 	{:else if status}
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -227,9 +226,7 @@
 						</span>
 					</div>
 					<span class="font-mono text-sm text-base-content/70">{status.devUrl}</span>
-					<p class="text-xs text-base-content/50">
-						Spawned automatically by the plugin connector
-					</p>
+					<p class="text-xs text-base-content/50">Spawned automatically by the plugin connector</p>
 				</div>
 			</div>
 
@@ -259,7 +256,7 @@
 						<div class="flex gap-2">
 							<input
 								type="text"
-								class="input input-bordered input-sm flex-1 font-mono"
+								class="input-bordered input input-sm flex-1 font-mono"
 								placeholder="https://{status.deployName}.user.partykit.dev"
 								bind:value={editValue}
 								onkeydown={(e) => {
@@ -267,8 +264,8 @@
 									if (e.key === 'Escape') cancelEdit();
 								}}
 							/>
-							<button class="btn btn-success btn-xs" disabled={saving} onclick={savePartyUrl}>
-								{#if saving}<span class="loading loading-spinner loading-xs"></span>{:else}Save{/if}
+							<button class="btn btn-xs btn-success" disabled={saving} onclick={savePartyUrl}>
+								{#if saving}<span class="loading loading-xs loading-spinner"></span>{:else}Save{/if}
 							</button>
 							<button class="btn btn-ghost btn-xs" onclick={cancelEdit}>Cancel</button>
 						</div>
@@ -279,13 +276,9 @@
 							</span>
 							<div class="flex gap-1">
 								{#if status.partyUrl}
-									<button
-										class="btn btn-ghost btn-xs"
-										disabled={testing}
-										onclick={testDeployedUrl}
-									>
+									<button class="btn btn-ghost btn-xs" disabled={testing} onclick={testDeployedUrl}>
 										{#if testing}
-											<span class="loading loading-spinner loading-xs"></span>
+											<span class="loading loading-xs loading-spinner"></span>
 										{:else}
 											Test
 										{/if}
@@ -319,7 +312,7 @@
 							onclick={deploy}
 						>
 							{#if deploying}
-								<span class="loading loading-spinner loading-xs"></span>
+								<span class="loading loading-xs loading-spinner"></span>
 								Deploying...
 							{:else if status.deployedAvailable}
 								Redeploy

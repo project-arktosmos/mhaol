@@ -35,8 +35,8 @@
 
 	let canAdd = $derived(
 		$state.selectedPath.length > 0 &&
-		$state.selectedName.trim().length > 0 &&
-		$state.selectedMediaTypes.length > 0
+			$state.selectedName.trim().length > 0 &&
+			$state.selectedMediaTypes.length > 0
 	);
 </script>
 
@@ -55,10 +55,17 @@
 		<!-- Selected path display -->
 		{#if $state.selectedPath}
 			<div class="flex items-center gap-2 rounded-lg bg-success/10 px-3 py-2 text-sm">
-				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4 text-success"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+				>
 					<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 				</svg>
-				<span class="font-mono truncate">{$state.selectedPath}</span>
+				<span class="truncate font-mono">{$state.selectedPath}</span>
 			</div>
 		{/if}
 
@@ -71,7 +78,7 @@
 				id="library-name"
 				type="text"
 				placeholder="Enter a name for this library"
-				class="input input-bordered"
+				class="input-bordered input"
 				value={$state.selectedName}
 				oninput={handleNameInput}
 			/>
@@ -87,7 +94,7 @@
 					<label class="label cursor-pointer gap-2">
 						<input
 							type="checkbox"
-							class="checkbox checkbox-primary checkbox-sm"
+							class="checkbox checkbox-sm checkbox-primary"
 							checked={$state.selectedMediaTypes.includes(option.value)}
 							onchange={() => handleToggleMediaType(option.value)}
 						/>
@@ -99,9 +106,7 @@
 
 		<!-- Actions -->
 		<div class="flex justify-end gap-2">
-			<button class="btn btn-ghost" onclick={handleCancel}>
-				Cancel
-			</button>
+			<button class="btn btn-ghost" onclick={handleCancel}> Cancel </button>
 			<button
 				class={classNames('btn btn-primary', { 'btn-disabled': !canAdd })}
 				disabled={!canAdd}

@@ -86,11 +86,7 @@
 						{/if}
 					</span>
 				</div>
-				<button
-					class="btn btn-ghost btn-xs"
-					on:click={handleRefreshHealth}
-					title="Refresh status"
-				>
+				<button class="btn btn-ghost btn-xs" on:click={handleRefreshHealth} title="Refresh status">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						class="h-4 w-4"
@@ -171,7 +167,7 @@
 			</label>
 			<select
 				id="video-quality-select"
-				class="select select-bordered w-full"
+				class="select-bordered select w-full"
 				value={$settings.videoQuality}
 				on:change={handleVideoQualityChange}
 			>
@@ -195,7 +191,7 @@
 			</label>
 			<select
 				id="video-codec-select"
-				class="select select-bordered w-full"
+				class="select-bordered select w-full"
 				value={$settings.videoCodec}
 				on:change={handleVideoCodecChange}
 			>
@@ -219,7 +215,7 @@
 			</label>
 			<select
 				id="audio-codec-select"
-				class="select select-bordered w-full"
+				class="select-bordered select w-full"
 				disabled
 				value={$settings.audioCodec}
 			>
@@ -235,7 +231,7 @@
 			<input
 				id="stun-server-input"
 				type="text"
-				class="input input-bordered w-full font-mono text-sm"
+				class="input-bordered input w-full font-mono text-sm"
 				placeholder="stun:stun.l.google.com:19302"
 				value={$settings.stunServer}
 				on:input={handleStunChange}
@@ -262,20 +258,15 @@
 				viewBox="0 0 24 24"
 				stroke="currentColor"
 			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M19 9l-7 7-7-7"
-				/>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 			</svg>
 		</button>
 
 		{#if showAdvanced}
 			<div class="mt-2 flex flex-col gap-3 rounded-lg bg-base-300 p-3">
 				<p class="text-xs text-base-content/60">
-					TURN servers relay traffic when direct peer-to-peer connections fail. Add server
-					URLs in the format <code class="text-xs">turn:host:port</code> or
+					TURN servers relay traffic when direct peer-to-peer connections fail. Add server URLs in
+					the format <code class="text-xs">turn:host:port</code> or
 					<code class="text-xs">turns:host:port</code>.
 				</p>
 
@@ -283,12 +274,10 @@
 				{#if $settings.turnServers.length > 0}
 					<div class="flex flex-col gap-2">
 						{#each $settings.turnServers as server}
-							<div
-								class="flex items-center justify-between rounded-lg bg-base-200 px-3 py-2"
-							>
+							<div class="flex items-center justify-between rounded-lg bg-base-200 px-3 py-2">
 								<span class="font-mono text-sm">{server}</span>
 								<button
-									class="btn btn-ghost btn-xs text-error"
+									class="btn text-error btn-ghost btn-xs"
 									on:click={() => handleRemoveTurnServer(server)}
 									title="Remove server"
 								>
@@ -300,11 +289,7 @@
 										stroke="currentColor"
 										stroke-width="2"
 									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M6 18L18 6M6 6l12 12"
-										/>
+										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 									</svg>
 								</button>
 							</div>
@@ -318,13 +303,13 @@
 				<div class="flex items-center gap-2">
 					<input
 						type="text"
-						class="input input-bordered input-sm flex-1 font-mono text-xs"
+						class="input-bordered input input-sm flex-1 font-mono text-xs"
 						placeholder="turn:example.com:3478"
 						bind:value={newTurnServer}
 						on:keydown={handleTurnKeydown}
 					/>
 					<button
-						class="btn btn-primary btn-sm"
+						class="btn btn-sm btn-primary"
 						on:click={handleAddTurnServer}
 						disabled={!newTurnServer.trim()}
 					>
@@ -336,7 +321,7 @@
 
 		<!-- Error display -->
 		{#if $state.error}
-			<div class="alert alert-error text-sm">
+			<div class="alert text-sm alert-error">
 				<span>{$state.error}</span>
 			</div>
 		{/if}

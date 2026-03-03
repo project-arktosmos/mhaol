@@ -50,9 +50,7 @@
 			});
 			if (!res.ok) {
 				const body = await res.json().catch(() => ({}));
-				throw new Error(
-					(body as { message?: string }).message ?? `HTTP ${res.status}`
-				);
+				throw new Error((body as { message?: string }).message ?? `HTTP ${res.status}`);
 			}
 			newName = '';
 			await loadIdentities();
@@ -165,7 +163,7 @@
 </div>
 
 {#if error}
-	<div class="alert alert-error mt-4">
+	<div class="mt-4 alert alert-error">
 		<span>{error}</span>
 		<button class="btn btn-ghost btn-sm" onclick={() => (error = null)}>x</button>
 	</div>
@@ -180,7 +178,7 @@
 		<input
 			id="new-identity-name"
 			type="text"
-			class="input input-bordered input-sm"
+			class="input-bordered input input-sm"
 			placeholder="e.g. MY_WALLET"
 			bind:value={newName}
 			disabled={creating}
@@ -188,12 +186,12 @@
 		/>
 	</div>
 	<button
-		class={classNames('btn btn-primary btn-sm', { loading: creating })}
+		class={classNames('btn btn-sm btn-primary', { loading: creating })}
 		disabled={creating || !newName.trim()}
 		onclick={createIdentity}
 	>
 		{#if creating}
-			<span class="loading loading-spinner loading-xs"></span>
+			<span class="loading loading-xs loading-spinner"></span>
 		{:else}
 			Create
 		{/if}
@@ -203,7 +201,7 @@
 <!-- Identity list -->
 {#if loading}
 	<div class="flex justify-center py-12">
-		<span class="loading loading-spinner loading-lg"></span>
+		<span class="loading loading-lg loading-spinner"></span>
 	</div>
 {:else if identities.length === 0}
 	<div class="mt-4 rounded-lg bg-base-200 p-8 text-center">
@@ -215,14 +213,14 @@
 			<div class="card bg-base-200">
 				<div class="card-body gap-3 p-4">
 					<div class="flex items-center gap-4">
-						<div class="flex-1 min-w-0">
+						<div class="min-w-0 flex-1">
 							<div class="font-mono text-sm font-semibold">{identity.name}</div>
-							<div class="flex items-center gap-2 mt-1">
-								<code class="break-all text-xs opacity-70">
+							<div class="mt-1 flex items-center gap-2">
+								<code class="text-xs break-all opacity-70">
 									{identity.address}
 								</code>
 								<button
-									class="btn btn-ghost btn-xs h-auto min-h-0 px-1 py-0.5"
+									class="btn h-auto min-h-0 px-1 py-0.5 btn-ghost btn-xs"
 									title="Copy address"
 									onclick={() => copyAddress(identity.address)}
 								>
@@ -233,15 +231,13 @@
 						<div class="flex gap-1">
 							<button
 								class="btn btn-ghost btn-xs"
-								onclick={() =>
-									(confirmTarget = { name: identity.name, action: 'regenerate' })}
+								onclick={() => (confirmTarget = { name: identity.name, action: 'regenerate' })}
 							>
 								Regenerate
 							</button>
 							<button
-								class="btn btn-ghost btn-xs text-error"
-								onclick={() =>
-									(confirmTarget = { name: identity.name, action: 'delete' })}
+								class="btn text-error btn-ghost btn-xs"
+								onclick={() => (confirmTarget = { name: identity.name, action: 'delete' })}
 							>
 								Delete
 							</button>
@@ -271,7 +267,7 @@
 							</div>
 						</div>
 						<textarea
-							class="textarea textarea-bordered w-full font-mono text-xs"
+							class="textarea-bordered textarea w-full font-mono text-xs"
 							rows="7"
 							disabled
 							value={prettyJson(identity.passport)}
@@ -288,30 +284,20 @@
 		{#if confirmTarget.action === 'regenerate'}
 			<h3 class="text-lg font-bold">Regenerate "{confirmTarget.name}"?</h3>
 			<p class="py-4">
-				This will permanently discard the current private key and generate a new one.
-				The address will change and peers using it will no longer be able to reach you.
+				This will permanently discard the current private key and generate a new one. The address
+				will change and peers using it will no longer be able to reach you.
 			</p>
 		{:else}
 			<h3 class="text-lg font-bold">Delete "{confirmTarget.name}"?</h3>
-			<p class="py-4">
-				This will permanently remove this identity. The private key will be lost.
-			</p>
+			<p class="py-4">This will permanently remove this identity. The private key will be lost.</p>
 		{/if}
 		<div class="modal-action">
-			<button
-				class="btn btn-ghost"
-				disabled={actionLoading}
-				onclick={() => (confirmTarget = null)}
-			>
+			<button class="btn btn-ghost" disabled={actionLoading} onclick={() => (confirmTarget = null)}>
 				Cancel
 			</button>
-			<button
-				class="btn btn-error"
-				disabled={actionLoading}
-				onclick={handleConfirm}
-			>
+			<button class="btn btn-error" disabled={actionLoading} onclick={handleConfirm}>
 				{#if actionLoading}
-					<span class="loading loading-spinner loading-xs"></span>
+					<span class="loading loading-xs loading-spinner"></span>
 				{:else}
 					{confirmTarget.action === 'regenerate' ? 'Regenerate' : 'Delete'}
 				{/if}

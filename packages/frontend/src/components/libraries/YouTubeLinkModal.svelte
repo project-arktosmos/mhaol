@@ -57,9 +57,9 @@
 	});
 </script>
 
-<div class="modal modal-open">
+<div class="modal-open modal">
 	<div class="modal-box max-w-2xl">
-		<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onclick={onclose}>
+		<button class="btn absolute top-2 right-2 btn-circle btn-ghost btn-sm" onclick={onclose}>
 			&times;
 		</button>
 
@@ -70,14 +70,18 @@
 			<div class="join flex-1">
 				<input
 					type="text"
-					class="input input-bordered input-sm join-item w-full"
+					class="input-bordered input input-sm join-item w-full"
 					placeholder="YouTube video ID..."
 					bind:value={videoId}
 					onkeydown={handleKeydown}
 				/>
-				<button class="btn btn-sm btn-primary join-item" onclick={fetchMetadata} disabled={loading || !videoId.trim()}>
+				<button
+					class="btn join-item btn-sm btn-primary"
+					onclick={fetchMetadata}
+					disabled={loading || !videoId.trim()}
+				>
 					{#if loading}
-						<span class="loading loading-spinner loading-xs"></span>
+						<span class="loading loading-xs loading-spinner"></span>
 					{:else}
 						Fetch
 					{/if}
@@ -105,9 +109,7 @@
 			</div>
 
 			<div class="mt-4 flex justify-end">
-				<button class="btn btn-info btn-sm" onclick={() => onlink(videoId.trim())}>
-					Link
-				</button>
+				<button class="btn btn-sm btn-info" onclick={() => onlink(videoId.trim())}> Link </button>
 			</div>
 		{/if}
 	</div>

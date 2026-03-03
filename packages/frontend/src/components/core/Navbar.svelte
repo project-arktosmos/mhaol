@@ -13,7 +13,7 @@
 
 <nav class={wrapperClasses}>
 	<div class="flex-1">
-		<a href="/" class="btn btn-ghost text-xl">Mhaol</a>
+		<a href="/" class="btn text-xl btn-ghost">Mhaol</a>
 	</div>
 
 	<div class="flex-none">
@@ -22,31 +22,52 @@
 			<button class="btn btn-sm btn-info" onclick={() => modalRouterService.openNavbar('youtube')}>
 				YouTube
 			</button>
-			<button class="btn btn-sm btn-info btn-outline" onclick={() => modalRouterService.openNavbar('youtube-search')}>
+			<button
+				class="btn btn-outline btn-sm btn-info"
+				onclick={() => modalRouterService.openNavbar('youtube-search')}
+			>
 				YT Search
 			</button>
-			<button class="btn btn-sm btn-primary" onclick={() => modalRouterService.openNavbar('torrent')}>
+			<button
+				class="btn btn-sm btn-primary"
+				onclick={() => modalRouterService.openNavbar('torrent')}
+			>
 				Torrent
 			</button>
-			<button class="btn btn-sm btn-secondary" onclick={() => modalRouterService.openNavbar('downloads')}>
+			<button
+				class="btn btn-sm btn-secondary"
+				onclick={() => modalRouterService.openNavbar('downloads')}
+			>
 				Downloads
 			</button>
-			<button class="btn btn-sm btn-neutral" onclick={() => modalRouterService.openNavbar('libraries')}>
+			<button
+				class="btn btn-sm btn-neutral"
+				onclick={() => modalRouterService.openNavbar('libraries')}
+			>
 				Libraries
 			</button>
-			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('signaling')}>
+			<button
+				class="btn btn-ghost btn-sm"
+				onclick={() => modalRouterService.openNavbar('signaling')}
+			>
 				Signaling
 			</button>
-			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('identity')}>
+			<button
+				class="btn btn-ghost btn-sm"
+				onclick={() => modalRouterService.openNavbar('identity')}
+			>
 				Identity
 			</button>
-			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('plugins')}>
+			<button class="btn btn-ghost btn-sm" onclick={() => modalRouterService.openNavbar('plugins')}>
 				Plugins
 			</button>
-			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('addons')}>
+			<button class="btn btn-ghost btn-sm" onclick={() => modalRouterService.openNavbar('addons')}>
 				Addons
 			</button>
-			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('settings')}>
+			<button
+				class="btn btn-ghost btn-sm"
+				onclick={() => modalRouterService.openNavbar('settings')}
+			>
 				Settings
 			</button>
 		</div>
@@ -55,18 +76,40 @@
 		<div class="dropdown dropdown-end lg:hidden">
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div tabindex="0" role="button" class="btn btn-ghost">
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-6 w-6">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke-width="1.5"
+					stroke="currentColor"
+					class="h-6 w-6"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+					/>
 				</svg>
 			</div>
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-			<ul tabindex="0" class="menu dropdown-content z-50 mt-3 w-52 rounded-box bg-base-200 p-2 shadow">
+			<ul
+				tabindex="0"
+				class="dropdown-content menu z-50 mt-3 w-52 rounded-box bg-base-200 p-2 shadow"
+			>
 				<li><button onclick={() => modalRouterService.openNavbar('youtube')}>YouTube</button></li>
-				<li><button onclick={() => modalRouterService.openNavbar('youtube-search')}>YT Search</button></li>
+				<li>
+					<button onclick={() => modalRouterService.openNavbar('youtube-search')}>YT Search</button>
+				</li>
 				<li><button onclick={() => modalRouterService.openNavbar('torrent')}>Torrent</button></li>
-				<li><button onclick={() => modalRouterService.openNavbar('downloads')}>Downloads</button></li>
-				<li><button onclick={() => modalRouterService.openNavbar('libraries')}>Libraries</button></li>
-				<li><button onclick={() => modalRouterService.openNavbar('signaling')}>Signaling</button></li>
+				<li>
+					<button onclick={() => modalRouterService.openNavbar('downloads')}>Downloads</button>
+				</li>
+				<li>
+					<button onclick={() => modalRouterService.openNavbar('libraries')}>Libraries</button>
+				</li>
+				<li>
+					<button onclick={() => modalRouterService.openNavbar('signaling')}>Signaling</button>
+				</li>
 				<li><button onclick={() => modalRouterService.openNavbar('identity')}>Identity</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('plugins')}>Plugins</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('addons')}>Addons</button></li>

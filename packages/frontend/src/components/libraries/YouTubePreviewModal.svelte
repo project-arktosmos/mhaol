@@ -13,9 +13,9 @@
 	let watchUrl = $derived(`https://www.youtube.com/watch?v=${videoId}`);
 </script>
 
-<div class="modal modal-open">
+<div class="modal-open modal">
 	<div class="modal-box max-w-2xl">
-		<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onclick={onclose}>
+		<button class="btn absolute top-2 right-2 btn-circle btn-ghost btn-sm" onclick={onclose}>
 			&times;
 		</button>
 
@@ -36,12 +36,7 @@
 
 			<div class="mt-3 flex items-center justify-between">
 				<span class="badge badge-secondary">{videoId}</span>
-				<a
-					href={watchUrl}
-					target="_blank"
-					rel="noopener noreferrer"
-					class="btn btn-ghost btn-sm"
-				>
+				<a href={watchUrl} target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm">
 					Open on YouTube
 				</a>
 			</div>

@@ -8,7 +8,12 @@
 
 	interface Props {
 		file: LibraryFile;
-		onlink: (tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: TmdbType) => void;
+		onlink: (
+			tmdbId: number,
+			seasonNumber: number | null,
+			episodeNumber: number | null,
+			type: TmdbType
+		) => void;
 		onclose: () => void;
 	}
 
@@ -29,7 +34,10 @@
 			.replace(/[._]/g, ' ')
 			.replace(/\s*[\[(].*?[\])]\s*/g, ' ')
 			.replace(/\b(720|1080|2160|480)p?\b/gi, '')
-			.replace(/\b(x264|x265|h264|h265|hevc|avc|bluray|bdrip|brrip|webrip|web-dl|hdtv|dvdrip|hdrip)\b/gi, '')
+			.replace(
+				/\b(x264|x265|h264|h265|hevc|avc|bluray|bdrip|brrip|webrip|web-dl|hdtv|dvdrip|hdrip)\b/gi,
+				''
+			)
 			.replace(/\b(aac|ac3|dts|mp3|flac|atmos|truehd)\b/gi, '')
 			.replace(/\b(s\d{1,2}e\d{1,2})\b/gi, '')
 			.replace(/\s{2,}/g, ' ')
@@ -79,9 +87,9 @@
 	}
 </script>
 
-<div class="modal modal-open">
+<div class="modal-open modal">
 	<div class="modal-box max-w-2xl">
-		<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onclick={onclose}>
+		<button class="btn absolute top-2 right-2 btn-circle btn-ghost btn-sm" onclick={onclose}>
 			&times;
 		</button>
 
@@ -92,14 +100,18 @@
 			<div class="join flex-1">
 				<input
 					type="text"
-					class="input input-bordered input-sm join-item w-full"
+					class="input-bordered input input-sm join-item w-full"
 					placeholder="Search TMDB..."
 					bind:value={query}
 					onkeydown={handleKeydown}
 				/>
-				<button class="btn btn-sm btn-primary join-item" onclick={search} disabled={searching || !query.trim()}>
+				<button
+					class="btn join-item btn-sm btn-primary"
+					onclick={search}
+					disabled={searching || !query.trim()}
+				>
 					{#if searching}
-						<span class="loading loading-spinner loading-xs"></span>
+						<span class="loading loading-xs loading-spinner"></span>
 					{:else}
 						Search
 					{/if}
@@ -107,14 +119,22 @@
 			</div>
 			<div class="join">
 				<button
-					class={classNames('join-item btn btn-sm', { 'btn-active': searchMode === 'movie' })}
-					onclick={() => { searchMode = 'movie'; movieResults = []; tvResults = []; }}
+					class={classNames('btn join-item btn-sm', { 'btn-active': searchMode === 'movie' })}
+					onclick={() => {
+						searchMode = 'movie';
+						movieResults = [];
+						tvResults = [];
+					}}
 				>
 					Movie
 				</button>
 				<button
-					class={classNames('join-item btn btn-sm', { 'btn-active': searchMode === 'tv' })}
-					onclick={() => { searchMode = 'tv'; movieResults = []; tvResults = []; }}
+					class={classNames('btn join-item btn-sm', { 'btn-active': searchMode === 'tv' })}
+					onclick={() => {
+						searchMode = 'tv';
+						movieResults = [];
+						tvResults = [];
+					}}
 				>
 					TV Show
 				</button>
@@ -128,7 +148,7 @@
 		<div class="mt-4 max-h-80 overflow-y-auto">
 			{#if searching}
 				<div class="flex justify-center py-8">
-					<span class="loading loading-spinner loading-md"></span>
+					<span class="loading loading-md loading-spinner"></span>
 				</div>
 			{:else if searchMode === 'movie' && movieResults.length > 0}
 				<div class="flex flex-col gap-2">
@@ -185,7 +205,9 @@
 										&middot; {show.vote_average.toFixed(1)}
 									{/if}
 									{#if show.number_of_seasons}
-										&middot; {show.number_of_seasons} season{show.number_of_seasons !== 1 ? 's' : ''}
+										&middot; {show.number_of_seasons} season{show.number_of_seasons !== 1
+											? 's'
+											: ''}
 									{/if}
 								</p>
 								{#if show.overview}
@@ -195,7 +217,7 @@
 						</button>
 					{/each}
 				</div>
-			{:else if (searchMode === 'movie' && movieResults.length === 0 || searchMode === 'tv' && tvResults.length === 0) && !searching && query.trim()}
+			{:else if ((searchMode === 'movie' && movieResults.length === 0) || (searchMode === 'tv' && tvResults.length === 0)) && !searching && query.trim()}
 				<div class="py-8 text-center">
 					<p class="text-sm opacity-50">No results found</p>
 				</div>

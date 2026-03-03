@@ -61,9 +61,9 @@
 </script>
 
 <div class="mb-2 flex items-center justify-between">
-	<h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50">Downloads</h2>
+	<h2 class="text-sm font-semibold tracking-wide text-base-content/50 uppercase">Downloads</h2>
 	<button
-		class="btn btn-ghost btn-xs text-base-content/50"
+		class="btn text-base-content/50 btn-ghost btn-xs"
 		onclick={() => modalRouterService.openNavbar('downloads')}
 	>
 		View All
@@ -72,7 +72,7 @@
 
 {#if $downloadState.loading && $downloadState.downloads.length === 0}
 	<div class="flex justify-center py-4">
-		<span class="loading loading-spinner loading-sm"></span>
+		<span class="loading loading-sm loading-spinner"></span>
 	</div>
 {:else if $downloadState.error && $downloadState.downloads.length === 0}
 	<p class="text-xs text-error">{$downloadState.error}</p>
@@ -104,13 +104,13 @@
 				<div class="rounded-lg bg-base-100 p-2">
 					<div class="mb-1 flex items-center justify-between gap-2">
 						<span class="min-w-0 truncate text-xs" title={dl.name}>{dl.name}</span>
-						<span class={classNames('badge badge-xs shrink-0', stateColor(dl.state))}>
+						<span class={classNames('badge shrink-0 badge-xs', stateColor(dl.state))}>
 							{dl.state}
 						</span>
 					</div>
 					<div class="flex items-center gap-2">
 						<progress
-							class="progress progress-primary h-1.5 flex-1"
+							class="progress h-1.5 flex-1 progress-primary"
 							value={dl.progress * 100}
 							max="100"
 						></progress>

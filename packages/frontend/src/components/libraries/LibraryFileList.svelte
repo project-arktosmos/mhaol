@@ -11,7 +11,13 @@
 		loading: boolean;
 		error: string | null;
 		onscan: () => void;
-		onlink: (file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') => void;
+		onlink: (
+			file: LibraryFile,
+			tmdbId: number,
+			seasonNumber: number | null,
+			episodeNumber: number | null,
+			type: 'movie' | 'tv'
+		) => void;
 		onunlink: (file: LibraryFile) => void;
 		onyoutubelink: (file: LibraryFile, youtubeId: string) => void;
 		onyoutubeunlink: (file: LibraryFile) => void;
@@ -20,7 +26,19 @@
 		onedittype: (file: LibraryFile, mediaType: string, categoryId: string | null) => void;
 	}
 
-	let { files, loading, error, onscan, onlink, onunlink, onyoutubelink, onyoutubeunlink, onmusicbrainzlink, onmusicbrainzunlink, onedittype }: Props = $props();
+	let {
+		files,
+		loading,
+		error,
+		onscan,
+		onlink,
+		onunlink,
+		onyoutubelink,
+		onyoutubeunlink,
+		onmusicbrainzlink,
+		onmusicbrainzunlink,
+		onedittype
+	}: Props = $props();
 
 	let modalFile: LibraryFile | null = $state(null);
 	let musicbrainzModalFile: LibraryFile | null = $state(null);
@@ -35,7 +53,12 @@
 		modalFile = null;
 	}
 
-	function handleLink(tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') {
+	function handleLink(
+		tmdbId: number,
+		seasonNumber: number | null,
+		episodeNumber: number | null,
+		type: 'movie' | 'tv'
+	) {
 		if (modalFile) {
 			onlink(modalFile, tmdbId, seasonNumber, episodeNumber, type);
 			closeModal();
@@ -88,7 +111,7 @@
 		</span>
 		<button class="btn btn-ghost btn-xs" onclick={onscan} disabled={loading}>
 			{#if loading}
-				<span class="loading loading-spinner loading-xs"></span>
+				<span class="loading loading-xs loading-spinner"></span>
 			{:else}
 				Scan
 			{/if}
@@ -97,7 +120,7 @@
 
 	{#if loading && files.length === 0}
 		<div class="flex justify-center py-4">
-			<span class="loading loading-spinner loading-sm"></span>
+			<span class="loading loading-sm loading-spinner"></span>
 		</div>
 	{:else if error}
 		<div class="rounded-lg bg-error/10 px-3 py-2 text-sm text-error">
@@ -109,7 +132,7 @@
 		</div>
 	{:else}
 		<div class="max-h-96 overflow-y-auto rounded-lg bg-base-100">
-			<table class="table table-xs w-full">
+			<table class="table w-full table-xs">
 				<thead class="sticky top-0 bg-base-100">
 					<tr>
 						<th>Name</th>
@@ -146,7 +169,11 @@
 {/if}
 
 {#if musicbrainzModalFile}
-	<MusicBrainzLinkModal file={musicbrainzModalFile} onlink={handleMusicBrainzLink} onclose={closeMusicBrainzModal} />
+	<MusicBrainzLinkModal
+		file={musicbrainzModalFile}
+		onlink={handleMusicBrainzLink}
+		onclose={closeMusicBrainzModal}
+	/>
 {/if}
 
 {#if youtubePreviewFile && youtubePreviewFile.links.youtube}
@@ -158,5 +185,9 @@
 {/if}
 
 {#if typeCategoryModalFile}
-	<MediaTypeCategoryModal file={typeCategoryModalFile} onsave={handleTypeCategorySave} onclose={closeTypeCategoryModal} />
+	<MediaTypeCategoryModal
+		file={typeCategoryModalFile}
+		onsave={handleTypeCategorySave}
+		onclose={closeTypeCategoryModal}
+	/>
 {/if}

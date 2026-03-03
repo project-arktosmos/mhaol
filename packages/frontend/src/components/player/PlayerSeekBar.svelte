@@ -73,10 +73,7 @@
 		tabindex="0"
 		on:mousedown={handleMouseDown}
 	>
-		<div
-			class="absolute inset-y-0 left-0 rounded-full bg-primary"
-			style:width="{progress}%"
-		></div>
+		<div class="absolute inset-y-0 left-0 rounded-full bg-primary" style:width="{progress}%"></div>
 
 		<div
 			class={classNames(

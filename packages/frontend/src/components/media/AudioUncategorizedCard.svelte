@@ -14,7 +14,14 @@
 	let { item, metadata = null, loading = false, selected = false, onselect }: Props = $props();
 </script>
 
-<MediaCardBase {item} imageUrl={metadata?.coverArtUrl ?? null} imageAlt={metadata?.title ?? item.name} {loading} {selected} onclick={() => onselect?.(item)}>
+<MediaCardBase
+	{item}
+	imageUrl={metadata?.coverArtUrl ?? null}
+	imageAlt={metadata?.title ?? item.name}
+	{loading}
+	{selected}
+	onclick={() => onselect?.(item)}
+>
 	{#if metadata}
 		<p class="truncate text-xs font-medium" title={metadata.title}>{metadata.title}</p>
 		<p class="truncate text-xs opacity-60">{metadata.artistCredits}</p>

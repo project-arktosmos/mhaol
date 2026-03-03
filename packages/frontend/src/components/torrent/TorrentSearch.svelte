@@ -13,9 +13,7 @@
 	$: hasResults = $searchState.results.length > 0;
 	$: showResults = hasResults || $searchState.error;
 
-	async function handleSearch(
-		event: CustomEvent<{ query: string; category: TorrentCategory }>
-	) {
+	async function handleSearch(event: CustomEvent<{ query: string; category: TorrentCategory }>) {
 		await torrentSearchService.search(event.detail.query, event.detail.category);
 	}
 
@@ -38,10 +36,7 @@
 		<div class="flex items-center justify-between">
 			<h2 class="card-title text-lg">Search Torrents</h2>
 			{#if hasResults}
-				<button
-					class="btn btn-ghost btn-sm"
-					on:click={() => torrentSearchService.clearResults()}
-				>
+				<button class="btn btn-ghost btn-sm" on:click={() => torrentSearchService.clearResults()}>
 					Clear
 				</button>
 			{/if}
@@ -55,14 +50,14 @@
 		/>
 
 		{#if $searchState.error}
-			<div class="alert alert-error alert-sm">
+			<div class="alert-sm alert alert-error">
 				<span>{$searchState.error}</span>
 			</div>
 		{/if}
 
 		{#if $searchState.searching}
 			<div class="flex justify-center py-8">
-				<span class="loading loading-spinner loading-lg"></span>
+				<span class="loading loading-lg loading-spinner"></span>
 			</div>
 		{:else if showResults}
 			<TorrentSearchResults

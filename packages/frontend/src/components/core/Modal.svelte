@@ -22,7 +22,7 @@
 {#if open}
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
-		class="modal modal-open"
+		class="modal-open modal"
 		style:z-index={zIndex}
 		onkeydown={handleKeydown}
 		role="dialog"
@@ -31,7 +31,7 @@
 	>
 		<div class={boxClasses}>
 			<button
-				class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+				class="btn absolute top-2 right-2 btn-circle btn-ghost btn-sm"
 				onclick={() => onclose?.()}
 			>
 				&times;

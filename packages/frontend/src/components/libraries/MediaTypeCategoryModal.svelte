@@ -50,12 +50,9 @@
 	});
 </script>
 
-<div class="modal modal-open">
+<div class="modal-open modal">
 	<div class="modal-box max-w-md">
-		<button
-			class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
-			onclick={onclose}
-		>
+		<button class="btn absolute top-2 right-2 btn-circle btn-ghost btn-sm" onclick={onclose}>
 			&times;
 		</button>
 
@@ -64,7 +61,7 @@
 
 		{#if loading}
 			<div class="flex justify-center py-8">
-				<span class="loading loading-spinner loading-md"></span>
+				<span class="loading loading-md loading-spinner"></span>
 			</div>
 		{:else}
 			<div class="mt-4">
@@ -118,7 +115,7 @@
 
 			<div class="modal-action">
 				<button class="btn btn-ghost btn-sm" onclick={onclose}>Cancel</button>
-				<button class="btn btn-primary btn-sm" onclick={handleSave}>Save</button>
+				<button class="btn btn-sm btn-primary" onclick={handleSave}>Save</button>
 			</div>
 		{/if}
 	</div>

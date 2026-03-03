@@ -116,7 +116,6 @@
 		configSaving = false;
 	}
 
-
 	// Reactive downloader status
 	$: downloaderStatus = $state.downloaderStatus;
 	$: downloaderAvailable = downloaderStatus?.available ?? false;
@@ -225,7 +224,7 @@
 				</label>
 				<select
 					id="quality-select"
-					class="select select-bordered w-full"
+					class="select-bordered select w-full"
 					value={$settings.defaultQuality}
 					on:change={handleQualityChange}
 				>
@@ -244,7 +243,7 @@
 				</label>
 				<select
 					id="format-select"
-					class="select select-bordered w-full"
+					class="select-bordered select w-full"
 					value={$settings.defaultFormat}
 					on:change={handleFormatChange}
 				>
@@ -263,7 +262,7 @@
 				</label>
 				<select
 					id="video-quality-select"
-					class="select select-bordered w-full"
+					class="select-bordered select w-full"
 					value={$settings.defaultVideoQuality}
 					on:change={handleVideoQualityChange}
 				>
@@ -282,7 +281,7 @@
 				</label>
 				<select
 					id="video-format-select"
-					class="select select-bordered w-full"
+					class="select-bordered select w-full"
 					value={$settings.defaultVideoFormat}
 					on:change={handleVideoFormatChange}
 				>
@@ -305,7 +304,7 @@
 				<div class="flex items-center gap-2">
 					<select
 						id="library-select"
-						class="select select-bordered flex-1"
+						class="select-bordered select flex-1"
 						value={selectedLibraryId}
 						on:change={handleLibrarySelect}
 					>
@@ -316,11 +315,7 @@
 							</option>
 						{/each}
 					</select>
-					<button
-						class="btn btn-ghost btn-sm"
-						on:click={handleShowAddForm}
-						title="Add new library"
-					>
+					<button class="btn btn-ghost btn-sm" on:click={handleShowAddForm} title="Add new library">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							class="h-4 w-4"
@@ -336,7 +331,7 @@
 			{:else}
 				<div class="rounded-lg bg-base-300 p-4 text-center">
 					<p class="mb-2 text-sm text-base-content/60">No libraries configured</p>
-					<button class="btn btn-primary btn-sm" on:click={handleShowAddForm}>
+					<button class="btn btn-sm btn-primary" on:click={handleShowAddForm}>
 						Create Library
 					</button>
 				</div>
@@ -373,12 +368,7 @@
 				viewBox="0 0 24 24"
 				stroke="currentColor"
 			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M19 9l-7 7-7-7"
-				/>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 			</svg>
 		</button>
 
@@ -396,7 +386,7 @@
 					<input
 						id="po-token"
 						type="text"
-						class="input input-bordered input-sm w-full font-mono text-xs"
+						class="input-bordered input input-sm w-full font-mono text-xs"
 						placeholder="Enter PO token..."
 						bind:value={poToken}
 					/>
@@ -409,7 +399,7 @@
 					</label>
 					<textarea
 						id="cookies"
-						class="textarea textarea-bordered textarea-sm w-full font-mono text-xs"
+						class="textarea-bordered textarea w-full font-mono text-xs textarea-sm"
 						placeholder="key1=value1; key2=value2"
 						rows="2"
 						bind:value={cookies}
@@ -417,13 +407,9 @@
 				</div>
 
 				<!-- Save Button -->
-				<button
-					class="btn btn-primary btn-sm"
-					on:click={handleSaveConfig}
-					disabled={configSaving}
-				>
+				<button class="btn btn-sm btn-primary" on:click={handleSaveConfig} disabled={configSaving}>
 					{#if configSaving}
-						<span class="loading loading-spinner loading-xs"></span>
+						<span class="loading loading-xs loading-spinner"></span>
 					{/if}
 					Save Config
 				</button>

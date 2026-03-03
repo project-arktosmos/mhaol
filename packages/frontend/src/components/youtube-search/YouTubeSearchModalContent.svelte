@@ -49,7 +49,7 @@
 </div>
 
 {#if $searchState.error}
-	<div class="alert alert-error mt-4">
+	<div class="mt-4 alert alert-error">
 		<span>{$searchState.error}</span>
 		<button
 			class="btn btn-ghost btn-sm"
@@ -62,7 +62,7 @@
 
 {#if $searchState.searching}
 	<div class="flex justify-center py-8">
-		<span class="loading loading-spinner loading-lg"></span>
+		<span class="loading loading-lg loading-spinner"></span>
 	</div>
 {:else if $searchState.results.length > 0}
 	<div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -79,7 +79,7 @@
 				disabled={$searchState.loadingMore}
 			>
 				{#if $searchState.loadingMore}
-					<span class="loading loading-spinner loading-sm"></span>
+					<span class="loading loading-sm loading-spinner"></span>
 					Loading...
 				{:else}
 					Load More

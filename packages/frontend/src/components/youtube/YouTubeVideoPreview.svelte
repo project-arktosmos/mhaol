@@ -37,8 +37,7 @@
 
 					<div class="flex flex-wrap gap-2">
 						{#if $state.currentVideoInfo.uploader}
-							<span class="badge badge-ghost">{$state.currentVideoInfo.uploader}</span
-							>
+							<span class="badge badge-ghost">{$state.currentVideoInfo.uploader}</span>
 						{/if}
 						<span class="badge badge-ghost">
 							{formatDuration($state.currentVideoInfo.duration)}
@@ -46,7 +45,7 @@
 					</div>
 
 					<div class="mt-2 flex items-center gap-2">
-						<span class="badge badge-sm badge-outline">
+						<span class="badge badge-outline badge-sm">
 							{$settings.downloadMode === 'video' ? 'Video' : 'Audio'}
 						</span>
 						<span class="text-sm text-base-content/60">

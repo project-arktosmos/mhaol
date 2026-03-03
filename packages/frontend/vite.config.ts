@@ -7,6 +7,9 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), routeDiscovery()],
 	server: {
 		host: true,
-		port: 1530
+		port: 1531,
+		proxy: {
+			'/api': 'http://localhost:1530'
+		}
 	}
 });

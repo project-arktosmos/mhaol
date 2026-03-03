@@ -75,7 +75,7 @@
 						LE{getSortIndicator('leechers')}
 					</th>
 					<th
-						class="w-24 cursor-pointer text-right hover:bg-base-300 hidden md:table-cell"
+						class="hidden w-24 cursor-pointer text-right hover:bg-base-300 md:table-cell"
 						on:click={() => handleSort('uploadedAt')}
 					>
 						Uploaded{getSortIndicator('uploadedAt')}
@@ -90,9 +90,9 @@
 						<td class="max-w-xs">
 							<div class="flex items-center gap-2">
 								{#if result.isVip}
-									<span class="badge badge-warning badge-xs" title="VIP">V</span>
+									<span class="badge badge-xs badge-warning" title="VIP">V</span>
 								{:else if result.isTrusted}
-									<span class="badge badge-success badge-xs" title="Trusted">T</span>
+									<span class="badge badge-xs badge-success" title="Trusted">T</span>
 								{/if}
 								<span class="truncate" title={result.name}>
 									{result.name}
@@ -100,28 +100,23 @@
 							</div>
 						</td>
 						<td class="text-right text-nowrap">{formatSearchSize(result.size)}</td>
-						<td
-							class={classNames(
-								'text-right font-medium',
-								getSeedersColor(result.seeders)
-							)}
-						>
+						<td class={classNames('text-right font-medium', getSeedersColor(result.seeders))}>
 							{formatSeeders(result.seeders)}
 						</td>
 						<td class="text-right text-base-content/60">
 							{formatSeeders(result.leechers)}
 						</td>
-						<td class="text-right text-nowrap text-base-content/60 hidden md:table-cell">
+						<td class="hidden text-right text-nowrap text-base-content/60 md:table-cell">
 							{formatUploadDate(result.uploadedAt)}
 						</td>
 						<td class="text-right">
 							<button
-								class="btn btn-primary btn-xs"
+								class="btn btn-xs btn-primary"
 								on:click={() => handleAdd(result)}
 								disabled={isAdding || disableAdd}
 							>
 								{#if isAdding}
-									<span class="loading loading-spinner loading-xs"></span>
+									<span class="loading loading-xs loading-spinner"></span>
 								{:else}
 									Add
 								{/if}

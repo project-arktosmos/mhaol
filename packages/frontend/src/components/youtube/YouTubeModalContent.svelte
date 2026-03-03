@@ -36,13 +36,13 @@
 		</p>
 	</div>
 	{#if !$state.initialized && $state.loading}
-		<span class="loading loading-spinner loading-md"></span>
+		<span class="loading loading-md loading-spinner"></span>
 	{/if}
 </div>
 
 <!-- Error display -->
 {#if $state.error}
-	<div class="alert alert-error mt-4">
+	<div class="mt-4 alert alert-error">
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			class="h-6 w-6 shrink-0 stroke-current"
@@ -58,7 +58,7 @@
 		</svg>
 		<span>{$state.error}</span>
 		<button
-			class="btn btn-sm btn-ghost"
+			class="btn btn-ghost btn-sm"
 			onclick={() => youtubeService.state.update((s) => ({ ...s, error: null }))}
 		>
 			Dismiss
@@ -73,7 +73,7 @@
 		<YouTubeDownloadSettings />
 
 		{#if $state.currentVideoInfo || $state.currentPlaylistInfo}
-			<button class="btn btn-primary w-full" onclick={handleDownload}>
+			<button class="btn w-full btn-primary" onclick={handleDownload}>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-5 w-5"
