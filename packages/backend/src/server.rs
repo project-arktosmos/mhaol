@@ -24,12 +24,16 @@ async fn main() {
         .unwrap_or_else(|| {
             // Default: packages/database/mhaol.db relative to the workspace root.
             // The server binary lives at packages/backend/, so go up two levels.
+            // If the workspace path doesn't exist (e.g. distributed binary), use ./mhaol.db.
             let manifest_dir = env!("CARGO_MANIFEST_DIR");
-            PathBuf::from(manifest_dir)
+            let candidate = PathBuf::from(manifest_dir)
                 .parent() // packages/
                 .and_then(|p| p.parent()) // workspace root
-                .map(|root| root.join("packages/database/mhaol.db"))
-                .unwrap_or_else(|| PathBuf::from("mhaol.db"))
+                .map(|root| root.join("packages/database/mhaol.db"));
+            match candidate {
+                Some(p) if p.parent().map_or(false, |d| d.exists()) => p,
+                _ => PathBuf::from("mhaol.db"),
+            }
         });
 
     let state = AppState::new(Some(db_path.as_path()))
