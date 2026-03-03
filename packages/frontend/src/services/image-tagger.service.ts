@@ -138,6 +138,55 @@ class ImageTaggerService {
 		}
 	}
 
+	async autoTagImages(
+		itemIds: string[],
+		onTagged?: (itemId: string, tags: ImageTag[]) => void
+	): Promise<void> {
+		if (!browser || itemIds.length === 0) return;
+
+		this.state.update((s) => ({
+			...s,
+			taggerInitializing: true,
+			taggingItemIds: [...s.taggingItemIds, ...itemIds]
+		}));
+		this.startProgressPolling();
+
+		try {
+			for (const itemId of itemIds) {
+				try {
+					const data = await this.fetchJson<TagResponse>('/api/images/tag', {
+						method: 'POST',
+						body: JSON.stringify({ libraryItemId: itemId })
+					});
+
+					this.store.update((items) =>
+						items.map((item) =>
+							item.id === itemId ? { ...item, tags: data.tags } : item
+						)
+					);
+
+					onTagged?.(itemId, data.tags);
+				} catch (error) {
+					console.error(`[image-tagger] Failed to auto-tag ${itemId}:`, error);
+				} finally {
+					this.state.update((s) => ({
+						...s,
+						taggingItemIds: s.taggingItemIds.filter((id) => id !== itemId)
+					}));
+				}
+			}
+
+			this.state.update((s) => ({
+				...s,
+				taggerReady: true,
+				taggerInitializing: false,
+				taggerStatus: 'ready' as TaggerStatus
+			}));
+		} finally {
+			this.stopProgressPolling();
+		}
+	}
+
 	async tagBatch(itemIds: string[]): Promise<void> {
 		if (!browser || itemIds.length === 0) return;
 

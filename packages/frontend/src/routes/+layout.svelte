@@ -6,10 +6,7 @@
 	import { identityService } from '$services/identity.service';
 	import Navbar from '$components/core/Navbar.svelte';
 	import IdentitySidebar from '$components/core/IdentitySidebar.svelte';
-	import DownloadsModal from '$components/downloads/DownloadsModal.svelte';
-	import TorrentModal from '$components/torrent/TorrentModal.svelte';
-	import YouTubeModal from '$components/youtube/YouTubeModal.svelte';
-	import LibraryModal from '$components/libraries/LibraryModal.svelte';
+	import ModalOutlet from '$components/core/ModalOutlet.svelte';
 
 	let { children } = $props();
 
@@ -33,7 +30,4 @@
 	</div>
 </div>
 
-<DownloadsModal />
-<TorrentModal />
-<YouTubeModal />
-<LibraryModal />
+<ModalOutlet />

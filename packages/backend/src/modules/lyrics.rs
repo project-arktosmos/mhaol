@@ -1,4 +1,5 @@
 use super::{Module, ModuleCompatibility, ModuleManifest};
+use crate::db::schema::LYRICS_SCHEMA_SQL;
 
 pub struct LyricsModule;
 
@@ -15,7 +16,7 @@ impl Module for LyricsModule {
             }),
             settings: Vec::new(),
             link_sources: Vec::new(),
-            schema_sql: None,
+            schema_sql: Some(LYRICS_SCHEMA_SQL.to_string()),
         }
     }
 }

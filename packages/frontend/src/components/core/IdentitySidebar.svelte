@@ -8,10 +8,6 @@
 	import { signalingAdapter } from '$adapters/classes/signaling.adapter';
 	import { signalingChatService } from '$services/signaling-chat.service';
 	import { sidebarService } from '$services/sidebar.service';
-	import { mediaDetailService } from '$services/media-detail.service';
-	import PlayerVideo from '$components/player/PlayerVideo.svelte';
-	import LyricsPanel from '$components/player/LyricsPanel.svelte';
-	import MediaDetail from '$components/media/MediaDetail.svelte';
 	import DownloadsSummary from '$components/downloads/DownloadsSummary.svelte';
 	import type { SignalingServerStatus } from '$types/signaling.type';
 	import type { SidebarWidthMode } from '$types/sidebar.type';
@@ -26,7 +22,6 @@
 	const playerState = playerService.state;
 	const chatState = signalingChatService.state;
 	const sidebarSettings = sidebarService.store;
-	const mediaDetailSelection = mediaDetailService.store;
 
 	let signalingStatus = $state<SignalingServerStatus | null>(null);
 
@@ -411,48 +406,4 @@
 	<div class="mt-4 border-t border-base-300 pt-4">
 		<DownloadsSummary />
 	</div>
-
-	{#if $mediaDetailSelection}
-		<div class="mt-4 border-t border-base-300 pt-4">
-			<MediaDetail
-				selection={$mediaDetailSelection}
-				onclose={() => mediaDetailService.clear()}
-			/>
-		</div>
-	{/if}
-
-	{#if $playerState.currentFile}
-		<div class="mt-4 border-t border-base-300 pt-4">
-			<div class="mb-2 flex items-center justify-between">
-				<h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50">
-					Now Playing
-				</h2>
-				<button
-					class="btn btn-ghost btn-xs btn-square"
-					onclick={() => playerService.stop()}
-					aria-label="Close player"
-				>
-					&times;
-				</button>
-			</div>
-			<p class="mb-2 truncate text-xs opacity-60" title={$playerState.currentFile.name}>
-				{$playerState.currentFile.name}
-			</p>
-			<PlayerVideo
-				file={$playerState.currentFile}
-				connectionState={$playerState.connectionState}
-				positionSecs={$playerState.positionSecs}
-				durationSecs={$playerState.durationSecs}
-			/>
-			{#if $playerState.currentFile.mode === 'audio'}
-				<div class="mt-2">
-					<LyricsPanel
-						currentFile={$playerState.currentFile}
-						positionSecs={$playerState.positionSecs}
-						on:seek={(e) => playerService.seek(e.detail.positionSecs)}
-					/>
-				</div>
-			{/if}
-		</div>
-	{/if}
 </aside>

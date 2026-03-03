@@ -18,19 +18,29 @@ async fn main() {
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
 
-    let db_path = std::env::var("DB_PATH").ok().map(PathBuf::from);
+    let db_path = std::env::var("DB_PATH")
+        .ok()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            // Default: packages/database/mhaol.db relative to the workspace root.
+            // The server binary lives at packages/backend/, so go up two levels.
+            let manifest_dir = env!("CARGO_MANIFEST_DIR");
+            PathBuf::from(manifest_dir)
+                .parent() // packages/
+                .and_then(|p| p.parent()) // workspace root
+                .map(|root| root.join("packages/database/mhaol.db"))
+                .unwrap_or_else(|| PathBuf::from("mhaol.db"))
+        });
 
-    let state = AppState::new(db_path.as_deref())
+    let state = AppState::new(Some(db_path.as_path()))
         .expect("Failed to initialize database");
 
     state.seed_default_library();
     state.initialize_modules();
 
-    // Start local signaling dev server and p2p-stream worker in the background
-    let signaling_dev = state.signaling_dev.clone();
+    // Start p2p-stream worker in the background
     let worker_bridge = state.worker_bridge.clone();
     tokio::spawn(async move {
-        signaling_dev.start().await;
         worker_bridge.start().await;
     });
 

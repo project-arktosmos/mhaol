@@ -13,7 +13,11 @@ export interface MediaDetailSelection {
 	youtubeMetadata: YouTubeOEmbedResponse | null;
 	musicbrainzMetadata: DisplayMusicBrainzRecording | null;
 	imageTags: ImageTag[];
+	imageTagging?: boolean;
 	onplay?: (item: MediaItem) => void;
 	onlink?: (item: MediaItem, service: string) => void;
 	onunlink?: (item: MediaItem, service: string) => void;
+	ontagimage?: (item: MediaItem) => void;
+	onaddtag?: (item: MediaItem, tag: string) => void;
+	onremovetag?: (item: MediaItem, tag: string) => void;
 }

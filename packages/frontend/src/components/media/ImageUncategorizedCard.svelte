@@ -8,18 +8,24 @@
 	interface Props {
 		item: MediaItem;
 		tags?: ImageTag[];
+		tagging?: boolean;
 		selected?: boolean;
 		onselect?: (item: MediaItem) => void;
 	}
 
-	let { item, tags = [], selected = false, onselect }: Props = $props();
+	let { item, tags = [], tagging = false, selected = false, onselect }: Props = $props();
 
 	let imageUrl = $derived(apiUrl(`/api/images/serve?path=${encodeURIComponent(item.path)}`));
 </script>
 
 <MediaCardBase {item} {imageUrl} imageAlt={item.name} {selected} onclick={() => onselect?.(item)}>
 	<p class="truncate text-xs opacity-60" title={item.path}>{item.path}</p>
-	{#if tags.length > 0}
+	{#if tagging}
+		<div class="flex items-center gap-2 text-xs opacity-70">
+			<span class="loading loading-spinner loading-xs"></span>
+			Tagging...
+		</div>
+	{:else if tags.length > 0}
 		<div class="flex flex-wrap gap-1">
 			{#each tags as tag (tag.tag)}
 				<TagPill tag={tag.tag} score={tag.score} readonly />
