@@ -5,6 +5,8 @@ const SERVER_HOST: &str = "127.0.0.1";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    mhaol_backend::load_env_app();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {

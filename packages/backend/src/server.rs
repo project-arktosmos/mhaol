@@ -1,9 +1,11 @@
-use mhaol_backend::{api, AppState};
+use mhaol_backend::{api, load_env_app, AppState};
 use std::path::PathBuf;
 use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() {
+    load_env_app();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
