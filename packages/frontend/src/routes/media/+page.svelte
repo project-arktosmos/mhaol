@@ -10,6 +10,7 @@
 	import { youtubeModalService } from '$services/youtube-modal.service';
 	import { downloadsService } from '$services/downloads.service';
 	import { libraryService } from '$services/library.service';
+	import { libraryModalService } from '$services/library-modal.service';
 	import type { MediaDetailCardType } from '$types/media-detail.type';
 	import TmdbLinkModal from '$components/libraries/TmdbLinkModal.svelte';
 	import MusicBrainzLinkModal from '$components/libraries/MusicBrainzLinkModal.svelte';
@@ -452,6 +453,9 @@
 			</button>
 			<button class="btn btn-sm btn-secondary" onclick={() => downloadsService.openModal()}>
 				Downloads
+			</button>
+			<button class="btn btn-sm btn-neutral" onclick={() => libraryModalService.open()}>
+				Libraries
 			</button>
 		</div>
 	</div>

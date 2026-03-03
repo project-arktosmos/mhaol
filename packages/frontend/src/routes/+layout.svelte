@@ -9,6 +9,7 @@
 	import DownloadsModal from '$components/downloads/DownloadsModal.svelte';
 	import TorrentModal from '$components/torrent/TorrentModal.svelte';
 	import YouTubeModal from '$components/youtube/YouTubeModal.svelte';
+	import LibraryModal from '$components/libraries/LibraryModal.svelte';
 
 	let { children } = $props();
 
@@ -35,3 +36,4 @@
 <DownloadsModal />
 <TorrentModal />
 <YouTubeModal />
+<LibraryModal />
