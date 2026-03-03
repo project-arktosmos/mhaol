@@ -11,5 +11,12 @@ export default defineConfig({
 		proxy: {
 			'/api': 'http://localhost:1530'
 		}
+	},
+	preview: {
+		host: true,
+		port: 1531,
+		proxy: {
+			'/api': 'http://localhost:1530'
+		}
 	}
 });
