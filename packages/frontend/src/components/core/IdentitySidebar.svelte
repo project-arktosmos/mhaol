@@ -136,7 +136,7 @@
 
 	let localAvailable = $derived(signalingStatus?.devAvailable ?? false);
 	let localUrl = $derived(
-		signalingAdapter.resolveDevUrl(signalingStatus?.devUrl ?? 'http://127.0.0.1:1999')
+		signalingAdapter.resolveLocalUrl(signalingStatus?.devUrl ?? 'http://127.0.0.1:1999')
 	);
 
 	let remoteAvailable = $derived(signalingStatus?.deployedAvailable ?? false);

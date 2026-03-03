@@ -77,13 +77,16 @@ export class SignalingAdapter extends AdapterClass {
 		return map[state];
 	}
 
-	resolveDevUrl(devUrl: string): string {
+	resolveLocalUrl(url: string): string {
 		try {
-			const url = new URL(devUrl);
-			url.hostname = window.location.hostname;
-			return url.toString().replace(/\/$/, '');
+			const parsed = new URL(url);
+			const local = ['127.0.0.1', 'localhost', '0.0.0.0'];
+			if (local.includes(parsed.hostname)) {
+				parsed.hostname = window.location.hostname;
+			}
+			return parsed.toString().replace(/\/$/, '');
 		} catch {
-			return devUrl;
+			return url;
 		}
 	}
 

@@ -159,7 +159,10 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				connectionState: 'signaling'
 			}));
 
-			await this.connectToSignalingRoom(session.signaling_url, session.room_id);
+			await this.connectToSignalingRoom(
+				signalingAdapter.resolveLocalUrl(session.signaling_url),
+				session.room_id
+			);
 		} catch (error) {
 			console.error('[Player] Playback error:', error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
