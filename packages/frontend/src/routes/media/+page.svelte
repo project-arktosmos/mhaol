@@ -1,11 +1,13 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount, onDestroy } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
 	import { apiUrl } from '$lib/api-base';
 	import { playerService } from '$services/player.service';
 	import { playerAdapter } from '$adapters/classes/player.adapter';
 	import { mediaDetailService } from '$services/media-detail.service';
 	import { torrentModalService } from '$services/torrent-modal.service';
+	import { youtubeModalService } from '$services/youtube-modal.service';
 	import { downloadsService } from '$services/downloads.service';
 	import { libraryService } from '$services/library.service';
 	import type { MediaDetailCardType } from '$types/media-detail.type';
@@ -68,6 +70,7 @@
 		scanning = true;
 		try {
 			await libraryService.scanAllLibraries();
+			await invalidateAll();
 		} finally {
 			scanning = false;
 		}
@@ -440,6 +443,9 @@
 				{:else}
 					Scan
 				{/if}
+			</button>
+			<button class="btn btn-sm btn-info" onclick={() => youtubeModalService.open()}>
+				YouTube
 			</button>
 			<button class="btn btn-sm btn-primary" onclick={() => torrentModalService.open()}>
 				Torrent

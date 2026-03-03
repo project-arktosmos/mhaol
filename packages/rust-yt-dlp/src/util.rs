@@ -72,17 +72,6 @@ fn is_valid_video_id(id: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// Sanitize a string for use as a filename.
-pub fn sanitize_title(title: &str) -> String {
-    sanitize_filename::sanitize_with_options(
-        title,
-        sanitize_filename::Options {
-            replacement: "_",
-            ..Default::default()
-        },
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,8 +120,4 @@ mod tests {
         assert_eq!(id, "PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf");
     }
 
-    #[test]
-    fn test_sanitize_title() {
-        assert_eq!(sanitize_title("Hello / World: Test"), "Hello _ World_ Test");
-    }
 }

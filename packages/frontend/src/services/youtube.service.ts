@@ -567,6 +567,7 @@ class YouTubeService {
 			this.eventSource.close();
 			this.eventSource = null;
 		}
+		this._initialized = false;
 	}
 }
 

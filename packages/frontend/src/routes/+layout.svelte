@@ -8,6 +8,7 @@
 	import IdentitySidebar from '$components/core/IdentitySidebar.svelte';
 	import DownloadsModal from '$components/downloads/DownloadsModal.svelte';
 	import TorrentModal from '$components/torrent/TorrentModal.svelte';
+	import YouTubeModal from '$components/youtube/YouTubeModal.svelte';
 
 	let { children } = $props();
 
@@ -33,3 +34,4 @@
 
 <DownloadsModal />
 <TorrentModal />
+<YouTubeModal />
