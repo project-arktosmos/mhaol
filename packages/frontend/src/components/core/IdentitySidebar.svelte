@@ -135,7 +135,9 @@
 	}
 
 	let localAvailable = $derived(signalingStatus?.devAvailable ?? false);
-	let localUrl = $derived(signalingStatus?.devUrl ?? 'http://127.0.0.1:1999');
+	let localUrl = $derived(
+		signalingAdapter.resolveDevUrl(signalingStatus?.devUrl ?? 'http://127.0.0.1:1999')
+	);
 
 	let remoteAvailable = $derived(signalingStatus?.deployedAvailable ?? false);
 	let remoteUrl = $derived(signalingStatus?.partyUrl ?? '');
