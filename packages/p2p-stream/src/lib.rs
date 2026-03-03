@@ -20,6 +20,30 @@ pub fn init() -> Result<(), error::Error> {
     result
 }
 
+/// Required GStreamer elements for streaming to work.
+const REQUIRED_ELEMENTS: &[&str] = &[
+    "filesrc",
+    "decodebin",
+    "videoconvert",
+    "audioconvert",
+    "audioresample",
+    "queue",
+    "opusenc",
+    "rtpopuspay",
+    "webrtcbin",
+];
+
+/// Check that all required GStreamer elements are available.
+/// Returns a list of missing element factory names (empty if all present).
+/// GStreamer must be initialized first via [`init`].
+pub fn check_required_elements() -> Vec<&'static str> {
+    REQUIRED_ELEMENTS
+        .iter()
+        .filter(|name| gstreamer::ElementFactory::find(name).is_none())
+        .copied()
+        .collect()
+}
+
 pub mod prelude {
     pub use crate::error::Error;
     pub use crate::media::{AudioCodec, CodecConfig, FileSource, MediaSource, VideoCodec, VideoQuality};

@@ -337,6 +337,12 @@ async fn create_peer_session(
                     peer_id = %peer_id,
                     "Failed to start peer session: {e}"
                 );
+                let error_msg = serde_json::json!({
+                    "type": "error",
+                    "target_peer_id": peer_id,
+                    "message": format!("Failed to start streaming session: {e}")
+                });
+                let _ = out_tx.send(error_msg.to_string());
                 return;
             }
 
@@ -366,6 +372,12 @@ async fn create_peer_session(
                 peer_id = %peer_id,
                 "Failed to create peer session: {e}"
             );
+            let error_msg = serde_json::json!({
+                "type": "error",
+                "target_peer_id": peer_id,
+                "message": format!("Failed to create streaming session: {e}")
+            });
+            let _ = out_tx.send(error_msg.to_string());
         }
     }
 }
