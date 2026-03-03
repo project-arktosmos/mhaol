@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[features]
+default = []
+embed-frontend = ["dep:rust-embed", "dep:mime_guess"]
+
 [lib]
 name = "mhaol_backend"
 path = "src/lib.rs"
@@ -34,6 +38,8 @@ parking_lot = "0.12"
 chrono = "0.4"
 anyhow = "1"
 urlencoding = "2"
+rust-embed = { version = "8", optional = true }
+mime_guess = { version = "2", optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 mhaol-p2p-stream = { path = "../p2p-stream" }

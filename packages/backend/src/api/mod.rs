@@ -1,3 +1,5 @@
+#[cfg(feature = "embed-frontend")]
+pub mod frontend;
 pub mod addons;
 pub mod database;
 pub mod downloads;
@@ -52,6 +54,9 @@ pub fn build_router(state: AppState) -> Router {
     let router = router
         .nest("/api/ytdl", ytdl::router())
         .nest("/api/torrent", torrent::router());
+
+    #[cfg(feature = "embed-frontend")]
+    let router = router.fallback(frontend::serve_frontend);
 
     router.with_state(state).layer(cors)
 }
