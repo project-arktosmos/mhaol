@@ -218,14 +218,14 @@ describe('localStorageWritableStore', () => {
 			expect(value).toBeUndefined();
 		});
 
-		it('should overwrite existing localStorage data on initialization', () => {
+		it('should merge existing localStorage data with initial defaults on initialization', () => {
 			// Pre-populate localStorage
 			localStorage.setItem(testKey, JSON.stringify({ old: 'data' }));
 
-			// Create new store - should load the existing data
+			// Create new store - should merge stored data with initial defaults
 			const store = localStorageWritableStore(testKey, initialValue);
 
-			expect(get(store)).toEqual({ old: 'data' });
+			expect(get(store)).toEqual({ id: 1, name: 'Test', old: 'data' });
 		});
 
 		it('should handle corrupted localStorage data gracefully', () => {

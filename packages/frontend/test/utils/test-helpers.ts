@@ -3,7 +3,7 @@ import type { ID } from '../../src/types/core.type';
 /**
  * Helper function to create mock items with IDs for testing
  */
-export function createMockItem<T extends Record<string, unknown>>(
+export function createMockItem<T extends { id: ID }>(
 	id: ID,
 	data: Partial<T> = {}
 ): T & { id: ID } {
@@ -16,7 +16,7 @@ export function createMockItem<T extends Record<string, unknown>>(
 /**
  * Helper to create multiple mock items
  */
-export function createMockItems<T extends Record<string, unknown>>(
+export function createMockItems<T extends { id: ID }>(
 	count: number,
 	baseData: Partial<T> = {}
 ): Array<T & { id: ID }> {
