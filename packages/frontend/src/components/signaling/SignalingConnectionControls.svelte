@@ -23,7 +23,7 @@
 
 	function getServerUrl(): string {
 		if (!serverStatus) return '';
-		if (serverTarget === 'dev') return signalingAdapter.resolveDevUrl(serverStatus.devUrl);
+		if (serverTarget === 'dev') return signalingAdapter.resolveLocalUrl(serverStatus.devUrl);
 		return serverStatus.partyUrl;
 	}
 
