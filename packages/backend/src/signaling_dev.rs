@@ -52,6 +52,8 @@ impl SignalingDevServer {
             .arg("dev")
             .arg("--port")
             .arg(DEV_PORT.to_string())
+            .arg("--host")
+            .arg("0.0.0.0")
             .current_dir(&signaling_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

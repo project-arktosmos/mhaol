@@ -77,6 +77,16 @@ export class SignalingAdapter extends AdapterClass {
 		return map[state];
 	}
 
+	resolveDevUrl(devUrl: string): string {
+		try {
+			const url = new URL(devUrl);
+			url.hostname = window.location.hostname;
+			return url.toString().replace(/\/$/, '');
+		} catch {
+			return devUrl;
+		}
+	}
+
 	buildWsUrl(baseUrl: string, roomId: string): string {
 		const url = new URL(baseUrl);
 		const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';

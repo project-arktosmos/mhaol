@@ -23,7 +23,8 @@
 
 	function getServerUrl(): string {
 		if (!serverStatus) return '';
-		return serverTarget === 'dev' ? serverStatus.devUrl : serverStatus.partyUrl;
+		if (serverTarget === 'dev') return signalingAdapter.resolveDevUrl(serverStatus.devUrl);
+		return serverStatus.partyUrl;
 	}
 
 	function isServerAvailable(): boolean {
