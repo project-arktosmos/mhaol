@@ -307,20 +307,20 @@ classNames('btn', typeClasses[type], { 'btn-outline': outline }, customClasses);
 **Theme enums** from `$types/core.type.ts`:
 
 ```typescript
-ThemeColors.Primary;   // 'primary'
+ThemeColors.Primary; // 'primary'
 ThemeColors.Secondary; // 'secondary'
-ThemeColors.Accent;    // 'accent'
-ThemeColors.Success;   // 'success'
-ThemeColors.Error;     // 'error'
-ThemeColors.Info;      // 'info'
-ThemeColors.Warning;   // 'warning'
-ThemeColors.Neutral;   // 'neutral'
+ThemeColors.Accent; // 'accent'
+ThemeColors.Success; // 'success'
+ThemeColors.Error; // 'error'
+ThemeColors.Info; // 'info'
+ThemeColors.Warning; // 'warning'
+ThemeColors.Neutral; // 'neutral'
 
-ThemeSizes.XSmall;     // 'xs'
-ThemeSizes.Small;      // 'sm'
-ThemeSizes.Medium;     // 'md'
-ThemeSizes.Large;      // 'lg'
-ThemeSizes.XLarge;     // 'xl'
+ThemeSizes.XSmall; // 'xs'
+ThemeSizes.Small; // 'sm'
+ThemeSizes.Medium; // 'md'
+ThemeSizes.Large; // 'lg'
+ThemeSizes.XLarge; // 'xl'
 ```
 
 **DaisyUI patterns:**

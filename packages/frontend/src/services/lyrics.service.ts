@@ -34,7 +34,6 @@ class LyricsService {
 	}
 
 	private async fetchById(cacheKey: string): Promise<void> {
-
 		const cached = this.cache.get(cacheKey);
 		if (cached) {
 			this.store.set({
