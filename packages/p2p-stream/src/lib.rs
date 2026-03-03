@@ -3,6 +3,7 @@ pub mod media;
 pub mod pipeline;
 pub mod session;
 pub mod signaling;
+pub mod worker;
 
 use std::sync::Once;
 

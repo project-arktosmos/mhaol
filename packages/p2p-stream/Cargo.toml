@@ -8,10 +8,6 @@ publish = false
 name = "mhaol_p2p_stream"
 path = "src/lib.rs"
 
-[[bin]]
-name = "p2p-stream-worker"
-path = "src/worker/main.rs"
-
 [dependencies]
 gstreamer = "0.24"
 gstreamer-webrtc = "0.24"

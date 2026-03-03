@@ -1,9 +1,7 @@
 use futures_util::{SinkExt, StreamExt};
 use k256::ecdsa::SigningKey;
-use mhaol_p2p_stream::prelude::*;
-use mhaol_p2p_stream::signaling::SdpType;
-// Note: `mhaol_p2p_stream` is this crate's own lib — Cargo resolves `[[bin]]`
-// targets' `extern crate` references to the same package's `[lib]`.
+use crate::prelude::*;
+use crate::signaling::SdpType;
 use sha3::{Digest, Keccak256};
 use std::collections::HashMap;
 use std::sync::Arc;

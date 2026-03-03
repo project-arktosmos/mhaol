@@ -59,25 +59,27 @@ impl WorkerBridge {
         self.ready.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    /// Spawn the p2p-stream-worker binary and set up communication channels.
+    /// Spawn the p2p-stream worker subprocess and set up communication channels.
+    ///
+    /// The worker runs as `mhaol-server worker` — the same binary with a
+    /// subcommand — so only a single binary needs to be distributed.
     pub async fn start(&self) {
         if self.is_ready() {
             return;
         }
 
-        // Find the worker binary next to the current executable
-        let worker_path = find_worker_binary();
-        let worker_path = match worker_path {
-            Some(p) => p,
-            None => {
-                tracing::error!("[worker-bridge] Could not find p2p-stream-worker binary");
+        let exe = match std::env::current_exe() {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::error!("[worker-bridge] Could not determine current executable: {}", e);
                 return;
             }
         };
 
-        tracing::info!("[worker-bridge] Spawning worker: {:?}", worker_path);
+        tracing::info!("[worker-bridge] Spawning worker: {:?} worker", exe);
 
-        let mut child: Child = match Command::new(&worker_path)
+        let mut child: Child = match Command::new(&exe)
+            .arg("worker")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -230,25 +232,3 @@ impl WorkerBridge {
     }
 }
 
-fn find_worker_binary() -> Option<std::path::PathBuf> {
-    // The worker binary should be built alongside the backend binary
-    let current_exe = std::env::current_exe().ok()?;
-    let dir = current_exe.parent()?;
-    let worker = dir.join("p2p-stream-worker");
-    if worker.exists() {
-        return Some(worker);
-    }
-    // Also check PATH
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("p2p-stream-worker")
-        .output()
-    {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Some(std::path::PathBuf::from(path));
-            }
-        }
-    }
-    None
-}
