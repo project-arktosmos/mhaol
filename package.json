@@ -5,10 +5,10 @@
 	"type": "module",
 	"scripts": {
 		"dev": "lsof -ti:1530 | xargs kill 2>/dev/null; cargo build -p mhaol-backend --bin mhaol-server && { PORT=1530 cargo run -p mhaol-backend --bin mhaol-server & BACKEND_PID=$!; trap 'kill $BACKEND_PID 2>/dev/null' EXIT; echo 'Waiting for backend on port 1530...'; until curl -s http://localhost:1530/api/ytdl/status > /dev/null 2>&1; do sleep 0.5; done; echo 'Backend ready.'; pnpm -r --filter frontend dev; }",
-		"start": "lsof -ti:1530 | xargs kill 2>/dev/null; cargo build -p mhaol-backend --release --bin mhaol-server && pnpm -r --filter frontend build && { PORT=1530 cargo run -p mhaol-backend --release --bin mhaol-server & BACKEND_PID=$!; trap 'kill $BACKEND_PID 2>/dev/null' EXIT; echo 'Waiting for backend on port 1530...'; until curl -s http://localhost:1530/api/ytdl/status > /dev/null 2>&1; do sleep 0.5; done; echo 'Backend ready.'; pnpm -r --filter frontend preview -- --port 1531; }",
+		"start": "lsof -ti:1530 | xargs kill 2>/dev/null; { PORT=1530 ./target/release/mhaol-server & BACKEND_PID=$!; trap 'kill $BACKEND_PID 2>/dev/null' EXIT; echo 'Waiting for backend on port 1530...'; until curl -s http://localhost:1530/api/ytdl/status > /dev/null 2>&1; do sleep 0.5; done; echo 'Backend ready.'; pnpm -r --filter frontend preview -- --port 1531; }",
 		"dev:backend": "PORT=1530 cargo run -p mhaol-backend --bin mhaol-server",
 		"dev:frontend": "pnpm -r --filter frontend dev",
-		"build": "pnpm -r --filter frontend build",
+		"build": "cargo build -p mhaol-backend --release --bin mhaol-server && pnpm -r --filter frontend build",
 		"build:backend": "cargo build -p mhaol-backend --release",
 		"preview": "pnpm -r --filter frontend preview",
 		"test": "pnpm -r run test && cargo test -p mhaol-backend",
