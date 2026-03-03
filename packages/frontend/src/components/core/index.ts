@@ -4,6 +4,3 @@ export { default as IdentitySidebar } from './IdentitySidebar.svelte';
 export { default as Navbar } from './Navbar.svelte';
 export { default as NavbarLink } from './NavbarLink.svelte';
 export { default as NavbarDropdown } from './NavbarDropdown.svelte';
-
-// Re-export from shared package for additional components
-export * from '@arktosmos/components/core';

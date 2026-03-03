@@ -4,7 +4,7 @@ import { get, type Writable } from 'svelte/store';
 import localStorageWritableStore from '$utils/localStorageWritableStore';
 import type { ID } from '$types/core.type';
 
-export class ObjectServiceClass<T extends { id: ID }> {
+export class ObjectServiceClass<T extends { id: ID } | null> {
 	id: string;
 	store: Writable<T>;
 	data: T;
