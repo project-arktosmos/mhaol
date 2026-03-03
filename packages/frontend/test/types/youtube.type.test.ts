@@ -19,9 +19,9 @@ describe('extractVideoId', () => {
 	});
 
 	it('extracts with additional query params', () => {
-		expect(
-			extractVideoId('https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLxyz&t=10')
-		).toBe('dQw4w9WgXcQ');
+		expect(extractVideoId('https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLxyz&t=10')).toBe(
+			'dQw4w9WgXcQ'
+		);
 	});
 
 	it('returns null for non-YouTube URL', () => {
@@ -36,16 +36,12 @@ describe('extractVideoId', () => {
 describe('extractPlaylistId', () => {
 	it('extracts playlist ID from URL', () => {
 		expect(
-			extractPlaylistId(
-				'https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf'
-			)
+			extractPlaylistId('https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf')
 		).toBe('PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf');
 	});
 
 	it('extracts playlist ID from video URL with list param', () => {
-		expect(
-			extractPlaylistId('https://www.youtube.com/watch?v=abc123&list=PLxyz')
-		).toBe('PLxyz');
+		expect(extractPlaylistId('https://www.youtube.com/watch?v=abc123&list=PLxyz')).toBe('PLxyz');
 	});
 
 	it('returns null when no playlist ID', () => {

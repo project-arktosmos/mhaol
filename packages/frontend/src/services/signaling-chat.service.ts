@@ -29,17 +29,11 @@ class SignalingChatService {
 	private ws: WebSocket | null = null;
 	private peerConnections: Map<string, RTCPeerConnection> = new Map();
 	private dataChannels: Map<string, RTCDataChannel> = new Map();
-	private ephemeralAccount = browser
-		? privateKeyToAccount(generatePrivateKey())
-		: null;
+	private ephemeralAccount = browser ? privateKeyToAccount(generatePrivateKey()) : null;
 
 	// ===== Connection =====
 
-	async connect(
-		serverUrl: string,
-		roomId: string,
-		target: SignalingServerTarget
-	): Promise<void> {
+	async connect(serverUrl: string, roomId: string, target: SignalingServerTarget): Promise<void> {
 		if (!browser) return;
 		this.disconnect();
 

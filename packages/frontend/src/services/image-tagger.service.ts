@@ -160,9 +160,7 @@ class ImageTaggerService {
 					});
 
 					this.store.update((items) =>
-						items.map((item) =>
-							item.id === itemId ? { ...item, tags: data.tags } : item
-						)
+						items.map((item) => (item.id === itemId ? { ...item, tags: data.tags } : item))
 					);
 
 					onTagged?.(itemId, data.tags);
@@ -259,9 +257,7 @@ class ImageTaggerService {
 
 		this.store.update((items) =>
 			items.map((item) =>
-				item.id === itemId
-					? { ...item, tags: item.tags.filter((t) => t.tag !== tag) }
-					: item
+				item.id === itemId ? { ...item, tags: item.tags.filter((t) => t.tag !== tag) } : item
 			)
 		);
 	}

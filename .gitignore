@@ -42,6 +42,10 @@ target/
 *.db-wal
 *.db-shm
 
+# Downloads
+downloads/
+**/downloads/
+
 # Prebuilt binaries
 packages/frontend/bin/
 

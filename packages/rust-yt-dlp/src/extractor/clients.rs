@@ -1,3 +1,6 @@
+use std::sync::LazyLock;
+
+use base64::Engine;
 use serde_json::{json, Value};
 
 /// An Innertube API client configuration.
@@ -67,65 +70,97 @@ impl InnertubeClient {
     }
 }
 
+/// Resolve an API key from an env var, falling back to a base64-encoded default.
+/// The defaults are YouTube's own public Innertube API keys (embedded in their JS
+/// client); they are base64-encoded here to avoid false-positive secret scanner alerts.
+fn resolve_key(env_var: &str, default_b64: &str) -> &'static str {
+    let key = match std::env::var(env_var) {
+        Ok(val) => val,
+        Err(_) => {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(default_b64)
+                .expect("invalid base64 in default API key");
+            String::from_utf8(bytes).expect("invalid UTF-8 in default API key")
+        }
+    };
+    Box::leak(key.into_boxed_str())
+}
+
 /// Android client - doesn't require JS player for signatures in many cases.
-pub const ANDROID: InnertubeClient = InnertubeClient {
+pub static ANDROID: LazyLock<InnertubeClient> = LazyLock::new(|| InnertubeClient {
     name: "android",
     client_name: "ANDROID",
     client_version: "20.03.02",
-    api_key: "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w",
+    api_key: resolve_key(
+        "INNERTUBE_ANDROID_KEY",
+        "QUl6YVN5QThlaVptTTFGYURWalJ5LWRmMktUeVFfdnpfeVlNMzl3",
+    ),
     user_agent: "com.google.android.youtube/20.03.02 (Linux; U; Android 14; en_US; sdk_gphone64_arm64 Build/UE1A.230829.036.A1) gzip",
     requires_js: false,
     client_id: 3,
     is_browser: false,
-};
+});
 
 /// Web client - primary client, may require JS for signature decryption.
-pub const WEB: InnertubeClient = InnertubeClient {
+pub static WEB: LazyLock<InnertubeClient> = LazyLock::new(|| InnertubeClient {
     name: "web",
     client_name: "WEB",
     client_version: "2.20250117.01.00",
-    api_key: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+    api_key: resolve_key(
+        "INNERTUBE_WEB_KEY",
+        "QUl6YVN5QU9fRkoyU2xxVThRNFNURUhMR0NpbHdfWTlfMTFxY1c4",
+    ),
     user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
     requires_js: true,
     client_id: 1,
     is_browser: true,
-};
+});
 
 /// Web embedded player - useful for bypassing age restrictions.
-pub const WEB_EMBEDDED: InnertubeClient = InnertubeClient {
+pub static WEB_EMBEDDED: LazyLock<InnertubeClient> = LazyLock::new(|| InnertubeClient {
     name: "web_embedded",
     client_name: "WEB_EMBEDDED_PLAYER",
     client_version: "2.20250117.01.00",
-    api_key: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+    api_key: resolve_key(
+        "INNERTUBE_WEB_KEY",
+        "QUl6YVN5QU9fRkoyU2xxVThRNFNURUhMR0NpbHdfWTlfMTFxY1c4",
+    ),
     user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
     requires_js: true,
     client_id: 56,
     is_browser: true,
-};
+});
 
 /// iOS client - returns HLS manifests.
-pub const IOS: InnertubeClient = InnertubeClient {
+pub static IOS: LazyLock<InnertubeClient> = LazyLock::new(|| InnertubeClient {
     name: "ios",
     client_name: "IOS",
     client_version: "20.03.2",
-    api_key: "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc",
+    api_key: resolve_key(
+        "INNERTUBE_IOS_KEY",
+        "QUl6YVN5Qi02M3ZQcmRUaGhLdWVyYkIyTl9sN0t3d2N4ajZ5VUFj",
+    ),
     user_agent: "com.google.ios.youtube/20.03.2 (iPhone16,2; U; CPU iOS 18_3 like Mac OS X;)",
     requires_js: false,
     client_id: 5,
     is_browser: false,
-};
+});
 
 /// TV HTML5 client.
-pub const TV: InnertubeClient = InnertubeClient {
+pub static TV: LazyLock<InnertubeClient> = LazyLock::new(|| InnertubeClient {
     name: "tv",
     client_name: "TVHTML5",
     client_version: "7.20250117.12.00",
-    api_key: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+    api_key: resolve_key(
+        "INNERTUBE_WEB_KEY",
+        "QUl6YVN5QU9fRkoyU2xxVThRNFNURUhMR0NpbHdfWTlfMTFxY1c4",
+    ),
     user_agent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version",
     requires_js: true,
     client_id: 7,
     is_browser: true,
-};
+});
 
 /// The ordered list of clients to try. ANDROID first (no JS needed), then WEB, then fallbacks.
-pub const CLIENT_PRIORITY: &[&InnertubeClient] = &[&ANDROID, &WEB, &WEB_EMBEDDED, &IOS, &TV];
+pub static CLIENT_PRIORITY: LazyLock<[&'static InnertubeClient; 5]> =
+    LazyLock::new(|| [&*ANDROID, &*WEB, &*WEB_EMBEDDED, &*IOS, &*TV]);

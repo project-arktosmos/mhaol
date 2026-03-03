@@ -144,7 +144,14 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				})
 			});
 
-			console.log('[Player] Session created:', session.session_id, 'signaling:', session.signaling_url, 'room:', session.room_id);
+			console.log(
+				'[Player] Session created:',
+				session.session_id,
+				'signaling:',
+				session.signaling_url,
+				'room:',
+				session.room_id
+			);
 
 			this.state.update((s) => ({
 				...s,
@@ -295,9 +302,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		const sdp = msg.sdp as string;
 
 		try {
-			await this.pc.setRemoteDescription(
-				new RTCSessionDescription({ type: 'answer', sdp })
-			);
+			await this.pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp }));
 			this.remoteDescriptionSet = true;
 
 			for (const candidate of this.pendingCandidates) {
@@ -359,7 +364,12 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 		// Listen for the data channel created by the Rust worker
 		this.pc.ondatachannel = (event) => {
-			console.log('[Player] Data channel received:', event.channel.label, 'state:', event.channel.readyState);
+			console.log(
+				'[Player] Data channel received:',
+				event.channel.label,
+				'state:',
+				event.channel.readyState
+			);
 			if (event.channel.label === 'media-control') {
 				this.dataChannel = event.channel;
 				this.setupDataChannel();

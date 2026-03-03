@@ -266,12 +266,12 @@ impl DownloadPipeline {
         // When a BotGuard PO token is available, prefer WEB clients (the token is
         // generated via BotGuard which is web-only; it won't work with ANDROID).
         use crate::extractor::clients::{WEB, WEB_EMBEDDED, ANDROID, IOS, TV};
-        let web_priority: &[&InnertubeClient] = &[&WEB, &WEB_EMBEDDED, &TV, &ANDROID, &IOS];
+        let web_priority: &[&InnertubeClient] = &[&*WEB, &*WEB_EMBEDDED, &*TV, &*ANDROID, &*IOS];
 
         let clients: &[&InnertubeClient] = if po_token.is_some() {
             web_priority
         } else {
-            CLIENT_PRIORITY
+            &*CLIENT_PRIORITY
         };
 
         for client in clients {
