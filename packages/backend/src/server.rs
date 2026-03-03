@@ -4,6 +4,21 @@ use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() {
+    // When invoked as `mhaol-server worker`, run the p2p-stream worker loop
+    // instead of the HTTP server. This allows shipping a single binary.
+    #[cfg(not(target_os = "android"))]
+    if std::env::args().nth(1).as_deref() == Some("worker") {
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "info,mhaol_p2p_stream=debug".into()),
+            )
+            .init();
+        mhaol_p2p_stream::worker::run().await;
+        return;
+    }
+
     load_env_app();
 
     tracing_subscriber::fmt()

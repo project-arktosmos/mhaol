@@ -52,25 +52,19 @@ jobs:
           workspaces: '. -> target'
 
       - name: Build release binaries
-        run: cargo build --release --bin mhaol-server --bin p2p-stream-worker --features mhaol-backend/embed-frontend
+        run: cargo build --release --bin mhaol-server --features mhaol-backend/embed-frontend
 
-      - name: Strip binaries
-        run: |
-          strip target/release/mhaol-server
-          strip target/release/p2p-stream-worker
+      - name: Strip binary
+        run: strip target/release/mhaol-server
 
-      - name: Package binaries
+      - name: Package binary
         run: |
           TAG=${GITHUB_REF#refs/tags/}
           cp target/release/mhaol-server mhaol-server-${TAG}-linux-x86_64
-          cp target/release/p2p-stream-worker p2p-stream-worker-${TAG}-linux-x86_64
           chmod +x mhaol-server-${TAG}-linux-x86_64
-          chmod +x p2p-stream-worker-${TAG}-linux-x86_64
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            mhaol-server-*-linux-x86_64
-            p2p-stream-worker-*-linux-x86_64
+          files: mhaol-server-*-linux-x86_64
           generate_release_notes: true

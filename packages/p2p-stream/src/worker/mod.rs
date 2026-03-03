@@ -1,30 +1,23 @@
 mod protocol;
-mod signaling_client;
+pub mod signaling_client;
 
-use mhaol_p2p_stream::prelude::*;
+use crate::prelude::*;
 use protocol::{Command, Event};
 use signaling_client::SignalingClient;
-// Note: `mhaol_p2p_stream` is this crate's own lib — Cargo resolves `[[bin]]`
-// targets' `extern crate` references to the same package's `[lib]`.
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{error, info};
 
-#[tokio::main]
-async fn main() {
-    // Tracing goes to stderr (stdout is reserved for the JSON protocol)
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,mhaol_p2p_stream=debug".into()),
-        )
-        .init();
+/// Run the p2p-stream worker loop (stdin/stdout JSON protocol).
+///
+/// This is the entry point used when `mhaol-server` is invoked with the
+/// `worker` subcommand. Tracing goes to stderr; stdout is reserved for the
+/// JSON protocol.
+pub async fn run() {
+    crate::init().expect("Failed to initialize GStreamer");
 
-    mhaol_p2p_stream::init().expect("Failed to initialize GStreamer");
-
-    let missing = mhaol_p2p_stream::check_required_elements();
+    let missing = crate::check_required_elements();
     if !missing.is_empty() {
         error!(
             "Missing required GStreamer elements: {}. \
