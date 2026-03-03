@@ -174,14 +174,19 @@ impl ModuleRegistry {
                         .env_key
                         .as_ref()
                         .and_then(|k| std::env::var(k).ok());
-                    if !state.settings.exists(&setting.key) {
+                    let current = state.settings.get(&setting.key);
+                    if current.is_none() {
+                        // Setting doesn't exist yet — seed with env value or default
                         entries.insert(
                             setting.key.clone(),
                             env_val.unwrap_or_else(|| setting.default.clone()),
                         );
-                    } else if let Some(env_val) = env_val {
-                        if state.settings.get(&setting.key).is_none() {
-                            entries.insert(setting.key.clone(), env_val);
+                    } else if let Some(env_val) = &env_val {
+                        // Setting exists but env var is set — override if DB value
+                        // is empty or matches the default (i.e. not user-configured)
+                        let db_val = current.unwrap();
+                        if db_val.is_empty() || db_val == setting.default {
+                            entries.insert(setting.key.clone(), env_val.clone());
                         }
                     }
                 }
