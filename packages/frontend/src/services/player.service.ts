@@ -255,6 +255,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 			case 'error':
 				console.error('[Player] Signaling error:', msg.message);
+				this.state.update((s) => ({
+					...s,
+					connectionState: 'error',
+					error: String(msg.message || 'Unknown signaling error')
+				}));
 				break;
 		}
 	}

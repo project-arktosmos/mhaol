@@ -99,10 +99,19 @@ async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn stream_status(State(_state): State<AppState>) -> impl IntoResponse {
     #[cfg(not(target_os = "android"))]
-    let available = mhaol_p2p_stream::init().is_ok();
+    {
+        if mhaol_p2p_stream::init().is_err() {
+            return Json(serde_json::json!({ "available": false }));
+        }
+        let missing = mhaol_p2p_stream::check_required_elements();
+        if missing.is_empty() {
+            Json(serde_json::json!({ "available": true }))
+        } else {
+            Json(serde_json::json!({ "available": false, "missing_elements": missing }))
+        }
+    }
     #[cfg(target_os = "android")]
-    let available = false;
-    Json(serde_json::json!({ "available": available }))
+    Json(serde_json::json!({ "available": false }))
 }
 
 #[derive(Deserialize)]

@@ -23,6 +23,19 @@ async fn main() {
         .init();
 
     mhaol_p2p_stream::init().expect("Failed to initialize GStreamer");
+
+    let missing = mhaol_p2p_stream::check_required_elements();
+    if !missing.is_empty() {
+        error!(
+            "Missing required GStreamer elements: {}. \
+             On Ubuntu/Debian install: sudo apt-get install \
+             gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+             gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav",
+            missing.join(", ")
+        );
+        std::process::exit(1);
+    }
+
     info!("p2p-stream-worker started (GStreamer initialized)");
 
     let stdin = tokio::io::stdin();
