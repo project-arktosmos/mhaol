@@ -10,6 +10,13 @@
 	onMount(() => {
 		libraryService.initialize();
 	});
+
+	function switchTab(tab: 'add' | 'libraries') {
+		activeTab = tab;
+		if (tab === 'add') {
+			libraryService.openAddForm();
+		}
+	}
 </script>
 
 <div class="flex items-center justify-between pr-8">
@@ -25,7 +32,7 @@
 			class={classNames('btn join-item btn-sm', {
 				'btn-active': activeTab === 'libraries'
 			})}
-			onclick={() => (activeTab = 'libraries')}
+			onclick={() => switchTab('libraries')}
 		>
 			Libraries
 		</button>
@@ -33,7 +40,7 @@
 			class={classNames('btn join-item btn-sm', {
 				'btn-active': activeTab === 'add'
 			})}
-			onclick={() => (activeTab = 'add')}
+			onclick={() => switchTab('add')}
 		>
 			Add Library
 		</button>
