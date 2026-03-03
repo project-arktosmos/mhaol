@@ -28,7 +28,7 @@
 	};
 
 	let activeId = $derived($routerStore.navbarModal);
-	let maxWidth = $derived(activeId ? MAX_WIDTHS[activeId] ?? 'max-w-lg' : 'max-w-lg');
+	let maxWidth = $derived(activeId ? (MAX_WIDTHS[activeId] ?? 'max-w-lg') : 'max-w-lg');
 
 	function handleClose() {
 		modalRouterService.closeNavbar();

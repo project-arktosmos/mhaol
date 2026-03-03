@@ -1,9 +1,17 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import type { LibraryFile } from '$types/library.type';
-	import type { DisplayMusicBrainzRecording, DisplayMusicBrainzArtist, DisplayMusicBrainzReleaseGroup } from 'musicbrainz/types';
+	import type {
+		DisplayMusicBrainzRecording,
+		DisplayMusicBrainzArtist,
+		DisplayMusicBrainzReleaseGroup
+	} from 'musicbrainz/types';
 	import { searchRecordings, searchArtists, searchReleaseGroups } from 'musicbrainz';
-	import { recordingsToDisplay, artistsToDisplay, releaseGroupsToDisplay } from 'musicbrainz/transform';
+	import {
+		recordingsToDisplay,
+		artistsToDisplay,
+		releaseGroupsToDisplay
+	} from 'musicbrainz/transform';
 
 	interface Props {
 		file: LibraryFile;
@@ -29,7 +37,10 @@
 			.replace(/[._]/g, ' ')
 			.replace(/\s*[\[(].*?[\])]\s*/g, ' ')
 			.replace(/\b(720|1080|2160|480)p?\b/gi, '')
-			.replace(/\b(x264|x265|h264|h265|hevc|avc|bluray|bdrip|brrip|webrip|web-dl|hdtv|dvdrip|hdrip)\b/gi, '')
+			.replace(
+				/\b(x264|x265|h264|h265|hevc|avc|bluray|bdrip|brrip|webrip|web-dl|hdtv|dvdrip|hdrip)\b/gi,
+				''
+			)
 			.replace(/\b(aac|ac3|dts|mp3|flac|atmos|truehd)\b/gi, '')
 			.replace(/\b(s\d{1,2}e\d{1,2})\b/gi, '')
 			.replace(/\s{2,}/g, ' ')
@@ -95,12 +106,14 @@
 		img.style.display = 'none';
 	}
 
-	let hasResults = $derived(trackResults.length > 0 || artistResults.length > 0 || albumResults.length > 0);
+	let hasResults = $derived(
+		trackResults.length > 0 || artistResults.length > 0 || albumResults.length > 0
+	);
 </script>
 
-<div class="modal modal-open">
+<div class="modal-open modal">
 	<div class="modal-box max-w-2xl">
-		<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onclick={onclose}>
+		<button class="btn absolute top-2 right-2 btn-circle btn-ghost btn-sm" onclick={onclose}>
 			&times;
 		</button>
 
@@ -111,14 +124,18 @@
 			<div class="join flex-1">
 				<input
 					type="text"
-					class="input input-bordered input-sm join-item w-full"
+					class="input-bordered input input-sm join-item w-full"
 					placeholder="Search MusicBrainz..."
 					bind:value={query}
 					onkeydown={handleKeydown}
 				/>
-				<button class="btn btn-sm btn-primary join-item" onclick={search} disabled={searching || !query.trim()}>
+				<button
+					class="btn join-item btn-sm btn-primary"
+					onclick={search}
+					disabled={searching || !query.trim()}
+				>
 					{#if searching}
-						<span class="loading loading-spinner loading-xs"></span>
+						<span class="loading loading-xs loading-spinner"></span>
 					{:else}
 						Search
 					{/if}
@@ -126,20 +143,29 @@
 			</div>
 			<div class="join">
 				<button
-					class={classNames('join-item btn btn-sm', { 'btn-active': searchMode === 'track' })}
-					onclick={() => { searchMode = 'track'; clearResults(); }}
+					class={classNames('btn join-item btn-sm', { 'btn-active': searchMode === 'track' })}
+					onclick={() => {
+						searchMode = 'track';
+						clearResults();
+					}}
 				>
 					Track
 				</button>
 				<button
-					class={classNames('join-item btn btn-sm', { 'btn-active': searchMode === 'artist' })}
-					onclick={() => { searchMode = 'artist'; clearResults(); }}
+					class={classNames('btn join-item btn-sm', { 'btn-active': searchMode === 'artist' })}
+					onclick={() => {
+						searchMode = 'artist';
+						clearResults();
+					}}
 				>
 					Artist
 				</button>
 				<button
-					class={classNames('join-item btn btn-sm', { 'btn-active': searchMode === 'album' })}
-					onclick={() => { searchMode = 'album'; clearResults(); }}
+					class={classNames('btn join-item btn-sm', { 'btn-active': searchMode === 'album' })}
+					onclick={() => {
+						searchMode = 'album';
+						clearResults();
+					}}
 				>
 					Album
 				</button>
@@ -153,7 +179,7 @@
 		<div class="mt-4 max-h-80 overflow-y-auto">
 			{#if searching}
 				<div class="flex justify-center py-8">
-					<span class="loading loading-spinner loading-md"></span>
+					<span class="loading loading-md loading-spinner"></span>
 				</div>
 			{:else if searchMode === 'track' && trackResults.length > 0}
 				<div class="flex flex-col gap-2">

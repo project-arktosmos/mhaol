@@ -70,8 +70,7 @@
 									<span
 										class={classNames('badge badge-sm', {
 											'badge-neutral': download.state === 'pending',
-											'badge-info':
-											download.state === 'fetching' || download.state === 'muxing',
+											'badge-info': download.state === 'fetching' || download.state === 'muxing',
 											'badge-primary': download.state === 'downloading',
 											'badge-success': download.state === 'completed',
 											'badge-error': download.state === 'failed',
@@ -89,7 +88,7 @@
 
 								{#if download.state === 'downloading' || download.state === 'muxing'}
 									<progress
-										class="progress progress-primary mt-2 w-full"
+										class="progress mt-2 w-full progress-primary"
 										value={getProgressPercent(download)}
 										max="100"
 									></progress>
@@ -100,10 +99,7 @@
 								{/if}
 
 								{#if download.outputPath && download.state === 'completed'}
-									<p
-										class="mt-1 truncate text-xs text-base-content/50"
-										title={download.outputPath}
-									>
+									<p class="mt-1 truncate text-xs text-base-content/50" title={download.outputPath}>
 										{download.outputPath}
 									</p>
 								{/if}
@@ -114,9 +110,7 @@
 									<!-- Copy path button -->
 									<button
 										class="btn btn-ghost btn-sm"
-										on:click={() =>
-											download.outputPath &&
-											handleCopyPath(download.outputPath)}
+										on:click={() => download.outputPath && handleCopyPath(download.outputPath)}
 										title="Copy file path"
 										aria-label="Copy file path"
 									>

@@ -40,8 +40,7 @@
 		/^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/|playlist\?list=)|youtu\.be\/)[\w-]+/;
 
 	$: isValidUrl =
-		youtubeRegex.test(urlInput) ||
-		(urlInput.includes('youtube.com') && urlInput.includes('list='));
+		youtubeRegex.test(urlInput) || (urlInput.includes('youtube.com') && urlInput.includes('list='));
 	$: videoId = extractVideoId(urlInput);
 	$: playlistId = extractPlaylistId(urlInput);
 	$: hasVideoId = videoId !== null;
@@ -117,19 +116,15 @@
 					on:keydown={handleKeydown}
 					on:paste={handlePaste}
 					placeholder="https://youtube.com/watch?v=... or playlist link"
-					class={classNames('input join-item input-bordered flex-1', {
+					class={classNames('input-bordered input join-item flex-1', {
 						'input-error': urlInput && !isValidUrl,
 						'input-success': isValidUrl
 					})}
 					disabled={!$state.initialized}
 				/>
-				<button
-					class="btn btn-primary join-item"
-					on:click={handleFetchInfo}
-					disabled={!canFetch}
-				>
+				<button class="btn join-item btn-primary" on:click={handleFetchInfo} disabled={!canFetch}>
 					{#if $state.fetchingInfo}
-						<span class="loading loading-spinner loading-sm"></span>
+						<span class="loading loading-sm loading-spinner"></span>
 					{:else}
 						Fetch
 					{/if}
@@ -143,12 +138,12 @@
 				<div class="mt-2 flex items-center justify-between">
 					<span class="text-xs text-info">This video is part of a playlist</span>
 					<button
-						class="btn btn-xs btn-ghost text-info"
+						class="btn text-info btn-ghost btn-xs"
 						on:click={handleFetchAsPlaylist}
 						disabled={!canFetchPlaylist}
 					>
 						{#if $state.fetchingPlaylistInfo}
-							<span class="loading loading-spinner loading-xs"></span>
+							<span class="loading loading-xs loading-spinner"></span>
 						{:else}
 							Fetch full playlist
 						{/if}
@@ -156,9 +151,7 @@
 				</div>
 			{:else if isPurePlaylist}
 				<span class="label">
-					<span class="label-text-alt text-info"
-						>Playlist URL - will fetch all videos</span
-					>
+					<span class="label-text-alt text-info">Playlist URL - will fetch all videos</span>
 				</span>
 			{/if}
 		</div>
@@ -179,12 +172,12 @@
 			<!-- oEmbed Metadata Preview -->
 			{#if oembedLoading}
 				<div class="flex items-center gap-2 text-sm text-base-content/60">
-					<span class="loading loading-spinner loading-xs"></span>
+					<span class="loading loading-xs loading-spinner"></span>
 					Loading metadata...
 				</div>
 			{:else if oembedData}
 				<div class="rounded-lg bg-base-300 p-3">
-					<h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+					<h3 class="mb-2 text-xs font-semibold tracking-wide text-base-content/50 uppercase">
 						Video Metadata
 					</h3>
 					<div class="flex flex-col gap-1 text-sm">
@@ -201,10 +194,10 @@
 							</a>
 						</div>
 						<div class="mt-1 flex flex-wrap gap-2">
-							<span class="badge badge-sm badge-ghost">
+							<span class="badge badge-ghost badge-sm">
 								{oembedData.thumbnail_width}x{oembedData.thumbnail_height}
 							</span>
-							<span class="badge badge-sm badge-ghost">
+							<span class="badge badge-ghost badge-sm">
 								embed {oembedData.width}x{oembedData.height}
 							</span>
 						</div>

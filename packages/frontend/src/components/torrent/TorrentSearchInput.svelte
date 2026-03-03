@@ -29,7 +29,7 @@
 </script>
 
 <div class="join w-full">
-	<select class="select select-bordered join-item" bind:value={category}>
+	<select class="select-bordered select join-item" bind:value={category}>
 		{#each categories as [value, label]}
 			<option {value}>{label}</option>
 		{/each}
@@ -39,7 +39,7 @@
 		bind:value={query}
 		on:keydown={handleKeydown}
 		placeholder="Search torrents..."
-		class="input input-bordered join-item flex-1"
+		class="input-bordered input join-item flex-1"
 	/>
 	<button
 		class={classNames('btn join-item btn-primary', { 'btn-disabled': !canSearch })}
@@ -47,7 +47,7 @@
 		disabled={!canSearch}
 	>
 		{#if searching}
-			<span class="loading loading-spinner loading-sm"></span>
+			<span class="loading loading-sm loading-spinner"></span>
 		{:else}
 			Search
 		{/if}

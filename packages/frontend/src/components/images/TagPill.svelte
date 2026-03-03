@@ -17,12 +17,12 @@
 	let percentage = $derived(Math.round(score * 100));
 </script>
 
-<span class={classNames('badge badge-sm gap-1', badgeClass)} title={`${tag}: ${percentage}%`}>
+<span class={classNames('badge gap-1 badge-sm', badgeClass)} title={`${tag}: ${percentage}%`}>
 	{tag}
 	<span class="opacity-60">{percentage}%</span>
 	{#if !isReadonly}
 		<button
-			class="ml-0.5 opacity-40 hover:opacity-100 cursor-pointer"
+			class="ml-0.5 cursor-pointer opacity-40 hover:opacity-100"
 			onclick={() => onremove?.(tag)}
 			title="Remove tag"
 		>

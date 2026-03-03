@@ -53,9 +53,7 @@
 				<div class="flex-1">
 					<div class="flex items-center gap-2">
 						<span class="badge badge-primary">Playlist</span>
-						<span class="badge badge-ghost"
-							>{$state.currentPlaylistInfo.videoCount} videos</span
-						>
+						<span class="badge badge-ghost">{$state.currentPlaylistInfo.videoCount} videos</span>
 						<span class="badge badge-ghost"
 							>{getTotalDuration($state.currentPlaylistInfo.videos)}</span
 						>
@@ -71,13 +69,9 @@
 				</div>
 
 				<div class="flex flex-col gap-2">
-					<button
-						class="btn btn-primary"
-						on:click={handleDownloadAll}
-						disabled={downloadingAll}
-					>
+					<button class="btn btn-primary" on:click={handleDownloadAll} disabled={downloadingAll}>
 						{#if downloadingAll}
-							<span class="loading loading-spinner loading-sm"></span>
+							<span class="loading loading-sm loading-spinner"></span>
 						{:else}
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -102,7 +96,7 @@
 
 			<!-- Format/Quality info -->
 			<div class="flex items-center gap-2 text-sm text-base-content/60">
-				<span class="badge badge-sm badge-outline">
+				<span class="badge badge-outline badge-sm">
 					{$settings.downloadMode === 'video' ? 'Video' : 'Audio'}
 				</span>
 				<span>
@@ -176,13 +170,13 @@
 
 							<!-- Download button -->
 							<button
-								class="btn btn-ghost btn-sm btn-square"
+								class="btn btn-square btn-ghost btn-sm"
 								on:click={() => handleDownloadSingle(video.videoId, video.title)}
 								disabled={downloadingIds.has(video.videoId)}
 								title="Download this video"
 							>
 								{#if downloadingIds.has(video.videoId)}
-									<span class="loading loading-spinner loading-xs"></span>
+									<span class="loading loading-xs loading-spinner"></span>
 								{:else}
 									<svg
 										xmlns="http://www.w3.org/2000/svg"

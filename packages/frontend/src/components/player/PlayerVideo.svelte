@@ -131,20 +131,16 @@
 		{/if}
 
 		{#if connectionState !== 'streaming' && connectionState !== 'idle'}
-			<div
-				class="absolute inset-0 flex items-center justify-center rounded-lg bg-base-300/80"
-			>
+			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-base-300/80">
 				{#if connectionState === 'connecting' || connectionState === 'signaling'}
 					<div class="text-center">
-						<span class="loading loading-spinner loading-sm"></span>
+						<span class="loading loading-sm loading-spinner"></span>
 						<p class="mt-1 text-xs">{statusLabel}</p>
 					</div>
 				{:else if connectionState === 'error'}
 					<div class="text-center text-error">
 						<p class="text-xs font-medium">Connection failed</p>
-						<button class="btn btn-xs btn-error mt-1" on:click={handleStop}>
-							Close
-						</button>
+						<button class="btn mt-1 btn-xs btn-error" on:click={handleStop}> Close </button>
 					</div>
 				{:else if connectionState === 'closed'}
 					<div class="text-center">

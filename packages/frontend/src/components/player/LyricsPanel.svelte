@@ -55,9 +55,7 @@
 </script>
 
 <div class="flex flex-col overflow-hidden rounded-lg bg-base-200">
-	<div
-		class="flex items-center justify-between border-b border-base-300 bg-base-200/50 px-3 py-2"
-	>
+	<div class="flex items-center justify-between border-b border-base-300 bg-base-200/50 px-3 py-2">
 		<h4 class="text-sm font-semibold text-base-content/70">Lyrics</h4>
 		{#if lyrics.status === 'success' && lyrics.lyrics?.syncedLyrics}
 			<span class="badge badge-xs badge-primary">Synced</span>
@@ -67,7 +65,7 @@
 	<div bind:this={lyricsContainer} class="max-h-64 overflow-y-auto scroll-smooth px-3 py-2">
 		{#if lyrics.status === 'loading'}
 			<div class="flex flex-col items-center justify-center py-8">
-				<span class="loading loading-spinner loading-md text-primary"></span>
+				<span class="loading loading-md loading-spinner text-primary"></span>
 				<span class="mt-2 text-sm text-base-content/60">Fetching lyrics...</span>
 			</div>
 		{:else if lyrics.status === 'not_found'}
@@ -134,10 +132,8 @@
 							class={classNames(
 								'w-full cursor-pointer rounded px-2 py-1 text-left text-sm transition-all duration-200',
 								{
-									'bg-primary font-semibold text-primary-content':
-										index === currentLineIndex,
-									'text-base-content/60 hover:bg-base-300/50':
-										index !== currentLineIndex
+									'bg-primary font-semibold text-primary-content': index === currentLineIndex,
+									'text-base-content/60 hover:bg-base-300/50': index !== currentLineIndex
 								}
 							)}
 							on:click={() => handleLineClick(line.time)}
@@ -151,7 +147,7 @@
 					{/each}
 				</div>
 			{:else if lyrics.lyrics.plainLyrics}
-				<div class="whitespace-pre-wrap py-4 text-sm leading-relaxed text-base-content/80">
+				<div class="py-4 text-sm leading-relaxed whitespace-pre-wrap text-base-content/80">
 					{lyrics.lyrics.plainLyrics}
 				</div>
 			{:else}

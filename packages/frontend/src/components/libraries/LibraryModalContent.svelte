@@ -15,16 +15,14 @@
 <div class="flex items-center justify-between pr-8">
 	<div>
 		<h3 class="text-lg font-bold">Libraries</h3>
-		<p class="text-sm text-base-content/60">
-			Manage media library locations on your server
-		</p>
+		<p class="text-sm text-base-content/60">Manage media library locations on your server</p>
 	</div>
 </div>
 
 <div class="mt-4 flex gap-2">
 	<div class="join">
 		<button
-			class={classNames('join-item btn btn-sm', {
+			class={classNames('btn join-item btn-sm', {
 				'btn-active': activeTab === 'libraries'
 			})}
 			onclick={() => (activeTab = 'libraries')}
@@ -32,7 +30,7 @@
 			Libraries
 		</button>
 		<button
-			class={classNames('join-item btn btn-sm', {
+			class={classNames('btn join-item btn-sm', {
 				'btn-active': activeTab === 'add'
 			})}
 			onclick={() => (activeTab = 'add')}

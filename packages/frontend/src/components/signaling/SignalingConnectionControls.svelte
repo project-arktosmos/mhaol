@@ -48,17 +48,19 @@
 	}
 </script>
 
-<div class="card bg-base-200 flex flex-col">
+<div class="card flex flex-col bg-base-200">
 	<div class="card-body gap-4 p-4">
 		<div class="flex items-center justify-between">
 			<h2 class="card-title text-base">Connection</h2>
-			<span class={classNames('badge badge-sm', signalingAdapter.phaseBadgeClass($chatStore.phase))}>
+			<span
+				class={classNames('badge badge-sm', signalingAdapter.phaseBadgeClass($chatStore.phase))}
+			>
 				{signalingAdapter.phaseLabel($chatStore.phase)}
 			</span>
 		</div>
 
 		<!-- Server Target Tabs -->
-		<div class="tabs tabs-box">
+		<div class="tabs-box tabs">
 			<button
 				class={classNames('tab', { 'tab-active': serverTarget === 'dev' })}
 				onclick={() => (serverTarget = 'dev')}
@@ -84,7 +86,9 @@
 						'bg-error': !isServerAvailable()
 					})}
 				></span>
-				<span class="truncate font-mono text-xs text-base-content/60">{getServerUrl() || 'Not configured'}</span>
+				<span class="truncate font-mono text-xs text-base-content/60"
+					>{getServerUrl() || 'Not configured'}</span
+				>
 			</div>
 		{/if}
 
@@ -96,7 +100,7 @@
 			<input
 				id="room-id-input"
 				type="text"
-				class="input input-bordered input-sm font-mono"
+				class="input-bordered input input-sm font-mono"
 				placeholder="Enter room ID..."
 				bind:value={roomId}
 				onkeydown={handleKeydown}
@@ -107,14 +111,14 @@
 		<!-- Connect / Disconnect -->
 		{#if $chatStore.phase === 'disconnected' || $chatStore.phase === 'error'}
 			<button
-				class="btn btn-primary btn-sm"
+				class="btn btn-sm btn-primary"
 				disabled={!getServerUrl() || !roomId.trim() || !isServerAvailable()}
 				onclick={handleConnect}
 			>
 				Connect
 			</button>
 		{:else}
-			<button class="btn btn-error btn-sm btn-outline" onclick={handleDisconnect}>
+			<button class="btn btn-outline btn-sm btn-error" onclick={handleDisconnect}>
 				Disconnect
 			</button>
 		{/if}
@@ -127,12 +131,12 @@
 		<!-- Connected Peers -->
 		{#if $chatStore.peerIds.length > 0}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+				<h3 class="mb-1 text-xs font-semibold tracking-wide text-base-content/50 uppercase">
 					Peers ({$chatStore.peerIds.length})
 				</h3>
 				<div class="flex flex-wrap gap-1">
 					{#each $chatStore.peerIds as peerId (peerId)}
-						<span class="badge badge-outline badge-sm font-mono">
+						<span class="badge badge-outline font-mono badge-sm">
 							{signalingAdapter.shortAddress(peerId)}
 						</span>
 					{/each}

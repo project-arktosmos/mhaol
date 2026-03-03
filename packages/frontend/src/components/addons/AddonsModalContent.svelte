@@ -105,7 +105,7 @@
 </div>
 
 {#if error}
-	<div class="alert alert-error mt-4">
+	<div class="mt-4 alert alert-error">
 		<span>{error}</span>
 		<button class="btn btn-ghost btn-sm" onclick={() => (error = null)}>x</button>
 	</div>
@@ -113,7 +113,7 @@
 
 {#if loading}
 	<div class="flex justify-center py-12">
-		<span class="loading loading-spinner loading-lg"></span>
+		<span class="loading loading-lg loading-spinner"></span>
 	</div>
 {:else if addons.length === 0}
 	<div class="mt-4 rounded-lg bg-base-200 p-8 text-center">
@@ -138,7 +138,7 @@
 					<!-- Link sources -->
 					{#if addon.linkSources.length > 0}
 						<div class="mt-3">
-							<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60">
+							<h3 class="mb-2 text-sm font-semibold tracking-wide uppercase opacity-60">
 								Link Sources
 							</h3>
 							<div class="flex flex-wrap gap-2">
@@ -154,7 +154,7 @@
 					<!-- Database tables -->
 					{#if addon.schemaTables.length > 0}
 						<div class="mt-3">
-							<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60">
+							<h3 class="mb-2 text-sm font-semibold tracking-wide uppercase opacity-60">
 								Database Tables
 							</h3>
 							<div class="flex flex-col gap-2">
@@ -173,12 +173,12 @@
 					<!-- Scheduled tasks -->
 					{#if addon.scheduledTasks.length > 0}
 						<div class="mt-3">
-							<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60">
+							<h3 class="mb-2 text-sm font-semibold tracking-wide uppercase opacity-60">
 								Scheduled Tasks
 							</h3>
 							<div class="flex flex-wrap gap-2">
 								{#each addon.scheduledTasks as task}
-									<span class="badge badge-outline badge-sm font-mono">{task}</span>
+									<span class="badge badge-outline font-mono badge-sm">{task}</span>
 								{/each}
 							</div>
 						</div>
@@ -187,7 +187,7 @@
 					<!-- Settings -->
 					{#if addon.settings.length > 0}
 						<div class="mt-3">
-							<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60">
+							<h3 class="mb-2 text-sm font-semibold tracking-wide uppercase opacity-60">
 								Settings
 							</h3>
 							<div class="overflow-x-auto">
@@ -204,82 +204,52 @@
 										{#each addon.settings as setting (setting.key)}
 											<tr>
 												<td>
-													<span class="text-sm"
-														>{formatSettingLabel(setting.key)}</span
-													>
+													<span class="text-sm">{formatSettingLabel(setting.key)}</span>
 													<br />
-													<span class="font-mono text-xs opacity-50"
-														>{setting.key}</span
-													>
+													<span class="font-mono text-xs opacity-50">{setting.key}</span>
 												</td>
 												<td>
 													{#if editingKey === setting.key}
 														<input
-															type={isSensitive(setting.key)
-																? 'password'
-																: 'text'}
-															class="input input-bordered input-sm w-full max-w-xs font-mono"
+															type={isSensitive(setting.key) ? 'password' : 'text'}
+															class="input-bordered input input-sm w-full max-w-xs font-mono"
 															bind:value={editValue}
 															onkeydown={(e) => {
-																if (e.key === 'Enter')
-																	saveSetting(
-																		addon.name,
-																		setting.key
-																	);
-																if (e.key === 'Escape')
-																	cancelEdit();
+																if (e.key === 'Enter') saveSetting(addon.name, setting.key);
+																if (e.key === 'Escape') cancelEdit();
 															}}
 														/>
 													{:else}
 														<span class="font-mono text-sm">
 															{#if isSensitive(setting.key) && setting.value}
-																{'*'.repeat(
-																	Math.min(
-																		setting.value.length,
-																		16
-																	)
-																)}
+																{'*'.repeat(Math.min(setting.value.length, 16))}
 															{:else}
 																{setting.value || '-'}
 															{/if}
 														</span>
 													{/if}
 												</td>
-												<td class="font-mono text-sm opacity-50"
-													>{setting.default || '-'}</td
-												>
+												<td class="font-mono text-sm opacity-50">{setting.default || '-'}</td>
 												<td>
 													{#if editingKey === setting.key}
 														<div class="flex gap-1">
 															<button
-																class="btn btn-success btn-xs"
+																class="btn btn-xs btn-success"
 																disabled={saving}
-																onclick={() =>
-																	saveSetting(
-																		addon.name,
-																		setting.key
-																	)}
+																onclick={() => saveSetting(addon.name, setting.key)}
 															>
 																{#if saving}
-																	<span
-																		class="loading loading-spinner loading-xs"
-																	></span>
+																	<span class="loading loading-xs loading-spinner"></span>
 																{:else}
 																	Save
 																{/if}
 															</button>
-															<button
-																class="btn btn-ghost btn-xs"
-																onclick={cancelEdit}
-															>
+															<button class="btn btn-ghost btn-xs" onclick={cancelEdit}>
 																Cancel
 															</button>
 														</div>
 													{:else}
-														<button
-															class="btn btn-ghost btn-xs"
-															onclick={() => startEdit(setting)}
-														>
+														<button class="btn btn-ghost btn-xs" onclick={() => startEdit(setting)}>
 															Edit
 														</button>
 													{/if}

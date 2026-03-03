@@ -11,7 +11,13 @@
 		filesError: string | null;
 		onremove: (library: Library) => void;
 		onscan: (library: Library) => void;
-		onlink: (file: LibraryFile, tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') => void;
+		onlink: (
+			file: LibraryFile,
+			tmdbId: number,
+			seasonNumber: number | null,
+			episodeNumber: number | null,
+			type: 'movie' | 'tv'
+		) => void;
 		onunlink: (file: LibraryFile) => void;
 		onyoutubelink: (file: LibraryFile, youtubeId: string) => void;
 		onyoutubeunlink: (file: LibraryFile) => void;
@@ -20,7 +26,21 @@
 		onedittype: (file: LibraryFile, mediaType: string, categoryId: string | null) => void;
 	}
 
-	let { library, files, filesLoading, filesError, onremove, onscan, onlink, onunlink, onyoutubelink, onyoutubeunlink, onmusicbrainzlink, onmusicbrainzunlink, onedittype }: Props = $props();
+	let {
+		library,
+		files,
+		filesLoading,
+		filesError,
+		onremove,
+		onscan,
+		onlink,
+		onunlink,
+		onyoutubelink,
+		onyoutubeunlink,
+		onmusicbrainzlink,
+		onmusicbrainzunlink,
+		onedittype
+	}: Props = $props();
 
 	const mediaTypeBadge: Record<MediaType, string> = {
 		[MediaType.Video]: 'badge-primary',
@@ -37,9 +57,9 @@
 
 <div class="rounded-lg bg-base-100 p-4">
 	<div class="flex items-center gap-4">
-		<div class="flex-1 min-w-0">
+		<div class="min-w-0 flex-1">
 			<div class="flex items-center gap-2">
-				<h3 class="font-semibold truncate">{library.name}</h3>
+				<h3 class="truncate font-semibold">{library.name}</h3>
 				<div class="flex gap-1">
 					{#each library.mediaTypes as type (type)}
 						<span class={classNames('badge badge-sm', mediaTypeBadge[type])}>
@@ -48,11 +68,11 @@
 					{/each}
 				</div>
 			</div>
-			<p class="text-xs text-base-content/50 truncate font-mono mt-1">{library.path}</p>
+			<p class="mt-1 truncate font-mono text-xs text-base-content/50">{library.path}</p>
 		</div>
 
 		<button
-			class="btn btn-ghost btn-sm text-error"
+			class="btn text-error btn-ghost btn-sm"
 			onclick={() => onremove(library)}
 			title="Remove library"
 		>

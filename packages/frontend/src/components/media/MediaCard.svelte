@@ -23,7 +23,17 @@
 		onselect?: (item: MediaItem) => void;
 	}
 
-	let { item, tmdbMetadata = null, youtubeMetadata = null, musicbrainzMetadata = null, metadataLoading = false, imageTags = [], tagging = false, selected = false, onselect }: Props = $props();
+	let {
+		item,
+		tmdbMetadata = null,
+		youtubeMetadata = null,
+		musicbrainzMetadata = null,
+		metadataLoading = false,
+		imageTags = [],
+		tagging = false,
+		selected = false,
+		onselect
+	}: Props = $props();
 
 	let cardType = $derived.by(() => {
 		if (item.categoryId === 'movies' && item.links.tmdb) return 'movie';
@@ -36,13 +46,31 @@
 </script>
 
 {#if cardType === 'movie'}
-	<MovieCard {item} metadata={tmdbMetadata as DisplayTMDBMovieDetails | null} loading={metadataLoading} {onselect} {selected} />
+	<MovieCard
+		{item}
+		metadata={tmdbMetadata as DisplayTMDBMovieDetails | null}
+		loading={metadataLoading}
+		{onselect}
+		{selected}
+	/>
 {:else if cardType === 'tv'}
-	<TvShowCard {item} metadata={tmdbMetadata as DisplayTMDBTvShowDetails | null} loading={metadataLoading} {onselect} {selected} />
+	<TvShowCard
+		{item}
+		metadata={tmdbMetadata as DisplayTMDBTvShowDetails | null}
+		loading={metadataLoading}
+		{onselect}
+		{selected}
+	/>
 {:else if cardType === 'youtube'}
 	<YouTubeCard {item} metadata={youtubeMetadata} loading={metadataLoading} {onselect} {selected} />
 {:else if cardType === 'audio'}
-	<AudioUncategorizedCard {item} metadata={musicbrainzMetadata} loading={metadataLoading} {onselect} {selected} />
+	<AudioUncategorizedCard
+		{item}
+		metadata={musicbrainzMetadata}
+		loading={metadataLoading}
+		{onselect}
+		{selected}
+	/>
 {:else if cardType === 'image'}
 	<ImageUncategorizedCard {item} tags={imageTags} {tagging} {onselect} {selected} />
 {:else}

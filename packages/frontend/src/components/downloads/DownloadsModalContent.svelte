@@ -56,9 +56,7 @@
 		filesModalLoading = true;
 
 		try {
-			const res = await fetch(
-				`/api/downloads/${encodeURIComponent(dl.id)}/files?type=${dl.type}`
-			);
+			const res = await fetch(`/api/downloads/${encodeURIComponent(dl.id)}/files?type=${dl.type}`);
 			if (!res.ok) throw new Error('Failed to load files');
 			filesModalData = await res.json();
 		} catch {
@@ -126,10 +124,10 @@
 
 {#if $downloadState.loading && $downloadState.downloads.length === 0}
 	<div class="flex justify-center py-12">
-		<span class="loading loading-spinner loading-lg"></span>
+		<span class="loading loading-lg loading-spinner"></span>
 	</div>
 {:else if $downloadState.error && $downloadState.downloads.length === 0}
-	<div class="alert alert-error mb-4">
+	<div class="mb-4 alert alert-error">
 		<span>{$downloadState.error}</span>
 	</div>
 {:else if $downloadState.downloads.length === 0}
@@ -178,7 +176,7 @@
 							{:else}
 								<div class="flex items-center gap-2">
 									<progress
-										class="progress progress-primary w-16"
+										class="progress w-16 progress-primary"
 										value={dl.progress * 100}
 										max="100"
 									></progress>
@@ -204,9 +202,7 @@
 							{formatDate(dl.updatedAt)}
 						</td>
 						<td>
-							<button class="btn btn-ghost btn-xs" onclick={() => openFiles(dl)}>
-								Files
-							</button>
+							<button class="btn btn-ghost btn-xs" onclick={() => openFiles(dl)}> Files </button>
 						</td>
 					</tr>
 				{/each}
@@ -224,11 +220,11 @@
 
 	{#if filesModalLoading}
 		<div class="flex justify-center py-8">
-			<span class="loading loading-spinner loading-md"></span>
+			<span class="loading loading-md loading-spinner"></span>
 		</div>
 	{:else if filesModalData?.type === 'torrent'}
 		{#if filesModalData.directory}
-			<p class="mb-3 mt-1 truncate text-xs opacity-50" title={filesModalData.directory}>
+			<p class="mt-1 mb-3 truncate text-xs opacity-50" title={filesModalData.directory}>
 				{filesModalData.directory}
 			</p>
 		{/if}
@@ -249,7 +245,7 @@
 								<td class="max-w-xs truncate" title={file.name}>
 									{file.name}
 								</td>
-								<td class="whitespace-nowrap text-right text-xs opacity-70">
+								<td class="text-right text-xs whitespace-nowrap opacity-70">
 									{#if file.isDirectory}
 										--
 									{:else}

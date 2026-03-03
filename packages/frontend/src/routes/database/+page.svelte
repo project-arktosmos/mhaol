@@ -57,7 +57,9 @@
 		error = null;
 
 		try {
-			const res = await fetch(apiUrl(`/api/database/tables/${encodeURIComponent(name)}?page=${page}&limit=20`));
+			const res = await fetch(
+				apiUrl(`/api/database/tables/${encodeURIComponent(name)}?page=${page}&limit=20`)
+			);
 			if (!res.ok) throw new Error(`Failed to load table "${name}"`);
 			tableData = await res.json();
 		} catch (e) {
@@ -92,7 +94,7 @@
 	</div>
 
 	{#if error}
-		<div class="alert alert-error mb-4">
+		<div class="mb-4 alert alert-error">
 			<span>{error}</span>
 			<button class="btn btn-ghost btn-sm" onclick={() => (error = null)}>x</button>
 		</div>
@@ -100,7 +102,7 @@
 
 	{#if loading}
 		<div class="flex justify-center py-12">
-			<span class="loading loading-spinner loading-lg"></span>
+			<span class="loading loading-lg loading-spinner"></span>
 		</div>
 	{:else if tables.length === 0}
 		<div class="rounded-lg bg-base-200 p-8 text-center">
@@ -127,7 +129,7 @@
 			<div class="min-w-0 flex-1">
 				{#if tableLoading}
 					<div class="flex justify-center py-12">
-						<span class="loading loading-spinner loading-lg"></span>
+						<span class="loading loading-lg loading-spinner"></span>
 					</div>
 				{:else if tableData}
 					<div class="mb-2 flex items-center justify-between">

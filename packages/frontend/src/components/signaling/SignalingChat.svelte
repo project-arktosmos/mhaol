@@ -32,7 +32,7 @@
 	}
 </script>
 
-<div class="card bg-base-200 flex flex-col">
+<div class="card flex flex-col bg-base-200">
 	<div class="card-body gap-3 p-4">
 		<div class="flex items-center justify-between">
 			<h2 class="card-title text-base">Chat</h2>
@@ -82,7 +82,7 @@
 		<!-- Input -->
 		<div class="flex gap-2">
 			<input
-				class="input input-bordered input-sm flex-1"
+				class="input-bordered input input-sm flex-1"
 				type="text"
 				placeholder={canSend ? 'Type a message...' : 'Waiting for connection...'}
 				bind:value={messageInput}
@@ -90,7 +90,7 @@
 				disabled={!canSend}
 			/>
 			<button
-				class="btn btn-primary btn-sm"
+				class="btn btn-sm btn-primary"
 				onclick={handleSend}
 				disabled={!canSend || !messageInput.trim()}
 			>

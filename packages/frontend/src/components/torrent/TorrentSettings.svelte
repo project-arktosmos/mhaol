@@ -121,7 +121,7 @@
 				<div class="flex items-center gap-2">
 					<select
 						id="library-select"
-						class="select select-bordered flex-1"
+						class="select-bordered select flex-1"
 						value={selectedLibraryId}
 						on:change={handleLibrarySelect}
 					>
@@ -132,11 +132,7 @@
 							</option>
 						{/each}
 					</select>
-					<button
-						class="btn btn-ghost btn-sm"
-						on:click={handleShowAddForm}
-						title="Add new library"
-					>
+					<button class="btn btn-ghost btn-sm" on:click={handleShowAddForm} title="Add new library">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							class="h-4 w-4"
@@ -152,7 +148,7 @@
 			{:else}
 				<div class="rounded-lg bg-base-300 p-4 text-center">
 					<p class="mb-2 text-sm text-base-content/60">No libraries configured</p>
-					<button class="btn btn-primary btn-sm" on:click={handleShowAddForm}>
+					<button class="btn btn-sm btn-primary" on:click={handleShowAddForm}>
 						Create Library
 					</button>
 				</div>
@@ -208,31 +204,24 @@
 				viewBox="0 0 24 24"
 				stroke="currentColor"
 			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M19 9l-7 7-7-7"
-				/>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 			</svg>
 		</button>
 
 		{#if showDebug}
 			<div class="mt-2 flex flex-col gap-2">
 				<button
-					class="btn btn-ghost btn-xs self-end"
+					class="btn self-end btn-ghost btn-xs"
 					on:click={handleFetchDebug}
 					disabled={loadingDebug}
 				>
 					{#if loadingDebug}
-						<span class="loading loading-spinner loading-xs"></span>
+						<span class="loading loading-xs loading-spinner"></span>
 					{:else}
 						Refresh
 					{/if}
 				</button>
-				<div
-					class="max-h-64 overflow-auto rounded-lg bg-base-300 p-3 font-mono text-xs"
-				>
+				<div class="max-h-64 overflow-auto rounded-lg bg-base-300 p-3 font-mono text-xs">
 					{#if debugLogs.length === 0}
 						<p class="text-base-content/50">No debug info available</p>
 					{:else}

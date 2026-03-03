@@ -170,7 +170,7 @@
 		<div class="join">
 			{#each widthModes as { mode, label }}
 				<button
-					class={classNames('btn btn-xs join-item', {
+					class={classNames('btn join-item btn-xs', {
 						'btn-active': $sidebarSettings.widthMode === mode
 					})}
 					onclick={() => sidebarService.setWidthMode(mode)}
@@ -181,13 +181,13 @@
 		</div>
 	</div>
 
-	<h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-base-content/50">
+	<h2 class="mb-3 text-sm font-semibold tracking-wide text-base-content/50 uppercase">
 		Identities
 	</h2>
 
 	{#if $identityState.loading}
 		<div class="flex justify-center py-4">
-			<span class="loading loading-spinner loading-sm"></span>
+			<span class="loading loading-sm loading-spinner"></span>
 		</div>
 	{:else if $identityState.error}
 		<p class="text-xs text-error">{$identityState.error}</p>
@@ -208,7 +208,7 @@
 
 	<div class="mt-4 border-t border-base-300 pt-4">
 		<div class="mb-2 flex items-center justify-between">
-			<h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50">
+			<h2 class="text-sm font-semibold tracking-wide text-base-content/50 uppercase">
 				Signaling Server
 			</h2>
 			{#if signalingStatus}
@@ -267,7 +267,7 @@
 							{#if $playerState.remotePeerId}
 								<div class="flex items-center gap-1">
 									<span class="text-xs text-base-content/40">Worker:</span>
-									<span class="badge badge-outline badge-sm font-mono">
+									<span class="badge badge-outline font-mono badge-sm">
 										{signalingAdapter.shortAddress($playerState.remotePeerId)}
 									</span>
 								</div>
@@ -291,7 +291,7 @@
 							{#if $chatState.peerIds.length > 0}
 								<div class="flex flex-wrap gap-1">
 									{#each $chatState.peerIds as peerId (peerId)}
-										<span class="badge badge-outline badge-sm font-mono">
+										<span class="badge badge-outline font-mono badge-sm">
 											{signalingAdapter.shortAddress(peerId)}
 										</span>
 									{/each}
@@ -340,19 +340,33 @@
 							<div class="flex flex-col gap-1">
 								<input
 									type="text"
-									class="input input-bordered input-xs w-full font-mono"
+									class="input-bordered input input-xs w-full font-mono"
 									placeholder="https://your-server.partykit.dev"
 									bind:value={editValue}
 									onkeydown={(e) => {
 										if (e.key === 'Enter') savePartyUrl();
-										if (e.key === 'Escape') { editingPartyUrl = false; editValue = ''; }
+										if (e.key === 'Escape') {
+											editingPartyUrl = false;
+											editValue = '';
+										}
 									}}
 								/>
 								<div class="flex gap-1">
-									<button class="btn btn-success btn-xs flex-1" disabled={savingUrl} onclick={savePartyUrl}>
-										{#if savingUrl}<span class="loading loading-spinner loading-xs"></span>{:else}Save{/if}
+									<button
+										class="btn flex-1 btn-xs btn-success"
+										disabled={savingUrl}
+										onclick={savePartyUrl}
+									>
+										{#if savingUrl}<span class="loading loading-xs loading-spinner"
+											></span>{:else}Save{/if}
 									</button>
-									<button class="btn btn-ghost btn-xs" onclick={() => { editingPartyUrl = false; editValue = ''; }}>
+									<button
+										class="btn btn-ghost btn-xs"
+										onclick={() => {
+											editingPartyUrl = false;
+											editValue = '';
+										}}
+									>
 										Cancel
 									</button>
 								</div>
@@ -360,18 +374,24 @@
 						{:else}
 							<div class="flex gap-1">
 								<button
-									class="btn btn-primary btn-xs flex-1"
+									class="btn flex-1 btn-xs btn-primary"
 									disabled={deploying}
 									onclick={deploySignaling}
 								>
 									{#if deploying}
-										<span class="loading loading-spinner loading-xs"></span>
+										<span class="loading loading-xs loading-spinner"></span>
 										Deploying...
 									{:else}
 										Deploy
 									{/if}
 								</button>
-								<button class="btn btn-ghost btn-xs" onclick={() => { editingPartyUrl = true; editValue = signalingStatus?.partyUrl ?? ''; }}>
+								<button
+									class="btn btn-ghost btn-xs"
+									onclick={() => {
+										editingPartyUrl = true;
+										editValue = signalingStatus?.partyUrl ?? '';
+									}}
+								>
 									Set URL
 								</button>
 							</div>

@@ -122,7 +122,7 @@
 </div>
 
 {#if error}
-	<div class="alert alert-error mt-4">
+	<div class="mt-4 alert alert-error">
 		<span>{error}</span>
 		<button class="btn btn-ghost btn-sm" onclick={() => (error = null)}>x</button>
 	</div>
@@ -130,7 +130,7 @@
 
 {#if loading}
 	<div class="flex justify-center py-12">
-		<span class="loading loading-spinner loading-lg"></span>
+		<span class="loading loading-lg loading-spinner"></span>
 	</div>
 {:else if plugins.length === 0}
 	<div class="mt-4 rounded-lg bg-base-200 p-8 text-center">
@@ -140,7 +140,8 @@
 	<div class="mt-4 flex flex-col gap-4">
 		{#each plugins as plugin (plugin.name)}
 			{@const isExpanded = expandedPlugin === plugin.name}
-			{@const allProcessesUp = plugin.processes.length > 0 && plugin.processes.every((p) => p.available)}
+			{@const allProcessesUp =
+				plugin.processes.length > 0 && plugin.processes.every((p) => p.available)}
 			{@const someProcessDown = plugin.processes.some((p) => !p.available)}
 			{@const noProcesses = plugin.processes.length === 0}
 
@@ -166,13 +167,13 @@
 								<span class="badge badge-outline badge-sm">computer</span>
 							{/if}
 							{#if noProcesses}
-								<span class="badge badge-info badge-sm">library</span>
+								<span class="badge badge-sm badge-info">library</span>
 							{:else if allProcessesUp}
-								<span class="badge badge-success badge-sm">running</span>
+								<span class="badge badge-sm badge-success">running</span>
 							{:else if someProcessDown}
-								<span class="badge badge-warning badge-sm">degraded</span>
+								<span class="badge badge-sm badge-warning">degraded</span>
 							{:else}
-								<span class="badge badge-error badge-sm">stopped</span>
+								<span class="badge badge-sm badge-error">stopped</span>
 							{/if}
 							<svg
 								class={classNames('h-4 w-4 transition-transform', {
@@ -182,7 +183,12 @@
 								stroke="currentColor"
 								viewBox="0 0 24 24"
 							>
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M19 9l-7 7-7-7"
+								/>
 							</svg>
 						</div>
 					</button>
@@ -193,7 +199,9 @@
 							<!-- Processes -->
 							{#if plugin.processes.length > 0}
 								<div>
-									<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60">Processes</h3>
+									<h3 class="mb-2 text-sm font-semibold tracking-wide uppercase opacity-60">
+										Processes
+									</h3>
 									<div class="overflow-x-auto">
 										<table class="table table-sm">
 											<thead>
@@ -210,9 +218,9 @@
 														<td class="font-mono text-sm">{proc.id}</td>
 														<td>
 															{#if proc.available}
-																<span class="badge badge-success badge-xs">running</span>
+																<span class="badge badge-xs badge-success">running</span>
 															{:else}
-																<span class="badge badge-error badge-xs">stopped</span>
+																<span class="badge badge-xs badge-error">stopped</span>
 															{/if}
 														</td>
 														<td class="font-mono text-sm">{proc.port}</td>
@@ -228,7 +236,9 @@
 							<!-- Settings -->
 							{#if plugin.settings.length > 0}
 								<div>
-									<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60">Settings</h3>
+									<h3 class="mb-2 text-sm font-semibold tracking-wide uppercase opacity-60">
+										Settings
+									</h3>
 									<div class="overflow-x-auto">
 										<table class="table table-sm">
 											<thead>
@@ -251,7 +261,7 @@
 															{#if editingKey === setting.key}
 																<input
 																	type={isSensitive(setting.key) ? 'password' : 'text'}
-																	class="input input-bordered input-sm w-full max-w-xs font-mono"
+																	class="input-bordered input input-sm w-full max-w-xs font-mono"
 																	bind:value={editValue}
 																	onkeydown={(e) => {
 																		if (e.key === 'Enter') saveSetting(plugin.name, setting.key);
@@ -273,12 +283,12 @@
 															{#if editingKey === setting.key}
 																<div class="flex gap-1">
 																	<button
-																		class="btn btn-success btn-xs"
+																		class="btn btn-xs btn-success"
 																		disabled={saving}
 																		onclick={() => saveSetting(plugin.name, setting.key)}
 																	>
 																		{#if saving}
-																			<span class="loading loading-spinner loading-xs"></span>
+																			<span class="loading loading-xs loading-spinner"></span>
 																		{:else}
 																			Save
 																		{/if}
@@ -288,7 +298,10 @@
 																	</button>
 																</div>
 															{:else}
-																<button class="btn btn-ghost btn-xs" onclick={() => startEdit(setting)}>
+																<button
+																	class="btn btn-ghost btn-xs"
+																	onclick={() => startEdit(setting)}
+																>
 																	Edit
 																</button>
 															{/if}
@@ -303,11 +316,15 @@
 
 							<!-- Capabilities summary -->
 							<div>
-								<h3 class="mb-2 text-sm font-semibold uppercase tracking-wide opacity-60">Capabilities</h3>
+								<h3 class="mb-2 text-sm font-semibold tracking-wide uppercase opacity-60">
+									Capabilities
+								</h3>
 								<div class="flex flex-wrap gap-2">
 									{#if plugin.schemaTables.length > 0}
 										<span class="badge badge-outline badge-sm">
-											{plugin.schemaTables.length} Database Table{plugin.schemaTables.length !== 1 ? 's' : ''}
+											{plugin.schemaTables.length} Database Table{plugin.schemaTables.length !== 1
+												? 's'
+												: ''}
 										</span>
 									{/if}
 									{#if plugin.processes.length > 0}
@@ -322,7 +339,10 @@
 									{/if}
 									{#if plugin.scheduledTasks.length > 0}
 										<span class="badge badge-outline badge-sm">
-											{plugin.scheduledTasks.length} Scheduled Task{plugin.scheduledTasks.length !== 1 ? 's' : ''}
+											{plugin.scheduledTasks.length} Scheduled Task{plugin.scheduledTasks.length !==
+											1
+												? 's'
+												: ''}
 										</span>
 									{/if}
 								</div>

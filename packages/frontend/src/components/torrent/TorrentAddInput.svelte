@@ -8,8 +8,7 @@
 	let adding = false;
 
 	$: isMagnet = magnetInput.startsWith('magnet:');
-	$: isUrl =
-		magnetInput.startsWith('http://') || magnetInput.startsWith('https://');
+	$: isUrl = magnetInput.startsWith('http://') || magnetInput.startsWith('https://');
 	$: isValidSource = isMagnet || isUrl || magnetInput.endsWith('.torrent');
 	$: canAdd = magnetInput.trim() && isValidSource && !adding && $state.initialized;
 
@@ -52,19 +51,15 @@
 					on:keydown={handleKeydown}
 					on:paste={handlePaste}
 					placeholder="magnet:?xt=urn:btih:... or torrent URL"
-					class={classNames('input join-item input-bordered flex-1', {
+					class={classNames('input-bordered input join-item flex-1', {
 						'input-error': magnetInput && !isValidSource,
 						'input-success': isValidSource && magnetInput
 					})}
 					disabled={!$state.initialized}
 				/>
-				<button
-					class="btn btn-primary join-item"
-					on:click={handleAdd}
-					disabled={!canAdd}
-				>
+				<button class="btn join-item btn-primary" on:click={handleAdd} disabled={!canAdd}>
 					{#if adding}
-						<span class="loading loading-spinner loading-sm"></span>
+						<span class="loading loading-sm loading-spinner"></span>
 					{:else}
 						Add
 					{/if}

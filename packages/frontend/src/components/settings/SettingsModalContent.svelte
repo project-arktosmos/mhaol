@@ -35,7 +35,7 @@
 </div>
 
 {#if error}
-	<div class="alert alert-error mt-4">
+	<div class="mt-4 alert alert-error">
 		<span>{error}</span>
 		<button class="btn btn-ghost btn-sm" onclick={() => (error = null)}>x</button>
 	</div>
@@ -56,9 +56,9 @@
 					Drop all tables, recreate from schema, and reseed defaults.
 				</p>
 			</div>
-			<button class="btn btn-error btn-sm" disabled={resetting} onclick={handleReset}>
+			<button class="btn btn-sm btn-error" disabled={resetting} onclick={handleReset}>
 				{#if resetting}
-					<span class="loading loading-spinner loading-sm"></span>
+					<span class="loading loading-sm loading-spinner"></span>
 				{:else}
 					Reset Database
 				{/if}

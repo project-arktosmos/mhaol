@@ -32,7 +32,7 @@
 		bind:value={inputValue}
 		onkeydown={handleKeydown}
 		placeholder="Search YouTube videos..."
-		class="input join-item input-bordered flex-1"
+		class="input-bordered input join-item flex-1"
 	/>
 	<button
 		class={buttonClasses}
@@ -40,7 +40,7 @@
 		disabled={!inputValue.trim() || searching}
 	>
 		{#if searching}
-			<span class="loading loading-spinner loading-sm"></span>
+			<span class="loading loading-sm loading-spinner"></span>
 		{:else}
 			Search
 		{/if}

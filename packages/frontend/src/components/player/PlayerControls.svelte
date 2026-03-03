@@ -128,19 +128,12 @@
 </script>
 
 <div class={classNames('flex flex-col gap-1', { 'pointer-events-none opacity-50': disabled })}>
-	<PlayerSeekBar
-		{positionSecs}
-		{durationSecs}
-		{disabled}
-		on:seek
-		on:seekstart
-		on:seekend
-	/>
+	<PlayerSeekBar {positionSecs} {durationSecs} {disabled} on:seek on:seekstart on:seekend />
 
 	<div class="flex items-center gap-0.5">
 		<!-- Play/Pause -->
 		<button
-			class="btn btn-ghost btn-xs btn-square"
+			class="btn btn-square btn-ghost btn-xs"
 			on:click={togglePlayPause}
 			aria-label={isPaused ? 'Play' : 'Pause'}
 		>
@@ -185,7 +178,7 @@
 
 		<!-- Volume -->
 		<button
-			class="btn btn-ghost btn-xs btn-square"
+			class="btn btn-square btn-ghost btn-xs"
 			on:click={toggleMute}
 			aria-label={isMuted ? 'Unmute' : 'Mute'}
 		>
@@ -260,7 +253,7 @@
 		<!-- Fullscreen (video only) -->
 		{#if isVideo}
 			<button
-				class="btn btn-ghost btn-xs btn-square"
+				class="btn btn-square btn-ghost btn-xs"
 				on:click={toggleFullscreen}
 				aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
 			>
@@ -300,7 +293,7 @@
 
 		<!-- Stop -->
 		<button
-			class="btn btn-ghost btn-xs btn-square"
+			class="btn btn-square btn-ghost btn-xs"
 			on:click={() => dispatch('stop')}
 			aria-label="Stop"
 		>

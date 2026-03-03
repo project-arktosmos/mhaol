@@ -26,9 +26,7 @@
 		<div class="flex items-center justify-between">
 			<h2 class="card-title text-lg">Torrents</h2>
 			{#if $state.torrents.length > 0}
-				<button class="btn btn-ghost btn-sm" on:click={handleRemoveAll}>
-					Remove All
-				</button>
+				<button class="btn btn-ghost btn-sm" on:click={handleRemoveAll}> Remove All </button>
 			{/if}
 		</div>
 

@@ -20,8 +20,7 @@
 
 	$: progressPercent = Math.round(torrent.progress * 100);
 	$: isPaused = torrent.state === 'paused';
-	$: isActive =
-		torrent.state === 'downloading' || torrent.state === 'initializing';
+	$: isActive = torrent.state === 'downloading' || torrent.state === 'initializing';
 	$: isSeeding = torrent.state === 'seeding';
 	$: stateColor = getStateColor(torrent.state);
 </script>
@@ -61,10 +60,7 @@
 
 			{#if torrent.state === 'downloading'}
 				<div class="mt-2 flex items-center gap-2">
-					<progress
-						class="progress progress-primary flex-1"
-						value={progressPercent}
-						max="100"
+					<progress class="progress flex-1 progress-primary" value={progressPercent} max="100"
 					></progress>
 					<span class="text-sm font-medium">{progressPercent}%</span>
 				</div>
@@ -75,11 +71,7 @@
 				</div>
 			{:else if isSeeding}
 				<div class="mt-2 flex items-center gap-2">
-					<progress
-						class="progress progress-success flex-1"
-						value="100"
-						max="100"
-					></progress>
+					<progress class="progress flex-1 progress-success" value="100" max="100"></progress>
 					<span class="text-sm font-medium">100%</span>
 				</div>
 				<div class="mt-1 text-xs text-base-content/60">
@@ -92,10 +84,7 @@
 			{/if}
 
 			{#if torrent.outputPath && isSeeding}
-				<p
-					class="mt-1 truncate text-xs text-base-content/50"
-					title={torrent.outputPath}
-				>
+				<p class="mt-1 truncate text-xs text-base-content/50" title={torrent.outputPath}>
 					{torrent.outputPath}
 				</p>
 			{/if}

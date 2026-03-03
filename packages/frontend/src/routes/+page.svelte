@@ -19,7 +19,12 @@
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import LyricsPanel from '$components/player/LyricsPanel.svelte';
 	import type { LibraryFile } from '$types/library.type';
-	import type { MediaItem, MediaItemLink, MediaLinkSource, MediaCategory } from '$types/media-card.type';
+	import type {
+		MediaItem,
+		MediaItemLink,
+		MediaLinkSource,
+		MediaCategory
+	} from '$types/media-card.type';
 	import type { ImageTag, ImagesResponse } from '$types/image-tagger.type';
 	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'tmdb/types';
 	import type { YouTubeOEmbedResponse } from 'youtube/oembed';
@@ -63,7 +68,9 @@
 	let musicbrainzLoading: Set<string> = $state(new Set());
 
 	// Merged loading state
-	let metadataLoading = $derived(new Set([...tmdbLoading, ...youtubeLoading, ...musicbrainzLoading]));
+	let metadataLoading = $derived(
+		new Set([...tmdbLoading, ...youtubeLoading, ...musicbrainzLoading])
+	);
 
 	// Image tags state
 	let imageTagsMap: Record<string, ImageTag[]> = $state({});
@@ -137,12 +144,12 @@
 
 	let isAllType = $derived(activeTypeId === ALL_TYPE);
 
-	let activeType = $derived(activeTypeId === ALL_TYPE ? ALL_TYPE : (activeTypeId || data.mediaTypes[0]?.id || ''));
+	let activeType = $derived(
+		activeTypeId === ALL_TYPE ? ALL_TYPE : activeTypeId || data.mediaTypes[0]?.id || ''
+	);
 
 	let categoriesForType = $derived(
-		isAllType
-			? data.categories
-			: data.categories.filter((c) => c.mediaTypeId === activeType)
+		isAllType ? data.categories : data.categories.filter((c) => c.mediaTypeId === activeType)
 	);
 
 	let activeCategory = $derived.by(() => {
@@ -188,7 +195,7 @@
 
 	// Media detail selection
 	const mediaDetailStore = mediaDetailService.store;
-	let selectedItemId = $derived(($mediaDetailStore)?.item.id ?? null);
+	let selectedItemId = $derived($mediaDetailStore?.item.id ?? null);
 
 	function resolveCardType(item: MediaItem): MediaDetailCardType {
 		if (item.categoryId === 'movies' && item.links.tmdb) return 'movie';
@@ -227,7 +234,10 @@
 			imageTags: imageTagsMap[item.id] ?? EMPTY_TAGS,
 			imageTagging: $taggerState.taggingItemIds.includes(item.id),
 			onplay: (i) => handlePlay(i),
-			onlink: (i, service) => { linkModalItem = i; linkModalService = service; },
+			onlink: (i, service) => {
+				linkModalItem = i;
+				linkModalService = service;
+			},
 			onunlink: (i, service) => handleUnlink(i, service),
 			ontagimage: (i) => handleTagImage(i),
 			onaddtag: (i, tag) => handleAddTag(i, tag),
@@ -248,7 +258,14 @@
 		const newMb = musicbrainzMetadata[id] ?? null;
 		const newTags = imageTagsMap[id] ?? EMPTY_TAGS;
 		const newTagging = $taggerState.taggingItemIds.includes(id);
-		if (newTmdb !== sel.tmdbMetadata || newYt !== sel.youtubeMetadata || newMb !== sel.musicbrainzMetadata || updatedItem !== sel.item || newTags !== sel.imageTags || newTagging !== sel.imageTagging) {
+		if (
+			newTmdb !== sel.tmdbMetadata ||
+			newYt !== sel.youtubeMetadata ||
+			newMb !== sel.musicbrainzMetadata ||
+			updatedItem !== sel.item ||
+			newTags !== sel.imageTags ||
+			newTagging !== sel.imageTagging
+		) {
 			mediaDetailService.select({
 				...sel,
 				item: updatedItem,
@@ -315,7 +332,12 @@
 		};
 	}
 
-	async function handleLink(tmdbId: number, seasonNumber: number | null, episodeNumber: number | null, type: 'movie' | 'tv') {
+	async function handleLink(
+		tmdbId: number,
+		seasonNumber: number | null,
+		episodeNumber: number | null,
+		type: 'movie' | 'tv'
+	) {
 		if (!linkModalItem) return;
 		const item = linkModalItem;
 
@@ -355,11 +377,14 @@
 		if (!linkModalItem) return;
 		const item = linkModalItem;
 
-		const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/musicbrainz`), {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ musicbrainzId })
-		});
+		const res = await fetch(
+			apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/musicbrainz`),
+			{
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ musicbrainzId })
+			}
+		);
 
 		if (res.ok) {
 			updateItemLinks(item.id, 'musicbrainz', {
@@ -396,9 +421,12 @@
 	}
 
 	async function handleUnlink(item: MediaItem, service: string) {
-		const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/${service}`), {
-			method: 'DELETE'
-		});
+		const res = await fetch(
+			apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/${service}`),
+			{
+				method: 'DELETE'
+			}
+		);
 
 		if (res.ok) {
 			updateItemLinks(item.id, service, null);
@@ -449,9 +477,7 @@
 			const res = await fetch(apiUrl(endpoint));
 			if (res.ok) {
 				const data = await res.json();
-				tmdbMetadata[item.id] = isTv
-					? tvShowDetailsToDisplay(data)
-					: movieDetailsToDisplay(data);
+				tmdbMetadata[item.id] = isTv ? tvShowDetailsToDisplay(data) : movieDetailsToDisplay(data);
 			}
 		} catch (e) {
 			console.error('Failed to load TMDB metadata:', e);
@@ -542,7 +568,7 @@
 		</div>
 		<button class="btn btn-sm btn-accent" onclick={handleScanAll} disabled={scanning}>
 			{#if scanning}
-				<span class="loading loading-spinner loading-xs"></span>
+				<span class="loading loading-xs loading-spinner"></span>
 			{:else}
 				Scan
 			{/if}
@@ -625,18 +651,15 @@
 
 <Modal open={!!$mediaDetailStore} maxWidth="max-w-lg" onclose={closeMediaDetail}>
 	{#if $mediaDetailStore}
-		<MediaDetail
-			selection={$mediaDetailStore}
-			onclose={closeMediaDetail}
-		/>
+		<MediaDetail selection={$mediaDetailStore} onclose={closeMediaDetail} />
 		{#if $playerState.currentFile && $playerState.currentFile.id !== $mediaDetailStore?.item.id}
 			<div class="mt-4 border-t border-base-300 pt-4">
 				<div class="mb-2 flex items-center justify-between">
-					<h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50">
+					<h2 class="text-sm font-semibold tracking-wide text-base-content/50 uppercase">
 						Now Playing
 					</h2>
 					<button
-						class="btn btn-ghost btn-xs btn-square"
+						class="btn btn-square btn-ghost btn-xs"
 						onclick={() => playerService.stop()}
 						aria-label="Close player"
 					>
@@ -670,7 +693,10 @@
 	<TmdbLinkModal
 		file={itemAsLibraryFile(linkModalItem)}
 		onlink={handleLink}
-		onclose={() => { linkModalItem = null; linkModalService = null; }}
+		onclose={() => {
+			linkModalItem = null;
+			linkModalService = null;
+		}}
 	/>
 {/if}
 
@@ -678,7 +704,10 @@
 	<MusicBrainzLinkModal
 		file={itemAsLibraryFile(linkModalItem)}
 		onlink={handleMusicBrainzLink}
-		onclose={() => { linkModalItem = null; linkModalService = null; }}
+		onclose={() => {
+			linkModalItem = null;
+			linkModalService = null;
+		}}
 	/>
 {/if}
 
@@ -686,6 +715,9 @@
 	<YouTubeLinkModal
 		file={itemAsLibraryFile(linkModalItem)}
 		onlink={handleYoutubeLink}
-		onclose={() => { linkModalItem = null; linkModalService = null; }}
+		onclose={() => {
+			linkModalItem = null;
+			linkModalService = null;
+		}}
 	/>
 {/if}
