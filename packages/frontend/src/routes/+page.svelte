@@ -13,6 +13,7 @@
 	import type { MediaDetailCardType } from '$types/media-detail.type';
 	import TmdbLinkModal from '$components/libraries/TmdbLinkModal.svelte';
 	import MusicBrainzLinkModal from '$components/libraries/MusicBrainzLinkModal.svelte';
+	import YouTubeLinkModal from '$components/libraries/YouTubeLinkModal.svelte';
 	import MediaCard from '$components/media/MediaCard.svelte';
 	import MediaDetail from '$components/media/MediaDetail.svelte';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
@@ -372,6 +373,28 @@
 		linkModalService = null;
 	}
 
+	async function handleYoutubeLink(youtubeId: string) {
+		if (!linkModalItem) return;
+		const item = linkModalItem;
+
+		const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/youtube`), {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ youtubeId })
+		});
+
+		if (res.ok) {
+			updateItemLinks(item.id, 'youtube', {
+				serviceId: youtubeId,
+				seasonNumber: null,
+				episodeNumber: null
+			});
+		}
+
+		linkModalItem = null;
+		linkModalService = null;
+	}
+
 	async function handleUnlink(item: MediaItem, service: string) {
 		const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/${service}`), {
 			method: 'DELETE'
@@ -606,7 +629,7 @@
 			selection={$mediaDetailStore}
 			onclose={closeMediaDetail}
 		/>
-		{#if $playerState.currentFile}
+		{#if $playerState.currentFile && $playerState.currentFile.id !== $mediaDetailStore?.item.id}
 			<div class="mt-4 border-t border-base-300 pt-4">
 				<div class="mb-2 flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50">
@@ -655,6 +678,14 @@
 	<MusicBrainzLinkModal
 		file={itemAsLibraryFile(linkModalItem)}
 		onlink={handleMusicBrainzLink}
+		onclose={() => { linkModalItem = null; linkModalService = null; }}
+	/>
+{/if}
+
+{#if linkModalItem && linkModalService === 'youtube'}
+	<YouTubeLinkModal
+		file={itemAsLibraryFile(linkModalItem)}
+		onlink={handleYoutubeLink}
 		onclose={() => { linkModalItem = null; linkModalService = null; }}
 	/>
 {/if}

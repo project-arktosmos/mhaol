@@ -14,8 +14,11 @@
 	let oembedLoading = false;
 	let lastOembedVideoId: string | null = null;
 
-	// Auto-fetch when initialUrl is provided
+	// Sync from service state when opened with a pre-filled URL (e.g. from YT Search)
 	onMount(() => {
+		if (!urlInput && $state.currentUrl) {
+			urlInput = $state.currentUrl;
+		}
 		if (initialUrl && $state.initialized) {
 			handleFetchInfo();
 		}

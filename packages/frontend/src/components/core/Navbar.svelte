@@ -22,6 +22,9 @@
 			<button class="btn btn-sm btn-info" onclick={() => modalRouterService.openNavbar('youtube')}>
 				YouTube
 			</button>
+			<button class="btn btn-sm btn-info btn-outline" onclick={() => modalRouterService.openNavbar('youtube-search')}>
+				YT Search
+			</button>
 			<button class="btn btn-sm btn-primary" onclick={() => modalRouterService.openNavbar('torrent')}>
 				Torrent
 			</button>
@@ -59,6 +62,7 @@
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<ul tabindex="0" class="menu dropdown-content z-50 mt-3 w-52 rounded-box bg-base-200 p-2 shadow">
 				<li><button onclick={() => modalRouterService.openNavbar('youtube')}>YouTube</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('youtube-search')}>YT Search</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('torrent')}>Torrent</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('downloads')}>Downloads</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('libraries')}>Libraries</button></li>

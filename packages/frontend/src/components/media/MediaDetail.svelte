@@ -3,8 +3,10 @@
 	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
 	import { getThumbnailUrl } from 'youtube/embed';
 	import TagPill from '$components/images/TagPill.svelte';
+	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import { apiUrl } from '$lib/api-base';
 	import { lyricsService } from '$services/lyrics.service';
+	import { playerService } from '$services/player.service';
 	import type { MediaDetailSelection } from '$types/media-detail.type';
 	import type { MediaType } from '$types/library.type';
 	import type { DisplayTMDBMovieDetails } from 'tmdb/types';
@@ -60,6 +62,9 @@
 
 	let isLinkedAudio = $derived(selection.cardType === 'audio' && !!selection.item.links.musicbrainz);
 
+	const playerState = playerService.state;
+	let isPlaying = $derived($playerState.currentFile?.id === selection.item.id);
+
 	let newTagInput = $state('');
 
 	function handleAddTag() {
@@ -85,7 +90,14 @@
 	</div>
 
 	<figure class="relative overflow-hidden rounded-lg bg-base-300">
-		{#if imageUrl}
+		{#if isPlaying && $playerState.currentFile}
+			<PlayerVideo
+				file={$playerState.currentFile}
+				connectionState={$playerState.connectionState}
+				positionSecs={$playerState.positionSecs}
+				durationSecs={$playerState.durationSecs}
+			/>
+		{:else if imageUrl}
 			<img
 				src={imageUrl}
 				alt={imageAlt}
@@ -306,7 +318,11 @@
 			</button>
 		{/if}
 		{#if selection.cardType === 'movie' || selection.cardType === 'tv' || selection.cardType === 'youtube' || selection.cardType === 'video'}
-			<button class="btn btn-accent btn-sm" onclick={() => selection.onplay?.(selection.item)}>Play</button>
+			{#if isPlaying}
+				<button class="btn btn-ghost btn-sm" onclick={() => playerService.stop()}>Stop</button>
+			{:else}
+				<button class="btn btn-accent btn-sm" onclick={() => selection.onplay?.(selection.item)}>Play</button>
+			{/if}
 		{/if}
 		{#if selection.cardType === 'video'}
 			<button class="btn btn-primary btn-sm" onclick={() => selection.onlink?.(selection.item, 'tmdb')}>Link metadata</button>

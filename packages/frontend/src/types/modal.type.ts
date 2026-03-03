@@ -1,5 +1,6 @@
 export type NavbarModalId =
 	| 'youtube'
+	| 'youtube-search'
 	| 'torrent'
 	| 'downloads'
 	| 'libraries'

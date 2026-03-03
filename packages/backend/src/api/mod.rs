@@ -15,6 +15,7 @@ pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
 pub mod youtube;
+pub mod youtube_search;
 #[cfg(not(target_os = "android"))]
 pub mod ytdl;
 
@@ -41,6 +42,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/tmdb", tmdb::router())
         .nest("/api/musicbrainz", musicbrainz::router())
         .nest("/api/youtube", youtube::router())
+        .nest("/api/youtube-search", youtube_search::router())
         .nest("/api/lyrics", lyrics::router())
         .nest("/api/addons", addons::router())
         .nest("/api/signaling", signaling::router())
