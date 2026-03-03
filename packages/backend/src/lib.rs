@@ -18,8 +18,41 @@ use modules::ModuleRegistry;
 use parking_lot::RwLock;
 use signaling_dev::SignalingDevServer;
 use worker_bridge::WorkerBridge;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+/// Load .env.app from the workspace root into process environment variables.
+/// Only sets variables that are not already present in the environment.
+pub fn load_env_app() {
+    let mut dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let env_path = loop {
+        if dir.join("pnpm-workspace.yaml").exists() {
+            break dir.join(".env.app");
+        }
+        if !dir.pop() {
+            break PathBuf::from(".env.app");
+        }
+    };
+
+    let content = match std::fs::read_to_string(&env_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(eq_idx) = trimmed.find('=') {
+            let key = trimmed[..eq_idx].trim();
+            let value = trimmed[eq_idx + 1..].trim();
+            if !key.is_empty() && std::env::var(key).is_err() {
+                std::env::set_var(key, value);
+            }
+        }
+    }
+}
 
 /// Shared application state available to all API handlers and modules.
 #[derive(Clone)]
