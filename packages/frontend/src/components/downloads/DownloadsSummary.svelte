@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import classNames from 'classnames';
 	import { downloadsService } from '$services/downloads.service';
+	import { modalRouterService } from '$services/modal-router.service';
 	import { formatBytes } from '$types/torrent.type';
 
 	const downloadState = downloadsService.state;
@@ -63,7 +64,7 @@
 	<h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50">Downloads</h2>
 	<button
 		class="btn btn-ghost btn-xs text-base-content/50"
-		onclick={() => downloadsService.openModal()}
+		onclick={() => modalRouterService.openNavbar('downloads')}
 	>
 		View All
 	</button>

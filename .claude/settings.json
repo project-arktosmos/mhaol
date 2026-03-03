@@ -1,0 +1,27 @@
+{
+	"permissions": {
+		"allow": [
+			"Bash(pnpm *)",
+			"Bash(git *)",
+			"Bash(cargo *)",
+			"Bash(ls *)",
+			"Bash(cat *)",
+			"Bash(rustc *)"
+		]
+	},
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "Bash",
+				"hooks": [
+					{
+						"type": "command",
+						"command": ".claude/hooks/pre-commit-check.sh",
+						"timeout": 300,
+						"statusMessage": "Running pre-commit checks..."
+					}
+				]
+			}
+		]
+	}
+}

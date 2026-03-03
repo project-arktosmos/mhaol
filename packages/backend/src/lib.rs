@@ -86,8 +86,10 @@ impl AppState {
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {
         use modules::{
-            lyrics::LyricsModule, musicbrainz::MusicbrainzModule, tmdb::TmdbModule,
-            torrent_search::TorrentSearchModule, youtube_meta::YoutubeMetaModule,
+            lyrics::LyricsModule, musicbrainz::MusicbrainzModule,
+            signaling::SignalingModule, signaling_deploy::SignalingDeployModule,
+            tmdb::TmdbModule, torrent_search::TorrentSearchModule,
+            youtube_meta::YoutubeMetaModule,
         };
         #[cfg(not(target_os = "android"))]
         use modules::{
@@ -103,6 +105,12 @@ impl AppState {
         registry.register(Box::new(YoutubeMetaModule));
         registry.register(Box::new(LyricsModule));
         registry.register(Box::new(TorrentSearchModule));
+
+        // Signaling modules
+        registry.register(Box::new(SignalingModule {
+            dev_server: Arc::clone(&self.signaling_dev),
+        }));
+        registry.register(Box::new(SignalingDeployModule));
 
         // Core modules (desktop only)
         #[cfg(not(target_os = "android"))]

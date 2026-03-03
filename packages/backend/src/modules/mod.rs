@@ -4,6 +4,8 @@ pub mod lyrics;
 pub mod musicbrainz;
 #[cfg(not(target_os = "android"))]
 pub mod p2p_stream;
+pub mod signaling;
+pub mod signaling_deploy;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
@@ -57,6 +59,17 @@ pub struct ModuleLinkSource {
     pub category_id: Option<String>,
 }
 
+/// A running process managed by a module.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProcessStatus {
+    pub id: String,
+    pub available: bool,
+    pub port: u16,
+    pub url: String,
+    #[serde(rename = "logPrefix")]
+    pub log_prefix: String,
+}
+
 /// Status information returned by the /api/plugins endpoint.
 #[derive(Debug, Clone, Serialize)]
 pub struct ModuleStatus {
@@ -66,6 +79,7 @@ pub struct ModuleStatus {
     pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compatibility: Option<ModuleCompatibility>,
+    pub processes: Vec<ProcessStatus>,
     pub settings: Vec<ModuleSettingStatus>,
     #[serde(rename = "scheduledTasks")]
     pub scheduled_tasks: Vec<String>,
@@ -92,6 +106,11 @@ pub struct SchemaTable {
 #[allow(unused_variables)]
 pub trait Module: Send + Sync {
     fn manifest(&self) -> ModuleManifest;
+
+    /// Return running processes managed by this module.
+    fn processes(&self, state: &AppState) -> Vec<ProcessStatus> {
+        Vec::new()
+    }
 
     /// Called during initialization after schema and settings are applied.
     fn initialize(&self, state: &AppState) -> Result<(), String> {
@@ -221,12 +240,15 @@ impl ModuleRegistry {
                     .map(|sql| parse_schema_tables(sql))
                     .unwrap_or_default();
 
+                let processes = module.processes(state);
+
                 ModuleStatus {
                     name: manifest.name.clone(),
                     version: manifest.version,
                     description: manifest.description,
                     source: manifest.source.unwrap_or_else(|| "module".to_string()),
                     compatibility: manifest.compatibility,
+                    processes,
                     settings,
                     scheduled_tasks: Vec::new(),
                     schema_tables,

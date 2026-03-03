@@ -1,4 +1,5 @@
 use super::{Module, ModuleCompatibility, ModuleLinkSource, ModuleManifest};
+use crate::db::schema::YOUTUBE_SCHEMA_SQL;
 
 pub struct YoutubeMetaModule;
 
@@ -20,7 +21,7 @@ impl Module for YoutubeMetaModule {
                 media_type_id: "audio".to_string(),
                 category_id: None,
             }],
-            schema_sql: None,
+            schema_sql: Some(YOUTUBE_SCHEMA_SQL.to_string()),
         }
     }
 }

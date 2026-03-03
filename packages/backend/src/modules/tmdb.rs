@@ -1,4 +1,5 @@
 use super::{Module, ModuleCompatibility, ModuleLinkSource, ModuleManifest, ModuleSettingDef};
+use crate::db::schema::TMDB_SCHEMA_SQL;
 
 pub struct TmdbModule;
 
@@ -32,7 +33,7 @@ impl Module for TmdbModule {
                     category_id: Some("tv".to_string()),
                 },
             ],
-            schema_sql: None,
+            schema_sql: Some(TMDB_SCHEMA_SQL.to_string()),
         }
     }
 }

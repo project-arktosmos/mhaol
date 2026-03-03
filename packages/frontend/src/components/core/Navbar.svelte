@@ -1,28 +1,12 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import routes from 'virtual:routes';
-	import type { RouteEntry } from '$types/route.type';
-	import { isMobile } from '$lib/platform';
-	import NavbarLink from './NavbarLink.svelte';
-	import NavbarDropdown from './NavbarDropdown.svelte';
+	import { modalRouterService } from '$services/modal-router.service';
 
 	interface Props {
 		classes?: string;
 	}
 
 	let { classes = '' }: Props = $props();
-
-	const DESKTOP_ONLY_ROUTES = ['/images', '/signaling'];
-
-	function hasNavigableChildren(route: RouteEntry): boolean {
-		return route.children.some((c) => !c.isDynamic);
-	}
-
-	let navRoutes = $derived(
-		routes.filter(
-			(r) => !r.isDynamic && !(isMobile && DESKTOP_ONLY_ROUTES.includes(r.path))
-		)
-	);
 
 	let wrapperClasses = $derived(classNames('navbar bg-base-100 shadow-sm', classes));
 </script>
@@ -33,22 +17,36 @@
 	</div>
 
 	<div class="flex-none">
-		<!-- Desktop: horizontal menu -->
-		<ul class="menu menu-horizontal gap-1 px-1 hidden lg:flex">
-			{#each navRoutes as route (route.path)}
-				{#if route.path !== '/'}
-					{#if hasNavigableChildren(route)}
-						<li>
-							<NavbarDropdown {route} />
-						</li>
-					{:else}
-						<li>
-							<NavbarLink href={route.path} label={route.label} />
-						</li>
-					{/if}
-				{/if}
-			{/each}
-		</ul>
+		<!-- Desktop: horizontal buttons -->
+		<div class="hidden gap-1 lg:flex">
+			<button class="btn btn-sm btn-info" onclick={() => modalRouterService.openNavbar('youtube')}>
+				YouTube
+			</button>
+			<button class="btn btn-sm btn-primary" onclick={() => modalRouterService.openNavbar('torrent')}>
+				Torrent
+			</button>
+			<button class="btn btn-sm btn-secondary" onclick={() => modalRouterService.openNavbar('downloads')}>
+				Downloads
+			</button>
+			<button class="btn btn-sm btn-neutral" onclick={() => modalRouterService.openNavbar('libraries')}>
+				Libraries
+			</button>
+			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('signaling')}>
+				Signaling
+			</button>
+			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('identity')}>
+				Identity
+			</button>
+			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('plugins')}>
+				Plugins
+			</button>
+			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('addons')}>
+				Addons
+			</button>
+			<button class="btn btn-sm btn-ghost" onclick={() => modalRouterService.openNavbar('settings')}>
+				Settings
+			</button>
+		</div>
 
 		<!-- Mobile: burger menu -->
 		<div class="dropdown dropdown-end lg:hidden">
@@ -60,22 +58,15 @@
 			</div>
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<ul tabindex="0" class="menu dropdown-content z-50 mt-3 w-52 rounded-box bg-base-200 p-2 shadow">
-				{#each navRoutes as route (route.path)}
-					{#if route.path !== '/'}
-						{#if hasNavigableChildren(route)}
-							<li class="menu-title">{route.label}</li>
-							{#each route.children.filter((c) => !c.isDynamic) as child (child.path)}
-								<li>
-									<NavbarLink href={child.path} label={child.label} />
-								</li>
-							{/each}
-						{:else}
-							<li>
-								<NavbarLink href={route.path} label={route.label} />
-							</li>
-						{/if}
-					{/if}
-				{/each}
+				<li><button onclick={() => modalRouterService.openNavbar('youtube')}>YouTube</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('torrent')}>Torrent</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('downloads')}>Downloads</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('libraries')}>Libraries</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('signaling')}>Signaling</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('identity')}>Identity</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('plugins')}>Plugins</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('addons')}>Addons</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('settings')}>Settings</button></li>
 			</ul>
 		</div>
 	</div>

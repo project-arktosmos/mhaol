@@ -59,6 +59,15 @@
 	});
 
 	let isLinkedAudio = $derived(selection.cardType === 'audio' && !!selection.item.links.musicbrainz);
+
+	let newTagInput = $state('');
+
+	function handleAddTag() {
+		const tag = newTagInput.trim().toLowerCase();
+		if (!tag) return;
+		selection.onaddtag?.(selection.item, tag);
+		newTagInput = '';
+	}
 </script>
 
 <div class="flex flex-col gap-3">
@@ -257,23 +266,51 @@
 		{/if}
 	{:else if selection.cardType === 'image'}
 		<p class="text-xs opacity-60" title={selection.item.path}>{selection.item.path}</p>
+		{#if selection.imageTagging}
+			<div class="flex items-center gap-2 text-xs opacity-70">
+				<span class="loading loading-spinner loading-xs"></span>
+				Tagging...
+			</div>
+		{/if}
 		{#if selection.imageTags.length > 0}
 			<div class="flex flex-wrap gap-1">
 				{#each selection.imageTags as tag (tag.tag)}
-					<TagPill tag={tag.tag} score={tag.score} readonly />
+					<TagPill tag={tag.tag} score={tag.score} onremove={(t) => selection.onremovetag?.(selection.item, t)} />
 				{/each}
 			</div>
 		{/if}
+		<form class="flex gap-1" onsubmit={(e) => { e.preventDefault(); handleAddTag(); }}>
+			<input
+				type="text"
+				placeholder="Add tag..."
+				class="input input-bordered input-xs flex-1"
+				bind:value={newTagInput}
+			/>
+			<button type="submit" class="btn btn-primary btn-xs" disabled={!newTagInput.trim()}>Add</button>
+		</form>
 	{:else}
 		<p class="text-xs opacity-60" title={selection.item.path}>{selection.item.path}</p>
 	{/if}
 
 	<div class="flex flex-wrap gap-2">
+		{#if selection.cardType === 'image'}
+			<button
+				class="btn btn-primary btn-sm"
+				disabled={selection.imageTagging}
+				onclick={() => selection.ontagimage?.(selection.item)}
+			>
+				{#if selection.imageTagging}
+					<span class="loading loading-spinner loading-xs"></span>
+				{/if}
+				{selection.imageTags.length > 0 ? 'Re-tag' : 'Tag'}
+			</button>
+		{/if}
 		{#if selection.cardType === 'movie' || selection.cardType === 'tv' || selection.cardType === 'youtube' || selection.cardType === 'video'}
 			<button class="btn btn-accent btn-sm" onclick={() => selection.onplay?.(selection.item)}>Play</button>
 		{/if}
 		{#if selection.cardType === 'video'}
 			<button class="btn btn-primary btn-sm" onclick={() => selection.onlink?.(selection.item, 'tmdb')}>Link metadata</button>
+			<button class="btn btn-info btn-sm" onclick={() => selection.onlink?.(selection.item, 'youtube')}>Link YouTube</button>
 		{/if}
 		{#if selection.cardType === 'audio' && !isLinkedAudio}
 			<button class="btn btn-primary btn-sm" onclick={() => selection.onlink?.(selection.item, 'musicbrainz')}>Link metadata</button>

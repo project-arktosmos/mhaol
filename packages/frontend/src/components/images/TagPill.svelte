@@ -1,16 +1,14 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { createEventDispatcher } from 'svelte';
 
 	interface Props {
 		tag: string;
 		score: number;
 		readonly?: boolean;
+		onremove?: (tag: string) => void;
 	}
 
-	let { tag, score, readonly: isReadonly = false }: Props = $props();
-
-	const dispatch = createEventDispatcher<{ remove: { tag: string } }>();
+	let { tag, score, readonly: isReadonly = false, onremove }: Props = $props();
 
 	let badgeClass = $derived(
 		score >= 0.1 ? 'badge-success' : score >= 0.03 ? 'badge-info' : 'badge-ghost'
@@ -25,7 +23,7 @@
 	{#if !isReadonly}
 		<button
 			class="ml-0.5 opacity-40 hover:opacity-100 cursor-pointer"
-			onclick={() => dispatch('remove', { tag })}
+			onclick={() => onremove?.(tag)}
 			title="Remove tag"
 		>
 			&times;

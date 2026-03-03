@@ -18,11 +18,12 @@
 		musicbrainzMetadata?: DisplayMusicBrainzRecording | null;
 		metadataLoading?: boolean;
 		imageTags?: ImageTag[];
+		tagging?: boolean;
 		selected?: boolean;
 		onselect?: (item: MediaItem) => void;
 	}
 
-	let { item, tmdbMetadata = null, youtubeMetadata = null, musicbrainzMetadata = null, metadataLoading = false, imageTags = [], selected = false, onselect }: Props = $props();
+	let { item, tmdbMetadata = null, youtubeMetadata = null, musicbrainzMetadata = null, metadataLoading = false, imageTags = [], tagging = false, selected = false, onselect }: Props = $props();
 
 	let cardType = $derived.by(() => {
 		if (item.categoryId === 'movies' && item.links.tmdb) return 'movie';
@@ -43,7 +44,7 @@
 {:else if cardType === 'audio'}
 	<AudioUncategorizedCard {item} metadata={musicbrainzMetadata} loading={metadataLoading} {onselect} {selected} />
 {:else if cardType === 'image'}
-	<ImageUncategorizedCard {item} tags={imageTags} {onselect} {selected} />
+	<ImageUncategorizedCard {item} tags={imageTags} {tagging} {onselect} {selected} />
 {:else}
 	<VideoUncategorizedCard {item} {onselect} {selected} />
 {/if}
