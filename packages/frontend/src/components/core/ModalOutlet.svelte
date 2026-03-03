@@ -10,11 +10,13 @@
 	import SettingsModalContent from '$components/settings/SettingsModalContent.svelte';
 	import AddonsModalContent from '$components/addons/AddonsModalContent.svelte';
 	import PluginsModalContent from '$components/plugins/PluginsModalContent.svelte';
+	import YouTubeSearchModalContent from '$components/youtube-search/YouTubeSearchModalContent.svelte';
 
 	const routerStore = modalRouterService.store;
 
 	const MAX_WIDTHS: Record<string, string> = {
 		youtube: 'max-w-6xl',
+		'youtube-search': 'max-w-5xl',
 		torrent: 'max-w-5xl',
 		downloads: 'max-w-5xl',
 		libraries: 'max-w-5xl',
@@ -34,7 +36,9 @@
 </script>
 
 <Modal open={!!activeId} {maxWidth} onclose={handleClose}>
-	{#if activeId === 'youtube'}
+	{#if activeId === 'youtube-search'}
+		<YouTubeSearchModalContent />
+	{:else if activeId === 'youtube'}
 		<YouTubeModalContent />
 	{:else if activeId === 'torrent'}
 		<TorrentModalContent />
