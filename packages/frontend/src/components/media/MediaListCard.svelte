@@ -11,6 +11,7 @@
 		selected?: boolean;
 		tmdbMetadata?: DisplayTMDBTvShowDetails | null;
 		mbMetadata?: DisplayMusicBrainzReleaseGroup | null;
+		seasonCount?: number | null;
 		onselect?: (list: MediaList) => void;
 	}
 
@@ -19,17 +20,22 @@
 		selected = false,
 		tmdbMetadata = null,
 		mbMetadata = null,
+		seasonCount = null,
 		onselect
 	}: Props = $props();
 
 	let kindLabel = $derived(list.mediaType === 'video' ? 'TV Show' : 'Album');
 
+	let displayTitle = $derived(seasonCount ? (tmdbMetadata?.name ?? list.title) : list.title);
+
 	let coverUrl = $derived.by(() => {
-		if (list.coverImage) return list.coverImage;
-		const seasonNum = list.links.tmdb?.seasonNumber;
-		if (tmdbMetadata && seasonNum != null) {
-			const season = tmdbMetadata.seasons.find((s) => s.seasonNumber === seasonNum);
-			if (season?.posterUrl) return season.posterUrl;
+		if (!seasonCount && list.coverImage) return list.coverImage;
+		if (!seasonCount) {
+			const seasonNum = list.links.tmdb?.seasonNumber;
+			if (tmdbMetadata && seasonNum != null) {
+				const season = tmdbMetadata.seasons.find((s) => s.seasonNumber === seasonNum);
+				if (season?.posterUrl) return season.posterUrl;
+			}
 		}
 		if (tmdbMetadata?.posterUrl) return tmdbMetadata.posterUrl;
 		if (mbMetadata?.coverArtUrl) return mbMetadata.coverArtUrl;
@@ -83,8 +89,8 @@
 		{/if}
 	</figure>
 	<div class="card-body gap-1">
-		<h3 class="card-title truncate text-sm" title={list.title}>{list.title}</h3>
-		{#if subtitle}
+		<h3 class="card-title truncate text-sm" title={displayTitle}>{displayTitle}</h3>
+		{#if subtitle && !seasonCount}
 			<p class="truncate text-xs opacity-60" title={subtitle}>{subtitle}</p>
 		{/if}
 		<div class="flex flex-wrap gap-1">
@@ -96,7 +102,11 @@
 			>
 				{kindLabel}
 			</span>
-			<span class="badge badge-ghost badge-xs">{list.itemCount} items</span>
+			{#if seasonCount}
+				<span class="badge badge-ghost badge-xs">{seasonCount} seasons</span>
+			{:else}
+				<span class="badge badge-ghost badge-xs">{list.itemCount} items</span>
+			{/if}
 		</div>
 	</div>
 </div>
