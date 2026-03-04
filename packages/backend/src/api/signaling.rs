@@ -1,6 +1,6 @@
 use crate::AppState;
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::{
         sse::{Event, KeepAlive},
@@ -21,6 +21,12 @@ static DEPLOY_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/status", get(get_status))
+        .route("/servers", get(list_servers).post(create_server))
+        .route(
+            "/servers/{id}",
+            get(get_server).put(update_server).delete(delete_server),
+        )
+        .route("/servers/{id}/check", get(check_server))
         .route("/wallet", get(get_wallet).delete(regenerate_wallet))
         .route("/wallet/sign", post(sign_message))
         .route("/deploy", head(deploy_status).get(deploy))
@@ -29,21 +35,6 @@ pub fn router() -> Router<AppState> {
 /// GET /api/signaling/status
 async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
     let identity_address = state.identity_manager.get_default_address();
-    let party_url = state
-        .settings
-        .get("signaling.partyUrl")
-        .unwrap_or_default();
-    let deploy_name = state
-        .settings
-        .get("signaling.deployName")
-        .unwrap_or_default();
-
-    // Check if the deployed URL is reachable
-    let deployed_available = if !party_url.is_empty() {
-        check_url_available(&party_url).await
-    } else {
-        false
-    };
 
     let dev_available = state.signaling_rooms.is_available();
     let dev_url = if dev_available {
@@ -52,14 +43,138 @@ async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
         String::new()
     };
 
+    let servers = state.signaling_servers.get_all();
+
+    // Check availability of each enabled server concurrently
+    let checks: Vec<_> = servers
+        .iter()
+        .map(|s| {
+            let url = s.url.clone();
+            let enabled = s.enabled;
+            async move {
+                if enabled {
+                    check_url_available(&url).await
+                } else {
+                    false
+                }
+            }
+        })
+        .collect();
+    let results = futures_util::future::join_all(checks).await;
+
+    let server_statuses: Vec<_> = servers
+        .iter()
+        .zip(results)
+        .map(|(server, available)| {
+            serde_json::json!({
+                "id": server.id,
+                "name": server.name,
+                "url": server.url,
+                "enabled": server.enabled,
+                "available": available,
+                "created_at": server.created_at,
+                "updated_at": server.updated_at,
+            })
+        })
+        .collect();
+
     Json(serde_json::json!({
         "devAvailable": dev_available,
-        "deployedAvailable": deployed_available,
         "devUrl": dev_url,
-        "partyUrl": party_url,
-        "deployName": deploy_name,
         "identityAddress": identity_address,
+        "servers": server_statuses,
     }))
+}
+
+/// GET /api/signaling/servers
+async fn list_servers(State(state): State<AppState>) -> impl IntoResponse {
+    Json(state.signaling_servers.get_all())
+}
+
+/// GET /api/signaling/servers/{id}
+async fn get_server(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match state.signaling_servers.get(&id) {
+        Some(server) => Json(serde_json::json!(server)).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Server not found"})),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct CreateServerBody {
+    name: String,
+    url: String,
+}
+
+/// POST /api/signaling/servers
+async fn create_server(
+    State(state): State<AppState>,
+    Json(body): Json<CreateServerBody>,
+) -> impl IntoResponse {
+    let id = uuid::Uuid::new_v4().to_string();
+    state
+        .signaling_servers
+        .insert(&id, &body.name, &body.url, true);
+    (StatusCode::CREATED, Json(state.signaling_servers.get(&id))).into_response()
+}
+
+#[derive(Deserialize)]
+struct UpdateServerBody {
+    name: String,
+    url: String,
+    enabled: bool,
+}
+
+/// PUT /api/signaling/servers/{id}
+async fn update_server(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<UpdateServerBody>,
+) -> impl IntoResponse {
+    if state.signaling_servers.get(&id).is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Server not found"})),
+        )
+            .into_response();
+    }
+    state
+        .signaling_servers
+        .update(&id, &body.name, &body.url, body.enabled);
+    Json(state.signaling_servers.get(&id)).into_response()
+}
+
+/// DELETE /api/signaling/servers/{id}
+async fn delete_server(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    state.signaling_servers.delete(&id);
+    StatusCode::NO_CONTENT
+}
+
+/// GET /api/signaling/servers/{id}/check
+async fn check_server(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match state.signaling_servers.get(&id) {
+        Some(server) => {
+            let available = check_url_available(&server.url).await;
+            Json(serde_json::json!({"id": id, "available": available})).into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Server not found"})),
+        )
+            .into_response(),
+    }
 }
 
 /// GET /api/signaling/wallet
@@ -131,9 +246,7 @@ fn find_repo_root() -> Option<PathBuf> {
 }
 
 /// GET /api/signaling/deploy — spawn `npx partykit deploy` and stream SSE
-async fn deploy(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn deploy(State(state): State<AppState>) -> impl IntoResponse {
     if DEPLOY_IN_PROGRESS.swap(true, Ordering::SeqCst) {
         return (
             StatusCode::CONFLICT,
@@ -164,7 +277,10 @@ async fn deploy(
     }
 
     // Build deploy name from identity address
-    let address = state.identity_manager.get_default_address().unwrap_or_default();
+    let address = state
+        .identity_manager
+        .get_default_address()
+        .unwrap_or_default();
     let short_addr = if address.starts_with("0x") && address.len() >= 10 {
         &address[2..10]
     } else {
@@ -172,10 +288,7 @@ async fn deploy(
     };
     let deploy_name = format!("{}-mhaol-signaling", short_addr);
 
-    // Save deploy name to settings
-    state.settings.set("signaling.deployName", &deploy_name);
-
-    let settings = state.settings.clone();
+    let signaling_servers = state.signaling_servers.clone();
     let deploy_name_clone = deploy_name.clone();
 
     let stream = async_stream::stream! {
@@ -252,7 +365,15 @@ async fn deploy(
 
         if success {
             if let Some(ref url) = url_re_match {
-                settings.set("signaling.partyUrl", url);
+                // Upsert into signaling_servers table
+                let existing = signaling_servers.get_all().into_iter().find(|s| s.url == *url);
+                match existing {
+                    Some(s) => signaling_servers.update(&s.id, &deploy_name_clone, url, true),
+                    None => {
+                        let id = uuid::Uuid::new_v4().to_string();
+                        signaling_servers.insert(&id, &deploy_name_clone, url, true);
+                    }
+                }
             }
         }
 
@@ -267,7 +388,9 @@ async fn deploy(
         DEPLOY_IN_PROGRESS.store(false, Ordering::SeqCst);
     };
 
-    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 async fn check_url_available(url: &str) -> bool {
@@ -275,7 +398,12 @@ async fn check_url_available(url: &str) -> bool {
         .timeout(std::time::Duration::from_secs(5))
         .build();
     match client {
-        Ok(c) => c.head(url).send().await.map(|r| r.status().is_success()).unwrap_or(false),
+        Ok(c) => c
+            .head(url)
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false),
         Err(_) => false,
     }
 }

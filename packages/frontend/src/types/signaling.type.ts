@@ -1,6 +1,6 @@
 // ===== Signaling Server Connection =====
 
-export type SignalingServerTarget = 'dev' | 'deployed';
+export type SignalingServerTarget = 'dev' | string;
 
 export type SignalingConnectionPhase =
 	| 'disconnected'
@@ -118,13 +118,23 @@ export interface SignalingChatState {
 	error: string | null;
 }
 
+// ===== Signaling Server =====
+
+export interface SignalingServer {
+	id: string;
+	name: string;
+	url: string;
+	enabled: boolean;
+	available?: boolean;
+	created_at: string;
+	updated_at: string;
+}
+
 // ===== Server Status =====
 
 export interface SignalingServerStatus {
 	devAvailable: boolean;
-	deployedAvailable: boolean;
 	devUrl: string;
-	partyUrl: string;
-	deployName: string;
 	identityAddress: string | null;
+	servers: SignalingServer[];
 }

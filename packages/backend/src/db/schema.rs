@@ -189,10 +189,26 @@ CREATE TABLE IF NOT EXISTS media_list_links (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(list_id, service)
 );
+
+CREATE TABLE IF NOT EXISTS signaling_servers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS signaling_servers_updated_at
+    AFTER UPDATE ON signaling_servers
+    FOR EACH ROW
+BEGIN
+    UPDATE signaling_servers SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '18', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '19', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -435,6 +451,45 @@ fn run_migrations(conn: &Connection) {
             conn.execute_batch("ALTER TABLE media_list_links ADD COLUMN season_number INTEGER");
     }
 
+    // Migration: add signaling_servers table (db_version 19)
+    if !has_table(conn, "signaling_servers") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE signaling_servers (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TRIGGER IF NOT EXISTS signaling_servers_updated_at
+                AFTER UPDATE ON signaling_servers FOR EACH ROW
+            BEGIN UPDATE signaling_servers SET updated_at = datetime('now') WHERE id = OLD.id; END;",
+        );
+    }
+
+    // Migrate existing signaling.partyUrl setting into signaling_servers table
+    if has_table(conn, "signaling_servers") {
+        let url: Result<String, _> = conn
+            .prepare("SELECT value FROM settings WHERE key = 'signaling.partyUrl'")
+            .and_then(|mut s| s.query_row([], |r| r.get::<_, String>(0)));
+        if let Ok(url) = url {
+            if !url.is_empty() {
+                let name: String = conn
+                    .prepare("SELECT value FROM settings WHERE key = 'signaling.deployName'")
+                    .and_then(|mut s| s.query_row([], |r| r.get::<_, String>(0)))
+                    .unwrap_or_else(|_| "PartyKit Server".to_string());
+                let _ = conn.execute(
+                    "INSERT OR IGNORE INTO signaling_servers (id, name, url) VALUES (lower(hex(randomblob(16))), ?1, ?2)",
+                    rusqlite::params![name, url],
+                );
+                let _ = conn.execute_batch(
+                    "DELETE FROM settings WHERE key IN ('signaling.partyUrl', 'signaling.deployName')",
+                );
+            }
+        }
+    }
+
     // Migration: migrate legacy columns to library_item_links (db_version 14 data)
     if has_table(conn, "library_items") && has_column(conn, "library_items", "tmdb_id") {
         let _ = conn.execute_batch(
@@ -519,6 +574,7 @@ mod tests {
         assert!(has_table(&conn, "media_lists"));
         assert!(has_table(&conn, "media_list_items"));
         assert!(has_table(&conn, "media_list_links"));
+        assert!(has_table(&conn, "signaling_servers"));
 
         // Verify seed data
         let count: i64 = conn

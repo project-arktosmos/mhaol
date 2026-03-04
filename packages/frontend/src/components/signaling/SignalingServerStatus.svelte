@@ -8,18 +8,11 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
-	let editingPartyUrl = $state(false);
-	let editValue = $state('');
-	let saving = $state(false);
-
 	let deploying = $state(false);
 	let deployLogs = $state<string[]>([]);
 	let deployResult = $state<{ success: boolean; code: number | null; url?: string } | null>(null);
 	let deployError = $state<string | null>(null);
 	let logContainer = $state<HTMLDivElement | null>(null);
-
-	let testing = $state(false);
-	let testResult = $state<boolean | null>(null);
 
 	$effect(() => {
 		if (logContainer && deployLogs.length > 0) {
@@ -54,35 +47,6 @@
 			error = e instanceof Error ? e.message : String(e);
 		} finally {
 			loading = false;
-		}
-	}
-
-	function startEditPartyUrl() {
-		if (!status) return;
-		editingPartyUrl = true;
-		editValue = status.partyUrl;
-	}
-
-	function cancelEdit() {
-		editingPartyUrl = false;
-		editValue = '';
-	}
-
-	async function savePartyUrl() {
-		saving = true;
-		try {
-			const res = await fetch(apiUrl('/api/plugins/settings'), {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ plugin: 'signaling', key: 'signaling.partyUrl', value: editValue })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			editingPartyUrl = false;
-			await fetchStatus();
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-		} finally {
-			saving = false;
 		}
 	}
 
@@ -152,9 +116,6 @@
 				case 'done':
 					deployResult = data;
 					if (data.success) {
-						if (data.url) {
-							saveDeployedUrl(data.url);
-						}
 						fetchStatus();
 					}
 					break;
@@ -164,35 +125,6 @@
 			}
 		} catch {
 			// ignore parse errors
-		}
-	}
-
-	async function saveDeployedUrl(url: string) {
-		try {
-			const res = await fetch(apiUrl('/api/plugins/settings'), {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ plugin: 'signaling', key: 'signaling.partyUrl', value: url })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-		}
-	}
-
-	async function testDeployedUrl() {
-		if (!status?.partyUrl) return;
-		testing = true;
-		testResult = null;
-		try {
-			const res = await fetch(apiUrl('/api/signaling/status'));
-			if (!res.ok) throw new Error();
-			const data = await res.json();
-			testResult = data.deployedAvailable;
-		} catch {
-			testResult = false;
-		} finally {
-			testing = false;
 		}
 	}
 </script>
@@ -211,7 +143,7 @@
 		</div>
 	{:else if status}
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-			<!-- Dev Server Card (managed by plugin connector) -->
+			<!-- Dev Server Card -->
 			<div class="card bg-base-200">
 				<div class="card-body gap-3 p-4">
 					<div class="flex items-center justify-between">
@@ -230,121 +162,86 @@
 				</div>
 			</div>
 
-			<!-- Deployed Server Card -->
-			<div class="card bg-base-200">
-				<div class="card-body gap-3 p-4">
-					<div class="flex items-center justify-between">
-						<h3 class="text-sm font-semibold">Remote Server</h3>
-						{#if status.partyUrl}
-							<span
-								class={classNames('badge badge-sm', {
-									'badge-success': status.deployedAvailable,
-									'badge-error': !status.deployedAvailable
-								})}
-							>
-								{status.deployedAvailable ? 'online' : 'offline'}
-							</span>
-						{:else}
-							<span class="badge badge-ghost badge-sm">not deployed</span>
-						{/if}
-					</div>
-					<div class="flex flex-col gap-1">
-						<span class="text-xs text-base-content/50">Deploy name</span>
-						<span class="font-mono text-sm text-base-content/70">{status.deployName}</span>
-					</div>
-					{#if editingPartyUrl}
-						<div class="flex gap-2">
-							<input
-								type="text"
-								class="input-bordered input input-sm flex-1 font-mono"
-								placeholder="https://{status.deployName}.user.partykit.dev"
-								bind:value={editValue}
-								onkeydown={(e) => {
-									if (e.key === 'Enter') savePartyUrl();
-									if (e.key === 'Escape') cancelEdit();
-								}}
-							/>
-							<button class="btn btn-xs btn-success" disabled={saving} onclick={savePartyUrl}>
-								{#if saving}<span class="loading loading-xs loading-spinner"></span>{:else}Save{/if}
-							</button>
-							<button class="btn btn-ghost btn-xs" onclick={cancelEdit}>Cancel</button>
-						</div>
-					{:else}
+			<!-- Remote Servers -->
+			{#each status.servers as server (server.id)}
+				<div class="card bg-base-200">
+					<div class="card-body gap-3 p-4">
 						<div class="flex items-center justify-between">
-							<span class="font-mono text-sm text-base-content/70">
-								{status.partyUrl || 'No URL set'}
-							</span>
-							<div class="flex gap-1">
-								{#if status.partyUrl}
-									<button class="btn btn-ghost btn-xs" disabled={testing} onclick={testDeployedUrl}>
-										{#if testing}
-											<span class="loading loading-xs loading-spinner"></span>
-										{:else}
-											Test
-										{/if}
-									</button>
-								{/if}
-								<button class="btn btn-ghost btn-xs" onclick={startEditPartyUrl}>Edit</button>
-							</div>
-						</div>
-						{#if testResult !== null}
-							<span
-								class={classNames('text-xs', {
-									'text-success': testResult,
-									'text-error': !testResult
-								})}
-							>
-								{testResult ? 'Reachable' : 'Unreachable'}
-							</span>
-						{/if}
-					{/if}
-					<p class="text-xs text-base-content/50">
-						Deploys to PartyKit (free GitHub account required for authentication)
-					</p>
-					<div class="flex items-center gap-2">
-						<button
-							class={classNames('btn btn-xs', {
-								'btn-disabled': deploying,
-								'btn-primary': !status.deployedAvailable,
-								'btn-warning': status.deployedAvailable
-							})}
-							disabled={deploying}
-							onclick={deploy}
-						>
-							{#if deploying}
-								<span class="loading loading-xs loading-spinner"></span>
-								Deploying...
-							{:else if status.deployedAvailable}
-								Redeploy
+							<h3 class="text-sm font-semibold">{server.name}</h3>
+							{#if !server.enabled}
+								<span class="badge badge-ghost badge-sm">disabled</span>
 							{:else}
-								Deploy
-							{/if}
-						</button>
-						{#if deployResult}
-							<span
-								class={classNames('badge badge-sm', {
-									'badge-success': deployResult.success,
-									'badge-error': !deployResult.success
-								})}
-							>
-								{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
-							</span>
-						{/if}
-					</div>
-					{#if deployLogs.length > 0 || deployError}
-						<div
-							bind:this={logContainer}
-							class="max-h-48 overflow-y-auto rounded bg-base-300 p-2 font-mono text-xs"
-						>
-							{#each deployLogs as line}
-								<div class="whitespace-pre-wrap">{line}</div>
-							{/each}
-							{#if deployError}
-								<div class="text-error">{deployError}</div>
+								<span
+									class={classNames('badge badge-sm', {
+										'badge-success': server.available,
+										'badge-error': !server.available
+									})}
+								>
+									{server.available ? 'online' : 'offline'}
+								</span>
 							{/if}
 						</div>
+						<span class="truncate font-mono text-sm text-base-content/70">{server.url}</span>
+					</div>
+				</div>
+			{/each}
+
+			{#if status.servers.length === 0}
+				<div class="card bg-base-200">
+					<div class="card-body gap-3 p-4">
+						<h3 class="text-sm font-semibold">Remote Servers</h3>
+						<p class="text-xs text-base-content/50">No remote servers configured</p>
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Deploy -->
+		<div class="card bg-base-200">
+			<div class="card-body gap-3 p-4">
+				<p class="text-xs text-base-content/50">
+					Deploys to PartyKit (free GitHub account required for authentication)
+				</p>
+				<div class="flex items-center gap-2">
+					<button
+						class={classNames('btn btn-xs', {
+							'btn-disabled': deploying,
+							'btn-primary': !deploying
+						})}
+						disabled={deploying}
+						onclick={deploy}
+					>
+						{#if deploying}
+							<span class="loading loading-xs loading-spinner"></span>
+							Deploying...
+						{:else}
+							Deploy
+						{/if}
+					</button>
+					{#if deployResult}
+						<span
+							class={classNames('badge badge-sm', {
+								'badge-success': deployResult.success,
+								'badge-error': !deployResult.success
+							})}
+						>
+							{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
+						</span>
 					{/if}
 				</div>
+				{#if deployLogs.length > 0 || deployError}
+					<div
+						bind:this={logContainer}
+						class="max-h-48 overflow-y-auto rounded bg-base-300 p-2 font-mono text-xs"
+					>
+						{#each deployLogs as line}
+							<div class="whitespace-pre-wrap">{line}</div>
+						{/each}
+						{#if deployError}
+							<div class="text-error">{deployError}</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 

@@ -148,3 +148,12 @@ export interface MediaListLinkRow {
   season_number: number | null;
   created_at: string;
 }
+
+export interface SignalingServerRow {
+  id: string;
+  name: string;
+  url: string;
+  enabled: number;
+  created_at: string;
+  updated_at: string;
+}
