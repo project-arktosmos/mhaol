@@ -52,8 +52,38 @@
 		}
 	}
 
+	async function checkDeployStatus() {
+		try {
+			const res = await fetch(apiUrl('/api/signaling/deploy'), { method: 'HEAD' });
+			if (res.status === 409) {
+				deploying = true;
+				await pollDeployDone();
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	async function pollDeployDone() {
+		while (true) {
+			await new Promise((r) => setTimeout(r, 2000));
+			try {
+				const res = await fetch(apiUrl('/api/signaling/deploy'), { method: 'HEAD' });
+				if (res.status !== 409) {
+					deploying = false;
+					await fetchSignalingStatus();
+					return;
+				}
+			} catch {
+				deploying = false;
+				return;
+			}
+		}
+	}
+
 	onMount(() => {
 		fetchSignalingStatus();
+		checkDeployStatus();
 	});
 
 	async function addServer() {
@@ -148,8 +178,7 @@
 			const res = await fetch(apiUrl('/api/signaling/deploy'));
 
 			if (res.status === 409) {
-				deployError = 'A deploy is already in progress';
-				deploying = false;
+				await pollDeployDone();
 				return;
 			}
 
