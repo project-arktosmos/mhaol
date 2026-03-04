@@ -24,12 +24,15 @@
 	function getServerUrl(): string {
 		if (!serverStatus) return '';
 		if (serverTarget === 'dev') return signalingAdapter.resolveLocalUrl(serverStatus.devUrl);
-		return serverStatus.partyUrl;
+		const server = serverStatus.servers.find((s) => s.id === serverTarget);
+		return server?.url ?? '';
 	}
 
 	function isServerAvailable(): boolean {
 		if (!serverStatus) return false;
-		return serverTarget === 'dev' ? serverStatus.devAvailable : serverStatus.deployedAvailable;
+		if (serverTarget === 'dev') return serverStatus.devAvailable;
+		const server = serverStatus.servers.find((s) => s.id === serverTarget);
+		return server?.available ?? false;
 	}
 
 	function handleConnect() {
@@ -60,23 +63,19 @@
 			</span>
 		</div>
 
-		<!-- Server Target Tabs -->
-		<div class="tabs-box tabs">
-			<button
-				class={classNames('tab', { 'tab-active': serverTarget === 'dev' })}
-				onclick={() => (serverTarget = 'dev')}
-				disabled={$chatStore.phase !== 'disconnected'}
-			>
-				Local
-			</button>
-			<button
-				class={classNames('tab', { 'tab-active': serverTarget === 'deployed' })}
-				onclick={() => (serverTarget = 'deployed')}
-				disabled={$chatStore.phase !== 'disconnected'}
-			>
-				Remote
-			</button>
-		</div>
+		<!-- Server Selection -->
+		<select
+			class="select-bordered select select-sm"
+			bind:value={serverTarget}
+			disabled={$chatStore.phase !== 'disconnected'}
+		>
+			<option value="dev">Local</option>
+			{#if serverStatus}
+				{#each serverStatus.servers as server (server.id)}
+					<option value={server.id}>{server.name}</option>
+				{/each}
+			{/if}
+		</select>
 
 		<!-- Server URL display -->
 		{#if serverStatus}

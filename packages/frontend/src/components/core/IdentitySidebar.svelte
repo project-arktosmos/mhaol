@@ -9,7 +9,7 @@
 	import { signalingChatService } from '$services/signaling-chat.service';
 	import { sidebarService } from '$services/sidebar.service';
 	import DownloadsSummary from '$components/downloads/DownloadsSummary.svelte';
-	import type { SignalingServerStatus } from '$types/signaling.type';
+	import type { SignalingServerStatus, SignalingServer } from '$types/signaling.type';
 	import type { SidebarWidthMode } from '$types/sidebar.type';
 
 	interface Props {
@@ -25,9 +25,19 @@
 
 	let signalingStatus = $state<SignalingServerStatus | null>(null);
 
-	let editingPartyUrl = $state(false);
-	let editValue = $state('');
-	let savingUrl = $state(false);
+	// Add server form
+	let addingServer = $state(false);
+	let addName = $state('');
+	let addUrl = $state('');
+	let addSaving = $state(false);
+
+	// Edit server form
+	let editingServerId = $state<string | null>(null);
+	let editName = $state('');
+	let editUrl = $state('');
+	let editSaving = $state(false);
+
+	// Deploy
 	let deploying = $state(false);
 	let deployLogs = $state<string[]>([]);
 	let deployError = $state<string | null>(null);
@@ -45,6 +55,88 @@
 	onMount(() => {
 		fetchSignalingStatus();
 	});
+
+	async function addServer() {
+		if (!addName.trim() || !addUrl.trim()) return;
+		addSaving = true;
+		try {
+			const res = await fetch(apiUrl('/api/signaling/servers'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name: addName.trim(), url: addUrl.trim() })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			addingServer = false;
+			addName = '';
+			addUrl = '';
+			await fetchSignalingStatus();
+		} catch {
+			// Ignore
+		} finally {
+			addSaving = false;
+		}
+	}
+
+	function startEdit(server: SignalingServer) {
+		editingServerId = server.id;
+		editName = server.name;
+		editUrl = server.url;
+	}
+
+	function cancelEdit() {
+		editingServerId = null;
+		editName = '';
+		editUrl = '';
+	}
+
+	async function saveEdit() {
+		if (!editingServerId || !editName.trim() || !editUrl.trim()) return;
+		const server = signalingStatus?.servers.find((s) => s.id === editingServerId);
+		if (!server) return;
+		editSaving = true;
+		try {
+			const res = await fetch(apiUrl(`/api/signaling/servers/${editingServerId}`), {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: editName.trim(),
+					url: editUrl.trim(),
+					enabled: server.enabled
+				})
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			cancelEdit();
+			await fetchSignalingStatus();
+		} catch {
+			// Ignore
+		} finally {
+			editSaving = false;
+		}
+	}
+
+	async function toggleServer(server: SignalingServer) {
+		try {
+			const res = await fetch(apiUrl(`/api/signaling/servers/${server.id}`), {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name: server.name, url: server.url, enabled: !server.enabled })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			await fetchSignalingStatus();
+		} catch {
+			// Ignore
+		}
+	}
+
+	async function deleteServer(id: string) {
+		try {
+			const res = await fetch(apiUrl(`/api/signaling/servers/${id}`), { method: 'DELETE' });
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			await fetchSignalingStatus();
+		} catch {
+			// Ignore
+		}
+	}
 
 	async function deploySignaling() {
 		deploying = true;
@@ -116,33 +208,13 @@
 		}
 	}
 
-	async function savePartyUrl() {
-		savingUrl = true;
-		try {
-			const res = await fetch(apiUrl('/api/plugins/settings'), {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ plugin: 'signaling', key: 'signaling.partyUrl', value: editValue })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			editingPartyUrl = false;
-			await fetchSignalingStatus();
-		} catch {
-			// Ignore
-		} finally {
-			savingUrl = false;
-		}
-	}
-
 	let localAvailable = $derived(signalingStatus?.devAvailable ?? false);
 	let localUrl = $derived(
 		signalingAdapter.resolveLocalUrl(signalingStatus?.devUrl ?? 'http://127.0.0.1:1999')
 	);
 
-	let remoteAvailable = $derived(signalingStatus?.deployedAvailable ?? false);
-	let remoteUrl = $derived(signalingStatus?.partyUrl ?? '');
-
-	let serverAvailable = $derived(localAvailable || remoteAvailable);
+	let servers = $derived(signalingStatus?.servers ?? []);
+	let serverAvailable = $derived(localAvailable || servers.some((s) => s.enabled && s.available));
 
 	const widthClasses: Record<SidebarWidthMode, string> = {
 		wide: 'w-[80vw]',
@@ -224,7 +296,7 @@
 		{#if !signalingStatus}
 			<p class="text-xs opacity-50">Loading...</p>
 		{:else}
-			<!-- LOCAL SERVER (always visible, primary) -->
+			<!-- LOCAL SERVER -->
 			<div class="flex flex-col gap-2">
 				<div class="flex items-center justify-between">
 					<span class="text-xs font-semibold text-base-content/60">Local</span>
@@ -304,111 +376,183 @@
 				{/if}
 			</div>
 
-			<!-- REMOTE SERVER (collapsible, secondary) -->
+			<!-- REMOTE SERVERS -->
 			<div class="mt-3 border-t border-base-300/50 pt-2">
-				<span class="flex items-center gap-2 text-xs font-semibold text-base-content/60">
-					Remote
-					{#if remoteUrl}
-						<span
-							class={classNames('h-1.5 w-1.5 rounded-full', {
-								'bg-success': remoteAvailable,
-								'bg-error': !remoteAvailable
-							})}
-						></span>
-					{/if}
-				</span>
+				<div class="flex items-center justify-between">
+					<span class="text-xs font-semibold text-base-content/60">
+						Remote ({servers.length})
+					</span>
+					<div class="flex gap-1">
+						<button
+							class="btn btn-ghost btn-xs"
+							onclick={() => {
+								addingServer = true;
+								addName = '';
+								addUrl = '';
+							}}
+						>
+							Add
+						</button>
+						<button class="btn btn-xs btn-primary" disabled={deploying} onclick={deploySignaling}>
+							{#if deploying}
+								<span class="loading loading-xs loading-spinner"></span>
+							{:else}
+								Deploy
+							{/if}
+						</button>
+					</div>
+				</div>
 
-				<div class="mt-2 flex flex-col gap-2">
-					{#if remoteUrl}
-						<span class="truncate font-mono text-xs text-base-content/60" title={remoteUrl}>
-							{remoteUrl}
-						</span>
-					{:else}
-						<span class="text-xs text-base-content/40">Not configured</span>
-					{/if}
-
-					{#if editingPartyUrl}
-						<div class="flex flex-col gap-1">
-							<input
-								type="text"
-								class="input-bordered input input-xs w-full font-mono"
-								placeholder="https://your-server.partykit.dev"
-								bind:value={editValue}
-								onkeydown={(e) => {
-									if (e.key === 'Enter') savePartyUrl();
-									if (e.key === 'Escape') {
-										editingPartyUrl = false;
-										editValue = '';
-									}
-								}}
-							/>
-							<div class="flex gap-1">
-								<button
-									class="btn flex-1 btn-xs btn-success"
-									disabled={savingUrl}
-									onclick={savePartyUrl}
-								>
-									{#if savingUrl}<span class="loading loading-xs loading-spinner"
-										></span>{:else}Save{/if}
-								</button>
-								<button
-									class="btn btn-ghost btn-xs"
-									onclick={() => {
-										editingPartyUrl = false;
-										editValue = '';
-									}}
-								>
-									Cancel
-								</button>
-							</div>
-						</div>
-					{:else}
+				{#if addingServer}
+					<div class="mt-2 flex flex-col gap-1">
+						<input
+							type="text"
+							class="input-bordered input input-xs w-full"
+							placeholder="Server name"
+							bind:value={addName}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') addServer();
+								if (e.key === 'Escape') {
+									addingServer = false;
+								}
+							}}
+						/>
+						<input
+							type="text"
+							class="input-bordered input input-xs w-full font-mono"
+							placeholder="https://your-server.partykit.dev"
+							bind:value={addUrl}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') addServer();
+								if (e.key === 'Escape') {
+									addingServer = false;
+								}
+							}}
+						/>
 						<div class="flex gap-1">
 							<button
-								class="btn flex-1 btn-xs btn-primary"
-								disabled={deploying}
-								onclick={deploySignaling}
+								class="btn flex-1 btn-xs btn-success"
+								disabled={addSaving}
+								onclick={addServer}
 							>
-								{#if deploying}
-									<span class="loading loading-xs loading-spinner"></span>
-									Deploying...
-								{:else}
-									Deploy
-								{/if}
+								{#if addSaving}<span class="loading loading-xs loading-spinner"
+									></span>{:else}Save{/if}
 							</button>
-							<button
-								class="btn btn-ghost btn-xs"
-								onclick={() => {
-									editingPartyUrl = true;
-									editValue = signalingStatus?.partyUrl ?? '';
-								}}
-							>
-								Set URL
+							<button class="btn btn-ghost btn-xs" onclick={() => (addingServer = false)}>
+								Cancel
 							</button>
 						</div>
-					{/if}
+					</div>
+				{/if}
 
-					{#if deployLogs.length > 0 || deployError}
-						<div class="max-h-32 overflow-y-auto rounded bg-base-300 p-2 font-mono text-xs">
-							{#each deployLogs as line}
-								<div class="whitespace-pre-wrap">{line}</div>
-							{/each}
-							{#if deployError}
-								<div class="text-error">{deployError}</div>
-							{/if}
-						</div>
-					{/if}
-					{#if deployResult}
-						<span
-							class={classNames('badge badge-sm', {
-								'badge-success': deployResult.success,
-								'badge-error': !deployResult.success
-							})}
-						>
-							{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
-						</span>
+				<div class="mt-2 flex flex-col gap-2">
+					{#each servers as server (server.id)}
+						{#if editingServerId === server.id}
+							<div class="flex flex-col gap-1 rounded bg-base-100 p-2">
+								<input
+									type="text"
+									class="input-bordered input input-xs w-full"
+									placeholder="Server name"
+									bind:value={editName}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') saveEdit();
+										if (e.key === 'Escape') cancelEdit();
+									}}
+								/>
+								<input
+									type="text"
+									class="input-bordered input input-xs w-full font-mono"
+									placeholder="https://..."
+									bind:value={editUrl}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') saveEdit();
+										if (e.key === 'Escape') cancelEdit();
+									}}
+								/>
+								<div class="flex gap-1">
+									<button
+										class="btn flex-1 btn-xs btn-success"
+										disabled={editSaving}
+										onclick={saveEdit}
+									>
+										{#if editSaving}<span class="loading loading-xs loading-spinner"
+											></span>{:else}Save{/if}
+									</button>
+									<button class="btn btn-ghost btn-xs" onclick={cancelEdit}>Cancel</button>
+								</div>
+							</div>
+						{:else}
+							<div class="flex flex-col gap-1 rounded bg-base-100 p-2">
+								<div class="flex items-center justify-between">
+									<div class="flex items-center gap-2">
+										<span
+											class={classNames('h-1.5 w-1.5 rounded-full', {
+												'bg-success': server.available && server.enabled,
+												'bg-error': !server.available && server.enabled,
+												'bg-base-300': !server.enabled
+											})}
+										></span>
+										<span
+											class={classNames('text-xs font-semibold', {
+												'text-base-content/40': !server.enabled
+											})}
+										>
+											{server.name}
+										</span>
+									</div>
+									<div class="flex gap-0.5">
+										<button class="btn btn-ghost btn-xs" onclick={() => toggleServer(server)}>
+											{server.enabled ? 'Off' : 'On'}
+										</button>
+										<button class="btn btn-ghost btn-xs" onclick={() => startEdit(server)}>
+											Edit
+										</button>
+										<button
+											class="btn text-error btn-ghost btn-xs"
+											onclick={() => deleteServer(server.id)}
+										>
+											Del
+										</button>
+									</div>
+								</div>
+								<span
+									class={classNames('truncate font-mono text-xs', {
+										'text-base-content/60': server.enabled,
+										'text-base-content/30': !server.enabled
+									})}
+									title={server.url}
+								>
+									{server.url}
+								</span>
+							</div>
+						{/if}
+					{/each}
+
+					{#if servers.length === 0 && !addingServer}
+						<span class="text-xs text-base-content/40">No remote servers</span>
 					{/if}
 				</div>
+
+				{#if deployLogs.length > 0 || deployError}
+					<div class="mt-2 max-h-32 overflow-y-auto rounded bg-base-300 p-2 font-mono text-xs">
+						{#each deployLogs as line}
+							<div class="whitespace-pre-wrap">{line}</div>
+						{/each}
+						{#if deployError}
+							<div class="text-error">{deployError}</div>
+						{/if}
+					</div>
+				{/if}
+				{#if deployResult}
+					<span
+						class={classNames('mt-1 badge badge-sm', {
+							'badge-success': deployResult.success,
+							'badge-error': !deployResult.success
+						})}
+					>
+						{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
+					</span>
+				{/if}
 			</div>
 		{/if}
 	</div>

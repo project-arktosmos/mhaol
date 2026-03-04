@@ -14,6 +14,7 @@ export { LinkSourceRepository } from "./repositories/link-source.repository.js";
 export { MediaListRepository } from "./repositories/media-list.repository.js";
 export { MediaListItemRepository } from "./repositories/media-list-item.repository.js";
 export { MediaListLinkRepository } from "./repositories/media-list-link.repository.js";
+export { SignalingServerRepository } from "./repositories/signaling-server.repository.js";
 export type {
   SettingRow,
   MetadataRow,
@@ -30,4 +31,5 @@ export type {
   MediaListRow,
   MediaListItemRow,
   MediaListLinkRow,
+  SignalingServerRow,
 } from "./types.js";

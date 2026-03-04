@@ -80,6 +80,7 @@ pub struct AppState {
     pub torrent_manager: Arc<TorrentManager>,
     #[cfg(not(target_os = "android"))]
     pub image_tagger_manager: Arc<ImageTaggerManager>,
+    pub signaling_servers: SignalingServerRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
     pub worker_bridge: Arc<WorkerBridge>,
 }
@@ -116,6 +117,7 @@ impl AppState {
             torrent_manager: Arc::new(TorrentManager::new()),
             #[cfg(not(target_os = "android"))]
             image_tagger_manager: Arc::new(ImageTaggerManager::new()),
+            signaling_servers: SignalingServerRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
             db,
