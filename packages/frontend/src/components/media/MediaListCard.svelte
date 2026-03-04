@@ -3,16 +3,44 @@
 	import type { MediaList } from '$types/media-list.type';
 	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
 	import type { MediaType } from '$types/library.type';
+	import type { DisplayTMDBTvShowDetails } from 'tmdb/types';
+	import type { DisplayMusicBrainzReleaseGroup } from 'musicbrainz/types';
 
 	interface Props {
 		list: MediaList;
 		selected?: boolean;
+		tmdbMetadata?: DisplayTMDBTvShowDetails | null;
+		mbMetadata?: DisplayMusicBrainzReleaseGroup | null;
 		onselect?: (list: MediaList) => void;
 	}
 
-	let { list, selected = false, onselect }: Props = $props();
+	let {
+		list,
+		selected = false,
+		tmdbMetadata = null,
+		mbMetadata = null,
+		onselect
+	}: Props = $props();
 
 	let kindLabel = $derived(list.mediaType === 'video' ? 'TV Show' : 'Album');
+
+	let coverUrl = $derived.by(() => {
+		if (list.coverImage) return list.coverImage;
+		const seasonNum = list.links.tmdb?.seasonNumber;
+		if (tmdbMetadata && seasonNum != null) {
+			const season = tmdbMetadata.seasons.find((s) => s.seasonNumber === seasonNum);
+			if (season?.posterUrl) return season.posterUrl;
+		}
+		if (tmdbMetadata?.posterUrl) return tmdbMetadata.posterUrl;
+		if (mbMetadata?.coverArtUrl) return mbMetadata.coverArtUrl;
+		return null;
+	});
+
+	let subtitle = $derived.by(() => {
+		if (tmdbMetadata) return tmdbMetadata.name;
+		if (mbMetadata) return mbMetadata.artistCredits;
+		return null;
+	});
 </script>
 
 <div
@@ -33,13 +61,8 @@
 	}}
 >
 	<figure class="relative h-48 overflow-hidden bg-base-300">
-		{#if list.coverImage}
-			<img
-				src={list.coverImage}
-				alt={list.title}
-				class="h-full w-full object-cover"
-				loading="lazy"
-			/>
+		{#if coverUrl}
+			<img src={coverUrl} alt={list.title} class="h-full w-full object-cover" loading="lazy" />
 		{:else}
 			<div class="flex h-full w-full items-center justify-center text-base-content/20">
 				<svg
@@ -61,6 +84,9 @@
 	</figure>
 	<div class="card-body gap-1">
 		<h3 class="card-title truncate text-sm" title={list.title}>{list.title}</h3>
+		{#if subtitle}
+			<p class="truncate text-xs opacity-60" title={subtitle}>{subtitle}</p>
+		{/if}
 		<div class="flex flex-wrap gap-1">
 			<span
 				class={classNames(

@@ -77,8 +77,16 @@ struct MappedMediaList {
     item_count: usize,
     #[serde(rename = "createdAt")]
     created_at: String,
-    links: HashMap<String, String>,
+    links: HashMap<String, MappedMediaListLink>,
     items: Vec<MappedItem>,
+}
+
+#[derive(Serialize)]
+struct MappedMediaListLink {
+    #[serde(rename = "serviceId")]
+    service_id: String,
+    #[serde(rename = "seasonNumber")]
+    season_number: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -250,7 +258,13 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
             let list_link_rows = state.media_list_links.get_by_list(&list.id);
             let mut list_links = HashMap::new();
             for ll in list_link_rows {
-                list_links.insert(ll.service, ll.service_id);
+                list_links.insert(
+                    ll.service,
+                    MappedMediaListLink {
+                        service_id: ll.service_id,
+                        season_number: ll.season_number,
+                    },
+                );
             }
             MappedMediaList {
                 id: list.id,

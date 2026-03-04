@@ -21,10 +21,11 @@ export class MediaListLinkRepository {
 				'SELECT * FROM media_list_links WHERE list_id = ? AND service = ?'
 			),
 			upsert: db.prepare(`
-				INSERT INTO media_list_links (id, list_id, service, service_id)
-				VALUES (@id, @list_id, @service, @service_id)
+				INSERT INTO media_list_links (id, list_id, service, service_id, season_number)
+				VALUES (@id, @list_id, @service, @service_id, @season_number)
 				ON CONFLICT(list_id, service) DO UPDATE SET
-					service_id = excluded.service_id
+					service_id = excluded.service_id,
+					season_number = excluded.season_number
 			`),
 			delete: db.prepare(
 				'DELETE FROM media_list_links WHERE list_id = ? AND service = ?'
