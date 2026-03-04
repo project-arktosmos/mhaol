@@ -293,6 +293,7 @@
 	});
 
 	function closeMediaDetail() {
+		playerService.stop();
 		mediaDetailService.clear();
 		modalRouterService.closeMediaDetail();
 	}
