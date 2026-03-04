@@ -11,6 +11,7 @@ pub mod torrent_download;
 pub mod image_tag;
 pub mod media_list;
 pub mod media_list_item;
+pub mod media_list_link;
 
 pub use settings::SettingsRepo;
 pub use metadata::MetadataRepo;
@@ -25,3 +26,4 @@ pub use torrent_download::TorrentDownloadRepo;
 pub use image_tag::ImageTagRepo;
 pub use media_list::MediaListRepo;
 pub use media_list_item::MediaListItemRepo;
+pub use media_list_link::MediaListLinkRepo;

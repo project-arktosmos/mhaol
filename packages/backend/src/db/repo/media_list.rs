@@ -26,6 +26,16 @@ impl MediaListRepo {
         Self { db }
     }
 
+    pub fn get_by_id(&self, id: &str) -> Option<MediaListRow> {
+        let conn = self.db.lock();
+        conn.query_row(
+            "SELECT id, library_id, title, description, cover_image, media_type, source, source_path, created_at, updated_at FROM media_lists WHERE id = ?1",
+            params![id],
+            Self::row_mapper,
+        )
+        .ok()
+    }
+
     pub fn get_all(&self) -> Vec<MediaListRow> {
         let conn = self.db.lock();
         let mut stmt = conn

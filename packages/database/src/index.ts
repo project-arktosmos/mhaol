@@ -13,6 +13,7 @@ export { CategoryRepository } from "./repositories/category.repository.js";
 export { LinkSourceRepository } from "./repositories/link-source.repository.js";
 export { MediaListRepository } from "./repositories/media-list.repository.js";
 export { MediaListItemRepository } from "./repositories/media-list-item.repository.js";
+export { MediaListLinkRepository } from "./repositories/media-list-link.repository.js";
 export type {
   SettingRow,
   MetadataRow,
@@ -28,4 +29,5 @@ export type {
   LinkSourceRow,
   MediaListRow,
   MediaListItemRow,
+  MediaListLinkRow,
 } from "./types.js";

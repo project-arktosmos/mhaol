@@ -55,10 +55,15 @@
 	let activeCategoryId = $state(ALL_CATEGORY);
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
+	let linkModalList: MediaList | null = $state(null);
+	let linkModalListService: string | null = $state(null);
 	let selectedList: MediaList | null = $state(null);
 
 	// Track link overrides so we can update without full page reload
 	let linkOverrides: Record<string, Record<string, MediaItemLink | null>> = $state({});
+
+	// Track list link overrides
+	let listLinkOverrides: Record<string, Record<string, string | null>> = $state({});
 
 	// TMDB metadata state
 	let tmdbMetadata: Record<string, DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails> = $state({});
@@ -459,6 +464,85 @@
 		playerService.play(playableFile);
 	}
 
+	function getListLinks(list: MediaList): Record<string, string> {
+		const overrides = listLinkOverrides[list.id];
+		if (!overrides) return list.links;
+		const merged = { ...list.links };
+		for (const [service, serviceId] of Object.entries(overrides)) {
+			if (serviceId === null) {
+				delete merged[service];
+			} else {
+				merged[service] = serviceId;
+			}
+		}
+		return merged;
+	}
+
+	function listAsLibraryFile(list: MediaList): LibraryFile {
+		return {
+			id: list.id,
+			name: list.title,
+			path: '',
+			extension: '',
+			mediaType: list.mediaType as LibraryFile['mediaType'],
+			categoryId: null,
+			links: {}
+		};
+	}
+
+	async function handleListTmdbLink(
+		tmdbId: number,
+		_seasonNumber: number | null,
+		_episodeNumber: number | null,
+		_type: 'movie' | 'tv'
+	) {
+		if (!linkModalList) return;
+		const list = linkModalList;
+		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/tmdb`), {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ tmdbId })
+		});
+		if (res.ok) {
+			listLinkOverrides = {
+				...listLinkOverrides,
+				[list.id]: { ...listLinkOverrides[list.id], tmdb: String(tmdbId) }
+			};
+		}
+		linkModalList = null;
+		linkModalListService = null;
+	}
+
+	async function handleListMusicBrainzLink(musicbrainzId: string) {
+		if (!linkModalList) return;
+		const list = linkModalList;
+		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/musicbrainz`), {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ musicbrainzId })
+		});
+		if (res.ok) {
+			listLinkOverrides = {
+				...listLinkOverrides,
+				[list.id]: { ...listLinkOverrides[list.id], musicbrainz: musicbrainzId }
+			};
+		}
+		linkModalList = null;
+		linkModalListService = null;
+	}
+
+	async function handleListUnlink(list: MediaList, service: string) {
+		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/${service}`), {
+			method: 'DELETE'
+		});
+		if (res.ok) {
+			listLinkOverrides = {
+				...listLinkOverrides,
+				[list.id]: { ...listLinkOverrides[list.id], [service]: null }
+			};
+		}
+	}
+
 	function itemAsLibraryFile(item: MediaItem): LibraryFile {
 		return {
 			id: item.id,
@@ -646,6 +730,7 @@
 	{#if isListsType}
 		<!-- Lists view -->
 		{#if selectedList}
+			{@const currentListLinks = getListLinks(selectedList)}
 			<div class="mb-4 flex items-center gap-2">
 				<button
 					class="btn btn-ghost btn-sm"
@@ -656,6 +741,48 @@
 					&larr; Back
 				</button>
 				<h2 class="text-xl font-semibold">{selectedList.title}</h2>
+				<div class="ml-auto flex gap-2">
+					{#if selectedList.mediaType === 'video'}
+						{#if currentListLinks.tmdb}
+							<button
+								class="btn btn-outline btn-xs btn-error"
+								onclick={() => handleListUnlink(selectedList!, 'tmdb')}
+							>
+								Unlink TV Show
+							</button>
+						{:else}
+							<button
+								class="btn btn-outline btn-xs"
+								onclick={() => {
+									linkModalList = selectedList;
+									linkModalListService = 'tmdb';
+								}}
+							>
+								Link TV Show
+							</button>
+						{/if}
+					{/if}
+					{#if selectedList.mediaType === 'audio'}
+						{#if currentListLinks.musicbrainz}
+							<button
+								class="btn btn-outline btn-xs btn-error"
+								onclick={() => handleListUnlink(selectedList!, 'musicbrainz')}
+							>
+								Unlink Album
+							</button>
+						{:else}
+							<button
+								class="btn btn-outline btn-xs"
+								onclick={() => {
+									linkModalList = selectedList;
+									linkModalListService = 'musicbrainz';
+								}}
+							>
+								Link Album
+							</button>
+						{/if}
+					{/if}
+				</div>
 			</div>
 			{#if selectedList.items.length > 0}
 				<div
@@ -797,6 +924,28 @@
 		onclose={() => {
 			linkModalItem = null;
 			linkModalService = null;
+		}}
+	/>
+{/if}
+
+{#if linkModalList && linkModalListService === 'tmdb'}
+	<TmdbLinkModal
+		file={listAsLibraryFile(linkModalList)}
+		onlink={handleListTmdbLink}
+		onclose={() => {
+			linkModalList = null;
+			linkModalListService = null;
+		}}
+	/>
+{/if}
+
+{#if linkModalList && linkModalListService === 'musicbrainz'}
+	<MusicBrainzLinkModal
+		file={listAsLibraryFile(linkModalList)}
+		onlink={handleListMusicBrainzLink}
+		onclose={() => {
+			linkModalList = null;
+			linkModalListService = null;
 		}}
 	/>
 {/if}

@@ -8,6 +8,7 @@ pub mod images;
 pub mod libraries;
 pub mod lyrics;
 pub mod media;
+pub mod media_lists;
 pub mod musicbrainz;
 pub mod p2p_stream;
 pub mod player;
@@ -36,6 +37,7 @@ pub fn build_router(state: AppState) -> Router {
     let router = Router::new()
         .nest("/api/libraries", libraries::router())
         .nest("/api/media", media::router())
+        .nest("/api/media-lists", media_lists::router())
         .nest("/api/downloads", downloads::router())
         .nest("/api/database", database::router())
         .nest("/api/p2p-stream", p2p_stream::router())
