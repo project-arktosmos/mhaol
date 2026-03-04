@@ -139,3 +139,11 @@ export interface MediaListItemRow {
   position: number;
   created_at: string;
 }
+
+export interface MediaListLinkRow {
+  id: string;
+  list_id: string;
+  service: string;
+  service_id: string;
+  created_at: string;
+}

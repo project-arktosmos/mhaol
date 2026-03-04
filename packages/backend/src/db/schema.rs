@@ -179,10 +179,19 @@ CREATE TABLE IF NOT EXISTS media_list_items (
 
 CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
 CREATE INDEX IF NOT EXISTS idx_media_lists_source_path ON media_lists(source_path);
+
+CREATE TABLE IF NOT EXISTS media_list_links (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+    service TEXT NOT NULL,
+    service_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(list_id, service)
+);
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '16', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '17', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -403,6 +412,20 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: add media_list_links table (db_version 17)
+    if !has_table(conn, "media_list_links") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE media_list_links (
+                id TEXT PRIMARY KEY,
+                list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+                service TEXT NOT NULL,
+                service_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(list_id, service)
+            );",
+        );
+    }
+
     // Migration: migrate legacy columns to library_item_links (db_version 14 data)
     if has_table(conn, "library_items") && has_column(conn, "library_items", "tmdb_id") {
         let _ = conn.execute_batch(
@@ -486,6 +509,7 @@ mod tests {
         assert!(has_table(&conn, "image_tags"));
         assert!(has_table(&conn, "media_lists"));
         assert!(has_table(&conn, "media_list_items"));
+        assert!(has_table(&conn, "media_list_links"));
 
         // Verify seed data
         let count: i64 = conn

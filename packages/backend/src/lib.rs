@@ -71,6 +71,7 @@ pub struct AppState {
     pub image_tags: ImageTagRepo,
     pub media_lists: MediaListRepo,
     pub media_list_items: MediaListItemRepo,
+    pub media_list_links: MediaListLinkRepo,
     pub identity_manager: IdentityManager,
     pub module_registry: Arc<RwLock<ModuleRegistry>>,
     #[cfg(not(target_os = "android"))]
@@ -103,6 +104,7 @@ impl AppState {
             image_tags: ImageTagRepo::new(Arc::clone(&db)),
             media_lists: MediaListRepo::new(Arc::clone(&db)),
             media_list_items: MediaListItemRepo::new(Arc::clone(&db)),
+            media_list_links: MediaListLinkRepo::new(Arc::clone(&db)),
             identity_manager: IdentityManager::new(identities_path),
             module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
             #[cfg(not(target_os = "android"))]

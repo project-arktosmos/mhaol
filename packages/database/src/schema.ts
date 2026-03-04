@@ -129,10 +129,19 @@ CREATE TABLE IF NOT EXISTS media_list_items (
 CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
 CREATE INDEX IF NOT EXISTS idx_media_lists_source_path ON media_lists(source_path);
 
+CREATE TABLE IF NOT EXISTS media_list_links (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+    service TEXT NOT NULL,
+    service_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(list_id, service)
+);
+
 `;
 
 const SEED_SQL = `
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '16', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '17', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -268,6 +277,20 @@ function runMigrations(db: DatabaseType): void {
       );
       CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
       CREATE INDEX IF NOT EXISTS idx_media_lists_source_path ON media_lists(source_path);
+    `);
+  }
+
+  // Migration: add media_list_links table (db_version 17)
+  if (!hasTable('media_list_links')) {
+    db.exec(`
+      CREATE TABLE media_list_links (
+        id TEXT PRIMARY KEY,
+        list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+        service TEXT NOT NULL,
+        service_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(list_id, service)
+      );
     `);
   }
 

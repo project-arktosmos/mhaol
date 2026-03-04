@@ -11,3 +11,4 @@ export { CategoryRepository } from "./category.repository.js";
 export { LinkSourceRepository } from "./link-source.repository.js";
 export { MediaListRepository } from "./media-list.repository.js";
 export { MediaListItemRepository } from "./media-list-item.repository.js";
+export { MediaListLinkRepository } from "./media-list-link.repository.js";

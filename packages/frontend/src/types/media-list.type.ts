@@ -10,5 +10,6 @@ export interface MediaList {
 	source: 'auto' | 'user';
 	itemCount: number;
 	createdAt: string;
+	links: Record<string, string>;
 	items: MediaItem[];
 }
