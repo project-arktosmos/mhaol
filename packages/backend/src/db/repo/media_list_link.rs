@@ -8,6 +8,7 @@ pub struct MediaListLinkRow {
     pub list_id: String,
     pub service: String,
     pub service_id: String,
+    pub season_number: Option<i64>,
     pub created_at: String,
 }
 
@@ -24,7 +25,7 @@ impl MediaListLinkRepo {
     pub fn get_by_list(&self, list_id: &str) -> Vec<MediaListLinkRow> {
         let conn = self.db.lock();
         let mut stmt = conn
-            .prepare("SELECT id, list_id, service, service_id, created_at FROM media_list_links WHERE list_id = ?1 ORDER BY service ASC")
+            .prepare("SELECT id, list_id, service, service_id, season_number, created_at FROM media_list_links WHERE list_id = ?1 ORDER BY service ASC")
             .unwrap();
         stmt.query_map(params![list_id], Self::row_mapper)
             .unwrap()
@@ -39,21 +40,29 @@ impl MediaListLinkRepo {
     ) -> Option<MediaListLinkRow> {
         let conn = self.db.lock();
         conn.query_row(
-            "SELECT id, list_id, service, service_id, created_at FROM media_list_links WHERE list_id = ?1 AND service = ?2",
+            "SELECT id, list_id, service, service_id, season_number, created_at FROM media_list_links WHERE list_id = ?1 AND service = ?2",
             params![list_id, service],
             Self::row_mapper,
         )
         .ok()
     }
 
-    pub fn upsert(&self, id: &str, list_id: &str, service: &str, service_id: &str) {
+    pub fn upsert(
+        &self,
+        id: &str,
+        list_id: &str,
+        service: &str,
+        service_id: &str,
+        season_number: Option<i64>,
+    ) {
         let conn = self.db.lock();
         conn.execute(
-            "INSERT INTO media_list_links (id, list_id, service, service_id)
-             VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO media_list_links (id, list_id, service, service_id, season_number)
+             VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(list_id, service) DO UPDATE SET
-                service_id = excluded.service_id",
-            params![id, list_id, service, service_id],
+                service_id = excluded.service_id,
+                season_number = excluded.season_number",
+            params![id, list_id, service, service_id, season_number],
         )
         .unwrap();
     }
@@ -82,7 +91,8 @@ impl MediaListLinkRepo {
             list_id: row.get(1)?,
             service: row.get(2)?,
             service_id: row.get(3)?,
-            created_at: row.get(4)?,
+            season_number: row.get(4)?,
+            created_at: row.get(5)?,
         })
     }
 }
@@ -106,21 +116,23 @@ mod tests {
     fn test_link_upsert() {
         let repo = setup();
 
-        repo.upsert("link1", "list1", "tmdb", "12345");
+        repo.upsert("link1", "list1", "tmdb", "12345", Some(2));
         let link = repo.get_by_list_and_service("list1", "tmdb").unwrap();
         assert_eq!(link.service_id, "12345");
+        assert_eq!(link.season_number, Some(2));
 
         // Upsert updates
-        repo.upsert("link2", "list1", "tmdb", "99999");
+        repo.upsert("link2", "list1", "tmdb", "99999", None);
         let link = repo.get_by_list_and_service("list1", "tmdb").unwrap();
         assert_eq!(link.service_id, "99999");
+        assert_eq!(link.season_number, None);
     }
 
     #[test]
     fn test_link_delete() {
         let repo = setup();
 
-        repo.upsert("link1", "list1", "tmdb", "12345");
+        repo.upsert("link1", "list1", "tmdb", "12345", None);
         assert!(repo.get_by_list_and_service("list1", "tmdb").is_some());
 
         repo.delete("list1", "tmdb");

@@ -24,6 +24,8 @@ pub fn router() -> Router<AppState> {
 struct LinkTmdbBody {
     #[serde(rename = "tmdbId")]
     tmdb_id: i64,
+    #[serde(rename = "seasonNumber")]
+    season_number: Option<i64>,
 }
 
 async fn link_tmdb(
@@ -43,6 +45,7 @@ async fn link_tmdb(
         &list_id,
         "tmdb",
         &body.tmdb_id.to_string(),
+        body.season_number,
     );
     Json(serde_json::json!({ "ok": true })).into_response()
 }
@@ -93,6 +96,7 @@ async fn link_musicbrainz(
         &list_id,
         "musicbrainz",
         mb_id,
+        None,
     );
     Json(serde_json::json!({ "ok": true })).into_response()
 }

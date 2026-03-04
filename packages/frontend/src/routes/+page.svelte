@@ -17,7 +17,7 @@
 	import MediaCard from '$components/media/MediaCard.svelte';
 	import MediaListCard from '$components/media/MediaListCard.svelte';
 	import MediaDetail from '$components/media/MediaDetail.svelte';
-	import type { MediaList } from '$types/media-list.type';
+	import type { MediaList, MediaListLink } from '$types/media-list.type';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import LyricsPanel from '$components/player/LyricsPanel.svelte';
 	import type { LibraryFile } from '$types/library.type';
@@ -30,8 +30,12 @@
 	import type { ImageTag, ImagesResponse } from '$types/image-tagger.type';
 	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'tmdb/types';
 	import type { YouTubeOEmbedResponse } from 'youtube/oembed';
-	import type { DisplayMusicBrainzRecording } from 'musicbrainz/types';
+	import type {
+		DisplayMusicBrainzRecording,
+		DisplayMusicBrainzReleaseGroup
+	} from 'musicbrainz/types';
 	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'tmdb/transform';
+	import { releaseGroupToDisplay } from 'musicbrainz/transform';
 
 	interface Props {
 		data: {
@@ -63,7 +67,15 @@
 	let linkOverrides: Record<string, Record<string, MediaItemLink | null>> = $state({});
 
 	// Track list link overrides
-	let listLinkOverrides: Record<string, Record<string, string | null>> = $state({});
+	let listLinkOverrides: Record<string, Record<string, MediaListLink | null>> = $state({});
+
+	// List-level TMDB metadata state
+	let listTmdbMetadata: Record<string, DisplayTMDBTvShowDetails> = $state({});
+	let listTmdbLoading: Set<string> = $state(new Set());
+
+	// List-level MusicBrainz metadata state
+	let listMbMetadata: Record<string, DisplayMusicBrainzReleaseGroup> = $state({});
+	let listMbLoading: Set<string> = $state(new Set());
 
 	// TMDB metadata state
 	let tmdbMetadata: Record<string, DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails> = $state({});
@@ -465,15 +477,15 @@
 		playerService.play(playableFile);
 	}
 
-	function getListLinks(list: MediaList): Record<string, string> {
+	function getListLinks(list: MediaList): Record<string, MediaListLink> {
 		const overrides = listLinkOverrides[list.id];
 		if (!overrides) return list.links;
 		const merged = { ...list.links };
-		for (const [service, serviceId] of Object.entries(overrides)) {
-			if (serviceId === null) {
+		for (const [service, link] of Object.entries(overrides)) {
+			if (link === null) {
 				delete merged[service];
 			} else {
-				merged[service] = serviceId;
+				merged[service] = link;
 			}
 		}
 		return merged;
@@ -507,8 +519,14 @@
 		if (res.ok) {
 			listLinkOverrides = {
 				...listLinkOverrides,
-				[list.id]: { ...listLinkOverrides[list.id], tmdb: String(tmdbId) }
+				[list.id]: {
+					...listLinkOverrides[list.id],
+					tmdb: { serviceId: String(tmdbId), seasonNumber: null }
+				}
 			};
+			// Clear old metadata so it gets re-fetched
+			const { [list.id]: _, ...restTmdb } = listTmdbMetadata;
+			listTmdbMetadata = restTmdb;
 		}
 		linkModalList = null;
 		linkModalListService = null;
@@ -525,8 +543,13 @@
 		if (res.ok) {
 			listLinkOverrides = {
 				...listLinkOverrides,
-				[list.id]: { ...listLinkOverrides[list.id], musicbrainz: musicbrainzId }
+				[list.id]: {
+					...listLinkOverrides[list.id],
+					musicbrainz: { serviceId: musicbrainzId, seasonNumber: null }
+				}
 			};
+			const { [list.id]: _, ...restMb } = listMbMetadata;
+			listMbMetadata = restMb;
 		}
 		linkModalList = null;
 		linkModalListService = null;
@@ -541,6 +564,70 @@
 				...listLinkOverrides,
 				[list.id]: { ...listLinkOverrides[list.id], [service]: null }
 			};
+			if (service === 'tmdb') {
+				const { [list.id]: _, ...rest } = listTmdbMetadata;
+				listTmdbMetadata = rest;
+			}
+			if (service === 'musicbrainz') {
+				const { [list.id]: _, ...rest } = listMbMetadata;
+				listMbMetadata = rest;
+			}
+		}
+	}
+
+	async function handleListSetSeason(list: MediaList, seasonNumber: number | null) {
+		const links = getListLinks(list);
+		const tmdbLink = links.tmdb;
+		if (!tmdbLink) return;
+		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/tmdb`), {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ tmdbId: Number(tmdbLink.serviceId), seasonNumber })
+		});
+		if (res.ok) {
+			listLinkOverrides = {
+				...listLinkOverrides,
+				[list.id]: {
+					...listLinkOverrides[list.id],
+					tmdb: { serviceId: tmdbLink.serviceId, seasonNumber }
+				}
+			};
+		}
+	}
+
+	async function fetchListTmdbMetadata(listId: string, tmdbId: string) {
+		if (listTmdbMetadata[listId] || listTmdbLoading.has(listId)) return;
+		listTmdbLoading = new Set([...listTmdbLoading, listId]);
+		try {
+			const res = await fetch(apiUrl(`/api/tmdb/tv/${tmdbId}`));
+			if (res.ok) {
+				const raw = await res.json();
+				listTmdbMetadata = { ...listTmdbMetadata, [listId]: tvShowDetailsToDisplay(raw) };
+			}
+		} catch (e) {
+			console.error('Failed to load list TMDB metadata:', e);
+		} finally {
+			const next = new Set(listTmdbLoading);
+			next.delete(listId);
+			listTmdbLoading = next;
+		}
+	}
+
+	async function fetchListMbMetadata(listId: string, mbId: string) {
+		if (listMbMetadata[listId] || listMbLoading.has(listId)) return;
+		listMbLoading = new Set([...listMbLoading, listId]);
+		try {
+			const res = await fetch(apiUrl(`/api/musicbrainz/release-group/${mbId}`));
+			if (res.ok) {
+				const raw = await res.json();
+				listMbMetadata = { ...listMbMetadata, [listId]: releaseGroupToDisplay(raw) };
+			}
+		} catch (e) {
+			console.error('Failed to load list MusicBrainz metadata:', e);
+		} finally {
+			const next = new Set(listMbLoading);
+			next.delete(listId);
+			listMbLoading = next;
 		}
 	}
 
@@ -652,6 +739,19 @@
 			}
 		}
 	});
+
+	// Fetch metadata for linked lists
+	$effect(() => {
+		for (const list of data.lists) {
+			const links = getListLinks(list);
+			if (links.tmdb) {
+				fetchListTmdbMetadata(list.id, links.tmdb.serviceId);
+			}
+			if (links.musicbrainz) {
+				fetchListMbMetadata(list.id, links.musicbrainz.serviceId);
+			}
+		}
+	});
 </script>
 
 <div class="container mx-auto p-4">
@@ -732,6 +832,13 @@
 		<!-- Lists view -->
 		{#if selectedList}
 			{@const currentListLinks = getListLinks(selectedList)}
+			{@const listTmdb = listTmdbMetadata[selectedList.id] ?? null}
+			{@const listMb = listMbMetadata[selectedList.id] ?? null}
+			{@const selectedSeason = currentListLinks.tmdb?.seasonNumber ?? null}
+			{@const seasonMeta =
+				listTmdb && selectedSeason != null
+					? (listTmdb.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
+					: null}
 			<div class="mb-4 flex items-center gap-2">
 				<button
 					class="btn btn-ghost btn-sm"
@@ -785,6 +892,72 @@
 					{/if}
 				</div>
 			</div>
+			{#if listTmdb}
+				<div class="mb-4 flex gap-4 rounded-lg bg-base-200 p-4">
+					{#if seasonMeta?.posterUrl}
+						<img
+							src={seasonMeta.posterUrl}
+							alt={seasonMeta.name}
+							class="h-40 w-auto rounded-lg object-cover"
+						/>
+					{:else if listTmdb.posterUrl}
+						<img
+							src={listTmdb.posterUrl}
+							alt={listTmdb.name}
+							class="h-40 w-auto rounded-lg object-cover"
+						/>
+					{/if}
+					<div class="flex flex-1 flex-col gap-1">
+						<h3 class="text-lg font-semibold">{listTmdb.name}</h3>
+						{#if seasonMeta}
+							<p class="text-sm font-medium opacity-70">{seasonMeta.name}</p>
+						{/if}
+						<p class="text-xs opacity-50">
+							{listTmdb.firstAirYear}{listTmdb.lastAirYear ? `–${listTmdb.lastAirYear}` : ''}
+						</p>
+						<p class="line-clamp-3 text-sm opacity-70">
+							{seasonMeta?.overview || listTmdb.overview}
+						</p>
+						{#if listTmdb.seasons.length > 0}
+							<div class="mt-auto">
+								<select
+									class="select-bordered select select-xs"
+									value={selectedSeason ?? ''}
+									onchange={(e) => {
+										const val = (e.target as HTMLSelectElement).value;
+										handleListSetSeason(selectedList!, val === '' ? null : Number(val));
+									}}
+								>
+									<option value="">All Seasons</option>
+									{#each listTmdb.seasons as season}
+										<option value={season.seasonNumber}>{season.name}</option>
+									{/each}
+								</select>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{:else if listMb}
+				<div class="mb-4 flex gap-4 rounded-lg bg-base-200 p-4">
+					{#if listMb.coverArtUrl}
+						<img
+							src={listMb.coverArtUrl}
+							alt={listMb.title}
+							class="h-40 w-40 rounded-lg object-cover"
+						/>
+					{/if}
+					<div class="flex flex-1 flex-col gap-1">
+						<h3 class="text-lg font-semibold">{listMb.title}</h3>
+						<p class="text-sm opacity-70">{listMb.artistCredits}</p>
+						{#if listMb.firstReleaseYear && listMb.firstReleaseYear !== 'Unknown'}
+							<p class="text-xs opacity-50">{listMb.firstReleaseYear}</p>
+						{/if}
+						{#if listMb.primaryType}
+							<span class="mt-1 badge badge-outline badge-sm">{listMb.primaryType}</span>
+						{/if}
+					</div>
+				</div>
+			{/if}
 			{#if selectedList.items.length > 0}
 				<div
 					class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
@@ -815,6 +988,8 @@
 				{#each data.lists as list (list.id)}
 					<MediaListCard
 						{list}
+						tmdbMetadata={listTmdbMetadata[list.id] ?? null}
+						mbMetadata={listMbMetadata[list.id] ?? null}
 						onselect={(l) => {
 							selectedList = l;
 						}}

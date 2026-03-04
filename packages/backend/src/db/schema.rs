@@ -185,13 +185,14 @@ CREATE TABLE IF NOT EXISTS media_list_links (
     list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
     service TEXT NOT NULL,
     service_id TEXT NOT NULL,
+    season_number INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(list_id, service)
 );
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '17', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '18', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -420,10 +421,18 @@ fn run_migrations(conn: &Connection) {
                 list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
                 service TEXT NOT NULL,
                 service_id TEXT NOT NULL,
+                season_number INTEGER,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(list_id, service)
             );",
         );
+    }
+
+    // Migration: add season_number to media_list_links (db_version 18)
+    if has_table(conn, "media_list_links") && !has_column(conn, "media_list_links", "season_number")
+    {
+        let _ =
+            conn.execute_batch("ALTER TABLE media_list_links ADD COLUMN season_number INTEGER");
     }
 
     // Migration: migrate legacy columns to library_item_links (db_version 14 data)

@@ -145,5 +145,6 @@ export interface MediaListLinkRow {
   list_id: string;
   service: string;
   service_id: string;
+  season_number: number | null;
   created_at: string;
 }

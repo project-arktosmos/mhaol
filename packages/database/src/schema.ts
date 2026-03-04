@@ -134,14 +134,31 @@ CREATE TABLE IF NOT EXISTS media_list_links (
     list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
     service TEXT NOT NULL,
     service_id TEXT NOT NULL,
+    season_number INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(list_id, service)
 );
 
+CREATE TABLE IF NOT EXISTS signaling_servers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS signaling_servers_updated_at
+    AFTER UPDATE ON signaling_servers
+    FOR EACH ROW
+BEGIN
+    UPDATE signaling_servers SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
+
 `;
 
 const SEED_SQL = `
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '17', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '19', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -288,10 +305,48 @@ function runMigrations(db: DatabaseType): void {
         list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
         service TEXT NOT NULL,
         service_id TEXT NOT NULL,
+        season_number INTEGER,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE(list_id, service)
       );
     `);
+  }
+
+  // Migration: add season_number to media_list_links (db_version 18)
+  if (hasTable('media_list_links') && !hasColumn('media_list_links', 'season_number')) {
+    db.exec('ALTER TABLE media_list_links ADD COLUMN season_number INTEGER');
+  }
+
+  // Migration: add signaling_servers table (db_version 19)
+  if (!hasTable('signaling_servers')) {
+    db.exec(`
+      CREATE TABLE signaling_servers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TRIGGER IF NOT EXISTS signaling_servers_updated_at
+        AFTER UPDATE ON signaling_servers FOR EACH ROW
+      BEGIN UPDATE signaling_servers SET updated_at = datetime('now') WHERE id = OLD.id; END;
+    `);
+  }
+
+  // Migrate existing signaling.partyUrl setting into signaling_servers table
+  if (hasTable('signaling_servers')) {
+    const existingUrl = db.prepare("SELECT value FROM settings WHERE key = 'signaling.partyUrl'").get() as { value: string } | undefined;
+    if (existingUrl && existingUrl.value) {
+      const existingName = db.prepare("SELECT value FROM settings WHERE key = 'signaling.deployName'").get() as { value: string } | undefined;
+      const name = existingName?.value || 'PartyKit Server';
+      db.exec(`
+        INSERT OR IGNORE INTO signaling_servers (id, name, url)
+        SELECT lower(hex(randomblob(16))), '${name.replace(/'/g, "''")}', '${existingUrl.value.replace(/'/g, "''")}'
+        WHERE NOT EXISTS (SELECT 1 FROM signaling_servers WHERE url = '${existingUrl.value.replace(/'/g, "''")}');
+      `);
+      db.exec("DELETE FROM settings WHERE key IN ('signaling.partyUrl', 'signaling.deployName')");
+    }
   }
 
   if (hasColumn('library_items', 'tmdb_id')) {
