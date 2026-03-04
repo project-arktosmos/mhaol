@@ -1,4 +1,4 @@
-use k256::ecdsa::{Signature, SigningKey};
+use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use serde::Serialize;
 use sha3::{Digest, Keccak256};
 
@@ -29,6 +29,40 @@ pub fn eip191_sign(message: &str, private_key_hex: &str) -> String {
     sig_bytes.push(recovery_id.to_byte() + 27);
 
     format!("0x{}", hex::encode(&sig_bytes))
+}
+
+/// Recover the Ethereum address from an EIP-191 signed message.
+/// Returns the lowercase 0x-prefixed address.
+pub fn eip191_recover(message: &str, signature_hex: &str) -> Result<String, String> {
+    let prefix = format!("\x19Ethereum Signed Message:\n{}", message.len());
+    let mut prefixed = Vec::new();
+    prefixed.extend_from_slice(prefix.as_bytes());
+    prefixed.extend_from_slice(message.as_bytes());
+    let hash = Keccak256::digest(&prefixed);
+
+    let sig_hex = signature_hex
+        .strip_prefix("0x")
+        .unwrap_or(signature_hex);
+    let sig_bytes = hex::decode(sig_hex).map_err(|e| format!("Invalid hex: {e}"))?;
+    if sig_bytes.len() != 65 {
+        return Err(format!("Signature must be 65 bytes, got {}", sig_bytes.len()));
+    }
+
+    let v = sig_bytes[64];
+    let recovery_byte = if v >= 27 { v - 27 } else { v };
+    let recid = k256::ecdsa::RecoveryId::try_from(recovery_byte)
+        .map_err(|e| format!("Invalid recovery id: {e}"))?;
+
+    let signature = Signature::from_bytes((&sig_bytes[..64]).into())
+        .map_err(|e| format!("Invalid signature: {e}"))?;
+
+    let verifying_key = VerifyingKey::recover_from_prehash(&hash, &signature, recid)
+        .map_err(|e| format!("Recovery failed: {e}"))?;
+
+    let encoded = verifying_key.to_encoded_point(false);
+    let pub_bytes = &encoded.as_bytes()[1..];
+    let addr_hash = Keccak256::digest(pub_bytes);
+    Ok(format!("0x{}", hex::encode(&addr_hash[12..])))
 }
 
 /// Sign a passport message using EIP-191 personal_sign.

@@ -45,9 +45,9 @@ async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
         false
     };
 
-    let dev_available = state.signaling_dev.is_available();
+    let dev_available = state.signaling_rooms.is_available();
     let dev_url = if dev_available {
-        state.signaling_dev.dev_url()
+        state.signaling_rooms.dev_url()
     } else {
         String::new()
     };

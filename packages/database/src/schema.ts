@@ -97,10 +97,42 @@ CREATE TABLE IF NOT EXISTS link_sources (
     UNIQUE(service, media_type_id, category_id)
 );
 
+CREATE TABLE IF NOT EXISTS media_lists (
+    id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    cover_image TEXT,
+    media_type TEXT NOT NULL REFERENCES media_types(id),
+    source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'user')),
+    source_path TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS media_lists_updated_at
+    AFTER UPDATE ON media_lists
+    FOR EACH ROW
+BEGIN
+    UPDATE media_lists SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
+
+CREATE TABLE IF NOT EXISTS media_list_items (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+    library_item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(list_id, library_item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
+CREATE INDEX IF NOT EXISTS idx_media_lists_source_path ON media_lists(source_path);
+
 `;
 
 const SEED_SQL = `
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '15', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '16', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -205,6 +237,37 @@ function runMigrations(db: DatabaseType): void {
         category_id TEXT REFERENCES categories(id),
         UNIQUE(service, media_type_id, category_id)
       );
+    `);
+  }
+
+  // Migration: add media_lists and media_list_items tables (db_version 16)
+  if (!hasTable('media_lists')) {
+    db.exec(`
+      CREATE TABLE media_lists (
+        id TEXT PRIMARY KEY,
+        library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        description TEXT,
+        cover_image TEXT,
+        media_type TEXT NOT NULL REFERENCES media_types(id),
+        source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'user')),
+        source_path TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TRIGGER IF NOT EXISTS media_lists_updated_at
+        AFTER UPDATE ON media_lists FOR EACH ROW
+      BEGIN UPDATE media_lists SET updated_at = datetime('now') WHERE id = OLD.id; END;
+      CREATE TABLE media_list_items (
+        id TEXT PRIMARY KEY,
+        list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+        library_item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(list_id, library_item_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
+      CREATE INDEX IF NOT EXISTS idx_media_lists_source_path ON media_lists(source_path);
     `);
   }
 

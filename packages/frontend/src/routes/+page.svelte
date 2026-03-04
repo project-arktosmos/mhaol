@@ -15,7 +15,9 @@
 	import MusicBrainzLinkModal from '$components/libraries/MusicBrainzLinkModal.svelte';
 	import YouTubeLinkModal from '$components/libraries/YouTubeLinkModal.svelte';
 	import MediaCard from '$components/media/MediaCard.svelte';
+	import MediaListCard from '$components/media/MediaListCard.svelte';
 	import MediaDetail from '$components/media/MediaDetail.svelte';
+	import type { MediaList } from '$types/media-list.type';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import LyricsPanel from '$components/player/LyricsPanel.svelte';
 	import type { LibraryFile } from '$types/library.type';
@@ -38,11 +40,13 @@
 			linkSources: MediaLinkSource[];
 			itemsByCategory: Record<string, MediaItem[]>;
 			itemsByType: Record<string, MediaItem[]>;
+			lists: MediaList[];
 		};
 	}
 
 	const ALL_CATEGORY = '__all__';
 	const ALL_TYPE = '__all_type__';
+	const LISTS_TYPE = '__lists__';
 	const EMPTY_TAGS: ImageTag[] = [];
 
 	let { data }: Props = $props();
@@ -51,6 +55,7 @@
 	let activeCategoryId = $state(ALL_CATEGORY);
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
+	let selectedList: MediaList | null = $state(null);
 
 	// Track link overrides so we can update without full page reload
 	let linkOverrides: Record<string, Record<string, MediaItemLink | null>> = $state({});
@@ -143,9 +148,12 @@
 	}
 
 	let isAllType = $derived(activeTypeId === ALL_TYPE);
+	let isListsType = $derived(activeTypeId === LISTS_TYPE);
 
 	let activeType = $derived(
-		activeTypeId === ALL_TYPE ? ALL_TYPE : activeTypeId || data.mediaTypes[0]?.id || ''
+		activeTypeId === ALL_TYPE || activeTypeId === LISTS_TYPE
+			? activeTypeId
+			: activeTypeId || data.mediaTypes[0]?.id || ''
 	);
 
 	let categoriesForType = $derived(
@@ -314,6 +322,7 @@
 	function selectType(id: string) {
 		activeTypeId = id;
 		activeCategoryId = ALL_CATEGORY;
+		selectedList = null;
 		closeMediaDetail();
 	}
 
@@ -586,6 +595,15 @@
 		>
 			All
 		</button>
+		<button
+			class={classNames('btn btn-sm', {
+				'btn-primary': isListsType,
+				'btn-ghost': !isListsType
+			})}
+			onclick={() => selectType(LISTS_TYPE)}
+		>
+			Lists
+		</button>
 		{#each data.mediaTypes as type}
 			<button
 				class={classNames('btn btn-sm', {
@@ -599,8 +617,8 @@
 		{/each}
 	</div>
 
-	<!-- Tier 2: All + Categories for selected type -->
-	{#if categoriesForType.length > 0}
+	<!-- Tier 2: All + Categories for selected type (hidden when Lists tab active) -->
+	{#if !isListsType && categoriesForType.length > 0}
 		<div class="mb-6 flex flex-wrap gap-2">
 			<button
 				class={classNames('btn btn-xs', {
@@ -625,27 +643,88 @@
 		</div>
 	{/if}
 
-	<!-- Items grid -->
-	{#if itemsWithOverrides.length > 0}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-			{#each itemsWithOverrides as item (item.id)}
-				<MediaCard
-					{item}
-					tmdbMetadata={tmdbMetadata[item.id] ?? null}
-					youtubeMetadata={youtubeMetadata[item.id] ?? null}
-					musicbrainzMetadata={musicbrainzMetadata[item.id] ?? null}
-					metadataLoading={metadataLoading.has(item.id)}
-					imageTags={imageTagsMap[item.id] ?? EMPTY_TAGS}
-					tagging={$taggerState.taggingItemIds.includes(item.id)}
-					selected={selectedItemId === item.id}
-					onselect={(i) => handleSelect(i)}
-				/>
-			{/each}
-		</div>
+	{#if isListsType}
+		<!-- Lists view -->
+		{#if selectedList}
+			<div class="mb-4 flex items-center gap-2">
+				<button
+					class="btn btn-ghost btn-sm"
+					onclick={() => {
+						selectedList = null;
+					}}
+				>
+					&larr; Back
+				</button>
+				<h2 class="text-xl font-semibold">{selectedList.title}</h2>
+			</div>
+			{#if selectedList.items.length > 0}
+				<div
+					class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+				>
+					{#each selectedList.items as item (item.id)}
+						<MediaCard
+							{item}
+							tmdbMetadata={tmdbMetadata[item.id] ?? null}
+							youtubeMetadata={youtubeMetadata[item.id] ?? null}
+							musicbrainzMetadata={musicbrainzMetadata[item.id] ?? null}
+							metadataLoading={metadataLoading.has(item.id)}
+							imageTags={imageTagsMap[item.id] ?? EMPTY_TAGS}
+							tagging={$taggerState.taggingItemIds.includes(item.id)}
+							selected={selectedItemId === item.id}
+							onselect={(i) => handleSelect(i)}
+						/>
+					{/each}
+				</div>
+			{:else}
+				<div class="rounded-lg bg-base-200 p-8 text-center">
+					<p class="opacity-50">No items in this list.</p>
+				</div>
+			{/if}
+		{:else if data.lists.length > 0}
+			<div
+				class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+			>
+				{#each data.lists as list (list.id)}
+					<MediaListCard
+						{list}
+						onselect={(l) => {
+							selectedList = l;
+						}}
+					/>
+				{/each}
+			</div>
+		{:else}
+			<div class="rounded-lg bg-base-200 p-8 text-center">
+				<p class="opacity-50">
+					No lists yet. Scan a library with directories containing multiple audio or video files.
+				</p>
+			</div>
+		{/if}
 	{:else}
-		<div class="rounded-lg bg-base-200 p-8 text-center">
-			<p class="opacity-50">No items in this category.</p>
-		</div>
+		<!-- Items grid -->
+		{#if itemsWithOverrides.length > 0}
+			<div
+				class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+			>
+				{#each itemsWithOverrides as item (item.id)}
+					<MediaCard
+						{item}
+						tmdbMetadata={tmdbMetadata[item.id] ?? null}
+						youtubeMetadata={youtubeMetadata[item.id] ?? null}
+						musicbrainzMetadata={musicbrainzMetadata[item.id] ?? null}
+						metadataLoading={metadataLoading.has(item.id)}
+						imageTags={imageTagsMap[item.id] ?? EMPTY_TAGS}
+						tagging={$taggerState.taggingItemIds.includes(item.id)}
+						selected={selectedItemId === item.id}
+						onselect={(i) => handleSelect(i)}
+					/>
+				{/each}
+			</div>
+		{:else}
+			<div class="rounded-lg bg-base-200 p-8 text-center">
+				<p class="opacity-50">No items in this category.</p>
+			</div>
+		{/if}
 	{/if}
 </div>
 

@@ -9,6 +9,8 @@ pub mod link_source;
 pub mod youtube_download;
 pub mod torrent_download;
 pub mod image_tag;
+pub mod media_list;
+pub mod media_list_item;
 
 pub use settings::SettingsRepo;
 pub use metadata::MetadataRepo;
@@ -21,3 +23,5 @@ pub use link_source::LinkSourceRepo;
 pub use youtube_download::YouTubeDownloadRepo;
 pub use torrent_download::TorrentDownloadRepo;
 pub use image_tag::ImageTagRepo;
+pub use media_list::MediaListRepo;
+pub use media_list_item::MediaListItemRepo;

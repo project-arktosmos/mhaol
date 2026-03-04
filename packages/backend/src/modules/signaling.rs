@@ -1,10 +1,10 @@
 use super::{Module, ModuleManifest, ProcessStatus};
-use crate::signaling_dev::SignalingDevServer;
+use crate::signaling_rooms::SignalingRoomManager;
 use crate::AppState;
 use std::sync::Arc;
 
 pub struct SignalingModule {
-    pub dev_server: Arc<SignalingDevServer>,
+    pub rooms: Arc<SignalingRoomManager>,
 }
 
 impl Module for SignalingModule {
@@ -23,19 +23,15 @@ impl Module for SignalingModule {
 
     fn processes(&self, _state: &AppState) -> Vec<ProcessStatus> {
         vec![ProcessStatus {
-            id: "signaling-dev".to_string(),
-            available: self.dev_server.is_available(),
-            port: 1999,
-            url: self.dev_server.dev_url(),
-            log_prefix: "[signaling-dev]".to_string(),
+            id: "signaling".to_string(),
+            available: self.rooms.is_available(),
+            port: self.rooms.port(),
+            url: self.rooms.dev_url(),
+            log_prefix: "[signaling]".to_string(),
         }]
     }
 
     fn initialize(&self, _state: &AppState) -> Result<(), String> {
-        let dev_server = Arc::clone(&self.dev_server);
-        tokio::runtime::Handle::current().spawn(async move {
-            dev_server.start().await;
-        });
         Ok(())
     }
 }
