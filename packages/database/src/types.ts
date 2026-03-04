@@ -118,3 +118,24 @@ export interface ImageTagRow {
   score: number;
   created_at: string;
 }
+
+export interface MediaListRow {
+  id: string;
+  library_id: string;
+  title: string;
+  description: string | null;
+  cover_image: string | null;
+  media_type: string;
+  source: 'auto' | 'user';
+  source_path: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MediaListItemRow {
+  id: string;
+  list_id: string;
+  library_item_id: string;
+  position: number;
+  created_at: string;
+}

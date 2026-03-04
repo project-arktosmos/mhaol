@@ -134,9 +134,9 @@ async fn create_session(
             .into_response();
     }
 
-    // Prefer local dev signaling server
-    let signaling_url = if state.signaling_dev.is_available() {
-        state.signaling_dev.dev_url()
+    // Prefer local signaling server
+    let signaling_url = if state.signaling_rooms.is_available() {
+        state.signaling_rooms.dev_url()
     } else {
         state.settings.get("signaling.partyUrl").unwrap_or_default()
     };

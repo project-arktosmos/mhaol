@@ -9,3 +9,5 @@ export { ImageTagRepository } from "./image-tag.repository.js";
 export { MediaTypeRepository } from "./media-type.repository.js";
 export { CategoryRepository } from "./category.repository.js";
 export { LinkSourceRepository } from "./link-source.repository.js";
+export { MediaListRepository } from "./media-list.repository.js";
+export { MediaListItemRepository } from "./media-list-item.repository.js";

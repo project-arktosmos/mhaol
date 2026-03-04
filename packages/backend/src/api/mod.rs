@@ -13,6 +13,7 @@ pub mod p2p_stream;
 pub mod player;
 pub mod plugins;
 pub mod signaling;
+pub mod signaling_ws;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
@@ -48,7 +49,8 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/lyrics", lyrics::router())
         .nest("/api/addons", addons::router())
         .nest("/api/signaling", signaling::router())
-        .nest("/api/images", images::router());
+        .nest("/api/images", images::router())
+        .merge(signaling_ws::signaling_routes());
 
     #[cfg(not(target_os = "android"))]
     let router = router

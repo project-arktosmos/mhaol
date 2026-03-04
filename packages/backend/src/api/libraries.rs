@@ -7,7 +7,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -290,6 +290,8 @@ async fn scan_library(
         state.library_items.sync_library(&id, &scanned_files);
     }
 
+    generate_auto_lists(&state, &id);
+
     // Spawn background task to pre-fetch YouTube oEmbed metadata
     {
         let db = state.db.clone();
@@ -551,4 +553,104 @@ fn scan_dir(
             }
         }
     }
+}
+
+/// After syncing library items, auto-generate media lists from directories
+/// containing 2+ files of the same media type.
+fn generate_auto_lists(state: &AppState, library_id: &str) {
+    let items = state.library_items.get_by_library(library_id);
+
+    // Group items by parent directory and media type
+    let mut dir_items: HashMap<String, Vec<&crate::db::repo::library_item::LibraryItemRow>> =
+        HashMap::new();
+    for item in &items {
+        if let Some(parent) = std::path::Path::new(&item.path).parent() {
+            let dir = parent.to_string_lossy().to_string();
+            dir_items.entry(dir).or_default().push(item);
+        }
+    }
+
+    let mut active_source_paths: HashSet<String> = HashSet::new();
+
+    for (dir_path, dir_files) in &dir_items {
+        let mut video_items: Vec<&crate::db::repo::library_item::LibraryItemRow> = Vec::new();
+        let mut audio_items: Vec<&crate::db::repo::library_item::LibraryItemRow> = Vec::new();
+
+        for item in dir_files {
+            match item.media_type.as_str() {
+                "video" => video_items.push(item),
+                "audio" => audio_items.push(item),
+                _ => {}
+            }
+        }
+
+        if video_items.len() >= 2 {
+            let source_key = format!("{}:video", dir_path);
+            active_source_paths.insert(source_key.clone());
+            upsert_auto_list(state, library_id, dir_path, "video", &source_key, &mut video_items);
+        }
+
+        if audio_items.len() >= 2 {
+            let source_key = format!("{}:audio", dir_path);
+            active_source_paths.insert(source_key.clone());
+            upsert_auto_list(state, library_id, dir_path, "audio", &source_key, &mut audio_items);
+        }
+    }
+
+    // Cleanup: remove auto lists whose source_path is no longer active
+    let existing_auto = state.media_lists.get_auto_by_library(library_id);
+    for list in existing_auto {
+        if let Some(ref sp) = list.source_path {
+            if !active_source_paths.contains(sp) {
+                state.media_list_items.delete_by_list(&list.id);
+                state.media_lists.delete(&list.id);
+            }
+        }
+    }
+}
+
+fn upsert_auto_list(
+    state: &AppState,
+    library_id: &str,
+    dir_path: &str,
+    media_type: &str,
+    source_path: &str,
+    items: &mut [&crate::db::repo::library_item::LibraryItemRow],
+) {
+    let list_id = match state.media_lists.get_by_source_path(source_path) {
+        Some(existing) => existing.id,
+        None => {
+            let id = uuid::Uuid::new_v4().to_string();
+            let title = std::path::Path::new(dir_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Untitled")
+                .to_string();
+            state.media_lists.insert(
+                &id,
+                library_id,
+                &title,
+                None,
+                None,
+                media_type,
+                "auto",
+                Some(source_path),
+            );
+            id
+        }
+    };
+
+    items.sort_by(|a, b| a.path.cmp(&b.path));
+    let list_items: Vec<(String, String, i64)> = items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            (
+                uuid::Uuid::new_v4().to_string(),
+                item.id.clone(),
+                i as i64,
+            )
+        })
+        .collect();
+    state.media_list_items.sync_list(&list_id, &list_items);
 }

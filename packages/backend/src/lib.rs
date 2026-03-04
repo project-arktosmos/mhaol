@@ -2,7 +2,7 @@ pub mod api;
 pub mod db;
 pub mod identity;
 pub mod modules;
-pub mod signaling_dev;
+pub mod signaling_rooms;
 pub mod worker_bridge;
 
 use db::repo::*;
@@ -16,7 +16,7 @@ use mhaol_yt_dlp::DownloadManager;
 use modules::image_tagger::ImageTaggerManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
-use signaling_dev::SignalingDevServer;
+use signaling_rooms::SignalingRoomManager;
 use worker_bridge::WorkerBridge;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -69,6 +69,8 @@ pub struct AppState {
     pub youtube_downloads: YouTubeDownloadRepo,
     pub torrent_downloads: TorrentDownloadRepo,
     pub image_tags: ImageTagRepo,
+    pub media_lists: MediaListRepo,
+    pub media_list_items: MediaListItemRepo,
     pub identity_manager: IdentityManager,
     pub module_registry: Arc<RwLock<ModuleRegistry>>,
     #[cfg(not(target_os = "android"))]
@@ -77,7 +79,7 @@ pub struct AppState {
     pub torrent_manager: Arc<TorrentManager>,
     #[cfg(not(target_os = "android"))]
     pub image_tagger_manager: Arc<ImageTaggerManager>,
-    pub signaling_dev: Arc<SignalingDevServer>,
+    pub signaling_rooms: Arc<SignalingRoomManager>,
     pub worker_bridge: Arc<WorkerBridge>,
 }
 
@@ -99,6 +101,8 @@ impl AppState {
             youtube_downloads: YouTubeDownloadRepo::new(Arc::clone(&db)),
             torrent_downloads: TorrentDownloadRepo::new(Arc::clone(&db)),
             image_tags: ImageTagRepo::new(Arc::clone(&db)),
+            media_lists: MediaListRepo::new(Arc::clone(&db)),
+            media_list_items: MediaListItemRepo::new(Arc::clone(&db)),
             identity_manager: IdentityManager::new(identities_path),
             module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
             #[cfg(not(target_os = "android"))]
@@ -110,7 +114,7 @@ impl AppState {
             torrent_manager: Arc::new(TorrentManager::new()),
             #[cfg(not(target_os = "android"))]
             image_tagger_manager: Arc::new(ImageTaggerManager::new()),
-            signaling_dev: Arc::new(SignalingDevServer::new()),
+            signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
             db,
         })
@@ -141,7 +145,7 @@ impl AppState {
 
         // Signaling modules
         registry.register(Box::new(SignalingModule {
-            dev_server: Arc::clone(&self.signaling_dev),
+            rooms: Arc::clone(&self.signaling_rooms),
         }));
         registry.register(Box::new(SignalingDeployModule));
 

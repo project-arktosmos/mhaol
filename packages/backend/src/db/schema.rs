@@ -147,10 +147,42 @@ CREATE TABLE IF NOT EXISTS image_tags (
 
 CREATE INDEX IF NOT EXISTS idx_image_tags_library_item_id ON image_tags(library_item_id);
 CREATE INDEX IF NOT EXISTS idx_image_tags_tag ON image_tags(tag);
+
+CREATE TABLE IF NOT EXISTS media_lists (
+    id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    cover_image TEXT,
+    media_type TEXT NOT NULL REFERENCES media_types(id),
+    source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'user')),
+    source_path TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS media_lists_updated_at
+    AFTER UPDATE ON media_lists
+    FOR EACH ROW
+BEGIN
+    UPDATE media_lists SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
+
+CREATE TABLE IF NOT EXISTS media_list_items (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+    library_item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(list_id, library_item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
+CREATE INDEX IF NOT EXISTS idx_media_lists_source_path ON media_lists(source_path);
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '15', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '16', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -340,6 +372,37 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: add media_lists and media_list_items tables (db_version 16)
+    if !has_table(conn, "media_lists") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE media_lists (
+                id TEXT PRIMARY KEY,
+                library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                description TEXT,
+                cover_image TEXT,
+                media_type TEXT NOT NULL REFERENCES media_types(id),
+                source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'user')),
+                source_path TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TRIGGER IF NOT EXISTS media_lists_updated_at
+                AFTER UPDATE ON media_lists FOR EACH ROW
+            BEGIN UPDATE media_lists SET updated_at = datetime('now') WHERE id = OLD.id; END;
+            CREATE TABLE media_list_items (
+                id TEXT PRIMARY KEY,
+                list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+                library_item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(list_id, library_item_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
+            CREATE INDEX IF NOT EXISTS idx_media_lists_source_path ON media_lists(source_path);",
+        );
+    }
+
     // Migration: migrate legacy columns to library_item_links (db_version 14 data)
     if has_table(conn, "library_items") && has_column(conn, "library_items", "tmdb_id") {
         let _ = conn.execute_batch(
@@ -421,6 +484,8 @@ mod tests {
         assert!(has_table(&conn, "youtube_downloads"));
         assert!(has_table(&conn, "torrent_downloads"));
         assert!(has_table(&conn, "image_tags"));
+        assert!(has_table(&conn, "media_lists"));
+        assert!(has_table(&conn, "media_list_items"));
 
         // Verify seed data
         let count: i64 = conn
