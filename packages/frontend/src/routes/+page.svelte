@@ -62,6 +62,45 @@
 	let linkModalList: MediaList | null = $state(null);
 	let linkModalListService: string | null = $state(null);
 	let selectedList: MediaList | null = $state(null);
+	let selectedShowGroup: { tmdbId: string; lists: MediaList[] } | null = $state(null);
+
+	type ListGridEntry =
+		| { type: 'single'; list: MediaList }
+		| { type: 'show-group'; tmdbId: string; lists: MediaList[] };
+
+	let listGridEntries: ListGridEntry[] = $derived.by(() => {
+		const tmdbGroups: Record<string, MediaList[]> = {};
+		const ungrouped: MediaList[] = [];
+
+		for (const list of data.lists) {
+			const links = getListLinks(list);
+			const tmdbId = links.tmdb?.serviceId;
+			if (tmdbId) {
+				if (!tmdbGroups[tmdbId]) tmdbGroups[tmdbId] = [];
+				tmdbGroups[tmdbId].push(list);
+			} else {
+				ungrouped.push(list);
+			}
+		}
+
+		const entries: ListGridEntry[] = [];
+		for (const [tmdbId, lists] of Object.entries(tmdbGroups)) {
+			if (lists.length >= 2) {
+				const sorted = [...lists].sort((a, b) => {
+					const sa = getListLinks(a).tmdb?.seasonNumber ?? 999;
+					const sb = getListLinks(b).tmdb?.seasonNumber ?? 999;
+					return sa - sb;
+				});
+				entries.push({ type: 'show-group', tmdbId, lists: sorted });
+			} else {
+				entries.push({ type: 'single', list: lists[0] });
+			}
+		}
+		for (const list of ungrouped) {
+			entries.push({ type: 'single', list });
+		}
+		return entries;
+	});
 
 	// Track link overrides so we can update without full page reload
 	let linkOverrides: Record<string, Record<string, MediaItemLink | null>> = $state({});
@@ -69,7 +108,7 @@
 	// Track list link overrides
 	let listLinkOverrides: Record<string, Record<string, MediaListLink | null>> = $state({});
 
-	// List-level TMDB metadata state
+	// List-level TMDB metadata state (keyed by tmdbId)
 	let listTmdbMetadata: Record<string, DisplayTMDBTvShowDetails> = $state({});
 	let listTmdbLoading: Set<string> = $state(new Set());
 
@@ -341,6 +380,7 @@
 		activeTypeId = id;
 		activeCategoryId = ALL_CATEGORY;
 		selectedList = null;
+		selectedShowGroup = null;
 		closeMediaDetail();
 	}
 
@@ -517,15 +557,16 @@
 			body: JSON.stringify({ tmdbId })
 		});
 		if (res.ok) {
+			const tmdbIdStr = String(tmdbId);
 			listLinkOverrides = {
 				...listLinkOverrides,
 				[list.id]: {
 					...listLinkOverrides[list.id],
-					tmdb: { serviceId: String(tmdbId), seasonNumber: null }
+					tmdb: { serviceId: tmdbIdStr, seasonNumber: null }
 				}
 			};
-			// Clear old metadata so it gets re-fetched
-			const { [list.id]: _, ...restTmdb } = listTmdbMetadata;
+			// Clear metadata for this tmdbId so it gets re-fetched
+			const { [tmdbIdStr]: _, ...restTmdb } = listTmdbMetadata;
 			listTmdbMetadata = restTmdb;
 		}
 		linkModalList = null;
@@ -556,6 +597,7 @@
 	}
 
 	async function handleListUnlink(list: MediaList, service: string) {
+		const links = getListLinks(list);
 		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/${service}`), {
 			method: 'DELETE'
 		});
@@ -564,14 +606,11 @@
 				...listLinkOverrides,
 				[list.id]: { ...listLinkOverrides[list.id], [service]: null }
 			};
-			if (service === 'tmdb') {
-				const { [list.id]: _, ...rest } = listTmdbMetadata;
-				listTmdbMetadata = rest;
-			}
 			if (service === 'musicbrainz') {
 				const { [list.id]: _, ...rest } = listMbMetadata;
 				listMbMetadata = rest;
 			}
+			// TMDB metadata keyed by tmdbId — don't remove since other lists may share it
 		}
 	}
 
@@ -595,20 +634,20 @@
 		}
 	}
 
-	async function fetchListTmdbMetadata(listId: string, tmdbId: string) {
-		if (listTmdbMetadata[listId] || listTmdbLoading.has(listId)) return;
-		listTmdbLoading = new Set([...listTmdbLoading, listId]);
+	async function fetchListTmdbMetadata(tmdbId: string) {
+		if (listTmdbMetadata[tmdbId] || listTmdbLoading.has(tmdbId)) return;
+		listTmdbLoading = new Set([...listTmdbLoading, tmdbId]);
 		try {
 			const res = await fetch(apiUrl(`/api/tmdb/tv/${tmdbId}`));
 			if (res.ok) {
 				const raw = await res.json();
-				listTmdbMetadata = { ...listTmdbMetadata, [listId]: tvShowDetailsToDisplay(raw) };
+				listTmdbMetadata = { ...listTmdbMetadata, [tmdbId]: tvShowDetailsToDisplay(raw) };
 			}
 		} catch (e) {
 			console.error('Failed to load list TMDB metadata:', e);
 		} finally {
 			const next = new Set(listTmdbLoading);
-			next.delete(listId);
+			next.delete(tmdbId);
 			listTmdbLoading = next;
 		}
 	}
@@ -745,7 +784,7 @@
 		for (const list of data.lists) {
 			const links = getListLinks(list);
 			if (links.tmdb) {
-				fetchListTmdbMetadata(list.id, links.tmdb.serviceId);
+				fetchListTmdbMetadata(links.tmdb.serviceId);
 			}
 			if (links.musicbrainz) {
 				fetchListMbMetadata(list.id, links.musicbrainz.serviceId);
@@ -832,7 +871,9 @@
 		<!-- Lists view -->
 		{#if selectedList}
 			{@const currentListLinks = getListLinks(selectedList)}
-			{@const listTmdb = listTmdbMetadata[selectedList.id] ?? null}
+			{@const listTmdb = currentListLinks.tmdb
+				? (listTmdbMetadata[currentListLinks.tmdb.serviceId] ?? null)
+				: null}
 			{@const listMb = listMbMetadata[selectedList.id] ?? null}
 			{@const selectedSeason = currentListLinks.tmdb?.seasonNumber ?? null}
 			{@const seasonMeta =
@@ -981,19 +1022,113 @@
 					<p class="opacity-50">No items in this list.</p>
 				</div>
 			{/if}
-		{:else if data.lists.length > 0}
+		{:else if selectedShowGroup}
+			{@const tmdbMeta = listTmdbMetadata[selectedShowGroup.tmdbId] ?? null}
+			<div class="mb-4 flex items-center gap-2">
+				<button
+					class="btn btn-ghost btn-sm"
+					onclick={() => {
+						selectedShowGroup = null;
+					}}
+				>
+					&larr; Back
+				</button>
+				<h2 class="text-xl font-semibold">{tmdbMeta?.name ?? 'TV Show'}</h2>
+			</div>
+			{#if tmdbMeta}
+				<div class="mb-6 flex gap-4 rounded-lg bg-base-200 p-4">
+					{#if tmdbMeta.posterUrl}
+						<img
+							src={tmdbMeta.posterUrl}
+							alt={tmdbMeta.name}
+							class="h-40 w-auto rounded-lg object-cover"
+						/>
+					{/if}
+					<div class="flex flex-1 flex-col gap-1">
+						<h3 class="text-lg font-semibold">{tmdbMeta.name}</h3>
+						<p class="text-xs opacity-50">
+							{tmdbMeta.firstAirYear}{tmdbMeta.lastAirYear ? `–${tmdbMeta.lastAirYear}` : ''}
+						</p>
+						<p class="line-clamp-3 text-sm opacity-70">{tmdbMeta.overview}</p>
+					</div>
+				</div>
+			{/if}
+			{#each selectedShowGroup.lists as list (list.id)}
+				{@const links = getListLinks(list)}
+				{@const seasonNum = links.tmdb?.seasonNumber}
+				{@const seasonMeta =
+					tmdbMeta && seasonNum != null
+						? (tmdbMeta.seasons.find((s) => s.seasonNumber === seasonNum) ?? null)
+						: null}
+				<div class="mb-6">
+					<div class="mb-3 flex items-center gap-3">
+						{#if seasonMeta?.posterUrl}
+							<img
+								src={seasonMeta.posterUrl}
+								alt={seasonMeta.name}
+								class="h-16 w-auto rounded object-cover"
+							/>
+						{/if}
+						<div>
+							<h3 class="text-base font-semibold">
+								{seasonMeta?.name ?? list.title}
+							</h3>
+							{#if seasonMeta?.episodeCount}
+								<p class="text-xs opacity-50">{seasonMeta.episodeCount} episodes</p>
+							{/if}
+						</div>
+					</div>
+					{#if list.items.length > 0}
+						<div
+							class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+						>
+							{#each list.items as item (item.id)}
+								<MediaCard
+									{item}
+									tmdbMetadata={tmdbMetadata[item.id] ?? null}
+									youtubeMetadata={youtubeMetadata[item.id] ?? null}
+									musicbrainzMetadata={musicbrainzMetadata[item.id] ?? null}
+									metadataLoading={metadataLoading.has(item.id)}
+									imageTags={imageTagsMap[item.id] ?? EMPTY_TAGS}
+									tagging={$taggerState.taggingItemIds.includes(item.id)}
+									selected={selectedItemId === item.id}
+									onselect={(i) => handleSelect(i)}
+								/>
+							{/each}
+						</div>
+					{:else}
+						<p class="text-sm opacity-50">No items in this season.</p>
+					{/if}
+				</div>
+			{/each}
+		{:else if listGridEntries.length > 0}
 			<div
 				class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 			>
-				{#each data.lists as list (list.id)}
-					<MediaListCard
-						{list}
-						tmdbMetadata={listTmdbMetadata[list.id] ?? null}
-						mbMetadata={listMbMetadata[list.id] ?? null}
-						onselect={(l) => {
-							selectedList = l;
-						}}
-					/>
+				{#each listGridEntries as entry}
+					{#if entry.type === 'single'}
+						{@const list = entry.list}
+						{@const links = getListLinks(list)}
+						<MediaListCard
+							{list}
+							tmdbMetadata={links.tmdb ? (listTmdbMetadata[links.tmdb.serviceId] ?? null) : null}
+							mbMetadata={listMbMetadata[list.id] ?? null}
+							onselect={(l) => {
+								selectedList = l;
+							}}
+						/>
+					{:else}
+						{@const tmdbMeta = listTmdbMetadata[entry.tmdbId] ?? null}
+						{@const representative = entry.lists[0]}
+						<MediaListCard
+							list={representative}
+							tmdbMetadata={tmdbMeta}
+							seasonCount={entry.lists.length}
+							onselect={() => {
+								selectedShowGroup = { tmdbId: entry.tmdbId, lists: entry.lists };
+							}}
+						/>
+					{/if}
 				{/each}
 			</div>
 		{:else}
