@@ -142,8 +142,6 @@
 	let remoteAvailable = $derived(signalingStatus?.deployedAvailable ?? false);
 	let remoteUrl = $derived(signalingStatus?.partyUrl ?? '');
 
-	let remoteExpanded = $state(false);
-
 	let serverAvailable = $derived(localAvailable || remoteAvailable);
 
 	const widthClasses: Record<SidebarWidthMode, string> = {
@@ -308,119 +306,109 @@
 
 			<!-- REMOTE SERVER (collapsible, secondary) -->
 			<div class="mt-3 border-t border-base-300/50 pt-2">
-				<button
-					class="flex w-full items-center justify-between text-xs font-semibold text-base-content/60"
-					onclick={() => (remoteExpanded = !remoteExpanded)}
-				>
-					<span class="flex items-center gap-2">
-						Remote
-						{#if remoteUrl}
-							<span
-								class={classNames('h-1.5 w-1.5 rounded-full', {
-									'bg-success': remoteAvailable,
-									'bg-error': !remoteAvailable
-								})}
-							></span>
-						{/if}
-					</span>
-					<span class={classNames('transition-transform', { 'rotate-180': remoteExpanded })}>
-						&#9662;
-					</span>
-				</button>
+				<span class="flex items-center gap-2 text-xs font-semibold text-base-content/60">
+					Remote
+					{#if remoteUrl}
+						<span
+							class={classNames('h-1.5 w-1.5 rounded-full', {
+								'bg-success': remoteAvailable,
+								'bg-error': !remoteAvailable
+							})}
+						></span>
+					{/if}
+				</span>
 
-				{#if remoteExpanded}
-					<div class="mt-2 flex flex-col gap-2">
-						{#if remoteUrl}
-							<span class="truncate font-mono text-xs text-base-content/60" title={remoteUrl}>
-								{remoteUrl}
-							</span>
-						{:else}
-							<span class="text-xs text-base-content/40">Not configured</span>
-						{/if}
+				<div class="mt-2 flex flex-col gap-2">
+					{#if remoteUrl}
+						<span class="truncate font-mono text-xs text-base-content/60" title={remoteUrl}>
+							{remoteUrl}
+						</span>
+					{:else}
+						<span class="text-xs text-base-content/40">Not configured</span>
+					{/if}
 
-						{#if editingPartyUrl}
-							<div class="flex flex-col gap-1">
-								<input
-									type="text"
-									class="input-bordered input input-xs w-full font-mono"
-									placeholder="https://your-server.partykit.dev"
-									bind:value={editValue}
-									onkeydown={(e) => {
-										if (e.key === 'Enter') savePartyUrl();
-										if (e.key === 'Escape') {
-											editingPartyUrl = false;
-											editValue = '';
-										}
-									}}
-								/>
-								<div class="flex gap-1">
-									<button
-										class="btn flex-1 btn-xs btn-success"
-										disabled={savingUrl}
-										onclick={savePartyUrl}
-									>
-										{#if savingUrl}<span class="loading loading-xs loading-spinner"
-											></span>{:else}Save{/if}
-									</button>
-									<button
-										class="btn btn-ghost btn-xs"
-										onclick={() => {
-											editingPartyUrl = false;
-											editValue = '';
-										}}
-									>
-										Cancel
-									</button>
-								</div>
-							</div>
-						{:else}
+					{#if editingPartyUrl}
+						<div class="flex flex-col gap-1">
+							<input
+								type="text"
+								class="input-bordered input input-xs w-full font-mono"
+								placeholder="https://your-server.partykit.dev"
+								bind:value={editValue}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') savePartyUrl();
+									if (e.key === 'Escape') {
+										editingPartyUrl = false;
+										editValue = '';
+									}
+								}}
+							/>
 							<div class="flex gap-1">
 								<button
-									class="btn flex-1 btn-xs btn-primary"
-									disabled={deploying}
-									onclick={deploySignaling}
+									class="btn flex-1 btn-xs btn-success"
+									disabled={savingUrl}
+									onclick={savePartyUrl}
 								>
-									{#if deploying}
-										<span class="loading loading-xs loading-spinner"></span>
-										Deploying...
-									{:else}
-										Deploy
-									{/if}
+									{#if savingUrl}<span class="loading loading-xs loading-spinner"
+										></span>{:else}Save{/if}
 								</button>
 								<button
 									class="btn btn-ghost btn-xs"
 									onclick={() => {
-										editingPartyUrl = true;
-										editValue = signalingStatus?.partyUrl ?? '';
+										editingPartyUrl = false;
+										editValue = '';
 									}}
 								>
-									Set URL
+									Cancel
 								</button>
 							</div>
-						{/if}
-
-						{#if deployLogs.length > 0 || deployError}
-							<div class="max-h-32 overflow-y-auto rounded bg-base-300 p-2 font-mono text-xs">
-								{#each deployLogs as line}
-									<div class="whitespace-pre-wrap">{line}</div>
-								{/each}
-								{#if deployError}
-									<div class="text-error">{deployError}</div>
-								{/if}
-							</div>
-						{/if}
-						{#if deployResult}
-							<span
-								class={classNames('badge badge-sm', {
-									'badge-success': deployResult.success,
-									'badge-error': !deployResult.success
-								})}
+						</div>
+					{:else}
+						<div class="flex gap-1">
+							<button
+								class="btn flex-1 btn-xs btn-primary"
+								disabled={deploying}
+								onclick={deploySignaling}
 							>
-								{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
-							</span>
-						{/if}
-					</div>
-				{/if}
+								{#if deploying}
+									<span class="loading loading-xs loading-spinner"></span>
+									Deploying...
+								{:else}
+									Deploy
+								{/if}
+							</button>
+							<button
+								class="btn btn-ghost btn-xs"
+								onclick={() => {
+									editingPartyUrl = true;
+									editValue = signalingStatus?.partyUrl ?? '';
+								}}
+							>
+								Set URL
+							</button>
+						</div>
+					{/if}
+
+					{#if deployLogs.length > 0 || deployError}
+						<div class="max-h-32 overflow-y-auto rounded bg-base-300 p-2 font-mono text-xs">
+							{#each deployLogs as line}
+								<div class="whitespace-pre-wrap">{line}</div>
+							{/each}
+							{#if deployError}
+								<div class="text-error">{deployError}</div>
+							{/if}
+						</div>
+					{/if}
+					{#if deployResult}
+						<span
+							class={classNames('badge badge-sm', {
+								'badge-success': deployResult.success,
+								'badge-error': !deployResult.success
+							})}
+						>
+							{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
+						</span>
+					{/if}
+				</div>
 			</div>
 		{/if}
 	</div>
