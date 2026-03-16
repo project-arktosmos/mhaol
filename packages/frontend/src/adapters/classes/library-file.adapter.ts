@@ -36,7 +36,6 @@ export class LibraryFileAdapter extends AdapterClass {
 		const map: Record<string, string> = {
 			tv: 'badge-info',
 			movies: 'badge-warning',
-			youtube: 'badge-error',
 			uncategorized: 'badge-ghost'
 		};
 		return map[categoryId] ?? 'badge-ghost';
@@ -46,7 +45,6 @@ export class LibraryFileAdapter extends AdapterClass {
 		const map: Record<string, string> = {
 			tv: 'TV',
 			movies: 'Movies',
-			youtube: 'YouTube',
 			uncategorized: 'Uncategorized'
 		};
 		return map[categoryId] ?? categoryId;

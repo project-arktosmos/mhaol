@@ -22,14 +22,7 @@ pub fn router() -> Router<AppState> {
             "/{id}/items/{item_id}/tmdb",
             put(link_tmdb).delete(unlink_tmdb),
         )
-        .route(
-            "/{id}/items/{item_id}/youtube",
-            put(link_youtube).delete(unlink_youtube),
-        )
-        .route(
-            "/{id}/items/{item_id}/musicbrainz",
-            put(link_musicbrainz).delete(unlink_musicbrainz),
-        )
+
         .route("/{id}/files", get(get_library_files))
         .route("/{id}/scan", get(scan_library).post(scan_library))
         .route("/browse", get(browse_directory))
@@ -292,33 +285,6 @@ async fn scan_library(
 
     generate_auto_lists(&state, &id);
 
-    // Spawn background task to pre-fetch YouTube oEmbed metadata
-    {
-        let db = state.db.clone();
-        let items = state.library_items.get_by_library(&id);
-        let links_repo = state.library_item_links.clone();
-        tokio::spawn(async move {
-            let mut video_ids: Vec<String> = Vec::new();
-            for item in &items {
-                if let Some(link) = links_repo.get_by_item_and_service(&item.id, "youtube") {
-                    if link.service_id.len() == 11 && !video_ids.contains(&link.service_id) {
-                        video_ids.push(link.service_id);
-                    }
-                }
-            }
-            if !video_ids.is_empty() {
-                tracing::info!(
-                    "Pre-fetching YouTube metadata for {} video(s)",
-                    video_ids.len()
-                );
-                for vid in &video_ids {
-                    if super::youtube::fetch_and_cache_oembed(&db, vid).await.is_none() {
-                        tracing::warn!("Failed to pre-fetch YouTube metadata for {}", vid);
-                    }
-                }
-            }
-        });
-    }
 
     let files = map_library_files(&state, &id);
     Json(LibraryFilesResponse {
@@ -425,67 +391,6 @@ async fn unlink_tmdb(
     Json(serde_json::json!({ "ok": true })).into_response()
 }
 
-#[derive(Deserialize)]
-struct LinkYoutubeBody {
-    #[serde(rename = "youtubeId")]
-    youtube_id: String,
-}
-
-async fn link_youtube(
-    State(state): State<AppState>,
-    Path((lib_id, item_id)): Path<(String, String)>,
-    Json(body): Json<LinkYoutubeBody>,
-) -> impl IntoResponse {
-    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
-    let yt_id = body.youtube_id.trim();
-    if yt_id.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "youtubeId must be a non-empty string" }))).into_response();
-    }
-    state.library_item_links.upsert(
-        &uuid::Uuid::new_v4().to_string(), &item_id, "youtube", yt_id, None, None,
-    );
-    Json(serde_json::json!({ "ok": true })).into_response()
-}
-
-async fn unlink_youtube(
-    State(state): State<AppState>,
-    Path((lib_id, item_id)): Path<(String, String)>,
-) -> impl IntoResponse {
-    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
-    state.library_item_links.delete(&item_id, "youtube");
-    Json(serde_json::json!({ "ok": true })).into_response()
-}
-
-#[derive(Deserialize)]
-struct LinkMusicbrainzBody {
-    #[serde(rename = "musicbrainzId")]
-    musicbrainz_id: String,
-}
-
-async fn link_musicbrainz(
-    State(state): State<AppState>,
-    Path((lib_id, item_id)): Path<(String, String)>,
-    Json(body): Json<LinkMusicbrainzBody>,
-) -> impl IntoResponse {
-    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
-    let mb_id = body.musicbrainz_id.trim();
-    if mb_id.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "musicbrainzId must be a non-empty string" }))).into_response();
-    }
-    state.library_item_links.upsert(
-        &uuid::Uuid::new_v4().to_string(), &item_id, "musicbrainz", mb_id, None, None,
-    );
-    Json(serde_json::json!({ "ok": true })).into_response()
-}
-
-async fn unlink_musicbrainz(
-    State(state): State<AppState>,
-    Path((lib_id, item_id)): Path<(String, String)>,
-) -> impl IntoResponse {
-    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
-    state.library_item_links.delete(&item_id, "musicbrainz");
-    Json(serde_json::json!({ "ok": true })).into_response()
-}
 
 // --- Scan helpers (ported from packages/tauri/src-tauri/src/commands/db.rs) ---
 

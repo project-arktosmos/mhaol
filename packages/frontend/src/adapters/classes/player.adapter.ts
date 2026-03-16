@@ -50,8 +50,6 @@ export class PlayerAdapter extends AdapterClass {
 
 	getSourceBadgeClass(type: PlayableFile['type']): string {
 		switch (type) {
-			case 'youtube':
-				return 'badge-secondary';
 			case 'torrent':
 				return 'badge-accent';
 			case 'library':

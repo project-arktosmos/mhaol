@@ -34,22 +34,6 @@
 		libraryService.unlinkTmdb(library.id as string, file.id);
 	}
 
-	function handleYoutubeLink(library: Library, file: LibraryFile, youtubeId: string) {
-		libraryService.linkYoutube(library.id as string, file.id, youtubeId);
-	}
-
-	function handleYoutubeUnlink(library: Library, file: LibraryFile) {
-		libraryService.unlinkYoutube(library.id as string, file.id);
-	}
-
-	function handleMusicBrainzLink(library: Library, file: LibraryFile, musicbrainzId: string) {
-		libraryService.linkMusicBrainz(library.id as string, file.id, musicbrainzId);
-	}
-
-	function handleMusicBrainzUnlink(library: Library, file: LibraryFile) {
-		libraryService.unlinkMusicBrainz(library.id as string, file.id);
-	}
-
 	async function handleEditType(
 		library: Library,
 		file: LibraryFile,
@@ -111,10 +95,6 @@
 						onlink={(file, tmdbId, season, episode, type) =>
 							handleLink(library, file, tmdbId, season, episode, type)}
 						onunlink={(file) => handleUnlink(library, file)}
-						onyoutubelink={(file, ytId) => handleYoutubeLink(library, file, ytId)}
-						onyoutubeunlink={(file) => handleYoutubeUnlink(library, file)}
-						onmusicbrainzlink={(file, mbId) => handleMusicBrainzLink(library, file, mbId)}
-						onmusicbrainzunlink={(file) => handleMusicBrainzUnlink(library, file)}
 						onedittype={(file, mediaType, categoryId) =>
 							handleEditType(library, file, mediaType, categoryId)}
 					/>

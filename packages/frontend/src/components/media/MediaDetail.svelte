@@ -1,11 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
-	import { getThumbnailUrl } from 'youtube/embed';
-	import TagPill from '$components/images/TagPill.svelte';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
-	import { apiUrl } from '$lib/api-base';
-	import { lyricsService } from '$services/lyrics.service';
 	import { playerService } from '$services/player.service';
 	import type { MediaDetailSelection } from '$types/media-detail.type';
 	import type { MediaType } from '$types/library.type';
@@ -19,67 +15,28 @@
 
 	let { selection, onclose }: Props = $props();
 
-	const lyricsState = lyricsService.store;
-	let lastFetchedItemId: string | null = $state(null);
-
-	$effect(() => {
-		const isLinked = selection.cardType === 'audio' && !!selection.item.links.musicbrainz;
-		if (isLinked && selection.item.id !== lastFetchedItemId) {
-			lastFetchedItemId = selection.item.id;
-			lyricsService.fetchForItemId(selection.item.id);
-		} else if (!isLinked && lastFetchedItemId) {
-			lastFetchedItemId = null;
-			lyricsService.clear();
-		}
-	});
-
 	let imageUrl = $derived.by(() => {
-		const { cardType, item, tmdbMetadata, musicbrainzMetadata } = selection;
+		const { cardType, tmdbMetadata } = selection;
 		if (cardType === 'movie' || cardType === 'tv') {
 			return (
 				(tmdbMetadata as DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails | null)?.posterUrl ??
 				null
 			);
 		}
-		if (cardType === 'youtube') {
-			const videoId = item.links.youtube?.serviceId ?? '';
-			return videoId ? getThumbnailUrl(videoId) : null;
-		}
-		if (cardType === 'audio') {
-			return musicbrainzMetadata?.coverArtUrl ?? null;
-		}
-		if (cardType === 'image') {
-			return apiUrl(`/api/images/serve?path=${encodeURIComponent(item.path)}`);
-		}
 		return null;
 	});
 
 	let imageAlt = $derived.by(() => {
-		const { cardType, tmdbMetadata, youtubeMetadata, musicbrainzMetadata, item } = selection;
+		const { cardType, tmdbMetadata, item } = selection;
 		if (cardType === 'movie')
 			return (tmdbMetadata as DisplayTMDBMovieDetails | null)?.title ?? item.name;
 		if (cardType === 'tv')
 			return (tmdbMetadata as DisplayTMDBTvShowDetails | null)?.name ?? item.name;
-		if (cardType === 'youtube') return youtubeMetadata?.title ?? item.name;
-		if (cardType === 'audio') return musicbrainzMetadata?.title ?? item.name;
 		return item.name;
 	});
 
-	let isLinkedAudio = $derived(
-		selection.cardType === 'audio' && !!selection.item.links.musicbrainz
-	);
-
 	const playerState = playerService.state;
 	let isPlaying = $derived($playerState.currentFile?.id === selection.item.id);
-
-	let newTagInput = $state('');
-
-	function handleAddTag() {
-		const tag = newTagInput.trim().toLowerCase();
-		if (!tag) return;
-		selection.onaddtag?.(selection.item, tag);
-		newTagInput = '';
-	}
 </script>
 
 <div class="flex flex-col gap-3">
@@ -267,118 +224,12 @@
 				<p class="text-xs opacity-60">{metadata.overview}</p>
 			{/if}
 		{/if}
-	{:else if selection.cardType === 'youtube'}
-		{#if selection.youtubeMetadata}
-			<p class="text-xs font-semibold">{selection.youtubeMetadata.title}</p>
-			<p class="text-xs opacity-60">{selection.youtubeMetadata.author_name}</p>
-		{/if}
-	{:else if selection.cardType === 'audio'}
-		{#if selection.musicbrainzMetadata}
-			<p class="text-xs font-medium">{selection.musicbrainzMetadata.title}</p>
-			<p class="text-xs opacity-60">{selection.musicbrainzMetadata.artistCredits}</p>
-			{#if selection.musicbrainzMetadata.firstReleaseTitle}
-				<p class="text-xs opacity-50">{selection.musicbrainzMetadata.firstReleaseTitle}</p>
-			{/if}
-			{#if selection.musicbrainzMetadata.duration}
-				<p class="text-xs opacity-40">{selection.musicbrainzMetadata.duration}</p>
-			{/if}
-
-			{@const lyrics = $lyricsState}
-			{#if lyrics.status === 'loading'}
-				<div class="flex items-center gap-2 py-2">
-					<span class="loading loading-xs loading-spinner text-primary"></span>
-					<span class="text-xs text-base-content/60">Fetching lyrics...</span>
-				</div>
-			{:else if lyrics.status === 'success' && lyrics.lyrics}
-				<div class="flex flex-col gap-1 rounded-lg bg-base-300/50 px-3 py-2">
-					<div class="flex items-center justify-between">
-						<span class="text-xs font-semibold text-base-content/70">Lyrics</span>
-						{#if lyrics.lyrics.syncedLyrics}
-							<span class="badge badge-xs badge-primary">Synced</span>
-						{/if}
-					</div>
-					{#if lyrics.lyrics.instrumental}
-						<p class="py-2 text-center text-xs text-base-content/40">Instrumental</p>
-					{:else if lyrics.lyrics.syncedLyrics && lyrics.lyrics.syncedLyrics.length > 0}
-						<div class="max-h-48 space-y-0.5 overflow-y-auto">
-							{#each lyrics.lyrics.syncedLyrics as line}
-								<p class="text-xs text-base-content/60">
-									{#if line.text}
-										{line.text}
-									{:else}
-										<span class="text-base-content/20">...</span>
-									{/if}
-								</p>
-							{/each}
-						</div>
-					{:else if lyrics.lyrics.plainLyrics}
-						<div
-							class="max-h-48 overflow-y-auto text-xs leading-relaxed whitespace-pre-wrap text-base-content/60"
-						>
-							{lyrics.lyrics.plainLyrics}
-						</div>
-					{/if}
-				</div>
-			{:else if lyrics.status === 'error'}
-				<p class="text-xs text-error/60">{lyrics.error ?? 'Failed to load lyrics'}</p>
-			{/if}
-		{:else}
-			<p class="text-xs opacity-60" title={selection.item.path}>{selection.item.path}</p>
-		{/if}
-	{:else if selection.cardType === 'image'}
-		<p class="text-xs opacity-60" title={selection.item.path}>{selection.item.path}</p>
-		{#if selection.imageTagging}
-			<div class="flex items-center gap-2 text-xs opacity-70">
-				<span class="loading loading-xs loading-spinner"></span>
-				Tagging...
-			</div>
-		{/if}
-		{#if selection.imageTags.length > 0}
-			<div class="flex flex-wrap gap-1">
-				{#each selection.imageTags as tag (tag.tag)}
-					<TagPill
-						tag={tag.tag}
-						score={tag.score}
-						onremove={(t) => selection.onremovetag?.(selection.item, t)}
-					/>
-				{/each}
-			</div>
-		{/if}
-		<form
-			class="flex gap-1"
-			onsubmit={(e) => {
-				e.preventDefault();
-				handleAddTag();
-			}}
-		>
-			<input
-				type="text"
-				placeholder="Add tag..."
-				class="input-bordered input input-xs flex-1"
-				bind:value={newTagInput}
-			/>
-			<button type="submit" class="btn btn-xs btn-primary" disabled={!newTagInput.trim()}
-				>Add</button
-			>
-		</form>
 	{:else}
 		<p class="text-xs opacity-60" title={selection.item.path}>{selection.item.path}</p>
 	{/if}
 
 	<div class="flex flex-wrap gap-2">
-		{#if selection.cardType === 'image'}
-			<button
-				class="btn btn-sm btn-primary"
-				disabled={selection.imageTagging}
-				onclick={() => selection.ontagimage?.(selection.item)}
-			>
-				{#if selection.imageTagging}
-					<span class="loading loading-xs loading-spinner"></span>
-				{/if}
-				{selection.imageTags.length > 0 ? 'Re-tag' : 'Tag'}
-			</button>
-		{/if}
-		{#if selection.cardType === 'movie' || selection.cardType === 'tv' || selection.cardType === 'youtube' || selection.cardType === 'video'}
+		{#if selection.cardType === 'movie' || selection.cardType === 'tv' || selection.cardType === 'video'}
 			{#if isPlaying}
 				<button class="btn btn-ghost btn-sm" onclick={() => playerService.stop()}>Stop</button>
 			{:else}
@@ -396,33 +247,11 @@
 				class="btn btn-sm btn-primary"
 				onclick={() => selection.onlink?.(selection.item, 'tmdb-tv')}>Link TV Show</button
 			>
-			<button
-				class="btn btn-sm btn-info"
-				onclick={() => selection.onlink?.(selection.item, 'youtube')}>Link YouTube</button
-			>
-		{/if}
-		{#if selection.cardType === 'audio' && !isLinkedAudio}
-			<button
-				class="btn btn-sm btn-primary"
-				onclick={() => selection.onlink?.(selection.item, 'musicbrainz')}>Link metadata</button
-			>
 		{/if}
 		{#if selection.cardType === 'movie' || selection.cardType === 'tv'}
 			<button
 				class="btn btn-ghost btn-sm"
 				onclick={() => selection.onunlink?.(selection.item, 'tmdb')}>Unlink</button
-			>
-		{/if}
-		{#if selection.cardType === 'youtube'}
-			<button
-				class="btn btn-ghost btn-sm"
-				onclick={() => selection.onunlink?.(selection.item, 'youtube')}>Unlink</button
-			>
-		{/if}
-		{#if selection.cardType === 'audio' && isLinkedAudio}
-			<button
-				class="btn btn-ghost btn-sm"
-				onclick={() => selection.onunlink?.(selection.item, 'musicbrainz')}>Unlink</button
 			>
 		{/if}
 	</div>

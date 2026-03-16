@@ -4,12 +4,9 @@ pub mod addons;
 pub mod database;
 pub mod downloads;
 pub mod identities;
-pub mod images;
 pub mod libraries;
-pub mod lyrics;
 pub mod media;
 pub mod media_lists;
-pub mod musicbrainz;
 pub mod p2p_stream;
 pub mod player;
 pub mod plugins;
@@ -18,10 +15,6 @@ pub mod signaling_ws;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
-pub mod youtube;
-pub mod youtube_search;
-#[cfg(not(target_os = "android"))]
-pub mod ytdl;
 
 use crate::AppState;
 use axum::Router;
@@ -45,19 +38,12 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/plugins", plugins::router())
         .nest("/api/player", player::router())
         .nest("/api/tmdb", tmdb::router())
-        .nest("/api/musicbrainz", musicbrainz::router())
-        .nest("/api/youtube", youtube::router())
-        .nest("/api/youtube-search", youtube_search::router())
-        .nest("/api/lyrics", lyrics::router())
         .nest("/api/addons", addons::router())
         .nest("/api/signaling", signaling::router())
-        .nest("/api/images", images::router())
         .merge(signaling_ws::signaling_routes());
 
     #[cfg(not(target_os = "android"))]
-    let router = router
-        .nest("/api/ytdl", ytdl::router())
-        .nest("/api/torrent", torrent::router());
+    let router = router.nest("/api/torrent", torrent::router());
 
     #[cfg(feature = "embed-frontend")]
     let router = router.fallback(frontend::serve_frontend);

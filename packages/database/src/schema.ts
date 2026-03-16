@@ -167,7 +167,6 @@ INSERT OR IGNORE INTO media_types (id, label) VALUES ('audio', 'Audio');
 
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('tv', 'video', 'TV');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('movies', 'video', 'Movies');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('youtube', 'video', 'YouTube');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('video-uncategorized', 'video', 'Uncategorized');
 
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('music', 'audio', 'Music');
