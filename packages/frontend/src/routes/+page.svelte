@@ -93,6 +93,9 @@
 	// Track link overrides so we can update without full page reload
 	let linkOverrides: Record<string, Record<string, MediaItemLink | null>> = $state({});
 
+	// Track category overrides so category changes are immediately reflected
+	let categoryOverrides: Record<string, string> = $state({});
+
 	// Track list link overrides
 	let listLinkOverrides: Record<string, Record<string, MediaListLink | null>> = $state({});
 
@@ -169,20 +172,23 @@
 		return data.itemsByCategory[activeCategory] ?? [];
 	});
 
-	// Apply link overrides to items for card rendering
+	// Apply link and category overrides to items for card rendering
 	let itemsWithOverrides = $derived(
 		items.map((item) => {
-			const overrides = linkOverrides[item.id];
-			if (!overrides) return item;
+			const linkOvr = linkOverrides[item.id];
+			const catOvr = categoryOverrides[item.id];
+			if (!linkOvr && catOvr === undefined) return item;
 			const merged = { ...item.links };
-			for (const [service, link] of Object.entries(overrides)) {
-				if (link === null) {
-					delete merged[service];
-				} else {
-					merged[service] = link;
+			if (linkOvr) {
+				for (const [service, link] of Object.entries(linkOvr)) {
+					if (link === null) {
+						delete merged[service];
+					} else {
+						merged[service] = link;
+					}
 				}
 			}
-			return { ...item, links: merged };
+			return { ...item, links: merged, ...(catOvr !== undefined ? { categoryId: catOvr } : {}) };
 		})
 	);
 
@@ -307,14 +313,12 @@
 			const categoryId = type === 'movie' ? 'movies' : 'tv';
 			const needsCategoryUpdate = item.categoryId !== categoryId;
 
-			// Set categoryId before triggering reactive update so cardType routes correctly
-			item.categoryId = categoryId;
-
 			updateItemLinks(item.id, 'tmdb', {
 				serviceId: String(tmdbId),
 				seasonNumber,
 				episodeNumber
 			});
+			categoryOverrides = { ...categoryOverrides, [item.id]: categoryId };
 
 			if (needsCategoryUpdate) {
 				fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/category`), {
@@ -342,6 +346,8 @@
 			if (service === 'tmdb') {
 				const { [item.id]: _, ...rest } = tmdbMetadata;
 				tmdbMetadata = rest;
+				const { [item.id]: __, ...restCat } = categoryOverrides;
+				categoryOverrides = restCat;
 			}
 		}
 	}
