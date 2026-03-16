@@ -8,6 +8,7 @@ import SignalingModalContent from '$components/signaling/SignalingModalContent.s
 	import SettingsModalContent from '$components/settings/SettingsModalContent.svelte';
 	import AddonsModalContent from '$components/addons/AddonsModalContent.svelte';
 	import PluginsModalContent from '$components/plugins/PluginsModalContent.svelte';
+	import LibraryModalContent from '$components/libraries/LibraryModalContent.svelte';
 
 	const routerStore = modalRouterService.store;
 
@@ -18,7 +19,8 @@ signaling: 'max-w-5xl',
 		identity: 'max-w-3xl',
 		plugins: 'max-w-4xl',
 		addons: 'max-w-4xl',
-		settings: 'max-w-2xl'
+		settings: 'max-w-2xl',
+		libraries: 'max-w-5xl'
 	};
 
 	let activeId = $derived($routerStore.navbarModal);
@@ -44,5 +46,7 @@ signaling: 'max-w-5xl',
 		<AddonsModalContent />
 	{:else if activeId === 'plugins'}
 		<PluginsModalContent />
+	{:else if activeId === 'libraries'}
+		<LibraryModalContent />
 	{/if}
 </Modal>

@@ -1,27 +1,36 @@
 {
-	"permissions": {
-		"allow": [
-			"Bash(pnpm *)",
-			"Bash(git *)",
-			"Bash(cargo *)",
-			"Bash(ls *)",
-			"Bash(cat *)",
-			"Bash(rustc *)"
-		]
-	},
-	"hooks": {
-		"PreToolUse": [
-			{
-				"matcher": "Bash",
-				"hooks": [
-					{
-						"type": "command",
-						"command": ".claude/hooks/pre-commit-check.sh",
-						"timeout": 300,
-						"statusMessage": "Running pre-commit checks..."
-					}
-				]
-			}
-		]
-	}
+  "permissions": {
+    "allow": [
+      "Bash(pnpm *)",
+      "Bash(git *)",
+      "Bash(cargo *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(rustc *)",
+      "Bash(chmod +x /Users/bearni/project-arktosmos/mhaol.git/packages/tauri/scripts/android-launch.sh)",
+      "Read(//Users/bearni/Library/Android/sdk/**)",
+      "Bash(ANDROID_SDK=/Users/bearni/Library/Android/sdk $ANDROID_SDK/cmdline-tools/latest/bin/avdmanager list avd 2)",
+      "Bash(1 echo:*)",
+      "Bash(ANDROID_SDK=/Users/bearni/Library/Android/sdk $ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager --list)",
+      "Bash(ANDROID_SDK=/Users/bearni/Library/Android/sdk)",
+      "Bash($ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager \"system-images;android-36;google-tv;arm64-v8a\")",
+      "Bash(ANDROID_SDK=/Users/bearni/Library/Android/sdk echo \"no\")",
+      "Bash($ANDROID_SDK/cmdline-tools/latest/bin/avdmanager create:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-commit-check.sh",
+            "timeout": 300,
+            "statusMessage": "Running pre-commit checks..."
+          }
+        ]
+      }
+    ]
+  }
 }

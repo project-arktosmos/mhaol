@@ -8,6 +8,7 @@
 	import { signalingAdapter } from '$adapters/classes/signaling.adapter';
 	import { signalingChatService } from '$services/signaling-chat.service';
 	import { sidebarService } from '$services/sidebar.service';
+	import { libraryService } from '$services/library.service';
 	import DownloadsSummary from '$components/downloads/DownloadsSummary.svelte';
 	import type { SignalingServerStatus, SignalingServer } from '$types/signaling.type';
 	import type { SidebarWidthMode } from '$types/sidebar.type';
@@ -22,6 +23,7 @@
 	const playerState = playerService.state;
 	const chatState = signalingChatService.state;
 	const sidebarSettings = sidebarService.store;
+	const libraries = libraryService.store;
 
 	let signalingStatus = $state<SignalingServerStatus | null>(null);
 
@@ -84,6 +86,7 @@
 	onMount(() => {
 		fetchSignalingStatus();
 		checkDeployStatus();
+		libraryService.initialize();
 	});
 
 	async function addServer() {
@@ -582,6 +585,26 @@
 						{deployResult.success ? 'Deployed' : `Failed (exit ${deployResult.code})`}
 					</span>
 				{/if}
+			</div>
+		{/if}
+	</div>
+
+	<div class="mt-4 border-t border-base-300 pt-4">
+		<h2 class="mb-3 text-sm font-semibold tracking-wide text-base-content/50 uppercase">
+			Libraries
+		</h2>
+		{#if $libraries.length === 0}
+			<p class="text-xs opacity-50">No libraries</p>
+		{:else}
+			<div class="flex flex-col gap-2">
+				{#each $libraries as library (library.id)}
+					<div class="rounded-lg bg-base-100 p-3">
+						<div class="text-xs font-semibold">{library.name}</div>
+						<div class="mt-1 truncate font-mono text-xs opacity-60" title={library.path}>
+							{library.path}
+						</div>
+					</div>
+				{/each}
 			</div>
 		{/if}
 	</div>

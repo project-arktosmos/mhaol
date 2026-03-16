@@ -51,6 +51,12 @@
 			</button>
 			<button
 				class="btn btn-ghost btn-sm"
+				onclick={() => modalRouterService.openNavbar('libraries')}
+			>
+				Libraries
+			</button>
+			<button
+				class="btn btn-ghost btn-sm"
 				onclick={() => modalRouterService.openNavbar('settings')}
 			>
 				Settings
@@ -91,7 +97,8 @@
 				<li><button onclick={() => modalRouterService.openNavbar('identity')}>Identity</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('plugins')}>Plugins</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('addons')}>Addons</button></li>
-				<li><button onclick={() => modalRouterService.openNavbar('settings')}>Settings</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('libraries')}>Libraries</button></li>
+			<li><button onclick={() => modalRouterService.openNavbar('settings')}>Settings</button></li>
 			</ul>
 		</div>
 	</div>

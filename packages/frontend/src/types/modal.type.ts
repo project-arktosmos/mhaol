@@ -5,7 +5,8 @@ export type NavbarModalId =
 	| 'identity'
 	| 'plugins'
 	| 'addons'
-	| 'settings';
+	| 'settings'
+	| 'libraries';
 
 export interface ModalRouterState {
 	navbarModal: NavbarModalId | null;

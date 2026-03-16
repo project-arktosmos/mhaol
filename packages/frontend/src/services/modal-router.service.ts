@@ -9,7 +9,8 @@ const VALID_NAVBAR_IDS = new Set<NavbarModalId>([
 	'identity',
 	'plugins',
 	'addons',
-	'settings'
+	'settings',
+	'libraries'
 ]);
 
 function parseHash(hash: string): NavbarModalId | null {
