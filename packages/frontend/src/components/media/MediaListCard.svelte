@@ -2,7 +2,6 @@
 	import classNames from 'classnames';
 	import type { MediaList } from '$types/media-list.type';
 	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
-	import type { MediaType } from '$types/library.type';
 	import type { DisplayTMDBTvShowDetails } from 'tmdb/types';
 
 	interface Props {
@@ -89,7 +88,7 @@
 			<span
 				class={classNames(
 					'badge badge-xs',
-					libraryFileAdapter.getMediaTypeBadgeClass(list.mediaType as MediaType)
+					libraryFileAdapter.getMediaTypeBadgeClass(list.mediaType)
 				)}
 			>
 				{kindLabel}

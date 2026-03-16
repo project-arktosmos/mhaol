@@ -2,7 +2,6 @@
 	import classNames from 'classnames';
 	import type { MediaItem } from '$types/media-card.type';
 	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
-	import type { MediaType } from '$types/library.type';
 	import type { Snippet } from 'svelte';
 
 	interface Props {
@@ -81,10 +80,10 @@
 			<span
 				class={classNames(
 					'badge badge-xs',
-					libraryFileAdapter.getMediaTypeBadgeClass(item.mediaTypeId as MediaType)
+					libraryFileAdapter.getMediaTypeBadgeClass(item.mediaTypeId)
 				)}
 			>
-				{libraryFileAdapter.getMediaTypeLabel(item.mediaTypeId as MediaType)}
+				{libraryFileAdapter.getMediaTypeLabel(item.mediaTypeId)}
 			</span>
 			{#if item.categoryId}
 				<span

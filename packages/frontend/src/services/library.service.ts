@@ -10,7 +10,7 @@ import type {
 	MediaTypeOption,
 	CategoryOption
 } from '$types/library.type';
-import { type MediaType } from '$types/library.type';
+import { LibraryType } from '$types/library.type';
 
 export interface LibraryServiceState {
 	showAddForm: boolean;
@@ -21,7 +21,7 @@ export interface LibraryServiceState {
 	browseParent: string | null;
 	selectedPath: string;
 	selectedName: string;
-	selectedMediaTypes: MediaType[];
+	selectedLibraryType: LibraryType | null;
 	libraryFiles: Record<string, LibraryFile[]>;
 	libraryFilesLoading: Record<string, boolean>;
 	libraryFilesError: Record<string, string | null>;
@@ -36,7 +36,7 @@ const initialState: LibraryServiceState = {
 	browseParent: null,
 	selectedPath: '',
 	selectedName: '',
-	selectedMediaTypes: [],
+	selectedLibraryType: null,
 	libraryFiles: {},
 	libraryFilesLoading: {},
 	libraryFilesError: {}
@@ -92,13 +92,13 @@ class LibraryService {
 		}
 	}
 
-	async addLibrary(name: string, path: string, mediaTypes: MediaType[]): Promise<void> {
+	async addLibrary(name: string, path: string, libraryType: LibraryType): Promise<void> {
 		if (!browser) return;
 
 		try {
 			const library = await this.fetchJson<Library>('/api/libraries', {
 				method: 'POST',
-				body: JSON.stringify({ name, path, mediaTypes })
+				body: JSON.stringify({ name, path, libraryType })
 			});
 
 			this.store.update((items) => [...items, library]);
@@ -125,7 +125,7 @@ class LibraryService {
 			showAddForm: true,
 			selectedPath: '',
 			selectedName: '',
-			selectedMediaTypes: [],
+			selectedLibraryType: null,
 			browseError: null
 		}));
 		this.browseDirectory();
@@ -137,7 +137,7 @@ class LibraryService {
 			showAddForm: false,
 			selectedPath: '',
 			selectedName: '',
-			selectedMediaTypes: [],
+			selectedLibraryType: null,
 			currentBrowsePath: '',
 			browseDirectories: [],
 			browseParent: null,
@@ -157,13 +157,8 @@ class LibraryService {
 		this.state.update((s) => ({ ...s, selectedName: name }));
 	}
 
-	toggleMediaType(mediaType: MediaType): void {
-		this.state.update((s) => {
-			const types = s.selectedMediaTypes.includes(mediaType)
-				? s.selectedMediaTypes.filter((t) => t !== mediaType)
-				: [...s.selectedMediaTypes, mediaType];
-			return { ...s, selectedMediaTypes: types };
-		});
+	setLibraryType(libraryType: LibraryType): void {
+		this.state.update((s) => ({ ...s, selectedLibraryType: libraryType }));
 	}
 
 	async fetchLibraryFiles(libraryId: string): Promise<void> {
@@ -347,7 +342,7 @@ class LibraryService {
 				libraryFiles: {
 					...s.libraryFiles,
 					[libraryId]: files.map((f) =>
-						f.id === itemId ? { ...f, mediaType: mediaTypeId as MediaType, categoryId: null } : f
+						f.id === itemId ? { ...f, mediaType: mediaTypeId, categoryId: null } : f
 					)
 				}
 			};
@@ -369,7 +364,7 @@ class LibraryService {
 			showAddForm: false,
 			selectedPath: '',
 			selectedName: '',
-			selectedMediaTypes: [],
+			selectedLibraryType: null,
 			currentBrowsePath: '',
 			browseDirectories: [],
 			browseParent: null,

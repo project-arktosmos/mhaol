@@ -397,6 +397,11 @@ function runMigrations(db: DatabaseType): void {
       DELETE FROM media_types WHERE id IN ('audio', 'image');
     `);
   }
+
+  // Migration: convert library media_types from ["video"] to ["movies"] (db_version 21)
+  if (!dbVersion || Number(dbVersion.value) < 21) {
+    db.exec(`UPDATE libraries SET media_types = '["movies"]' WHERE media_types LIKE '%"video"%'`);
+  }
 }
 
 export function initializeSchema(db: DatabaseType): void {

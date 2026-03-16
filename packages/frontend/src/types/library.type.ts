@@ -1,15 +1,13 @@
 import type { ID } from '$types/core.type';
 
-export enum MediaType {
-	Video = 'video',
-	Image = 'image',
-	Audio = 'audio'
+export enum LibraryType {
+	Movies = 'movies',
+	TV = 'tv'
 }
 
-export const MEDIA_TYPE_OPTIONS: { value: MediaType; label: string }[] = [
-	{ value: MediaType.Video, label: 'Video' },
-	{ value: MediaType.Image, label: 'Image' },
-	{ value: MediaType.Audio, label: 'Audio' }
+export const LIBRARY_TYPE_OPTIONS: { value: LibraryType; label: string }[] = [
+	{ value: LibraryType.Movies, label: 'Movies' },
+	{ value: LibraryType.TV, label: 'TV Shows' }
 ];
 
 export interface MediaTypeOption {
@@ -27,7 +25,7 @@ export interface Library {
 	id: ID;
 	name: string;
 	path: string;
-	mediaTypes: MediaType[];
+	libraryType: LibraryType;
 	dateAdded: number;
 }
 
@@ -53,7 +51,7 @@ export interface LibraryFile {
 	name: string;
 	path: string;
 	extension: string;
-	mediaType: MediaType;
+	mediaType: string;
 	categoryId: string | null;
 	links: Record<string, LibraryFileLink>;
 }

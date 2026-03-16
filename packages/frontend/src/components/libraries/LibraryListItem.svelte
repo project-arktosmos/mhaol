@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import type { Library, LibraryFile } from '$types/library.type';
-	import { MediaType } from '$types/library.type';
+	import { LibraryType } from '$types/library.type';
 	import LibraryFileList from './LibraryFileList.svelte';
 
 	interface Props {
@@ -34,16 +34,14 @@
 		onedittype
 	}: Props = $props();
 
-	const mediaTypeBadge: Record<MediaType, string> = {
-		[MediaType.Video]: 'badge-primary',
-		[MediaType.Image]: 'badge-secondary',
-		[MediaType.Audio]: 'badge-accent'
+	const libraryTypeBadge: Record<LibraryType, string> = {
+		[LibraryType.Movies]: 'badge-primary',
+		[LibraryType.TV]: 'badge-secondary'
 	};
 
-	const mediaTypeLabel: Record<MediaType, string> = {
-		[MediaType.Video]: 'Video',
-		[MediaType.Image]: 'Image',
-		[MediaType.Audio]: 'Audio'
+	const libraryTypeLabel: Record<LibraryType, string> = {
+		[LibraryType.Movies]: 'Movies',
+		[LibraryType.TV]: 'TV Shows'
 	};
 </script>
 
@@ -52,13 +50,9 @@
 		<div class="min-w-0 flex-1">
 			<div class="flex items-center gap-2">
 				<h3 class="truncate font-semibold">{library.name}</h3>
-				<div class="flex gap-1">
-					{#each library.mediaTypes as type (type)}
-						<span class={classNames('badge badge-sm', mediaTypeBadge[type])}>
-							{mediaTypeLabel[type]}
-						</span>
-					{/each}
-				</div>
+				<span class={classNames('badge badge-sm', libraryTypeBadge[library.libraryType])}>
+					{libraryTypeLabel[library.libraryType]}
+				</span>
 			</div>
 			<p class="mt-1 truncate font-mono text-xs text-base-content/50">{library.path}</p>
 		</div>
