@@ -11,6 +11,7 @@
 	import Modal from '$components/core/Modal.svelte';
 	import type { MediaDetailCardType } from '$types/media-detail.type';
 	import TmdbLinkModal from '$components/libraries/TmdbLinkModal.svelte';
+	import SeasonEpisodeMatchModal from '$components/libraries/SeasonEpisodeMatchModal.svelte';
 	import MediaCard from '$components/media/MediaCard.svelte';
 	import MediaListCard from '$components/media/MediaListCard.svelte';
 	import MediaDetail from '$components/media/MediaDetail.svelte';
@@ -48,6 +49,13 @@
 	let linkModalService: string | null = $state(null);
 	let linkModalList: MediaList | null = $state(null);
 	let linkModalListService: string | null = $state(null);
+	let seasonMatchModal: {
+		tmdbId: number;
+		seasonNumber: number;
+		showName: string;
+		seasonName: string;
+		files: LibraryFile[];
+	} | null = $state(null);
 	let selectedList: MediaList | null = $state(null);
 	let selectedShowGroup: { tmdbId: string; lists: MediaList[] } | null = $state(null);
 
@@ -413,6 +421,36 @@
 		}
 	}
 
+	async function handleSeasonMatchLinkAll(
+		matches: Array<{ file: LibraryFile; seasonNumber: number; episodeNumber: number }>
+	) {
+		await Promise.all(
+			matches.map(async (m) => {
+				const item = data.lists.flatMap((l) => l.items).find((i) => i.id === m.file.id);
+				if (!item) return;
+				const tmdbId = seasonMatchModal ? seasonMatchModal.tmdbId : 0;
+				const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/tmdb`), {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						tmdbId,
+						seasonNumber: m.seasonNumber,
+						episodeNumber: m.episodeNumber
+					})
+				});
+				if (res.ok) {
+					updateItemLinks(item.id, 'tmdb', {
+						serviceId: String(tmdbId),
+						seasonNumber: m.seasonNumber,
+						episodeNumber: m.episodeNumber
+					});
+					categoryOverrides = { ...categoryOverrides, [item.id]: 'tv' };
+				}
+			})
+		);
+		seasonMatchModal = null;
+	}
+
 	async function fetchListTmdbMetadata(tmdbId: string) {
 		if (listTmdbMetadata[tmdbId] || listTmdbLoading.has(tmdbId)) return;
 		listTmdbLoading = new Set([...listTmdbLoading, tmdbId]);
@@ -680,12 +718,30 @@
 								class="h-16 w-auto rounded object-cover"
 							/>
 						{/if}
-						<div>
-							<h3 class="text-base font-semibold">
-								{seasonMeta?.name ?? list.title}
-							</h3>
-							{#if seasonMeta?.episodeCount}
-								<p class="text-xs opacity-50">{seasonMeta.episodeCount} episodes</p>
+						<div class="flex flex-1 items-center gap-3">
+							<div>
+								<h3 class="text-base font-semibold">
+									{seasonMeta?.name ?? list.title}
+								</h3>
+								{#if seasonMeta?.episodeCount}
+									<p class="text-xs opacity-50">{seasonMeta.episodeCount} episodes</p>
+								{/if}
+							</div>
+							{#if tmdbMeta && seasonNum != null && list.items.length > 0}
+								<button
+									class="btn ml-auto btn-ghost btn-xs"
+									onclick={() => {
+										seasonMatchModal = {
+											tmdbId: Number(selectedShowGroup!.tmdbId),
+											seasonNumber: seasonNum!,
+											showName: tmdbMeta!.name,
+											seasonName: seasonMeta?.name ?? list.title,
+											files: list.items.map((i) => itemAsLibraryFile(i))
+										};
+									}}
+								>
+									Match episodes
+								</button>
 							{/if}
 						</div>
 					</div>
@@ -829,6 +885,20 @@
 		onclose={() => {
 			linkModalList = null;
 			linkModalListService = null;
+		}}
+	/>
+{/if}
+
+{#if seasonMatchModal}
+	<SeasonEpisodeMatchModal
+		tmdbId={seasonMatchModal.tmdbId}
+		seasonNumber={seasonMatchModal.seasonNumber}
+		showName={seasonMatchModal.showName}
+		seasonName={seasonMatchModal.seasonName}
+		files={seasonMatchModal.files}
+		onlinkall={handleSeasonMatchLinkAll}
+		onclose={() => {
+			seasonMatchModal = null;
 		}}
 	/>
 {/if}
