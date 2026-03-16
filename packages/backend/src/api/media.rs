@@ -72,6 +72,8 @@ struct MappedMediaList {
     cover_image: Option<String>,
     #[serde(rename = "mediaType")]
     media_type: String,
+    #[serde(rename = "libraryType")]
+    library_type: String,
     source: String,
     #[serde(rename = "itemCount")]
     item_count: usize,
@@ -101,6 +103,8 @@ struct MediaResponse {
     #[serde(rename = "itemsByType")]
     items_by_type: HashMap<String, Vec<MappedItem>>,
     lists: Vec<MappedMediaList>,
+    /// Map of library id → library type ("movies" | "tv")
+    libraries: HashMap<String, String>,
 }
 
 async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
@@ -194,6 +198,18 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
         items_by_type.insert(mt.id.clone(), map_rows(rows, &mt.id));
     }
 
+    // Build library type map: id → "movies" | "tv"
+    let lib_type_map: HashMap<String, String> = state
+        .libraries
+        .get_all()
+        .into_iter()
+        .map(|lib| {
+            let types: Vec<String> = serde_json::from_str(&lib.media_types).unwrap_or_default();
+            let lt = types.into_iter().next().unwrap_or_else(|| "movies".to_string());
+            (lib.id, lt)
+        })
+        .collect();
+
     let all_lists = state.media_lists.get_all();
     let lists: Vec<MappedMediaList> = all_lists
         .into_iter()
@@ -245,6 +261,10 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
                     },
                 );
             }
+            let library_type = lib_type_map
+                .get(&list.library_id)
+                .cloned()
+                .unwrap_or_else(|| "movies".to_string());
             MappedMediaList {
                 id: list.id,
                 library_id: list.library_id,
@@ -252,6 +272,7 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
                 description: list.description,
                 cover_image: list.cover_image,
                 media_type: list.media_type,
+                library_type,
                 source: list.source,
                 item_count,
                 created_at: list.created_at,
@@ -268,5 +289,6 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
         items_by_category,
         items_by_type,
         lists,
+        libraries: lib_type_map,
     })
 }

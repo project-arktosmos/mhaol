@@ -34,17 +34,16 @@
 			itemsByCategory: Record<string, MediaItem[]>;
 			itemsByType: Record<string, MediaItem[]>;
 			lists: MediaList[];
+			libraries: Record<string, string>;
 		};
 	}
 
-	const ALL_CATEGORY = '__all__';
-	const ALL_TYPE = '__all_type__';
-	const LISTS_TYPE = '__lists__';
+	const MOVIES_TAB = 'movies';
+	const TV_TAB = 'tv';
 
 	let { data }: Props = $props();
 
-	let activeTypeId = $state(ALL_TYPE);
-	let activeCategoryId = $state(ALL_CATEGORY);
+	let activeTab = $state<'movies' | 'tv'>(MOVIES_TAB);
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
 	let linkModalList: MediaList | null = $state(null);
@@ -56,11 +55,11 @@
 		| { type: 'single'; list: MediaList }
 		| { type: 'show-group'; tmdbId: string; lists: MediaList[] };
 
-	let listGridEntries: ListGridEntry[] = $derived.by(() => {
+	let tvListGridEntries: ListGridEntry[] = $derived.by(() => {
 		const tmdbGroups: Record<string, MediaList[]> = {};
 		const ungrouped: MediaList[] = [];
 
-		for (const list of data.lists) {
+		for (const list of data.lists.filter((l) => l.libraryType === 'tv')) {
 			const links = getListLinks(list);
 			const tmdbId = links.tmdb?.serviceId;
 			if (tmdbId) {
@@ -89,6 +88,9 @@
 		}
 		return entries;
 	});
+
+	let isMoviesTab = $derived(activeTab === MOVIES_TAB);
+	let isTvTab = $derived(activeTab === TV_TAB);
 
 	// Track link overrides so we can update without full page reload
 	let linkOverrides: Record<string, Record<string, MediaItemLink | null>> = $state({});
@@ -138,43 +140,15 @@
 		return merged;
 	}
 
-	let isAllType = $derived(activeTypeId === ALL_TYPE);
-	let isListsType = $derived(activeTypeId === LISTS_TYPE);
-
-	let activeType = $derived(
-		activeTypeId === ALL_TYPE || activeTypeId === LISTS_TYPE
-			? activeTypeId
-			: activeTypeId || data.mediaTypes[0]?.id || ''
+	let movieItems = $derived(
+		Object.values(data.itemsByType)
+			.flat()
+			.filter((i) => (data.libraries[i.libraryId] ?? 'movies') === 'movies')
 	);
-
-	let categoriesForType = $derived(
-		isAllType ? data.categories : data.categories.filter((c) => c.mediaTypeId === activeType)
-	);
-
-	let activeCategory = $derived.by(() => {
-		if (activeCategoryId === ALL_CATEGORY) return ALL_CATEGORY;
-		if (categoriesForType.some((c) => c.id === activeCategoryId)) return activeCategoryId;
-		return ALL_CATEGORY;
-	});
-
-	let isAllCategoryView = $derived(activeCategory === ALL_CATEGORY);
-
-	let items = $derived.by(() => {
-		if (isAllType && isAllCategoryView) {
-			return Object.values(data.itemsByType).flat();
-		}
-		if (isAllType && !isAllCategoryView) {
-			return data.itemsByCategory[activeCategory] ?? [];
-		}
-		if (isAllCategoryView) {
-			return data.itemsByType[activeType] ?? [];
-		}
-		return data.itemsByCategory[activeCategory] ?? [];
-	});
 
 	// Apply link and category overrides to items for card rendering
 	let itemsWithOverrides = $derived(
-		items.map((item) => {
+		movieItems.map((item) => {
 			const linkOvr = linkOverrides[item.id];
 			const catOvr = categoryOverrides[item.id];
 			if (!linkOvr && catOvr === undefined) return item;
@@ -271,16 +245,10 @@
 		}
 	});
 
-	function selectType(id: string) {
-		activeTypeId = id;
-		activeCategoryId = ALL_CATEGORY;
+	function selectTab(tab: 'movies' | 'tv') {
+		activeTab = tab;
 		selectedList = null;
 		selectedShowGroup = null;
-		closeMediaDetail();
-	}
-
-	function selectCategory(id: string) {
-		activeCategoryId = id;
 		closeMediaDetail();
 	}
 
@@ -535,67 +503,30 @@
 		</button>
 	</div>
 
-	<!-- Tier 1: All + Media Types -->
-	<div class="mb-3 flex flex-wrap gap-2">
+	<!-- Tabs: Movies | TV -->
+	<div class="mb-6 flex gap-2">
 		<button
 			class={classNames('btn btn-sm', {
-				'btn-primary': isAllType,
-				'btn-ghost': !isAllType
+				'btn-primary': isMoviesTab,
+				'btn-ghost': !isMoviesTab
 			})}
-			onclick={() => selectType(ALL_TYPE)}
+			onclick={() => selectTab(MOVIES_TAB)}
 		>
-			All
+			Movies
 		</button>
 		<button
 			class={classNames('btn btn-sm', {
-				'btn-primary': isListsType,
-				'btn-ghost': !isListsType
+				'btn-primary': isTvTab,
+				'btn-ghost': !isTvTab
 			})}
-			onclick={() => selectType(LISTS_TYPE)}
+			onclick={() => selectTab(TV_TAB)}
 		>
-			Lists
+			TV Shows
 		</button>
-		{#each data.mediaTypes as type}
-			<button
-				class={classNames('btn btn-sm', {
-					'btn-primary': activeType === type.id,
-					'btn-ghost': activeType !== type.id
-				})}
-				onclick={() => selectType(type.id)}
-			>
-				{type.label}
-			</button>
-		{/each}
 	</div>
 
-	<!-- Tier 2: All + Categories for selected type (hidden when Lists tab active) -->
-	{#if !isListsType && categoriesForType.length > 0}
-		<div class="mb-6 flex flex-wrap gap-2">
-			<button
-				class={classNames('btn btn-xs', {
-					'btn-secondary': isAllCategoryView,
-					'btn-ghost': !isAllCategoryView
-				})}
-				onclick={() => selectCategory(ALL_CATEGORY)}
-			>
-				All
-			</button>
-			{#each categoriesForType as category}
-				<button
-					class={classNames('btn btn-xs', {
-						'btn-secondary': activeCategory === category.id,
-						'btn-ghost': activeCategory !== category.id
-					})}
-					onclick={() => selectCategory(category.id)}
-				>
-					{category.label}
-				</button>
-			{/each}
-		</div>
-	{/if}
-
-	{#if isListsType}
-		<!-- Lists view -->
+	{#if isTvTab}
+		<!-- TV Shows view -->
 		{#if selectedList}
 			{@const currentListLinks = getListLinks(selectedList)}
 			{@const listTmdb = currentListLinks.tmdb
@@ -617,25 +548,23 @@
 				</button>
 				<h2 class="text-xl font-semibold">{selectedList.title}</h2>
 				<div class="ml-auto flex gap-2">
-					{#if selectedList.mediaType === 'video'}
-						{#if currentListLinks.tmdb}
-							<button
-								class="btn btn-outline btn-xs btn-error"
-								onclick={() => handleListUnlink(selectedList!, 'tmdb')}
-							>
-								Unlink TV Show
-							</button>
-						{:else}
-							<button
-								class="btn btn-outline btn-xs"
-								onclick={() => {
-									linkModalList = selectedList;
-									linkModalListService = 'tmdb';
-								}}
-							>
-								Link TV Show
-							</button>
-						{/if}
+					{#if currentListLinks.tmdb}
+						<button
+							class="btn btn-outline btn-xs btn-error"
+							onclick={() => handleListUnlink(selectedList!, 'tmdb')}
+						>
+							Unlink TV Show
+						</button>
+					{:else}
+						<button
+							class="btn btn-outline btn-xs"
+							onclick={() => {
+								linkModalList = selectedList;
+								linkModalListService = 'tmdb';
+							}}
+						>
+							Link TV Show
+						</button>
 					{/if}
 				</div>
 			</div>
@@ -779,11 +708,11 @@
 					{/if}
 				</div>
 			{/each}
-		{:else if listGridEntries.length > 0}
+		{:else if tvListGridEntries.length > 0}
 			<div
 				class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 			>
-				{#each listGridEntries as entry}
+				{#each tvListGridEntries as entry}
 					{#if entry.type === 'single'}
 						{@const list = entry.list}
 						{@const links = getListLinks(list)}
@@ -810,13 +739,11 @@
 			</div>
 		{:else}
 			<div class="rounded-lg bg-base-200 p-8 text-center">
-				<p class="opacity-50">
-					No lists yet. Scan a library with directories containing multiple video files.
-				</p>
+				<p class="opacity-50">No TV shows yet. Add a TV library and scan it.</p>
 			</div>
 		{/if}
 	{:else}
-		<!-- Items grid -->
+		<!-- Movies grid -->
 		{#if itemsWithOverrides.length > 0}
 			<div
 				class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
@@ -833,7 +760,7 @@
 			</div>
 		{:else}
 			<div class="rounded-lg bg-base-200 p-8 text-center">
-				<p class="opacity-50">No items in this category.</p>
+				<p class="opacity-50">No movies yet. Add a Movies library and scan it.</p>
 			</div>
 		{/if}
 	{/if}
