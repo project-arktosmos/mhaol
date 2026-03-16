@@ -5,7 +5,6 @@ import type { NavbarModalId, ModalRouterState } from '$types/modal.type';
 const VALID_NAVBAR_IDS = new Set<NavbarModalId>([
 	'torrent',
 	'downloads',
-	'libraries',
 	'signaling',
 	'identity',
 	'plugins',
