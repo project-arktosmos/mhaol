@@ -1,5 +1,4 @@
 <script lang="ts">
-	import classNames from 'classnames';
 	import type { LibraryFile } from '$types/library.type';
 	import type { TMDBMovie, TMDBTvShow } from 'tmdb/types';
 	import { getPosterUrl, extractYear } from 'tmdb/transform';
@@ -8,6 +7,7 @@
 
 	interface Props {
 		file: LibraryFile;
+		type: TmdbType;
 		onlink: (
 			tmdbId: number,
 			seasonNumber: number | null,
@@ -17,11 +17,8 @@
 		onclose: () => void;
 	}
 
-	let { file, onlink, onclose }: Props = $props();
+	let { file, type, onlink, onclose }: Props = $props();
 
-	type SearchMode = 'movie' | 'tv';
-
-	let searchMode: SearchMode = $state('movie');
 	let query = $state(cleanFilename(file.name));
 	let searching = $state(false);
 	let movieResults: TMDBMovie[] = $state([]);
@@ -52,7 +49,7 @@
 		tvResults = [];
 
 		try {
-			const endpoint = searchMode === 'movie' ? '/api/tmdb/search/movies' : '/api/tmdb/search/tv';
+			const endpoint = type === 'movie' ? '/api/tmdb/search/movies' : '/api/tmdb/search/tv';
 			const params = new URLSearchParams({ q: query.trim() });
 			const res = await fetch(`${endpoint}?${params}`);
 			const data = await res.json();
@@ -60,7 +57,7 @@
 				error = data.error ?? 'Search failed';
 				return;
 			}
-			if (searchMode === 'movie') {
+			if (type === 'movie') {
 				movieResults = data.results ?? [];
 			} else {
 				tvResults = data.results ?? [];
@@ -93,52 +90,28 @@
 			&times;
 		</button>
 
-		<h3 class="text-lg font-bold">Link TMDB</h3>
+		<h3 class="text-lg font-bold">Link {type === 'movie' ? 'Movie' : 'TV Show'}</h3>
 		<p class="mt-1 truncate text-sm opacity-60" title={file.name}>{file.name}</p>
 
-		<div class="mt-4 flex gap-2">
-			<div class="join flex-1">
-				<input
-					type="text"
-					class="input-bordered input input-sm join-item w-full"
-					placeholder="Search TMDB..."
-					bind:value={query}
-					onkeydown={handleKeydown}
-				/>
-				<button
-					class="btn join-item btn-sm btn-primary"
-					onclick={search}
-					disabled={searching || !query.trim()}
-				>
-					{#if searching}
-						<span class="loading loading-xs loading-spinner"></span>
-					{:else}
-						Search
-					{/if}
-				</button>
-			</div>
-			<div class="join">
-				<button
-					class={classNames('btn join-item btn-sm', { 'btn-active': searchMode === 'movie' })}
-					onclick={() => {
-						searchMode = 'movie';
-						movieResults = [];
-						tvResults = [];
-					}}
-				>
-					Movie
-				</button>
-				<button
-					class={classNames('btn join-item btn-sm', { 'btn-active': searchMode === 'tv' })}
-					onclick={() => {
-						searchMode = 'tv';
-						movieResults = [];
-						tvResults = [];
-					}}
-				>
-					TV Show
-				</button>
-			</div>
+		<div class="join mt-4 w-full">
+			<input
+				type="text"
+				class="input-bordered input input-sm join-item w-full"
+				placeholder="Search {type === 'movie' ? 'movies' : 'TV shows'}..."
+				bind:value={query}
+				onkeydown={handleKeydown}
+			/>
+			<button
+				class="btn join-item btn-sm btn-primary"
+				onclick={search}
+				disabled={searching || !query.trim()}
+			>
+				{#if searching}
+					<span class="loading loading-xs loading-spinner"></span>
+				{:else}
+					Search
+				{/if}
+			</button>
 		</div>
 
 		{#if error}
@@ -150,7 +123,7 @@
 				<div class="flex justify-center py-8">
 					<span class="loading loading-md loading-spinner"></span>
 				</div>
-			{:else if searchMode === 'movie' && movieResults.length > 0}
+			{:else if type === 'movie' && movieResults.length > 0}
 				<div class="flex flex-col gap-2">
 					{#each movieResults as movie (movie.id)}
 						<button
@@ -181,7 +154,7 @@
 						</button>
 					{/each}
 				</div>
-			{:else if searchMode === 'tv' && tvResults.length > 0}
+			{:else if type === 'tv' && tvResults.length > 0}
 				<div class="flex flex-col gap-2">
 					{#each tvResults as show (show.id)}
 						<button
@@ -217,7 +190,7 @@
 						</button>
 					{/each}
 				</div>
-			{:else if ((searchMode === 'movie' && movieResults.length === 0) || (searchMode === 'tv' && tvResults.length === 0)) && !searching && query.trim()}
+			{:else if ((type === 'movie' && movieResults.length === 0) || (type === 'tv' && tvResults.length === 0)) && !searching && query.trim()}
 				<div class="py-8 text-center">
 					<p class="text-sm opacity-50">No results found</p>
 				</div>

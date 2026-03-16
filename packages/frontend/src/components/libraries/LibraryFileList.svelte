@@ -41,12 +41,14 @@
 	}: Props = $props();
 
 	let modalFile: LibraryFile | null = $state(null);
+	let modalFileType: 'movie' | 'tv' = $state('movie');
 	let musicbrainzModalFile: LibraryFile | null = $state(null);
 	let youtubePreviewFile: LibraryFile | null = $state(null);
 	let typeCategoryModalFile: LibraryFile | null = $state(null);
 
-	function openModal(file: LibraryFile) {
+	function openModal(file: LibraryFile, type: 'movie' | 'tv') {
 		modalFile = file;
+		modalFileType = type;
 	}
 
 	function closeModal() {
@@ -165,7 +167,7 @@
 </div>
 
 {#if modalFile}
-	<TmdbLinkModal file={modalFile} onlink={handleLink} onclose={closeModal} />
+	<TmdbLinkModal file={modalFile} type={modalFileType} onlink={handleLink} onclose={closeModal} />
 {/if}
 
 {#if musicbrainzModalFile}

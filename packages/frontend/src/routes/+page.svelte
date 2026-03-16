@@ -1206,9 +1206,22 @@
 	{/if}
 </Modal>
 
-{#if linkModalItem && linkModalService === 'tmdb'}
+{#if linkModalItem && linkModalService === 'tmdb-movie'}
 	<TmdbLinkModal
 		file={itemAsLibraryFile(linkModalItem)}
+		type="movie"
+		onlink={handleLink}
+		onclose={() => {
+			linkModalItem = null;
+			linkModalService = null;
+		}}
+	/>
+{/if}
+
+{#if linkModalItem && linkModalService === 'tmdb-tv'}
+	<TmdbLinkModal
+		file={itemAsLibraryFile(linkModalItem)}
+		type="tv"
 		onlink={handleLink}
 		onclose={() => {
 			linkModalItem = null;
@@ -1242,6 +1255,7 @@
 {#if linkModalList && linkModalListService === 'tmdb'}
 	<TmdbLinkModal
 		file={listAsLibraryFile(linkModalList)}
+		type="tv"
 		onlink={handleListTmdbLink}
 		onclose={() => {
 			linkModalList = null;
