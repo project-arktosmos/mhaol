@@ -397,23 +397,10 @@ async fn unlink_tmdb(
 fn build_extension_map(media_types: &[String]) -> HashMap<&'static str, &'static str> {
     let mut map = HashMap::new();
     for mt in media_types {
-        match mt.as_str() {
-            "video" => {
-                for ext in &["mp4", "mkv", "avi", "mov", "wmv", "webm", "flv", "m4v"] {
-                    map.insert(*ext, "video");
-                }
+        if mt == "video" {
+            for ext in &["mp4", "mkv", "avi", "mov", "wmv", "webm", "flv", "m4v"] {
+                map.insert(*ext, "video");
             }
-            "audio" => {
-                for ext in &["mp3", "flac", "wav", "aac", "ogg", "m4a", "wma", "opus"] {
-                    map.insert(*ext, "audio");
-                }
-            }
-            "image" => {
-                for ext in &["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "tiff"] {
-                    map.insert(*ext, "image");
-                }
-            }
-            _ => {}
         }
     }
     map
@@ -478,27 +465,16 @@ fn generate_auto_lists(state: &AppState, library_id: &str) {
     let mut active_source_paths: HashSet<String> = HashSet::new();
 
     for (dir_path, dir_files) in &dir_items {
-        let mut video_items: Vec<&crate::db::repo::library_item::LibraryItemRow> = Vec::new();
-        let mut audio_items: Vec<&crate::db::repo::library_item::LibraryItemRow> = Vec::new();
-
-        for item in dir_files {
-            match item.media_type.as_str() {
-                "video" => video_items.push(item),
-                "audio" => audio_items.push(item),
-                _ => {}
-            }
-        }
+        let mut video_items: Vec<&crate::db::repo::library_item::LibraryItemRow> = dir_files
+            .iter()
+            .filter(|i| i.media_type == "video")
+            .copied()
+            .collect();
 
         if video_items.len() >= 2 {
             let source_key = format!("{}:video", dir_path);
             active_source_paths.insert(source_key.clone());
             upsert_auto_list(state, library_id, dir_path, "video", &source_key, &mut video_items);
-        }
-
-        if audio_items.len() >= 2 {
-            let source_key = format!("{}:audio", dir_path);
-            active_source_paths.insert(source_key.clone());
-            upsert_auto_list(state, library_id, dir_path, "audio", &source_key, &mut audio_items);
         }
     }
 
