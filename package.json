@@ -23,7 +23,11 @@
 		"tauri:build": "pnpm -r --filter tauri build",
 		"dev:android": "pnpm -r --filter tauri android:dev",
 		"tauri:android:dev": "pnpm -r --filter tauri tauri android dev",
-		"tauri:android:build": "pnpm -r --filter tauri tauri android build --apk",
+		"tauri:android:build": "pnpm -r --filter tauri android:build",
+		"build:android": "pnpm -r --filter tauri android:build",
+		"android:tv": "pnpm build:android && pnpm -r --filter tauri android:launch:tv",
+		"android:phone": "pnpm build:android && pnpm -r --filter tauri android:launch:phone",
+		"android:tablet": "pnpm build:android && pnpm -r --filter tauri android:launch:tablet",
 		"install:deps": "sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev libonig-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav"
 	},
 	"engines": {
