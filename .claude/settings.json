@@ -16,7 +16,8 @@
       "Bash($ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager \"system-images;android-36;google-tv;arm64-v8a\")",
       "Bash(ANDROID_SDK=/Users/bearni/Library/Android/sdk echo \"no\")",
       "Bash($ANDROID_SDK/cmdline-tools/latest/bin/avdmanager create:*)",
-      "Bash(ANDROID_SDK=/Users/bearni/Library/Android/sdk $ANDROID_SDK/cmdline-tools/latest/bin/avdmanager list avd)"
+      "Bash(ANDROID_SDK=/Users/bearni/Library/Android/sdk $ANDROID_SDK/cmdline-tools/latest/bin/avdmanager list avd)",
+      "Bash(xxd)"
     ]
   },
   "hooks": {
