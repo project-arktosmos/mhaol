@@ -1,5 +1,4 @@
 import { AdapterClass } from '$adapters/classes/adapter.class';
-import { MediaType } from '$types/library.type';
 
 export class LibraryFileAdapter extends AdapterClass {
 	constructor() {
@@ -14,22 +13,18 @@ export class LibraryFileAdapter extends AdapterClass {
 		return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 	}
 
-	getMediaTypeBadgeClass(mediaType: MediaType): string {
-		const map: Record<MediaType, string> = {
-			[MediaType.Video]: 'badge-primary',
-			[MediaType.Image]: 'badge-secondary',
-			[MediaType.Audio]: 'badge-accent'
+	getMediaTypeBadgeClass(mediaType: string): string {
+		const map: Record<string, string> = {
+			video: 'badge-primary'
 		};
-		return map[mediaType];
+		return map[mediaType] ?? 'badge-ghost';
 	}
 
-	getMediaTypeLabel(mediaType: MediaType): string {
-		const map: Record<MediaType, string> = {
-			[MediaType.Video]: 'Video',
-			[MediaType.Image]: 'Image',
-			[MediaType.Audio]: 'Audio'
+	getMediaTypeLabel(mediaType: string): string {
+		const map: Record<string, string> = {
+			video: 'Video'
 		};
-		return map[mediaType];
+		return map[mediaType] ?? mediaType;
 	}
 
 	getCategoryBadgeClass(categoryId: string): string {

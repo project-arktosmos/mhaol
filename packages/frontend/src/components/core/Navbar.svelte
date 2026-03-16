@@ -31,7 +31,7 @@
 			>
 				Downloads
 			</button>
-<button
+			<button
 				class="btn btn-ghost btn-sm"
 				onclick={() => modalRouterService.openNavbar('signaling')}
 			>
@@ -91,14 +91,16 @@
 				<li>
 					<button onclick={() => modalRouterService.openNavbar('downloads')}>Downloads</button>
 				</li>
-	<li>
+				<li>
 					<button onclick={() => modalRouterService.openNavbar('signaling')}>Signaling</button>
 				</li>
 				<li><button onclick={() => modalRouterService.openNavbar('identity')}>Identity</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('plugins')}>Plugins</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('addons')}>Addons</button></li>
-				<li><button onclick={() => modalRouterService.openNavbar('libraries')}>Libraries</button></li>
-			<li><button onclick={() => modalRouterService.openNavbar('settings')}>Settings</button></li>
+				<li>
+					<button onclick={() => modalRouterService.openNavbar('libraries')}>Libraries</button>
+				</li>
+				<li><button onclick={() => modalRouterService.openNavbar('settings')}>Settings</button></li>
 			</ul>
 		</div>
 	</div>

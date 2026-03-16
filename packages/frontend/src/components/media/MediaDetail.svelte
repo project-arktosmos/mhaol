@@ -4,7 +4,6 @@
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import { playerService } from '$services/player.service';
 	import type { MediaDetailSelection } from '$types/media-detail.type';
-	import type { MediaType } from '$types/library.type';
 	import type { DisplayTMDBMovieDetails } from 'tmdb/types';
 	import type { DisplayTMDBTvShowDetails } from 'tmdb/types';
 
@@ -87,10 +86,10 @@
 		<span
 			class={classNames(
 				'badge badge-xs',
-				libraryFileAdapter.getMediaTypeBadgeClass(selection.item.mediaTypeId as MediaType)
+				libraryFileAdapter.getMediaTypeBadgeClass(selection.item.mediaTypeId)
 			)}
 		>
-			{libraryFileAdapter.getMediaTypeLabel(selection.item.mediaTypeId as MediaType)}
+			{libraryFileAdapter.getMediaTypeLabel(selection.item.mediaTypeId)}
 		</span>
 		{#if selection.item.categoryId}
 			<span

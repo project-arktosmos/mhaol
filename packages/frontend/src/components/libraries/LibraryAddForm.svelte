@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { libraryService } from '$services/library.service';
-	import { MEDIA_TYPE_OPTIONS, type MediaType } from '$types/library.type';
+	import { LibraryType, LIBRARY_TYPE_OPTIONS } from '$types/library.type';
 	import DirectoryBrowser from './DirectoryBrowser.svelte';
 
 	const state = libraryService.state;
@@ -15,8 +15,8 @@
 		libraryService.setSelectedName(target.value);
 	}
 
-	function handleToggleMediaType(mediaType: MediaType) {
-		libraryService.toggleMediaType(mediaType);
+	function handleSelectLibraryType(libraryType: LibraryType) {
+		libraryService.setLibraryType(libraryType);
 	}
 
 	function handleAdd() {
@@ -24,7 +24,7 @@
 			libraryService.addLibrary(
 				$state.selectedName.trim(),
 				$state.selectedPath,
-				$state.selectedMediaTypes
+				$state.selectedLibraryType!
 			);
 		}
 	}
@@ -36,7 +36,7 @@
 	let canAdd = $derived(
 		$state.selectedPath.length > 0 &&
 			$state.selectedName.trim().length > 0 &&
-			$state.selectedMediaTypes.length > 0
+			$state.selectedLibraryType !== null
 	);
 </script>
 
@@ -84,19 +84,21 @@
 			/>
 		</div>
 
-		<!-- Media types -->
+		<!-- Library type -->
 		<div class="form-control">
 			<div class="label">
-				<span class="label-text font-medium">Media Types</span>
+				<span class="label-text font-medium">Library Type</span>
 			</div>
-			<div class="flex flex-wrap gap-3">
-				{#each MEDIA_TYPE_OPTIONS as option (option.value)}
+			<div class="flex gap-3">
+				{#each LIBRARY_TYPE_OPTIONS as option (option.value)}
 					<label class="label cursor-pointer gap-2">
 						<input
-							type="checkbox"
-							class="checkbox checkbox-sm checkbox-primary"
-							checked={$state.selectedMediaTypes.includes(option.value)}
-							onchange={() => handleToggleMediaType(option.value)}
+							type="radio"
+							name="library-type"
+							class="radio radio-sm radio-primary"
+							value={option.value}
+							checked={$state.selectedLibraryType === option.value}
+							onchange={() => handleSelectLibraryType(option.value)}
 						/>
 						<span class="label-text">{option.label}</span>
 					</label>
