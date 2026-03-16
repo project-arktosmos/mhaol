@@ -390,7 +390,11 @@
 		{#if selection.cardType === 'video'}
 			<button
 				class="btn btn-sm btn-primary"
-				onclick={() => selection.onlink?.(selection.item, 'tmdb')}>Link metadata</button
+				onclick={() => selection.onlink?.(selection.item, 'tmdb-movie')}>Link Movie</button
+			>
+			<button
+				class="btn btn-sm btn-primary"
+				onclick={() => selection.onlink?.(selection.item, 'tmdb-tv')}>Link TV Show</button
 			>
 			<button
 				class="btn btn-sm btn-info"

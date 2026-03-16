@@ -14,7 +14,7 @@ use std::convert::Infallible;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/config", get(get_config))
+        .route("/config", get(get_config).put(set_config))
         .route("/debug", get(debug_info))
         .route("/search", get(search_torrents))
         .route("/status", get(get_status))
@@ -34,6 +34,36 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
+async fn set_config(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let library_id = body["library_id"].as_str().unwrap_or("");
+    if library_id.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Missing library_id" })),
+        )
+            .into_response();
+    }
+
+    match state.libraries.get(library_id) {
+        Some(library) => {
+            let path = std::path::PathBuf::from(&library.path);
+            state.torrent_manager.set_download_path(path);
+            Json(serde_json::json!({
+                "download_path": state.torrent_manager.download_path(),
+            }))
+            .into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Library not found" })),
+        )
+            .into_response(),
+    }
+}
+
 async fn debug_info(State(state): State<AppState>) -> impl IntoResponse {
     match state.torrent_manager.debug_info().await {
         Ok(info) => Json(serde_json::json!({ "debug": info })).into_response(),
@@ -46,14 +76,16 @@ async fn debug_info(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
-    match state.torrent_manager.stats().await {
-        Ok(stats) => Json(serde_json::to_value(stats).unwrap()).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
-    }
+    let initialized = state.torrent_manager.is_initialized();
+    let download_path = state.torrent_manager.download_path();
+    let stats = state.torrent_manager.stats().await.ok();
+
+    Json(serde_json::json!({
+        "initialized": initialized,
+        "download_path": download_path,
+        "stats": stats,
+    }))
+    .into_response()
 }
 
 async fn clear_storage(State(state): State<AppState>) -> impl IntoResponse {
@@ -297,11 +329,12 @@ struct SearchResult {
     size: i64,
     #[serde(rename = "fileCount")]
     file_count: i64,
-    uploader: String,
+    #[serde(rename = "uploadedBy")]
+    uploaded_by: String,
     #[serde(rename = "uploadedAt")]
     uploaded_at: i64,
     category: String,
-    #[serde(rename = "magnetUri")]
+    #[serde(rename = "magnetLink")]
     magnet_uri: String,
 }
 
@@ -365,7 +398,7 @@ async fn search_torrents(
                                 leechers: r["leechers"].as_str()?.parse().ok()?,
                                 size: r["size"].as_str()?.parse().ok()?,
                                 file_count: r["num_files"].as_str()?.parse().unwrap_or(0),
-                                uploader: r["username"].as_str().unwrap_or("").to_string(),
+                                uploaded_by: r["username"].as_str().unwrap_or("").to_string(),
                                 uploaded_at: r["added"].as_str()?.parse().ok()?,
                                 category: r["category"].as_str().unwrap_or("0").to_string(),
                                 magnet_uri,

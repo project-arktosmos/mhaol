@@ -161,6 +161,10 @@ impl TorrentManager {
         self.config.read().download_path.clone()
     }
 
+    pub fn set_download_path(&self, path: PathBuf) {
+        self.config.write().download_path = path;
+    }
+
     pub fn is_initialized(&self) -> bool {
         self.session.read().is_some()
     }

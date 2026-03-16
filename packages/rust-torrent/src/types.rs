@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct TorrentInfo {
     pub id: usize,
     pub name: String,
@@ -37,6 +38,7 @@ pub struct AddTorrentRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct TorrentStats {
     pub total_downloaded: u64,
     pub total_uploaded: u64,
