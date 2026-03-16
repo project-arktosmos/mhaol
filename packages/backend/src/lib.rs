@@ -10,10 +10,6 @@ use db::DbPool;
 use identity::IdentityManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
-#[cfg(not(target_os = "android"))]
-use mhaol_yt_dlp::DownloadManager;
-#[cfg(not(target_os = "android"))]
-use modules::image_tagger::ImageTaggerManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
 use signaling_rooms::SignalingRoomManager;
@@ -66,20 +62,14 @@ pub struct AppState {
     pub media_types: MediaTypeRepo,
     pub categories: CategoryRepo,
     pub link_sources: LinkSourceRepo,
-    pub youtube_downloads: YouTubeDownloadRepo,
     pub torrent_downloads: TorrentDownloadRepo,
-    pub image_tags: ImageTagRepo,
     pub media_lists: MediaListRepo,
     pub media_list_items: MediaListItemRepo,
     pub media_list_links: MediaListLinkRepo,
     pub identity_manager: IdentityManager,
     pub module_registry: Arc<RwLock<ModuleRegistry>>,
     #[cfg(not(target_os = "android"))]
-    pub ytdl_manager: Arc<DownloadManager>,
-    #[cfg(not(target_os = "android"))]
     pub torrent_manager: Arc<TorrentManager>,
-    #[cfg(not(target_os = "android"))]
-    pub image_tagger_manager: Arc<ImageTaggerManager>,
     pub signaling_servers: SignalingServerRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
     pub worker_bridge: Arc<WorkerBridge>,
@@ -100,23 +90,14 @@ impl AppState {
             media_types: MediaTypeRepo::new(Arc::clone(&db)),
             categories: CategoryRepo::new(Arc::clone(&db)),
             link_sources: LinkSourceRepo::new(Arc::clone(&db)),
-            youtube_downloads: YouTubeDownloadRepo::new(Arc::clone(&db)),
             torrent_downloads: TorrentDownloadRepo::new(Arc::clone(&db)),
-            image_tags: ImageTagRepo::new(Arc::clone(&db)),
             media_lists: MediaListRepo::new(Arc::clone(&db)),
             media_list_items: MediaListItemRepo::new(Arc::clone(&db)),
             media_list_links: MediaListLinkRepo::new(Arc::clone(&db)),
             identity_manager: IdentityManager::new(identities_path),
             module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
             #[cfg(not(target_os = "android"))]
-            ytdl_manager: {
-                let config = mhaol_yt_dlp::YtDownloadConfig::from_env();
-                Arc::new(DownloadManager::new(config))
-            },
-            #[cfg(not(target_os = "android"))]
             torrent_manager: Arc::new(TorrentManager::new()),
-            #[cfg(not(target_os = "android"))]
-            image_tagger_manager: Arc::new(ImageTaggerManager::new()),
             signaling_servers: SignalingServerRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
@@ -127,24 +108,19 @@ impl AppState {
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {
         use modules::{
-            lyrics::LyricsModule, musicbrainz::MusicbrainzModule,
             signaling::SignalingModule, signaling_deploy::SignalingDeployModule,
             tmdb::TmdbModule, torrent_search::TorrentSearchModule,
-            youtube_meta::YoutubeMetaModule,
         };
         #[cfg(not(target_os = "android"))]
         use modules::{
-            image_tagger::ImageTaggerModule, p2p_stream::P2pStreamModule,
-            torrent::TorrentModule, ytdl::YtdlModule,
+            p2p_stream::P2pStreamModule,
+            torrent::TorrentModule,
         };
 
         let mut registry = self.module_registry.write();
 
         // Addons
         registry.register(Box::new(TmdbModule));
-        registry.register(Box::new(MusicbrainzModule));
-        registry.register(Box::new(YoutubeMetaModule));
-        registry.register(Box::new(LyricsModule));
         registry.register(Box::new(TorrentSearchModule));
 
         // Signaling modules
@@ -156,16 +132,10 @@ impl AppState {
         // Core modules (desktop only)
         #[cfg(not(target_os = "android"))]
         {
-            registry.register(Box::new(YtdlModule {
-                manager: Arc::clone(&self.ytdl_manager),
-            }));
             registry.register(Box::new(TorrentModule {
                 manager: Arc::clone(&self.torrent_manager),
             }));
             registry.register(Box::new(P2pStreamModule::new()));
-            registry.register(Box::new(ImageTaggerModule {
-                manager: Arc::clone(&self.image_tagger_manager),
-            }));
         }
 
         // Initialize all registered modules (applies schemas, seeds settings, registers link sources)

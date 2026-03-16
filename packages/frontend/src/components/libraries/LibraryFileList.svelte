@@ -2,8 +2,6 @@
 	import type { LibraryFile } from '$types/library.type';
 	import LibraryFileItem from './LibraryFileItem.svelte';
 	import TmdbLinkModal from './TmdbLinkModal.svelte';
-	import MusicBrainzLinkModal from './MusicBrainzLinkModal.svelte';
-	import YouTubePreviewModal from './YouTubePreviewModal.svelte';
 	import MediaTypeCategoryModal from './MediaTypeCategoryModal.svelte';
 
 	interface Props {
@@ -19,31 +17,13 @@
 			type: 'movie' | 'tv'
 		) => void;
 		onunlink: (file: LibraryFile) => void;
-		onyoutubelink: (file: LibraryFile, youtubeId: string) => void;
-		onyoutubeunlink: (file: LibraryFile) => void;
-		onmusicbrainzlink: (file: LibraryFile, musicbrainzId: string) => void;
-		onmusicbrainzunlink: (file: LibraryFile) => void;
 		onedittype: (file: LibraryFile, mediaType: string, categoryId: string | null) => void;
 	}
 
-	let {
-		files,
-		loading,
-		error,
-		onscan,
-		onlink,
-		onunlink,
-		onyoutubelink,
-		onyoutubeunlink,
-		onmusicbrainzlink,
-		onmusicbrainzunlink,
-		onedittype
-	}: Props = $props();
+	let { files, loading, error, onscan, onlink, onunlink, onedittype }: Props = $props();
 
 	let modalFile: LibraryFile | null = $state(null);
 	let modalFileType: 'movie' | 'tv' = $state('movie');
-	let musicbrainzModalFile: LibraryFile | null = $state(null);
-	let youtubePreviewFile: LibraryFile | null = $state(null);
 	let typeCategoryModalFile: LibraryFile | null = $state(null);
 
 	function openModal(file: LibraryFile, type: 'movie' | 'tv') {
@@ -65,29 +45,6 @@
 			onlink(modalFile, tmdbId, seasonNumber, episodeNumber, type);
 			closeModal();
 		}
-	}
-
-	function openMusicBrainzModal(file: LibraryFile) {
-		musicbrainzModalFile = file;
-	}
-
-	function closeMusicBrainzModal() {
-		musicbrainzModalFile = null;
-	}
-
-	function handleMusicBrainzLink(musicbrainzId: string) {
-		if (musicbrainzModalFile) {
-			onmusicbrainzlink(musicbrainzModalFile, musicbrainzId);
-			closeMusicBrainzModal();
-		}
-	}
-
-	function openYoutubePreview(file: LibraryFile) {
-		youtubePreviewFile = file;
-	}
-
-	function closeYoutubePreview() {
-		youtubePreviewFile = null;
 	}
 
 	function openTypeCategoryModal(file: LibraryFile) {
@@ -142,8 +99,6 @@
 						<th class="w-24">Category</th>
 						<th class="w-20">Ext</th>
 						<th class="w-24">TMDB</th>
-						<th class="w-28">YouTube</th>
-						<th class="w-28">MusicBrainz</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -152,11 +107,6 @@
 							{file}
 							onlinkclick={openModal}
 							onunlinkclick={(f) => onunlink(f)}
-							onyoutubelink={(f, ytId) => onyoutubelink(f, ytId)}
-							onyoutubeunlink={(f) => onyoutubeunlink(f)}
-							onyoutubepreview={openYoutubePreview}
-							onmusicbrainzlinkclick={openMusicBrainzModal}
-							onmusicbrainzunlink={(f) => onmusicbrainzunlink(f)}
 							onedittype={openTypeCategoryModal}
 						/>
 					{/each}
@@ -168,22 +118,6 @@
 
 {#if modalFile}
 	<TmdbLinkModal file={modalFile} type={modalFileType} onlink={handleLink} onclose={closeModal} />
-{/if}
-
-{#if musicbrainzModalFile}
-	<MusicBrainzLinkModal
-		file={musicbrainzModalFile}
-		onlink={handleMusicBrainzLink}
-		onclose={closeMusicBrainzModal}
-	/>
-{/if}
-
-{#if youtubePreviewFile && youtubePreviewFile.links.youtube}
-	<YouTubePreviewModal
-		file={youtubePreviewFile}
-		videoId={youtubePreviewFile.links.youtube.serviceId}
-		onclose={closeYoutubePreview}
-	/>
 {/if}
 
 {#if typeCategoryModalFile}

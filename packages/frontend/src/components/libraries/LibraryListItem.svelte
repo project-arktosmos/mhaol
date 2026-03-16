@@ -19,10 +19,6 @@
 			type: 'movie' | 'tv'
 		) => void;
 		onunlink: (file: LibraryFile) => void;
-		onyoutubelink: (file: LibraryFile, youtubeId: string) => void;
-		onyoutubeunlink: (file: LibraryFile) => void;
-		onmusicbrainzlink: (file: LibraryFile, musicbrainzId: string) => void;
-		onmusicbrainzunlink: (file: LibraryFile) => void;
 		onedittype: (file: LibraryFile, mediaType: string, categoryId: string | null) => void;
 	}
 
@@ -35,10 +31,6 @@
 		onscan,
 		onlink,
 		onunlink,
-		onyoutubelink,
-		onyoutubeunlink,
-		onmusicbrainzlink,
-		onmusicbrainzunlink,
 		onedittype
 	}: Props = $props();
 
@@ -100,10 +92,6 @@
 		onscan={() => onscan(library)}
 		{onlink}
 		{onunlink}
-		{onyoutubelink}
-		{onyoutubeunlink}
-		{onmusicbrainzlink}
-		{onmusicbrainzunlink}
 		{onedittype}
 	/>
 </div>

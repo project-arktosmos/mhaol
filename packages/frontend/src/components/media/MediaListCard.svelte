@@ -4,13 +4,11 @@
 	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
 	import type { MediaType } from '$types/library.type';
 	import type { DisplayTMDBTvShowDetails } from 'tmdb/types';
-	import type { DisplayMusicBrainzReleaseGroup } from 'musicbrainz/types';
 
 	interface Props {
 		list: MediaList;
 		selected?: boolean;
 		tmdbMetadata?: DisplayTMDBTvShowDetails | null;
-		mbMetadata?: DisplayMusicBrainzReleaseGroup | null;
 		seasonCount?: number | null;
 		onselect?: (list: MediaList) => void;
 	}
@@ -19,12 +17,11 @@
 		list,
 		selected = false,
 		tmdbMetadata = null,
-		mbMetadata = null,
 		seasonCount = null,
 		onselect
 	}: Props = $props();
 
-	let kindLabel = $derived(list.mediaType === 'video' ? 'TV Show' : 'Album');
+	let kindLabel = $derived(list.mediaType === 'video' ? 'TV Show' : list.mediaType);
 
 	let displayTitle = $derived(seasonCount ? (tmdbMetadata?.name ?? list.title) : list.title);
 
@@ -38,15 +35,10 @@
 			}
 		}
 		if (tmdbMetadata?.posterUrl) return tmdbMetadata.posterUrl;
-		if (mbMetadata?.coverArtUrl) return mbMetadata.coverArtUrl;
 		return null;
 	});
 
-	let subtitle = $derived.by(() => {
-		if (tmdbMetadata) return tmdbMetadata.name;
-		if (mbMetadata) return mbMetadata.artistCredits;
-		return null;
-	});
+	let subtitle = $derived(tmdbMetadata ? tmdbMetadata.name : null);
 </script>
 
 <div

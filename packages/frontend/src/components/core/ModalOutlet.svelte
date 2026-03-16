@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Modal from '$components/core/Modal.svelte';
 	import { modalRouterService } from '$services/modal-router.service';
-	import YouTubeModalContent from '$components/youtube/YouTubeModalContent.svelte';
 	import TorrentModalContent from '$components/torrent/TorrentModalContent.svelte';
 	import DownloadsModalContent from '$components/downloads/DownloadsModalContent.svelte';
 	import LibraryModalContent from '$components/libraries/LibraryModalContent.svelte';
@@ -10,13 +9,10 @@
 	import SettingsModalContent from '$components/settings/SettingsModalContent.svelte';
 	import AddonsModalContent from '$components/addons/AddonsModalContent.svelte';
 	import PluginsModalContent from '$components/plugins/PluginsModalContent.svelte';
-	import YouTubeSearchModalContent from '$components/youtube-search/YouTubeSearchModalContent.svelte';
 
 	const routerStore = modalRouterService.store;
 
 	const MAX_WIDTHS: Record<string, string> = {
-		youtube: 'max-w-6xl',
-		'youtube-search': 'max-w-5xl',
 		torrent: 'max-w-5xl',
 		downloads: 'max-w-5xl',
 		libraries: 'max-w-5xl',
@@ -36,11 +32,7 @@
 </script>
 
 <Modal open={!!activeId} {maxWidth} onclose={handleClose}>
-	{#if activeId === 'youtube-search'}
-		<YouTubeSearchModalContent />
-	{:else if activeId === 'youtube'}
-		<YouTubeModalContent />
-	{:else if activeId === 'torrent'}
+	{#if activeId === 'torrent'}
 		<TorrentModalContent />
 	{:else if activeId === 'downloads'}
 		<DownloadsModalContent />

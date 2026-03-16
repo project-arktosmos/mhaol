@@ -138,27 +138,6 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
         })
         .collect();
 
-    // Auto-link completed YouTube downloads to library items
-    let completed = state.youtube_downloads.get_by_state("completed");
-    for dl in &completed {
-        if let Some(ref output_path) = dl.output_path {
-            if let Some(item_id) = state.library_items.exists_by_path(output_path) {
-                let existing = state
-                    .library_item_links
-                    .get_by_item_and_service(&item_id, "youtube");
-                if existing.is_none() {
-                    state.library_item_links.upsert(
-                        &uuid::Uuid::new_v4().to_string(),
-                        &item_id,
-                        "youtube",
-                        &dl.video_id,
-                        None,
-                        None,
-                    );
-                }
-            }
-        }
-    }
 
     let map_rows = |rows: Vec<crate::db::repo::library_item::LibraryItemRow>,
                     media_type_id: &str|

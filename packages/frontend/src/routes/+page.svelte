@@ -7,19 +7,15 @@
 	import { playerAdapter } from '$adapters/classes/player.adapter';
 	import { mediaDetailService } from '$services/media-detail.service';
 	import { libraryService } from '$services/library.service';
-	import { imageTaggerService } from '$services/image-tagger.service';
 	import { modalRouterService } from '$services/modal-router.service';
 	import Modal from '$components/core/Modal.svelte';
 	import type { MediaDetailCardType } from '$types/media-detail.type';
 	import TmdbLinkModal from '$components/libraries/TmdbLinkModal.svelte';
-	import MusicBrainzLinkModal from '$components/libraries/MusicBrainzLinkModal.svelte';
-	import YouTubeLinkModal from '$components/libraries/YouTubeLinkModal.svelte';
 	import MediaCard from '$components/media/MediaCard.svelte';
 	import MediaListCard from '$components/media/MediaListCard.svelte';
 	import MediaDetail from '$components/media/MediaDetail.svelte';
 	import type { MediaList, MediaListLink } from '$types/media-list.type';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
-	import LyricsPanel from '$components/player/LyricsPanel.svelte';
 	import type { LibraryFile } from '$types/library.type';
 	import type {
 		MediaItem,
@@ -27,15 +23,8 @@
 		MediaLinkSource,
 		MediaCategory
 	} from '$types/media-card.type';
-	import type { ImageTag, ImagesResponse } from '$types/image-tagger.type';
 	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'tmdb/types';
-	import type { YouTubeOEmbedResponse } from 'youtube/oembed';
-	import type {
-		DisplayMusicBrainzRecording,
-		DisplayMusicBrainzReleaseGroup
-	} from 'musicbrainz/types';
 	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'tmdb/transform';
-	import { releaseGroupToDisplay } from 'musicbrainz/transform';
 
 	interface Props {
 		data: {
@@ -51,7 +40,6 @@
 	const ALL_CATEGORY = '__all__';
 	const ALL_TYPE = '__all_type__';
 	const LISTS_TYPE = '__lists__';
-	const EMPTY_TAGS: ImageTag[] = [];
 
 	let { data }: Props = $props();
 
@@ -112,81 +100,25 @@
 	let listTmdbMetadata: Record<string, DisplayTMDBTvShowDetails> = $state({});
 	let listTmdbLoading: Set<string> = $state(new Set());
 
-	// List-level MusicBrainz metadata state
-	let listMbMetadata: Record<string, DisplayMusicBrainzReleaseGroup> = $state({});
-	let listMbLoading: Set<string> = $state(new Set());
-
 	// TMDB metadata state
 	let tmdbMetadata: Record<string, DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails> = $state({});
 	let tmdbLoading: Set<string> = $state(new Set());
 
-	// YouTube metadata state
-	let youtubeMetadata: Record<string, YouTubeOEmbedResponse> = $state({});
-	let youtubeLoading: Set<string> = $state(new Set());
-
-	// MusicBrainz metadata state
-	let musicbrainzMetadata: Record<string, DisplayMusicBrainzRecording> = $state({});
-	let musicbrainzLoading: Set<string> = $state(new Set());
-
-	// Merged loading state
-	let metadataLoading = $derived(
-		new Set([...tmdbLoading, ...youtubeLoading, ...musicbrainzLoading])
-	);
-
-	// Image tags state
-	let imageTagsMap: Record<string, ImageTag[]> = $state({});
-
 	// Scan all libraries state
 	let scanning = $state(false);
-
-	// Image tagger state for progress display
-	const taggerState = imageTaggerService.state;
 
 	async function handleScanAll() {
 		scanning = true;
 		try {
 			await libraryService.scanAllLibraries();
 			await invalidateAll();
-			autoTagNewImages();
 		} finally {
 			scanning = false;
 		}
 	}
 
-	function autoTagNewImages() {
-		const allItems = Object.values(data.itemsByType).flat();
-		const untaggedImageIds = allItems
-			.filter(
-				(item) =>
-					item.mediaTypeId === 'image' &&
-					(!imageTagsMap[item.id] || imageTagsMap[item.id].length === 0)
-			)
-			.map((item) => item.id);
-
-		if (untaggedImageIds.length === 0) return;
-
-		imageTaggerService.autoTagImages(untaggedImageIds, (itemId, tags) => {
-			imageTagsMap = { ...imageTagsMap, [itemId]: tags };
-		});
-	}
-
 	onMount(async () => {
 		libraryService.initialize();
-		try {
-			const res = await fetch(apiUrl('/api/images'));
-			if (res.ok) {
-				const data: ImagesResponse = await res.json();
-				const map: Record<string, ImageTag[]> = {};
-				for (const img of data.images) {
-					if (img.tags.length > 0) {
-						map[img.id] = img.tags;
-					}
-				}
-				imageTagsMap = map;
-			}
-		} catch {
-			// Image tags are non-critical, fail silently
-		}
 	});
 
 	function getItemLinks(item: MediaItem): Record<string, MediaItemLink> {
@@ -264,28 +196,7 @@
 	function resolveCardType(item: MediaItem): MediaDetailCardType {
 		if (item.categoryId === 'movies' && item.links.tmdb) return 'movie';
 		if (item.categoryId === 'tv' && item.links.tmdb) return 'tv';
-		if (item.links.youtube) return 'youtube';
-		if (item.mediaTypeId === 'audio') return 'audio';
-		if (item.mediaTypeId === 'image') return 'image';
 		return 'video';
-	}
-
-	async function handleTagImage(item: MediaItem) {
-		await imageTaggerService.autoTagImages([item.id], (itemId, tags) => {
-			imageTagsMap = { ...imageTagsMap, [itemId]: tags };
-		});
-	}
-
-	async function handleAddTag(item: MediaItem, tag: string) {
-		await imageTaggerService.addTag(item.id, tag);
-		const existing = imageTagsMap[item.id] ?? EMPTY_TAGS;
-		imageTagsMap = { ...imageTagsMap, [item.id]: [...existing, { tag, score: 1.0 }] };
-	}
-
-	async function handleRemoveTag(item: MediaItem, tag: string) {
-		await imageTaggerService.removeTag(item.id, tag);
-		const existing = imageTagsMap[item.id] ?? EMPTY_TAGS;
-		imageTagsMap = { ...imageTagsMap, [item.id]: existing.filter((t) => t.tag !== tag) };
 	}
 
 	function handleSelect(item: MediaItem) {
@@ -293,19 +204,12 @@
 			item,
 			cardType: resolveCardType(item),
 			tmdbMetadata: tmdbMetadata[item.id] ?? null,
-			youtubeMetadata: youtubeMetadata[item.id] ?? null,
-			musicbrainzMetadata: musicbrainzMetadata[item.id] ?? null,
-			imageTags: imageTagsMap[item.id] ?? EMPTY_TAGS,
-			imageTagging: $taggerState.taggingItemIds.includes(item.id),
 			onplay: (i) => handlePlay(i),
 			onlink: (i, service) => {
 				linkModalItem = i;
 				linkModalService = service;
 			},
-			onunlink: (i, service) => handleUnlink(i, service),
-			ontagimage: (i) => handleTagImage(i),
-			onaddtag: (i, tag) => handleAddTag(i, tag),
-			onremovetag: (i, tag) => handleRemoveTag(i, tag)
+			onunlink: (i, service) => handleUnlink(i, service)
 		});
 		modalRouterService.openMediaDetail(item.mediaTypeId, item.categoryId ?? '', item.id);
 	}
@@ -318,27 +222,12 @@
 		const updatedItem = itemsWithOverrides.find((i) => i.id === id);
 		if (!updatedItem) return;
 		const newTmdb = tmdbMetadata[id] ?? null;
-		const newYt = youtubeMetadata[id] ?? null;
-		const newMb = musicbrainzMetadata[id] ?? null;
-		const newTags = imageTagsMap[id] ?? EMPTY_TAGS;
-		const newTagging = $taggerState.taggingItemIds.includes(id);
-		if (
-			newTmdb !== sel.tmdbMetadata ||
-			newYt !== sel.youtubeMetadata ||
-			newMb !== sel.musicbrainzMetadata ||
-			updatedItem !== sel.item ||
-			newTags !== sel.imageTags ||
-			newTagging !== sel.imageTagging
-		) {
+		if (newTmdb !== sel.tmdbMetadata || updatedItem !== sel.item) {
 			mediaDetailService.select({
 				...sel,
 				item: updatedItem,
 				cardType: resolveCardType(updatedItem),
-				tmdbMetadata: newTmdb,
-				youtubeMetadata: newYt,
-				musicbrainzMetadata: newMb,
-				imageTags: newTags,
-				imageTagging: newTagging
+				tmdbMetadata: newTmdb
 			});
 		}
 	});
@@ -440,53 +329,6 @@
 		linkModalService = null;
 	}
 
-	async function handleMusicBrainzLink(musicbrainzId: string) {
-		if (!linkModalItem) return;
-		const item = linkModalItem;
-
-		const res = await fetch(
-			apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/musicbrainz`),
-			{
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ musicbrainzId })
-			}
-		);
-
-		if (res.ok) {
-			updateItemLinks(item.id, 'musicbrainz', {
-				serviceId: musicbrainzId,
-				seasonNumber: null,
-				episodeNumber: null
-			});
-		}
-
-		linkModalItem = null;
-		linkModalService = null;
-	}
-
-	async function handleYoutubeLink(youtubeId: string) {
-		if (!linkModalItem) return;
-		const item = linkModalItem;
-
-		const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/youtube`), {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ youtubeId })
-		});
-
-		if (res.ok) {
-			updateItemLinks(item.id, 'youtube', {
-				serviceId: youtubeId,
-				seasonNumber: null,
-				episodeNumber: null
-			});
-		}
-
-		linkModalItem = null;
-		linkModalService = null;
-	}
-
 	async function handleUnlink(item: MediaItem, service: string) {
 		const res = await fetch(
 			apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/${service}`),
@@ -500,14 +342,6 @@
 			if (service === 'tmdb') {
 				const { [item.id]: _, ...rest } = tmdbMetadata;
 				tmdbMetadata = rest;
-			}
-			if (service === 'youtube') {
-				const { [item.id]: _, ...rest } = youtubeMetadata;
-				youtubeMetadata = rest;
-			}
-			if (service === 'musicbrainz') {
-				const { [item.id]: _, ...rest } = musicbrainzMetadata;
-				musicbrainzMetadata = rest;
 			}
 		}
 	}
@@ -573,31 +407,7 @@
 		linkModalListService = null;
 	}
 
-	async function handleListMusicBrainzLink(musicbrainzId: string) {
-		if (!linkModalList) return;
-		const list = linkModalList;
-		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/musicbrainz`), {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ musicbrainzId })
-		});
-		if (res.ok) {
-			listLinkOverrides = {
-				...listLinkOverrides,
-				[list.id]: {
-					...listLinkOverrides[list.id],
-					musicbrainz: { serviceId: musicbrainzId, seasonNumber: null }
-				}
-			};
-			const { [list.id]: _, ...restMb } = listMbMetadata;
-			listMbMetadata = restMb;
-		}
-		linkModalList = null;
-		linkModalListService = null;
-	}
-
 	async function handleListUnlink(list: MediaList, service: string) {
-		const links = getListLinks(list);
 		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/${service}`), {
 			method: 'DELETE'
 		});
@@ -606,11 +416,6 @@
 				...listLinkOverrides,
 				[list.id]: { ...listLinkOverrides[list.id], [service]: null }
 			};
-			if (service === 'musicbrainz') {
-				const { [list.id]: _, ...rest } = listMbMetadata;
-				listMbMetadata = rest;
-			}
-			// TMDB metadata keyed by tmdbId — don't remove since other lists may share it
 		}
 	}
 
@@ -652,24 +457,6 @@
 		}
 	}
 
-	async function fetchListMbMetadata(listId: string, mbId: string) {
-		if (listMbMetadata[listId] || listMbLoading.has(listId)) return;
-		listMbLoading = new Set([...listMbLoading, listId]);
-		try {
-			const res = await fetch(apiUrl(`/api/musicbrainz/release-group/${mbId}`));
-			if (res.ok) {
-				const raw = await res.json();
-				listMbMetadata = { ...listMbMetadata, [listId]: releaseGroupToDisplay(raw) };
-			}
-		} catch (e) {
-			console.error('Failed to load list MusicBrainz metadata:', e);
-		} finally {
-			const next = new Set(listMbLoading);
-			next.delete(listId);
-			listMbLoading = next;
-		}
-	}
-
 	function itemAsLibraryFile(item: MediaItem): LibraryFile {
 		return {
 			id: item.id,
@@ -708,73 +495,10 @@
 		}
 	}
 
-	async function fetchYoutubeMetadata(item: MediaItem) {
-		const youtubeLink = item.links.youtube;
-		if (!youtubeLink || youtubeMetadata[item.id] || youtubeLoading.has(item.id)) return;
-
-		youtubeLoading = new Set([...youtubeLoading, item.id]);
-
-		try {
-			const res = await fetch(apiUrl(`/api/youtube/oembed?videoId=${youtubeLink.serviceId}`));
-			if (res.ok) {
-				youtubeMetadata[item.id] = await res.json();
-			}
-		} catch (e) {
-			console.error('Failed to load YouTube metadata:', e);
-		} finally {
-			const next = new Set(youtubeLoading);
-			next.delete(item.id);
-			youtubeLoading = next;
-		}
-	}
-
-	async function fetchMusicbrainzMetadata(item: MediaItem) {
-		const mbLink = item.links.musicbrainz;
-		if (!mbLink || musicbrainzMetadata[item.id] || musicbrainzLoading.has(item.id)) return;
-
-		musicbrainzLoading = new Set([...musicbrainzLoading, item.id]);
-
-		try {
-			const res = await fetch(apiUrl(`/api/musicbrainz/recording/${mbLink.serviceId}`));
-			if (res.ok) {
-				musicbrainzMetadata[item.id] = await res.json();
-			}
-		} catch (e) {
-			console.error('Failed to load MusicBrainz metadata:', e);
-		} finally {
-			const next = new Set(musicbrainzLoading);
-			next.delete(item.id);
-			musicbrainzLoading = next;
-		}
-	}
-
-	// Pre-fetched lyrics items tracker (prevents duplicate fetches)
-	let lyricsFetched: Set<string> = $state(new Set());
-
-	async function fetchLyrics(item: MediaItem) {
-		if (!item.links.musicbrainz || lyricsFetched.has(item.id)) return;
-		lyricsFetched = new Set([...lyricsFetched, item.id]);
-
-		try {
-			await fetch(apiUrl(`/api/lyrics/${item.id}`));
-		} catch {
-			// Lyrics pre-fetch is best-effort
-		}
-	}
-
 	$effect(() => {
 		for (const item of itemsWithOverrides) {
 			if (item.links.tmdb) {
 				fetchTmdbMetadata(item);
-			}
-			if (item.links.youtube) {
-				fetchYoutubeMetadata(item);
-			}
-			if (item.links.musicbrainz) {
-				fetchMusicbrainzMetadata(item);
-				if (item.mediaTypeId === 'audio') {
-					fetchLyrics(item);
-				}
 			}
 		}
 	});
@@ -785,9 +509,6 @@
 			const links = getListLinks(list);
 			if (links.tmdb) {
 				fetchListTmdbMetadata(links.tmdb.serviceId);
-			}
-			if (links.musicbrainz) {
-				fetchListMbMetadata(list.id, links.musicbrainz.serviceId);
 			}
 		}
 	});
@@ -874,7 +595,6 @@
 			{@const listTmdb = currentListLinks.tmdb
 				? (listTmdbMetadata[currentListLinks.tmdb.serviceId] ?? null)
 				: null}
-			{@const listMb = listMbMetadata[selectedList.id] ?? null}
 			{@const selectedSeason = currentListLinks.tmdb?.seasonNumber ?? null}
 			{@const seasonMeta =
 				listTmdb && selectedSeason != null
@@ -908,26 +628,6 @@
 								}}
 							>
 								Link TV Show
-							</button>
-						{/if}
-					{/if}
-					{#if selectedList.mediaType === 'audio'}
-						{#if currentListLinks.musicbrainz}
-							<button
-								class="btn btn-outline btn-xs btn-error"
-								onclick={() => handleListUnlink(selectedList!, 'musicbrainz')}
-							>
-								Unlink Album
-							</button>
-						{:else}
-							<button
-								class="btn btn-outline btn-xs"
-								onclick={() => {
-									linkModalList = selectedList;
-									linkModalListService = 'musicbrainz';
-								}}
-							>
-								Link Album
 							</button>
 						{/if}
 					{/if}
@@ -978,26 +678,6 @@
 						{/if}
 					</div>
 				</div>
-			{:else if listMb}
-				<div class="mb-4 flex gap-4 rounded-lg bg-base-200 p-4">
-					{#if listMb.coverArtUrl}
-						<img
-							src={listMb.coverArtUrl}
-							alt={listMb.title}
-							class="h-40 w-40 rounded-lg object-cover"
-						/>
-					{/if}
-					<div class="flex flex-1 flex-col gap-1">
-						<h3 class="text-lg font-semibold">{listMb.title}</h3>
-						<p class="text-sm opacity-70">{listMb.artistCredits}</p>
-						{#if listMb.firstReleaseYear && listMb.firstReleaseYear !== 'Unknown'}
-							<p class="text-xs opacity-50">{listMb.firstReleaseYear}</p>
-						{/if}
-						{#if listMb.primaryType}
-							<span class="mt-1 badge badge-outline badge-sm">{listMb.primaryType}</span>
-						{/if}
-					</div>
-				</div>
 			{/if}
 			{#if selectedList.items.length > 0}
 				<div
@@ -1007,11 +687,7 @@
 						<MediaCard
 							{item}
 							tmdbMetadata={tmdbMetadata[item.id] ?? null}
-							youtubeMetadata={youtubeMetadata[item.id] ?? null}
-							musicbrainzMetadata={musicbrainzMetadata[item.id] ?? null}
-							metadataLoading={metadataLoading.has(item.id)}
-							imageTags={imageTagsMap[item.id] ?? EMPTY_TAGS}
-							tagging={$taggerState.taggingItemIds.includes(item.id)}
+							metadataLoading={tmdbLoading.has(item.id)}
 							selected={selectedItemId === item.id}
 							onselect={(i) => handleSelect(i)}
 						/>
@@ -1086,11 +762,7 @@
 								<MediaCard
 									{item}
 									tmdbMetadata={tmdbMetadata[item.id] ?? null}
-									youtubeMetadata={youtubeMetadata[item.id] ?? null}
-									musicbrainzMetadata={musicbrainzMetadata[item.id] ?? null}
-									metadataLoading={metadataLoading.has(item.id)}
-									imageTags={imageTagsMap[item.id] ?? EMPTY_TAGS}
-									tagging={$taggerState.taggingItemIds.includes(item.id)}
+									metadataLoading={tmdbLoading.has(item.id)}
 									selected={selectedItemId === item.id}
 									onselect={(i) => handleSelect(i)}
 								/>
@@ -1112,7 +784,6 @@
 						<MediaListCard
 							{list}
 							tmdbMetadata={links.tmdb ? (listTmdbMetadata[links.tmdb.serviceId] ?? null) : null}
-							mbMetadata={listMbMetadata[list.id] ?? null}
 							onselect={(l) => {
 								selectedList = l;
 							}}
@@ -1134,7 +805,7 @@
 		{:else}
 			<div class="rounded-lg bg-base-200 p-8 text-center">
 				<p class="opacity-50">
-					No lists yet. Scan a library with directories containing multiple audio or video files.
+					No lists yet. Scan a library with directories containing multiple video files.
 				</p>
 			</div>
 		{/if}
@@ -1148,11 +819,7 @@
 					<MediaCard
 						{item}
 						tmdbMetadata={tmdbMetadata[item.id] ?? null}
-						youtubeMetadata={youtubeMetadata[item.id] ?? null}
-						musicbrainzMetadata={musicbrainzMetadata[item.id] ?? null}
-						metadataLoading={metadataLoading.has(item.id)}
-						imageTags={imageTagsMap[item.id] ?? EMPTY_TAGS}
-						tagging={$taggerState.taggingItemIds.includes(item.id)}
+						metadataLoading={tmdbLoading.has(item.id)}
 						selected={selectedItemId === item.id}
 						onselect={(i) => handleSelect(i)}
 					/>
@@ -1192,15 +859,6 @@
 					positionSecs={$playerState.positionSecs}
 					durationSecs={$playerState.durationSecs}
 				/>
-				{#if $playerState.currentFile.mode === 'audio'}
-					<div class="mt-2">
-						<LyricsPanel
-							currentFile={$playerState.currentFile}
-							positionSecs={$playerState.positionSecs}
-							on:seek={(e) => playerService.seek(e.detail.positionSecs)}
-						/>
-					</div>
-				{/if}
 			</div>
 		{/if}
 	{/if}
@@ -1230,44 +888,11 @@
 	/>
 {/if}
 
-{#if linkModalItem && linkModalService === 'musicbrainz'}
-	<MusicBrainzLinkModal
-		file={itemAsLibraryFile(linkModalItem)}
-		onlink={handleMusicBrainzLink}
-		onclose={() => {
-			linkModalItem = null;
-			linkModalService = null;
-		}}
-	/>
-{/if}
-
-{#if linkModalItem && linkModalService === 'youtube'}
-	<YouTubeLinkModal
-		file={itemAsLibraryFile(linkModalItem)}
-		onlink={handleYoutubeLink}
-		onclose={() => {
-			linkModalItem = null;
-			linkModalService = null;
-		}}
-	/>
-{/if}
-
 {#if linkModalList && linkModalListService === 'tmdb'}
 	<TmdbLinkModal
 		file={listAsLibraryFile(linkModalList)}
 		type="tv"
 		onlink={handleListTmdbLink}
-		onclose={() => {
-			linkModalList = null;
-			linkModalListService = null;
-		}}
-	/>
-{/if}
-
-{#if linkModalList && linkModalListService === 'musicbrainz'}
-	<MusicBrainzLinkModal
-		file={listAsLibraryFile(linkModalList)}
-		onlink={handleListMusicBrainzLink}
 		onclose={() => {
 			linkModalList = null;
 			linkModalListService = null;

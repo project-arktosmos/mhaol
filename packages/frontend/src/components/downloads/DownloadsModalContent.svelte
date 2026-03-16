@@ -19,20 +19,7 @@
 		files: FileEntry[];
 	}
 
-	interface YoutubeFilesResponse {
-		type: 'youtube';
-		thumbnailUrl: string | null;
-		title: string;
-		url: string;
-		videoId: string;
-		mode: string;
-		quality: string;
-		format: string;
-		durationSeconds: number | null;
-		outputPath: string | null;
-	}
-
-	type FilesResponse = TorrentFilesResponse | YoutubeFilesResponse;
+	type FilesResponse = TorrentFilesResponse;
 
 	const downloadState = downloadsService.state;
 
@@ -108,18 +95,11 @@
 			minute: '2-digit'
 		});
 	}
-
-	function formatDuration(seconds: number | null): string {
-		if (!seconds) return '--';
-		const m = Math.floor(seconds / 60);
-		const s = Math.floor(seconds % 60);
-		return `${m}:${s.toString().padStart(2, '0')}`;
-	}
 </script>
 
 <div class="mb-4">
 	<h3 class="text-lg font-bold">Downloads</h3>
-	<p class="text-sm opacity-70">All YouTube and torrent downloads</p>
+	<p class="text-sm opacity-70">All torrent downloads</p>
 </div>
 
 {#if $downloadState.loading && $downloadState.downloads.length === 0}
@@ -153,12 +133,7 @@
 				{#each $downloadState.downloads as dl (dl.id)}
 					<tr class="hover:bg-base-200/50">
 						<td>
-							<span
-								class={classNames('badge badge-sm', {
-									'badge-secondary': dl.type === 'youtube',
-									'badge-accent': dl.type === 'torrent'
-								})}
-							>
+							<span class="badge badge-sm badge-accent">
 								{dl.type}
 							</span>
 						</td>
@@ -258,32 +233,6 @@
 				</table>
 			</div>
 		{/if}
-	{:else if filesModalData?.type === 'youtube'}
-		<div class="mt-3 flex flex-col gap-3">
-			{#if filesModalData.thumbnailUrl}
-				<img
-					src={filesModalData.thumbnailUrl}
-					alt={filesModalData.title}
-					class="w-full rounded-lg"
-				/>
-			{/if}
-			<div class="grid grid-cols-2 gap-2 text-sm">
-				<span class="opacity-50">Mode</span>
-				<span>{filesModalData.mode}</span>
-				<span class="opacity-50">Quality</span>
-				<span>{filesModalData.quality}</span>
-				<span class="opacity-50">Format</span>
-				<span>{filesModalData.format}</span>
-				<span class="opacity-50">Duration</span>
-				<span>{formatDuration(filesModalData.durationSeconds)}</span>
-				{#if filesModalData.outputPath}
-					<span class="opacity-50">File</span>
-					<span class="truncate" title={filesModalData.outputPath}>
-						{filesModalData.outputPath}
-					</span>
-				{/if}
-			</div>
-		</div>
 	{:else}
 		<p class="py-4 opacity-50">Could not load details.</p>
 	{/if}

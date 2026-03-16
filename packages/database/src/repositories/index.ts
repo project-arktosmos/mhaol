@@ -1,11 +1,9 @@
 export { SettingsRepository } from "./settings.repository.js";
 export { MetadataRepository } from "./metadata.repository.js";
-export { YouTubeDownloadRepository } from "./youtube-download.repository.js";
 export { TorrentDownloadRepository } from "./torrent-download.repository.js";
 export { LibraryRepository } from "./library.repository.js";
 export { LibraryItemRepository } from "./library-item.repository.js";
 export { LibraryItemLinkRepository } from "./library-item-link.repository.js";
-export { ImageTagRepository } from "./image-tag.repository.js";
 export { MediaTypeRepository } from "./media-type.repository.js";
 export { CategoryRepository } from "./category.repository.js";
 export { LinkSourceRepository } from "./link-source.repository.js";
