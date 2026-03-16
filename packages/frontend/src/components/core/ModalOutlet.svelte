@@ -3,8 +3,7 @@
 	import { modalRouterService } from '$services/modal-router.service';
 	import TorrentModalContent from '$components/torrent/TorrentModalContent.svelte';
 	import DownloadsModalContent from '$components/downloads/DownloadsModalContent.svelte';
-	import LibraryModalContent from '$components/libraries/LibraryModalContent.svelte';
-	import SignalingModalContent from '$components/signaling/SignalingModalContent.svelte';
+import SignalingModalContent from '$components/signaling/SignalingModalContent.svelte';
 	import IdentityModalContent from '$components/identity/IdentityModalContent.svelte';
 	import SettingsModalContent from '$components/settings/SettingsModalContent.svelte';
 	import AddonsModalContent from '$components/addons/AddonsModalContent.svelte';
@@ -15,8 +14,7 @@
 	const MAX_WIDTHS: Record<string, string> = {
 		torrent: 'max-w-5xl',
 		downloads: 'max-w-5xl',
-		libraries: 'max-w-5xl',
-		signaling: 'max-w-5xl',
+signaling: 'max-w-5xl',
 		identity: 'max-w-3xl',
 		plugins: 'max-w-4xl',
 		addons: 'max-w-4xl',
@@ -36,8 +34,6 @@
 		<TorrentModalContent />
 	{:else if activeId === 'downloads'}
 		<DownloadsModalContent />
-	{:else if activeId === 'libraries'}
-		<LibraryModalContent />
 	{:else if activeId === 'signaling'}
 		<SignalingModalContent />
 	{:else if activeId === 'identity'}

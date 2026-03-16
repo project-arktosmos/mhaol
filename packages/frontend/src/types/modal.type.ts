@@ -1,7 +1,6 @@
 export type NavbarModalId =
 	| 'torrent'
 	| 'downloads'
-	| 'libraries'
 	| 'signaling'
 	| 'identity'
 	| 'plugins'
