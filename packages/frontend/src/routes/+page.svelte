@@ -318,7 +318,7 @@
 
 			if (needsCategoryUpdate) {
 				fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/category`), {
-					method: 'PUT',
+					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ categoryId })
 				});
