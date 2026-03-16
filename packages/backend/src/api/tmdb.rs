@@ -17,6 +17,7 @@ pub fn router() -> Router<AppState> {
         .route("/search/tv", get(search_tv))
         .route("/movies/{id}", get(get_movie))
         .route("/tv/{id}", get(get_tv))
+        .route("/tv/{id}/season/{season}", get(get_tv_season))
 }
 
 async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
@@ -234,6 +235,98 @@ async fn get_movie(
             if let Ok(data) = conn.query_row(
                 "SELECT data FROM tmdb_movies WHERE tmdb_id = ?1",
                 rusqlite::params![tmdb_id],
+                |row| row.get::<_, String>(0),
+            ) {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                    return Json(parsed).into_response();
+                }
+            }
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "TMDB API unavailable" })),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn get_tv_season(
+    State(state): State<AppState>,
+    Path((id, season)): Path<(String, i64)>,
+    Query(query): Query<DetailQuery>,
+) -> impl IntoResponse {
+    let tmdb_id: i64 = match id.parse() {
+        Ok(id) => id,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "Invalid TV show ID" })),
+            )
+                .into_response()
+        }
+    };
+
+    let refresh = query.refresh.as_deref() == Some("true");
+
+    if !refresh {
+        let conn = state.db.lock();
+        if let Ok(data) = conn.query_row(
+            "SELECT data FROM tmdb_seasons WHERE tmdb_id = ?1 AND season_number = ?2",
+            rusqlite::params![tmdb_id, season],
+            |row| row.get::<_, String>(0),
+        ) {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                return Json(parsed).into_response();
+            }
+        }
+    }
+
+    let api_key = match state.settings.get("tmdb.apiKey") {
+        Some(key) if !key.is_empty() => key,
+        _ => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({ "error": "TMDB API key not configured" })),
+            )
+                .into_response()
+        }
+    };
+
+    let url = format!(
+        "{}/tv/{}/season/{}?api_key={}",
+        TMDB_BASE, tmdb_id, season, api_key
+    );
+
+    match reqwest::get(&url).await {
+        Ok(resp) if resp.status().is_success() => {
+            match resp.json::<serde_json::Value>().await {
+                Ok(data) => {
+                    let data_str = serde_json::to_string(&data).unwrap_or_default();
+                    let conn = state.db.lock();
+                    let _ = conn.execute(
+                        "INSERT INTO tmdb_seasons (tmdb_id, season_number, data) VALUES (?1, ?2, ?3)
+                         ON CONFLICT(tmdb_id, season_number) DO UPDATE SET data = ?3, fetched_at = datetime('now')",
+                        rusqlite::params![tmdb_id, season, data_str],
+                    );
+                    Json(data).into_response()
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response(),
+            }
+        }
+        Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Season not found" })),
+        )
+            .into_response(),
+        _ => {
+            let conn = state.db.lock();
+            if let Ok(data) = conn.query_row(
+                "SELECT data FROM tmdb_seasons WHERE tmdb_id = ?1 AND season_number = ?2",
+                rusqlite::params![tmdb_id, season],
                 |row| row.get::<_, String>(0),
             ) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {

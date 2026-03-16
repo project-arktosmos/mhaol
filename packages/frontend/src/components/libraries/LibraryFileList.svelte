@@ -47,6 +47,17 @@
 		}
 	}
 
+	function handleLinkAll(
+		tmdbId: number,
+		matches: Array<{ file: LibraryFile; seasonNumber: number; episodeNumber: number }>,
+		type: 'movie' | 'tv'
+	) {
+		for (const m of matches) {
+			onlink(m.file, tmdbId, m.seasonNumber, m.episodeNumber, type);
+		}
+		closeModal();
+	}
+
 	function openTypeCategoryModal(file: LibraryFile) {
 		typeCategoryModalFile = file;
 	}
@@ -117,7 +128,14 @@
 </div>
 
 {#if modalFile}
-	<TmdbLinkModal file={modalFile} type={modalFileType} onlink={handleLink} onclose={closeModal} />
+	<TmdbLinkModal
+		file={modalFile}
+		{files}
+		type={modalFileType}
+		onlink={handleLink}
+		onlinkall={handleLinkAll}
+		onclose={closeModal}
+	/>
 {/if}
 
 {#if typeCategoryModalFile}
