@@ -1,28 +1,14 @@
 import { spawn, execSync } from 'node:child_process';
 import { createServer as createNetServer } from 'node:net';
-import { createServer, request as httpRequest } from 'node:http';
-import { createReadStream, readFileSync, existsSync, statSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PORT = 1530;
-const BACKEND_PORT = PORT + 1; // internal only, not exposed
-const HEALTH_URL = `http://localhost:${BACKEND_PORT}/api/health`;
+const HEALTH_URL = `http://localhost:${PORT}/api/health`;
 const STATIC_DIR = join(__dirname, '..', 'dist-static');
-
-const MIME_TYPES = {
-	'.html': 'text/html',
-	'.js': 'application/javascript',
-	'.css': 'text/css',
-	'.json': 'application/json',
-	'.png': 'image/png',
-	'.svg': 'image/svg+xml',
-	'.ico': 'image/x-icon',
-	'.woff': 'font/woff',
-	'.woff2': 'font/woff2'
-};
 
 await checkPort(PORT);
 
@@ -36,7 +22,7 @@ if (skipBuild && existsSync(join(STATIC_DIR, 'index.html'))) {
 	execSync('pnpm --filter flix build', { stdio: 'inherit', cwd: '../..' });
 }
 
-// Build + start backend on internal port
+// Build backend
 const serverBin = join(__dirname, '..', '..', '..', 'target', 'debug', 'mhaol-server');
 if (skipBuild && existsSync(serverBin)) {
 	console.log('Backend already built, skipping.');
@@ -45,99 +31,20 @@ if (skipBuild && existsSync(serverBin)) {
 	execSync('cargo build --bin mhaol-server', { stdio: 'inherit', cwd: '../..' });
 }
 
-console.log('Starting backend on internal port', BACKEND_PORT);
+// Start backend on PORT with STATIC_DIR so it serves both API and static files
+console.log(`Starting backend on port ${PORT}`);
 const backend = spawn(serverBin, [], {
 	stdio: 'inherit',
-	env: { ...process.env, PORT: String(BACKEND_PORT) }
+	env: { ...process.env, PORT: String(PORT), STATIC_DIR }
 });
 
 console.log('Waiting for backend...');
 await waitForBackend();
-console.log('Backend ready.');
 
-// Single server on PORT: static files + proxy to backend
-const server = createServer((req, res) => {
-	const url = req.url || '/';
-
-	// Proxy /api and /party to backend
-	if (url.startsWith('/api') || url.startsWith('/party')) {
-		const proxyReq = httpRequest(
-			{
-				hostname: 'localhost',
-				port: BACKEND_PORT,
-				path: url,
-				method: req.method,
-				headers: req.headers
-			},
-			(proxyRes) => {
-				res.writeHead(proxyRes.statusCode, proxyRes.headers);
-				proxyRes.pipe(res);
-			}
-		);
-		proxyReq.on('error', () => {
-			res.writeHead(502);
-			res.end('Backend unavailable');
-		});
-		req.pipe(proxyReq);
-		return;
-	}
-
-	// Serve static files
-	let filePath = join(STATIC_DIR, url === '/' ? 'index.html' : url);
-	if (!existsSync(filePath) || statSync(filePath).isDirectory()) {
-		filePath = join(STATIC_DIR, 'index.html'); // SPA fallback
-	}
-
-	const ext = extname(filePath);
-	const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-
-	const stream = createReadStream(filePath);
-	stream.on('error', () => {
-		res.writeHead(404);
-		res.end('Not found');
-	});
-	res.writeHead(200, { 'Content-Type': contentType });
-	stream.pipe(res);
-});
-
-// WebSocket upgrade proxy for /party
-server.on('upgrade', (req, socket, _head) => {
-	const url = req.url || '';
-	if (url.startsWith('/party')) {
-		const proxyReq = httpRequest({
-			hostname: 'localhost',
-			port: BACKEND_PORT,
-			path: url,
-			method: req.method,
-			headers: req.headers
-		});
-
-		proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
-			socket.write(
-				`HTTP/1.1 ${proxyRes.statusCode || 101} ${proxyRes.statusMessage || 'Switching Protocols'}\r\n` +
-					Object.entries(proxyRes.headers)
-						.map(([k, v]) => `${k}: ${v}`)
-						.join('\r\n') +
-					'\r\n\r\n'
-			);
-			if (proxyHead.length) socket.write(proxyHead);
-			proxySocket.pipe(socket);
-			socket.pipe(proxySocket);
-		});
-
-		proxyReq.on('error', () => socket.destroy());
-		proxyReq.end();
-	} else {
-		socket.destroy();
-	}
-});
-
-server.listen(PORT, '0.0.0.0', () => {
-	const lanIp = getLanIp();
-	console.log(`Flix app running on:`);
-	console.log(`  Local:   http://localhost:${PORT}`);
-	if (lanIp) console.log(`  Network: http://${lanIp}:${PORT}`);
-});
+const lanIp = getLanIp();
+console.log(`Flix app running on:`);
+console.log(`  Local:   http://localhost:${PORT}`);
+if (lanIp) console.log(`  Network: http://${lanIp}:${PORT}`);
 
 function getLanIp() {
 	const nets = networkInterfaces();
@@ -151,7 +58,6 @@ function getLanIp() {
 
 function cleanup() {
 	backend.kill();
-	server.close();
 	process.exit();
 }
 

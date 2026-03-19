@@ -141,7 +141,7 @@
 									class="btn btn-ghost btn-xs"
 									onclick={() => openLogs(app.name, 'build')}
 								>
-									Build
+									Build Logs
 								</button>
 							{/if}
 							{#if app.runtime_logs.length > 0}
@@ -149,7 +149,7 @@
 									class="btn btn-ghost btn-xs"
 									onclick={() => openLogs(app.name, 'runtime')}
 								>
-									Runtime
+									Runtime Logs
 								</button>
 							{/if}
 

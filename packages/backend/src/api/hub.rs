@@ -385,12 +385,28 @@ async fn start_app(
     };
 
     {
-        let procs = state.hub.processes.lock().await;
-        if procs.contains_key(entry.name) {
-            return Json(ActionResult {
-                success: false,
-                message: format!("{} is already running", name),
-            });
+        let mut procs = state.hub.processes.lock().await;
+        if let Some(proc) = procs.get(entry.name) {
+            let s = proc.status.lock().await.clone();
+            match s {
+                AppStatus::Building | AppStatus::Starting | AppStatus::Running => {
+                    return Json(ActionResult {
+                        success: false,
+                        message: format!("{} is already {}", name, match s {
+                            AppStatus::Building => "building",
+                            AppStatus::Starting => "starting",
+                            AppStatus::Running => "running",
+                            _ => "busy",
+                        }),
+                    });
+                }
+                _ => {
+                    // Remove stale entry so we can start fresh
+                    if let Some(mut old) = procs.remove(entry.name) {
+                        let _ = old.child.kill().await;
+                    }
+                }
+            }
         }
     }
 

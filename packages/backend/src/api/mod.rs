@@ -28,6 +28,7 @@ pub mod torrent;
 use crate::AppState;
 use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 
 /// Build the complete API router with all route groups.
 pub fn build_router(state: AppState) -> Router {
@@ -72,6 +73,16 @@ pub fn build_router(state: AppState) -> Router {
 
     #[cfg(feature = "embed-frontend")]
     let router = router.fallback(frontend::serve_frontend);
+
+    // When STATIC_DIR is set, serve static files as a fallback (for headless mode).
+    // API routes take priority; unmatched paths fall back to static files with SPA index.html.
+    #[cfg(not(feature = "embed-frontend"))]
+    let router = if let Ok(static_dir) = std::env::var("STATIC_DIR") {
+        let index = std::path::PathBuf::from(&static_dir).join("index.html");
+        router.fallback_service(ServeDir::new(&static_dir).fallback(ServeFile::new(index)))
+    } else {
+        router
+    };
 
     router.with_state(state).layer(cors)
 }
