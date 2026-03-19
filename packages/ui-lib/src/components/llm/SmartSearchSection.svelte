@@ -35,6 +35,7 @@
 	const searchStore = smartSearchService.store;
 	let selection = $derived($searchStore.selection);
 	let searching = $derived($searchStore.searching);
+	let analyzing = $derived($searchStore.analyzing);
 	let searchResults = $derived($searchStore.searchResults);
 	let searchError = $derived($searchStore.searchError);
 
@@ -114,6 +115,9 @@
 			<div class="mb-1 flex items-center justify-between">
 				<span class="text-xs font-semibold text-base-content/50">
 					{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
+					{#if analyzing}
+						<span class="loading loading-xs loading-spinner ml-1"></span>
+					{/if}
 				</span>
 			</div>
 			<div class="overflow-x-auto">
@@ -121,10 +125,16 @@
 					<thead>
 						<tr>
 							<th>Name</th>
+							<th>Query</th>
 							<th class="text-right">Size</th>
 							<th class="text-right">SE</th>
 							<th class="text-right">LE</th>
 							<th class="text-right">Uploaded</th>
+							<th>Quality</th>
+							<th>Lang</th>
+							<th>Subs</th>
+							<th class="text-right">Rel%</th>
+							<th>Reason</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -140,6 +150,13 @@
 										<span class="truncate" title={result.name}>{result.name}</span>
 									</div>
 								</td>
+								<td>
+									<div class="flex flex-col gap-0.5">
+										{#each result.searchQueries as q}
+											<span class="truncate text-xs text-base-content/40" title={q}>{q}</span>
+										{/each}
+									</div>
+								</td>
 								<td class="text-right text-nowrap">{formatSearchSize(result.size)}</td>
 								<td class={classNames('text-right font-medium', getSeedersColor(result.seeders))}>
 									{formatSeeders(result.seeders)}
@@ -148,6 +165,27 @@
 								<td class="text-right text-nowrap text-base-content/60">
 									{formatUploadDate(result.uploadedAt)}
 								</td>
+								{#if result.analyzing}
+									<td colspan="5" class="text-center">
+										<span class="loading loading-xs loading-spinner"></span>
+									</td>
+								{:else if result.analysis}
+									<td class="text-nowrap text-xs">{result.analysis.quality}</td>
+									<td class="text-nowrap text-xs">{result.analysis.languages}</td>
+									<td class="text-nowrap text-xs">{result.analysis.subs}</td>
+									<td class={classNames('text-right text-xs font-medium', {
+										'text-success': result.analysis.relevance >= 80,
+										'text-warning': result.analysis.relevance >= 50 && result.analysis.relevance < 80,
+										'text-error': result.analysis.relevance < 50
+									})}>
+										{result.analysis.relevance}%
+									</td>
+									<td class="max-w-xs text-xs text-base-content/60" title={result.analysis.reason}>
+										<span class="line-clamp-2">{result.analysis.reason}</span>
+									</td>
+								{:else}
+									<td colspan="5"></td>
+								{/if}
 							</tr>
 						{/each}
 					</tbody>

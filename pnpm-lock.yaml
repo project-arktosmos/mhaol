@@ -38,9 +38,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.2.1(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
-      '@tauri-apps/cli':
-        specifier: ^2.10
-        version: 2.10.0
       daisyui:
         specifier: ^5.0.50
         version: 5.5.19
@@ -308,9 +305,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.2.1(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
-      '@tauri-apps/cli':
-        specifier: ^2.10
-        version: 2.10.0
       daisyui:
         specifier: ^5.0.50
         version: 5.5.19
@@ -387,9 +381,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.2.1(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
-      '@tauri-apps/cli':
-        specifier: ^2.10
-        version: 2.10.0
       daisyui:
         specifier: ^5.0.50
         version: 5.5.19
@@ -457,9 +448,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.2.1(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
-      '@tauri-apps/cli':
-        specifier: ^2.10
-        version: 2.10.0
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
@@ -512,9 +500,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.2.1(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
-      '@tauri-apps/cli':
-        specifier: ^2.10
-        version: 2.10.0
       daisyui:
         specifier: ^5.0.50
         version: 5.5.19
@@ -566,9 +551,6 @@ importers:
       '@sveltejs/adapter-static':
         specifier: ^3.0.10
         version: 3.0.10(@sveltejs/kit@2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))
-      '@tauri-apps/api':
-        specifier: ^2.10.1
-        version: 2.10.1
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
@@ -597,9 +579,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.2.1(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
-      '@tauri-apps/cli':
-        specifier: ^2.10
-        version: 2.10.0
       '@testing-library/jest-dom':
         specifier: ^6.9.1
         version: 6.9.1
@@ -887,8 +866,6 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
-
-  packages/tauri: {}
 
   packages/ui-lib:
     dependencies:

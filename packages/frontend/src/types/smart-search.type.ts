@@ -6,10 +6,25 @@ export interface SmartSearchSelection {
 	type: 'movie' | 'tv';
 }
 
+export interface TorrentAnalysis {
+	quality: string;
+	languages: string;
+	subs: string;
+	relevance: number;
+	reason: string;
+}
+
+export interface SmartSearchTorrentResult extends TorrentSearchResult {
+	searchQueries: string[];
+	analysis: TorrentAnalysis | null;
+	analyzing: boolean;
+}
+
 export interface SmartSearchState {
 	selection: SmartSearchSelection | null;
 	visible: boolean;
 	searching: boolean;
-	searchResults: TorrentSearchResult[];
+	analyzing: boolean;
+	searchResults: SmartSearchTorrentResult[];
 	searchError: string | null;
 }
