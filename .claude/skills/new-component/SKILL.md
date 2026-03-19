@@ -9,7 +9,7 @@ Scaffold a new Svelte 5 component following project conventions.
    - Feature area (e.g. "media", "player", "core")
    - What props it needs
 
-2. **Create the component** at `packages/frontend/src/components/{area}/{ComponentName}.svelte`:
+2. **Create the component** at `packages/mhaol-video/src/components/{area}/{ComponentName}.svelte`:
 
 ```svelte
 <script lang="ts">

@@ -24,10 +24,10 @@ Scaffold a new feature across the entire stack (database, backend, frontend).
    - Run checks: `cargo check -p mhaol-backend && cargo test -p mhaol-backend`
 
 4. **Frontend**:
-   - Define types in `packages/frontend/src/types/{feature}.type.ts`
-   - Create adapter in `packages/frontend/src/adapters/classes/{feature}.adapter.ts`
-   - Create service in `packages/frontend/src/services/{feature}.service.ts`
-   - Create component directory `packages/frontend/src/components/{feature}/`
+   - Define types in `packages/mhaol-video/src/types/{feature}.type.ts`
+   - Create adapter in `packages/mhaol-video/src/adapters/classes/{feature}.adapter.ts`
+   - Create service in `packages/mhaol-video/src/services/{feature}.service.ts`
+   - Create component directory `packages/mhaol-video/src/components/{feature}/`
    - Follow all component rules: no `<style>` tags, no inline styles, use `classnames`, TypeScript `$props()` with inline types, callback props for parent communication
 
 5. **Verify**:

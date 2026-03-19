@@ -1,6 +1,6 @@
-# Package: frontend
+# Package: mhaol-video
 
-**Location:** `packages/frontend/`
+**Location:** `packages/mhaol-video/`
 **Framework:** SvelteKit 2 + Svelte 5 + TailwindCSS v4 + DaisyUI v5
 **Adapter:** `@sveltejs/adapter-static` (fully pre-rendered, fallback to `index.html`)
 **Dev port:** 1531
@@ -42,7 +42,7 @@ src/
 
 ## Path Aliases
 
-These aliases are configured in both `svelte.config.js` and `vite.config.ts` and are **only valid inside `packages/frontend/`**:
+These aliases are configured in both `svelte.config.js` and `vite.config.ts` and are **only valid inside `packages/mhaol-video/`**:
 
 ```typescript
 $components  → src/components/*
@@ -336,7 +336,7 @@ ThemeSizes.XLarge; // 'xl'
 
 ## Types
 
-Define shared types in `packages/frontend/src/types/`. One file per domain:
+Define shared types in `packages/mhaol-video/src/types/`. One file per domain:
 
 ```
 src/types/
@@ -402,7 +402,7 @@ Use `svelte-i18n` for translations. Translations are in `src/services/i18n/local
 
 ## Testing
 
-Tests live in `packages/frontend/test/` mirroring `src/`:
+Tests live in `packages/mhaol-video/test/` mirroring `src/`:
 
 ```
 test/

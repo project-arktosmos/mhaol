@@ -1,4 +1,4 @@
-import type { PluginCompanion } from '../../packages/frontend/src/lib/server/plugins/types';
+import type { PluginCompanion } from '../../packages/mhaol-video/src/lib/server/plugins/types';
 import { TmdbCacheRepository } from './src/cache-repository';
 
 export const tmdbCompanion: PluginCompanion = {
