@@ -1,0 +1,143 @@
+name: Build Hub
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            libonig-dev \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/hub
+          tagName: v__VERSION__-hub
+          releaseName: 'Hub v__VERSION__'
+          releaseBody: 'Hub desktop build'
+          releaseDraft: true
+
+  headless:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            libonig-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+
+      - name: Build all frontends
+        run: |
+          pnpm --filter hub build
+          pnpm --filter storybook --filter identity --filter signaling-app --filter cloud --filter torrent --filter flix build
+
+      - name: Build backend
+        run: cargo build --release --bin mhaol-server
+
+      - name: Strip binary
+        run: strip target/release/mhaol-server
+
+      - name: Package headless bundle
+        run: |
+          mkdir -p bundle/apps/hub/scripts
+          cp target/release/mhaol-server bundle/
+          cp apps/hub/scripts/headless.js bundle/apps/hub/scripts/
+          cp -r apps/hub/dist-static bundle/apps/hub/dist-static
+          for app in storybook identity signaling cloud torrent flix; do
+            if [ -d "apps/$app/dist-static" ]; then
+              mkdir -p "bundle/apps/$app/dist-static"
+              cp -r "apps/$app/dist-static/." "bundle/apps/$app/dist-static/"
+            fi
+          done
+          tar -czf mhaol-hub-headless-linux-x86_64.tar.gz -C bundle .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mhaol-hub-headless-linux-x86_64
+          path: mhaol-hub-headless-linux-x86_64.tar.gz
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.0-hub
+          files: mhaol-hub-headless-linux-x86_64.tar.gz
+          draft: true

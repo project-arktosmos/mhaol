@@ -42,10 +42,7 @@ class HubService {
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const apps: HubApp[] = (await res.json()).map((a: HubApp) => ({
 				...a,
-				frontend_built: a.frontend_built ?? false,
-				backend_built: a.backend_built ?? false,
-				build_logs: a.build_logs ?? [],
-				runtime_logs: a.runtime_logs ?? []
+				logs: a.logs ?? []
 			}));
 			this.state.update((s) => ({ ...s, loading: false, apps }));
 			await this.poll();
@@ -65,7 +62,7 @@ class HubService {
 					this.fetchHealth(app.name),
 					this.fetchLogs(app.name)
 				]);
-				return { ...app, status: healthData, build_logs: logs.build_logs, runtime_logs: logs.runtime_logs };
+				return { ...app, status: healthData, logs };
 			})
 		);
 		this.state.update((s) => ({ ...s, apps: updated }));
@@ -82,44 +79,22 @@ class HubService {
 		}
 	}
 
-	private async fetchLogs(name: string): Promise<{ build_logs: string[]; runtime_logs: string[] }> {
+	private async fetchLogs(name: string): Promise<string[]> {
 		try {
 			const res = await fetch(apiUrl(`/api/hub/${name}/logs`));
-			if (!res.ok) return { build_logs: [], runtime_logs: [] };
+			if (!res.ok) return [];
 			const data = await res.json();
-			return { build_logs: data.build_logs ?? [], runtime_logs: data.runtime_logs ?? [] };
+			return data.logs ?? [];
 		} catch {
-			return { build_logs: [], runtime_logs: [] };
-		}
-	}
-
-	async buildApp(name: string): Promise<void> {
-		this.state.update((s) => ({
-			...s,
-			apps: s.apps.map((a) =>
-				a.name === name ? { ...a, status: 'building' as const, build_logs: [], runtime_logs: [] } : a
-			)
-		}));
-
-		try {
-			const res = await fetch(apiUrl(`/api/hub/${name}/build`), { method: 'POST' });
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const data = await res.json();
-			if (!data.success) {
-				this.state.update((s) => ({ ...s, error: data.message }));
-			}
-		} catch (err) {
-			const message = err instanceof Error ? err.message : `Failed to build ${name}`;
-			this.state.update((s) => ({ ...s, error: message }));
+			return [];
 		}
 	}
 
 	async startApp(name: string): Promise<void> {
-		// Set status to "building" immediately — the backend will build first
 		this.state.update((s) => ({
 			...s,
 			apps: s.apps.map((a) =>
-				a.name === name ? { ...a, status: 'building' as const, build_logs: [], runtime_logs: [] } : a
+				a.name === name ? { ...a, status: 'starting' as const, logs: [] } : a
 			)
 		}));
 

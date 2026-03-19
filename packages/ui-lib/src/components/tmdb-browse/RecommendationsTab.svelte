@@ -17,6 +17,8 @@
 		sourceId,
 		sourceType,
 		loading = false,
+		onselectMovie,
+		onselectTvShow,
 		onload
 	}: {
 		linkedItems: LinkedItem[];
@@ -26,6 +28,8 @@
 		sourceId: number | null;
 		sourceType: 'movie' | 'tv' | null;
 		loading?: boolean;
+		onselectMovie?: (movie: DisplayTMDBMovie) => void;
+		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 		onload: (tmdbId: number, type: 'movie' | 'tv', page: number) => void;
 	} = $props();
 
@@ -81,9 +85,9 @@
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
 			{#each recommendations as item (item.id)}
 				{#if isMovie(item)}
-					<TmdbBrowseCard movie={item} />
+					<TmdbBrowseCard movie={item} onclick={onselectMovie ? () => onselectMovie(item as DisplayTMDBMovie) : undefined} />
 				{:else}
-					<TmdbBrowseCard tvShow={item} />
+					<TmdbBrowseCard tvShow={item} onclick={onselectTvShow ? () => onselectTvShow(item as DisplayTMDBTvShow) : undefined} />
 				{/if}
 			{/each}
 		</div>

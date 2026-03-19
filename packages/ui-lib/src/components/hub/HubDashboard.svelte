@@ -3,13 +3,10 @@
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import type { HubApp } from 'frontend/types/hub.type';
 
-	type LogType = 'build' | 'runtime';
-
 	let {
 		apps,
 		loading = false,
 		error = null,
-		onbuild,
 		onstart,
 		onstop,
 		ondismiss
@@ -17,21 +14,15 @@
 		apps: HubApp[];
 		loading?: boolean;
 		error?: string | null;
-		onbuild: (name: string) => void;
 		onstart: (name: string) => void;
 		onstop: (name: string) => void;
 		ondismiss: (name: string) => void;
 	} = $props();
 
 	let logsModalApp = $state<string | null>(null);
-	let logsModalType = $state<LogType>('build');
-
-	let logsModalLines = $derived.by(() => {
-		if (!logsModalApp) return [];
-		const app = apps.find((a) => a.name === logsModalApp);
-		if (!app) return [];
-		return logsModalType === 'build' ? app.build_logs : app.runtime_logs;
-	});
+	let logsModalLines = $derived(
+		logsModalApp ? (apps.find((a) => a.name === logsModalApp)?.logs ?? []) : []
+	);
 
 	let logEndRef: HTMLDivElement | undefined = $state();
 
@@ -41,17 +32,8 @@
 		}
 	});
 
-	function openLogs(name: string, type: LogType) {
-		logsModalApp = name;
-		logsModalType = type;
-	}
-
-	function hasLogs(app: HubApp): boolean {
-		return app.build_logs.length > 0 || app.runtime_logs.length > 0;
-	}
-
 	function isBusy(app: HubApp): boolean {
-		return app.status === 'building' || app.status === 'starting';
+		return app.status === 'starting';
 	}
 </script>
 
@@ -103,26 +85,6 @@
 						{/if}
 					</div>
 
-					<!-- Build status -->
-					{#if !isBusy(app) && app.status !== 'running'}
-						<div class="flex gap-3 text-xs">
-							<span
-								class={classNames('flex items-center gap-1', {
-									'text-success': app.frontend_built,
-									'text-base-content/40': !app.frontend_built
-								})}
-							>
-								<div
-									class={classNames('h-1.5 w-1.5 rounded-full', {
-										'bg-success': app.frontend_built,
-										'bg-base-content/20': !app.frontend_built
-									})}
-								></div>
-								{app.frontend_built ? 'built' : 'not built'}
-							</span>
-						</div>
-					{/if}
-
 					<div class="flex items-center justify-between">
 						<span
 							class={classNames('badge badge-sm', {
@@ -136,30 +98,17 @@
 						</span>
 
 						<div class="flex gap-1">
-							{#if app.build_logs.length > 0}
+							{#if app.logs.length > 0}
 								<button
 									class="btn btn-ghost btn-xs"
-									onclick={() => openLogs(app.name, 'build')}
+									onclick={() => (logsModalApp = app.name)}
 								>
-									Build Logs
-								</button>
-							{/if}
-							{#if app.runtime_logs.length > 0}
-								<button
-									class="btn btn-ghost btn-xs"
-									onclick={() => openLogs(app.name, 'runtime')}
-								>
-									Runtime Logs
+									Logs
 								</button>
 							{/if}
 
 							{#if app.has_headless}
-								{#if app.status === 'building'}
-									<button class="btn btn-xs btn-disabled" disabled>
-										<span class="loading loading-spinner loading-xs"></span>
-										Building
-									</button>
-								{:else if app.status === 'starting'}
+								{#if app.status === 'starting'}
 									<button class="btn btn-xs btn-disabled" disabled>
 										<span class="loading loading-spinner loading-xs"></span>
 										Starting
@@ -177,19 +126,13 @@
 									</button>
 									<button
 										class="btn btn-warning btn-xs"
-										onclick={() => onbuild(app.name)}
+										onclick={() => onstart(app.name)}
 									>
-										Rebuild
+										Retry
 									</button>
 								{:else}
-									<button
-										class="btn btn-ghost btn-xs"
-										onclick={() => onbuild(app.name)}
-									>
-										Build
-									</button>
 									<button class="btn btn-primary btn-xs" onclick={() => onstart(app.name)}>
-										Run
+										Start
 									</button>
 								{/if}
 							{/if}
@@ -204,29 +147,9 @@
 
 <Modal open={logsModalApp !== null} maxWidth="max-w-3xl" onclose={() => (logsModalApp = null)}>
 	{#if logsModalApp}
-		<h3 class="mb-3 text-lg font-bold capitalize">{logsModalApp} — {logsModalType} Logs</h3>
-		<div class="mb-3 flex gap-1">
-			<button
-				class={classNames('btn btn-xs', {
-					'btn-active': logsModalType === 'build',
-					'btn-ghost': logsModalType !== 'build'
-				})}
-				onclick={() => (logsModalType = 'build')}
-			>
-				Build
-			</button>
-			<button
-				class={classNames('btn btn-xs', {
-					'btn-active': logsModalType === 'runtime',
-					'btn-ghost': logsModalType !== 'runtime'
-				})}
-				onclick={() => (logsModalType = 'runtime')}
-			>
-				Runtime
-			</button>
-		</div>
+		<h3 class="mb-3 text-lg font-bold capitalize">{logsModalApp} Logs</h3>
 		{#if logsModalLines.length === 0}
-			<p class="py-8 text-center text-sm opacity-50">No {logsModalType} logs yet.</p>
+			<p class="py-8 text-center text-sm opacity-50">No logs yet.</p>
 		{:else}
 			<div
 				class="max-h-[70vh] overflow-y-auto rounded bg-base-300 p-3 font-mono text-xs leading-relaxed"

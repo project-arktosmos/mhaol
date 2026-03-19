@@ -16,7 +16,6 @@
 		apps={$state.apps}
 		loading={$state.loading}
 		error={$state.error}
-		onbuild={(name) => hubService.buildApp(name)}
 		onstart={(name) => hubService.startApp(name)}
 		onstop={(name) => hubService.stopApp(name)}
 		ondismiss={(name) => hubService.dismissApp(name)}

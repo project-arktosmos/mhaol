@@ -27,6 +27,8 @@
 	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
 	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'addons/tmdb/transform';
 	import { tmdbBrowseService } from 'frontend/services/tmdb-browse.service';
+	import { smartSearchService } from 'frontend/services/smart-search.service';
+	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 	import PopularTab from 'ui-lib/components/tmdb-browse/PopularTab.svelte';
 	import DiscoverTab from 'ui-lib/components/tmdb-browse/DiscoverTab.svelte';
 	import RecommendationsTab from 'ui-lib/components/tmdb-browse/RecommendationsTab.svelte';
@@ -45,15 +47,19 @@
 
 	const MOVIES_TAB = 'movies';
 	const TV_TAB = 'tv';
-	const POPULAR_TAB = 'popular';
-	const DISCOVER_TAB = 'discover';
-	const RECOMMENDATIONS_TAB = 'recommendations';
 
-	type TabId = 'movies' | 'tv' | 'popular' | 'discover' | 'recommendations';
+	const LIBRARY_SUB = 'library';
+	const POPULAR_SUB = 'popular';
+	const DISCOVER_SUB = 'discover';
+	const RECOMMENDATIONS_SUB = 'recommendations';
+
+	type TabId = 'movies' | 'tv';
+	type SubTabId = 'library' | 'popular' | 'discover' | 'recommendations';
 
 	let { data }: Props = $props();
 
 	let activeTab = $state<TabId>(MOVIES_TAB);
+	let activeSubTab = $state<SubTabId>(LIBRARY_SUB);
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
 	let linkModalList: MediaList | null = $state(null);
@@ -108,9 +114,10 @@
 
 	let isMoviesTab = $derived(activeTab === MOVIES_TAB);
 	let isTvTab = $derived(activeTab === TV_TAB);
-	let isPopularTab = $derived(activeTab === POPULAR_TAB);
-	let isDiscoverTab = $derived(activeTab === DISCOVER_TAB);
-	let isRecommendationsTab = $derived(activeTab === RECOMMENDATIONS_TAB);
+	let isLibrarySub = $derived(activeSubTab === LIBRARY_SUB);
+	let isPopularSub = $derived(activeSubTab === POPULAR_SUB);
+	let isDiscoverSub = $derived(activeSubTab === DISCOVER_SUB);
+	let isRecommendationsSub = $derived(activeSubTab === RECOMMENDATIONS_SUB);
 
 	// TMDB browse state
 	const browseState = tmdbBrowseService.state;
@@ -310,26 +317,53 @@
 
 	function selectTab(tab: TabId) {
 		activeTab = tab;
+		activeSubTab = LIBRARY_SUB;
+		selectedList = null;
+		selectedShowGroup = null;
+		closeMediaDetail();
+	}
+
+	function selectSubTab(sub: SubTabId) {
+		activeSubTab = sub;
 		selectedList = null;
 		selectedShowGroup = null;
 		closeMediaDetail();
 
-		if (tab === POPULAR_TAB) {
+		if (sub === POPULAR_SUB) {
 			const s = $browseState;
-			if (s.popularMovies.length === 0) tmdbBrowseService.loadPopularMovies();
-			if (s.popularTv.length === 0) tmdbBrowseService.loadPopularTv();
-		} else if (tab === DISCOVER_TAB) {
+			if (isMoviesTab && s.popularMovies.length === 0) tmdbBrowseService.loadPopularMovies();
+			if (isTvTab && s.popularTv.length === 0) tmdbBrowseService.loadPopularTv();
+		} else if (sub === DISCOVER_SUB) {
 			tmdbBrowseService.loadGenres();
 			const s = $browseState;
-			if (s.discoverMovies.length === 0) tmdbBrowseService.loadDiscoverMovies();
-			if (s.discoverTv.length === 0) tmdbBrowseService.loadDiscoverTv();
-		} else if (tab === RECOMMENDATIONS_TAB) {
+			if (isMoviesTab && s.discoverMovies.length === 0) tmdbBrowseService.loadDiscoverMovies();
+			if (isTvTab && s.discoverTv.length === 0) tmdbBrowseService.loadDiscoverTv();
+		} else if (sub === RECOMMENDATIONS_SUB) {
 			const s = $browseState;
-			if (s.recommendations.length === 0 && linkedItems.length > 0) {
-				const first = linkedItems[0];
+			const filteredLinked = linkedItems.filter(
+				(i) => i.type === (isMoviesTab ? 'movie' : 'tv')
+			);
+			if (s.recommendations.length === 0 && filteredLinked.length > 0) {
+				const first = filteredLinked[0];
 				tmdbBrowseService.loadRecommendations(first.tmdbId, first.type);
 			}
 		}
+	}
+
+	function handleBrowseSelectMovie(movie: DisplayTMDBMovie) {
+		smartSearchService.select({
+			title: movie.title,
+			year: movie.releaseYear,
+			type: 'movie'
+		});
+	}
+
+	function handleBrowseSelectTvShow(tvShow: DisplayTMDBTvShow) {
+		smartSearchService.select({
+			title: tvShow.name,
+			year: tvShow.firstAirYear,
+			type: 'tv'
+		});
 	}
 
 	function updateItemLinks(itemId: string, service: string, link: MediaItemLink | null) {
@@ -613,8 +647,8 @@
 		</button>
 	</div>
 
-	<!-- Tabs -->
-	<div class="mb-6 flex gap-2">
+	<!-- Main Tabs -->
+	<div class="mb-3 flex gap-2">
 		<button
 			class={classNames('btn btn-sm', {
 				'btn-primary': isMoviesTab,
@@ -633,36 +667,49 @@
 		>
 			TV Shows
 		</button>
+	</div>
+
+	<!-- Sub Tabs -->
+	<div class="mb-6 flex gap-1">
 		<button
-			class={classNames('btn btn-sm', {
-				'btn-primary': isPopularTab,
-				'btn-ghost': !isPopularTab
+			class={classNames('btn btn-xs', {
+				'btn-secondary': isLibrarySub,
+				'btn-ghost': !isLibrarySub
 			})}
-			onclick={() => selectTab(POPULAR_TAB)}
+			onclick={() => selectSubTab(LIBRARY_SUB)}
+		>
+			Library
+		</button>
+		<button
+			class={classNames('btn btn-xs', {
+				'btn-secondary': isPopularSub,
+				'btn-ghost': !isPopularSub
+			})}
+			onclick={() => selectSubTab(POPULAR_SUB)}
 		>
 			Popular
 		</button>
 		<button
-			class={classNames('btn btn-sm', {
-				'btn-primary': isDiscoverTab,
-				'btn-ghost': !isDiscoverTab
+			class={classNames('btn btn-xs', {
+				'btn-secondary': isDiscoverSub,
+				'btn-ghost': !isDiscoverSub
 			})}
-			onclick={() => selectTab(DISCOVER_TAB)}
+			onclick={() => selectSubTab(DISCOVER_SUB)}
 		>
 			Discover
 		</button>
 		<button
-			class={classNames('btn btn-sm', {
-				'btn-primary': isRecommendationsTab,
-				'btn-ghost': !isRecommendationsTab
+			class={classNames('btn btn-xs', {
+				'btn-secondary': isRecommendationsSub,
+				'btn-ghost': !isRecommendationsSub
 			})}
-			onclick={() => selectTab(RECOMMENDATIONS_TAB)}
+			onclick={() => selectSubTab(RECOMMENDATIONS_SUB)}
 		>
 			Recommendations
 		</button>
 	</div>
 
-	{#if isPopularTab}
+	{#if isPopularSub}
 		<PopularTab
 			movies={$browseState.popularMovies}
 			tvShows={$browseState.popularTv}
@@ -672,10 +719,13 @@
 			tvTotalPages={$browseState.popularTvTotalPages}
 			loadingMovies={$browseState.loading['popularMovies'] ?? false}
 			loadingTv={$browseState.loading['popularTv'] ?? false}
+			mediaType={isMoviesTab ? 'movies' : 'tv'}
+			onselectMovie={handleBrowseSelectMovie}
+			onselectTvShow={handleBrowseSelectTvShow}
 			onloadMovies={(p) => tmdbBrowseService.loadPopularMovies(p)}
 			onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
 		/>
-	{:else if isDiscoverTab}
+	{:else if isDiscoverSub}
 		<DiscoverTab
 			movies={$browseState.discoverMovies}
 			tvShows={$browseState.discoverTv}
@@ -688,21 +738,26 @@
 			selectedGenreId={$browseState.selectedGenreId}
 			loadingMovies={$browseState.loading['discoverMovies'] ?? false}
 			loadingTv={$browseState.loading['discoverTv'] ?? false}
+			mediaType={isMoviesTab ? 'movies' : 'tv'}
+			onselectMovie={handleBrowseSelectMovie}
+			onselectTvShow={handleBrowseSelectTvShow}
 			ondiscoverMovies={(p, g) => tmdbBrowseService.loadDiscoverMovies(p, g)}
 			ondiscoverTv={(p, g) => tmdbBrowseService.loadDiscoverTv(p, g)}
 		/>
-	{:else if isRecommendationsTab}
+	{:else if isRecommendationsSub}
 		<RecommendationsTab
-			{linkedItems}
+			linkedItems={linkedItems.filter((i) => i.type === (isMoviesTab ? 'movie' : 'tv'))}
 			recommendations={$browseState.recommendations}
 			page={$browseState.recommendationsPage}
 			totalPages={$browseState.recommendationsTotalPages}
 			sourceId={$browseState.recommendationSourceId}
 			sourceType={$browseState.recommendationSourceType}
 			loading={$browseState.loading['recommendations'] ?? false}
+			onselectMovie={handleBrowseSelectMovie}
+			onselectTvShow={handleBrowseSelectTvShow}
 			onload={(id, type, p) => tmdbBrowseService.loadRecommendations(id, type, p)}
 		/>
-	{:else if isTvTab}
+	{:else if isLibrarySub && isTvTab}
 		<!-- TV Shows view -->
 		{#if selectedList}
 			{@const currentListLinks = getListLinks(selectedList)}
@@ -937,7 +992,7 @@
 				<p class="opacity-50">No TV shows yet. Add a TV library and scan it.</p>
 			</div>
 		{/if}
-	{:else}
+	{:else if isLibrarySub && isMoviesTab}
 		<!-- Movies grid -->
 		{#if itemsWithOverrides.length > 0}
 			<div

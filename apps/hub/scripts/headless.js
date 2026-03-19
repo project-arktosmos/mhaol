@@ -47,6 +47,18 @@ if (skipBuild && existsSync(serverBin)) {
 	execSync('cargo build --bin mhaol-server', { stdio: 'inherit', cwd: '../..' });
 }
 
+// Build all sub-app frontends so they can be started without building
+const subApps = ['storybook', 'identity', 'signaling-app', 'cloud', 'torrent', 'flix'];
+for (const app of subApps) {
+	const distCheck = join(__dirname, '..', '..', app.replace('-app', ''), 'dist-static', 'index.html');
+	if (skipBuild && existsSync(distCheck)) {
+		console.log(`${app} already built, skipping.`);
+	} else {
+		console.log(`Building ${app}...`);
+		execSync(`pnpm --filter ${app} build`, { stdio: 'inherit', cwd: '../..' });
+	}
+}
+
 console.log('Starting backend on internal port', BACKEND_PORT);
 const backend = spawn(serverBin, [], {
 	stdio: 'inherit',

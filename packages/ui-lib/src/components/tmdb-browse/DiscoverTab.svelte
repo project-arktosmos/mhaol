@@ -17,6 +17,9 @@
 		selectedGenreId,
 		loadingMovies = false,
 		loadingTv = false,
+		mediaType,
+		onselectMovie,
+		onselectTvShow,
 		ondiscoverMovies,
 		ondiscoverTv
 	}: {
@@ -31,11 +34,15 @@
 		selectedGenreId: number | null;
 		loadingMovies?: boolean;
 		loadingTv?: boolean;
+		mediaType?: 'movies' | 'tv';
+		onselectMovie?: (movie: DisplayTMDBMovie) => void;
+		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 		ondiscoverMovies: (page: number, genreId: number | null) => void;
 		ondiscoverTv: (page: number, genreId: number | null) => void;
 	} = $props();
 
-	let subTab = $state<'movies' | 'tv'>('movies');
+	let subTabInternal = $state<'movies' | 'tv'>('movies');
+	let subTab = $derived(mediaType ?? subTabInternal);
 
 	let genres = $derived(subTab === 'movies' ? movieGenres : tvGenres);
 
@@ -51,27 +58,29 @@
 </script>
 
 <div class="mb-4 flex flex-wrap items-center gap-2">
-	<button
-		class={classNames('btn btn-xs', {
-			'btn-secondary': subTab === 'movies',
-			'btn-ghost': subTab !== 'movies'
-		})}
-		onclick={() => (subTab = 'movies')}
-	>
-		Movies
-	</button>
-	<button
-		class={classNames('btn btn-xs', {
-			'btn-secondary': subTab === 'tv',
-			'btn-ghost': subTab !== 'tv'
-		})}
-		onclick={() => (subTab = 'tv')}
-	>
-		TV Shows
-	</button>
+	{#if !mediaType}
+		<button
+			class={classNames('btn btn-xs', {
+				'btn-secondary': subTab === 'movies',
+				'btn-ghost': subTab !== 'movies'
+			})}
+			onclick={() => (subTabInternal = 'movies')}
+		>
+			Movies
+		</button>
+		<button
+			class={classNames('btn btn-xs', {
+				'btn-secondary': subTab === 'tv',
+				'btn-ghost': subTab !== 'tv'
+			})}
+			onclick={() => (subTabInternal = 'tv')}
+		>
+			TV Shows
+		</button>
+	{/if}
 
 	<select
-		class="select-bordered select ml-auto select-xs"
+		class={classNames('select-bordered select select-xs', { 'ml-auto': !mediaType })}
 		value={selectedGenreId ?? ''}
 		onchange={handleGenreChange}
 	>
@@ -90,7 +99,7 @@
 	{:else if movies.length > 0}
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
 			{#each movies as movie (movie.id)}
-				<TmdbBrowseCard {movie} />
+				<TmdbBrowseCard {movie} onclick={onselectMovie ? () => onselectMovie(movie) : undefined} />
 			{/each}
 		</div>
 		<TmdbPagination
@@ -111,7 +120,7 @@
 {:else if tvShows.length > 0}
 	<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
 		{#each tvShows as tvShow (tvShow.id)}
-			<TmdbBrowseCard {tvShow} />
+			<TmdbBrowseCard {tvShow} onclick={onselectTvShow ? () => onselectTvShow(tvShow) : undefined} />
 		{/each}
 	</div>
 	<TmdbPagination
