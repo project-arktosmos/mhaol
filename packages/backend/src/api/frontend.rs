@@ -5,7 +5,7 @@ use axum::{
 use rust_embed::Embed;
 
 #[derive(Embed)]
-#[folder = "../mhaol-video/dist-static/"]
+#[folder = "../../apps/video/dist-static/"]
 struct FrontendAssets;
 
 /// Serve an embedded static file, or fall back to index.html for SPA routing.

@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { get, type Writable } from 'svelte/store';
-import localStorageWritableStore from '$utils/localStorageWritableStore';
-import type { ID } from '$types/core.type';
+import localStorageWritableStore from 'frontend/utils/localStorageWritableStore';
+import type { ID } from 'frontend/types/core.type';
 
 export class ArrayServiceClass<T extends { id: ID }> {
 	id: string;

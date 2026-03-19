@@ -1,9 +1,9 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { torrentService } from '$services/torrent.service';
-	import { libraryService } from '$services/library.service';
-	import type { Library } from '$types/library.type';
-	import LibraryAddForm from '$components/libraries/LibraryAddForm.svelte';
+	import { torrentService } from 'frontend/services/torrent.service';
+	import { libraryService } from 'frontend/services/library.service';
+	import type { Library } from 'frontend/types/library.type';
+	import LibraryAddForm from 'frontend/components/libraries/LibraryAddForm.svelte';
 
 	const state = torrentService.state;
 	const libraries = libraryService.store;

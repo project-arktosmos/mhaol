@@ -1,19 +1,19 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { page } from '$app/stores';
-	import type { RouteEntry } from '$types/route.type';
+	import type { RouteEntry } from 'frontend/types/route.type';
 
 	interface Props {
 		route: RouteEntry;
+		currentPath: string;
 		classes?: string;
 	}
 
-	let { route, classes = '' }: Props = $props();
+	let { route, currentPath, classes = '' }: Props = $props();
 
 	let navigableChildren = $derived(route.children.filter((c) => !c.isDynamic));
 
 	let isActive = $derived(
-		$page.url.pathname === route.path || $page.url.pathname.startsWith(route.path + '/')
+		currentPath === route.path || currentPath.startsWith(route.path + '/')
 	);
 
 	let dropdownClasses = $derived(classNames('dropdown dropdown-end', classes));
@@ -44,7 +44,7 @@
 	<ul tabindex="0" class="dropdown-content menu z-50 mt-1 w-52 rounded-box bg-base-200 p-2 shadow">
 		{#each navigableChildren as child (child.path)}
 			<li>
-				<a href={child.path} class={classNames({ active: $page.url.pathname === child.path })}>
+				<a href={child.path} class={classNames({ active: currentPath === child.path })}>
 					{child.label}
 				</a>
 			</li>

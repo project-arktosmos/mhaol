@@ -7,6 +7,9 @@ pub mod tmdb;
 pub mod torrent;
 pub mod jackett;
 pub mod torrent_search;
+pub mod youtube_meta;
+#[cfg(not(target_os = "android"))]
+pub mod ytdl;
 
 use crate::AppState;
 use serde::Serialize;

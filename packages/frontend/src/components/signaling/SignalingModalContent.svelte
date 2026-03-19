@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { signalingChatService } from '$services/signaling-chat.service';
-	import SignalingServerStatus from '$components/signaling/SignalingServerStatus.svelte';
-	import SignalingConnectionControls from '$components/signaling/SignalingConnectionControls.svelte';
-	import SignalingChat from '$components/signaling/SignalingChat.svelte';
+	import { signalingChatService } from 'frontend/services/signaling-chat.service';
+	import SignalingServerStatus from 'frontend/components/signaling/SignalingServerStatus.svelte';
+	import SignalingConnectionControls from 'frontend/components/signaling/SignalingConnectionControls.svelte';
+	import SignalingChat from 'frontend/components/signaling/SignalingChat.svelte';
 
 	onDestroy(() => {
 		signalingChatService.destroy();

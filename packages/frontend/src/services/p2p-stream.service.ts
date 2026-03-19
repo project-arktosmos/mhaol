@@ -1,13 +1,13 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
+import { apiUrl } from 'frontend/lib/api-base';
 import type {
 	P2pStreamSettings,
 	P2pStreamServiceState,
 	P2pVideoCodec,
 	P2pVideoQuality,
 	P2pStreamMode
-} from '$types/p2p-stream.type';
+} from 'frontend/types/p2p-stream.type';
 
 const initialSettings: P2pStreamSettings = {
 	id: 'p2p-stream-settings',

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { youtubeService } from '$services/youtube.service';
-	import { formatDuration } from '$types/youtube.type';
+	import { youtubeService } from 'frontend/services/youtube.service';
+	import { formatDuration } from 'frontend/types/youtube.type';
 
 	const state = youtubeService.state;
 	const settings = youtubeService.store;

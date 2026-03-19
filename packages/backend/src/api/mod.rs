@@ -14,6 +14,10 @@ pub mod plugins;
 pub mod signaling;
 pub mod signaling_ws;
 pub mod tmdb;
+pub mod youtube;
+pub mod youtube_search;
+#[cfg(not(target_os = "android"))]
+pub mod ytdl;
 #[cfg(not(target_os = "android"))]
 pub mod llm;
 #[cfg(not(target_os = "android"))]
@@ -44,7 +48,12 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/addons", addons::router())
         .nest("/api/jackett", jackett::router())
         .nest("/api/signaling", signaling::router())
+        .nest("/api/youtube", youtube::router())
+        .nest("/api/youtube-search", youtube_search::router())
         .merge(signaling_ws::signaling_routes());
+
+    #[cfg(not(target_os = "android"))]
+    let router = router.nest("/api/ytdl", ytdl::router());
 
     #[cfg(not(target_os = "android"))]
     let router = router.nest("/api/torrent", torrent::router());

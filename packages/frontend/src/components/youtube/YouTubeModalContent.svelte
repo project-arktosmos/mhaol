@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { youtubeService } from '$services/youtube.service';
-	import { libraryService } from '$services/library.service';
-	import YouTubeUrlInput from '$components/youtube/YouTubeUrlInput.svelte';
-	import YouTubeVideoPreview from '$components/youtube/YouTubeVideoPreview.svelte';
-	import YouTubePlaylistPreview from '$components/youtube/YouTubePlaylistPreview.svelte';
-	import YouTubeDownloadSettings from '$components/youtube/YouTubeDownloadSettings.svelte';
-	import YouTubeDownloadQueue from '$components/youtube/YouTubeDownloadQueue.svelte';
+	import { youtubeService } from 'frontend/services/youtube.service';
+	import { libraryService } from 'frontend/services/library.service';
+	import YouTubeUrlInput from 'frontend/components/youtube/YouTubeUrlInput.svelte';
+	import YouTubeVideoPreview from 'frontend/components/youtube/YouTubeVideoPreview.svelte';
+	import YouTubePlaylistPreview from 'frontend/components/youtube/YouTubePlaylistPreview.svelte';
+	import YouTubeDownloadSettings from 'frontend/components/youtube/YouTubeDownloadSettings.svelte';
+	import YouTubeDownloadQueue from 'frontend/components/youtube/YouTubeDownloadQueue.svelte';
 
 	const state = youtubeService.state;
 

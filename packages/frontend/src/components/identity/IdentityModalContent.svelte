@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { apiUrl } from '$lib/api-base';
-	import type { Identity } from '$types/identity.type';
-	import { identityService } from '$services/identity.service';
-	import Modal from '$components/core/Modal.svelte';
+	import { apiUrl } from 'frontend/lib/api-base';
+	import type { Identity } from 'frontend/types/identity.type';
+	import { identityService } from 'frontend/services/identity.service';
+	import Modal from 'frontend/components/core/Modal.svelte';
 
 	let identities = $state<Identity[]>([]);
 	let loading = $state(true);

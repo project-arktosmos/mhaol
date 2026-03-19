@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <rect width="1200" height="630" fill="#ffffff"/>
+  <text
+    text-anchor="middle"
+    dominant-baseline="central"
+    x="600"
+    y="315"
+    font-family="system-ui, -apple-system, sans-serif"
+    font-weight="bold"
+    font-size="160"
+  ><tspan fill="#333c4d">Mhaol</tspan><tspan fill="#fb2c36">Tube</tspan></text>
+</svg>

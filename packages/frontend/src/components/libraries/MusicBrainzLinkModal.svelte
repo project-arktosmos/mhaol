@@ -1,17 +1,17 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { LibraryFile } from '$types/library.type';
+	import type { LibraryFile } from 'frontend/types/library.type';
 	import type {
 		DisplayMusicBrainzRecording,
 		DisplayMusicBrainzArtist,
 		DisplayMusicBrainzReleaseGroup
-	} from 'musicbrainz/types';
-	import { searchRecordings, searchArtists, searchReleaseGroups } from 'musicbrainz';
+	} from '$types/musicbrainz.type';
+	import { searchRecordings, searchArtists, searchReleaseGroups } from '$utils/musicbrainz/client';
 	import {
 		recordingsToDisplay,
 		artistsToDisplay,
 		releaseGroupsToDisplay
-	} from 'musicbrainz/transform';
+	} from '$utils/musicbrainz/transform';
 
 	interface Props {
 		file: LibraryFile;

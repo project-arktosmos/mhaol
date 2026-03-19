@@ -1,9 +1,9 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
-import { ObjectServiceClass } from '$services/classes/object-service.class';
-import { p2pStreamService } from '$services/p2p-stream.service';
-import { signalingAdapter } from '$adapters/classes/signaling.adapter';
+import { apiUrl } from 'frontend/lib/api-base';
+import { ObjectServiceClass } from 'frontend/services/classes/object-service.class';
+import { p2pStreamService } from 'frontend/services/p2p-stream.service';
+import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import type {
 	PlayerSettings,
@@ -11,7 +11,7 @@ import type {
 	PlayableFile,
 	MediaInfoPayload,
 	PositionPayload
-} from '$types/player.type';
+} from 'frontend/types/player.type';
 
 const initialSettings: PlayerSettings = {
 	id: 'player-settings',

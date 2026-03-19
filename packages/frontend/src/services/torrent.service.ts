@@ -1,14 +1,14 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
-import { ObjectServiceClass } from '$services/classes/object-service.class';
+import { apiUrl } from 'frontend/lib/api-base';
+import { ObjectServiceClass } from 'frontend/services/classes/object-service.class';
 import type {
 	TorrentSettings,
 	TorrentServiceState,
 	TorrentInfo,
 	TorrentStats,
 	TorrentStatusResponse
-} from '$types/torrent.type';
+} from 'frontend/types/torrent.type';
 
 // Default settings stored in localStorage
 const initialSettings: TorrentSettings = {

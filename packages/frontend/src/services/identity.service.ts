@@ -1,7 +1,7 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
-import type { Identity } from '$types/identity.type';
+import { apiUrl } from 'frontend/lib/api-base';
+import type { Identity } from 'frontend/types/identity.type';
 
 interface IdentityState {
 	loading: boolean;

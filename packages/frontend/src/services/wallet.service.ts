@@ -1,6 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
+import { apiUrl } from 'frontend/lib/api-base';
 
 export interface WalletState {
 	loading: boolean;

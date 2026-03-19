@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import classNames from 'classnames';
-	import { downloadsService } from '$services/downloads.service';
-	import { modalRouterService } from '$services/modal-router.service';
-	import { formatBytes } from '$types/torrent.type';
+	import { downloadsService } from 'frontend/services/downloads.service';
+	import { modalRouterService } from 'frontend/services/modal-router.service';
+	import { formatBytes } from 'frontend/types/torrent.type';
 
 	const downloadState = downloadsService.state;
 

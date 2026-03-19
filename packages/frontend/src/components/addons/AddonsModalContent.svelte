@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { apiUrl } from '$lib/api-base';
+	import { apiUrl } from 'frontend/lib/api-base';
 
 	interface AddonSetting {
 		key: string;

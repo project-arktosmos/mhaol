@@ -1,4 +1,4 @@
-import { AdapterClass } from '$adapters/classes/adapter.class';
+import { AdapterClass } from 'frontend/adapters/classes/adapter.class';
 
 export class IdentityAdapter extends AdapterClass {
 	constructor() {

@@ -1,8 +1,6 @@
 pub mod api;
 pub mod db;
 pub mod identity;
-#[cfg(not(target_os = "android"))]
-pub mod llm_engine;
 pub mod modules;
 pub mod signaling_rooms;
 pub mod worker_bridge;
@@ -11,15 +9,29 @@ use db::repo::*;
 use db::DbPool;
 use identity::IdentityManager;
 #[cfg(not(target_os = "android"))]
-use llm_engine::LlmEngine;
+use mhaol_llm::LlmEngine;
 #[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
+#[cfg(not(target_os = "android"))]
+use mhaol_yt_dlp::DownloadManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
 use signaling_rooms::SignalingRoomManager;
 use worker_bridge::WorkerBridge;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+/// Return the default mhaol data directory: `<Documents>/mhaol`.
+/// Creates the directory if it does not exist.
+pub fn default_data_dir() -> PathBuf {
+    let doc_dir = dirs::document_dir().unwrap_or_else(|| {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        PathBuf::from(home).join("Documents")
+    });
+    let data_dir = doc_dir.join("mhaol");
+    std::fs::create_dir_all(&data_dir).ok();
+    data_dir
+}
 
 /// Load .env.app from the workspace root into process environment variables.
 /// Only sets variables that are not already present in the environment.
@@ -67,15 +79,21 @@ pub struct AppState {
     pub categories: CategoryRepo,
     pub link_sources: LinkSourceRepo,
     pub torrent_downloads: TorrentDownloadRepo,
+    pub youtube_content: YouTubeContentRepo,
+    pub youtube_downloads: YouTubeDownloadRepo,
+    pub youtube_channels: YouTubeChannelRepo,
     pub media_lists: MediaListRepo,
     pub media_list_items: MediaListItemRepo,
     pub media_list_links: MediaListLinkRepo,
     pub identity_manager: IdentityManager,
     pub module_registry: Arc<RwLock<ModuleRegistry>>,
     #[cfg(not(target_os = "android"))]
+    pub ytdl_manager: Arc<DownloadManager>,
+    #[cfg(not(target_os = "android"))]
     pub torrent_manager: Arc<TorrentManager>,
     #[cfg(not(target_os = "android"))]
     pub llm_engine: Arc<LlmEngine>,
+    pub data_dir: PathBuf,
     pub llm_conversations: LlmConversationRepo,
     pub signaling_servers: SignalingServerRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
@@ -87,6 +105,8 @@ impl AppState {
     pub fn new(db_path: Option<&Path>) -> Result<Self, rusqlite::Error> {
         let db = db::open_database(db_path)?;
         let identities_path = identity::default_identities_path();
+
+        let data_dir = default_data_dir();
 
         #[cfg(not(target_os = "android"))]
         let llm_models_dir = {
@@ -107,11 +127,19 @@ impl AppState {
             categories: CategoryRepo::new(Arc::clone(&db)),
             link_sources: LinkSourceRepo::new(Arc::clone(&db)),
             torrent_downloads: TorrentDownloadRepo::new(Arc::clone(&db)),
+            youtube_content: YouTubeContentRepo::new(Arc::clone(&db)),
+            youtube_downloads: YouTubeDownloadRepo::new(Arc::clone(&db)),
+            youtube_channels: YouTubeChannelRepo::new(Arc::clone(&db)),
             media_lists: MediaListRepo::new(Arc::clone(&db)),
             media_list_items: MediaListItemRepo::new(Arc::clone(&db)),
             media_list_links: MediaListLinkRepo::new(Arc::clone(&db)),
             identity_manager: IdentityManager::new(identities_path),
             module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
+            #[cfg(not(target_os = "android"))]
+            ytdl_manager: {
+                let config = mhaol_yt_dlp::YtDownloadConfig::from_env();
+                Arc::new(DownloadManager::new(config))
+            },
             #[cfg(not(target_os = "android"))]
             torrent_manager: Arc::new(TorrentManager::new()),
             #[cfg(not(target_os = "android"))]
@@ -120,9 +148,13 @@ impl AppState {
             signaling_servers: SignalingServerRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
+            data_dir,
             db,
         })
     }
+
+    /// The fixed ID for the single default library.
+    pub const DEFAULT_LIBRARY_ID: &'static str = "default";
 
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {
@@ -130,14 +162,23 @@ impl AppState {
             jackett::JackettModule, signaling::SignalingModule,
             signaling_deploy::SignalingDeployModule, tmdb::TmdbModule,
             torrent_search::TorrentSearchModule,
+            youtube_meta::YoutubeMetaModule,
         };
         #[cfg(not(target_os = "android"))]
         use modules::{
             p2p_stream::P2pStreamModule,
             torrent::TorrentModule,
+            ytdl::YtdlModule,
         };
 
         let mut registry = self.module_registry.write();
+
+        // YouTube
+        registry.register(Box::new(YoutubeMetaModule));
+        #[cfg(not(target_os = "android"))]
+        registry.register(Box::new(YtdlModule {
+            manager: Arc::clone(&self.ytdl_manager),
+        }));
 
         // Addons
         registry.register(Box::new(TmdbModule));

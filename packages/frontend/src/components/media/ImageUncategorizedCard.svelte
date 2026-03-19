@@ -1,9 +1,9 @@
 <script lang="ts">
 	import MediaCardBase from './MediaCardBase.svelte';
-	import TagPill from '$components/images/TagPill.svelte';
-	import { apiUrl } from '$lib/api-base';
-	import type { MediaItem } from '$types/media-card.type';
-	import type { ImageTag } from '$types/image-tagger.type';
+	import TagPill from 'frontend/components/images/TagPill.svelte';
+	import { apiUrl } from 'frontend/lib/api-base';
+	import type { MediaItem } from 'frontend/types/media-card.type';
+	import type { ImageTag } from 'frontend/types/image-tagger.type';
 
 	interface Props {
 		item: MediaItem;

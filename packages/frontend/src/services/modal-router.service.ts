@@ -1,18 +1,21 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import type { NavbarModalId, ModalRouterState } from '$types/modal.type';
+import type { NavbarModalId, ModalRouterState } from 'frontend/types/modal.type';
 
 const VALID_NAVBAR_IDS = new Set<NavbarModalId>([
 	'youtube',
 	'youtube-search',
 	'torrent',
 	'downloads',
+	'jackett',
 	'libraries',
 	'signaling',
+	'peer-libraries',
 	'identity',
 	'plugins',
 	'addons',
-	'settings'
+	'settings',
+	'llm'
 ]);
 
 function parseHash(hash: string): NavbarModalId | null {

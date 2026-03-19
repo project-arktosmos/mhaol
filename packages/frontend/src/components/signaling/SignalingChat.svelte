@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { signalingChatService } from '$services/signaling-chat.service';
-	import { signalingAdapter } from '$adapters/classes/signaling.adapter';
+	import { signalingChatService } from 'frontend/services/signaling-chat.service';
+	import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
 
 	const chatStore = signalingChatService.state;
 

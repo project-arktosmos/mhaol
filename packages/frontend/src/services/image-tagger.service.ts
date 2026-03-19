@@ -1,6 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
+import { apiUrl } from 'frontend/lib/api-base';
 import type {
 	ImageItem,
 	ImageTag,
@@ -8,7 +8,7 @@ import type {
 	TagResponse,
 	BatchTagResponse,
 	TaggerStatusResponse
-} from '$types/image-tagger.type';
+} from 'frontend/types/image-tagger.type';
 
 export type TaggerStatus = 'idle' | 'downloading' | 'loading' | 'ready' | 'error';
 

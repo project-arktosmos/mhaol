@@ -1,10 +1,10 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount } from 'svelte';
-	import { apiUrl } from '$lib/api-base';
-	import { signalingChatService } from '$services/signaling-chat.service';
-	import { signalingAdapter } from '$adapters/classes/signaling.adapter';
-	import type { SignalingServerTarget, SignalingServerStatus } from '$types/signaling.type';
+	import { apiUrl } from 'frontend/lib/api-base';
+	import { signalingChatService } from 'frontend/services/signaling-chat.service';
+	import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
+	import type { SignalingServerTarget, SignalingServerStatus } from 'frontend/types/signaling.type';
 
 	const chatStore = signalingChatService.state;
 

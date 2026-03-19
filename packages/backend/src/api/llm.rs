@@ -1,4 +1,4 @@
-use crate::llm_engine::{
+use mhaol_llm::{
     build_chat_prompt, list_models, load_model_blocking, run_inference_blocking, ChatMessage,
     LlmConfigUpdate, LlmDownloadProgress, LlmStatus,
 };

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import MediaCardBase from './MediaCardBase.svelte';
-	import type { MediaItem } from '$types/media-card.type';
+	import type { MediaItem } from 'frontend/types/media-card.type';
 
 	interface Props {
 		item: MediaItem;

@@ -1,5 +1,5 @@
-import { AdapterClass } from '$adapters/classes/adapter.class';
-import { MediaType } from '$types/library.type';
+import { AdapterClass } from 'frontend/adapters/classes/adapter.class';
+import { MediaType } from 'frontend/types/library.type';
 
 export class LibraryFileAdapter extends AdapterClass {
 	constructor() {

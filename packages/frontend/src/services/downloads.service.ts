@@ -1,7 +1,7 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
-import type { UnifiedDownload } from '$types/download.type';
+import { apiUrl } from 'frontend/lib/api-base';
+import type { UnifiedDownload } from 'frontend/types/download.type';
 
 export interface DownloadsState {
 	downloads: UnifiedDownload[];

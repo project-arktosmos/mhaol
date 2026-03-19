@@ -3,7 +3,7 @@
 This document guides Claude (and developers) on implementing features in this monorepo. Follow these conventions strictly to maintain consistency across all packages.
 
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
-- `packages/mhaol-video/CLAUDE.md` — Components, services, adapters, styling
+- `packages/frontend/CLAUDE.md` — Components, services, adapters, styling
 - `packages/backend/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
 - `packages/database/CLAUDE.md` — SQLite schema, repository pattern
 
@@ -13,22 +13,19 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 
 ```
 mhaol.git/
-├── packages/
+├── apps/
 │   ├── mhaol-video/              # SvelteKit 2 app (Vite, port 1531)
+│   └── mhaol-server/             # Server orchestrator (starts frontend + backend)
+├── packages/
+│   ├── frontend/                 # SvelteKit 2 frontend (Vite, port 1531)
 │   ├── backend/                  # Rust Axum server (port 1530)
 │   ├── database/                 # SQLite schema & repositories (better-sqlite3)
 │   ├── signaling/                # PartyKit signaling service
 │   ├── tauri/                    # Desktop/mobile wrapper (macOS, Android)
 │   ├── p2p-stream/               # Rust P2P streaming library
-│   ├── rust-torrent/             # Rust torrent implementation
-│   ├── rust-yt-dlp/              # Rust yt-dlp wrapper
-│   ├── image-tagger/             # Image tagging (ONNX/ML)
-│   └── torrent/                  # Node torrent utilities
+│   └── torrent/                  # Rust torrent implementation
 ├── addons/
 │   ├── common/                   # Shared addon config
-│   ├── youtube/                  # YouTube video linking
-│   ├── lyrics/                   # Song lyrics from LRCLIB
-│   ├── musicbrainz/              # MusicBrainz music metadata
 │   ├── tmdb/                     # TMDB movie/TV metadata (SQLite cache)
 │   └── torrent-search-thepiratebay/  # Torrent search via PirateBay API
 ├── pnpm-workspace.yaml
@@ -92,7 +89,7 @@ After every change, immediately commit the affected files:
 pnpm lint && pnpm check && pnpm build && pnpm test
 
 # Then commit
-git add packages/mhaol-video/src/components/media/MediaCard.svelte
+git add packages/frontend/src/components/media/MediaCard.svelte
 git commit -m "add thumbnail fallback to MediaCard"
 ```
 
@@ -113,7 +110,7 @@ When adding a new feature that spans the full stack:
 - [ ] Register route in `build_router()`: `.nest("/api/{feature}", {feature}::router())`
 - [ ] Add any new repos to `AppState`
 
-**Frontend (`packages/mhaol-video`)**
+**Frontend (`packages/frontend`)**
 - [ ] Define types in `src/types/{feature}.type.ts`
 - [ ] Create adapter in `src/adapters/classes/{feature}.adapter.ts`
 - [ ] Create/extend service in `src/services/{feature}.service.ts`

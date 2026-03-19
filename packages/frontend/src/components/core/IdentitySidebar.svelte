@@ -1,16 +1,16 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount } from 'svelte';
-	import { apiUrl } from '$lib/api-base';
-	import { identityService } from '$services/identity.service';
-	import { identityAdapter } from '$adapters/classes/identity.adapter';
-	import { playerService } from '$services/player.service';
-	import { signalingAdapter } from '$adapters/classes/signaling.adapter';
-	import { signalingChatService } from '$services/signaling-chat.service';
-	import { sidebarService } from '$services/sidebar.service';
-	import DownloadsSummary from '$components/downloads/DownloadsSummary.svelte';
-	import type { SignalingServerStatus, SignalingServer } from '$types/signaling.type';
-	import type { SidebarWidthMode } from '$types/sidebar.type';
+	import { apiUrl } from 'frontend/lib/api-base';
+	import { identityService } from 'frontend/services/identity.service';
+	import { identityAdapter } from 'frontend/adapters/classes/identity.adapter';
+	import { playerService } from 'frontend/services/player.service';
+	import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
+	import { signalingChatService } from 'frontend/services/signaling-chat.service';
+	import { sidebarService } from 'frontend/services/sidebar.service';
+	import DownloadsSummary from 'frontend/components/downloads/DownloadsSummary.svelte';
+	import type { SignalingServerStatus, SignalingServer } from 'frontend/types/signaling.type';
+	import type { SidebarWidthMode } from 'frontend/types/sidebar.type';
 
 	interface Props {
 		classes?: string;

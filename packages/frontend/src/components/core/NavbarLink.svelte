@@ -1,19 +1,19 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { page } from '$app/stores';
 
 	interface Props {
 		href: string;
 		label: string;
+		currentPath: string;
 		classes?: string;
 	}
 
-	let { href, label, classes = '' }: Props = $props();
+	let { href, label, currentPath, classes = '' }: Props = $props();
 
 	let isActive = $derived(
 		href === '/'
-			? $page.url.pathname === '/'
-			: $page.url.pathname === href || $page.url.pathname.startsWith(href + '/')
+			? currentPath === '/'
+			: currentPath === href || currentPath.startsWith(href + '/')
 	);
 
 	let linkClasses = $derived(

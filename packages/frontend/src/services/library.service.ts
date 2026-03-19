@@ -1,6 +1,6 @@
 import { get, writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
+import { apiUrl } from 'frontend/lib/api-base';
 import type {
 	Library,
 	DirectoryEntry,
@@ -9,8 +9,8 @@ import type {
 	LibraryFilesResponse,
 	MediaTypeOption,
 	CategoryOption
-} from '$types/library.type';
-import { type MediaType } from '$types/library.type';
+} from 'frontend/types/library.type';
+import { type MediaType, type LibraryType } from 'frontend/types/library.type';
 
 export interface LibraryServiceState {
 	showAddForm: boolean;
@@ -22,6 +22,7 @@ export interface LibraryServiceState {
 	selectedPath: string;
 	selectedName: string;
 	selectedMediaTypes: MediaType[];
+	selectedLibraryType: LibraryType | null;
 	libraryFiles: Record<string, LibraryFile[]>;
 	libraryFilesLoading: Record<string, boolean>;
 	libraryFilesError: Record<string, string | null>;
@@ -37,6 +38,7 @@ const initialState: LibraryServiceState = {
 	selectedPath: '',
 	selectedName: '',
 	selectedMediaTypes: [],
+	selectedLibraryType: null,
 	libraryFiles: {},
 	libraryFilesLoading: {},
 	libraryFilesError: {}
@@ -126,6 +128,7 @@ class LibraryService {
 			selectedPath: '',
 			selectedName: '',
 			selectedMediaTypes: [],
+			selectedLibraryType: null,
 			browseError: null
 		}));
 		this.browseDirectory();
@@ -138,6 +141,7 @@ class LibraryService {
 			selectedPath: '',
 			selectedName: '',
 			selectedMediaTypes: [],
+			selectedLibraryType: null,
 			currentBrowsePath: '',
 			browseDirectories: [],
 			browseParent: null,
@@ -155,6 +159,10 @@ class LibraryService {
 
 	setSelectedName(name: string): void {
 		this.state.update((s) => ({ ...s, selectedName: name }));
+	}
+
+	setLibraryType(libraryType: LibraryType): void {
+		this.state.update((s) => ({ ...s, selectedLibraryType: libraryType }));
 	}
 
 	toggleMediaType(mediaType: MediaType): void {
@@ -484,6 +492,7 @@ class LibraryService {
 			selectedPath: '',
 			selectedName: '',
 			selectedMediaTypes: [],
+			selectedLibraryType: null,
 			currentBrowsePath: '',
 			browseDirectories: [],
 			browseParent: null,

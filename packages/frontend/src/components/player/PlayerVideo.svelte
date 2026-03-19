@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
-	import { playerService } from '$services/player.service';
-	import type { PlayableFile, PlayerConnectionState } from '$types/player.type';
+	import { playerService } from 'frontend/services/player.service';
+	import type { PlayableFile, PlayerConnectionState } from 'frontend/types/player.type';
 	import PlayerControls from './PlayerControls.svelte';
 
 	export let file: PlayableFile | null = null;

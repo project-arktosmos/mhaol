@@ -58,8 +58,8 @@ All API handlers receive `AppState` which contains:
 
 These are conditionally compiled with `#[cfg(not(target_os = "android"))]`:
 - `mhaol-p2p-stream` — P2P streaming (`packages/p2p-stream/`)
-- `mhaol-yt-dlp` — YouTube downloading (`packages/rust-yt-dlp/`)
-- `mhaol-torrent` — Torrent management (`packages/rust-torrent/`)
+- `mhaol-yt-dlp` — YouTube downloading (`packages/yt-dlp/`)
+- `mhaol-torrent` — Torrent management (`packages/torrent/`)
 - `ort` + `tokenizers` + `image` — ML image tagging (ONNX runtime)
 
 ## Running

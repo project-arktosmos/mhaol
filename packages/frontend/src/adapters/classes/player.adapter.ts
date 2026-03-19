@@ -1,6 +1,6 @@
-import { AdapterClass } from '$adapters/classes/adapter.class';
-import type { MediaItem } from '$types/media-card.type';
-import type { PlayableFile } from '$types/player.type';
+import { AdapterClass } from 'frontend/adapters/classes/adapter.class';
+import type { MediaItem } from 'frontend/types/media-card.type';
+import type { PlayableFile } from 'frontend/types/player.type';
 
 export class PlayerAdapter extends AdapterClass {
 	constructor() {

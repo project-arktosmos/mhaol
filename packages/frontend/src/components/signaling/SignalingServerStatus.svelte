@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount } from 'svelte';
-	import { apiUrl } from '$lib/api-base';
-	import type { SignalingServerStatus } from '$types/signaling.type';
+	import { apiUrl } from 'frontend/lib/api-base';
+	import type { SignalingServerStatus } from 'frontend/types/signaling.type';
 
 	let status = $state<SignalingServerStatus | null>(null);
 	let loading = $state(true);

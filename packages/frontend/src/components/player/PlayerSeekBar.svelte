@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { createEventDispatcher, onDestroy } from 'svelte';
-	import { playerAdapter } from '$adapters/classes/player.adapter';
+	import { playerAdapter } from 'frontend/adapters/classes/player.adapter';
 
 	export let positionSecs: number = 0;
 	export let durationSecs: number | null = null;

@@ -1,4 +1,4 @@
-import type { MediaItem } from '$types/media-card.type';
+import type { MediaItem } from 'frontend/types/media-card.type';
 
 export interface MediaListLink {
 	serviceId: string;
@@ -12,6 +12,7 @@ export interface MediaList {
 	description: string | null;
 	coverImage: string | null;
 	mediaType: string;
+	libraryType: string;
 	source: 'auto' | 'user';
 	itemCount: number;
 	createdAt: string;

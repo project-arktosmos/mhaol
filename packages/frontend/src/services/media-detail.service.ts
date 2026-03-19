@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import type { MediaDetailSelection } from '$types/media-detail.type';
+import type { MediaDetailSelection } from 'frontend/types/media-detail.type';
 
 function createMediaDetailService() {
 	const store = writable<MediaDetailSelection | null>(null);

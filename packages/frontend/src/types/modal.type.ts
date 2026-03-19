@@ -3,12 +3,15 @@ export type NavbarModalId =
 	| 'youtube-search'
 	| 'torrent'
 	| 'downloads'
+	| 'jackett'
 	| 'libraries'
 	| 'signaling'
+	| 'peer-libraries'
 	| 'identity'
 	| 'plugins'
 	| 'addons'
-	| 'settings';
+	| 'settings'
+	| 'llm';
 
 export interface ModalRouterState {
 	navbarModal: NavbarModalId | null;

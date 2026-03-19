@@ -1,14 +1,14 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
+	import { libraryFileAdapter } from 'frontend/adapters/classes/library-file.adapter';
 	import { getThumbnailUrl } from 'youtube/embed';
-	import TagPill from '$components/images/TagPill.svelte';
-	import PlayerVideo from '$components/player/PlayerVideo.svelte';
-	import { apiUrl } from '$lib/api-base';
-	import { lyricsService } from '$services/lyrics.service';
-	import { playerService } from '$services/player.service';
-	import type { MediaDetailSelection } from '$types/media-detail.type';
-	import type { MediaType } from '$types/library.type';
+	import TagPill from 'frontend/components/images/TagPill.svelte';
+	import PlayerVideo from 'frontend/components/player/PlayerVideo.svelte';
+	import { apiUrl } from 'frontend/lib/api-base';
+	import { lyricsService } from 'frontend/services/lyrics.service';
+	import { playerService } from 'frontend/services/player.service';
+	import type { MediaDetailSelection } from 'frontend/types/media-detail.type';
+	import type { MediaType } from 'frontend/types/library.type';
 	import type { DisplayTMDBMovieDetails } from 'tmdb/types';
 	import type { DisplayTMDBTvShowDetails } from 'tmdb/types';
 

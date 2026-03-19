@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>
+    .m { fill: oklch(35.519% 0.032 262.988); }
+    .t { fill: oklch(63.7% 0.237 25.331); }
+    @media (prefers-color-scheme: dark) {
+      .m { fill: oklch(87.609% 0 0); }
+    }
+  </style>
+  <text
+    font-family="system-ui, -apple-system, sans-serif"
+    font-weight="bold"
+    font-size="44"
+    dominant-baseline="auto"
+  ><tspan class="m" x="1" y="52">M</tspan><tspan class="t">T</tspan></text>
+</svg>

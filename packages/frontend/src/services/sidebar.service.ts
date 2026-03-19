@@ -1,5 +1,5 @@
-import { ObjectServiceClass } from '$services/classes/object-service.class';
-import type { SidebarSettings, SidebarWidthMode } from '$types/sidebar.type';
+import { ObjectServiceClass } from 'frontend/services/classes/object-service.class';
+import type { SidebarSettings, SidebarWidthMode } from 'frontend/types/sidebar.type';
 
 const initialSettings: SidebarSettings = {
 	id: 'sidebar-settings',

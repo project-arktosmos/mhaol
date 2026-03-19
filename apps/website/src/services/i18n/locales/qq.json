@@ -1,0 +1,33 @@
+{
+	"common": {
+		"welcome": "QQQQQ",
+		"hello": "QQQQQ",
+		"goodbye": "QQQQQ",
+		"yes": "QQQQQ",
+		"no": "QQQQQ",
+		"ok": "QQQQQ",
+		"cancel": "QQQQQ",
+		"save": "QQQQQ",
+		"delete": "QQQQQ",
+		"edit": "QQQQQ",
+		"close": "QQQQQ",
+		"back": "QQQQQ",
+		"next": "QQQQQ",
+		"previous": "QQQQQ",
+		"submit": "QQQQQ",
+		"search": "QQQQQ",
+		"loading": "QQQQQ"
+	},
+	"navigation": {
+		"home": "QQQQQ",
+		"about": "QQQQQ",
+		"contact": "QQQQQ"
+	},
+	"errors": {
+		"generic": "QQQQQ",
+		"notFound": "QQQQQ",
+		"unauthorized": "QQQQQ",
+		"forbidden": "QQQQQ",
+		"serverError": "QQQQQ"
+	}
+}

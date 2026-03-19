@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { torrentService } from '$services/torrent.service';
-	import { libraryService } from '$services/library.service';
-	import TorrentAddInput from '$components/torrent/TorrentAddInput.svelte';
-	import TorrentSettings from '$components/torrent/TorrentSettings.svelte';
-	import TorrentStats from '$components/torrent/TorrentStats.svelte';
-	import TorrentList from '$components/torrent/TorrentList.svelte';
-	import TorrentSearch from '$components/torrent/TorrentSearch.svelte';
+	import { torrentService } from 'frontend/services/torrent.service';
+	import { libraryService } from 'frontend/services/library.service';
+	import TorrentAddInput from 'frontend/components/torrent/TorrentAddInput.svelte';
+	import TorrentSettings from 'frontend/components/torrent/TorrentSettings.svelte';
+	import TorrentStats from 'frontend/components/torrent/TorrentStats.svelte';
+	import TorrentList from 'frontend/components/torrent/TorrentList.svelte';
+	import TorrentSearch from 'frontend/components/torrent/TorrentSearch.svelte';
 
 	const state = torrentService.state;
 

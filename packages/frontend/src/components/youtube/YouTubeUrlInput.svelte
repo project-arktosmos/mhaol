@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { youtubeService } from '$services/youtube.service';
-	import { extractVideoId, extractPlaylistId, type YouTubeOEmbedData } from '$types/youtube.type';
-	import { apiUrl } from '$lib/api-base';
+	import { youtubeService } from 'frontend/services/youtube.service';
+	import { extractVideoId, extractPlaylistId, type YouTubeOEmbedData } from 'frontend/types/youtube.type';
+	import { apiUrl } from 'frontend/lib/api-base';
 
 	export let initialUrl: string = '';
 

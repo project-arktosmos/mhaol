@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { Library, LibraryFile } from '$types/library.type';
-	import { MediaType } from '$types/library.type';
+	import type { Library, LibraryFile } from 'frontend/types/library.type';
+	import { MediaType } from 'frontend/types/library.type';
 	import LibraryFileList from './LibraryFileList.svelte';
 
 	interface Props {

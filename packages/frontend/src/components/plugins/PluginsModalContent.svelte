@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { apiUrl } from '$lib/api-base';
+	import { apiUrl } from 'frontend/lib/api-base';
 
 	interface PluginProcess {
 		id: string;

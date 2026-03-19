@@ -1,8 +1,8 @@
-import type { MediaItem } from '$types/media-card.type';
-import type { ImageTag } from '$types/image-tagger.type';
+import type { MediaItem } from 'frontend/types/media-card.type';
+import type { ImageTag } from 'frontend/types/image-tagger.type';
 import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'tmdb/types';
 import type { YouTubeOEmbedResponse } from 'youtube/oembed';
-import type { DisplayMusicBrainzRecording } from 'musicbrainz/types';
+import type { DisplayMusicBrainzRecording } from '$types/musicbrainz.type';
 
 export type MediaDetailCardType = 'movie' | 'tv' | 'youtube' | 'audio' | 'image' | 'video';
 

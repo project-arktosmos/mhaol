@@ -1,4 +1,4 @@
-import type { ID } from '$types/core.type';
+import type { ID } from 'frontend/types/core.type';
 
 // ===== Torrent States =====
 

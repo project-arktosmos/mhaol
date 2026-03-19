@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { torrentSearchService } from '$services/torrent-search.service';
-	import { torrentService } from '$services/torrent.service';
+	import { torrentSearchService } from 'frontend/services/torrent-search.service';
+	import { torrentService } from 'frontend/services/torrent.service';
 	import TorrentSearchInput from './TorrentSearchInput.svelte';
 	import TorrentSearchResults from './TorrentSearchResults.svelte';
 	import type { TorrentCategory, TorrentSearchSortField } from 'torrent-search-thepiratebay/types';

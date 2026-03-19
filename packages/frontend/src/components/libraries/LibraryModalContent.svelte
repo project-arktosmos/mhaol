@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { libraryService } from '$services/library.service';
+	import { libraryService } from 'frontend/services/library.service';
 	import LibraryAddForm from './LibraryAddForm.svelte';
 	import LibraryList from './LibraryList.svelte';
 

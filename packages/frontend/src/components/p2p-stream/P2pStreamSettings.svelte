@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { p2pStreamService } from '$services/p2p-stream.service';
-	import { P2P_VIDEO_CODEC_OPTIONS, P2P_VIDEO_QUALITY_OPTIONS } from '$types/p2p-stream.type';
-	import type { P2pVideoCodec, P2pVideoQuality, P2pStreamMode } from '$types/p2p-stream.type';
+	import { p2pStreamService } from 'frontend/services/p2p-stream.service';
+	import { P2P_VIDEO_CODEC_OPTIONS, P2P_VIDEO_QUALITY_OPTIONS } from 'frontend/types/p2p-stream.type';
+	import type { P2pVideoCodec, P2pVideoQuality, P2pStreamMode } from 'frontend/types/p2p-stream.type';
 
 	const settings = p2pStreamService.store;
 	const state = p2pStreamService.state;

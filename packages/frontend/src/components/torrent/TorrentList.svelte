@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { torrentService } from '$services/torrent.service';
+	import { torrentService } from 'frontend/services/torrent.service';
 	import TorrentListItem from './TorrentListItem.svelte';
 
 	const state = torrentService.state;

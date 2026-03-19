@@ -1,16 +1,16 @@
 <script lang="ts">
-	import Modal from '$components/core/Modal.svelte';
-	import { modalRouterService } from '$services/modal-router.service';
-	import YouTubeModalContent from '$components/youtube/YouTubeModalContent.svelte';
-	import TorrentModalContent from '$components/torrent/TorrentModalContent.svelte';
-	import DownloadsModalContent from '$components/downloads/DownloadsModalContent.svelte';
-	import LibraryModalContent from '$components/libraries/LibraryModalContent.svelte';
-	import SignalingModalContent from '$components/signaling/SignalingModalContent.svelte';
-	import IdentityModalContent from '$components/identity/IdentityModalContent.svelte';
-	import SettingsModalContent from '$components/settings/SettingsModalContent.svelte';
-	import AddonsModalContent from '$components/addons/AddonsModalContent.svelte';
-	import PluginsModalContent from '$components/plugins/PluginsModalContent.svelte';
-	import YouTubeSearchModalContent from '$components/youtube-search/YouTubeSearchModalContent.svelte';
+	import Modal from 'frontend/components/core/Modal.svelte';
+	import { modalRouterService } from 'frontend/services/modal-router.service';
+	import YouTubeModalContent from 'frontend/components/youtube/YouTubeModalContent.svelte';
+	import TorrentModalContent from 'frontend/components/torrent/TorrentModalContent.svelte';
+	import DownloadsModalContent from 'frontend/components/downloads/DownloadsModalContent.svelte';
+	import LibraryModalContent from 'frontend/components/libraries/LibraryModalContent.svelte';
+	import SignalingModalContent from 'frontend/components/signaling/SignalingModalContent.svelte';
+	import IdentityModalContent from 'frontend/components/identity/IdentityModalContent.svelte';
+	import SettingsModalContent from 'frontend/components/settings/SettingsModalContent.svelte';
+	import AddonsModalContent from 'frontend/components/addons/AddonsModalContent.svelte';
+	import PluginsModalContent from 'frontend/components/plugins/PluginsModalContent.svelte';
+	import YouTubeSearchModalContent from 'frontend/components/youtube-search/YouTubeSearchModalContent.svelte';
 
 	const routerStore = modalRouterService.store;
 

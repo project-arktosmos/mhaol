@@ -97,6 +97,28 @@ CREATE TABLE IF NOT EXISTS link_sources (
     UNIQUE(service, media_type_id, category_id)
 );
 
+CREATE TABLE IF NOT EXISTS youtube_content (
+    youtube_id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    thumbnail_url TEXT,
+    duration_seconds INTEGER,
+    channel_name TEXT,
+    channel_id TEXT,
+    video_path TEXT,
+    audio_path TEXT,
+    is_favorite INTEGER NOT NULL DEFAULT 0,
+    favorited_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS youtube_content_updated_at
+    AFTER UPDATE ON youtube_content
+    FOR EACH ROW
+BEGIN
+    UPDATE youtube_content SET updated_at = datetime('now') WHERE youtube_id = OLD.youtube_id;
+END;
+
 CREATE TABLE IF NOT EXISTS youtube_downloads (
     download_id TEXT PRIMARY KEY,
     url TEXT NOT NULL,
@@ -118,6 +140,24 @@ CREATE TABLE IF NOT EXISTS youtube_downloads (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS youtube_channels (
+    id TEXT PRIMARY KEY,
+    handle TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    subscriber_text TEXT,
+    image_url TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS youtube_channels_updated_at
+    AFTER UPDATE ON youtube_channels
+    FOR EACH ROW
+BEGIN
+    UPDATE youtube_channels SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
 
 CREATE TABLE IF NOT EXISTS torrent_downloads (
     info_hash TEXT PRIMARY KEY,
@@ -232,6 +272,14 @@ INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('tv', 'video', 'TV');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('movies', 'video', 'Movies');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('video-uncategorized', 'video', 'Uncategorized');
+";
+
+pub const YOUTUBE_SCHEMA_SQL: &str = "
+CREATE TABLE IF NOT EXISTS youtube_videos (
+    video_id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 ";
 
 /// Module SQL schemas for addon tables
@@ -532,6 +580,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
 
 /// Apply module schemas (addon tables).
 pub fn initialize_module_schemas(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(YOUTUBE_SCHEMA_SQL)?;
     conn.execute_batch(TMDB_SCHEMA_SQL)?;
     Ok(())
 }
@@ -554,7 +603,9 @@ mod tests {
         assert!(has_table(&conn, "library_items"));
         assert!(has_table(&conn, "library_item_links"));
         assert!(has_table(&conn, "link_sources"));
+        assert!(has_table(&conn, "youtube_content"));
         assert!(has_table(&conn, "youtube_downloads"));
+        assert!(has_table(&conn, "youtube_channels"));
         assert!(has_table(&conn, "torrent_downloads"));
         assert!(has_table(&conn, "image_tags"));
         assert!(has_table(&conn, "media_lists"));
@@ -581,6 +632,7 @@ mod tests {
         initialize_schema(&conn).unwrap();
         initialize_module_schemas(&conn).unwrap();
 
+        assert!(has_table(&conn, "youtube_videos"));
         assert!(has_table(&conn, "tmdb_movies"));
         assert!(has_table(&conn, "tmdb_tv_shows"));
         assert!(has_table(&conn, "tmdb_seasons"));

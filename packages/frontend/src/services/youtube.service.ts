@@ -1,6 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
+import { apiUrl } from 'frontend/lib/api-base';
 import {
 	extractVideoId,
 	type YouTubeSettings,
@@ -16,7 +16,7 @@ import {
 	type DownloadMode,
 	type VideoQuality,
 	type VideoFormat
-} from '$types/youtube.type';
+} from 'frontend/types/youtube.type';
 
 const API_PREFIX = '/api/ytdl';
 

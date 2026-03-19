@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { torrentService } from '$services/torrent.service';
+	import { torrentService } from 'frontend/services/torrent.service';
 
 	const state = torrentService.state;
 

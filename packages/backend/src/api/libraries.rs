@@ -1,13 +1,16 @@
 use crate::AppState;
 use axum::{
+    body::Body,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, Response, StatusCode},
     response::IntoResponse,
     routing::{delete, get, post, put},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio_util::io::ReaderStream;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -630,4 +633,87 @@ fn upsert_auto_list_titled(
         })
         .collect();
     state.media_list_items.sync_list(&list_id, &list_items);
+}
+
+pub(crate) async fn stream_file(path_str: &str, range_header: Option<&str>) -> axum::response::Response {
+    let path = std::path::Path::new(path_str);
+
+    let file = match tokio::fs::File::open(path).await {
+        Ok(f) => f,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    let file_size = match file.metadata().await {
+        Ok(m) => m.len(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let content_type = match path.extension().and_then(|e| e.to_str()) {
+        Some("mp4") => "video/mp4",
+        Some("mkv") => "video/x-matroska",
+        Some("webm") => "video/webm",
+        Some("avi") => "video/x-msvideo",
+        Some("mov") => "video/quicktime",
+        Some("mp3") => "audio/mpeg",
+        Some("flac") => "audio/flac",
+        Some("wav") => "audio/wav",
+        Some("ogg") => "audio/ogg",
+        Some("m4a") => "audio/mp4",
+        Some("opus") => "audio/opus",
+        Some("aac") => "audio/aac",
+        _ => "application/octet-stream",
+    };
+
+    if let Some(range_str) = range_header {
+        if let Some(range_val) = range_str.strip_prefix("bytes=") {
+            let parts: Vec<&str> = range_val.splitn(2, '-').collect();
+            if parts.len() == 2 {
+                let start: u64 = parts[0].parse().unwrap_or(0);
+                let end: u64 = parts[1]
+                    .parse()
+                    .unwrap_or_else(|_| file_size.saturating_sub(1))
+                    .min(file_size.saturating_sub(1));
+
+                if start >= file_size || start > end {
+                    return Response::builder()
+                        .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                        .header(header::CONTENT_RANGE, format!("bytes */{}", file_size))
+                        .body(Body::empty())
+                        .unwrap();
+                }
+
+                let length = end - start + 1;
+                let mut file = file;
+
+                if file.seek(std::io::SeekFrom::Start(start)).await.is_err() {
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+
+                let limited = file.take(length);
+                let stream = ReaderStream::new(limited);
+
+                return Response::builder()
+                    .status(StatusCode::PARTIAL_CONTENT)
+                    .header(header::CONTENT_TYPE, content_type)
+                    .header(
+                        header::CONTENT_RANGE,
+                        format!("bytes {}-{}/{}", start, end, file_size),
+                    )
+                    .header(header::CONTENT_LENGTH, length.to_string())
+                    .header(header::ACCEPT_RANGES, "bytes")
+                    .body(Body::from_stream(stream))
+                    .unwrap();
+            }
+        }
+    }
+
+    // No Range header — stream entire file
+    let stream = ReaderStream::new(file);
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CONTENT_LENGTH, file_size.to_string())
+        .header(header::ACCEPT_RANGES, "bytes")
+        .body(Body::from_stream(stream))
+        .unwrap()
 }

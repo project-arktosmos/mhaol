@@ -51,7 +51,7 @@ models/
 **/models/
 
 # Prebuilt binaries
-packages/mhaol-video/bin/
+apps/video/bin/
 
 # Android signing
 packages/tauri/src-tauri/gen/android/keystore.properties

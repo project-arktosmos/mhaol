@@ -1,0 +1,40 @@
+{
+	"name": "addons",
+	"version": "1.0.0",
+	"description": "Addon modules for Mhaol",
+	"type": "module",
+	"addons": {
+		"tmdb": {
+			"source": "addon",
+			"schema": {
+				"sql": "CREATE TABLE IF NOT EXISTS tmdb_movies (\n    tmdb_id INTEGER PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS tmdb_tv_shows (\n    tmdb_id INTEGER PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS tmdb_seasons (\n    tmdb_id INTEGER NOT NULL,\n    season_number INTEGER NOT NULL,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),\n    PRIMARY KEY (tmdb_id, season_number)\n);"
+			},
+			"settings": [
+				{ "key": "tmdb.apiKey", "default": "", "envKey": "TMDB_API_KEY" }
+			]
+		},
+		"torrent-search-thepiratebay": {
+			"source": "addon"
+		}
+	},
+	"exports": {
+		"./tmdb": "./tmdb/src/index.ts",
+		"./tmdb/types": "./tmdb/src/types.ts",
+		"./tmdb/transform": "./tmdb/src/transform.ts",
+		"./tmdb/cache-repository": "./tmdb/src/cache-repository.ts",
+		"./torrent-search-thepiratebay": "./torrent-search-thepiratebay/src/index.ts",
+		"./torrent-search-thepiratebay/types": "./torrent-search-thepiratebay/src/types.ts",
+		"./common/rate-limiter": "./common/src/rate-limiter.ts",
+		"./common/utils": "./common/src/utils.ts"
+	},
+	"scripts": {
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.12",
+		"@types/node": "^22.15.3",
+		"better-sqlite3": "^11.7.0",
+		"typescript": "^5.8.3",
+		"vitest": "^4.0.6"
+	}
+}

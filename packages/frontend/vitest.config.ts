@@ -16,13 +16,17 @@ export default defineConfig({
 		}
 	},
 	resolve: {
+		conditions: ['svelte'],
 		alias: {
 			$lib: resolve(__dirname, './src/lib'),
+			$components: resolve(__dirname, './src/components'),
 			$services: resolve(__dirname, './src/services'),
 			$adapters: resolve(__dirname, './src/adapters'),
 			$types: resolve(__dirname, './src/types'),
 			$utils: resolve(__dirname, './src/utils'),
-			$app: resolve(__dirname, './test/mocks/$app')
+			$data: resolve(__dirname, './src/data'),
+			$app: resolve(__dirname, './test/mocks/$app'),
+			frontend: resolve(__dirname, './src')
 		}
 	}
 });

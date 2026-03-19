@@ -1,7 +1,7 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from '$lib/api-base';
-import type { YouTubeSearchState, YouTubeSearchResponse } from '$types/youtube-search.type';
+import { apiUrl } from 'frontend/lib/api-base';
+import type { YouTubeSearchState, YouTubeSearchResponse } from 'frontend/types/youtube-search.type';
 
 const initialState: YouTubeSearchState = {
 	query: '',

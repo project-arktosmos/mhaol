@@ -7,8 +7,8 @@
 		formatEta,
 		getStateColor,
 		getStateLabel
-	} from '$types/torrent.type';
-	import type { TorrentInfo } from '$types/torrent.type';
+	} from 'frontend/types/torrent.type';
+	import type { TorrentInfo } from 'frontend/types/torrent.type';
 
 	export let torrent: TorrentInfo;
 

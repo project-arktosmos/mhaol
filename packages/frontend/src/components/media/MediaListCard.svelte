@@ -1,16 +1,17 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { MediaList } from '$types/media-list.type';
-	import { libraryFileAdapter } from '$adapters/classes/library-file.adapter';
-	import type { MediaType } from '$types/library.type';
+	import type { MediaList } from 'frontend/types/media-list.type';
+	import { libraryFileAdapter } from 'frontend/adapters/classes/library-file.adapter';
+	import type { MediaType } from 'frontend/types/library.type';
 	import type { DisplayTMDBTvShowDetails } from 'tmdb/types';
-	import type { DisplayMusicBrainzReleaseGroup } from 'musicbrainz/types';
+	import type { DisplayMusicBrainzReleaseGroup } from '$types/musicbrainz.type';
 
 	interface Props {
 		list: MediaList;
 		selected?: boolean;
 		tmdbMetadata?: DisplayTMDBTvShowDetails | null;
 		mbMetadata?: DisplayMusicBrainzReleaseGroup | null;
+		seasonCount?: number;
 		onselect?: (list: MediaList) => void;
 	}
 
@@ -19,6 +20,7 @@
 		selected = false,
 		tmdbMetadata = null,
 		mbMetadata = null,
+		seasonCount,
 		onselect
 	}: Props = $props();
 

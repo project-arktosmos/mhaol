@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { LibraryFile } from '$types/library.type';
+	import type { LibraryFile } from 'frontend/types/library.type';
 
 	interface Props {
 		file: LibraryFile;

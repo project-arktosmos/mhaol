@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { LibraryFile } from '$types/library.type';
+	import type { LibraryFile } from 'frontend/types/library.type';
 	import LibraryFileItem from './LibraryFileItem.svelte';
 	import TmdbLinkModal from './TmdbLinkModal.svelte';
 	import MusicBrainzLinkModal from './MusicBrainzLinkModal.svelte';
@@ -165,7 +165,7 @@
 </div>
 
 {#if modalFile}
-	<TmdbLinkModal file={modalFile} onlink={handleLink} onclose={closeModal} />
+	<TmdbLinkModal file={modalFile} type="movie" onlink={handleLink} onclose={closeModal} />
 {/if}
 
 {#if musicbrainzModalFile}

@@ -1,4 +1,4 @@
-import type { ID } from '$types/core.type';
+import type { ID } from 'frontend/types/core.type';
 
 export enum MediaType {
 	Video = 'video',
@@ -6,10 +6,20 @@ export enum MediaType {
 	Audio = 'audio'
 }
 
+export enum LibraryType {
+	Movies = 'movies',
+	TV = 'tv'
+}
+
 export const MEDIA_TYPE_OPTIONS: { value: MediaType; label: string }[] = [
 	{ value: MediaType.Video, label: 'Video' },
 	{ value: MediaType.Image, label: 'Image' },
 	{ value: MediaType.Audio, label: 'Audio' }
+];
+
+export const LIBRARY_TYPE_OPTIONS: { value: LibraryType; label: string }[] = [
+	{ value: LibraryType.Movies, label: 'Movies' },
+	{ value: LibraryType.TV, label: 'TV Shows' }
 ];
 
 export interface MediaTypeOption {
@@ -28,6 +38,7 @@ export interface Library {
 	name: string;
 	path: string;
 	mediaTypes: MediaType[];
+	libraryType: LibraryType;
 	dateAdded: number;
 }
 

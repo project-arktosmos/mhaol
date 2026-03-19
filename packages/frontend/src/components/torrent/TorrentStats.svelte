@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { torrentService } from '$services/torrent.service';
-	import { formatBytes, formatSpeed } from '$types/torrent.type';
+	import { torrentService } from 'frontend/services/torrent.service';
+	import { formatBytes, formatSpeed } from 'frontend/types/torrent.type';
 
 	const state = torrentService.state;
 </script>

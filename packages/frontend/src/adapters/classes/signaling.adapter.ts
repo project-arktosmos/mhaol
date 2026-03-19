@@ -1,6 +1,6 @@
-import { AdapterClass } from '$adapters/classes/adapter.class';
-import type { SignalingChatMessage, SignalingConnectionPhase } from '$types/signaling.type';
-import type { PlayerConnectionState } from '$types/player.type';
+import { AdapterClass } from 'frontend/adapters/classes/adapter.class';
+import type { SignalingChatMessage, SignalingConnectionPhase } from 'frontend/types/signaling.type';
+import type { PlayerConnectionState } from 'frontend/types/player.type';
 
 export class SignalingAdapter extends AdapterClass {
 	constructor() {

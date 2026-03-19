@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { createEventDispatcher, tick } from 'svelte';
-	import { lyricsService } from '$services/lyrics.service';
-	import type { PlayableFile } from '$types/player.type';
+	import { lyricsService } from 'frontend/services/lyrics.service';
+	import type { PlayableFile } from 'frontend/types/player.type';
 
 	export let currentFile: PlayableFile | null = null;
 	export let positionSecs: number = 0;
