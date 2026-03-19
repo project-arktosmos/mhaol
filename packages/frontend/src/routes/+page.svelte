@@ -26,6 +26,10 @@
 	} from '$types/media-card.type';
 	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'tmdb/types';
 	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'tmdb/transform';
+	import { tmdbBrowseService } from '$services/tmdb-browse.service';
+	import PopularTab from '$components/tmdb-browse/PopularTab.svelte';
+	import DiscoverTab from '$components/tmdb-browse/DiscoverTab.svelte';
+	import RecommendationsTab from '$components/tmdb-browse/RecommendationsTab.svelte';
 
 	interface Props {
 		data: {
@@ -41,10 +45,15 @@
 
 	const MOVIES_TAB = 'movies';
 	const TV_TAB = 'tv';
+	const POPULAR_TAB = 'popular';
+	const DISCOVER_TAB = 'discover';
+	const RECOMMENDATIONS_TAB = 'recommendations';
+
+	type TabId = 'movies' | 'tv' | 'popular' | 'discover' | 'recommendations';
 
 	let { data }: Props = $props();
 
-	let activeTab = $state<'movies' | 'tv'>(MOVIES_TAB);
+	let activeTab = $state<TabId>(MOVIES_TAB);
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
 	let linkModalList: MediaList | null = $state(null);
@@ -99,6 +108,49 @@
 
 	let isMoviesTab = $derived(activeTab === MOVIES_TAB);
 	let isTvTab = $derived(activeTab === TV_TAB);
+	let isPopularTab = $derived(activeTab === POPULAR_TAB);
+	let isDiscoverTab = $derived(activeTab === DISCOVER_TAB);
+	let isRecommendationsTab = $derived(activeTab === RECOMMENDATIONS_TAB);
+
+	// TMDB browse state
+	const browseState = tmdbBrowseService.state;
+
+	// Collect linked items for recommendations dropdown
+	let linkedItems = $derived.by(() => {
+		const items: Array<{ tmdbId: number; title: string; type: 'movie' | 'tv' }> = [];
+		const seen = new Set<string>();
+		for (const item of movieItems) {
+			const tmdbLink = getItemLinks(item).tmdb;
+			if (tmdbLink) {
+				const key = `movie:${tmdbLink.serviceId}`;
+				if (!seen.has(key)) {
+					seen.add(key);
+					const meta = tmdbMetadata[item.id] as DisplayTMDBMovieDetails | undefined;
+					items.push({
+						tmdbId: Number(tmdbLink.serviceId),
+						title: meta?.title ?? item.name,
+						type: 'movie'
+					});
+				}
+			}
+		}
+		for (const list of data.lists.filter((l) => l.libraryType === 'tv')) {
+			const links = getListLinks(list);
+			if (links.tmdb) {
+				const key = `tv:${links.tmdb.serviceId}`;
+				if (!seen.has(key)) {
+					seen.add(key);
+					const meta = listTmdbMetadata[links.tmdb.serviceId];
+					items.push({
+						tmdbId: Number(links.tmdb.serviceId),
+						title: meta?.name ?? list.title,
+						type: 'tv'
+					});
+				}
+			}
+		}
+		return items;
+	});
 
 	// Track link overrides so we can update without full page reload
 	let linkOverrides: Record<string, Record<string, MediaItemLink | null>> = $state({});
@@ -253,11 +305,28 @@
 		}
 	});
 
-	function selectTab(tab: 'movies' | 'tv') {
+	function selectTab(tab: TabId) {
 		activeTab = tab;
 		selectedList = null;
 		selectedShowGroup = null;
 		closeMediaDetail();
+
+		if (tab === POPULAR_TAB) {
+			const s = $browseState;
+			if (s.popularMovies.length === 0) tmdbBrowseService.loadPopularMovies();
+			if (s.popularTv.length === 0) tmdbBrowseService.loadPopularTv();
+		} else if (tab === DISCOVER_TAB) {
+			tmdbBrowseService.loadGenres();
+			const s = $browseState;
+			if (s.discoverMovies.length === 0) tmdbBrowseService.loadDiscoverMovies();
+			if (s.discoverTv.length === 0) tmdbBrowseService.loadDiscoverTv();
+		} else if (tab === RECOMMENDATIONS_TAB) {
+			const s = $browseState;
+			if (s.recommendations.length === 0 && linkedItems.length > 0) {
+				const first = linkedItems[0];
+				tmdbBrowseService.loadRecommendations(first.tmdbId, first.type);
+			}
+		}
 	}
 
 	function updateItemLinks(itemId: string, service: string, link: MediaItemLink | null) {
@@ -541,7 +610,7 @@
 		</button>
 	</div>
 
-	<!-- Tabs: Movies | TV -->
+	<!-- Tabs -->
 	<div class="mb-6 flex gap-2">
 		<button
 			class={classNames('btn btn-sm', {
@@ -561,9 +630,76 @@
 		>
 			TV Shows
 		</button>
+		<button
+			class={classNames('btn btn-sm', {
+				'btn-primary': isPopularTab,
+				'btn-ghost': !isPopularTab
+			})}
+			onclick={() => selectTab(POPULAR_TAB)}
+		>
+			Popular
+		</button>
+		<button
+			class={classNames('btn btn-sm', {
+				'btn-primary': isDiscoverTab,
+				'btn-ghost': !isDiscoverTab
+			})}
+			onclick={() => selectTab(DISCOVER_TAB)}
+		>
+			Discover
+		</button>
+		<button
+			class={classNames('btn btn-sm', {
+				'btn-primary': isRecommendationsTab,
+				'btn-ghost': !isRecommendationsTab
+			})}
+			onclick={() => selectTab(RECOMMENDATIONS_TAB)}
+		>
+			Recommendations
+		</button>
 	</div>
 
-	{#if isTvTab}
+	{#if isPopularTab}
+		<PopularTab
+			movies={$browseState.popularMovies}
+			tvShows={$browseState.popularTv}
+			moviesPage={$browseState.popularMoviesPage}
+			tvPage={$browseState.popularTvPage}
+			moviesTotalPages={$browseState.popularMoviesTotalPages}
+			tvTotalPages={$browseState.popularTvTotalPages}
+			loadingMovies={$browseState.loading['popularMovies'] ?? false}
+			loadingTv={$browseState.loading['popularTv'] ?? false}
+			onloadMovies={(p) => tmdbBrowseService.loadPopularMovies(p)}
+			onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
+		/>
+	{:else if isDiscoverTab}
+		<DiscoverTab
+			movies={$browseState.discoverMovies}
+			tvShows={$browseState.discoverTv}
+			moviesPage={$browseState.discoverMoviesPage}
+			tvPage={$browseState.discoverTvPage}
+			moviesTotalPages={$browseState.discoverMoviesTotalPages}
+			tvTotalPages={$browseState.discoverTvTotalPages}
+			movieGenres={$browseState.movieGenres}
+			tvGenres={$browseState.tvGenres}
+			selectedGenreId={$browseState.selectedGenreId}
+			loadingMovies={$browseState.loading['discoverMovies'] ?? false}
+			loadingTv={$browseState.loading['discoverTv'] ?? false}
+			ondiscoverMovies={(p, g) => tmdbBrowseService.loadDiscoverMovies(p, g)}
+			ondiscoverTv={(p, g) => tmdbBrowseService.loadDiscoverTv(p, g)}
+		/>
+	{:else if isRecommendationsTab}
+		<RecommendationsTab
+			{linkedItems}
+			recommendations={$browseState.recommendations}
+			page={$browseState.recommendationsPage}
+			totalPages={$browseState.recommendationsTotalPages}
+			sourceId={$browseState.recommendationSourceId}
+			sourceType={$browseState.recommendationSourceType}
+			loading={$browseState.loading['recommendations'] ?? false}
+			onload={(id, type, p) => tmdbBrowseService.loadRecommendations(id, type, p)}
+		/>
+	{:else if isTvTab}
 		<!-- TV Shows view -->
 		{#if selectedList}
 			{@const currentListLinks = getListLinks(selectedList)}

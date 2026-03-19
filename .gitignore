@@ -46,6 +46,10 @@ target/
 downloads/
 **/downloads/
 
+# LLM models
+models/
+**/models/
+
 # Prebuilt binaries
 packages/frontend/bin/
 

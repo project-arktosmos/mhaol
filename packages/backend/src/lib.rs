@@ -94,7 +94,7 @@ impl AppState {
                 .and_then(|p| p.parent())
                 .map(|p| p.to_path_buf())
                 .unwrap_or_else(|| PathBuf::from("."));
-            base.join("llm").join("models")
+            base.join("models")
         };
 
         Ok(Self {
