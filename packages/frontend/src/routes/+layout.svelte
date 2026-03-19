@@ -4,6 +4,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { playerService } from '$services/player.service';
 	import { identityService } from '$services/identity.service';
+	import { peerLibraryService } from '$services/peer-library.service';
 	import Navbar from '$components/core/Navbar.svelte';
 	import IdentitySidebar from '$components/core/IdentitySidebar.svelte';
 	import ModalOutlet from '$components/core/ModalOutlet.svelte';
@@ -13,6 +14,7 @@
 	onMount(async () => {
 		await playerService.initialize();
 		await identityService.initialize();
+		peerLibraryService.initialize();
 	});
 
 	onDestroy(() => {

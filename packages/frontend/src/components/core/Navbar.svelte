@@ -26,6 +26,12 @@
 				Torrent
 			</button>
 			<button
+				class="btn btn-sm btn-primary"
+				onclick={() => modalRouterService.openNavbar('jackett')}
+			>
+				Jackett
+			</button>
+			<button
 				class="btn btn-sm btn-secondary"
 				onclick={() => modalRouterService.openNavbar('downloads')}
 			>
@@ -36,6 +42,12 @@
 				onclick={() => modalRouterService.openNavbar('signaling')}
 			>
 				Signaling
+			</button>
+			<button
+				class="btn btn-ghost btn-sm"
+				onclick={() => modalRouterService.openNavbar('peer-libraries')}
+			>
+				Peers
 			</button>
 			<button
 				class="btn btn-ghost btn-sm"
@@ -54,6 +66,9 @@
 				onclick={() => modalRouterService.openNavbar('libraries')}
 			>
 				Libraries
+			</button>
+			<button class="btn btn-ghost btn-sm" onclick={() => modalRouterService.openNavbar('llm')}>
+				LLM
 			</button>
 			<button
 				class="btn btn-ghost btn-sm"
@@ -88,11 +103,15 @@
 				class="dropdown-content menu z-50 mt-3 w-52 rounded-box bg-base-200 p-2 shadow"
 			>
 				<li><button onclick={() => modalRouterService.openNavbar('torrent')}>Torrent</button></li>
+				<li><button onclick={() => modalRouterService.openNavbar('jackett')}>Jackett</button></li>
 				<li>
 					<button onclick={() => modalRouterService.openNavbar('downloads')}>Downloads</button>
 				</li>
 				<li>
 					<button onclick={() => modalRouterService.openNavbar('signaling')}>Signaling</button>
+				</li>
+				<li>
+					<button onclick={() => modalRouterService.openNavbar('peer-libraries')}>Peers</button>
 				</li>
 				<li><button onclick={() => modalRouterService.openNavbar('identity')}>Identity</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('plugins')}>Plugins</button></li>
@@ -100,6 +119,7 @@
 				<li>
 					<button onclick={() => modalRouterService.openNavbar('libraries')}>Libraries</button>
 				</li>
+				<li><button onclick={() => modalRouterService.openNavbar('llm')}>LLM</button></li>
 				<li><button onclick={() => modalRouterService.openNavbar('settings')}>Settings</button></li>
 			</ul>
 		</div>

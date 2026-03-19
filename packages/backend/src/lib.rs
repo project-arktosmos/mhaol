@@ -1,6 +1,8 @@
 pub mod api;
 pub mod db;
 pub mod identity;
+#[cfg(not(target_os = "android"))]
+pub mod llm_engine;
 pub mod modules;
 pub mod signaling_rooms;
 pub mod worker_bridge;
@@ -8,6 +10,8 @@ pub mod worker_bridge;
 use db::repo::*;
 use db::DbPool;
 use identity::IdentityManager;
+#[cfg(not(target_os = "android"))]
+use llm_engine::LlmEngine;
 #[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
 use modules::ModuleRegistry;
@@ -70,6 +74,9 @@ pub struct AppState {
     pub module_registry: Arc<RwLock<ModuleRegistry>>,
     #[cfg(not(target_os = "android"))]
     pub torrent_manager: Arc<TorrentManager>,
+    #[cfg(not(target_os = "android"))]
+    pub llm_engine: Arc<LlmEngine>,
+    pub llm_conversations: LlmConversationRepo,
     pub signaling_servers: SignalingServerRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
     pub worker_bridge: Arc<WorkerBridge>,
@@ -80,6 +87,15 @@ impl AppState {
     pub fn new(db_path: Option<&Path>) -> Result<Self, rusqlite::Error> {
         let db = db::open_database(db_path)?;
         let identities_path = identity::default_identities_path();
+
+        #[cfg(not(target_os = "android"))]
+        let llm_models_dir = {
+            let base = db_path
+                .and_then(|p| p.parent())
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| PathBuf::from("."));
+            base.join("llm").join("models")
+        };
 
         Ok(Self {
             settings: SettingsRepo::new(Arc::clone(&db)),
@@ -98,6 +114,9 @@ impl AppState {
             module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
             #[cfg(not(target_os = "android"))]
             torrent_manager: Arc::new(TorrentManager::new()),
+            #[cfg(not(target_os = "android"))]
+            llm_engine: Arc::new(LlmEngine::new(llm_models_dir)),
+            llm_conversations: LlmConversationRepo::new(Arc::clone(&db)),
             signaling_servers: SignalingServerRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
@@ -108,8 +127,9 @@ impl AppState {
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {
         use modules::{
-            signaling::SignalingModule, signaling_deploy::SignalingDeployModule,
-            tmdb::TmdbModule, torrent_search::TorrentSearchModule,
+            jackett::JackettModule, signaling::SignalingModule,
+            signaling_deploy::SignalingDeployModule, tmdb::TmdbModule,
+            torrent_search::TorrentSearchModule,
         };
         #[cfg(not(target_os = "android"))]
         use modules::{
@@ -122,6 +142,7 @@ impl AppState {
         // Addons
         registry.register(Box::new(TmdbModule));
         registry.register(Box::new(TorrentSearchModule));
+        registry.register(Box::new(JackettModule));
 
         // Signaling modules
         registry.register(Box::new(SignalingModule {

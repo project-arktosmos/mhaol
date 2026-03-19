@@ -5,12 +5,15 @@ import type { NavbarModalId, ModalRouterState } from '$types/modal.type';
 const VALID_NAVBAR_IDS = new Set<NavbarModalId>([
 	'torrent',
 	'downloads',
+	'jackett',
 	'signaling',
+	'peer-libraries',
 	'identity',
 	'plugins',
 	'addons',
 	'settings',
-	'libraries'
+	'libraries',
+	'llm'
 ]);
 
 function parseHash(hash: string): NavbarModalId | null {

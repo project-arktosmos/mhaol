@@ -10,6 +10,7 @@ import type {
 	SignalingClientMessage,
 	SignalingChatMessage
 } from '$types/signaling.type';
+import type { DataChannelEnvelope, PeerLibraryMessage } from '$types/peer-library.type';
 
 const DATA_CHANNEL_LABEL = 'signaling-chat';
 
@@ -25,6 +26,12 @@ const initialState: SignalingChatState = {
 
 class SignalingChatService {
 	public state: Writable<SignalingChatState> = writable(initialState);
+
+	// ===== Peer Lifecycle Callbacks =====
+
+	public onPeerChannelOpen: ((peerId: string) => void) | null = null;
+	public onPeerDisconnected: ((peerId: string) => void) | null = null;
+	public onPeerLibraryMessage: ((peerId: string, msg: PeerLibraryMessage) => void) | null = null;
 
 	private ws: WebSocket | null = null;
 	private peerConnections: Map<string, RTCPeerConnection> = new Map();
@@ -110,7 +117,8 @@ class SignalingChatService {
 		if (!address) return;
 
 		const message = signalingAdapter.createMessage(address, content);
-		const serialized = JSON.stringify(message);
+		const envelope: DataChannelEnvelope = { channel: 'chat', payload: message };
+		const serialized = JSON.stringify(envelope);
 
 		for (const [, channel] of this.dataChannels) {
 			if (channel.readyState === 'open') {
@@ -119,6 +127,24 @@ class SignalingChatService {
 		}
 
 		this.state.update((s) => ({ ...s, messages: [...s.messages, message] }));
+	}
+
+	// ===== Data Channel Send =====
+
+	sendToPeer(peerId: string, envelope: DataChannelEnvelope): void {
+		const channel = this.dataChannels.get(peerId);
+		if (channel?.readyState === 'open') {
+			channel.send(JSON.stringify(envelope));
+		}
+	}
+
+	broadcast(envelope: DataChannelEnvelope): void {
+		const serialized = JSON.stringify(envelope);
+		for (const [, channel] of this.dataChannels) {
+			if (channel.readyState === 'open') {
+				channel.send(serialized);
+			}
+		}
 	}
 
 	// ===== Protocol Handling =====
@@ -241,14 +267,27 @@ class SignalingChatService {
 	private setupDataChannel(peerId: string, channel: RTCDataChannel): void {
 		this.dataChannels.set(peerId, channel);
 
-		channel.onopen = () => this.updatePeerIds();
+		channel.onopen = () => {
+			this.updatePeerIds();
+			this.onPeerChannelOpen?.(peerId);
+		};
 		channel.onclose = () => this.updatePeerIds();
 		channel.onerror = () => this.updatePeerIds();
 
 		channel.onmessage = (event) => {
 			try {
-				const msg = JSON.parse(event.data as string) as SignalingChatMessage;
-				this.state.update((s) => ({ ...s, messages: [...s.messages, msg] }));
+				const parsed = JSON.parse(event.data as string);
+
+				if (parsed.channel === 'chat') {
+					const msg = parsed.payload as SignalingChatMessage;
+					this.state.update((s) => ({ ...s, messages: [...s.messages, msg] }));
+				} else if (parsed.channel === 'peer-library') {
+					this.onPeerLibraryMessage?.(peerId, parsed.payload as PeerLibraryMessage);
+				} else if (parsed.id && parsed.address && parsed.content) {
+					// Legacy format: raw SignalingChatMessage (backward compat)
+					const msg = parsed as SignalingChatMessage;
+					this.state.update((s) => ({ ...s, messages: [...s.messages, msg] }));
+				}
 			} catch {
 				// Ignore unparseable messages
 			}
@@ -259,6 +298,7 @@ class SignalingChatService {
 
 	private removePeer(peerId: string): void {
 		this.removePeerConnection(peerId);
+		this.onPeerDisconnected?.(peerId);
 		this.updatePeerIds();
 	}
 
