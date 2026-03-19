@@ -20,7 +20,8 @@
       "Bash(xxd)",
       "Bash(2)",
       "Read(//Users/bearni/project-arktosmos/fallout-2d20-solo.git/**)",
-      "Bash(find /Users/bearni/project-arktosmos/fallout-2d20-solo.git -type f \\\\\\(-name *llm* -o -name *model* -o -name *inference* \\\\\\))"
+      "Bash(find /Users/bearni/project-arktosmos/fallout-2d20-solo.git -type f \\\\\\(-name *llm* -o -name *model* -o -name *inference* \\\\\\))",
+      "Bash(wc -l /Users/bearni/project-arktosmos/mhaol.git/addons/tmdb/src/*.ts)"
     ]
   },
   "hooks": {
