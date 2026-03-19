@@ -1,7 +1,7 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { apiUrl } from 'frontend/lib/api-base';
-import type { Lyrics, LyricsState } from 'lyrics/types';
+import type { Lyrics, LyricsState } from '$types/lyrics.type';
 import type { PlayableFile } from 'frontend/types/player.type';
 
 class LyricsService {

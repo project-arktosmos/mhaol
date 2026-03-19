@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { libraryFileAdapter } from 'frontend/adapters/classes/library-file.adapter';
-	import { getThumbnailUrl } from 'youtube/embed';
+	import { getThumbnailUrl } from '$utils/youtube/embed';
 	import TagPill from 'frontend/components/images/TagPill.svelte';
 	import PlayerVideo from 'frontend/components/player/PlayerVideo.svelte';
 	import { apiUrl } from 'frontend/lib/api-base';

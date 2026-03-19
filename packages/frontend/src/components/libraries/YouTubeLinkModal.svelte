@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { LibraryFile } from 'frontend/types/library.type';
-	import type { YouTubeOEmbedResponse } from 'youtube/oembed';
-	import { getThumbnailUrl } from 'youtube/embed';
+	import type { YouTubeOEmbedResponse } from '$types/youtube-oembed.type';
+	import { getThumbnailUrl } from '$utils/youtube/embed';
 	import { apiUrl } from 'frontend/lib/api-base';
 
 	interface Props {
