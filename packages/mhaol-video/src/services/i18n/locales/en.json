@@ -1,0 +1,33 @@
+{
+	"common": {
+		"welcome": "Welcome",
+		"hello": "Hello",
+		"goodbye": "Goodbye",
+		"yes": "Yes",
+		"no": "No",
+		"ok": "OK",
+		"cancel": "Cancel",
+		"save": "Save",
+		"delete": "Delete",
+		"edit": "Edit",
+		"close": "Close",
+		"back": "Back",
+		"next": "Next",
+		"previous": "Previous",
+		"submit": "Submit",
+		"search": "Search",
+		"loading": "Loading..."
+	},
+	"navigation": {
+		"home": "Home",
+		"about": "About",
+		"contact": "Contact"
+	},
+	"errors": {
+		"generic": "An error occurred",
+		"notFound": "Not found",
+		"unauthorized": "Unauthorized",
+		"forbidden": "Forbidden",
+		"serverError": "Server error"
+	}
+}

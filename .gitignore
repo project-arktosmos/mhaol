@@ -46,8 +46,12 @@ target/
 downloads/
 **/downloads/
 
+# LLM models
+models/
+**/models/
+
 # Prebuilt binaries
-packages/frontend/bin/
+packages/mhaol-video/bin/
 
 # Android signing
 packages/tauri/src-tauri/gen/android/keystore.properties

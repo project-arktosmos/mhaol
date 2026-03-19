@@ -1,4 +1,4 @@
-import type { PluginCompanion } from '../../packages/frontend/src/lib/server/plugins/types';
+import type { PluginCompanion } from '../../packages/mhaol-video/src/lib/server/plugins/types';
 import { search } from './src/search';
 
 export const torrentSearchCompanion: PluginCompanion = {

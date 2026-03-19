@@ -99,12 +99,12 @@ mod tests {
         let db = open_test_database();
         let repo = LibraryRepo::new(db);
 
-        repo.insert("lib1", "Downloads", "/tmp/downloads", "[\"video\"]", 1000);
+        repo.insert("lib1", "Downloads", "/tmp/downloads", "[\"movies\"]", 1000);
         let lib = repo.get("lib1").unwrap();
         assert_eq!(lib.name, "Downloads");
         assert_eq!(lib.path, "/tmp/downloads");
 
-        repo.update("lib1", "Media", "/tmp/media", "[\"video\",\"audio\"]");
+        repo.update("lib1", "Media", "/tmp/media", "[\"tv\"]");
         let lib = repo.get("lib1").unwrap();
         assert_eq!(lib.name, "Media");
 

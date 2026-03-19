@@ -31,21 +31,6 @@ struct PlayableFile {
 async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
     let mut files: Vec<PlayableFile> = Vec::new();
 
-    // YouTube completed downloads
-    let yt_downloads = state.youtube_downloads.get_by_state("completed");
-    for dl in yt_downloads {
-        if let Some(path) = &dl.output_path {
-            files.push(PlayableFile {
-                id: format!("yt:{}", dl.download_id),
-                name: dl.title.clone(),
-                path: path.clone(),
-                source: "youtube".to_string(),
-                media_type: dl.mode.clone(),
-                completed_at: Some(dl.updated_at.clone()),
-            });
-        }
-    }
-
     // Torrent completed/seeding downloads
     let torrent_downloads = state.torrent_downloads.get_all();
     for dl in torrent_downloads {

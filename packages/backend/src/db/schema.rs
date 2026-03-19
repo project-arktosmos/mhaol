@@ -205,28 +205,33 @@ CREATE TRIGGER IF NOT EXISTS signaling_servers_updated_at
 BEGIN
     UPDATE signaling_servers SET updated_at = datetime('now') WHERE id = OLD.id;
 END;
+
+CREATE TABLE IF NOT EXISTS llm_conversations (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    system_prompt TEXT,
+    messages TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS llm_conversations_updated_at
+    AFTER UPDATE ON llm_conversations
+    FOR EACH ROW
+BEGIN
+    UPDATE llm_conversations SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '19', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '21', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
-INSERT OR IGNORE INTO media_types (id, label) VALUES ('image', 'Image');
-INSERT OR IGNORE INTO media_types (id, label) VALUES ('audio', 'Audio');
 
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('tv', 'video', 'TV');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('movies', 'video', 'Movies');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('youtube', 'video', 'YouTube');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('video-uncategorized', 'video', 'Uncategorized');
-
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('music', 'audio', 'Music');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('podcast', 'audio', 'Podcast');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('audio-uncategorized', 'audio', 'Uncategorized');
-
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('photos', 'image', 'Photos');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('memes', 'image', 'Memes');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('image-uncategorized', 'image', 'Uncategorized');
 ";
 
 /// Module SQL schemas for addon tables
@@ -252,54 +257,6 @@ CREATE TABLE IF NOT EXISTS tmdb_seasons (
 );
 ";
 
-pub const MUSICBRAINZ_SCHEMA_SQL: &str = "
-CREATE TABLE IF NOT EXISTS musicbrainz_artists (
-    mbid TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS musicbrainz_release_groups (
-    mbid TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS musicbrainz_recordings (
-    mbid TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-";
-
-pub const YOUTUBE_SCHEMA_SQL: &str = "
-CREATE TABLE IF NOT EXISTS youtube_videos (
-    video_id TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-";
-
-pub const LYRICS_SCHEMA_SQL: &str = "
-CREATE TABLE IF NOT EXISTS lrclib_lyrics (
-    lrclib_id INTEGER PRIMARY KEY,
-    track_name TEXT NOT NULL,
-    artist_name TEXT NOT NULL,
-    album_name TEXT NOT NULL DEFAULT '',
-    duration REAL NOT NULL DEFAULT 0,
-    instrumental INTEGER NOT NULL DEFAULT 0,
-    plain_lyrics TEXT,
-    synced_lyrics TEXT,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS lrclib_lookups (
-    library_item_id TEXT PRIMARY KEY,
-    lrclib_id INTEGER REFERENCES lrclib_lyrics(lrclib_id),
-    status TEXT NOT NULL CHECK (status IN ('found', 'not_found')),
-    looked_up_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-";
 
 fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
     let sql = format!("PRAGMA table_info({})", table);
@@ -490,6 +447,38 @@ fn run_migrations(conn: &Connection) {
         }
     }
 
+    // Migration: remove audio and image media types and their categories (db_version 20)
+    {
+        let version: i64 = conn
+            .prepare("SELECT CAST(value AS INTEGER) FROM metadata WHERE key = 'db_version'")
+            .and_then(|mut s| s.query_row([], |r| r.get(0)))
+            .unwrap_or(0);
+        if version < 20 {
+            let _ = conn.execute_batch(
+                "DELETE FROM categories WHERE media_type_id IN ('audio', 'image');
+                 DELETE FROM media_types WHERE id IN ('audio', 'image');
+                 DELETE FROM categories WHERE id = 'youtube';",
+            );
+        }
+    }
+
+    // Migration: add llm_conversations table (db_version 21)
+    if !has_table(conn, "llm_conversations") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE llm_conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                system_prompt TEXT,
+                messages TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TRIGGER IF NOT EXISTS llm_conversations_updated_at
+                AFTER UPDATE ON llm_conversations FOR EACH ROW
+            BEGIN UPDATE llm_conversations SET updated_at = datetime('now') WHERE id = OLD.id; END;",
+        );
+    }
+
     // Migration: migrate legacy columns to library_item_links (db_version 14 data)
     if has_table(conn, "library_items") && has_column(conn, "library_items", "tmdb_id") {
         let _ = conn.execute_batch(
@@ -544,9 +533,6 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
 /// Apply module schemas (addon tables).
 pub fn initialize_module_schemas(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(TMDB_SCHEMA_SQL)?;
-    conn.execute_batch(MUSICBRAINZ_SCHEMA_SQL)?;
-    conn.execute_batch(YOUTUBE_SCHEMA_SQL)?;
-    conn.execute_batch(LYRICS_SCHEMA_SQL)?;
     Ok(())
 }
 
@@ -575,17 +561,18 @@ mod tests {
         assert!(has_table(&conn, "media_list_items"));
         assert!(has_table(&conn, "media_list_links"));
         assert!(has_table(&conn, "signaling_servers"));
+        assert!(has_table(&conn, "llm_conversations"));
 
         // Verify seed data
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM media_types", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 3);
+        assert_eq!(count, 1);
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 10);
+        assert_eq!(count, 3);
     }
 
     #[test]
@@ -597,11 +584,5 @@ mod tests {
         assert!(has_table(&conn, "tmdb_movies"));
         assert!(has_table(&conn, "tmdb_tv_shows"));
         assert!(has_table(&conn, "tmdb_seasons"));
-        assert!(has_table(&conn, "musicbrainz_artists"));
-        assert!(has_table(&conn, "musicbrainz_release_groups"));
-        assert!(has_table(&conn, "musicbrainz_recordings"));
-        assert!(has_table(&conn, "youtube_videos"));
-        assert!(has_table(&conn, "lrclib_lyrics"));
-        assert!(has_table(&conn, "lrclib_lookups"));
     }
 }

@@ -4,10 +4,10 @@
 	"version": "0.1.0",
 	"identifier": "com.arktosmos.mhaol",
 	"build": {
-		"beforeDevCommand": "pnpm --filter frontend dev",
+		"beforeDevCommand": "pnpm --filter mhaol-video dev",
 		"devUrl": "http://localhost:1531",
-		"beforeBuildCommand": "pnpm --filter frontend build",
-		"frontendDist": "../../frontend/dist-static"
+		"beforeBuildCommand": "pnpm --filter mhaol-video build",
+		"frontendDist": "../../mhaol-video/dist-static"
 	},
 	"app": {
 		"windows": [

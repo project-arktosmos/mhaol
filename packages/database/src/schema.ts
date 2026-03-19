@@ -158,25 +158,14 @@ END;
 `;
 
 const SEED_SQL = `
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '19', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '20', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
-INSERT OR IGNORE INTO media_types (id, label) VALUES ('image', 'Image');
-INSERT OR IGNORE INTO media_types (id, label) VALUES ('audio', 'Audio');
 
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('tv', 'video', 'TV');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('movies', 'video', 'Movies');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('youtube', 'video', 'YouTube');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('video-uncategorized', 'video', 'Uncategorized');
-
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('music', 'audio', 'Music');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('podcast', 'audio', 'Podcast');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('audio-uncategorized', 'audio', 'Uncategorized');
-
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('photos', 'image', 'Photos');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('memes', 'image', 'Memes');
-INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('image-uncategorized', 'image', 'Uncategorized');
 `;
 
 function runMigrations(db: DatabaseType): void {
@@ -398,6 +387,20 @@ function runMigrations(db: DatabaseType): void {
         UPDATE library_items SET updated_at = datetime('now') WHERE id = OLD.id;
       END;
     `);
+  }
+
+  // Migration: remove audio and image media types and their categories (db_version 20)
+  const dbVersion = db.prepare("SELECT value FROM metadata WHERE key = 'db_version'").get() as { value: string } | undefined;
+  if (!dbVersion || Number(dbVersion.value) < 20) {
+    db.exec(`
+      DELETE FROM categories WHERE media_type_id IN ('audio', 'image');
+      DELETE FROM media_types WHERE id IN ('audio', 'image');
+    `);
+  }
+
+  // Migration: convert library media_types from ["video"] to ["movies"] (db_version 21)
+  if (!dbVersion || Number(dbVersion.value) < 21) {
+    db.exec(`UPDATE libraries SET media_types = '["movies"]' WHERE media_types LIKE '%"video"%'`);
   }
 }
 
