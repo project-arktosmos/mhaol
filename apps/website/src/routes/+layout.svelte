@@ -1,9 +1,9 @@
 <script lang="ts">
 	import '../css/app.css';
-	import '$services/i18n';
+	import 'frontend/services/i18n';
 	import { onMount } from 'svelte';
-	import { themeService } from '$services/theme.service';
-	import Navbar from '$components/landing/Navbar.svelte';
+	import { themeService } from 'frontend/services/theme.service';
+	import LandingNavbar from 'ui-lib/components/landing/LandingNavbar.svelte';
 
 	let { children } = $props();
 
@@ -13,6 +13,6 @@
 </script>
 
 <div class="min-h-screen bg-base-100">
-	<Navbar />
+	<LandingNavbar />
 	{@render children?.()}
 </div>

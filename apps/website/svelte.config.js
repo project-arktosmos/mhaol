@@ -22,12 +22,14 @@ const config = {
 			base: '/mhaoltube'
 		},
 		alias: {
-			$components: 'src/components/*',
-			$utils: 'src/utils/*',
-			$types: 'src/types/*',
-			$data: 'src/data/*',
-			$adapters: 'src/adapters/*',
-			$services: 'src/services/*'
+			$components: '../../packages/ui-lib/src/components',
+			$utils: '../../packages/frontend/src/utils',
+			$types: '../../packages/frontend/src/types',
+			$data: '../../packages/frontend/src/data',
+			$adapters: '../../packages/frontend/src/adapters',
+			$services: '../../packages/frontend/src/services',
+			frontend: '../../packages/frontend/src',
+			'ui-lib': '../../packages/ui-lib/src'
 		}
 	}
 };

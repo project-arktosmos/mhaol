@@ -2,9 +2,15 @@
 resolver = "2"
 members = [
     "packages/backend",
+    "packages/cloud",
+    "packages/identity",
     "packages/llm",
     "packages/yt-dlp",
     "packages/torrent",
     "packages/p2p-stream",
     "packages/tauri/src-tauri",
+    "apps/tube/src-tauri",
+    "apps/cloud/src-tauri",
+    "apps/torrent/src-tauri",
+    "apps/signaling/src-tauri",
 ]

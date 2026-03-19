@@ -1,9 +1,0 @@
-{
-	"build": {
-		"beforeBuildCommand": "pnpm --filter video build",
-		"frontendDist": "../../../apps/video/dist-static"
-	},
-	"bundle": {
-		"resources": null
-	}
-}

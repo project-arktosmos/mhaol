@@ -11,6 +11,7 @@ import type {
 	SignalingChatMessage
 } from 'frontend/types/signaling.type';
 import type { DataChannelEnvelope, PeerLibraryMessage } from 'frontend/types/peer-library.type';
+import type { CloudPeerMessage } from 'frontend/types/cloud-peer.type';
 
 const DATA_CHANNEL_LABEL = 'signaling-chat';
 
@@ -32,6 +33,7 @@ class SignalingChatService {
 	public onPeerChannelOpen: ((peerId: string) => void) | null = null;
 	public onPeerDisconnected: ((peerId: string) => void) | null = null;
 	public onPeerLibraryMessage: ((peerId: string, msg: PeerLibraryMessage) => void) | null = null;
+	public onCloudMessage: ((peerId: string, msg: CloudPeerMessage) => void) | null = null;
 
 	private ws: WebSocket | null = null;
 	private peerConnections: Map<string, RTCPeerConnection> = new Map();
@@ -283,6 +285,8 @@ class SignalingChatService {
 					this.state.update((s) => ({ ...s, messages: [...s.messages, msg] }));
 				} else if (parsed.channel === 'peer-library') {
 					this.onPeerLibraryMessage?.(peerId, parsed.payload as PeerLibraryMessage);
+				} else if (parsed.channel === 'cloud') {
+					this.onCloudMessage?.(peerId, parsed.payload as CloudPeerMessage);
 				} else if (parsed.id && parsed.address && parsed.content) {
 					// Legacy format: raw SignalingChatMessage (backward compat)
 					const msg = parsed as SignalingChatMessage;

@@ -7,6 +7,7 @@ const initialState: YouTubeSearchState = {
 	query: '',
 	searching: false,
 	results: [],
+	channels: [],
 	continuation: null,
 	loadingMore: false,
 	error: null
@@ -42,6 +43,7 @@ class YouTubeSearchService {
 				...s,
 				searching: false,
 				results: data.items,
+				channels: data.channels,
 				continuation: data.continuation
 			}));
 		} catch (error) {
@@ -80,6 +82,7 @@ class YouTubeSearchService {
 				...s,
 				loadingMore: false,
 				results: [...s.results, ...data.items],
+				channels: [...s.channels, ...data.channels],
 				continuation: data.continuation
 			}));
 		} catch (error) {

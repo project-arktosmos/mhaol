@@ -14,8 +14,11 @@ import {
 	type AudioQuality,
 	type AudioFormat,
 	type DownloadMode,
+	type MediaMode,
 	type VideoQuality,
-	type VideoFormat
+	type VideoFormat,
+	type YouTubeStreamUrlResult,
+	type YouTubeStreamFormat
 } from 'frontend/types/youtube.type';
 
 const API_PREFIX = '/api/ytdl';
@@ -383,6 +386,88 @@ class YouTubeService {
 		}
 	}
 
+	async queueDownloadWithMode(
+		videoId: string,
+		title: string,
+		thumbnailUrl: string | null,
+		mode: DownloadMode
+	): Promise<string | null> {
+		if (!browser) return null;
+
+		const settings = this.get();
+		const url = `https://www.youtube.com/watch?v=${videoId}`;
+
+		const body: Record<string, unknown> = {
+			url,
+			videoId,
+			title,
+			mode,
+			quality: settings.defaultQuality,
+			format: settings.defaultFormat,
+			thumbnailUrl,
+			durationSeconds: null,
+			channelName: null
+		};
+
+		if (mode === 'video' || mode === 'both') {
+			body.videoQuality = settings.defaultVideoQuality;
+			body.videoFormat = settings.defaultVideoFormat;
+		}
+
+		try {
+			const result = await this.fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
+				method: 'POST',
+				body: JSON.stringify(body)
+			});
+
+			return result.downloadId;
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				error: `Failed to queue download: ${errorMsg}`
+			}));
+			return null;
+		}
+	}
+
+	// ===== Stream URL Extraction =====
+
+	private streamUrlCache = new Map<string, { result: YouTubeStreamUrlResult; fetchedAt: number }>();
+
+	async fetchStreamUrls(videoId: string): Promise<YouTubeStreamUrlResult | null> {
+		if (!browser) return null;
+
+		const now = Math.floor(Date.now() / 1000);
+		const cached = this.streamUrlCache.get(videoId);
+		if (cached && cached.result.expiresAt - 300 > now) {
+			return cached.result;
+		}
+
+		try {
+			const url = `https://www.youtube.com/watch?v=${videoId}`;
+			const result = await this.fetchJson<YouTubeStreamUrlResult>(
+				`/api/ytdl/info/stream-urls?url=${encodeURIComponent(url)}`
+			);
+			this.streamUrlCache.set(videoId, { result, fetchedAt: now });
+			return result;
+		} catch (error) {
+			console.error('[YouTube] Failed to extract stream URLs:', error);
+			return null;
+		}
+	}
+
+	selectBestMuxedFormat(result: YouTubeStreamUrlResult): YouTubeStreamFormat | null {
+		const muxed = result.formats.filter((f) => !f.isAudioOnly && !f.isVideoOnly);
+		if (muxed.length === 0) return null;
+		muxed.sort((a, b) => {
+			const heightDiff = (b.height ?? 0) - (a.height ?? 0);
+			if (heightDiff !== 0) return heightDiff;
+			return b.bitrate - a.bitrate;
+		});
+		return muxed[0];
+	}
+
 	// ===== Settings Management (database-backed) =====
 
 	async updateSettings(updates: Partial<YouTubeSettings>): Promise<void> {
@@ -416,6 +501,10 @@ class YouTubeService {
 				error: `Failed to save settings: ${errorMsg}`
 			}));
 		}
+	}
+
+	setMediaMode(mode: MediaMode): void {
+		this.updateSettings({ mediaMode: mode });
 	}
 
 	setDownloadMode(mode: DownloadMode): void {

@@ -1,3 +1,5 @@
 @import 'tailwindcss';
 @plugin 'daisyui';
-@import 'mhaoltube-common/css/themes.css';
+@source '../../packages/frontend/src';
+@source '../../packages/ui-lib/src';
+@import 'ui-lib/css/themes.css';

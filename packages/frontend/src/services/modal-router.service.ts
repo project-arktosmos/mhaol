@@ -1,26 +1,10 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import type { NavbarModalId, ModalRouterState } from 'frontend/types/modal.type';
+import type { ModalRouterState } from 'frontend/types/modal.type';
 
-const VALID_NAVBAR_IDS = new Set<NavbarModalId>([
-	'youtube',
-	'youtube-search',
-	'torrent',
-	'downloads',
-	'jackett',
-	'libraries',
-	'signaling',
-	'peer-libraries',
-	'identity',
-	'plugins',
-	'addons',
-	'settings',
-	'llm'
-]);
-
-function parseHash(hash: string): NavbarModalId | null {
-	const id = hash.replace('#', '') as NavbarModalId;
-	return VALID_NAVBAR_IDS.has(id) ? id : null;
+function parseHash(hash: string): string | null {
+	const id = hash.replace('#', '');
+	return id || null;
 }
 
 function parseMediaDetail(search: string): ModalRouterState['mediaDetail'] {
@@ -56,7 +40,7 @@ function createModalRouterService() {
 		});
 	}
 
-	function openNavbar(id: NavbarModalId): void {
+	function openNavbar(id: string): void {
 		store.update((s) => ({ ...s, navbarModal: id }));
 		history.pushState(null, '', buildUrl(`#${id}`, ''));
 	}

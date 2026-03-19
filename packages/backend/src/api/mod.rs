@@ -34,6 +34,10 @@ pub fn build_router(state: AppState) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    // Cloud router has its own state (Arc<CloudManager>), so we build it separately.
+    let cloud_router = mhaol_cloud::api::router()
+        .with_state(std::sync::Arc::clone(&state.cloud));
+
     let router = Router::new()
         .nest("/api/libraries", libraries::router())
         .nest("/api/media", media::router())
@@ -50,6 +54,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/signaling", signaling::router())
         .nest("/api/youtube", youtube::router())
         .nest("/api/youtube-search", youtube_search::router())
+        .nest("/api/cloud", cloud_router)
         .merge(signaling_ws::signaling_routes());
 
     #[cfg(not(target_os = "android"))]

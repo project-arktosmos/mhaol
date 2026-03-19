@@ -219,7 +219,7 @@ async fn sign_message(
         }
     };
 
-    let signature = crate::identity::passport::eip191_sign(&body.message, &pk);
+    let signature = mhaol_identity::eip191_sign(&body.message, &pk);
     Json(serde_json::json!({ "signature": signature })).into_response()
 }
 
@@ -314,32 +314,40 @@ async fn deploy(State(state): State<AppState>) -> impl IntoResponse {
             }
         };
 
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
+        let mut stdout_reader = child.stdout.take().map(|out| BufReader::new(out).lines());
+        let mut stderr_reader = child.stderr.take().map(|err| BufReader::new(err).lines());
 
         let mut all_output = String::new();
+        let mut stdout_done = stdout_reader.is_none();
+        let mut stderr_done = stderr_reader.is_none();
 
-        // Read stdout
-        if let Some(out) = stdout {
-            let mut reader = BufReader::new(out).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                all_output.push_str(&line);
-                all_output.push('\n');
-                yield Ok(Event::default().event("log").data(
-                    serde_json::json!({ "text": line }).to_string()
-                ));
-            }
-        }
-
-        // Read stderr
-        if let Some(err) = stderr {
-            let mut reader = BufReader::new(err).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                all_output.push_str(&line);
-                all_output.push('\n');
-                yield Ok(Event::default().event("log").data(
-                    serde_json::json!({ "text": line }).to_string()
-                ));
+        // Read stdout and stderr concurrently
+        while !stdout_done || !stderr_done {
+            tokio::select! {
+                result = async { stdout_reader.as_mut().unwrap().next_line().await }, if !stdout_done => {
+                    match result {
+                        Ok(Some(line)) => {
+                            all_output.push_str(&line);
+                            all_output.push('\n');
+                            yield Ok(Event::default().event("log").data(
+                                serde_json::json!({ "text": line }).to_string()
+                            ));
+                        }
+                        _ => { stdout_done = true; }
+                    }
+                }
+                result = async { stderr_reader.as_mut().unwrap().next_line().await }, if !stderr_done => {
+                    match result {
+                        Ok(Some(line)) => {
+                            all_output.push_str(&line);
+                            all_output.push('\n');
+                            yield Ok(Event::default().event("log").data(
+                                serde_json::json!({ "text": line }).to_string()
+                            ));
+                        }
+                        _ => { stderr_done = true; }
+                    }
+                }
             }
         }
 
@@ -399,10 +407,15 @@ async fn check_url_available(url: &str) -> bool {
         .build();
     match client {
         Ok(c) => c
-            .head(url)
+            .get(url)
             .send()
             .await
-            .map(|r| r.status().is_success())
+            .map(|r| {
+                let s = r.status();
+                // Any HTTP response means the server is reachable.
+                // PartyKit returns 405 for non-WebSocket requests, which is fine.
+                !s.is_server_error()
+            })
             .unwrap_or(false),
         Err(_) => false,
     }

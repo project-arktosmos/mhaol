@@ -50,7 +50,7 @@ async fn ws_handler(
     // Verify EIP-191 signature
     let message = format!("partykit-auth:{}:{}", room_id, params.timestamp);
     let recovered =
-        match crate::identity::passport::eip191_recover(&message, &params.signature) {
+        match mhaol_identity::eip191_recover(&message, &params.signature) {
             Ok(addr) => addr,
             Err(_) => {
                 return (StatusCode::UNAUTHORIZED, "Signature verification failed")

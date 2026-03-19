@@ -83,6 +83,8 @@ export class SignalingAdapter extends AdapterClass {
 			const local = ['127.0.0.1', 'localhost', '0.0.0.0'];
 			if (local.includes(parsed.hostname)) {
 				parsed.hostname = window.location.hostname;
+				parsed.port = window.location.port;
+				parsed.protocol = window.location.protocol;
 			}
 			return parsed.toString().replace(/\/$/, '');
 		} catch {

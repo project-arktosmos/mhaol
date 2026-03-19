@@ -1,25 +1,25 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { apiUrl } from '$lib/api-base';
-	import { libraryService } from '$services/library.service';
-	import { rightPanelService } from '$services/right-panel.service';
-	import { youtubeService } from '$services/youtube.service';
-	import { youtubeSearchService } from '$services/youtube-search.service';
+	import { apiUrl } from 'frontend/lib/api-base';
+	import { youtubeLibraryService } from 'frontend/services/youtube-library.service';
+	import { rightPanelService } from 'frontend/services/right-panel.service';
+	import { youtubeService } from 'frontend/services/youtube.service';
+	import { youtubeSearchService } from 'frontend/services/youtube-search.service';
 	import type {
 		YouTubeDownloadProgress,
 		YouTubeChannelMeta,
 		YouTubeRssVideo,
 		YouTubeRssFeedResponse
-	} from '$types/youtube.type';
-	import { youTubeCardAdapter } from '$adapters/classes/youtube-card.adapter';
-	import type { LibraryCardItem } from '$types/library.type';
-	import type { YouTubeSearchChannelItem } from '$types/youtube-search.type';
-	import LibraryContentGrid from '$components/libraries/LibraryContentGrid.svelte';
-	import YouTubeSearchInput from '$components/youtube-search/YouTubeSearchInput.svelte';
-	import YouTubeChannelCard from '$components/youtube-search/YouTubeChannelCard.svelte';
+	} from 'frontend/types/youtube.type';
+	import { youTubeCardAdapter } from 'frontend/adapters/classes/youtube-card.adapter';
+	import type { LibraryCardItem } from 'frontend/types/library.type';
+	import type { YouTubeSearchChannelItem } from 'frontend/types/youtube-search.type';
+	import LibraryContentGrid from 'ui-lib/components/libraries/LibraryContentGrid.svelte';
+	import YouTubeSearchInput from 'ui-lib/components/youtube-search/YouTubeSearchInput.svelte';
+	import YouTubeChannelCard from 'ui-lib/components/youtube-search/YouTubeChannelCard.svelte';
 
-	const libState = libraryService.state;
+	const libState = youtubeLibraryService.state;
 	const ytState = youtubeService.state;
 	const searchState = youtubeSearchService.state;
 
@@ -213,7 +213,7 @@
 	let searchItemMap = $derived(new Map($searchState.results.map((item) => [item.videoId, item])));
 
 	onMount(() => {
-		libraryService.initialize();
+		youtubeLibraryService.initialize();
 		fetchChannels();
 	});
 

@@ -1,19 +1,19 @@
 pub mod api;
 pub mod db;
-pub mod identity;
 pub mod modules;
 pub mod signaling_rooms;
 pub mod worker_bridge;
 
 use db::repo::*;
 use db::DbPool;
-use identity::IdentityManager;
+use mhaol_identity::IdentityManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_llm::LlmEngine;
 #[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_yt_dlp::DownloadManager;
+use mhaol_cloud::CloudManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
 use signaling_rooms::SignalingRoomManager;
@@ -98,13 +98,28 @@ pub struct AppState {
     pub signaling_servers: SignalingServerRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
     pub worker_bridge: Arc<WorkerBridge>,
+    pub cloud: Arc<CloudManager>,
 }
 
 impl AppState {
     /// Create a new AppState with a database at the given path (or in-memory if None).
     pub fn new(db_path: Option<&Path>) -> Result<Self, rusqlite::Error> {
         let db = db::open_database(db_path)?;
-        let identities_path = identity::default_identities_path();
+        let identities_dir = mhaol_identity::default_identities_dir();
+        let identity_manager = IdentityManager::new(identities_dir);
+
+        // One-time migration from old .env.identities format
+        let old_env_path = find_env_identities_path();
+        if old_env_path.exists() {
+            let count = mhaol_identity::migrate_from_env_file(&old_env_path, &identity_manager);
+            if count > 0 {
+                tracing::info!(
+                    "Migrated {} identities from {} to ~/.mhaol-identities/",
+                    count,
+                    old_env_path.display()
+                );
+            }
+        }
 
         let data_dir = default_data_dir();
 
@@ -133,7 +148,7 @@ impl AppState {
             media_lists: MediaListRepo::new(Arc::clone(&db)),
             media_list_items: MediaListItemRepo::new(Arc::clone(&db)),
             media_list_links: MediaListLinkRepo::new(Arc::clone(&db)),
-            identity_manager: IdentityManager::new(identities_path),
+            identity_manager,
             module_registry: Arc::new(RwLock::new(ModuleRegistry::new())),
             #[cfg(not(target_os = "android"))]
             ytdl_manager: {
@@ -148,6 +163,7 @@ impl AppState {
             signaling_servers: SignalingServerRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
+            cloud: Arc::new(CloudManager::new(Arc::clone(&db))),
             data_dir,
             db,
         })
@@ -219,4 +235,18 @@ impl AppState {
             tracing::info!("Created default library at {}", downloads_path);
         }
     }
+}
+
+/// Find the legacy .env.identities file by searching up for the repo root.
+fn find_env_identities_path() -> PathBuf {
+    let mut dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    loop {
+        if dir.join("pnpm-workspace.yaml").exists() {
+            return dir.join(".env.identities");
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    Path::new(".env.identities").to_path_buf()
 }

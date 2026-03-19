@@ -1,0 +1,17 @@
+[package]
+name = "mhaol-tube-desktop"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "mhaol_tube_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+tauri = { version = "2.10", features = [] }
+tauri-plugin-shell = "2"
+mhaol-tauri-core = { path = "../../../packages/tauri/src-tauri" }

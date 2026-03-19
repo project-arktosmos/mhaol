@@ -30,7 +30,6 @@ src/
 │   ├── youtube.rs
 │   └── ytdl.rs           # cfg(not(target_os = "android"))
 ├── db/                   # Database layer (rusqlite repos)
-├── identity/             # Identity/wallet management
 ├── modules/              # Plugin modules (image tagger, etc.)
 ├── signaling_dev.rs      # Local signaling dev server
 └── worker_bridge.rs      # Background worker bridge
@@ -40,7 +39,7 @@ src/
 
 All API handlers receive `AppState` which contains:
 - Database repositories (settings, metadata, libraries, library_items, etc.)
-- `IdentityManager` for identity/wallet operations
+- `IdentityManager` for identity/wallet operations (from `mhaol-identity` crate)
 - `ModuleRegistry` for plugin modules
 - `DownloadManager` (yt-dlp, desktop only)
 - `TorrentManager` (desktop only)
@@ -54,9 +53,13 @@ All API handlers receive `AppState` which contains:
 3. Register in `build_router()`: `.nest("/api/{feature}", {feature}::router())`
 4. If new database access is needed, add a repo to `AppState`
 
-## Sub-crate Dependencies (desktop only)
+## Sub-crate Dependencies
 
-These are conditionally compiled with `#[cfg(not(target_os = "android"))]`:
+Always included:
+- `mhaol-identity` — Ethereum identity/wallet management (`packages/identity/`)
+- `mhaol-cloud` — Cloud library management (`packages/cloud/`)
+
+Conditionally compiled with `#[cfg(not(target_os = "android"))]`:
 - `mhaol-p2p-stream` — P2P streaming (`packages/p2p-stream/`)
 - `mhaol-yt-dlp` — YouTube downloading (`packages/yt-dlp/`)
 - `mhaol-torrent` — Torrent management (`packages/torrent/`)

@@ -582,6 +582,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
 pub fn initialize_module_schemas(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(YOUTUBE_SCHEMA_SQL)?;
     conn.execute_batch(TMDB_SCHEMA_SQL)?;
+    mhaol_cloud::initialize_cloud_schema(conn)?;
     Ok(())
 }
 

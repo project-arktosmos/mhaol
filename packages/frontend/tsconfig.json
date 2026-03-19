@@ -15,6 +15,13 @@
 		"paths": {
 			"$app/environment": ["./test/mocks/$app/environment.ts"],
 			"$app/stores": ["./test/mocks/$app/stores.ts"],
+			"$app/paths": ["./test/mocks/$app/paths.ts"],
+			"$services/*": ["./src/services/*"],
+			"$adapters/*": ["./src/adapters/*"],
+			"$types/*": ["./src/types/*"],
+			"$utils/*": ["./src/utils/*"],
+			"$data/*": ["./src/data/*"],
+			"$lib/*": ["./src/lib/*"],
 			"frontend/*": ["./src/*"]
 		}
 	},

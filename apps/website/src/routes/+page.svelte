@@ -1,8 +1,8 @@
 <script lang="ts">
-	import Hero from '$components/landing/Hero.svelte';
-	import Features from '$components/landing/Features.svelte';
-	import Platforms from '$components/landing/Platforms.svelte';
-	import Footer from '$components/landing/Footer.svelte';
+	import Hero from 'ui-lib/components/landing/Hero.svelte';
+	import Features from 'ui-lib/components/landing/Features.svelte';
+	import Platforms from 'ui-lib/components/landing/Platforms.svelte';
+	import Footer from 'ui-lib/components/landing/Footer.svelte';
 </script>
 
 <svelte:head>

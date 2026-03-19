@@ -19,8 +19,8 @@
 	},
 	"dependencies": {
 		"@sveltejs/adapter-static": "^3.0.9",
-		"classnames": "^2.5.1",
-		"mhaoltube-common": "workspace:*",
+		"frontend": "workspace:*",
+		"ui-lib": "workspace:*",
 		"svelte-i18n": "^4.0.1"
 	},
 	"devDependencies": {

@@ -1,0 +1,4 @@
+@import 'tailwindcss';
+@plugin 'daisyui';
+@source '../../packages/frontend/src';
+@source '../../packages/ui-lib/src';

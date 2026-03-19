@@ -1,0 +1,40 @@
+name: Release Desktop Apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Apps to build (comma-separated, or "all")'
+        required: true
+        default: 'all'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  determine-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          if [ "${{ inputs.apps }}" = "all" ]; then
+            echo 'matrix={"app":["tube","cloud"],"platform":["macos-latest","ubuntu-latest","windows-latest"]}' >> "$GITHUB_OUTPUT"
+          else
+            IFS=',' read -ra APPS <<< "${{ inputs.apps }}"
+            JSON=$(printf '"%s",' "${APPS[@]}" | sed 's/,$//')
+            echo "matrix={\"app\":[$JSON],\"platform\":[\"macos-latest\",\"ubuntu-latest\",\"windows-latest\"]}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: determine-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.determine-matrix.outputs.matrix) }}
+    uses: ./.github/workflows/tauri-build.yml
+    with:
+      app: ${{ matrix.app }}
+      platform: ${{ matrix.platform }}
+    secrets: inherit

@@ -19,7 +19,8 @@ export default defineConfig({
 		conditions: ['svelte'],
 		alias: {
 			$lib: resolve(__dirname, './src/lib'),
-			$components: resolve(__dirname, './src/components'),
+			$components: resolve(__dirname, '../ui-lib/src/components'),
+			'ui-lib': resolve(__dirname, '../ui-lib/src'),
 			$services: resolve(__dirname, './src/services'),
 			$adapters: resolve(__dirname, './src/adapters'),
 			$types: resolve(__dirname, './src/types'),

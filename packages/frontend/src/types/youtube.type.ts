@@ -33,9 +33,20 @@ export const AUDIO_FORMAT_OPTIONS: { value: AudioFormat; label: string; extensio
 	{ value: 'opus', label: 'Opus', extension: 'opus' }
 ];
 
+// ===== Media Mode =====
+
+export type MediaMode = 'audio' | 'video';
+
 // ===== Download Mode =====
 
-export type DownloadMode = 'audio' | 'video';
+export type DownloadMode = 'audio' | 'video' | 'both';
+
+export const DOWNLOAD_MODE_OPTIONS: { value: DownloadMode; label: string; description: string }[] =
+	[
+		{ value: 'both', label: 'Both', description: 'Download audio and video' },
+		{ value: 'audio', label: 'Audio only', description: 'Download audio track only' },
+		{ value: 'video', label: 'Video only', description: 'Download video with audio' }
+	];
 
 // ===== Video Quality =====
 
@@ -71,6 +82,8 @@ export interface YouTubeDownloadProgress {
 	downloadedBytes: number;
 	totalBytes: number;
 	outputPath: string | null;
+	videoOutputPath: string | null;
+	audioOutputPath: string | null;
 	error: string | null;
 	mode: DownloadMode;
 	quality: AudioQuality;
@@ -87,6 +100,30 @@ export interface YouTubeVideoInfo {
 	thumbnailUrl: string | null;
 	uploader: string | null;
 	videoId: string;
+}
+
+// ===== Stream URL Extraction =====
+
+export interface YouTubeStreamFormat {
+	itag: number;
+	url: string;
+	mimeType: string;
+	bitrate: number;
+	contentLength: number | null;
+	width: number | null;
+	height: number | null;
+	qualityLabel: string | null;
+	audioQuality: string | null;
+	fps: number | null;
+	isAudioOnly: boolean;
+	isVideoOnly: boolean;
+	codec: string;
+	container: string;
+}
+
+export interface YouTubeStreamUrlResult {
+	formats: YouTubeStreamFormat[];
+	expiresAt: number;
 }
 
 // ===== Playlist Types =====
@@ -132,7 +169,7 @@ export interface YouTubeServiceState {
 	initialized: boolean;
 	loading: boolean;
 	error: string | null;
-	libraryId: string;
+	libraryId?: string;
 	downloads: YouTubeDownloadProgress[];
 	stats: YouTubeManagerStats | null;
 	downloaderStatus: DownloaderStatus | null;
@@ -145,16 +182,35 @@ export interface YouTubeServiceState {
 	fetchingPlaylistInfo: boolean;
 }
 
+// ===== YouTube Content (downloaded media) =====
+
+export interface YouTubeContent {
+	youtubeId: string;
+	title: string;
+	thumbnailUrl: string | null;
+	durationSeconds: number | null;
+	channelName: string | null;
+	channelId: string | null;
+	hasVideo: boolean;
+	hasAudio: boolean;
+	videoSize: number | null;
+	audioSize: number | null;
+	isFavorite: boolean;
+	favoritedAt: string | null;
+	createdAt: string;
+}
+
 // ===== Settings (database) =====
 
 export interface YouTubeSettings {
 	id: ID;
+	mediaMode?: MediaMode;
 	downloadMode: DownloadMode;
 	defaultQuality: AudioQuality;
 	defaultFormat: AudioFormat;
 	defaultVideoQuality: VideoQuality;
 	defaultVideoFormat: VideoFormat;
-	libraryId: string;
+	libraryId?: string;
 	poToken: string;
 	cookies: string;
 }
@@ -248,6 +304,69 @@ export function extractPlaylistId(url: string): string | null {
 	return match ? match[1] : null;
 }
 
+// ===== Channel Feed (InnerTube Browse) =====
+
+export interface YouTubeChannelFeedVideo {
+	videoId: string;
+	title: string;
+	thumbnail: string;
+	duration: number;
+	durationText: string;
+	views: number;
+	viewsText: string;
+	publishedText: string;
+}
+
+export interface YouTubeChannelFeedResponse {
+	channelId: string;
+	videos: YouTubeChannelFeedVideo[];
+	continuation: string | null;
+}
+
+// ===== Channel Metadata =====
+
+export interface YouTubeChannelMeta {
+	channelId: string;
+	avatar: string;
+	description: string;
+	subscriberText: string;
+}
+
+// ===== Right Panel =====
+
+export interface RightPanelVideo {
+	videoId: string;
+	title: string;
+	thumbnail: string;
+	views?: number;
+	viewsText?: string;
+	publishedText?: string;
+	uploaderName?: string;
+	uploaderAvatar?: string;
+	uploaderUrl?: string;
+	uploaderVerified?: boolean;
+	hasVideo?: boolean;
+	hasAudio?: boolean;
+}
+
+// ===== Channel RSS Feed =====
+
+export interface YouTubeRssVideo {
+	videoId: string;
+	title: string;
+	published: string;
+	publishedText: string;
+	thumbnail: string;
+	views: number;
+	viewsText: string;
+}
+
+export interface YouTubeRssFeedResponse {
+	channelId: string;
+	channelName: string;
+	videos: YouTubeRssVideo[];
+}
+
 // ===== oEmbed Metadata =====
 
 export interface YouTubeOEmbedData {
@@ -265,3 +384,6 @@ export interface YouTubeOEmbedData {
 	thumbnail_url: string;
 	html: string;
 }
+
+/** Alias kept for backward compatibility with code that used the addon type name */
+export type YouTubeOEmbedResponse = YouTubeOEmbedData;

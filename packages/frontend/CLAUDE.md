@@ -1,421 +1,119 @@
 # Package: frontend
 
 **Location:** `packages/frontend/`
-**Framework:** SvelteKit 2 + Svelte 5 + TailwindCSS v4 + DaisyUI v5
-**Adapter:** `@sveltejs/adapter-static` (fully pre-rendered, fallback to `index.html`)
-**Dev port:** 1531
+**Role:** Shared frontend logic — services, adapters, types, utils, and data for every app
+
+This package is **not** a SvelteKit app itself. It is a library consumed by apps and by `packages/ui-lib`. UI components and CSS live in `packages/ui-lib`.
 
 ## Source Structure
 
 ```
 src/
-├── adapters/classes/     # Data transformation logic
-├── components/           # UI components organized by feature
-│   ├── core/            # Shared reusable components (Button, Navbar, etc.)
-│   ├── downloads/
-│   ├── images/
-│   ├── libraries/
-│   ├── media/
-│   ├── p2p-stream/
-│   ├── player/
-│   ├── signaling/
-│   ├── torrent/
-│   └── youtube/
-├── routes/               # SvelteKit pages (+page.svelte, +layout.svelte)
-│   ├── addons/
-│   ├── database/
-│   ├── identity/
-│   ├── images/
-│   ├── media/
-│   ├── plugins/
-│   ├── settings/
-│   └── signaling/
-├── services/
-│   ├── classes/         # ArrayServiceClass, ObjectServiceClass
-│   └── i18n/            # svelte-i18n locales
-├── types/                # TypeScript type definitions
-├── utils/                # Pure utility functions
-├── data/                 # Static JSON data
-├── css/                  # Tailwind v4 imports
-└── lib/                  # SvelteKit utilities
+├── adapters/classes/         # Data transformation logic
+├── services/                 # State management + API calls
+│   ├── classes/              # ArrayServiceClass, ObjectServiceClass
+│   ├── i18n/                 # svelte-i18n locales (en.json, qq.json)
+│   └── *.service.ts          # Feature services (see list below)
+├── types/                    # TypeScript type definitions (one file per domain)
+├── utils/                    # Pure utility functions
+│   ├── localStorageWritableStore.ts
+│   ├── string/               # capitalize, normalize
+│   ├── musicbrainz/          # MusicBrainz API client + transforms
+│   ├── tmdb/                 # TMDB image URL helpers + transforms
+│   ├── torrent-search/       # Torrent result formatting
+│   └── youtube/              # YouTube embed helpers
+├── data/                     # Static JSON data (releases.json, recommended-models.ts)
+└── lib/                      # Platform detection + API base URL
+    ├── platform.ts           # isTauri, isMobile detection
+    └── api-base.ts           # apiUrl() helper with Tauri fallback
 ```
 
-## Path Aliases
+## Import Conventions
 
-These aliases are configured in both `svelte.config.js` and `vite.config.ts` and are **only valid inside `packages/frontend/`**:
+**Within packages/frontend** — use `frontend/...` paths:
 
 ```typescript
-$components  → src/components/*
-$services    → src/services/*
-$adapters    → src/adapters/*
-$utils       → src/utils/*
-$types       → src/types/*
-$data        → src/data/*
+import { modalRouterService } from 'frontend/services/modal-router.service';
+import type { ID } from 'frontend/types/core.type';
 ```
 
-## Architecture: Separation of Concerns
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Svelte Components                         │
-│              (UI only — no business logic)                   │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-        ▼                 ▼                 ▼
-┌───────────────┐ ┌───────────────┐ ┌───────────────┐
-│   Services    │ │   Adapters    │ │    Utils      │
-│ (State/Data)  │ │(Transformers) │ │(Pure helpers) │
-└───────────────┘ └───────────────┘ └───────────────┘
-```
-
-**Components** — render UI, handle user interactions, call callback props
-**Services** — manage Svelte store state, persist to localStorage, call the backend API
-**Adapters** — transform data between API format and internal format
-**Utils** — pure functions, no side effects
+**From consuming apps** — same `frontend/...` paths work via the alias in svelte.config.js.
 
 ---
 
 ## Services
 
-Services manage shared state using Svelte stores with automatic localStorage persistence.
+Feature services (all in `src/services/`):
 
-### ArrayServiceClass\<T\>
+| Service                             | Description                                             |
+| ----------------------------------- | ------------------------------------------------------- |
+| `downloads.service.ts`              | Download queue state                                    |
+| `identity.service.ts`               | Wallet/identity                                         |
+| `image-tagger.service.ts`           | Image auto-tagging                                      |
+| `jackett-search.service.ts`         | Jackett torrent search                                  |
+| `library.service.ts`                | Filesystem media libraries                              |
+| `llm.service.ts`                    | LLM chat conversations                                  |
+| `lyrics.service.ts`                 | Song lyrics fetching                                    |
+| `media-detail.service.ts`           | Media detail panel state                                |
+| `media-mode.service.ts`             | Audio/video mode toggle                                 |
+| `modal-router.service.ts`           | URL-synced modal state                                  |
+| `p2p-stream.service.ts`             | P2P streaming                                           |
+| `peer-library.service.ts`           | Peer library discovery                                  |
+| `player.service.ts`                 | Media player state                                      |
+| `right-panel.service.ts`            | Right panel video selection                             |
+| `sidebar.service.ts`                | Sidebar state                                           |
+| `signaling-chat.service.ts`         | Signaling chat                                          |
+| `theme.service.ts`                  | Light/dark theme + DOM sync                             |
+| `tmdb-browse.service.ts`            | TMDB popular/discover                                   |
+| `torrent-search.service.ts`         | Torrent search                                          |
+| `torrent.service.ts`                | Torrent management                                      |
+| `wallet.service.ts`                 | Crypto wallet                                           |
+| `youtube.service.ts`                | YouTube download + streaming                            |
+| `youtube-channel-search.service.ts` | YouTube channel search                                  |
+| `youtube-library.service.ts`        | YouTube content library (favorites, content management) |
+| `youtube-search.service.ts`         | YouTube video search                                    |
 
-For collections of items with unique IDs:
+### Service classes
 
 ```typescript
-// src/services/myItems.service.ts
-import { ArrayServiceClass } from '$services/classes/array-service.class';
-
-interface MyItem {
-	id: string;
-	name: string;
-	value: number;
-}
-
+// ArrayServiceClass<T> — for collections
 export const myItemsService = new ArrayServiceClass<MyItem>('my-items', []);
+
+// ObjectServiceClass<T> — for single objects
+export const settingsService = new ObjectServiceClass<Settings>('settings', initialSettings);
 ```
-
-**Methods:** `add(item)`, `remove(item)`, `update(item)`, `exists(id)`, `all()`, `find(predicate)`, `filter(predicate)`
-
-**Using in a component:**
-
-```svelte
-<script lang="ts">
-	import { myItemsService } from '$services/myItems.service';
-
-	let items = $derived($myItemsService.store);
-
-	function addItem() {
-		myItemsService.add({ id: crypto.randomUUID(), name: 'New', value: 0 });
-	}
-</script>
-```
-
-### ObjectServiceClass\<T\>
-
-For managing a single object:
-
-```typescript
-// src/services/settings.service.ts
-import { ObjectServiceClass } from '$services/classes/object-service.class';
-
-export const settingsService = new ObjectServiceClass<Settings>('settings', {
-	id: 'user-settings',
-	theme: 'light',
-	language: 'en'
-});
-```
-
-**localStorage keys:**
-
-- Array services: `array-service:{id}`
-- Object services: `object-service:{id}`
-
-**SSR safety:** Both classes use `localStorageWritableStore`, which falls back to a plain writable store when `browser` is false.
 
 ---
 
 ## Adapters
 
-Adapters transform data between external formats (API responses, file imports) and internal types. **All data transformation lives in adapters — never in components or services.**
-
-**Existing adapters** in `src/adapters/classes/`:
+All in `src/adapters/classes/`:
 
 - `adapter.class.ts` — base class
 - `identity.adapter.ts` — identity/wallet data
 - `library-file.adapter.ts` — library file data
+- `llm.adapter.ts` — LLM conversation data
+- `peer-library.adapter.ts` — peer library data
 - `player.adapter.ts` — media player data
 - `signaling.adapter.ts` — signaling/P2P data
-
-```typescript
-// src/adapters/classes/example.adapter.ts
-import { AdapterClass } from '$adapters/classes/adapter.class';
-
-export class ExampleAdapter extends AdapterClass {
-	constructor() {
-		super('example');
-	}
-
-	fromApi(raw: ApiExample): Example {
-		return { id: raw.example_id, name: raw.display_name };
-	}
-
-	toApi(item: Example): Partial<ApiExample> {
-		return { display_name: item.name };
-	}
-}
-
-export const exampleAdapter = new ExampleAdapter();
-```
-
-**Rules:**
-
-1. Always export a singleton instance
-2. Name methods clearly: `fromApi`, `toApi`, `toDisplayFormat`, etc.
-3. No side effects — transformations only
-4. Type both input and output
-
----
-
-## Svelte Components (Svelte 5 Runes)
-
-Components contain **only UI logic**. All business logic belongs in services and adapters. This project uses **Svelte 5 runes** — do not use legacy Svelte 4 patterns.
-
-**Rules:**
-
-1. No business logic — delegate to services/adapters
-2. No `<style>` tags — use Tailwind classes only
-3. No inline `style` attributes
-4. Use `classnames` for all conditional class rendering
-5. Type all props with inline type annotations on `$props()`
-6. Use callback props for parent communication (e.g. `onClose`, `onSave`)
-7. Keep components small — split when they grow
-
-**Component template:**
-
-```svelte
-<script lang="ts">
-	import classNames from 'classnames';
-	import { ThemeColors, ThemeSizes } from '$types/core.type';
-	import type { Snippet } from 'svelte';
-
-	let {
-		label = '',
-		variant = ThemeColors.Primary,
-		disabled = false,
-		classes = '',
-		onclick,
-		children
-	}: {
-		label?: string;
-		variant?: ThemeColors;
-		disabled?: boolean;
-		classes?: string;
-		onclick?: () => void;
-		children?: Snippet;
-	} = $props();
-
-	const variantClasses: Record<ThemeColors, string> = {
-		[ThemeColors.Primary]: 'bg-primary text-primary-content',
-		[ThemeColors.Secondary]: 'bg-secondary text-secondary-content'
-	};
-
-	let computedClasses = $derived(
-		classNames(
-			'btn',
-			variantClasses[variant],
-			{ 'opacity-50 cursor-not-allowed': disabled },
-			classes
-		)
-	);
-</script>
-
-<button class={computedClasses} {disabled} {onclick}>
-	{#if label}{label}{:else if children}{@render children()}{/if}
-</button>
-```
-
-**Svelte 5 runes cheat sheet:**
-
-```svelte
-<script lang="ts">
-	// Props — use $props() with inline types
-	let {
-		show,
-		item,
-		onSave,
-		onClose
-	}: {
-		show: boolean;
-		item: Item | null;
-		onSave: (data: ItemPayload) => void;
-		onClose: () => void;
-	} = $props();
-
-	// Reactive state — use $state()
-	let loading = $state(false);
-	let error = $state('');
-	let items: Item[] = $state([]);
-
-	// Derived values — use $derived()
-	let isEditing = $derived(item !== null);
-	let filteredItems = $derived(items.filter((i) => i.active));
-
-	// Side effects — use $effect()
-	$effect(() => {
-		if (show) {
-			loading = true;
-			fetchData();
-		}
-	});
-</script>
-
-<!-- Event handlers — use direct attributes, not on: directives -->
-<button onclick={handleClick}>Click</button>
-<input oninput={(e) => (query = e.currentTarget.value)} />
-```
-
-**`classnames` usage:**
-
-```typescript
-import classNames from 'classnames';
-
-// Always-on strings
-classNames('btn', 'flex', 'gap-2');
-
-// Conditional object syntax
-classNames({ 'bg-primary': isPrimary, 'opacity-50': disabled });
-
-// Mixed — null/undefined safely ignored
-classNames('btn', typeClasses[type], { 'btn-outline': outline }, customClasses);
-```
-
----
-
-## CSS & Styling
-
-| Rule                      | Detail                      |
-| ------------------------- | --------------------------- |
-| NEVER use `<style>` tags  | Tailwind only               |
-| NEVER use inline `style=` | Tailwind only               |
-| ALWAYS use `classnames`   | For conditional classes     |
-| Stack                     | TailwindCSS v4 + DaisyUI v5 |
-
-**Theme enums** from `$types/core.type.ts`:
-
-```typescript
-ThemeColors.Primary; // 'primary'
-ThemeColors.Secondary; // 'secondary'
-ThemeColors.Accent; // 'accent'
-ThemeColors.Success; // 'success'
-ThemeColors.Error; // 'error'
-ThemeColors.Info; // 'info'
-ThemeColors.Warning; // 'warning'
-ThemeColors.Neutral; // 'neutral'
-
-ThemeSizes.XSmall; // 'xs'
-ThemeSizes.Small; // 'sm'
-ThemeSizes.Medium; // 'md'
-ThemeSizes.Large; // 'lg'
-ThemeSizes.XLarge; // 'xl'
-```
-
-**DaisyUI patterns:**
-
-```html
-<button class="btn btn-sm btn-primary">Save</button>
-<div class="card bg-base-100 shadow-xl"><div class="card-body">...</div></div>
-<input class="input-bordered input w-full input-primary" />
-<span class="badge badge-success">Active</span>
-```
+- `youtube-card.adapter.ts` — YouTube content → LibraryCardItem
 
 ---
 
 ## Types
 
-Define shared types in `packages/frontend/src/types/`. One file per domain:
+One file per domain in `src/types/`:
 
-```
-src/types/
-├── core.type.ts          # ID, ThemeColors, ThemeSizes
-├── download.type.ts
-├── identity.type.ts
-├── image-tagger.type.ts
-├── library.type.ts
-├── media-card.type.ts
-├── media-detail.type.ts
-├── p2p-stream.type.ts
-├── player.type.ts
-├── route.type.ts
-├── sidebar.type.ts
-├── signaling.type.ts
-├── torrent.type.ts
-└── youtube.type.ts
-```
-
-Always use the `ID` type from `$types/core.type` for entity identifiers:
-
-```typescript
-import type { ID } from '$types/core.type';
-
-interface Entity {
-	id: ID; // string | number
-}
-```
-
----
-
-## Utils
-
-Pure functions with no side effects. Organize by domain:
-
-```
-src/utils/
-├── localStorageWritableStore.ts
-├── string/
-└── torrent-search/
-```
-
-```typescript
-import { capitalize } from '$utils/string/capitalize';
-import { normalize } from '$utils/string/normalize';
-```
-
----
-
-## i18n
-
-Use `svelte-i18n` for translations. Translations are in `src/services/i18n/locales/`.
-
-```svelte
-<script lang="ts">
-	import { _ } from 'svelte-i18n';
-</script>
-
-<h1>{$_('common.welcome')}</h1>
-```
+`core.type.ts`, `download.type.ts`, `identity.type.ts`, `image-tagger.type.ts`, `library.type.ts`, `llm.type.ts`, `media-card.type.ts`, `media-detail.type.ts`, `media-list.type.ts`, `modal.type.ts`, `musicbrainz.type.ts`, `p2p-stream.type.ts`, `peer-library.type.ts`, `player.type.ts`, `route.type.ts`, `sidebar.type.ts`, `signaling.type.ts`, `tmdb-browse.type.ts`, `torrent.type.ts`, `youtube.type.ts`, `youtube-search.type.ts`
 
 ---
 
 ## Testing
 
-Tests live in `packages/frontend/test/` mirroring `src/`:
-
-```
-test/
-├── services/
-├── adapters/
-├── utils/
-└── components/
-```
+Tests live in `packages/frontend/test/` mirroring `src/`.
 
 ```bash
 pnpm test             # vitest
 pnpm test:ui          # interactive UI
 pnpm test:coverage    # coverage report
-pnpm test:e2e         # Playwright
-pnpm test:e2e:headed  # Playwright with visible browser
 ```

@@ -1,13 +1,15 @@
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
-import { routeDiscovery } from './vite-plugin-routes.js';
 
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit(), routeDiscovery()],
+	plugins: [tailwindcss(), sveltekit()],
 	server: {
 		host: true,
 		port: 1531,
+		fs: {
+			allow: ['../..']
+		},
 		proxy: {
 			'/api': 'http://localhost:1530'
 		}

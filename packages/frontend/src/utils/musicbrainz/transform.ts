@@ -8,16 +8,16 @@ import type {
 	DisplayMusicBrainzReleaseGroup
 } from '$types/musicbrainz.type';
 
-function formatArtistCredits(credits: MusicBrainzArtistCredit[] | undefined): string {
+export function formatArtistCredits(credits: MusicBrainzArtistCredit[] | undefined): string {
 	if (!credits || credits.length === 0) return 'Unknown Artist';
 	return credits.map((c) => c.name + (c.joinphrase || '')).join('');
 }
 
-function getCoverArtUrl(releaseGroupId: string): string {
-	return `https://coverartarchive.org/release-group/${releaseGroupId}/front-250`;
+export function getCoverArtUrl(releaseGroupId: string, size: 250 | 500 = 250): string {
+	return `https://coverartarchive.org/release-group/${releaseGroupId}/front-${size}`;
 }
 
-function formatDuration(ms: number | undefined): string | null {
+export function formatDuration(ms: number | undefined): string | null {
 	if (!ms) return null;
 	const totalSeconds = Math.floor(ms / 1000);
 	const minutes = Math.floor(totalSeconds / 60);
@@ -30,43 +30,62 @@ function extractYear(dateString: string | undefined): string {
 	return dateString.split('-')[0] || 'Unknown';
 }
 
-export function recordingsToDisplay(recordings: MusicBrainzRecording[]): DisplayMusicBrainzRecording[] {
-	return recordings.map((r) => {
-		const releaseGroupId = r.releases?.[0]?.['release-group']?.id;
-		return {
-			id: r.id,
-			title: r.title,
-			duration: formatDuration(r.length),
-			artistCredits: formatArtistCredits(r['artist-credit']),
-			disambiguation: r.disambiguation || null,
-			coverArtUrl: releaseGroupId ? getCoverArtUrl(releaseGroupId) : null,
-			firstReleaseTitle: r.releases?.[0]?.title ?? null
-		};
-	});
+export function recordingToDisplay(recording: MusicBrainzRecording): DisplayMusicBrainzRecording {
+	const releaseGroupId = recording.releases?.[0]?.['release-group']?.id;
+	return {
+		id: recording.id,
+		title: recording.title,
+		duration: formatDuration(recording.length),
+		durationMs: recording.length || null,
+		artistCredits: formatArtistCredits(recording['artist-credit']),
+		disambiguation: recording.disambiguation || null,
+		coverArtUrl: releaseGroupId ? getCoverArtUrl(releaseGroupId) : null,
+		firstReleaseTitle: recording.releases?.[0]?.title ?? null,
+		score: recording.score || 0
+	};
+}
+
+export function recordingsToDisplay(
+	recordings: MusicBrainzRecording[]
+): DisplayMusicBrainzRecording[] {
+	return recordings.map(recordingToDisplay);
+}
+
+export function artistToDisplay(artist: MusicBrainzArtist): DisplayMusicBrainzArtist {
+	return {
+		id: artist.id,
+		name: artist.name,
+		sortName: artist['sort-name'],
+		type: artist.type || null,
+		country: artist.country || null,
+		disambiguation: artist.disambiguation || null,
+		beginYear: artist['life-span']?.begin?.split('-')[0] || null,
+		endYear: artist['life-span']?.end?.split('-')[0] || null,
+		ended: artist['life-span']?.ended ?? false,
+		tags: (artist.tags || []).sort((x, y) => y.count - x.count).map((t) => t.name),
+		score: artist.score || 0
+	};
 }
 
 export function artistsToDisplay(artists: MusicBrainzArtist[]): DisplayMusicBrainzArtist[] {
-	return artists.map((a) => ({
-		id: a.id,
-		name: a.name,
-		type: a.type || null,
-		country: a.country || null,
-		disambiguation: a.disambiguation || null,
-		beginYear: a['life-span']?.begin?.split('-')[0] || null,
-		endYear: a['life-span']?.end?.split('-')[0] || null,
-		tags: (a.tags || []).sort((x, y) => y.count - x.count).map((t) => t.name)
-	}));
+	return artists.map(artistToDisplay);
+}
+
+export function releaseGroupToDisplay(rg: MusicBrainzReleaseGroup): DisplayMusicBrainzReleaseGroup {
+	return {
+		id: rg.id,
+		title: rg.title,
+		primaryType: rg['primary-type'] || null,
+		secondaryTypes: rg['secondary-types'] || [],
+		firstReleaseYear: extractYear(rg['first-release-date']),
+		artistCredits: formatArtistCredits(rg['artist-credit']),
+		coverArtUrl: getCoverArtUrl(rg.id),
+		score: rg.score || 0
+	};
 }
 
 export function releaseGroupsToDisplay(
 	releaseGroups: MusicBrainzReleaseGroup[]
 ): DisplayMusicBrainzReleaseGroup[] {
-	return releaseGroups.map((rg) => ({
-		id: rg.id,
-		title: rg.title,
-		primaryType: rg['primary-type'] || null,
-		firstReleaseYear: extractYear(rg['first-release-date']),
-		artistCredits: formatArtistCredits(rg['artist-credit']),
-		coverArtUrl: getCoverArtUrl(rg.id)
-	}));
+	return releaseGroups.map(releaseGroupToDisplay);
 }

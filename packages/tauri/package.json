@@ -4,15 +4,8 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "tauri dev",
-		"build": "tauri build",
-		"android:dev": "tauri android build --apk && (adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk || (adb uninstall com.arktosmos.mhaol && adb install src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk)) && adb shell am start -n com.arktosmos.mhaol/.MainActivity",
-		"android:build": "tauri android build --apk",
 		"android:launch:tv": "bash scripts/android-launch.sh tv",
 		"android:launch:phone": "bash scripts/android-launch.sh phone",
 		"android:launch:tablet": "bash scripts/android-launch.sh tablet"
-	},
-	"devDependencies": {
-		"@tauri-apps/cli": "^2.10"
 	}
 }
