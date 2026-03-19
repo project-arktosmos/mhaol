@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { MediaItem } from 'frontend/types/media-card.type';
 	import type { ImageTag } from 'frontend/types/image-tagger.type';
-	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'tmdb/types';
+	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
 	import type { YouTubeOEmbedResponse } from '$types/youtube-oembed.type';
 	import type { DisplayMusicBrainzRecording } from '$types/musicbrainz.type';
 	import MovieCard from './MovieCard.svelte';

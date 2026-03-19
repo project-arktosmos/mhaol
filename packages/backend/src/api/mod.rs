@@ -1,9 +1,11 @@
 #[cfg(feature = "embed-frontend")]
 pub mod frontend;
 pub mod addons;
-pub mod jackett;
 pub mod database;
 pub mod downloads;
+pub mod health;
+pub mod hub;
+pub mod jackett;
 pub mod identities;
 pub mod libraries;
 pub mod media;
@@ -39,6 +41,8 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(std::sync::Arc::clone(&state.cloud));
 
     let router = Router::new()
+        .nest("/api/health", health::router())
+        .nest("/api/hub", hub::router())
         .nest("/api/libraries", libraries::router())
         .nest("/api/media", media::router())
         .nest("/api/media-lists", media_lists::router())

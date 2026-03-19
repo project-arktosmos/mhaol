@@ -99,6 +99,7 @@ pub struct AppState {
     pub signaling_rooms: Arc<SignalingRoomManager>,
     pub worker_bridge: Arc<WorkerBridge>,
     pub cloud: Arc<CloudManager>,
+    pub hub: Arc<api::hub::HubManager>,
 }
 
 impl AppState {
@@ -164,6 +165,7 @@ impl AppState {
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
             cloud: Arc::new(CloudManager::new(Arc::clone(&db))),
+            hub: Arc::new(api::hub::HubManager::new()),
             data_dir,
             db,
         })

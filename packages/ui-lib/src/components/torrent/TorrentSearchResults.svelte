@@ -5,7 +5,7 @@
 		TorrentSearchResult,
 		TorrentSearchSort,
 		TorrentSearchSortField
-	} from 'torrent-search-thepiratebay/types';
+	} from 'addons/torrent-search-thepiratebay/types';
 	import { sortSearchResults } from 'torrent-search-thepiratebay';
 	import {
 		formatSearchSize,

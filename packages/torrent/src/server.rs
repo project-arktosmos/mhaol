@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use axum::Router;
-use tower_http::cors::CorsLayer;
 use axum::http::{HeaderValue, Method};
+use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
 
 use mhaol_torrent::{TorrentConfig, TorrentManager};
 
@@ -16,6 +17,7 @@ async fn main() {
     });
     let cors_origin = std::env::var("TORRENT_CORS_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:1530".to_string());
+    let static_dir = std::env::var("TORRENT_STATIC_DIR").ok();
 
     let manager = Arc::new(TorrentManager::new());
 
@@ -48,9 +50,20 @@ async fn main() {
         .allow_headers(tower_http::cors::Any);
 
     let app = Router::new()
-        .nest("/api", mhaol_torrent::api::router())
-        .layer(cors)
+        .nest("/api/torrent", mhaol_torrent::api::router())
         .with_state(manager);
+
+    // Serve static frontend files if TORRENT_STATIC_DIR is set
+    let app = if let Some(ref dir) = static_dir {
+        log::info!("Serving static files from {}", dir);
+        let index = std::path::PathBuf::from(dir).join("index.html");
+        let serve = ServeDir::new(dir).not_found_service(ServeFile::new(index));
+        app.fallback_service(serve)
+    } else {
+        app
+    };
+
+    let app = app.layer(cors);
 
     let bind_addr = format!("0.0.0.0:{}", port);
     log::info!("Starting torrent server on {}", bind_addr);

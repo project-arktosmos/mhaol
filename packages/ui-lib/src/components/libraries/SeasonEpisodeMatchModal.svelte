@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { LibraryFile } from 'frontend/types/library.type';
-	import type { TMDBEpisode } from 'tmdb/types';
+	import type { TMDBEpisode } from 'addons/tmdb/types';
 
 	interface EpisodeMatch {
 		file: LibraryFile;

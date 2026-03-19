@@ -40,12 +40,6 @@ import { youtubeService } from 'frontend/services/youtube.service';
 import type { YouTubeContent } from 'frontend/types/youtube.type';
 ```
 
-## Desktop build (Tauri)
-
-This app has `src-tauri/` for Tauri desktop builds. The Rust crate (`mhaol-tube-desktop`) depends on `mhaol-tauri-core` which embeds the backend server. Run with `pnpm tauri:dev:tube` from the repo root.
-
-Shared assets (icons, capabilities, loading screen) are copied from `packages/tauri/assets/` via `sync-assets.sh` and are gitignored in `src-tauri/`.
-
 ## Adding features
 
 To add UI features to this app, add the component to `packages/ui-lib` and the service/type to `packages/frontend`, then import and wire it in this app's route files.

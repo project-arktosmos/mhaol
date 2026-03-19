@@ -25,8 +25,7 @@
 		"html5-qrcode": "^2.3.8",
 		"qrcode": "^1.5.4",
 		"svelte-i18n": "^4.0.1",
-		"tmdb": "workspace:*",
-		"torrent-search-thepiratebay": "workspace:*",
+		"addons": "workspace:*",
 		"viem": "^2.46.3"
 	},
 	"peerDependencies": {

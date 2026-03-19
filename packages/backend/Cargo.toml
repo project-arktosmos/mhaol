@@ -39,6 +39,7 @@ anyhow = "1"
 urlencoding = "2"
 quick-xml = "0.37"
 dirs = "5"
+libc = "0.2"
 mhaol-cloud = { path = "../cloud" }
 rust-embed = { version = "8", optional = true }
 mime_guess = { version = "2", optional = true }

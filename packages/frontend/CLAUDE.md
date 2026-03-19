@@ -48,6 +48,7 @@ Feature services (all in `src/services/`):
 | Service                             | Description                                             |
 | ----------------------------------- | ------------------------------------------------------- |
 | `downloads.service.ts`              | Download queue state                                    |
+| `hub.service.ts`                    | Hub app management (list, health, start/stop)           |
 | `identity.service.ts`               | Wallet/identity                                         |
 | `image-tagger.service.ts`           | Image auto-tagging                                      |
 | `jackett-search.service.ts`         | Jackett torrent search                                  |

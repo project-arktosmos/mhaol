@@ -9,7 +9,7 @@ import { networkInterfaces } from 'node:os';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const envFile = readFileSync(join(__dirname, '..', '.env'), 'utf-8');
 const envPort = envFile.match(/^PORT=(\d+)/m)?.[1];
-const PORT = parseInt(envPort || '1520');
+const PORT = parseInt(envPort || '1420');
 const BACKEND_PORT = PORT + 1; // internal only, not exposed
 const HEALTH_URL = `http://localhost:${BACKEND_PORT}/api/signaling/status`;
 const STATIC_DIR = join(__dirname, '..', 'dist-static');
@@ -28,18 +28,28 @@ const MIME_TYPES = {
 
 await checkPort(PORT);
 
+const skipBuild = process.argv.includes('--skip-build');
+
 // Build frontend
-console.log('Building frontend...');
-execSync('pnpm --filter signaling-app build', { stdio: 'inherit', cwd: '../..' });
+if (skipBuild && existsSync(join(STATIC_DIR, 'index.html'))) {
+	console.log('Frontend already built, skipping.');
+} else {
+	console.log('Building frontend...');
+	execSync('pnpm --filter signaling-app build', { stdio: 'inherit', cwd: '../..' });
+}
 
 // Build + start backend on internal port
-console.log('Building backend...');
-execSync('cargo build --bin mhaol-server', { stdio: 'inherit', cwd: '../..' });
+const serverBin = join(__dirname, '..', '..', '..', 'target', 'debug', 'mhaol-server');
+if (skipBuild && existsSync(serverBin)) {
+	console.log('Backend already built, skipping.');
+} else {
+	console.log('Building backend...');
+	execSync('cargo build --bin mhaol-server', { stdio: 'inherit', cwd: '../..' });
+}
 
 console.log('Starting backend on internal port', BACKEND_PORT);
-const backend = spawn('cargo', ['run', '-p', 'mhaol-backend', '--bin', 'mhaol-server'], {
+const backend = spawn(serverBin, [], {
 	stdio: 'inherit',
-	cwd: '../..',
 	env: { ...process.env, PORT: String(BACKEND_PORT) }
 });
 
@@ -93,7 +103,7 @@ const server = createServer((req, res) => {
 });
 
 // WebSocket upgrade proxy for /party
-server.on('upgrade', (req, socket, head) => {
+server.on('upgrade', (req, socket, _head) => {
 	const url = req.url || '';
 	if (url.startsWith('/party')) {
 		const proxyReq = httpRequest({

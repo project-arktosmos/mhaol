@@ -2,7 +2,7 @@
 	import classNames from 'classnames';
 	import TmdbBrowseCard from './TmdbBrowseCard.svelte';
 	import TmdbPagination from './TmdbPagination.svelte';
-	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'tmdb/types';
+	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 	import type { TmdbGenre } from 'frontend/types/tmdb-browse.type';
 
 	let {

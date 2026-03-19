@@ -17,19 +17,15 @@
 		"test:e2e": "playwright test",
 		"test:e2e:headed": "playwright test --headed",
 		"test:e2e:ui": "playwright test --ui",
-		"clean": "rm -rf dist-static .svelte-kit",
-		"tauri:dev": "tauri dev",
-		"tauri:build": "tauri build"
+		"clean": "rm -rf dist-static .svelte-kit"
 	},
 	"dependencies": {
 		"@sveltejs/adapter-static": "^3.0.10",
-		"@tauri-apps/api": "^2.10.1",
 		"classnames": "^2.5.1",
 		"frontend": "workspace:*",
 		"ui-lib": "workspace:*"
 	},
 	"devDependencies": {
-		"@tauri-apps/cli": "^2.10",
 		"@eslint/compat": "^2.0.2",
 		"@eslint/js": "^9.39.3",
 		"@playwright/test": "^1.58.2",

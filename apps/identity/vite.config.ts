@@ -4,7 +4,7 @@ import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), '');
-	const port = parseInt(env.PORT || '1540');
+	const port = parseInt(env.PORT || '1410');
 
 	return {
 		plugins: [tailwindcss(), sveltekit()],

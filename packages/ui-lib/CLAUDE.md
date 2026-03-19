@@ -14,6 +14,7 @@ src/
 │   ├── addons/               # Addon management
 │   ├── core/                 # Shared reusable (Button, Modal, Navbar, ModalOutlet, ThemeToggle, etc.)
 │   ├── downloads/            # Download management
+│   ├── hub/                  # Hub dashboard (app management)
 │   ├── identity/             # Identity/wallet
 │   ├── images/               # Image tagging
 │   ├── jackett/              # Jackett search
@@ -65,6 +66,7 @@ import { apiUrl } from 'frontend/lib/api-base';
 6. Use callback props for parent communication (e.g. `onClose`, `onSave`)
 7. Keep components small — split when they grow
 8. Use Svelte 5 runes (`$state`, `$derived`, `$effect`, `$props`)
+9. Every new component must have a `.stories.svelte` file in `apps/storybook/src/stories/{category}/`
 
 ## CSS & Styling
 
@@ -80,4 +82,4 @@ import { apiUrl } from 'frontend/lib/api-base';
 - `frontend` (workspace) — services, types, adapters, utils
 - `classnames` — conditional CSS class composition
 - `svelte-i18n` — internationalization in landing components
-- `tmdb`, `torrent-search-thepiratebay` (workspace) — addon type imports
+- `addons` (workspace) — TMDB and torrent search type imports (use `addons/tmdb/...` and `addons/torrent-search-thepiratebay/...` paths)

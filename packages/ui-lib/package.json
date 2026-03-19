@@ -10,8 +10,7 @@
 		"frontend": "workspace:*",
 		"classnames": "^2.5.1",
 		"svelte-i18n": "^4.0.1",
-		"tmdb": "workspace:*",
-		"torrent-search-thepiratebay": "workspace:*"
+		"addons": "workspace:*"
 	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"

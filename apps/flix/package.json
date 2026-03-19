@@ -3,12 +3,12 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev --port 1531 --strictPort",
+		"dev": "vite dev --port 1530 --strictPort",
 		"dev:full": "node scripts/dev.js",
 		"start": "node scripts/start.js",
 		"build": "vite build",
 		"build:full": "cargo build --release --bin mhaol-server && vite build",
-		"preview": "vite preview --port 1531 --strictPort",
+		"preview": "vite preview --port 1530 --strictPort",
 		"dev:backend": "PORT=1530 cargo run -p mhaol-backend --bin mhaol-server",
 		"build:backend": "cargo build --release --bin mhaol-server",
 		"prepare": "svelte-kit sync || echo ''",
@@ -22,6 +22,7 @@
 		"test:e2e": "playwright test",
 		"test:e2e:headed": "playwright test --headed",
 		"test:e2e:ui": "playwright test --ui",
+		"headless": "node scripts/headless.js",
 		"clean": "rm -rf dist-static .svelte-kit"
 	},
 	"dependencies": {
@@ -33,7 +34,6 @@
 		"addons": "workspace:*",
 		"frontend": "workspace:*",
 		"ui-lib": "workspace:*",
-		"tmdb": "workspace:*",
 		"viem": "^2.46.3"
 	},
 	"devDependencies": {

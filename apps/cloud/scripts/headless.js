@@ -1,6 +1,6 @@
 import { spawn, execSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,21 +8,27 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const envFile = readFileSync(join(__dirname, '..', '.env'), 'utf-8');
 const envPort = envFile.match(/^PORT=(\d+)/m)?.[1];
 const PORT = parseInt(envPort || '1510');
-const BACKEND_PORT = 1530;
+const BACKEND_PORT = PORT + 1; // internal only, not exposed
 const HEALTH_URL = `http://localhost:${BACKEND_PORT}/api/cloud/libraries`;
 
 // Check that port 1510 is available before doing anything
 await checkPort(PORT);
 
+const skipBuild = process.argv.includes('--skip-build');
+
 // Build the backend first
-console.log('Building backend...');
-execSync('cargo build --bin mhaol-server', { stdio: 'inherit', cwd: '../..' });
+const serverBin = join(__dirname, '..', '..', '..', 'target', 'debug', 'mhaol-server');
+if (skipBuild && existsSync(serverBin)) {
+	console.log('Backend already built, skipping.');
+} else {
+	console.log('Building backend...');
+	execSync('cargo build --bin mhaol-server', { stdio: 'inherit', cwd: '../..' });
+}
 
 // Start the backend on its internal port
 console.log('Starting backend on port', BACKEND_PORT);
-const backend = spawn('cargo', ['run', '-p', 'mhaol-backend', '--bin', 'mhaol-server'], {
+const backend = spawn(serverBin, [], {
 	stdio: 'inherit',
-	cwd: '../..',
 	env: { ...process.env, PORT: String(BACKEND_PORT) }
 });
 

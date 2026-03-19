@@ -1,7 +1,7 @@
 <script lang="ts">
 	import TmdbBrowseCard from './TmdbBrowseCard.svelte';
 	import TmdbPagination from './TmdbPagination.svelte';
-	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'tmdb/types';
+	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 
 	interface LinkedItem {
 		tmdbId: number;

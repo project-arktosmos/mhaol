@@ -6,8 +6,6 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `packages/ui-lib/CLAUDE.md` — UI components, CSS/themes
 - `packages/frontend/CLAUDE.md` — Services, adapters, types, utils
 - `packages/backend/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
-- `packages/database/CLAUDE.md` — SQLite schema, repository pattern
-
 ---
 
 ## Monorepo Overview
@@ -16,26 +14,25 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 mhaol.git/
 ├── apps/                             # Thin SvelteKit wrappers (routes + assembly only)
 │   ├── mhaol-video/                  # Main media app (Vite, port 1531)
-│   ├── tube/                         # YouTube-focused app (has src-tauri/ for desktop build)
-│   ├── cloud/                        # Cloud library management (has src-tauri/ for desktop build)
+│   ├── tube/                         # YouTube-focused app (port 1531)
+│   ├── cloud/                        # Cloud library management (headless, port 1510)
 │   ├── video/                        # Full-featured video app
-│   ├── signaling/                    # Signaling server management dashboard (has src-tauri/ for desktop build, port 1520)
+│   ├── hub/                          # App dashboard & launcher (Tauri desktop, port 1400)
+│   ├── identity/                     # Identity management (headless, port 1410)
+│   ├── signaling/                    # Signaling server management dashboard (headless, port 1420)
+│   ├── storybook/                    # Storybook component gallery (headless, port 1405)
 │   ├── website/                      # Marketing landing page (base: /mhaoltube)
 │   └── server/                       # Server orchestrator (starts frontend + backend)
 ├── packages/
 │   ├── ui-lib/                       # UI components + CSS/themes (Svelte, Tailwind, DaisyUI)
 │   ├── frontend/                     # Shared frontend logic (services, adapters, types, utils)
 │   ├── backend/                      # Rust Axum server (port 1530)
-│   ├── database/                     # SQLite schema & repositories (better-sqlite3)
+│   ├── addons/                       # Addon modules (TMDB metadata, torrent search, shared utils)
+│   ├── cloud/                        # Rust cloud library management (Axum + rusqlite)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── signaling/                    # PartyKit signaling service
-│   ├── tauri/                        # Shared Tauri library + assets (mhaol-tauri-core)
 │   ├── p2p-stream/                   # Rust P2P streaming library
 │   └── torrent/                      # Rust torrent implementation
-├── addons/
-│   ├── common/                       # Shared addon config
-│   ├── tmdb/                         # TMDB movie/TV metadata (SQLite cache)
-│   └── torrent-search-thepiratebay/  # Torrent search via PirateBay API
 ├── pnpm-workspace.yaml
 └── package.json                      # Root workspace scripts
 ```
@@ -55,17 +52,13 @@ Apps under `apps/` are **thin wrappers** that import UI from `packages/ui-lib` a
 
 Apps **never** implement their own components, services, adapters, types, or utils. Components live in `packages/ui-lib`, everything else in `packages/frontend`.
 
-### Tauri Desktop Builds
+### Tauri Desktop Build (Hub Only)
 
-Apps that support desktop builds have a `src-tauri/` directory containing:
-- `Cargo.toml` — Depends on `mhaol-tauri-core` (shared library in `packages/tauri/src-tauri/`)
-- `tauri.conf.json` — App-specific product name, identifier, frontend build commands
-- `src/lib.rs` + `src/main.rs` — Thin wrappers that call `mhaol_tauri_core::setup_backend()`
-- `build.rs` — Standard `tauri_build::build()`
+Only the **hub** app has a Tauri desktop build. Its `src-tauri/` directory contains the embedded backend server directly (no shared library). All other apps run in **headless mode** (browser + backend, no native window).
 
-Shared assets (icons, capabilities, loading screen) live in `packages/tauri/assets/` and are copied into each app's `src-tauri/` via `bash packages/tauri/scripts/sync-assets.sh apps/{app}`. These copied assets are gitignored.
-
-Currently enabled for: **tube**, **cloud**. To add Tauri support to another app, create `apps/{app}/src-tauri/` following the same pattern.
+- `apps/hub/src-tauri/Cargo.toml` — Depends on `mhaol-backend` and `axum` directly
+- `apps/hub/src-tauri/src/lib.rs` — Embeds the backend server on port 1500 (fallback 1501)
+- Assets (icons, capabilities, loading screen) live directly in `apps/hub/src-tauri/`
 
 ### How apps wire up
 
@@ -146,13 +139,17 @@ pnpm check            # svelte-check + cargo check
 pnpm test             # vitest + cargo test
 pnpm format           # Prettier write
 
-# Desktop (Tauri) — per-app builds
-pnpm tauri:dev            # Default Tauri dev (tube)
-pnpm tauri:dev:tube       # Tube desktop dev
-pnpm tauri:dev:cloud      # Cloud desktop dev
-pnpm tauri:build          # Default Tauri build (tube)
-pnpm tauri:build:tube     # Tube desktop build
-pnpm tauri:build:cloud    # Cloud desktop build
+# Desktop (Tauri) — hub only
+pnpm app:hub              # Hub Tauri desktop dev (port 1400)
+pnpm app:hub:headless     # Hub headless mode (port 1400)
+
+# Headless apps (browser + backend, no native window)
+pnpm app:storybook        # Storybook headless (port 1405)
+pnpm app:identity         # Identity headless (port 1410)
+pnpm app:signaling        # Signaling headless (port 1420)
+pnpm app:cloud            # Cloud headless (port 1510)
+pnpm app:torrent          # Torrent headless (port 1520)
+pnpm app:flix             # Flix headless (port 1530)
 
 # Signaling
 pnpm signaling:dev    # PartyKit local dev
@@ -191,11 +188,6 @@ git commit -m "add thumbnail fallback to MediaCard"
 
 When adding a new feature that spans the full stack:
 
-**Database (`packages/database`)**
-- [ ] Add/update table in `src/schema.ts`
-- [ ] Create repository in `src/repositories/`
-- [ ] Export from `src/repositories/index.ts`
-
 **Backend (`packages/backend`)**
 - [ ] Create API module in `src/api/{feature}.rs`
 - [ ] Add `pub mod {feature};` to `src/api/mod.rs`
@@ -215,6 +207,7 @@ When adding a new feature that spans the full stack:
 - [ ] No `<style>` tags or inline styles
 - [ ] Components use callback props, contain no business logic
 - [ ] Use `ui-lib/...` for cross-component imports, `frontend/...` for services/types
+- [ ] Add a `.stories.svelte` file in `apps/storybook/src/stories/{feature}/` for each new component
 
 **Apps (if the feature needs UI wiring)**
 - [ ] Import the new component(s) from `ui-lib/components/...`
@@ -238,4 +231,3 @@ When making significant structural changes (new packages, new component director
 - **packages/frontend/CLAUDE.md** — Services list, adapters list, types, utils
 - **App CLAUDE.md files** — Which features the app uses, how it assembles them
 - **packages/backend/CLAUDE.md** — API modules, routes
-- **packages/database/CLAUDE.md** — Schema, repositories

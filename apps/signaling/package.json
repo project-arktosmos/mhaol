@@ -12,8 +12,6 @@
 		"lint": "prettier --check . && eslint .",
 		"test": "vitest run",
 		"clean": "rm -rf dist-static .svelte-kit",
-		"tauri:dev": "pnpm exec tauri dev",
-		"tauri:build": "pnpm exec tauri build",
 		"headless": "node scripts/headless.js"
 	},
 	"dependencies": {
@@ -23,7 +21,6 @@
 		"ui-lib": "workspace:*"
 	},
 	"devDependencies": {
-		"@tauri-apps/cli": "^2.10",
 		"@eslint/compat": "^2.0.2",
 		"@eslint/js": "^9.39.3",
 		"@sveltejs/kit": "^2.22.0",

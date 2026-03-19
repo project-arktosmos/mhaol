@@ -4,28 +4,22 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { themeService } from 'frontend/services/theme.service';
 	import { torrentService } from 'frontend/services/torrent.service';
-	import { libraryService } from 'frontend/services/library.service';
 	import Navbar from 'ui-lib/components/core/Navbar.svelte';
 	import ModalOutlet from 'ui-lib/components/core/ModalOutlet.svelte';
-	import TorrentModalContent from 'ui-lib/components/torrent/TorrentModalContent.svelte';
-	import SettingsModalContent from 'ui-lib/components/settings/SettingsModalContent.svelte';
+	import TorrentDownloadSettings from 'ui-lib/components/torrent/TorrentDownloadSettings.svelte';
 
 	let { children } = $props();
 
 	const themeStore = themeService.store;
 
-	const navItems = [
-		{ id: 'torrent', label: 'Torrent' },
-		{ id: 'settings', label: 'Settings' }
-	];
+	const navItems = [{ id: 'downloads', label: 'Downloads' }];
 
 	const modals = {
-		torrent: { component: TorrentModalContent, maxWidth: 'max-w-5xl' },
-		settings: { component: SettingsModalContent, maxWidth: 'max-w-2xl' }
+		downloads: { component: TorrentDownloadSettings, maxWidth: 'max-w-lg' }
 	};
 
 	onMount(async () => {
-		await Promise.all([torrentService.initialize(), libraryService.initialize()]);
+		await torrentService.initialize();
 	});
 
 	onDestroy(() => {

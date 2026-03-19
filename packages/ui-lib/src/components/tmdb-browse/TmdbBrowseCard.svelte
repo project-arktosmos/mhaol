@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'tmdb/types';
+	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 
 	let {
 		movie = null,

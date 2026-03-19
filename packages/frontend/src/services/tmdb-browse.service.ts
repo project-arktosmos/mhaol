@@ -1,9 +1,9 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { apiUrl } from 'frontend/lib/api-base';
-import { moviesToDisplay, tvShowsToDisplay } from 'tmdb/transform';
+import { moviesToDisplay, tvShowsToDisplay } from 'addons/tmdb/transform';
 import type { TmdbBrowseState, TmdbGenre } from 'frontend/types/tmdb-browse.type';
-import type { DisplayTMDBMovie, DisplayTMDBTvShow, TMDBMovie, TMDBTvShow } from 'tmdb/types';
+import type { DisplayTMDBMovie, DisplayTMDBTvShow, TMDBMovie, TMDBTvShow } from 'addons/tmdb/types';
 
 interface TmdbPagedResponse<T> {
 	results: T[];

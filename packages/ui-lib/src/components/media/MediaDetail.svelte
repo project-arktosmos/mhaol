@@ -9,8 +9,8 @@
 	import { playerService } from 'frontend/services/player.service';
 	import type { MediaDetailSelection } from 'frontend/types/media-detail.type';
 	import type { MediaType } from 'frontend/types/library.type';
-	import type { DisplayTMDBMovieDetails } from 'tmdb/types';
-	import type { DisplayTMDBTvShowDetails } from 'tmdb/types';
+	import type { DisplayTMDBMovieDetails } from 'addons/tmdb/types';
+	import type { DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
 
 	interface Props {
 		selection: MediaDetailSelection;

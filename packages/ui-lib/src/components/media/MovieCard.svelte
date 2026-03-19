@@ -1,7 +1,7 @@
 <script lang="ts">
 	import MediaCardBase from './MediaCardBase.svelte';
 	import type { MediaItem } from 'frontend/types/media-card.type';
-	import type { DisplayTMDBMovieDetails } from 'tmdb/types';
+	import type { DisplayTMDBMovieDetails } from 'addons/tmdb/types';
 
 	interface Props {
 		item: MediaItem;

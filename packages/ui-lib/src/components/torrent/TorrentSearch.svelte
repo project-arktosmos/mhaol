@@ -3,10 +3,12 @@
 	import { torrentService } from 'frontend/services/torrent.service';
 	import TorrentSearchInput from './TorrentSearchInput.svelte';
 	import TorrentSearchResults from './TorrentSearchResults.svelte';
-	import type { TorrentCategory, TorrentSearchSortField } from 'torrent-search-thepiratebay/types';
+	import type { TorrentCategory, TorrentSearchSortField } from 'addons/torrent-search-thepiratebay/types';
 
 	const searchState = torrentSearchService.state;
 	const torrentState = torrentService.state;
+
+	export let onadded: (() => void) | undefined = undefined;
 
 	$: canAddTorrents = $torrentState.initialized;
 
@@ -26,8 +28,9 @@
 	) {
 		const { magnetLink, infoHash } = event.detail;
 		torrentSearchService.markAdding(infoHash);
-		await torrentService.addTorrent(magnetLink);
+		const result = await torrentService.addTorrent(magnetLink);
 		torrentSearchService.unmarkAdding(infoHash);
+		if (result) onadded?.();
 	}
 </script>
 

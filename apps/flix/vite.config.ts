@@ -6,7 +6,7 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	server: {
 		host: true,
-		port: 1531,
+		port: 1530,
 		fs: {
 			allow: ['../..']
 		},
@@ -16,7 +16,7 @@ export default defineConfig({
 	},
 	preview: {
 		host: true,
-		port: 1531,
+		port: 1530,
 		proxy: {
 			'/api': 'http://localhost:1530'
 		}

@@ -1,4 +1,4 @@
-import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'tmdb/types';
+import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 
 export interface TmdbGenre {
 	id: number;

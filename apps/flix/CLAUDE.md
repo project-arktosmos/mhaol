@@ -34,8 +34,7 @@ src/
 ## Dependencies
 
 - `frontend` (workspace) — all shared UI code
-- `addons` (workspace) — TMDB metadata transforms
-- `tmdb` (workspace) — TMDB types
+- `addons` (workspace) — TMDB metadata types and transforms (use `addons/tmdb/...` paths)
 - `fflate`, `html5-qrcode`, `qrcode`, `viem` — compression, QR codes, blockchain
 
 ## Import pattern

@@ -15,6 +15,8 @@ src/
 │   ├── addons.rs
 │   ├── database.rs
 │   ├── downloads.rs
+│   ├── health.rs           # GET /api/health — simple status check
+│   ├── hub.rs              # App management (list, health check, start/stop headless)
 │   ├── identities.rs
 │   ├── images.rs
 │   ├── libraries.rs
@@ -44,6 +46,7 @@ All API handlers receive `AppState` which contains:
 - `DownloadManager` (yt-dlp, desktop only)
 - `TorrentManager` (desktop only)
 - `ImageTaggerManager` (ONNX/ML, desktop only)
+- `HubManager` for app process management (start/stop headless apps)
 - `SignalingDevServer` and `WorkerBridge` (auto-started on server boot)
 
 ## Adding a New API Module

@@ -13,7 +13,7 @@ import type {
 	DisplayTMDBTvShowDetails,
 	DisplayTMDBSeason,
 	DisplayTMDBEpisode
-} from 'tmdb/types';
+} from 'addons/tmdb/types';
 
 function extractYear(dateString: string | undefined): string {
 	if (!dateString) return 'Unknown';

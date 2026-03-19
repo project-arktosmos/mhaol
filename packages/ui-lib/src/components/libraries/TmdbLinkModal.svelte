@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { LibraryFile } from 'frontend/types/library.type';
-	import type { TMDBMovie, TMDBTvShow, TMDBTvShowDetails, TMDBEpisode } from 'tmdb/types';
-	import { getPosterUrl, extractYear } from 'tmdb/transform';
+	import type { TMDBMovie, TMDBTvShow, TMDBTvShowDetails, TMDBEpisode } from 'addons/tmdb/types';
+	import { getPosterUrl, extractYear } from 'addons/tmdb/transform';
 
 	type TmdbType = 'movie' | 'tv';
 

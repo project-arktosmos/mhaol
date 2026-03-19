@@ -3,7 +3,7 @@
 	import type { MediaList } from 'frontend/types/media-list.type';
 	import { libraryFileAdapter } from 'frontend/adapters/classes/library-file.adapter';
 	import type { MediaType } from 'frontend/types/library.type';
-	import type { DisplayTMDBTvShowDetails } from 'tmdb/types';
+	import type { DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
 	import type { DisplayMusicBrainzReleaseGroup } from '$types/musicbrainz.type';
 
 	interface Props {
