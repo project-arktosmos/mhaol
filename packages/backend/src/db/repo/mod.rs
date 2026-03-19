@@ -11,6 +11,7 @@ pub mod media_list;
 pub mod media_list_item;
 pub mod media_list_link;
 pub mod signaling_server;
+pub mod llm_conversation;
 
 pub use settings::SettingsRepo;
 pub use metadata::MetadataRepo;
@@ -25,3 +26,4 @@ pub use media_list::MediaListRepo;
 pub use media_list_item::MediaListItemRepo;
 pub use media_list_link::MediaListLinkRepo;
 pub use signaling_server::SignalingServerRepo;
+pub use llm_conversation::LlmConversationRepo;

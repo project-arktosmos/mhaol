@@ -205,10 +205,26 @@ CREATE TRIGGER IF NOT EXISTS signaling_servers_updated_at
 BEGIN
     UPDATE signaling_servers SET updated_at = datetime('now') WHERE id = OLD.id;
 END;
+
+CREATE TABLE IF NOT EXISTS llm_conversations (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    system_prompt TEXT,
+    messages TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS llm_conversations_updated_at
+    AFTER UPDATE ON llm_conversations
+    FOR EACH ROW
+BEGIN
+    UPDATE llm_conversations SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '20', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '21', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -446,6 +462,23 @@ fn run_migrations(conn: &Connection) {
         }
     }
 
+    // Migration: add llm_conversations table (db_version 21)
+    if !has_table(conn, "llm_conversations") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE llm_conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                system_prompt TEXT,
+                messages TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TRIGGER IF NOT EXISTS llm_conversations_updated_at
+                AFTER UPDATE ON llm_conversations FOR EACH ROW
+            BEGIN UPDATE llm_conversations SET updated_at = datetime('now') WHERE id = OLD.id; END;",
+        );
+    }
+
     // Migration: migrate legacy columns to library_item_links (db_version 14 data)
     if has_table(conn, "library_items") && has_column(conn, "library_items", "tmdb_id") {
         let _ = conn.execute_batch(
@@ -528,6 +561,7 @@ mod tests {
         assert!(has_table(&conn, "media_list_items"));
         assert!(has_table(&conn, "media_list_links"));
         assert!(has_table(&conn, "signaling_servers"));
+        assert!(has_table(&conn, "llm_conversations"));
 
         // Verify seed data
         let count: i64 = conn

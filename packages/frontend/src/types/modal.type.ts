@@ -1,12 +1,15 @@
 export type NavbarModalId =
 	| 'torrent'
 	| 'downloads'
+	| 'jackett'
 	| 'signaling'
+	| 'peer-libraries'
 	| 'identity'
 	| 'plugins'
 	| 'addons'
 	| 'settings'
-	| 'libraries';
+	| 'libraries'
+	| 'llm';
 
 export interface ModalRouterState {
 	navbarModal: NavbarModalId | null;

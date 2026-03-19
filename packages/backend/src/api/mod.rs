@@ -1,6 +1,7 @@
 #[cfg(feature = "embed-frontend")]
 pub mod frontend;
 pub mod addons;
+pub mod jackett;
 pub mod database;
 pub mod downloads;
 pub mod identities;
@@ -13,6 +14,8 @@ pub mod plugins;
 pub mod signaling;
 pub mod signaling_ws;
 pub mod tmdb;
+#[cfg(not(target_os = "android"))]
+pub mod llm;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
 
@@ -39,11 +42,15 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/player", player::router())
         .nest("/api/tmdb", tmdb::router())
         .nest("/api/addons", addons::router())
+        .nest("/api/jackett", jackett::router())
         .nest("/api/signaling", signaling::router())
         .merge(signaling_ws::signaling_routes());
 
     #[cfg(not(target_os = "android"))]
     let router = router.nest("/api/torrent", torrent::router());
+
+    #[cfg(not(target_os = "android"))]
+    let router = router.nest("/api/llm", llm::router());
 
     #[cfg(feature = "embed-frontend")]
     let router = router.fallback(frontend::serve_frontend);

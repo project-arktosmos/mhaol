@@ -8,19 +8,25 @@
 	import SettingsModalContent from '$components/settings/SettingsModalContent.svelte';
 	import AddonsModalContent from '$components/addons/AddonsModalContent.svelte';
 	import PluginsModalContent from '$components/plugins/PluginsModalContent.svelte';
+	import JackettModalContent from '$components/jackett/JackettModalContent.svelte';
 	import LibraryModalContent from '$components/libraries/LibraryModalContent.svelte';
+	import PeerLibrariesModalContent from '$components/peer-libraries/PeerLibrariesModalContent.svelte';
+	import LlmModalContent from '$components/llm/LlmModalContent.svelte';
 
 	const routerStore = modalRouterService.store;
 
 	const MAX_WIDTHS: Record<string, string> = {
 		torrent: 'max-w-5xl',
 		downloads: 'max-w-5xl',
+		jackett: 'max-w-5xl',
 		signaling: 'max-w-5xl',
+		'peer-libraries': 'max-w-5xl',
 		identity: 'max-w-3xl',
 		plugins: 'max-w-4xl',
 		addons: 'max-w-4xl',
 		settings: 'max-w-2xl',
-		libraries: 'max-w-5xl'
+		libraries: 'max-w-5xl',
+		llm: 'max-w-6xl'
 	};
 
 	let activeId = $derived($routerStore.navbarModal);
@@ -34,10 +40,14 @@
 <Modal open={!!activeId} {maxWidth} onclose={handleClose}>
 	{#if activeId === 'torrent'}
 		<TorrentModalContent />
+	{:else if activeId === 'jackett'}
+		<JackettModalContent />
 	{:else if activeId === 'downloads'}
 		<DownloadsModalContent />
 	{:else if activeId === 'signaling'}
 		<SignalingModalContent />
+	{:else if activeId === 'peer-libraries'}
+		<PeerLibrariesModalContent />
 	{:else if activeId === 'identity'}
 		<IdentityModalContent />
 	{:else if activeId === 'settings'}
@@ -48,5 +58,7 @@
 		<PluginsModalContent />
 	{:else if activeId === 'libraries'}
 		<LibraryModalContent />
+	{:else if activeId === 'llm'}
+		<LlmModalContent />
 	{/if}
 </Modal>

@@ -5,6 +5,7 @@ pub mod signaling_deploy;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
+pub mod jackett;
 pub mod torrent_search;
 
 use crate::AppState;
