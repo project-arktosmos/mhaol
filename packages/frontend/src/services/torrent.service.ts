@@ -1,5 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { apiUrl } from 'frontend/lib/api-base';
 import { ObjectServiceClass } from 'frontend/services/classes/object-service.class';
 import type {
 	TorrentSettings,
@@ -23,18 +24,11 @@ const initialState: TorrentServiceState = {
 	libraryId: ''
 };
 
-type PendingRequest = {
-	resolve: (value: unknown) => void;
-	reject: (error: Error) => void;
-	type: string;
-};
-
 class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	public state: Writable<TorrentServiceState> = writable(initialState);
 
-	private ws: WebSocket | null = null;
 	private _initialized = false;
-	private pendingRequests: PendingRequest[] = [];
+	private eventSource: EventSource | null = null;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private reconnectDelay = 1000;
 
@@ -42,7 +36,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 		super('torrent-settings', initialSettings);
 	}
 
-	// ===== WebSocket Connection =====
+	// ===== Initialization =====
 
 	async initialize(): Promise<void> {
 		if (!browser || this._initialized) return;
@@ -50,27 +44,29 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 		this.state.update((s) => ({ ...s, loading: true }));
 
 		try {
-			await this.connect();
-
-			const [status, config] = await Promise.all([
-				this.send<{ initialized: boolean; downloadPath: string; stats: TorrentStats | null }>(
-					{ type: 'getStatus' },
-					'status'
-				),
-				this.send<{ downloadPath: string }>({ type: 'getConfig' }, 'config')
+			const [statusRes, configRes] = await Promise.all([
+				fetch(apiUrl('/api/torrent/status')),
+				fetch(apiUrl('/api/torrent/config'))
 			]);
+
+			if (!statusRes.ok || !configRes.ok) {
+				throw new Error('Failed to fetch torrent status');
+			}
+
+			const status = await statusRes.json();
+			const config = await configRes.json();
 
 			this.state.update((s) => ({
 				...s,
 				initialized: status.initialized,
 				loading: false,
-				downloadPath: status.downloadPath,
-				stats: status.stats,
+				downloadPath: config.downloadPath ?? status.downloadPath ?? '',
+				stats: status.stats ?? null,
 				error: null
 			}));
 
 			this._initialized = true;
-			this.reconnectDelay = 1000;
+			this.connectEvents();
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
@@ -81,119 +77,41 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 		}
 	}
 
-	private connect(): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-			const url = `${protocol}//${window.location.host}/api/torrent/ws`;
+	// ===== SSE Events =====
 
-			this.ws = new WebSocket(url);
-
-			this.ws.onopen = () => resolve();
-
-			this.ws.onerror = () => {
-				if (!this._initialized) {
-					reject(new Error('WebSocket connection failed'));
-				}
-			};
-
-			this.ws.onmessage = (event) => {
-				try {
-					const msg = JSON.parse(event.data);
-					this.handleMessage(msg);
-				} catch {
-					// ignore parse errors
-				}
-			};
-
-			this.ws.onclose = () => {
-				if (this._initialized) {
-					this.scheduleReconnect();
-				}
-			};
-		});
-	}
-
-	private handleMessage(msg: Record<string, unknown>): void {
-		const type = msg.type as string;
-
-		// Check if this resolves a pending request
-		const pendingIdx = this.pendingRequests.findIndex((p) => p.type === type);
-		if (pendingIdx !== -1) {
-			const pending = this.pendingRequests[pendingIdx];
-			this.pendingRequests.splice(pendingIdx, 1);
-			pending.resolve(msg);
-			return;
+	private connectEvents(): void {
+		if (this.eventSource) {
+			this.eventSource.close();
 		}
 
-		// Check for error responses
-		if (type === 'error') {
-			const errPending = this.pendingRequests.shift();
-			if (errPending) {
-				errPending.reject(new Error(msg.error as string));
-				return;
+		const url = apiUrl('/api/torrent/torrents/events');
+		this.eventSource = new EventSource(url);
+
+		this.eventSource.addEventListener('torrents', (event) => {
+			try {
+				const torrents: TorrentInfo[] = JSON.parse(event.data);
+				this.state.update((s) => ({ ...s, torrents }));
+			} catch {
+				// ignore parse errors
 			}
-		}
+		});
 
-		// Handle pushed updates
-		switch (type) {
-			case 'torrents':
-				this.state.update((s) => ({
-					...s,
-					torrents: msg.torrents as TorrentInfo[]
-				}));
-				break;
-			case 'stats':
-				this.state.update((s) => ({
-					...s,
-					stats: msg.stats as TorrentStats
-				}));
-				break;
-		}
+		this.eventSource.onerror = () => {
+			this.eventSource?.close();
+			this.eventSource = null;
+			this.scheduleReconnect();
+		};
+
+		this.reconnectDelay = 1000;
 	}
 
 	private scheduleReconnect(): void {
 		if (this.reconnectTimer) return;
-		console.warn(`[Torrent] WS disconnected, reconnecting in ${this.reconnectDelay}ms...`);
-		this.reconnectTimer = setTimeout(async () => {
+		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null;
-			try {
-				await this.connect();
-				this.reconnectDelay = 1000;
-				console.info('[Torrent] WS reconnected');
-			} catch {
-				this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000);
-				this.scheduleReconnect();
-			}
+			this.connectEvents();
+			this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000);
 		}, this.reconnectDelay);
-	}
-
-	/** Send a message and await a specific response type */
-	send<T>(msg: Record<string, unknown>, expectType: string): Promise<T> {
-		return new Promise((resolve, reject) => {
-			if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-				reject(new Error('WebSocket not connected'));
-				return;
-			}
-
-			this.pendingRequests.push({
-				resolve: resolve as (v: unknown) => void,
-				reject,
-				type: expectType
-			});
-
-			this.ws.send(JSON.stringify(msg));
-
-			// Timeout after 30s
-			setTimeout(() => {
-				const idx = this.pendingRequests.findIndex(
-					(p) => p.resolve === (resolve as (v: unknown) => void)
-				);
-				if (idx !== -1) {
-					this.pendingRequests.splice(idx, 1);
-					reject(new Error('Request timed out'));
-				}
-			}, 30000);
-		});
 	}
 
 	// ===== Torrent Operations =====
@@ -201,7 +119,6 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async addTorrent(source: string, downloadPath?: string): Promise<TorrentInfo | null> {
 		if (!browser) return null;
 
-		// Optimistic placeholder
 		const placeholderId = `pending-${Date.now()}`;
 		const placeholder: TorrentInfo = {
 			infoHash: placeholderId,
@@ -224,17 +141,27 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 		}));
 
 		try {
-			const result = await this.send<{ torrent: TorrentInfo }>(
-				{ type: 'addTorrent', source, downloadPath },
-				'torrentAdded'
-			);
+			const body: Record<string, unknown> = { source };
+			if (downloadPath) body.downloadPath = downloadPath;
+
+			const res = await fetch(apiUrl('/api/torrent/torrents'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+
+			if (!res.ok) {
+				throw new Error(`HTTP ${res.status}`);
+			}
+
+			const torrent: TorrentInfo = await res.json();
 
 			this.state.update((s) => ({
 				...s,
-				torrents: s.torrents.map((t) => (t.infoHash === placeholderId ? result.torrent : t))
+				torrents: s.torrents.map((t) => (t.infoHash === placeholderId ? torrent : t))
 			}));
 
-			return result.torrent;
+			return torrent;
 		} catch (error) {
 			this.state.update((s) => ({
 				...s,
@@ -248,7 +175,10 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async pauseTorrent(infoHash: string): Promise<void> {
 		if (!browser) return;
 		try {
-			await this.send({ type: 'pauseTorrent', id: this.findTorrentId(infoHash) }, 'ok');
+			const res = await fetch(apiUrl(`/api/torrent/torrents/${infoHash}/pause`), {
+				method: 'POST'
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		} catch (error) {
 			this.state.update((s) => ({
 				...s,
@@ -260,7 +190,10 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async resumeTorrent(infoHash: string): Promise<void> {
 		if (!browser) return;
 		try {
-			await this.send({ type: 'resumeTorrent', id: this.findTorrentId(infoHash) }, 'ok');
+			const res = await fetch(apiUrl(`/api/torrent/torrents/${infoHash}/resume`), {
+				method: 'POST'
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		} catch (error) {
 			this.state.update((s) => ({
 				...s,
@@ -272,7 +205,10 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async removeTorrent(infoHash: string): Promise<void> {
 		if (!browser) return;
 		try {
-			await this.send({ type: 'removeTorrent', id: this.findTorrentId(infoHash) }, 'ok');
+			const res = await fetch(apiUrl(`/api/torrent/torrents/${infoHash}`), {
+				method: 'DELETE'
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		} catch (error) {
 			this.state.update((s) => ({
 				...s,
@@ -284,7 +220,10 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async removeAll(): Promise<void> {
 		if (!browser) return;
 		try {
-			await this.send({ type: 'removeAll' }, 'removed');
+			const res = await fetch(apiUrl('/api/torrent/torrents/remove-all'), {
+				method: 'POST'
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		} catch (error) {
 			this.state.update((s) => ({
 				...s,
@@ -295,14 +234,19 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 
 	// ===== Config =====
 
-	async setLibrary(libraryId: string): Promise<void> {
-		// No-op in standalone torrent app (no library API)
+	async setLibrary(_libraryId: string): Promise<void> {
+		// No-op in standalone torrent app
 	}
 
 	async setDownloadPath(downloadPath: string): Promise<void> {
 		if (!browser) return;
 		try {
-			await this.send({ type: 'setConfig', downloadPath }, 'config');
+			const res = await fetch(apiUrl('/api/torrent/config'), {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ downloadPath })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			this.state.update((s) => ({ ...s, downloadPath }));
 		} catch (error) {
 			this.state.update((s) => ({
@@ -312,13 +256,18 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 		}
 	}
 
-	// ===== Search (via WebSocket) =====
+	// ===== Search =====
 
 	async search(
 		query: string,
 		category?: string
 	): Promise<{ results: Array<Record<string, unknown>> }> {
-		return this.send({ type: 'search', query, category }, 'searchResults');
+		const params = new URLSearchParams({ q: query });
+		if (category) params.set('cat', category);
+		const res = await fetch(apiUrl(`/api/torrent/search?${params}`));
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const results = await res.json();
+		return { results };
 	}
 
 	// ===== Debug & Storage =====
@@ -326,10 +275,11 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async getDebugInfo(): Promise<string[]> {
 		if (!browser) return [];
 		try {
-			const result = await this.send<{ logs: string[] }>({ type: 'getDebug' }, 'debug');
-			return result.logs;
-		} catch (error) {
-			console.error('[Torrent] Failed to get debug info:', error);
+			const res = await fetch(apiUrl('/api/torrent/debug'));
+			if (!res.ok) return [];
+			const data = await res.json();
+			return data.debug ?? [];
+		} catch {
 			return [];
 		}
 	}
@@ -337,7 +287,10 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async clearStorage(): Promise<void> {
 		if (!browser) return;
 		try {
-			await this.send({ type: 'clearStorage' }, 'ok');
+			const res = await fetch(apiUrl('/api/torrent/storage/clear'), {
+				method: 'POST'
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		} catch (error) {
 			this.state.update((s) => ({
 				...s,
@@ -353,17 +306,6 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 		this.set({ ...current, ...updates });
 	}
 
-	// ===== Helpers =====
-
-	private findTorrentId(infoHash: string): number {
-		let id = -1;
-		this.state.subscribe((s) => {
-			const t = s.torrents.find((t) => t.infoHash === infoHash);
-			if (t) id = (t as TorrentInfo & { id?: number }).id ?? -1;
-		})();
-		return id;
-	}
-
 	// ===== Lifecycle =====
 
 	destroy(): void {
@@ -371,12 +313,11 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 			clearTimeout(this.reconnectTimer);
 			this.reconnectTimer = null;
 		}
-		if (this.ws) {
-			this.ws.close();
-			this.ws = null;
+		if (this.eventSource) {
+			this.eventSource.close();
+			this.eventSource = null;
 		}
 		this._initialized = false;
-		this.pendingRequests = [];
 	}
 }
 

@@ -19,8 +19,15 @@ const initialState: SmartSearchState = {
 
 class SmartSearchService {
 	public store = writable(initialState);
+	private abortController: AbortController | null = null;
 
 	select(selection: SmartSearchSelection) {
+		// Cancel any in-flight searches/analysis
+		if (this.abortController) {
+			this.abortController.abort();
+		}
+		this.abortController = new AbortController();
+
 		this.store.update((s) => ({
 			...s,
 			selection,
@@ -30,10 +37,14 @@ class SmartSearchService {
 			searchResults: [],
 			searchError: null
 		}));
-		this.runSearches(selection);
+		this.runSearches(selection, this.abortController.signal);
 	}
 
 	clear() {
+		if (this.abortController) {
+			this.abortController.abort();
+			this.abortController = null;
+		}
 		this.store.update((s) => ({
 			...s,
 			selection: null,
@@ -43,29 +54,39 @@ class SmartSearchService {
 		}));
 	}
 
-	private async runSearches(selection: SmartSearchSelection) {
-		const { title, year, type } = selection;
-		const typeLabel = type === 'movie' ? 'movie' : 'tv show';
+	private async runSearches(selection: SmartSearchSelection, signal: AbortSignal) {
+		const { title, year } = selection;
 		const queries = [
 			title,
-			`${title} ${year}`,
-			`${title} ${typeLabel}`,
-			`${title} ${year} ${typeLabel}`
+			`${title} ${year}`
 		];
 
 		this.store.update((s) => ({ ...s, searching: true, searchError: null }));
 
 		try {
 			const seen = new Map<string, SmartSearchTorrentResult>();
+			const analyzeHashes = new Set<string>();
 
 			for (const query of queries) {
+				if (signal.aborted) return;
+
 				try {
 					const url = apiUrl(
 						`/api/torrent/search?q=${encodeURIComponent(query)}&cat=200`
 					);
-					const res = await fetch(url);
+					const res = await fetch(url, { signal });
 					if (!res.ok) continue;
 					const data: TorrentSearchResult[] = await res.json();
+
+					// Pick top 5 from this query by SE then LE
+					const sorted = [...data].sort((a, b) => {
+						if (b.seeders !== a.seeders) return b.seeders - a.seeders;
+						return b.leechers - a.leechers;
+					});
+					const top = sorted.slice(0, 5);
+					for (const r of top) {
+						analyzeHashes.add(r.infoHash);
+					}
 
 					for (const r of data) {
 						const existing = seen.get(r.infoHash);
@@ -81,19 +102,20 @@ class SmartSearchService {
 							});
 						}
 					}
-				} catch {
-					// skip failed query
+				} catch (e) {
+					if (signal.aborted) return;
 				}
 
-				const current = [...seen.values()].sort((a, b) => b.seeders - a.seeders);
+				const current = [...seen.values()];
 				this.store.update((s) => ({ ...s, searchResults: current }));
 			}
 
+			if (signal.aborted) return;
 			this.store.update((s) => ({ ...s, searching: false }));
 
-			// Start LLM analysis
-			this.analyzeResults(selection);
+			await this.analyzeResults(selection, signal, analyzeHashes);
 		} catch (error) {
+			if (signal.aborted) return;
 			this.store.update((s) => ({
 				...s,
 				searching: false,
@@ -102,46 +124,67 @@ class SmartSearchService {
 		}
 	}
 
-	private async analyzeResults(selection: SmartSearchSelection) {
+	private static BATCH_SIZE = 3;
+
+	private async analyzeResults(selection: SmartSearchSelection, signal: AbortSignal, analyzeHashes: Set<string>) {
 		const state = get(this.store);
-		if (state.searchResults.length === 0) return;
+		const toAnalyze = state.searchResults
+			.map((r, i) => ({ result: r, index: i }))
+			.filter((e) => analyzeHashes.has(e.result.infoHash));
+
+		if (toAnalyze.length === 0) return;
 
 		this.store.update((s) => ({ ...s, analyzing: true }));
 
-		for (let i = 0; i < state.searchResults.length; i++) {
-			const result = state.searchResults[i];
+		for (let start = 0; start < toAnalyze.length; start += SmartSearchService.BATCH_SIZE) {
+			if (signal.aborted) return;
 
-			// Mark this result as analyzing
+			const end = Math.min(start + SmartSearchService.BATCH_SIZE, toAnalyze.length);
+			const batchEntries = toAnalyze.slice(start, end);
+			const batch = batchEntries.map((e) => e.result);
+
 			this.store.update((s) => {
 				const results = [...s.searchResults];
-				results[i] = { ...results[i], analyzing: true };
+				for (const entry of batchEntries) {
+					results[entry.index] = { ...results[entry.index], analyzing: true };
+				}
 				return { ...s, searchResults: results };
 			});
 
-			const analysis = await this.analyzeOneResult(result, selection);
+			const analyses = await this.callLlmBatch(batch, selection, signal);
 
-			// Store the analysis
+			if (signal.aborted) return;
+
 			this.store.update((s) => {
 				const results = [...s.searchResults];
-				results[i] = { ...results[i], analysis, analyzing: false };
+				for (let i = 0; i < batchEntries.length; i++) {
+					results[batchEntries[i].index] = {
+						...results[batchEntries[i].index],
+						analysis: analyses[i] ?? null,
+						analyzing: false
+					};
+				}
 				return { ...s, searchResults: results };
 			});
 		}
 
-		this.store.update((s) => ({ ...s, analyzing: false }));
+		if (!signal.aborted) {
+			this.store.update((s) => ({ ...s, analyzing: false }));
+		}
 	}
 
-	private async analyzeOneResult(
-		result: SmartSearchTorrentResult,
-		selection: SmartSearchSelection
-	): Promise<TorrentAnalysis | null> {
-		const prompt = `Analyze this torrent result for the ${selection.type === 'movie' ? 'movie' : 'TV show'} "${selection.title}" (${selection.year}).
+	private async callLlmBatch(
+		batch: SmartSearchTorrentResult[],
+		selection: SmartSearchSelection,
+		signal: AbortSignal
+	): Promise<(TorrentAnalysis | null)[]> {
+		const listing = batch
+			.map((r, i) => `${i + 1}. ${r.name}`)
+			.join('\n');
 
-Torrent name: "${result.name}"
-Matched search queries: ${result.searchQueries.join(', ')}
-
-Respond ONLY with a JSON object, no other text:
-{"quality":"video quality (e.g. 1080p, 720p, 4K, CAM, TS, WEBSCREENER)","languages":"audio language(s)","subs":"subtitle language(s) or none","relevance":0-100,"reason":"one sentence justifying the relevance percentage"}`;
+		const prompt = `Target: "${selection.title}" (${selection.year})
+${listing}
+JSON array, one per torrent: [{"quality":"1080p","languages":"English","subs":"none","relevance":95,"reason":"matches title"}]`;
 
 		try {
 			const response = await fetch(apiUrl('/api/llm/chat/stream'), {
@@ -149,13 +192,17 @@ Respond ONLY with a JSON object, no other text:
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					messages: [
-						{ role: 'system', content: 'You analyze torrent filenames. Respond only with valid JSON, no markdown, no explanation.' },
+						{
+							role: 'system',
+							content: 'Extract from torrent filenames: quality, languages, subs, relevance 0-100 to target, reason. Return JSON array only.'
+						},
 						{ role: 'user', content: prompt }
 					]
-				})
+				}),
+				signal
 			});
 
-			if (!response.ok || !response.body) return null;
+			if (!response.ok || !response.body) return batch.map(() => null);
 
 			const reader = response.body.getReader();
 			const decoder = new TextDecoder();
@@ -163,6 +210,11 @@ Respond ONLY with a JSON object, no other text:
 			let fullContent = '';
 
 			while (true) {
+				if (signal.aborted) {
+					reader.cancel();
+					return batch.map(() => null);
+				}
+
 				const { done, value } = await reader.read();
 				if (done) break;
 
@@ -183,20 +235,57 @@ Respond ONLY with a JSON object, no other text:
 				}
 			}
 
-			// Extract JSON from response
-			const jsonMatch = fullContent.match(/\{[\s\S]*\}/);
-			if (!jsonMatch) return null;
+			console.log('[smart-search] LLM raw response:', fullContent);
 
-			const parsed = JSON.parse(jsonMatch[0]);
-			return {
-				quality: parsed.quality ?? 'Unknown',
-				languages: parsed.languages ?? 'Unknown',
-				subs: parsed.subs ?? 'none',
-				relevance: typeof parsed.relevance === 'number' ? parsed.relevance : 0,
-				reason: parsed.reason ?? ''
-			};
+			// Strip markdown code fences if present
+			const cleaned = fullContent.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+
+			let parsed: Record<string, unknown>[] = [];
+
+			// Try array first
+			const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+			if (arrayMatch) {
+				try {
+					parsed = JSON.parse(arrayMatch[0]);
+				} catch {
+					console.warn('[smart-search] Failed to parse JSON array');
+				}
+			}
+
+			// Fallback: collect individual objects
+			if (parsed.length === 0) {
+				const objRegex = /\{[^{}]*\}/g;
+				let m;
+				while ((m = objRegex.exec(cleaned)) !== null) {
+					try {
+						parsed.push(JSON.parse(m[0]));
+					} catch {
+						// skip
+					}
+				}
+			}
+
+			console.log('[smart-search] Parsed results:', parsed);
+
+			if (parsed.length === 0) {
+				console.warn('[smart-search] No JSON found in response');
+				return batch.map(() => null);
+			}
+
+			return batch.map((_, i) => {
+				const p = parsed[i];
+				if (!p) return null;
+				const rel = p.relevance ?? p.score ?? p.match ?? 0;
+				return {
+					quality: String(p.quality ?? p.video_quality ?? 'Unknown'),
+					languages: String(p.languages ?? p.language ?? p.lang ?? p.audio ?? 'Unknown'),
+					subs: String(p.subs ?? p.subtitles ?? p.subtitle ?? 'none'),
+					relevance: typeof rel === 'number' ? rel : parseInt(String(rel), 10) || 0,
+					reason: String(p.reason ?? p.explanation ?? p.justification ?? '')
+				};
+			});
 		} catch {
-			return null;
+			return batch.map(() => null);
 		}
 	}
 }

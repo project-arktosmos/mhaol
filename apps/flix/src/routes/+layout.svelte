@@ -5,6 +5,7 @@
 	import { playerService } from 'frontend/services/player.service';
 	import { identityService } from 'frontend/services/identity.service';
 	import { peerLibraryService } from 'frontend/services/peer-library.service';
+	import { torrentService } from 'frontend/services/torrent.service';
 	import IdentitySidebar from 'ui-lib/components/core/IdentitySidebar.svelte';
 	import Navbar from 'ui-lib/components/core/Navbar.svelte';
 	import ModalOutlet from 'ui-lib/components/core/ModalOutlet.svelte';
@@ -55,15 +56,17 @@
 		await playerService.initialize();
 		await identityService.initialize();
 		peerLibraryService.initialize();
+		torrentService.initialize();
 	});
 
 	onDestroy(() => {
 		playerService.destroy();
+		torrentService.destroy();
 	});
 </script>
 
 <div class="flex min-h-screen flex-col">
-	<Navbar brand={{ label: 'Mhaol' }} items={navItems} />
+	<Navbar brand={{ label: 'Mhaol', highlight: 'Flix' }} items={navItems} />
 	<div class="flex flex-1">
 		<main class="min-w-0 flex-1">
 			{@render children?.()}

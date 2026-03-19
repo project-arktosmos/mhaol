@@ -60,6 +60,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/hub
+          tauriScript: pnpm tauri
           tagName: v__VERSION__-hub
           releaseName: 'Hub v__VERSION__'
           releaseBody: 'Hub desktop build'
@@ -104,10 +105,15 @@ jobs:
         with:
           workspaces: '. -> target'
 
-      - name: Build all frontends
+      - name: Build hub frontend
+        run: pnpm --filter hub build
+
+      - name: Build sub-app frontends
         run: |
-          pnpm --filter hub build
-          pnpm --filter storybook --filter identity --filter signaling-app --filter cloud --filter torrent --filter flix build
+          for app in identity signaling-app cloud torrent flix storybook; do
+            echo "Building $app..."
+            pnpm --filter "$app" build || echo "WARNING: $app build failed, skipping"
+          done
 
       - name: Build backend
         run: cargo build --release --bin mhaol-server

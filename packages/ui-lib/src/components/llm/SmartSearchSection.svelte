@@ -4,6 +4,7 @@
 	import { llmAdapter } from 'frontend/adapters/classes/llm.adapter';
 	import { recommendedModels } from 'frontend/data/recommended-models';
 	import { smartSearchService } from 'frontend/services/smart-search.service';
+	import { apiUrl } from 'frontend/lib/api-base';
 	import {
 		formatSearchSize,
 		formatSeeders,
@@ -32,27 +33,119 @@
 	let downloadedFileNames = $derived(new Set(models.map((m) => m.fileName)));
 	let showRecommended = $state(false);
 
+	let preferredLanguage = $state('English');
+	let preferredQuality = $state('1080p');
+
+	const languages = ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian', 'Japanese', 'Korean', 'Chinese', 'Hindi', 'Arabic', 'Dutch', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Polish', 'Turkish', 'Thai'];
+	const qualities = ['4K', '2160p', '1080p', '720p', '480p'];
+
 	const searchStore = smartSearchService.store;
 	let selection = $derived($searchStore.selection);
 	let searching = $derived($searchStore.searching);
 	let analyzing = $derived($searchStore.analyzing);
-	let searchResults = $derived($searchStore.searchResults);
+	let searchResults = $derived(
+		[...$searchStore.searchResults].sort((a, b) => {
+			const matchA = a.analysis
+				? (a.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0)
+				+ (a.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
+				: -1;
+			const matchB = b.analysis
+				? (b.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0)
+				+ (b.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
+				: -1;
+			if (matchB !== matchA) return matchB - matchA;
+			if (b.seeders !== a.seeders) return b.seeders - a.seeders;
+			if (b.leechers !== a.leechers) return b.leechers - a.leechers;
+			const relA = a.analysis?.relevance ?? -1;
+			const relB = b.analysis?.relevance ?? -1;
+			return relB - relA;
+		})
+	);
 	let searchError = $derived($searchStore.searchError);
+
+	$effect(() => {
+		if (selection) {
+			candidateAdded = false;
+			addingCandidate = false;
+		}
+	});
+
+	let bestCandidate = $derived.by(() => {
+		if (analyzing || searching) return null;
+		for (const r of searchResults) {
+			if (!r.analysis) continue;
+			if (r.analysis.relevance < 75) continue;
+			if (!r.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase())) continue;
+			if (!r.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase())) continue;
+			return r;
+		}
+		return null;
+	});
+
+	let addingCandidate = $state(false);
+	let candidateAdded = $state(false);
+
+	$effect(() => {
+		if (bestCandidate && !candidateAdded && !addingCandidate) {
+			handleAddCandidate();
+		}
+	});
+
+	async function handleAddCandidate() {
+		if (!bestCandidate || !selection) return;
+		addingCandidate = true;
+		try {
+			const res = await fetch(apiUrl('/api/torrent/torrents'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ source: bestCandidate.magnetLink })
+			});
+			if (res.ok) {
+				candidateAdded = true;
+			}
+		} catch {
+			// ignore
+		} finally {
+			addingCandidate = false;
+		}
+	}
 
 	let searchTerms = $derived.by(() => {
 		if (!selection) return [];
-		const { title, year, type } = selection;
-		const typeLabel = type === 'movie' ? 'movie' : 'tv show';
-		const parts: Array<{ term: string; components: string[] }> = [];
-
-		parts.push({ term: title, components: ['title'] });
-		parts.push({ term: `${title} ${year}`, components: ['title', 'year'] });
-		parts.push({ term: `${title} ${typeLabel}`, components: ['title', 'type'] });
-		parts.push({ term: `${title} ${year} ${typeLabel}`, components: ['title', 'year', 'type'] });
-
-		return parts;
+		const { title, year } = selection;
+		return [
+			{ term: title, components: ['title'] },
+			{ term: `${title} ${year}`, components: ['title', 'year'] }
+		];
 	});
+
+	let stepModel = $derived(status?.modelLoaded ?? false);
+	let stepTerms = $derived(selection !== null);
+	let stepSearch = $derived(stepTerms && !searching && searchResults.length > 0);
+	let stepEval = $derived(stepSearch && !analyzing && searchResults.some((r) => r.analysis !== null));
+	let stepDone = $derived(stepEval && candidateAdded);
 </script>
+
+<ul class="steps steps-horizontal mb-4 w-full text-xs">
+	<li class={classNames('step', { 'step-success': stepModel })}>Model</li>
+	<li class={classNames('step', { 'step-success': stepTerms })}>Terms</li>
+	<li class={classNames('step', { 'step-success': stepSearch })}>{searching ? 'Searching...' : 'Search'}</li>
+	<li class={classNames('step', { 'step-success': stepEval })}>{analyzing ? 'Evaluating...' : 'Evaluation'}</li>
+	<li class={classNames('step', { 'step-success': stepDone })}>{bestCandidate && !candidateAdded ? 'Ready' : candidateAdded ? 'Done' : 'Candidate'}</li>
+</ul>
+
+<div class="mb-3 flex items-center gap-2">
+	<select class="select-bordered select select-xs" bind:value={preferredLanguage}>
+		{#each languages as lang}
+			<option value={lang}>{lang}</option>
+		{/each}
+	</select>
+	<select class="select-bordered select select-xs" bind:value={preferredQuality}>
+		{#each qualities as q}
+			<option value={q}>{q}</option>
+		{/each}
+	</select>
+</div>
 
 {#if selection}
 	<div class="mb-3 rounded bg-base-100 p-2">
@@ -191,6 +284,43 @@
 					</tbody>
 				</table>
 			</div>
+		</div>
+	{/if}
+
+	{#if bestCandidate}
+		<div class="mt-3 rounded-lg border border-success/50 bg-success/10 p-3">
+			<div class="mb-2 flex items-center gap-2">
+				<span class="badge badge-sm badge-success">Best Match</span>
+				<span class="text-xs font-semibold">{bestCandidate.analysis?.relevance}% relevance</span>
+			</div>
+			<div class="mb-2 text-xs font-medium" title={bestCandidate.name}>
+				{bestCandidate.name}
+			</div>
+			<div class="mb-2 flex flex-wrap gap-2 text-xs text-base-content/60">
+				<span>{bestCandidate.analysis?.quality}</span>
+				<span>{bestCandidate.analysis?.languages}</span>
+				{#if bestCandidate.analysis?.subs && bestCandidate.analysis.subs !== 'none'}
+					<span>Subs: {bestCandidate.analysis.subs}</span>
+				{/if}
+				<span>{formatSearchSize(bestCandidate.size)}</span>
+				<span class={getSeedersColor(bestCandidate.seeders)}>{formatSeeders(bestCandidate.seeders)} SE</span>
+			</div>
+			<div class="mb-2 text-xs text-base-content/50">{bestCandidate.analysis?.reason}</div>
+			{#if candidateAdded}
+				<span class="badge badge-sm badge-success">Added to downloads</span>
+			{:else}
+				<button
+					class="btn btn-sm btn-success"
+					onclick={handleAddCandidate}
+					disabled={addingCandidate}
+				>
+					{#if addingCandidate}
+						<span class="loading loading-xs loading-spinner"></span>
+					{:else}
+						Download & Add to Library
+					{/if}
+				</button>
+			{/if}
 		</div>
 	{/if}
 {/if}

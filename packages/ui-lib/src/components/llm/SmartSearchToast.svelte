@@ -5,6 +5,11 @@
 	import { smartSearchService } from 'frontend/services/smart-search.service';
 	import SmartSearchSection from './SmartSearchSection.svelte';
 
+	const REQUIRED_MODEL = {
+		repoId: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+		fileName: 'qwen2.5-1.5b-instruct-q4_k_m.gguf'
+	};
+
 	const llmStore = llmService.store;
 	const searchStore = smartSearchService.store;
 
@@ -12,19 +17,32 @@
 
 	onMount(async () => {
 		await llmService.initialize();
-
-		const state = get(llmStore);
-		const { status, models } = state;
-
-		if (status?.modelLoaded) return;
-
-		if (models.length === 1) {
-			llmService.loadModel(models[0].fileName);
-		} else if (models.length > 1 && status?.currentModel) {
-			const match = models.find((m) => m.fileName === status.currentModel);
-			if (match) llmService.loadModel(match.fileName);
-		}
+		await ensureModel();
 	});
+
+	async function ensureModel() {
+		const state = get(llmStore);
+
+		// Already loaded and it's the right model
+		if (state.status?.modelLoaded && state.status.currentModel === REQUIRED_MODEL.fileName) {
+			return;
+		}
+
+		// Check if downloaded
+		const downloaded = state.models.find((m) => m.fileName === REQUIRED_MODEL.fileName);
+
+		if (!downloaded) {
+			// Download it
+			await llmService.downloadModel(REQUIRED_MODEL.repoId, REQUIRED_MODEL.fileName);
+		}
+
+		// Load it (re-read state after potential download)
+		const updated = get(llmStore);
+		const model = updated.models.find((m) => m.fileName === REQUIRED_MODEL.fileName);
+		if (model && !model.isLoaded) {
+			await llmService.loadModel(REQUIRED_MODEL.fileName);
+		}
+	}
 </script>
 
 {#if visible}
