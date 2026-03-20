@@ -47,6 +47,14 @@ pub struct TorrentStats {
     pub active_torrents: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TorrentFile {
+    pub id: usize,
+    pub name: String,
+    pub size: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

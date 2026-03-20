@@ -16,12 +16,15 @@
 		pause: { infoHash: string };
 		resume: { infoHash: string };
 		remove: { infoHash: string };
+		stream: { infoHash: string };
 	}>();
 
 	$: progressPercent = Math.round(torrent.progress * 100);
 	$: isPaused = torrent.state === 'paused';
 	$: isActive = torrent.state === 'downloading' || torrent.state === 'initializing';
 	$: isSeeding = torrent.state === 'seeding';
+	$: isStreamable =
+		(torrent.state === 'downloading' && torrent.progress >= 0.02) || isSeeding;
 	$: stateColor = getStateColor(torrent.state);
 </script>
 
@@ -91,6 +94,24 @@
 		</div>
 
 		<div class="flex items-center gap-1">
+			{#if isStreamable}
+				<button
+					class="btn btn-ghost btn-sm text-primary"
+					on:click={() => dispatch('stream', { infoHash: torrent.infoHash })}
+					title="Stream"
+					aria-label="Stream torrent"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="h-5 w-5"
+						fill="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path d="M8 5v14l11-7z" />
+					</svg>
+				</button>
+			{/if}
+
 			{#if isActive || isSeeding}
 				<button
 					class="btn btn-ghost btn-sm"

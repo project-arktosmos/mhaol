@@ -33,7 +33,9 @@ const initialState: PlayerState = {
 	positionSecs: 0,
 	durationSecs: null,
 	isSeeking: false,
-	isPaused: true
+	isPaused: true,
+	streamUrl: null,
+	buffering: false
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -102,6 +104,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	async play(file: PlayableFile): Promise<void> {
 		if (!browser) return;
+
+		// Route to HTTP streaming for in-progress torrent downloads
+		if (file.streamUrl) {
+			return this.playStream(file);
+		}
 
 		const { streamServerAvailable } = get(this.state);
 
@@ -172,6 +179,43 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				error: `Failed to start playback: ${errorMsg}`
 			}));
 		}
+	}
+
+	// ===== HTTP streaming (for in-progress torrent downloads) =====
+
+	async playStream(file: PlayableFile): Promise<void> {
+		if (!browser) return;
+
+		await this.stop();
+
+		const infoHash = file.id.replace('torrent:', '');
+
+		try {
+			// Pause all other torrents to maximise bandwidth
+			await this.fetchJson('/api/torrent/torrents/' + infoHash + '/stream/start', {
+				method: 'POST'
+			});
+		} catch {
+			// Non-fatal — streaming still works, just slower
+		}
+
+		const streamUrl = apiUrl(file.streamUrl ?? `/api/torrent/torrents/${infoHash}/stream`);
+
+		this.state.update((s) => ({
+			...s,
+			currentFile: file,
+			connectionState: 'http-streaming',
+			error: null,
+			positionSecs: 0,
+			durationSecs: null,
+			streamUrl,
+			buffering: false,
+			isPaused: false
+		}));
+	}
+
+	setBuffering(buffering: boolean): void {
+		this.state.update((s) => ({ ...s, buffering }));
 	}
 
 	// ===== PartyKit signaling connection =====
@@ -529,6 +573,18 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		this.localPeerId = null;
 
 		const currentState = get(this.state);
+
+		if (currentState.connectionState === 'http-streaming' && currentState.currentFile) {
+			const infoHash = currentState.currentFile.id.replace('torrent:', '');
+			try {
+				await fetch(apiUrl(`/api/torrent/torrents/${infoHash}/stream/stop`), {
+					method: 'POST'
+				});
+			} catch {
+				// Ignore cleanup errors
+			}
+		}
+
 		if (currentState.sessionId) {
 			try {
 				await fetch(apiUrl(`/api/player/sessions/${currentState.sessionId}`), {
@@ -550,7 +606,9 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			positionSecs: 0,
 			durationSecs: null,
 			isSeeking: false,
-			isPaused: true
+			isPaused: true,
+			streamUrl: null,
+			buffering: false
 		}));
 	}
 

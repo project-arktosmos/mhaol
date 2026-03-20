@@ -2,16 +2,31 @@
 	import MediaCardBase from './MediaCardBase.svelte';
 	import type { MediaItem } from 'frontend/types/media-card.type';
 	import type { DisplayTMDBMovieDetails } from 'addons/tmdb/types';
+	import type { TorrentState } from 'frontend/types/torrent.type';
 
 	interface Props {
 		item: MediaItem;
 		metadata?: DisplayTMDBMovieDetails | null;
 		loading?: boolean;
 		selected?: boolean;
+		torrentProgress?: number | null;
+		torrentState?: TorrentState | null;
+		torrentSpeed?: number | null;
+		torrentEta?: number | null;
 		onselect?: (item: MediaItem) => void;
 	}
 
-	let { item, metadata = null, loading = false, selected = false, onselect }: Props = $props();
+	let {
+		item,
+		metadata = null,
+		loading = false,
+		selected = false,
+		torrentProgress = null,
+		torrentState = null,
+		torrentSpeed = null,
+		torrentEta = null,
+		onselect
+	}: Props = $props();
 </script>
 
 <MediaCardBase
@@ -20,6 +35,10 @@
 	imageAlt={metadata?.title ?? item.name}
 	{loading}
 	{selected}
+	{torrentProgress}
+	{torrentState}
+	{torrentSpeed}
+	{torrentEta}
 	onclick={() => onselect?.(item)}
 >
 	{#if metadata}

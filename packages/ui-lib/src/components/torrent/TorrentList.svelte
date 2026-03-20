@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { torrentService } from 'frontend/services/torrent.service';
+	import { playerService } from 'frontend/services/player.service';
 	import TorrentListItem from './TorrentListItem.svelte';
 
 	const state = torrentService.state;
@@ -18,6 +19,27 @@
 
 	function handleRemoveAll() {
 		torrentService.removeAll();
+	}
+
+	function handleStream(event: CustomEvent<{ infoHash: string }>) {
+		const torrent = $state.torrents.find((t) => t.infoHash === event.detail.infoHash);
+		if (!torrent) return;
+
+		playerService.play({
+			id: `torrent:${torrent.infoHash}`,
+			type: 'torrent',
+			name: torrent.name,
+			outputPath: torrent.outputPath ?? '',
+			mode: 'video',
+			format: null,
+			videoFormat: null,
+			thumbnailUrl: null,
+			durationSeconds: null,
+			size: torrent.size,
+			completedAt: '',
+			progress: torrent.progress,
+			streamUrl: `/api/torrent/torrents/${torrent.infoHash}/stream`
+		});
 	}
 </script>
 
@@ -57,6 +79,7 @@
 						on:pause={handlePause}
 						on:resume={handleResume}
 						on:remove={handleRemove}
+						on:stream={handleStream}
 					/>
 				{/each}
 			</div>

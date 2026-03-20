@@ -1,10 +1,10 @@
 use crate::AppState;
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, HeaderMap, StatusCode},
     response::{
         sse::{Event, KeepAlive},
-        IntoResponse, Sse,
+        IntoResponse, Response, Sse,
     },
     routing::{delete, get, post},
     Json, Router,
@@ -25,6 +25,20 @@ pub fn router() -> Router<AppState> {
         .route("/torrents/{info_hash}/resume", post(resume_torrent))
         .route("/torrents/events", get(torrent_events))
         .route("/torrents/remove-all", post(remove_all))
+        .route("/torrents/{info_hash}/files", get(list_torrent_files))
+        .route(
+            "/torrents/{info_hash}/stream/{file_idx}",
+            get(stream_torrent_file),
+        )
+        .route("/torrents/{info_hash}/stream", get(stream_torrent_largest))
+        .route(
+            "/torrents/{info_hash}/stream/start",
+            post(start_streaming),
+        )
+        .route(
+            "/torrents/{info_hash}/stream/stop",
+            post(stop_streaming),
+        )
 }
 
 async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
@@ -421,6 +435,136 @@ async fn search_torrents(
         )
             .into_response(),
     }
+}
+
+async fn list_torrent_files(
+    State(state): State<AppState>,
+    Path(info_hash): Path<String>,
+) -> impl IntoResponse {
+    let torrent_id = match find_torrent_id(&state, &info_hash).await {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Torrent not found" })),
+            )
+                .into_response()
+        }
+    };
+
+    match state.torrent_manager.list_files(torrent_id).await {
+        Ok(files) => Json(serde_json::to_value(files).unwrap()).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+async fn resolve_stream_url(
+    state: &AppState,
+    info_hash: &str,
+    file_idx: usize,
+) -> Result<String, Response> {
+    let torrent_id = find_torrent_id(state, info_hash).await.ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Torrent not found" })),
+        )
+            .into_response()
+    })?;
+
+    let http_api_addr = state.torrent_manager.get_http_api_addr().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": "Torrent HTTP API not available" })),
+        )
+            .into_response()
+    })?;
+
+    Ok(mhaol_http_stream::build_stream_url(
+        &http_api_addr,
+        torrent_id,
+        file_idx,
+    ))
+}
+
+async fn stream_torrent_file(
+    State(state): State<AppState>,
+    Path((info_hash, file_idx)): Path<(String, usize)>,
+    headers: HeaderMap,
+) -> Response {
+    let range = headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok());
+    match resolve_stream_url(&state, &info_hash, file_idx).await {
+        Ok(url) => mhaol_http_stream::proxy_stream(&url, range).await,
+        Err(resp) => resp,
+    }
+}
+
+async fn stream_torrent_largest(
+    State(state): State<AppState>,
+    Path(info_hash): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let torrent_id = match find_torrent_id(&state, &info_hash).await {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Torrent not found" })),
+            )
+                .into_response()
+        }
+    };
+
+    let file_idx = match state.torrent_manager.list_files(torrent_id).await {
+        Ok(files) if !files.is_empty() => {
+            files
+                .iter()
+                .max_by_key(|f| f.size)
+                .map(|f| f.id)
+                .unwrap_or(0)
+        }
+        Ok(_) => 0,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    };
+
+    let range = headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok());
+    match resolve_stream_url(&state, &info_hash, file_idx).await {
+        Ok(url) => mhaol_http_stream::proxy_stream(&url, range).await,
+        Err(resp) => resp,
+    }
+}
+
+async fn start_streaming(
+    State(state): State<AppState>,
+    Path(info_hash): Path<String>,
+) -> impl IntoResponse {
+    if let Err(e) = state.torrent_manager.pause_all_except(&info_hash).await {
+        tracing::warn!("Failed to pause other torrents: {}", e);
+    }
+
+    let stream_url = format!("/api/torrent/torrents/{}/stream", info_hash);
+    Json(serde_json::json!({ "streamUrl": stream_url }))
+}
+
+async fn stop_streaming(State(state): State<AppState>) -> impl IntoResponse {
+    if let Err(e) = state.torrent_manager.resume_auto_paused().await {
+        tracing::warn!("Failed to resume auto-paused torrents: {}", e);
+    }
+
+    Json(serde_json::json!({ "ok": true }))
 }
 
 async fn find_torrent_id(state: &AppState, info_hash: &str) -> Option<usize> {

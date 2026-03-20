@@ -5,10 +5,9 @@
 	import { smartSearchService } from 'frontend/services/smart-search.service';
 	import SmartSearchSection from './SmartSearchSection.svelte';
 
-	const REQUIRED_MODEL = {
-		repoId: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF',
-		fileName: 'qwen2.5-1.5b-instruct-q4_k_m.gguf'
-	};
+	const DEFAULT_MODEL = 'qwen2.5-1.5b-instruct-q4_k_m.gguf';
+
+	let { onlibrarychange }: { onlibrarychange?: () => void } = $props();
 
 	const llmStore = llmService.store;
 	const searchStore = smartSearchService.store;
@@ -17,32 +16,13 @@
 
 	onMount(async () => {
 		await llmService.initialize();
-		await ensureModel();
-	});
-
-	async function ensureModel() {
 		const state = get(llmStore);
-
-		// Already loaded and it's the right model
-		if (state.status?.modelLoaded && state.status.currentModel === REQUIRED_MODEL.fileName) {
-			return;
-		}
-
-		// Check if downloaded
-		const downloaded = state.models.find((m) => m.fileName === REQUIRED_MODEL.fileName);
-
-		if (!downloaded) {
-			// Download it
-			await llmService.downloadModel(REQUIRED_MODEL.repoId, REQUIRED_MODEL.fileName);
-		}
-
-		// Load it (re-read state after potential download)
-		const updated = get(llmStore);
-		const model = updated.models.find((m) => m.fileName === REQUIRED_MODEL.fileName);
+		if (state.status?.modelLoaded) return;
+		const model = state.models.find((m) => m.fileName === DEFAULT_MODEL);
 		if (model && !model.isLoaded) {
-			await llmService.loadModel(REQUIRED_MODEL.fileName);
+			await llmService.loadModel(DEFAULT_MODEL);
 		}
-	}
+	});
 </script>
 
 {#if visible}
@@ -59,6 +39,7 @@
 				onLoadModel={(fileName) => llmService.loadModel(fileName)}
 				onUnloadModel={() => llmService.unloadModel()}
 				onDownloadModel={(repoId, fileName) => llmService.downloadModel(repoId, fileName)}
+				{onlibrarychange}
 			/>
 		</div>
 	</div>

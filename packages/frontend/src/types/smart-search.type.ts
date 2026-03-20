@@ -4,6 +4,7 @@ export interface SmartSearchSelection {
 	title: string;
 	year: string;
 	type: 'movie' | 'tv';
+	tmdbId: number;
 }
 
 export interface TorrentAnalysis {

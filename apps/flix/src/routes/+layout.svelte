@@ -20,6 +20,7 @@
 	import LibraryModalContent from 'ui-lib/components/libraries/LibraryModalContent.svelte';
 	import PeerLibrariesModalContent from 'ui-lib/components/peer-libraries/PeerLibrariesModalContent.svelte';
 	import LlmModalContent from 'ui-lib/components/llm/LlmModalContent.svelte';
+	import { invalidateAll } from '$app/navigation';
 	import SmartSearchToast from 'ui-lib/components/llm/SmartSearchToast.svelte';
 
 	let { children } = $props();
@@ -76,4 +77,4 @@
 </div>
 
 <ModalOutlet {modals} />
-<SmartSearchToast />
+<SmartSearchToast onlibrarychange={() => invalidateAll()} />

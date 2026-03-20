@@ -9,7 +9,7 @@ use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
 use crate::config::{TorrentConfig, DEFAULT_TRACKERS};
-use crate::types::{AddTorrentRequest, TorrentInfo, TorrentState, TorrentStats};
+use crate::types::{AddTorrentRequest, TorrentFile, TorrentInfo, TorrentState, TorrentStats};
 use crate::util::{get_unix_timestamp, parse_magnet_uri};
 
 #[derive(Debug, Clone)]
@@ -23,6 +23,7 @@ pub struct TorrentManager {
     http_server_handle: RwLock<Option<JoinHandle<()>>>,
     tracking_info: RwLock<HashMap<String, TrackingInfo>>,
     completed_torrents: RwLock<HashSet<String>>,
+    auto_paused: RwLock<Vec<String>>,
 }
 
 impl TorrentManager {
@@ -33,6 +34,7 @@ impl TorrentManager {
             http_server_handle: RwLock::new(None),
             tracking_info: RwLock::new(HashMap::new()),
             completed_torrents: RwLock::new(HashSet::new()),
+            auto_paused: RwLock::new(Vec::new()),
         }
     }
 
@@ -763,6 +765,79 @@ impl TorrentManager {
         ));
 
         Ok(logs)
+    }
+
+    pub fn get_http_api_addr(&self) -> Option<String> {
+        self.config.read().http_api_bind_addr.clone()
+    }
+
+    pub async fn list_files(&self, torrent_id: usize) -> Result<Vec<TorrentFile>> {
+        let api = self
+            .api()
+            .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
+
+        let details = api
+            .api_torrent_details(torrent_id.into())
+            .map_err(|e| anyhow::anyhow!("Failed to get torrent details: {}", e))?;
+
+        let files = details
+            .files
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
+            .map(|(idx, f)| TorrentFile {
+                id: idx,
+                name: f.name,
+                size: f.length,
+            })
+            .collect();
+
+        Ok(files)
+    }
+
+    pub async fn pause_all_except(&self, info_hash: &str) -> Result<()> {
+        let torrents = self.list().await?;
+        let mut auto_paused = Vec::new();
+
+        for t in &torrents {
+            if t.info_hash != info_hash && t.state == TorrentState::Downloading {
+                if let Err(e) = self.pause(t.id).await {
+                    log::warn!("Failed to auto-pause torrent {}: {}", t.info_hash, e);
+                } else {
+                    auto_paused.push(t.info_hash.clone());
+                }
+            }
+        }
+
+        log::info!(
+            "Auto-paused {} torrents for streaming {}",
+            auto_paused.len(),
+            info_hash
+        );
+        *self.auto_paused.write() = auto_paused;
+        Ok(())
+    }
+
+    pub async fn resume_auto_paused(&self) -> Result<()> {
+        let to_resume: Vec<String> = self.auto_paused.write().drain(..).collect();
+
+        if to_resume.is_empty() {
+            return Ok(());
+        }
+
+        let torrents = self.list().await?;
+        for info_hash in &to_resume {
+            if let Some(t) = torrents.iter().find(|t| &t.info_hash == info_hash) {
+                if t.state == TorrentState::Paused {
+                    if let Err(e) = self.resume(t.id).await {
+                        log::warn!("Failed to resume torrent {}: {}", info_hash, e);
+                    }
+                }
+            }
+        }
+
+        log::info!("Resumed {} auto-paused torrents", to_resume.len());
+        Ok(())
     }
 
     pub fn complete_download(&self, info_hash: String, output_path: String) -> Result<()> {

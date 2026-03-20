@@ -101,6 +101,8 @@
 				connectionState={$playerState.connectionState}
 				positionSecs={$playerState.positionSecs}
 				durationSecs={$playerState.durationSecs}
+				streamUrl={$playerState.streamUrl}
+				buffering={$playerState.buffering}
 			/>
 		{:else if imageUrl}
 			<img src={imageUrl} alt={imageAlt} class="w-full object-cover" />

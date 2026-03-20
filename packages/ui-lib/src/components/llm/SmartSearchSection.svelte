@@ -19,7 +19,8 @@
 		loading,
 		onLoadModel,
 		onUnloadModel,
-		onDownloadModel
+		onDownloadModel,
+		onlibrarychange
 	}: {
 		status: LlmStatus | null;
 		models: LocalModel[];
@@ -28,6 +29,7 @@
 		onLoadModel: (fileName: string) => void;
 		onUnloadModel: () => void;
 		onDownloadModel: (repoId: string, fileName: string) => void;
+		onlibrarychange?: () => void;
 	} = $props();
 
 	let downloadedFileNames = $derived(new Set(models.map((m) => m.fileName)));
@@ -95,18 +97,84 @@
 		if (!bestCandidate || !selection) return;
 		addingCandidate = true;
 		try {
+			const configRes = await fetch(apiUrl('/api/torrent/config'));
+			if (!configRes.ok) return;
+			const config = await configRes.json();
+			const basePath: string = config.downloadPath ?? '';
+			if (!basePath) return;
+
+			const subdir = selection.type === 'movie' ? 'movies' : 'tv';
+			const downloadPath = `${basePath}/${subdir}`;
+
 			const res = await fetch(apiUrl('/api/torrent/torrents'), {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ source: bestCandidate.magnetLink })
+				body: JSON.stringify({
+					source: bestCandidate.magnetLink,
+					downloadPath
+				})
 			});
 			if (res.ok) {
+				const torrentInfo = await res.json();
 				candidateAdded = true;
+				const outputPath: string = torrentInfo.outputPath ?? downloadPath;
+				await addLibraryItem(selection, outputPath, basePath);
 			}
 		} catch {
 			// ignore
 		} finally {
 			addingCandidate = false;
+		}
+	}
+
+	async function addLibraryItem(
+		sel: NonNullable<typeof selection>,
+		outputPath: string,
+		basePath: string
+	) {
+		try {
+			const subdir = sel.type === 'movie' ? 'movies' : 'tv';
+			const targetPath = `${basePath}/${subdir}`;
+
+			// Find the library whose path matches the type-specific subdir
+			const libRes = await fetch(apiUrl('/api/libraries'));
+			if (!libRes.ok) return;
+			const libraries: Array<{ id: string; path: string; libraryType: string }> =
+				await libRes.json();
+			let library = libraries.find((l) => l.path === targetPath);
+
+			// Create library if it doesn't exist
+			if (!library) {
+				const createRes = await fetch(apiUrl('/api/libraries'), {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						name: sel.type === 'movie' ? 'Movies' : 'TV Shows',
+						path: targetPath,
+						libraryType: subdir
+					})
+				});
+				if (!createRes.ok) return;
+				library = await createRes.json();
+			}
+			if (!library) return;
+
+			const itemRes = await fetch(apiUrl(`/api/libraries/${library.id}/items`), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: sel.title,
+					path: outputPath,
+					mediaType: 'video',
+					categoryId: subdir,
+					tmdbId: sel.tmdbId
+				})
+			});
+			if (itemRes.ok) {
+				onlibrarychange?.();
+			}
+		} catch {
+			// best-effort
 		}
 	}
 
@@ -119,18 +187,16 @@
 		];
 	});
 
-	let stepModel = $derived(status?.modelLoaded ?? false);
 	let stepTerms = $derived(selection !== null);
 	let stepSearch = $derived(stepTerms && !searching && searchResults.length > 0);
-	let stepEval = $derived(stepSearch && !analyzing && searchResults.some((r) => r.analysis !== null));
+	let stepEval = $derived(stepSearch && searchResults.some((r) => r.analysis !== null));
 	let stepDone = $derived(stepEval && candidateAdded);
 </script>
 
 <ul class="steps steps-horizontal mb-4 w-full text-xs">
-	<li class={classNames('step', { 'step-success': stepModel })}>Model</li>
 	<li class={classNames('step', { 'step-success': stepTerms })}>Terms</li>
 	<li class={classNames('step', { 'step-success': stepSearch })}>{searching ? 'Searching...' : 'Search'}</li>
-	<li class={classNames('step', { 'step-success': stepEval })}>{analyzing ? 'Evaluating...' : 'Evaluation'}</li>
+	<li class={classNames('step', { 'step-success': stepEval })}>Analysis</li>
 	<li class={classNames('step', { 'step-success': stepDone })}>{bestCandidate && !candidateAdded ? 'Ready' : candidateAdded ? 'Done' : 'Candidate'}</li>
 </ul>
 

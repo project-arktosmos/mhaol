@@ -3,6 +3,8 @@
 	import type { MediaItem } from 'frontend/types/media-card.type';
 	import { libraryFileAdapter } from 'frontend/adapters/classes/library-file.adapter';
 	import type { MediaType } from 'frontend/types/library.type';
+	import type { TorrentState } from 'frontend/types/torrent.type';
+	import { formatSpeed, formatEta } from 'frontend/types/torrent.type';
 	import type { Snippet } from 'svelte';
 
 	interface Props {
@@ -12,6 +14,10 @@
 		loading?: boolean;
 		classes?: string;
 		selected?: boolean;
+		torrentProgress?: number | null;
+		torrentState?: TorrentState | null;
+		torrentSpeed?: number | null;
+		torrentEta?: number | null;
 		onclick?: () => void;
 		children?: Snippet;
 	}
@@ -23,9 +29,20 @@
 		loading = false,
 		classes = '',
 		selected = false,
+		torrentProgress = null,
+		torrentState = null,
+		torrentSpeed = null,
+		torrentEta = null,
 		onclick,
 		children
 	}: Props = $props();
+
+	let isDownloading = $derived(
+		torrentProgress !== null && torrentState !== null && torrentState !== 'seeding'
+	);
+	let progressPercent = $derived(
+		torrentProgress !== null ? Math.round(torrentProgress * 100) : 0
+	);
 </script>
 
 <div
@@ -72,6 +89,49 @@
 						d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
 					/>
 				</svg>
+			</div>
+		{/if}
+		{#if isDownloading}
+			<div class="absolute inset-x-0 bottom-0 bg-black/70 px-2 py-1.5">
+				<div class="mb-1 flex items-center justify-between text-xs text-white">
+					<span class={classNames('font-medium', {
+						'text-info': torrentState === 'initializing' || torrentState === 'checking',
+						'text-primary': torrentState === 'downloading',
+						'text-warning': torrentState === 'paused',
+						'text-error': torrentState === 'error'
+					})}>
+						{progressPercent}%
+					</span>
+					<span class="opacity-70">
+						{#if torrentState === 'downloading' && torrentSpeed}
+							{formatSpeed(torrentSpeed)}
+						{:else if torrentState === 'initializing'}
+							Starting...
+						{:else if torrentState === 'paused'}
+							Paused
+						{:else if torrentState === 'error'}
+							Error
+						{:else if torrentState === 'checking'}
+							Checking...
+						{/if}
+					</span>
+				</div>
+				<div class="h-1 w-full overflow-hidden rounded-full bg-white/20">
+					<div
+						class={classNames('h-full rounded-full transition-all', {
+							'bg-primary': torrentState === 'downloading',
+							'bg-info': torrentState === 'initializing' || torrentState === 'checking',
+							'bg-warning': torrentState === 'paused',
+							'bg-error': torrentState === 'error'
+						})}
+						style="width: {progressPercent}%"
+					></div>
+				</div>
+				{#if torrentState === 'downloading' && torrentEta}
+					<div class="mt-0.5 text-right text-xs text-white/50">
+						{formatEta(torrentEta)}
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</figure>

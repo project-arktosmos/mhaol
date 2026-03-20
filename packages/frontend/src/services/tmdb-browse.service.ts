@@ -30,6 +30,14 @@ const initialState: TmdbBrowseState = {
 	movieGenres: [],
 	tvGenres: [],
 
+	searchMovies: [],
+	searchTv: [],
+	searchMoviesPage: 1,
+	searchTvPage: 1,
+	searchMoviesTotalPages: 1,
+	searchTvTotalPages: 1,
+	searchQuery: '',
+
 	recommendations: [],
 	recommendationsPage: 1,
 	recommendationsTotalPages: 1,
@@ -167,6 +175,54 @@ class TmdbBrowseService {
 			}));
 		} finally {
 			this.setLoading('discoverTv', false);
+		}
+	}
+
+	async searchMovies(query: string, page: number = 1): Promise<void> {
+		if (!browser || !query.trim()) return;
+		this.setLoading('searchMovies', true);
+		try {
+			const data = await this.fetchJson<TmdbPagedResponse<TMDBMovie>>(
+				`/api/tmdb/search/movies?q=${encodeURIComponent(query)}&page=${page}`
+			);
+			this.state.update((s) => ({
+				...s,
+				searchMovies: moviesToDisplay(data.results),
+				searchMoviesPage: data.page,
+				searchMoviesTotalPages: data.total_pages,
+				searchQuery: query
+			}));
+		} catch (e) {
+			this.state.update((s) => ({
+				...s,
+				error: e instanceof Error ? e.message : 'Failed to search movies'
+			}));
+		} finally {
+			this.setLoading('searchMovies', false);
+		}
+	}
+
+	async searchTv(query: string, page: number = 1): Promise<void> {
+		if (!browser || !query.trim()) return;
+		this.setLoading('searchTv', true);
+		try {
+			const data = await this.fetchJson<TmdbPagedResponse<TMDBTvShow>>(
+				`/api/tmdb/search/tv?q=${encodeURIComponent(query)}&page=${page}`
+			);
+			this.state.update((s) => ({
+				...s,
+				searchTv: tvShowsToDisplay(data.results),
+				searchTvPage: data.page,
+				searchTvTotalPages: data.total_pages,
+				searchQuery: query
+			}));
+		} catch (e) {
+			this.state.update((s) => ({
+				...s,
+				error: e instanceof Error ? e.message : 'Failed to search TV shows'
+			}));
+		} finally {
+			this.setLoading('searchTv', false);
 		}
 	}
 

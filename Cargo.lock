@@ -3594,6 +3594,7 @@ dependencies = [
  "futures-util",
  "libc",
  "mhaol-cloud",
+ "mhaol-http-stream",
  "mhaol-identity",
  "mhaol-llm",
  "mhaol-p2p-stream",
@@ -3629,6 +3630,18 @@ dependencies = [
  "serde_json",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "mhaol-http-stream"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

@@ -28,7 +28,10 @@
 	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'addons/tmdb/transform';
 	import { tmdbBrowseService } from 'frontend/services/tmdb-browse.service';
 	import { smartSearchService } from 'frontend/services/smart-search.service';
+	import { torrentService } from 'frontend/services/torrent.service';
+	import type { TorrentInfo } from 'frontend/types/torrent.type';
 	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
+	import SearchTab from 'ui-lib/components/tmdb-browse/SearchTab.svelte';
 	import PopularTab from 'ui-lib/components/tmdb-browse/PopularTab.svelte';
 	import DiscoverTab from 'ui-lib/components/tmdb-browse/DiscoverTab.svelte';
 	import RecommendationsTab from 'ui-lib/components/tmdb-browse/RecommendationsTab.svelte';
@@ -49,12 +52,13 @@
 	const TV_TAB = 'tv';
 
 	const LIBRARY_SUB = 'library';
+	const SEARCH_SUB = 'search';
 	const POPULAR_SUB = 'popular';
 	const DISCOVER_SUB = 'discover';
 	const RECOMMENDATIONS_SUB = 'recommendations';
 
 	type TabId = 'movies' | 'tv';
-	type SubTabId = 'library' | 'popular' | 'discover' | 'recommendations';
+	type SubTabId = 'library' | 'search' | 'popular' | 'discover' | 'recommendations';
 
 	let { data }: Props = $props();
 
@@ -115,12 +119,26 @@
 	let isMoviesTab = $derived(activeTab === MOVIES_TAB);
 	let isTvTab = $derived(activeTab === TV_TAB);
 	let isLibrarySub = $derived(activeSubTab === LIBRARY_SUB);
+	let isSearchSub = $derived(activeSubTab === SEARCH_SUB);
 	let isPopularSub = $derived(activeSubTab === POPULAR_SUB);
 	let isDiscoverSub = $derived(activeSubTab === DISCOVER_SUB);
 	let isRecommendationsSub = $derived(activeSubTab === RECOMMENDATIONS_SUB);
 
 	// TMDB browse state
 	const browseState = tmdbBrowseService.state;
+
+	// Torrent state — match torrents to library items by path
+	const torrentState = torrentService.state;
+
+	function findTorrentForItem(item: MediaItem): TorrentInfo | null {
+		const torrents = $torrentState.torrents;
+		if (torrents.length === 0) return null;
+		for (const t of torrents) {
+			if (!t.outputPath) continue;
+			if (item.path.startsWith(t.outputPath)) return t;
+		}
+		return null;
+	}
 
 	// Collect linked items for recommendations dropdown
 	let linkedItems = $derived.by(() => {
@@ -354,7 +372,8 @@
 		smartSearchService.select({
 			title: movie.title,
 			year: movie.releaseYear,
-			type: 'movie'
+			type: 'movie',
+			tmdbId: movie.id
 		});
 	}
 
@@ -362,7 +381,8 @@
 		smartSearchService.select({
 			title: tvShow.name,
 			year: tvShow.firstAirYear,
-			type: 'tv'
+			type: 'tv',
+			tmdbId: tvShow.id
 		});
 	}
 
@@ -682,6 +702,15 @@
 		</button>
 		<button
 			class={classNames('btn btn-xs', {
+				'btn-secondary': isSearchSub,
+				'btn-ghost': !isSearchSub
+			})}
+			onclick={() => selectSubTab(SEARCH_SUB)}
+		>
+			Search
+		</button>
+		<button
+			class={classNames('btn btn-xs', {
 				'btn-secondary': isPopularSub,
 				'btn-ghost': !isPopularSub
 			})}
@@ -709,7 +738,24 @@
 		</button>
 	</div>
 
-	{#if isPopularSub}
+	{#if isSearchSub}
+		<SearchTab
+			movies={$browseState.searchMovies}
+			tvShows={$browseState.searchTv}
+			moviesPage={$browseState.searchMoviesPage}
+			tvPage={$browseState.searchTvPage}
+			moviesTotalPages={$browseState.searchMoviesTotalPages}
+			tvTotalPages={$browseState.searchTvTotalPages}
+			query={$browseState.searchQuery}
+			loadingMovies={$browseState.loading['searchMovies'] ?? false}
+			loadingTv={$browseState.loading['searchTv'] ?? false}
+			mediaType={isMoviesTab ? 'movies' : 'tv'}
+			onselectMovie={handleBrowseSelectMovie}
+			onselectTvShow={handleBrowseSelectTvShow}
+			onsearchMovies={(q, p) => tmdbBrowseService.searchMovies(q, p)}
+			onsearchTv={(q, p) => tmdbBrowseService.searchTv(q, p)}
+		/>
+	{:else if isPopularSub}
 		<PopularTab
 			movies={$browseState.popularMovies}
 			tvShows={$browseState.popularTv}
@@ -851,11 +897,16 @@
 					class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 				>
 					{#each selectedList.items as item (item.id)}
+						{@const torrent = findTorrentForItem(item)}
 						<MediaCard
 							{item}
 							tmdbMetadata={tmdbMetadata[item.id] ?? null}
 							metadataLoading={tmdbLoading.has(item.id)}
 							selected={selectedItemId === item.id}
+							torrentProgress={torrent?.progress ?? null}
+							torrentState={torrent?.state ?? null}
+							torrentSpeed={torrent?.downloadSpeed ?? null}
+							torrentEta={torrent?.eta ?? null}
 							onselect={(i) => handleSelect(i)}
 						/>
 					{/each}
@@ -944,11 +995,16 @@
 							class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 						>
 							{#each list.items as item (item.id)}
+								{@const torrent = findTorrentForItem(item)}
 								<MediaCard
 									{item}
 									tmdbMetadata={tmdbMetadata[item.id] ?? null}
 									metadataLoading={tmdbLoading.has(item.id)}
 									selected={selectedItemId === item.id}
+									torrentProgress={torrent?.progress ?? null}
+									torrentState={torrent?.state ?? null}
+									torrentSpeed={torrent?.downloadSpeed ?? null}
+									torrentEta={torrent?.eta ?? null}
 									onselect={(i) => handleSelect(i)}
 								/>
 							{/each}
@@ -999,11 +1055,16 @@
 				class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 			>
 				{#each itemsWithOverrides as item (item.id)}
+					{@const torrent = findTorrentForItem(item)}
 					<MediaCard
 						{item}
 						tmdbMetadata={tmdbMetadata[item.id] ?? null}
 						metadataLoading={tmdbLoading.has(item.id)}
 						selected={selectedItemId === item.id}
+						torrentProgress={torrent?.progress ?? null}
+						torrentState={torrent?.state ?? null}
+						torrentSpeed={torrent?.downloadSpeed ?? null}
+						torrentEta={torrent?.eta ?? null}
 						onselect={(i) => handleSelect(i)}
 					/>
 				{/each}
@@ -1041,6 +1102,8 @@
 					connectionState={$playerState.connectionState}
 					positionSecs={$playerState.positionSecs}
 					durationSecs={$playerState.durationSecs}
+					streamUrl={$playerState.streamUrl}
+					buffering={$playerState.buffering}
 				/>
 			</div>
 		{/if}

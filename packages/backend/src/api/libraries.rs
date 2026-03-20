@@ -16,6 +16,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_libraries).post(create_library))
         .route("/{id}", delete(delete_library))
+        .route("/{id}/items", post(create_item))
         .route("/{id}/items/{item_id}/category", post(update_item_category).delete(clear_item_category))
         .route(
             "/{id}/items/{item_id}/media-type",
@@ -192,6 +193,70 @@ async fn delete_library(
     state.library_items.delete_by_library(&id);
     state.libraries.delete(&id);
     StatusCode::NO_CONTENT
+}
+
+#[derive(Deserialize)]
+struct CreateItemBody {
+    name: String,
+    path: String,
+    #[serde(alias = "mediaType")]
+    media_type: Option<String>,
+    #[serde(alias = "categoryId")]
+    category_id: Option<String>,
+    #[serde(alias = "tmdbId")]
+    tmdb_id: Option<i64>,
+}
+
+async fn create_item(
+    State(state): State<AppState>,
+    Path(library_id): Path<String>,
+    Json(body): Json<CreateItemBody>,
+) -> impl IntoResponse {
+    if state.libraries.get(&library_id).is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Library not found" })),
+        )
+            .into_response();
+    }
+
+    let item_id = uuid::Uuid::new_v4().to_string();
+    let extension = std::path::Path::new(&body.path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    state.library_items.insert(&crate::db::repo::library_item::InsertLibraryItem {
+        id: item_id.clone(),
+        library_id: library_id.clone(),
+        path: body.path.clone(),
+        extension,
+        media_type: body.media_type.unwrap_or_else(|| "video".to_string()),
+        category_id: body.category_id,
+    });
+
+    if let Some(tmdb_id) = body.tmdb_id {
+        state.library_item_links.upsert(
+            &uuid::Uuid::new_v4().to_string(),
+            &item_id,
+            "tmdb",
+            &tmdb_id.to_string(),
+            None,
+            None,
+        );
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": item_id,
+            "libraryId": library_id,
+            "name": body.name,
+            "path": body.path,
+        })),
+    )
+        .into_response()
 }
 
 #[derive(Deserialize)]

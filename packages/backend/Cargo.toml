@@ -48,6 +48,7 @@ mime_guess = { version = "2", optional = true }
 mhaol-yt-dlp = { path = "../yt-dlp" }
 mhaol-p2p-stream = { path = "../p2p-stream" }
 mhaol-torrent = { path = "../torrent" }
+mhaol-http-stream = { path = "../http-stream" }
 mhaol-llm = { path = "../llm" }
 
 [dev-dependencies]

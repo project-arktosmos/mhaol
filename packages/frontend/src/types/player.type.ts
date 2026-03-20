@@ -14,6 +14,8 @@ export interface PlayableFile {
 	durationSeconds: number | null;
 	size: number;
 	completedAt: string;
+	progress?: number;
+	streamUrl?: string;
 }
 
 // ===== Player State =====
@@ -23,6 +25,7 @@ export type PlayerConnectionState =
 	| 'connecting'
 	| 'signaling'
 	| 'streaming'
+	| 'http-streaming'
 	| 'error'
 	| 'closed';
 
@@ -41,6 +44,8 @@ export interface PlayerState {
 	durationSecs: number | null;
 	isSeeking: boolean;
 	isPaused: boolean;
+	streamUrl: string | null;
+	buffering: boolean;
 }
 
 // ===== Player Settings (localStorage) =====

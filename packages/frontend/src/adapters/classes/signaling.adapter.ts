@@ -59,6 +59,7 @@ export class SignalingAdapter extends AdapterClass {
 			connecting: 'Connecting...',
 			signaling: 'Signaling...',
 			streaming: 'Streaming',
+			'http-streaming': 'Streaming',
 			error: 'Error',
 			closed: 'Closed'
 		};
@@ -71,6 +72,7 @@ export class SignalingAdapter extends AdapterClass {
 			connecting: 'badge-info',
 			signaling: 'badge-info',
 			streaming: 'badge-success',
+			'http-streaming': 'badge-success',
 			error: 'badge-error',
 			closed: 'badge-ghost'
 		};

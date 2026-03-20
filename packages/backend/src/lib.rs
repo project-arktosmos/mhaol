@@ -227,13 +227,16 @@ impl AppState {
         if self.libraries.get_all().is_empty() {
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
             let downloads_path = format!("{}/Downloads", home);
+            let library_id = uuid::Uuid::new_v4().to_string();
             self.libraries.insert(
-                &uuid::Uuid::new_v4().to_string(),
+                &library_id,
                 "Downloads",
                 &downloads_path,
-                "[\"video\",\"image\",\"audio\"]",
+                "[\"movies\"]",
                 chrono::Utc::now().timestamp_millis(),
             );
+            // Point the torrent module at this library so downloads land where scans look
+            self.metadata.set_string("torrent.libraryId", &library_id);
             tracing::info!("Created default library at {}", downloads_path);
         }
     }

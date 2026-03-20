@@ -109,7 +109,7 @@
 		}
 	}
 
-	$: disabled = connectionState !== 'streaming';
+	$: disabled = connectionState !== 'streaming' && connectionState !== 'http-streaming';
 
 	onDestroy(() => {
 		if (currentElement) {

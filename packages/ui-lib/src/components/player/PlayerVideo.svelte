@@ -8,6 +8,8 @@
 	export let connectionState: PlayerConnectionState = 'idle';
 	export let positionSecs: number = 0;
 	export let durationSecs: number | null = null;
+	export let streamUrl: string | null = null;
+	export let buffering: boolean = false;
 
 	let videoElement: HTMLVideoElement | null = null;
 	let audioElement: HTMLAudioElement | null = null;
@@ -15,9 +17,12 @@
 	let streamAttached = false;
 
 	$: isVideo = file?.mode !== 'audio';
+	$: isHttpStreaming = connectionState === 'http-streaming';
+	$: isWebRtcStreaming = connectionState === 'streaming';
+	$: isPlaying = isHttpStreaming || isWebRtcStreaming;
 	$: activeMediaElement = (isVideo ? videoElement : audioElement) as HTMLMediaElement | null;
 
-	$: if (connectionState === 'streaming' && !streamAttached) {
+	$: if (isWebRtcStreaming && !streamAttached) {
 		tryAttachStream();
 	}
 
@@ -59,7 +64,11 @@
 	}
 
 	function handleSeek(event: CustomEvent<{ positionSecs: number }>): void {
-		playerService.seek(event.detail.positionSecs);
+		if (isHttpStreaming && videoElement) {
+			videoElement.currentTime = event.detail.positionSecs;
+		} else {
+			playerService.seek(event.detail.positionSecs);
+		}
 	}
 
 	function handleSeekStart(): void {
@@ -67,11 +76,43 @@
 	}
 
 	function handleVideoClick(): void {
-		if (!activeMediaElement || connectionState !== 'streaming') return;
+		if (!activeMediaElement || !isPlaying) return;
 		if (activeMediaElement.paused) {
 			activeMediaElement.play().catch(console.error);
 		} else {
 			activeMediaElement.pause();
+		}
+	}
+
+	function handleTimeUpdate(): void {
+		if (!videoElement || !isHttpStreaming) return;
+		playerService.state.update((s) => ({
+			...s,
+			positionSecs: videoElement!.currentTime,
+			durationSecs: videoElement!.duration || s.durationSecs
+		}));
+	}
+
+	function handleLoadedMetadata(): void {
+		if (!videoElement || !isHttpStreaming) return;
+		playerService.state.update((s) => ({
+			...s,
+			durationSecs: videoElement!.duration
+		}));
+	}
+
+	function handleWaiting(): void {
+		playerService.setBuffering(true);
+	}
+
+	function handlePlaying(): void {
+		playerService.setBuffering(false);
+		playerService.setPaused(false);
+	}
+
+	function handlePause(): void {
+		if (isHttpStreaming) {
+			playerService.setPaused(true);
 		}
 	}
 
@@ -84,6 +125,7 @@
 			case 'signaling':
 				return 'Negotiating WebRTC connection...';
 			case 'streaming':
+			case 'http-streaming':
 				return '';
 			case 'error':
 				return 'Connection failed';
@@ -101,7 +143,28 @@
 
 <div>
 	<div class="relative" bind:this={containerElement}>
-		{#if isVideo}
+		{#if isHttpStreaming && streamUrl}
+			<video
+				bind:this={videoElement}
+				src={streamUrl}
+				class="w-full cursor-pointer rounded-lg bg-black"
+				playsinline
+				autoplay
+				on:click={handleVideoClick}
+				on:timeupdate={handleTimeUpdate}
+				on:loadedmetadata={handleLoadedMetadata}
+				on:waiting={handleWaiting}
+				on:playing={handlePlaying}
+				on:pause={handlePause}
+			>
+				<track kind="captions" />
+			</video>
+			{#if buffering}
+				<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
+					<span class="loading loading-lg loading-spinner text-primary"></span>
+				</div>
+			{/if}
+		{:else if isVideo}
 			<video
 				bind:this={videoElement}
 				class="w-full cursor-pointer rounded-lg bg-black"
@@ -130,7 +193,7 @@
 			<audio bind:this={audioElement} class="absolute h-0 w-0 overflow-hidden"></audio>
 		{/if}
 
-		{#if connectionState !== 'streaming' && connectionState !== 'idle'}
+		{#if !isPlaying && connectionState !== 'idle'}
 			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-base-300/80">
 				{#if connectionState === 'connecting' || connectionState === 'signaling'}
 					<div class="text-center">
@@ -151,7 +214,7 @@
 		{/if}
 	</div>
 
-	{#if connectionState === 'streaming'}
+	{#if isPlaying}
 		<div class="mt-1">
 			<PlayerControls
 				mediaElement={activeMediaElement}

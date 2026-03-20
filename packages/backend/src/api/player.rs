@@ -26,20 +26,37 @@ struct PlayableFile {
     media_type: String,
     #[serde(rename = "completedAt", skip_serializing_if = "Option::is_none")]
     completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    progress: Option<f64>,
+    #[serde(rename = "streamUrl", skip_serializing_if = "Option::is_none")]
+    stream_url: Option<String>,
 }
 
 async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
     let mut files: Vec<PlayableFile> = Vec::new();
 
-    // Torrent completed/seeding downloads
+    // Torrent downloads (completed + in-progress with enough data to stream)
     let torrent_downloads = state.torrent_downloads.get_all();
     for dl in torrent_downloads {
-        if (dl.state == "seeding" || dl.progress >= 1.0) && dl.output_path.is_some() {
+        let is_complete = dl.state == "seeding" || dl.progress >= 1.0;
+        let is_streamable = dl.state == "downloading" && dl.progress >= 0.02;
+
+        if (is_complete || is_streamable) && dl.output_path.is_some() {
             let path = match (&dl.output_path, &dl.name) {
                 (Some(p), name) if !name.is_empty() => format!("{}/{}", p, name),
                 (Some(p), _) => p.clone(),
                 _ => continue,
             };
+
+            let (progress, stream_url) = if is_streamable && !is_complete {
+                (
+                    Some(dl.progress),
+                    Some(format!("/api/torrent/torrents/{}/stream", dl.info_hash)),
+                )
+            } else {
+                (None, None)
+            };
+
             files.push(PlayableFile {
                 id: format!("torrent:{}", dl.info_hash),
                 name: dl.name,
@@ -47,6 +64,8 @@ async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
                 source: "torrent".to_string(),
                 media_type: "video".to_string(),
                 completed_at: Some(dl.updated_at.clone()),
+                progress,
+                stream_url,
             });
         }
     }
@@ -69,6 +88,8 @@ async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
             source: "library".to_string(),
             media_type: item.media_type.clone(),
             completed_at: Some(item.created_at.clone()),
+            progress: None,
+            stream_url: None,
         });
     }
 
@@ -111,10 +132,11 @@ async fn create_session(
     State(state): State<AppState>,
     Json(body): Json<CreateSessionBody>,
 ) -> impl IntoResponse {
-    if !std::path::Path::new(&body.file_path).exists() {
+    let file_path = resolve_media_path(&body.file_path);
+    if !std::path::Path::new(&file_path).exists() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": format!("File not found: {}", body.file_path) })),
+            Json(serde_json::json!({ "error": format!("File not found: {}", file_path) })),
         )
             .into_response();
     }
@@ -148,7 +170,7 @@ async fn create_session(
         .worker_bridge
         .create_session(
             &session_id,
-            &body.file_path,
+            &file_path,
             &signaling_url,
             body.mode,
             body.video_codec,
@@ -191,4 +213,56 @@ async fn delete_session(
         let _ = state.worker_bridge.delete_session(&id).await;
     }
     Json(serde_json::json!({ "ok": true }))
+}
+
+const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "wmv", "webm", "flv", "m4v"];
+
+/// Resolve a media path to an actual video file.
+/// - If it's a file, return as-is.
+/// - If it's a directory, find the largest video file inside.
+/// - If it doesn't exist, search the parent directory for the largest video file.
+fn resolve_media_path(path: &str) -> String {
+    let p = std::path::Path::new(path);
+    if p.is_file() {
+        return path.to_string();
+    }
+    if p.is_dir() {
+        return find_largest_video(p).unwrap_or_else(|| path.to_string());
+    }
+    // Path doesn't exist — try the parent directory
+    if let Some(parent) = p.parent() {
+        if parent.is_dir() {
+            if let Some(found) = find_largest_video(parent) {
+                return found;
+            }
+        }
+    }
+    path.to_string()
+}
+
+fn find_largest_video(dir: &std::path::Path) -> Option<String> {
+    let mut best: Option<(u64, String)> = None;
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let ft = entry.file_type().ok()?;
+        let entry_path = entry.path();
+        if ft.is_file() {
+            if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
+                if VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                    if best.as_ref().map_or(true, |(s, _)| size > *s) {
+                        best = Some((size, entry_path.to_string_lossy().to_string()));
+                    }
+                }
+            }
+        } else if ft.is_dir() {
+            if let Some(found) = find_largest_video(&entry_path) {
+                let size = std::fs::metadata(&found).map(|m| m.len()).unwrap_or(0);
+                if best.as_ref().map_or(true, |(s, _)| size > *s) {
+                    best = Some((size, found));
+                }
+            }
+        }
+    }
+    best.map(|(_, path)| path)
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { MediaItem } from 'frontend/types/media-card.type';
 	import type { ImageTag } from 'frontend/types/image-tagger.type';
+	import type { TorrentState } from 'frontend/types/torrent.type';
 	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
 	import type { YouTubeOEmbedResponse } from '$types/youtube-oembed.type';
 	import type { DisplayMusicBrainzRecording } from '$types/musicbrainz.type';
@@ -20,6 +21,10 @@
 		imageTags?: ImageTag[];
 		tagging?: boolean;
 		selected?: boolean;
+		torrentProgress?: number | null;
+		torrentState?: TorrentState | null;
+		torrentSpeed?: number | null;
+		torrentEta?: number | null;
 		onselect?: (item: MediaItem) => void;
 	}
 
@@ -32,6 +37,10 @@
 		imageTags = [],
 		tagging = false,
 		selected = false,
+		torrentProgress = null,
+		torrentState = null,
+		torrentSpeed = null,
+		torrentEta = null,
 		onselect
 	}: Props = $props();
 
@@ -52,6 +61,10 @@
 		loading={metadataLoading}
 		{onselect}
 		{selected}
+		{torrentProgress}
+		{torrentState}
+		{torrentSpeed}
+		{torrentEta}
 	/>
 {:else if cardType === 'tv'}
 	<TvShowCard
@@ -60,6 +73,10 @@
 		loading={metadataLoading}
 		{onselect}
 		{selected}
+		{torrentProgress}
+		{torrentState}
+		{torrentSpeed}
+		{torrentEta}
 	/>
 {:else if cardType === 'youtube'}
 	<YouTubeCard {item} metadata={youtubeMetadata} loading={metadataLoading} {onselect} {selected} />

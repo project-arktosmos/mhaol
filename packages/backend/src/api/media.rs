@@ -205,7 +205,9 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
         .into_iter()
         .map(|lib| {
             let types: Vec<String> = serde_json::from_str(&lib.media_types).unwrap_or_default();
-            let lt = types.into_iter().next().unwrap_or_else(|| "movies".to_string());
+            let raw = types.into_iter().next().unwrap_or_else(|| "movies".to_string());
+            // Normalize "video" → "movies" so the flix UI filters work correctly
+            let lt = if raw == "video" { "movies".to_string() } else { raw };
             (lib.id, lt)
         })
         .collect();

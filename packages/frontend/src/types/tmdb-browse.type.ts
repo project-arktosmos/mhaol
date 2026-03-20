@@ -26,6 +26,14 @@ export interface TmdbBrowseState {
 	movieGenres: TmdbGenre[];
 	tvGenres: TmdbGenre[];
 
+	searchMovies: DisplayTMDBMovie[];
+	searchTv: DisplayTMDBTvShow[];
+	searchMoviesPage: number;
+	searchTvPage: number;
+	searchMoviesTotalPages: number;
+	searchTvTotalPages: number;
+	searchQuery: string;
+
 	recommendations: (DisplayTMDBMovie | DisplayTMDBTvShow)[];
 	recommendationsPage: number;
 	recommendationsTotalPages: number;
