@@ -3,9 +3,13 @@ import type {
 	MusicBrainzRecording,
 	MusicBrainzArtist,
 	MusicBrainzReleaseGroup,
+	MusicBrainzRelease,
+	MusicBrainzTrack,
 	DisplayMusicBrainzRecording,
 	DisplayMusicBrainzArtist,
-	DisplayMusicBrainzReleaseGroup
+	DisplayMusicBrainzReleaseGroup,
+	DisplayMusicBrainzRelease,
+	DisplayMusicBrainzTrack
 } from '$types/musicbrainz.type';
 
 export function formatArtistCredits(credits: MusicBrainzArtistCredit[] | undefined): string {
@@ -88,4 +92,38 @@ export function releaseGroupsToDisplay(
 	releaseGroups: MusicBrainzReleaseGroup[]
 ): DisplayMusicBrainzReleaseGroup[] {
 	return releaseGroups.map(releaseGroupToDisplay);
+}
+
+export function trackToDisplay(track: MusicBrainzTrack): DisplayMusicBrainzTrack {
+	return {
+		id: track.id,
+		number: track.number,
+		title: track.title,
+		duration: formatDuration(track.length),
+		durationMs: track.length || null,
+		artistCredits: formatArtistCredits(track['artist-credit'])
+	};
+}
+
+export function releaseToDisplay(release: MusicBrainzRelease): DisplayMusicBrainzRelease {
+	const tracks: DisplayMusicBrainzTrack[] = [];
+	let trackCount = 0;
+	for (const media of release.media ?? []) {
+		trackCount += media['track-count'];
+		for (const track of media.tracks ?? []) {
+			tracks.push(trackToDisplay(track));
+		}
+	}
+	const labelInfo = release['label-info']?.[0];
+	return {
+		id: release.id,
+		title: release.title,
+		date: release.date ?? null,
+		status: release.status ?? null,
+		country: release.country ?? null,
+		artistCredits: formatArtistCredits(release['artist-credit']),
+		trackCount: trackCount || release['track-count'] || 0,
+		label: labelInfo?.label?.name ?? null,
+		tracks
+	};
 }

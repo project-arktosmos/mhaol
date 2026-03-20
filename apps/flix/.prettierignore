@@ -1,0 +1,7 @@
+# Build output
+.svelte-kit/
+dist-static/
+dist/
+
+# Large binary files
+models/

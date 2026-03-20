@@ -5,11 +5,15 @@ pub mod database;
 pub mod downloads;
 pub mod health;
 pub mod hub;
+pub mod images;
 pub mod jackett;
 pub mod identities;
 pub mod libraries;
+pub mod lyrics;
+
 pub mod media;
 pub mod media_lists;
+pub mod musicbrainz;
 pub mod network;
 pub mod p2p_stream;
 pub mod player;
@@ -59,6 +63,9 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/jackett", jackett::router())
         .nest("/api/network", network::router())
         .nest("/api/signaling", signaling::router())
+        .nest("/api/images", images::router())
+        .nest("/api/lyrics", lyrics::router())
+        .nest("/api/musicbrainz", musicbrainz::router())
         .nest("/api/youtube", youtube::router())
         .nest("/api/youtube-search", youtube_search::router())
         .nest("/api/cloud", cloud_router)

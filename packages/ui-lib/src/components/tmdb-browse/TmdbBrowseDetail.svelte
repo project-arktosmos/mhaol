@@ -5,15 +5,27 @@
 		DisplayTMDBMovieDetails,
 		DisplayTMDBTvShowDetails
 	} from 'addons/tmdb/types';
-
+	import type { PlayableFile, PlayerConnectionState } from 'frontend/types/player.type';
+	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 	let {
 		movie = null,
 		tvShow = null,
 		movieDetails = null,
 		tvShowDetails = null,
 		loading = false,
+		fetching = false,
+		fetched = false,
+		playerFile = null,
+		playerConnectionState = 'idle',
+		playerPositionSecs = 0,
+		playerDurationSecs = 0,
+		playerStreamUrl = null,
+		playerBuffering = false,
+		onfetch,
 		ondownload,
 		onstream,
+		onfullscreen,
+		onstopplayer,
 		onclose
 	}: {
 		movie?: DisplayTMDBMovie | null;
@@ -21,8 +33,19 @@
 		movieDetails?: DisplayTMDBMovieDetails | null;
 		tvShowDetails?: DisplayTMDBTvShowDetails | null;
 		loading?: boolean;
+		fetching?: boolean;
+		fetched?: boolean;
+		playerFile?: PlayableFile | null;
+		playerConnectionState?: PlayerConnectionState;
+		playerPositionSecs?: number;
+		playerDurationSecs?: number | null;
+		playerStreamUrl?: string | null;
+		playerBuffering?: boolean;
+		onfetch?: () => void;
 		ondownload?: () => void;
 		onstream?: () => void;
+		onfullscreen?: () => void;
+		onstopplayer?: () => void;
 		onclose?: () => void;
 	} = $props();
 
@@ -59,7 +82,46 @@
 		{/if}
 	</div>
 
-	{#if backdropUrl}
+	{#if playerFile}
+		<div class="bg-black">
+			<div class="flex items-center justify-between px-2 py-1">
+				<p class="min-w-0 truncate text-xs font-semibold text-white" title={playerFile.name}>
+					{playerFile.name}
+				</p>
+				<div class="flex shrink-0 items-center gap-1">
+					{#if onfullscreen}
+						<button
+							class="btn btn-square btn-ghost btn-xs text-white"
+							onclick={onfullscreen}
+							aria-label="Fullscreen player"
+							title="Fullscreen player"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
+							</svg>
+						</button>
+					{/if}
+					{#if onstopplayer}
+						<button
+							class="btn btn-square btn-ghost btn-xs text-white"
+							onclick={onstopplayer}
+							aria-label="Close player"
+						>
+							&times;
+						</button>
+					{/if}
+				</div>
+			</div>
+			<PlayerVideo
+				file={playerFile}
+				connectionState={playerConnectionState}
+				positionSecs={playerPositionSecs}
+				durationSecs={playerDurationSecs}
+				streamUrl={playerStreamUrl}
+				buffering={playerBuffering}
+			/>
+		</div>
+	{:else if backdropUrl}
 		<div class="relative">
 			<img src={backdropUrl} alt={title} class="h-40 w-full object-cover" />
 			<div class="absolute inset-0 bg-gradient-to-t from-base-200 to-transparent"></div>
@@ -122,8 +184,31 @@
 		{/if}
 
 		<div class="flex gap-2">
+			{#if onfetch}
+				<button class="btn btn-sm btn-info flex-1" onclick={onfetch} disabled={fetching || fetched}>
+					{#if fetching}
+						<span class="loading loading-xs loading-spinner"></span>
+					{:else}
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							class="h-4 w-4"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+							/>
+						</svg>
+					{/if}
+					{fetched ? 'Fetched' : 'Fetch'}
+				</button>
+			{/if}
 			{#if ondownload}
-				<button class="btn btn-sm btn-success flex-1" onclick={ondownload}>
+				<button class="btn btn-sm btn-success flex-1" onclick={ondownload} disabled={!fetched}>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						class="h-4 w-4"
@@ -142,7 +227,7 @@
 				</button>
 			{/if}
 			{#if onstream}
-				<button class="btn btn-sm btn-primary flex-1" onclick={onstream}>
+				<button class="btn btn-sm btn-primary flex-1" onclick={onstream} disabled={!fetched}>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						class="h-4 w-4"

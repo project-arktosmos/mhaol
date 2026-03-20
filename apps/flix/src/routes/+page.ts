@@ -1,7 +1,7 @@
-import { apiUrl } from 'frontend/lib/api-base';
-import type { PageLoad } from './$types';
+import { apiUrl } from "frontend/lib/api-base";
+import type { PageLoad } from "./$types";
 
 export const load: PageLoad = async ({ fetch }) => {
-	const res = await fetch(apiUrl('/api/media'));
-	return res.json();
+  const res = await fetch(apiUrl("/api/media"));
+  return res.json();
 };

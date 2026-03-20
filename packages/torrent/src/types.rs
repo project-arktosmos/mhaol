@@ -183,7 +183,7 @@ mod tests {
         };
         let json = serde_json::to_string(&info).unwrap();
         assert!(json.contains("\"eta\":null"));
-        assert!(json.contains("\"output_path\":null"));
+        assert!(json.contains("\"outputPath\":null"));
         let deserialized: TorrentInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(info, deserialized);
     }
@@ -208,17 +208,17 @@ mod tests {
         let json = r#"{
             "id": 1,
             "name": "my file",
-            "info_hash": "deadbeef",
+            "infoHash": "deadbeef",
             "size": 999,
             "progress": 1.0,
-            "download_speed": 0,
-            "upload_speed": 0,
+            "downloadSpeed": 0,
+            "uploadSpeed": 0,
             "peers": 0,
             "seeds": 3,
             "state": "seeding",
-            "added_at": 1700000000,
+            "addedAt": 1700000000,
             "eta": null,
-            "output_path": "/tmp/my file"
+            "outputPath": "/tmp/my file"
         }"#;
         let info: TorrentInfo = serde_json::from_str(json).unwrap();
         assert_eq!(info.id, 1);

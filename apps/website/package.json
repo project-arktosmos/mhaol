@@ -3,7 +3,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
+		"dev": "vite dev --port 1600",
 		"dev:qq": "node scripts/generate-qq-locale.js",
 		"build": "vite build",
 		"preview": "vite preview",

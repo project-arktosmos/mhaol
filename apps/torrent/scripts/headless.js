@@ -31,7 +31,10 @@ if (skipBuild && existsSync(torrentBin)) {
 	console.log('Torrent server already built, skipping.');
 } else {
 	console.log('Building torrent server...');
-	execSync('cargo build -p mhaol-torrent --bin mhaol-torrent-server', { stdio: 'inherit', cwd: ROOT });
+	execSync('cargo build -p mhaol-torrent --bin mhaol-torrent-server', {
+		stdio: 'inherit',
+		cwd: ROOT
+	});
 }
 
 // Start the torrent server — serves both API and static frontend on a single port

@@ -5,8 +5,7 @@ import { ObjectServiceClass } from 'frontend/services/classes/object-service.cla
 import type {
 	TorrentSettings,
 	TorrentServiceState,
-	TorrentInfo,
-	TorrentStats
+	TorrentInfo
 } from 'frontend/types/torrent.type';
 
 const initialSettings: TorrentSettings = {
@@ -21,6 +20,8 @@ const initialState: TorrentServiceState = {
 	torrents: [],
 	stats: null,
 	downloadPath: '',
+	appName: '',
+	appDownloadPath: '',
 	libraryId: ''
 };
 
@@ -28,6 +29,8 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	public state: Writable<TorrentServiceState> = writable(initialState);
 
 	private _initialized = false;
+	private appName = '';
+	private appDownloadPath = '';
 	private eventSource: EventSource | null = null;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private reconnectDelay = 1000;
@@ -38,9 +41,10 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 
 	// ===== Initialization =====
 
-	async initialize(): Promise<void> {
+	async initialize(appName?: string): Promise<void> {
 		if (!browser || this._initialized) return;
 
+		this.appName = appName ?? '';
 		this.state.update((s) => ({ ...s, loading: true }));
 
 		try {
@@ -56,11 +60,16 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 			const status = await statusRes.json();
 			const config = await configRes.json();
 
+			const downloadPath = config.downloadPath ?? status.downloadPath ?? '';
+			this.appDownloadPath = this.appName ? `${downloadPath}/${this.appName}` : downloadPath;
+
 			this.state.update((s) => ({
 				...s,
 				initialized: status.initialized,
 				loading: false,
-				downloadPath: config.downloadPath ?? status.downloadPath ?? '',
+				downloadPath,
+				appName: this.appName,
+				appDownloadPath: this.appDownloadPath,
 				stats: status.stats ?? null,
 				error: null
 			}));
@@ -89,7 +98,10 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 
 		this.eventSource.addEventListener('torrents', (event) => {
 			try {
-				const torrents: TorrentInfo[] = JSON.parse(event.data);
+				const allTorrents: TorrentInfo[] = JSON.parse(event.data);
+				const torrents = this.appName
+					? allTorrents.filter((t) => t.outputPath && t.outputPath.startsWith(this.appDownloadPath))
+					: allTorrents;
 				this.state.update((s) => ({ ...s, torrents }));
 			} catch {
 				// ignore parse errors
@@ -142,7 +154,8 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 
 		try {
 			const body: Record<string, unknown> = { source };
-			if (downloadPath) body.downloadPath = downloadPath;
+			const effectivePath = downloadPath || this.appDownloadPath;
+			if (effectivePath) body.downloadPath = effectivePath;
 
 			const res = await fetch(apiUrl('/api/torrent/torrents'), {
 				method: 'POST',
@@ -220,10 +233,17 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async removeAll(): Promise<void> {
 		if (!browser) return;
 		try {
-			const res = await fetch(apiUrl('/api/torrent/torrents/remove-all'), {
-				method: 'POST'
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			if (this.appName) {
+				// Remove only this app's torrents
+				let currentTorrents: TorrentInfo[] = [];
+				this.state.subscribe((s) => (currentTorrents = s.torrents))();
+				await Promise.all(currentTorrents.map((t) => this.removeTorrent(t.infoHash)));
+			} else {
+				const res = await fetch(apiUrl('/api/torrent/torrents/remove-all'), {
+					method: 'POST'
+				});
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			}
 		} catch (error) {
 			this.state.update((s) => ({
 				...s,

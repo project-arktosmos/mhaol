@@ -1,4 +1,8 @@
 #[cfg(not(target_os = "android"))]
+pub mod image_tagger;
+pub mod lyrics;
+pub mod musicbrainz;
+#[cfg(not(target_os = "android"))]
 pub mod p2p_stream;
 pub mod signaling;
 pub mod tmdb;

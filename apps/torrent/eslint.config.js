@@ -23,6 +23,7 @@ export default ts.config(
 		rules: {
 			'no-undef': 'off',
 			'no-useless-escape': 'warn',
+			'@typescript-eslint/triple-slash-reference': 'off',
 			'@typescript-eslint/no-unused-vars': [
 				'error',
 				{ argsIgnorePattern: '^_', varsIgnorePattern: '^_' }

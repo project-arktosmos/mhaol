@@ -23,26 +23,37 @@ const initialSettings: ThemeSettings = {
 };
 
 class ThemeService extends ObjectServiceClass<ThemeSettings> {
+	private variant: string | null = null;
+
 	constructor() {
 		super('theme-settings', initialSettings);
 	}
 
-	initialize(): void {
+	private resolveThemeName(theme: Theme): string {
+		return this.variant ? `${this.variant}-${theme}` : theme;
+	}
+
+	initialize(variant?: string): void {
 		if (!browser) return;
+		this.variant = variant ?? null;
 		const hasStoredPreference = localStorage.getItem(STORAGE_KEY) !== null;
 		if (!hasStoredPreference) {
 			this.set({ id: 'theme-settings', theme: getBrowserPreference() });
 		}
 		const current = this.get();
-		document.documentElement.setAttribute('data-theme', current.theme);
+		document.documentElement.setAttribute('data-theme', this.resolveThemeName(current.theme));
 		this.store.subscribe((settings) => {
-			document.documentElement.setAttribute('data-theme', settings.theme);
+			document.documentElement.setAttribute('data-theme', this.resolveThemeName(settings.theme));
 		});
 	}
 
 	toggle(): void {
 		const current = this.get();
 		this.set({ ...current, theme: current.theme === 'light' ? 'dark' : 'light' });
+	}
+
+	currentTheme(): Theme {
+		return this.get().theme;
 	}
 }
 

@@ -1,40 +1,41 @@
 {
-	"$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
-	"productName": "Mhaol Flix",
-	"version": "0.1.0",
-	"identifier": "com.arktosmos.mhaolflix",
-	"build": {
-		"beforeDevCommand": "pnpm --filter flix dev -- --port 1532",
-		"devUrl": "http://localhost:1532",
-		"beforeBuildCommand": "pnpm --filter flix build",
-		"frontendDist": "../dist-static"
-	},
-	"app": {
-		"windows": [
-			{
-				"title": "Mhaol Flix",
-				"width": 900,
-				"height": 700,
-				"resizable": true,
-				"fullscreen": false
-			}
-		],
-		"security": {
-			"csp": null
-		}
-	},
-	"bundle": {
-		"active": true,
-		"targets": "all",
-		"icon": [
-			"icons/32x32.png",
-			"icons/128x128.png",
-			"icons/128x128@2x.png",
-			"icons/icon.icns",
-			"icons/icon.ico"
-		],
-		"android": {
-			"minSdkVersion": 24
-		}
-	}
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "productName": "Mhaol Flix",
+  "version": "0.1.0",
+  "identifier": "com.arktosmos.mhaolflix",
+  "build": {
+    "beforeDevCommand": "pnpm --filter flix dev",
+    "devUrl": "http://localhost:1530",
+    "beforeBuildCommand": "pnpm --filter flix build",
+    "frontendDist": "../dist-static"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Mhaol Flix",
+        "width": 900,
+        "height": 700,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "minSdkVersion": 24
+    }
+  }
 }

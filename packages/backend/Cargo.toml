@@ -50,6 +50,11 @@ mhaol-p2p-stream = { path = "../p2p-stream" }
 mhaol-torrent = { path = "../torrent" }
 mhaol-http-stream = { path = "../http-stream" }
 mhaol-llm = { path = "../llm" }
+ort = { version = "2.0.0-rc.11", features = ["ndarray"] }
+ndarray = "0.17"
+tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp"] }
+hf-hub = { version = "0.5", features = ["tokio"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

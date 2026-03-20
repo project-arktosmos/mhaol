@@ -42,24 +42,37 @@
 	let preferredQuality = $state('1080p');
 
 	const languages = ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian', 'Japanese', 'Korean', 'Chinese', 'Hindi', 'Arabic', 'Dutch', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Polish', 'Turkish', 'Thai'];
-	const qualities = ['4K', '2160p', '1080p', '720p', '480p'];
+	const videoQualities = ['4K', '2160p', '1080p', '720p', '480p'];
+	const audioQualities = ['FLAC', 'ALAC', 'Lossless', '320kbps', 'MP3', 'AAC', 'WAV', 'OGG'];
 
 	const searchStore = smartSearchService.store;
 	let selection = $derived($searchStore.selection);
+	let isMusic = $derived(selection?.type === 'music');
+	let qualities = $derived(isMusic ? audioQualities : videoQualities);
+
+	$effect(() => {
+		if (isMusic && preferredQuality === '1080p') {
+			preferredQuality = 'FLAC';
+		} else if (!isMusic && preferredQuality === 'FLAC') {
+			preferredQuality = '1080p';
+		}
+	});
 	let mode = $derived(selection?.mode ?? null);
 	let searching = $derived($searchStore.searching);
 	let analyzing = $derived($searchStore.analyzing);
 	let searchResults = $derived(
 		[...$searchStore.searchResults].sort((a, b) => {
-			const matchA = a.analysis
-				? (a.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0)
-				+ (a.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
-				: -1;
-			const matchB = b.analysis
-				? (b.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0)
-				+ (b.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
-				: -1;
-			if (matchB !== matchA) return matchB - matchA;
+			if (!isMusic) {
+				const matchA = a.analysis
+					? (a.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0)
+					+ (a.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
+					: -1;
+				const matchB = b.analysis
+					? (b.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0)
+					+ (b.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
+					: -1;
+				if (matchB !== matchA) return matchB - matchA;
+			}
 			if (b.seeders !== a.seeders) return b.seeders - a.seeders;
 			if (b.leechers !== a.leechers) return b.leechers - a.leechers;
 			const relA = a.analysis?.relevance ?? -1;
@@ -89,8 +102,10 @@
 		for (const r of searchResults) {
 			if (!r.analysis) continue;
 			if (r.analysis.relevance < 75) continue;
-			if (!r.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase())) continue;
-			if (!r.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase())) continue;
+			if (!isMusic) {
+				if (!r.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase())) continue;
+				if (!r.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase())) continue;
+			}
 			return r;
 		}
 		return null;
@@ -105,6 +120,9 @@
 				handleAddCandidate();
 			} else if (mode === 'stream') {
 				onstream?.(bestCandidate);
+				candidateAdded = true;
+			} else if (mode === 'fetch') {
+				smartSearchService.setFetchedCandidate(bestCandidate);
 				candidateAdded = true;
 			}
 		}
@@ -123,7 +141,7 @@
 			const basePath: string = config.downloadPath ?? '';
 			if (!basePath) return;
 
-			const subdir = selection.type === 'movie' ? 'movies' : 'tv';
+			const subdir = selection.type === 'music' ? 'music' : selection.type === 'movie' ? 'movies' : 'tv';
 			const downloadPath = `${basePath}/${subdir}`;
 
 			const res = await fetch(apiUrl('/api/torrent/torrents'), {
@@ -151,6 +169,12 @@
 
 	let searchTerms = $derived.by(() => {
 		if (!selection) return [];
+		if (selection.type === 'music') {
+			return [
+				{ term: `${selection.artist} ${selection.title}`, components: ['artist', 'album'] },
+				{ term: selection.artist, components: ['artist'] }
+			];
+		}
 		const { title, year } = selection;
 		return [
 			{ term: title, components: ['title'] },
@@ -171,18 +195,20 @@
 	<li class={classNames('step', { 'step-success': stepDone })}>{bestCandidate && !candidateAdded ? 'Ready' : candidateAdded ? 'Done' : 'Candidate'}</li>
 </ul>
 
-<div class="mb-3 flex items-center gap-2">
-	<select class="select-bordered select select-xs" bind:value={preferredLanguage}>
-		{#each languages as lang}
-			<option value={lang}>{lang}</option>
-		{/each}
-	</select>
-	<select class="select-bordered select select-xs" bind:value={preferredQuality}>
-		{#each qualities as q}
-			<option value={q}>{q}</option>
-		{/each}
-	</select>
-</div>
+{#if !isMusic}
+	<div class="mb-3 flex items-center gap-2">
+		<select class="select-bordered select select-xs" bind:value={preferredLanguage}>
+			{#each languages as lang}
+				<option value={lang}>{lang}</option>
+			{/each}
+		</select>
+		<select class="select-bordered select select-xs" bind:value={preferredQuality}>
+			{#each qualities as q}
+				<option value={q}>{q}</option>
+			{/each}
+		</select>
+	</div>
+{/if}
 
 {#if selection}
 	<div class="mb-3 rounded bg-base-100 p-2">
@@ -193,11 +219,15 @@
 					<span>{selection.year}</span>
 					<span class={classNames('badge badge-xs', {
 						'badge-primary': selection.type === 'movie',
-						'badge-info': selection.type === 'tv'
+						'badge-info': selection.type === 'tv',
+						'badge-secondary': selection.type === 'music'
 					})}>
-						{selection.type === 'movie' ? 'Movie' : 'TV'}
+						{selection.type === 'music' ? 'Music' : selection.type === 'movie' ? 'Movie' : 'TV'}
 					</span>
 				</div>
+				{#if selection.type === 'music'}
+					<div class="truncate text-xs text-base-content/40">{selection.artist}</div>
+				{/if}
 			</div>
 			<button
 				class="btn btn-ghost btn-xs"
@@ -262,7 +292,7 @@
 							<th class="text-right">Uploaded</th>
 							<th>Quality</th>
 							<th>Lang</th>
-							<th>Subs</th>
+							{#if !isMusic}<th>Subs</th>{/if}
 							<th class="text-right">Rel%</th>
 							<th>Reason</th>
 						</tr>
@@ -296,13 +326,13 @@
 									{formatUploadDate(result.uploadedAt)}
 								</td>
 								{#if result.analyzing}
-									<td colspan="5" class="text-center">
+									<td colspan={isMusic ? 4 : 5} class="text-center">
 										<span class="loading loading-xs loading-spinner"></span>
 									</td>
 								{:else if result.analysis}
 									<td class="text-nowrap text-xs">{result.analysis.quality}</td>
 									<td class="text-nowrap text-xs">{result.analysis.languages}</td>
-									<td class="text-nowrap text-xs">{result.analysis.subs}</td>
+									{#if !isMusic}<td class="text-nowrap text-xs">{result.analysis.subs}</td>{/if}
 									<td class={classNames('text-right text-xs font-medium', {
 										'text-success': result.analysis.relevance >= 80,
 										'text-warning': result.analysis.relevance >= 50 && result.analysis.relevance < 80,
@@ -314,7 +344,7 @@
 										<span class="line-clamp-2">{result.analysis.reason}</span>
 									</td>
 								{:else}
-									<td colspan="5"></td>
+									<td colspan={isMusic ? 4 : 5}></td>
 								{/if}
 							</tr>
 						{/each}
@@ -343,7 +373,9 @@
 				<span class={getSeedersColor(bestCandidate.seeders)}>{formatSeeders(bestCandidate.seeders)} SE</span>
 			</div>
 			<div class="mb-2 text-xs text-base-content/50">{bestCandidate.analysis?.reason}</div>
-						{#if candidateAdded}
+						{#if candidateAdded && mode === 'fetch'}
+				<span class="badge badge-sm badge-success">Torrent located</span>
+			{:else if candidateAdded}
 				<span class="badge badge-sm badge-success">Added to downloads</span>
 			{:else if streamingHash}
 				<div class="flex items-center gap-2">

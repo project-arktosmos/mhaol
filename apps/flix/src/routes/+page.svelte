@@ -10,7 +10,7 @@
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import type { MediaDetailCardType } from 'frontend/types/media-detail.type';
 	import TmdbLinkModal from 'ui-lib/components/libraries/TmdbLinkModal.svelte';
-	import TmdbBrowseCard from 'ui-lib/components/tmdb-browse/TmdbBrowseCard.svelte';
+	import LibraryTab from 'ui-lib/components/tmdb-browse/LibraryTab.svelte';
 	import MediaDetail from 'ui-lib/components/media/MediaDetail.svelte';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 	import TmdbBrowseDetail from 'ui-lib/components/tmdb-browse/TmdbBrowseDetail.svelte';
@@ -32,6 +32,8 @@
 	import { smartSearchService } from 'frontend/services/smart-search.service';
 	import { torrentService } from 'frontend/services/torrent.service';
 	import type { TorrentInfo } from 'frontend/types/torrent.type';
+	import type { SmartSearchTorrentResult } from 'frontend/types/smart-search.type';
+	import type { PlayableFile } from 'frontend/types/player.type';
 	import SearchTab from 'ui-lib/components/tmdb-browse/SearchTab.svelte';
 	import PopularTab from 'ui-lib/components/tmdb-browse/PopularTab.svelte';
 	import DiscoverTab from 'ui-lib/components/tmdb-browse/DiscoverTab.svelte';
@@ -111,6 +113,8 @@
 		selectedBrowseTvShow = null;
 		browseMovieDetails = null;
 		browseTvShowDetails = null;
+		fetchingTmdbId = null;
+		smartSearchService.clear();
 	}
 
 	async function fetchBrowseMovieDetails(tmdbId: number) {
@@ -143,20 +147,89 @@
 		}
 	}
 
-	function handleBrowseDetailDownload() {
+	// Smart search store for tracking fetch state
+	const searchStore = smartSearchService.store;
+
+	let fetchingTmdbId = $state<number | null>(null);
+	let currentDetailTmdbId = $derived(selectedBrowseMovie?.id ?? selectedBrowseTvShow?.id ?? null);
+	let isFetching = $derived(
+		fetchingTmdbId !== null &&
+			fetchingTmdbId === currentDetailTmdbId &&
+			$searchStore.fetchedCandidate === null &&
+			$searchStore.selection?.mode === 'fetch'
+	);
+	let isFetchedForCurrent = $derived(
+		$searchStore.fetchedCandidate !== null && fetchingTmdbId === currentDetailTmdbId
+	);
+
+	function handleBrowseDetailFetch() {
 		if (selectedBrowseMovie) {
-			handleBrowseDownloadMovie(selectedBrowseMovie);
+			fetchingTmdbId = selectedBrowseMovie.id;
+			smartSearchService.select({
+				title: selectedBrowseMovie.title,
+				year: selectedBrowseMovie.releaseYear,
+				type: 'movie',
+				tmdbId: selectedBrowseMovie.id,
+				mode: 'fetch'
+			});
 		} else if (selectedBrowseTvShow) {
-			handleBrowseDownloadTvShow(selectedBrowseTvShow);
+			fetchingTmdbId = selectedBrowseTvShow.id;
+			smartSearchService.select({
+				title: selectedBrowseTvShow.name,
+				year: selectedBrowseTvShow.firstAirYear,
+				type: 'tv',
+				tmdbId: selectedBrowseTvShow.id,
+				mode: 'fetch'
+			});
 		}
 	}
 
+	function handleBrowseDetailDownload() {
+		const candidate = smartSearchService.getFetchedCandidate();
+		if (!candidate) return;
+		smartSearchService.startDownload(candidate);
+	}
+
 	function handleBrowseDetailStream() {
-		if (selectedBrowseMovie) {
-			handleBrowseStreamMovie(selectedBrowseMovie);
-		} else if (selectedBrowseTvShow) {
-			handleBrowseStreamTvShow(selectedBrowseTvShow);
-		}
+		const candidate = smartSearchService.getFetchedCandidate();
+		if (!candidate) return;
+		const title = selectedBrowseMovie?.title ?? selectedBrowseTvShow?.name ?? '';
+		playerService.prepareStream(title);
+		handleStreamCandidate(candidate);
+	}
+
+	async function handleStreamCandidate(candidate: SmartSearchTorrentResult) {
+		smartSearchService.hide();
+		const infoHash = await smartSearchService.startStream(candidate);
+		if (!infoHash) return;
+
+		const unsubscribe = torrentService.state.subscribe((state) => {
+			const torrent = state.torrents.find((t) => t.infoHash === infoHash);
+			if (!torrent) return;
+
+			smartSearchService.updateStreamingProgress(torrent.progress);
+
+			if (torrent.progress >= 0.02 || torrent.state === 'seeding') {
+				unsubscribe();
+				smartSearchService.clearStreaming();
+
+				const file: PlayableFile = {
+					id: `torrent:${infoHash}`,
+					type: 'torrent',
+					name: torrent.name,
+					outputPath: torrent.outputPath ?? '',
+					mode: 'video',
+					format: null,
+					videoFormat: null,
+					thumbnailUrl: null,
+					durationSeconds: null,
+					size: torrent.size,
+					completedAt: '',
+					streamUrl: `/api/torrent/torrents/${infoHash}/stream`
+				};
+				playerService.playStream(file);
+			}
+		});
 	}
 
 	// Torrent state — match torrents to library items by path
@@ -246,6 +319,39 @@
 			}
 			return { ...item, links: merged, ...(catOvr !== undefined ? { categoryId: catOvr } : {}) };
 		})
+	);
+
+	// Convert library items to DisplayTMDBMovie[] for LibraryTab
+	// Use a stable unique numeric id per item (hash from item.id string)
+	function stableNumericId(str: string): number {
+		let hash = 0;
+		for (let i = 0; i < str.length; i++) {
+			hash = (hash * 31 + str.charCodeAt(i)) | 0;
+		}
+		return Math.abs(hash);
+	}
+
+	let libraryMovies = $derived(
+		itemsWithOverrides.map((item): DisplayTMDBMovie => {
+			const meta = tmdbMetadata[item.id];
+			return {
+				id: stableNumericId(item.id),
+				title: meta?.title ?? item.name,
+				originalTitle: meta?.originalTitle ?? item.name,
+				overview: meta?.overview ?? '',
+				posterUrl: meta?.posterUrl ?? null,
+				backdropUrl: meta?.backdropUrl ?? null,
+				releaseYear: meta?.releaseYear ?? '',
+				voteAverage: meta?.voteAverage ?? 0,
+				voteCount: meta?.voteCount ?? 0,
+				genres: meta?.genres ?? []
+			};
+		})
+	);
+
+	// Map numeric id back to MediaItem for selection handling
+	let libraryItemsByMovieId = $derived(
+		new Map(itemsWithOverrides.map((item) => [stableNumericId(item.id), item]))
 	);
 
 	// Player state
@@ -351,47 +457,6 @@
 		}
 	}
 
-	function handleBrowseDownloadMovie(movie: DisplayTMDBMovie) {
-		smartSearchService.select({
-			title: movie.title,
-			year: movie.releaseYear,
-			type: 'movie',
-			tmdbId: movie.id,
-			mode: 'download'
-		});
-	}
-
-	function handleBrowseStreamMovie(movie: DisplayTMDBMovie) {
-		playerService.prepareStream(movie.title);
-		smartSearchService.select({
-			title: movie.title,
-			year: movie.releaseYear,
-			type: 'movie',
-			tmdbId: movie.id,
-			mode: 'stream'
-		});
-	}
-
-	function handleBrowseDownloadTvShow(tvShow: DisplayTMDBTvShow) {
-		smartSearchService.select({
-			title: tvShow.name,
-			year: tvShow.firstAirYear,
-			type: 'tv',
-			tmdbId: tvShow.id,
-			mode: 'download'
-		});
-	}
-
-	function handleBrowseStreamTvShow(tvShow: DisplayTMDBTvShow) {
-		playerService.prepareStream(tvShow.name);
-		smartSearchService.select({
-			title: tvShow.name,
-			year: tvShow.firstAirYear,
-			type: 'tv',
-			tmdbId: tvShow.id,
-			mode: 'stream'
-		});
-	}
 
 	function updateItemLinks(itemId: string, service: string, link: MediaItemLink | null) {
 		linkOverrides = {
@@ -626,41 +691,32 @@
 					onload={(id, type, p) => tmdbBrowseService.loadRecommendations(id, type, p)}
 				/>
 			{:else if isLibrarySub}
-				<!-- Movies grid -->
-				{#if itemsWithOverrides.length > 0}
-					<div
-						class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-					>
-						{#each itemsWithOverrides as item (item.id)}
-							{@const meta = tmdbMetadata[item.id]}
-							<TmdbBrowseCard
-								movie={{
-									id: Number(item.links.tmdb?.serviceId ?? 0),
-									title: meta?.title ?? item.name,
-									originalTitle: meta?.originalTitle ?? item.name,
-									overview: meta?.overview ?? '',
-									posterUrl: meta?.posterUrl ?? null,
-									backdropUrl: meta?.backdropUrl ?? null,
-									releaseYear: meta?.releaseYear ?? '',
-									voteAverage: meta?.voteAverage ?? 0,
-									voteCount: meta?.voteCount ?? 0,
-									genres: meta?.genres ?? []
-								}}
-								selected={selectedItemId === item.id}
-								onclick={() => handleSelect(item)}
-							/>
-						{/each}
-					</div>
-				{:else}
-					<div class="rounded-lg bg-base-200 p-8 text-center">
-						<p class="opacity-50">No movies yet. Add a Movies library and scan it.</p>
-					</div>
-				{/if}
+				<LibraryTab
+					movies={libraryMovies}
+					selectedMovieId={selectedBrowseMovie?.id ?? null}
+					onselectMovie={(movie) => {
+						const item = libraryItemsByMovieId.get(movie.id);
+						if (!item) return;
+						selectedBrowseTvShow = null;
+						browseTvShowDetails = null;
+						if (selectedBrowseMovie?.id === movie.id) {
+							selectedBrowseMovie = null;
+							browseMovieDetails = null;
+							return;
+						}
+						selectedBrowseMovie = movie;
+						const meta = tmdbMetadata[item.id] ?? null;
+						browseMovieDetails = meta;
+						if (!meta && item.links.tmdb) {
+							fetchBrowseMovieDetails(Number(item.links.tmdb.serviceId));
+						}
+					}}
+				/>
 			{/if}
 		</div>
 	</div>
 
-	{#if hasBrowseSelection && !isLibrarySub}
+	{#if hasBrowseSelection || ($playerState.currentFile && $playerDisplayMode === 'sidebar')}
 		<div class="hidden w-85 shrink-0 border-l border-base-300 bg-base-200 lg:block">
 			<TmdbBrowseDetail
 				movie={selectedBrowseMovie}
@@ -668,12 +724,49 @@
 				movieDetails={browseMovieDetails}
 				tvShowDetails={browseTvShowDetails}
 				loading={browseDetailLoading}
+				fetching={isFetching}
+				fetched={isFetchedForCurrent}
+				playerFile={$playerDisplayMode === 'sidebar' ? $playerState.currentFile : null}
+				playerConnectionState={$playerState.connectionState}
+				playerPositionSecs={$playerState.positionSecs}
+				playerDurationSecs={$playerState.durationSecs}
+				playerStreamUrl={$playerState.streamUrl}
+				playerBuffering={$playerState.buffering}
+				onfetch={handleBrowseDetailFetch}
 				ondownload={handleBrowseDetailDownload}
 				onstream={handleBrowseDetailStream}
+				onfullscreen={() => playerService.setDisplayMode('fullscreen')}
+				onstopplayer={() => playerService.stop()}
 				onclose={closeBrowseDetail}
 			/>
 		</div>
 	{/if}
+</div>
+
+<div class="lg:hidden">
+<Modal open={hasBrowseSelection || !!($playerState.currentFile && $playerDisplayMode === 'sidebar')} maxWidth="max-w-lg" onclose={closeBrowseDetail}>
+	<TmdbBrowseDetail
+		movie={selectedBrowseMovie}
+		tvShow={selectedBrowseTvShow}
+		movieDetails={browseMovieDetails}
+		tvShowDetails={browseTvShowDetails}
+		loading={browseDetailLoading}
+		fetching={isFetching}
+		fetched={isFetchedForCurrent}
+		playerFile={$playerDisplayMode === 'sidebar' ? $playerState.currentFile : null}
+		playerConnectionState={$playerState.connectionState}
+		playerPositionSecs={$playerState.positionSecs}
+		playerDurationSecs={$playerState.durationSecs}
+		playerStreamUrl={$playerState.streamUrl}
+		playerBuffering={$playerState.buffering}
+		onfetch={handleBrowseDetailFetch}
+		ondownload={handleBrowseDetailDownload}
+		onstream={handleBrowseDetailStream}
+		onfullscreen={() => playerService.setDisplayMode('fullscreen')}
+		onstopplayer={() => playerService.stop()}
+		onclose={closeBrowseDetail}
+	/>
+</Modal>
 </div>
 
 {#if $playerState.currentFile && !$mediaDetailStore && $playerDisplayMode === 'fullscreen'}

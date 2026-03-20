@@ -2,6 +2,7 @@ pub mod settings;
 pub mod metadata;
 pub mod library;
 pub mod library_item;
+pub mod image_tag;
 pub mod library_item_link;
 pub mod media_type;
 pub mod category;
@@ -17,6 +18,7 @@ pub mod llm_conversation;
 
 pub use settings::SettingsRepo;
 pub use metadata::MetadataRepo;
+pub use image_tag::ImageTagRepo;
 pub use library::LibraryRepo;
 pub use library_item::LibraryItemRepo;
 pub use library_item_link::LibraryItemLinkRepo;

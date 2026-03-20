@@ -1,40 +1,45 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { createEventDispatcher, tick } from 'svelte';
+	import { tick } from 'svelte';
 	import { lyricsService } from 'frontend/services/lyrics.service';
 	import type { PlayableFile } from 'frontend/types/player.type';
 
-	export let currentFile: PlayableFile | null = null;
-	export let positionSecs: number = 0;
+	interface Props {
+		currentFile: PlayableFile | null;
+		positionSecs?: number;
+		onseek?: (positionSecs: number) => void;
+	}
 
-	const dispatch = createEventDispatcher<{
-		seek: { positionSecs: number };
-	}>();
+	let { currentFile, positionSecs = 0, onseek }: Props = $props();
 
 	const lyricsState = lyricsService.store;
 
-	let lyricsContainer: HTMLDivElement | null = null;
-	let lastFetchedFileId: string | null = null;
+	let lyricsContainer: HTMLDivElement | null = $state(null);
+	let lastFetchedFileId: string | null = $state(null);
 
-	$: lyrics = $lyricsState;
+	let lyrics = $derived($lyricsState);
 
-	$: if (currentFile) {
-		if (currentFile.id !== lastFetchedFileId) {
-			lastFetchedFileId = currentFile.id;
-			lyricsService.fetchForFile(currentFile);
+	$effect(() => {
+		if (currentFile) {
+			if (currentFile.id !== lastFetchedFileId) {
+				lastFetchedFileId = currentFile.id;
+				lyricsService.fetchForFile(currentFile);
+			}
+		} else if (!currentFile && lastFetchedFileId) {
+			lastFetchedFileId = null;
+			lyricsService.clear();
 		}
-	} else if (!currentFile && lastFetchedFileId) {
-		lastFetchedFileId = null;
-		lyricsService.clear();
-	}
+	});
 
-	$: currentLineIndex = lyrics.lyrics?.syncedLyrics
-		? lyricsService.getCurrentLineIndex(positionSecs)
-		: -1;
+	let currentLineIndex = $derived(
+		lyrics.lyrics?.syncedLyrics ? lyricsService.getCurrentLineIndex(positionSecs) : -1
+	);
 
-	$: if (currentLineIndex >= 0 && lyricsContainer) {
-		scrollToCurrentLine(currentLineIndex);
-	}
+	$effect(() => {
+		if (currentLineIndex >= 0 && lyricsContainer) {
+			scrollToCurrentLine(currentLineIndex);
+		}
+	});
 
 	async function scrollToCurrentLine(index: number) {
 		await tick();
@@ -50,7 +55,7 @@
 	}
 
 	function handleLineClick(time: number) {
-		dispatch('seek', { positionSecs: time });
+		onseek?.(time);
 	}
 </script>
 
@@ -136,7 +141,7 @@
 									'text-base-content/60 hover:bg-base-300/50': index !== currentLineIndex
 								}
 							)}
-							on:click={() => handleLineClick(line.time)}
+							onclick={() => handleLineClick(line.time)}
 						>
 							{#if line.text}
 								{line.text}

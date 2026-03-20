@@ -60,6 +60,8 @@ export interface TorrentServiceState {
 	torrents: TorrentInfo[];
 	stats: TorrentStats | null;
 	downloadPath: string;
+	appName: string;
+	appDownloadPath: string;
 	libraryId: string;
 }
 

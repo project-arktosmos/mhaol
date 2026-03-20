@@ -19,7 +19,7 @@ const config = {
 			strict: false // This tells the adapter to ignore dynamic routes
 		}),
 		paths: {
-			base: '/mhaoltube'
+			base: '/mhaol'
 		},
 		alias: {
 			$components: '../../packages/ui-lib/src/components',

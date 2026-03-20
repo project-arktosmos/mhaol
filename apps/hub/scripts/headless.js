@@ -50,7 +50,14 @@ if (skipBuild && existsSync(serverBin)) {
 // Build all sub-app frontends so they can be started without building
 const subApps = ['storybook', 'identity', 'signaling-app', 'cloud', 'torrent', 'flix'];
 for (const app of subApps) {
-	const distCheck = join(__dirname, '..', '..', app.replace('-app', ''), 'dist-static', 'index.html');
+	const distCheck = join(
+		__dirname,
+		'..',
+		'..',
+		app.replace('-app', ''),
+		'dist-static',
+		'index.html'
+	);
 	if (skipBuild && existsSync(distCheck)) {
 		console.log(`${app} already built, skipping.`);
 	} else {

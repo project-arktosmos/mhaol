@@ -1,10 +1,11 @@
 export interface ImageTag {
 	tag: string;
-	confidence: number;
-	score?: number;
+	score: number;
+	confidence?: number;
 }
 
 export interface ImageItem {
+	id: string;
 	path: string;
 	tags: ImageTag[];
 }
@@ -18,10 +19,12 @@ export interface TagResponse {
 }
 
 export interface BatchTagResponse {
-	results: Array<{ path: string; tags: ImageTag[] }>;
+	results: Record<string, ImageTag[]>;
 }
 
 export interface TaggerStatusResponse {
-	available: boolean;
-	model?: string;
+	ready: boolean;
+	status: string;
+	overallProgress: number;
+	error: string | null;
 }

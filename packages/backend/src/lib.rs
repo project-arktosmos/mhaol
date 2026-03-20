@@ -93,6 +93,9 @@ pub struct AppState {
     pub torrent_manager: Arc<TorrentManager>,
     #[cfg(not(target_os = "android"))]
     pub llm_engine: Arc<LlmEngine>,
+    pub image_tags: ImageTagRepo,
+    #[cfg(not(target_os = "android"))]
+    pub image_tagger_manager: Arc<modules::image_tagger::ImageTaggerManager>,
     pub data_dir: PathBuf,
     pub llm_conversations: LlmConversationRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
@@ -159,6 +162,9 @@ impl AppState {
             torrent_manager: Arc::new(TorrentManager::new()),
             #[cfg(not(target_os = "android"))]
             llm_engine: Arc::new(LlmEngine::new(llm_models_dir)),
+            image_tags: ImageTagRepo::new(Arc::clone(&db)),
+            #[cfg(not(target_os = "android"))]
+            image_tagger_manager: Arc::new(modules::image_tagger::ImageTaggerManager::new()),
             llm_conversations: LlmConversationRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
@@ -175,13 +181,15 @@ impl AppState {
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {
         use modules::{
-            jackett::JackettModule, signaling::SignalingModule,
+            jackett::JackettModule, lyrics::LyricsModule,
+            musicbrainz::MusicbrainzModule, signaling::SignalingModule,
             tmdb::TmdbModule,
             torrent_search::TorrentSearchModule,
             youtube_meta::YoutubeMetaModule,
         };
         #[cfg(not(target_os = "android"))]
         use modules::{
+            image_tagger::ImageTaggerModule,
             p2p_stream::P2pStreamModule,
             torrent::TorrentModule,
             ytdl::YtdlModule,
@@ -194,6 +202,14 @@ impl AppState {
         #[cfg(not(target_os = "android"))]
         registry.register(Box::new(YtdlModule {
             manager: Arc::clone(&self.ytdl_manager),
+        }));
+
+        // Music & Images
+        registry.register(Box::new(LyricsModule));
+        registry.register(Box::new(MusicbrainzModule));
+        #[cfg(not(target_os = "android"))]
+        registry.register(Box::new(ImageTaggerModule {
+            manager: Arc::clone(&self.image_tagger_manager),
         }));
 
         // Addons

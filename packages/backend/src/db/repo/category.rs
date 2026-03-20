@@ -81,9 +81,15 @@ mod tests {
         let repo = CategoryRepo::new(db);
 
         let all = repo.get_all();
-        assert_eq!(all.len(), 3);
+        assert_eq!(all.len(), 5);
 
         let video_cats = repo.get_by_media_type("video");
         assert_eq!(video_cats.len(), 3);
+
+        let audio_cats = repo.get_by_media_type("audio");
+        assert_eq!(audio_cats.len(), 1);
+
+        let image_cats = repo.get_by_media_type("image");
+        assert_eq!(image_cats.len(), 1);
     }
 }

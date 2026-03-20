@@ -68,7 +68,7 @@ class ImageTaggerService {
 			this.state.update((s) => ({
 				...s,
 				taggerReady: data.ready,
-				taggerStatus: data.status,
+				taggerStatus: data.status as TaggerStatus,
 				taggerProgress: data.overallProgress,
 				taggerError: data.error
 			}));

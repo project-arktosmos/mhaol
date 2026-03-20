@@ -128,6 +128,16 @@ async fn add_torrent(
     State(state): State<AppState>,
     Json(body): Json<mhaol_torrent::AddTorrentRequest>,
 ) -> impl IntoResponse {
+    if let Some(ref path) = body.download_path {
+        if let Err(e) = std::fs::create_dir_all(path) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Failed to create download directory: {}", e) })),
+            )
+                .into_response();
+        }
+    }
+
     match state.torrent_manager.add(body).await {
         Ok(info) => {
             let state_str = format!("{:?}", info.state).to_lowercase();

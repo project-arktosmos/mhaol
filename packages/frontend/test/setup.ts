@@ -24,7 +24,7 @@ const localStorageMock = (() => {
 })();
 
 // Mock console methods
-global.console = {
+(globalThis as Record<string, unknown>).console = {
 	...console,
 	log: vi.fn(),
 	debug: vi.fn(),

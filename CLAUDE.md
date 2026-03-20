@@ -21,8 +21,11 @@ mhaol.git/
 │   ├── hub/                          # App dashboard & launcher (Tauri desktop, port 1400)
 │   ├── identity/                     # Identity management (headless, port 1410)
 │   ├── signaling/                    # Signaling server management dashboard (headless, port 1420)
+│   ├── tunes/                        # Music library app (headless, port 1550)
+│   ├── photos/                       # Photo gallery app (headless, port 1560)
 │   ├── storybook/                    # Storybook component gallery (headless, port 1405)
 │   ├── website/                      # Marketing landing page (base: /mhaoltube)
+│   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 │   └── server/                       # Server orchestrator (starts frontend + backend)
 ├── packages/
 │   ├── ui-lib/                       # UI components + CSS/themes (Svelte, Tailwind, DaisyUI)
@@ -151,7 +154,13 @@ pnpm app:signaling        # Signaling headless (port 1420)
 pnpm app:cloud            # Cloud headless (port 1510)
 pnpm app:torrent          # Torrent headless (port 1520)
 pnpm app:flix             # Flix headless (port 1530)
+pnpm app:tunes            # Tunes headless (port 1550)
+pnpm app:photos           # Photos headless (port 1560)
 pnpm app:video-cloud      # Video Cloud headless (port 1540)
+
+# Browser extension
+pnpm app:shepperd         # Shepperd dev (watch mode)
+pnpm app:shepperd:build   # Shepperd production build
 
 # Signaling
 pnpm signaling:dev    # PartyKit local dev

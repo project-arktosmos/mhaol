@@ -73,5 +73,5 @@ fn resolve_download_path(state: &AppState) -> String {
     }
     // Fallback to ~/Downloads
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    format!("{}/Downloads", home)
+    format!("{}/Downloads/mhaol", home)
 }

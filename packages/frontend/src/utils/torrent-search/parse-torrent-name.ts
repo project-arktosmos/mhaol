@@ -26,6 +26,25 @@ const SOURCE_PATTERNS: [RegExp, string][] = [
 	[/hdrip/i, 'HDRip']
 ];
 
+const AUDIO_QUALITY_PATTERNS: [RegExp, string][] = [
+	[/\bFLAC\b/i, 'FLAC'],
+	[/\bALAC\b/i, 'ALAC'],
+	[/\blossless\b/i, 'Lossless'],
+	[/\bDSD\b/i, 'DSD'],
+	[/\bWAV\b/i, 'WAV'],
+	[/\b24[\s-]?bit\b/i, '24-bit'],
+	[/\b16[\s-]?bit\b/i, '16-bit'],
+	[/\b320\s?k(?:bps?)?\b/i, '320kbps'],
+	[/\b256\s?k(?:bps?)?\b/i, '256kbps'],
+	[/\b192\s?k(?:bps?)?\b/i, '192kbps'],
+	[/\b128\s?k(?:bps?)?\b/i, '128kbps'],
+	[/\bMP3\b/i, 'MP3'],
+	[/\bAAC\b/i, 'AAC'],
+	[/\bOGG\b/i, 'OGG'],
+	[/\bVORBIS\b/i, 'Vorbis'],
+	[/\bOPUS\b/i, 'Opus']
+];
+
 const LANGUAGE_PATTERNS: [RegExp, string][] = [
 	[/\bmulti(?:[\s.-]?(?:lang|audio|sub))?s?\b/i, 'Multi'],
 	[/\bdual[\s.-]?audio\b/i, 'Dual Audio'],
@@ -71,6 +90,16 @@ function extractQuality(name: string): string {
 	return source ?? 'Unknown';
 }
 
+function extractAudioQuality(name: string): string {
+	const found: string[] = [];
+	for (const [re, label] of AUDIO_QUALITY_PATTERNS) {
+		if (re.test(name) && !found.includes(label)) {
+			found.push(label);
+		}
+	}
+	return found.length > 0 ? found.join(' ') : 'Unknown';
+}
+
 function extractSource(name: string): string | null {
 	for (const [re, label] of SOURCE_PATTERNS) {
 		if (re.test(name)) return label;
@@ -108,13 +137,22 @@ function extractYear(name: string): string | null {
 	return match ? match[1] : null;
 }
 
-function computeRelevance(name: string, title: string, targetYear: string): { relevance: number; reason: string } {
-	const normName = normalizeForMatch(name);
-	const normTitle = normalizeForMatch(title);
-	const titleWords = normTitle.split(' ').filter((w) => w.length > 1);
+function computeWordScore(normName: string, text: string): number {
+	const words = normalizeForMatch(text)
+		.split(' ')
+		.filter((w) => w.length > 1);
+	if (words.length === 0) return 0;
+	const matched = words.filter((w) => normName.includes(w));
+	return matched.length / words.length;
+}
 
-	const matchedWords = titleWords.filter((w) => normName.includes(w));
-	const wordScore = titleWords.length > 0 ? matchedWords.length / titleWords.length : 0;
+function computeRelevance(
+	name: string,
+	title: string,
+	targetYear: string,
+	artist?: string
+): { relevance: number; reason: string } {
+	const normName = normalizeForMatch(name);
 
 	const torrentYear = extractYear(name);
 	const yearMatches = torrentYear !== null && torrentYear === targetYear;
@@ -124,13 +162,40 @@ function computeRelevance(name: string, title: string, targetYear: string): { re
 		return { relevance: 0, reason: `year mismatch: ${torrentYear} vs ${targetYear}` };
 	}
 
+	const titleScore = computeWordScore(normName, title);
+
+	if (artist) {
+		// Music scoring: artist (40%) + album title (45%) + year (15%)
+		const artistScore = computeWordScore(normName, artist);
+		const yearScore = yearMatches ? 1 : 0;
+		const relevance = Math.round(
+			Math.min(artistScore * 40 + titleScore * 45 + yearScore * 15, 100)
+		);
+
+		const parts: string[] = [];
+		if (artistScore === 1) parts.push('artist matches');
+		else if (artistScore >= 0.5) parts.push('partial artist match');
+		else if (artistScore > 0) parts.push('weak artist match');
+		else parts.push('artist not found');
+
+		if (titleScore === 1) parts.push('album matches');
+		else if (titleScore >= 0.5) parts.push('partial album match');
+		else if (titleScore > 0) parts.push('weak album match');
+		else parts.push('album not found');
+
+		if (yearMatches) parts.push('year matches');
+
+		return { relevance, reason: parts.join(', ') };
+	}
+
+	// Video scoring (unchanged): title (85%) + year (15%)
 	const yearScore = yearMatches ? 0.15 : 0;
-	const relevance = Math.round(Math.min((wordScore * 85 + yearScore * 100), 100));
+	const relevance = Math.round(Math.min(titleScore * 85 + yearScore * 100, 100));
 
 	const parts: string[] = [];
-	if (wordScore === 1) {
+	if (titleScore === 1) {
 		parts.push('title matches');
-	} else if (wordScore >= 0.5) {
+	} else if (titleScore >= 0.5) {
 		parts.push('partial title match');
 	} else {
 		parts.push('weak title match');
@@ -143,12 +208,13 @@ function computeRelevance(name: string, title: string, targetYear: string): { re
 export function parseTorrentName(
 	name: string,
 	targetTitle: string,
-	targetYear: string
+	targetYear: string,
+	artist?: string
 ): TorrentAnalysis {
-	const quality = extractQuality(name);
+	const quality = artist ? extractAudioQuality(name) : extractQuality(name);
 	const languages = extractLanguages(name);
-	const subs = extractSubs(name);
-	const { relevance, reason } = computeRelevance(name, targetTitle, targetYear);
+	const subs = artist ? 'none' : extractSubs(name);
+	const { relevance, reason } = computeRelevance(name, targetTitle, targetYear, artist);
 
 	return { quality, languages, subs, relevance, reason };
 }

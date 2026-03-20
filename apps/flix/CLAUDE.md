@@ -42,9 +42,9 @@ src/
 Component imports use `ui-lib/...` paths, services/types use `frontend/...`:
 
 ```typescript
-import Navbar from 'ui-lib/components/core/Navbar.svelte';
-import { playerService } from 'frontend/services/player.service';
-import type { DisplayTMDBMovieDetails } from 'addons/tmdb/types';
+import Navbar from "ui-lib/components/core/Navbar.svelte";
+import { playerService } from "frontend/services/player.service";
+import type { DisplayTMDBMovieDetails } from "addons/tmdb/types";
 ```
 
 ## Adding features

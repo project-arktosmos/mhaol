@@ -19,8 +19,15 @@ const initialState: SmartSearchState = {
 	streamingHash: null,
 	streamingProgress: 0,
 	pendingItemId: null,
-	pendingLibraryId: null
+	pendingLibraryId: null,
+	downloadedHash: null,
+	fetchedCandidate: null
 };
+
+function getSubdir(selection: SmartSearchSelection): string {
+	if (selection.type === 'music') return 'music';
+	return selection.type === 'movie' ? 'movies' : 'tv';
+}
 
 class SmartSearchService {
 	public store = writable(initialState);
@@ -42,7 +49,9 @@ class SmartSearchService {
 			searchResults: [],
 			searchError: null,
 			pendingItemId: null,
-			pendingLibraryId: null
+			pendingLibraryId: null,
+			downloadedHash: null,
+			fetchedCandidate: null
 		}));
 		this.runSearches(selection, this.abortController.signal);
 		this.createPendingItem(selection);
@@ -60,16 +69,19 @@ class SmartSearchService {
 			searchError: null,
 			analyzing: false,
 			pendingItemId: null,
-			pendingLibraryId: null
+			pendingLibraryId: null,
+			fetchedCandidate: null
 		}));
 	}
 
 	private async runSearches(selection: SmartSearchSelection, signal: AbortSignal) {
 		const { title, year } = selection;
-		const queries = [
-			title,
-			`${title} ${year}`
-		];
+
+		const cat = selection.type === 'music' ? 100 : 200;
+		const queries =
+			selection.type === 'music'
+				? [`${selection.artist} ${title}`, selection.artist]
+				: [title, `${title} ${year}`];
 
 		this.store.update((s) => ({ ...s, searching: true, searchError: null }));
 
@@ -81,9 +93,7 @@ class SmartSearchService {
 				if (signal.aborted) return;
 
 				try {
-					const url = apiUrl(
-						`/api/torrent/search?q=${encodeURIComponent(query)}&cat=200`
-					);
+					const url = apiUrl(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`);
 					const res = await fetch(url, { signal });
 					if (!res.ok) continue;
 					const data: TorrentSearchResult[] = await res.json();
@@ -112,7 +122,7 @@ class SmartSearchService {
 							});
 						}
 					}
-				} catch (e) {
+				} catch {
 					if (signal.aborted) return;
 				}
 
@@ -135,14 +145,60 @@ class SmartSearchService {
 	}
 
 	private analyzeResults(selection: SmartSearchSelection, analyzeHashes: Set<string>) {
+		const artist = selection.type === 'music' ? selection.artist : undefined;
 		this.store.update((s) => {
 			const results = s.searchResults.map((r) => {
 				if (!analyzeHashes.has(r.infoHash)) return r;
-				const analysis = parseTorrentName(r.name, selection.title, selection.year);
+				const analysis = parseTorrentName(r.name, selection.title, selection.year, artist);
 				return { ...r, analysis, analyzing: false };
 			});
 			return { ...s, searchResults: results, analyzing: false };
 		});
+	}
+
+	setFetchedCandidate(candidate: SmartSearchTorrentResult) {
+		this.store.update((s) => ({ ...s, fetchedCandidate: candidate }));
+	}
+
+	getFetchedCandidate(): SmartSearchTorrentResult | null {
+		return this.getState().fetchedCandidate;
+	}
+
+	async startDownload(candidate: SmartSearchTorrentResult): Promise<string | null> {
+		const selection = this.getSelection();
+		if (!selection) return null;
+
+		try {
+			const configRes = await fetch(apiUrl('/api/torrent/config'));
+			if (!configRes.ok) return null;
+			const config = await configRes.json();
+			const basePath: string = config.downloadPath ?? '';
+			if (!basePath) return null;
+
+			const subdir = getSubdir(selection);
+			const downloadPath = `${basePath}/${subdir}`;
+
+			const res = await fetch(apiUrl('/api/torrent/torrents'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					source: candidate.magnetLink,
+					downloadPath
+				})
+			});
+			if (!res.ok) return null;
+
+			const torrentInfo = await res.json();
+			const infoHash: string = torrentInfo.infoHash ?? candidate.infoHash;
+			const outputPath: string = torrentInfo.outputPath ?? downloadPath;
+
+			await this.updateItemWithTorrent(infoHash, outputPath, 'download');
+
+			this.store.update((s) => ({ ...s, downloadedHash: infoHash }));
+			return infoHash;
+		} catch {
+			return null;
+		}
 	}
 
 	async startStream(candidate: SmartSearchTorrentResult): Promise<string | null> {
@@ -156,7 +212,7 @@ class SmartSearchService {
 			const basePath: string = config.downloadPath ?? '';
 			if (!basePath) return null;
 
-			const subdir = selection.type === 'movie' ? 'movies' : 'tv';
+			const subdir = getSubdir(selection);
 			const downloadPath = `${basePath}/${subdir}`;
 
 			const res = await fetch(apiUrl('/api/torrent/torrents'), {
@@ -182,16 +238,25 @@ class SmartSearchService {
 		}
 	}
 
-	async updateItemWithTorrent(infoHash: string, outputPath: string, mode: SmartSearchMode): Promise<void> {
+	async updateItemWithTorrent(
+		infoHash: string,
+		outputPath: string,
+		mode: SmartSearchMode
+	): Promise<void> {
 		const state = this.getState();
 		if (!state.pendingItemId || !state.pendingLibraryId) return;
 
+		this.store.update((s) => ({ ...s, downloadedHash: infoHash }));
+
 		try {
-			await fetch(apiUrl(`/api/libraries/${state.pendingLibraryId}/items/${state.pendingItemId}/torrent`), {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ infoHash, outputPath, mode })
-			});
+			await fetch(
+				apiUrl(`/api/libraries/${state.pendingLibraryId}/items/${state.pendingItemId}/torrent`),
+				{
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ infoHash, outputPath, mode })
+				}
+			);
 		} catch {
 			// best-effort
 		}
@@ -227,7 +292,7 @@ class SmartSearchService {
 			const basePath: string = config.downloadPath ?? '';
 			if (!basePath) return;
 
-			const subdir = selection.type === 'movie' ? 'movies' : 'tv';
+			const subdir = getSubdir(selection);
 			const targetPath = `${basePath}/${subdir}`;
 
 			const libRes = await fetch(apiUrl('/api/libraries'));
@@ -236,11 +301,13 @@ class SmartSearchService {
 			let library = libraries.find((l) => l.path === targetPath);
 
 			if (!library) {
+				const libName =
+					selection.type === 'music' ? 'Music' : selection.type === 'movie' ? 'Movies' : 'TV Shows';
 				const createRes = await fetch(apiUrl('/api/libraries'), {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
-						name: selection.type === 'movie' ? 'Movies' : 'TV Shows',
+						name: libName,
 						path: targetPath,
 						libraryType: subdir
 					})
@@ -250,17 +317,27 @@ class SmartSearchService {
 			}
 			if (!library) return;
 
-			const pendingPath = `${targetPath}/${selection.title}`;
+			const pendingName =
+				selection.type === 'music' ? `${selection.artist} - ${selection.title}` : selection.title;
+			const pendingPath = `${targetPath}/${pendingName}`;
+			const mediaType = selection.type === 'music' ? 'audio' : 'video';
+			const categoryId =
+				selection.type === 'music' ? 'audio-uncategorized' : subdir === 'movies' ? 'movies' : 'tv';
+
+			const itemBody: Record<string, unknown> = {
+				name: pendingName,
+				path: pendingPath,
+				mediaType,
+				categoryId
+			};
+			if (selection.type !== 'music') {
+				itemBody.tmdbId = selection.tmdbId;
+			}
+
 			const itemRes = await fetch(apiUrl(`/api/libraries/${library.id}/items`), {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					name: selection.title,
-					path: pendingPath,
-					mediaType: 'video',
-					categoryId: subdir === 'movies' ? 'movies' : 'tv',
-					tmdbId: selection.tmdbId
-				})
+				body: JSON.stringify(itemBody)
 			});
 			if (itemRes.ok) {
 				const item = await itemRes.json();
@@ -269,6 +346,19 @@ class SmartSearchService {
 					pendingItemId: item.id,
 					pendingLibraryId: library!.id
 				}));
+
+				// Link MusicBrainz ID after item creation
+				if (selection.type === 'music') {
+					try {
+						await fetch(apiUrl(`/api/libraries/${library!.id}/items/${item.id}/musicbrainz`), {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ musicbrainzId: selection.musicbrainzId })
+						});
+					} catch {
+						// best-effort
+					}
+				}
 			}
 		} catch {
 			// best-effort

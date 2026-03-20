@@ -1,14 +1,25 @@
 import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/types';
 
-export type SmartSearchMode = 'download' | 'stream';
+export type SmartSearchMode = 'download' | 'stream' | 'fetch';
 
-export interface SmartSearchSelection {
+interface SmartSearchBaseSelection {
 	title: string;
 	year: string;
-	type: 'movie' | 'tv';
-	tmdbId: number;
 	mode: SmartSearchMode;
 }
+
+export interface SmartSearchMovieSelection extends SmartSearchBaseSelection {
+	type: 'movie' | 'tv';
+	tmdbId: number;
+}
+
+export interface SmartSearchMusicSelection extends SmartSearchBaseSelection {
+	type: 'music';
+	musicbrainzId: string;
+	artist: string;
+}
+
+export type SmartSearchSelection = SmartSearchMovieSelection | SmartSearchMusicSelection;
 
 export interface TorrentAnalysis {
 	quality: string;
@@ -35,4 +46,6 @@ export interface SmartSearchState {
 	streamingProgress: number;
 	pendingItemId: string | null;
 	pendingLibraryId: string | null;
+	downloadedHash: string | null;
+	fetchedCandidate: SmartSearchTorrentResult | null;
 }
