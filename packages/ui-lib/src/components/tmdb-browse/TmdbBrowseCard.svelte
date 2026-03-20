@@ -5,10 +5,12 @@
 	let {
 		movie = null,
 		tvShow = null,
+		selected = false,
 		onclick
 	}: {
 		movie?: DisplayTMDBMovie | null;
 		tvShow?: DisplayTMDBTvShow | null;
+		selected?: boolean;
 		onclick?: () => void;
 	} = $props();
 
@@ -21,8 +23,9 @@
 </script>
 
 <div
-	class={classNames('card-compact card bg-base-200 shadow-sm', {
-		'cursor-pointer transition-shadow hover:shadow-md': !!onclick
+	class={classNames('group card-compact card bg-base-200 shadow-sm', {
+		'cursor-pointer transition-shadow hover:shadow-md': !!onclick,
+		'ring-2 ring-primary': selected
 	})}
 	{onclick}
 	role={onclick ? 'button' : undefined}

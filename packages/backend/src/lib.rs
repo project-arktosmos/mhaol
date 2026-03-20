@@ -95,7 +95,6 @@ pub struct AppState {
     pub llm_engine: Arc<LlmEngine>,
     pub data_dir: PathBuf,
     pub llm_conversations: LlmConversationRepo,
-    pub signaling_servers: SignalingServerRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
     pub worker_bridge: Arc<WorkerBridge>,
     pub cloud: Arc<CloudManager>,
@@ -161,7 +160,6 @@ impl AppState {
             #[cfg(not(target_os = "android"))]
             llm_engine: Arc::new(LlmEngine::new(llm_models_dir)),
             llm_conversations: LlmConversationRepo::new(Arc::clone(&db)),
-            signaling_servers: SignalingServerRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
             cloud: Arc::new(CloudManager::new(Arc::clone(&db))),
@@ -178,7 +176,7 @@ impl AppState {
     pub fn initialize_modules(&self) {
         use modules::{
             jackett::JackettModule, signaling::SignalingModule,
-            signaling_deploy::SignalingDeployModule, tmdb::TmdbModule,
+            tmdb::TmdbModule,
             torrent_search::TorrentSearchModule,
             youtube_meta::YoutubeMetaModule,
         };
@@ -207,7 +205,6 @@ impl AppState {
         registry.register(Box::new(SignalingModule {
             rooms: Arc::clone(&self.signaling_rooms),
         }));
-        registry.register(Box::new(SignalingDeployModule));
 
         // Core modules (desktop only)
         #[cfg(not(target_os = "android"))]

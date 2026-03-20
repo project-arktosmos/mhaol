@@ -1,7 +1,7 @@
 import { spawn, execSync } from 'node:child_process';
 
 const BACKEND_PORT = process.env.PORT || 1530;
-const HEALTH_URL = `http://localhost:${BACKEND_PORT}/api/ytdl/status`;
+const HEALTH_URL = `http://localhost:${BACKEND_PORT}/api/health`;
 
 // Kill any existing process on the backend port
 try {

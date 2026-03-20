@@ -10,6 +10,7 @@
 	export let durationSecs: number | null = null;
 	export let streamUrl: string | null = null;
 	export let buffering: boolean = false;
+	export let fullscreen: boolean = false;
 
 	let videoElement: HTMLVideoElement | null = null;
 	let audioElement: HTMLAudioElement | null = null;
@@ -120,6 +121,8 @@
 		switch (state) {
 			case 'idle':
 				return '';
+			case 'waiting-for-stream':
+				return 'Finding stream...';
 			case 'connecting':
 				return 'Connecting to stream server...';
 			case 'signaling':
@@ -141,13 +144,13 @@
 	$: statusLabel = getStatusLabel(connectionState);
 </script>
 
-<div>
-	<div class="relative" bind:this={containerElement}>
+<div class={fullscreen ? 'flex h-full flex-col' : ''}>
+	<div class={fullscreen ? 'relative min-h-0 flex-1' : 'relative'} bind:this={containerElement}>
 		{#if isHttpStreaming && streamUrl}
 			<video
 				bind:this={videoElement}
 				src={streamUrl}
-				class="w-full cursor-pointer rounded-lg bg-black"
+				class={fullscreen ? 'h-full w-full cursor-pointer bg-black object-contain' : 'w-full cursor-pointer rounded-lg bg-black'}
 				playsinline
 				autoplay
 				on:click={handleVideoClick}
@@ -167,7 +170,7 @@
 		{:else if isVideo}
 			<video
 				bind:this={videoElement}
-				class="w-full cursor-pointer rounded-lg bg-black"
+				class={fullscreen ? 'h-full w-full cursor-pointer bg-black object-contain' : 'w-full cursor-pointer rounded-lg bg-black'}
 				playsinline
 				on:click={handleVideoClick}
 			>
@@ -195,7 +198,7 @@
 
 		{#if !isPlaying && connectionState !== 'idle'}
 			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-base-300/80">
-				{#if connectionState === 'connecting' || connectionState === 'signaling'}
+				{#if connectionState === 'waiting-for-stream' || connectionState === 'connecting' || connectionState === 'signaling'}
 					<div class="text-center">
 						<span class="loading loading-sm loading-spinner"></span>
 						<p class="mt-1 text-xs">{statusLabel}</p>

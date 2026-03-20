@@ -1,10 +1,13 @@
 import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/types';
 
+export type SmartSearchMode = 'download' | 'stream';
+
 export interface SmartSearchSelection {
 	title: string;
 	year: string;
 	type: 'movie' | 'tv';
 	tmdbId: number;
+	mode: SmartSearchMode;
 }
 
 export interface TorrentAnalysis {
@@ -28,4 +31,8 @@ export interface SmartSearchState {
 	analyzing: boolean;
 	searchResults: SmartSearchTorrentResult[];
 	searchError: string | null;
+	streamingHash: string | null;
+	streamingProgress: number;
+	pendingItemId: string | null;
+	pendingLibraryId: string | null;
 }

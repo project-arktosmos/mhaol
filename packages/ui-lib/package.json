@@ -10,7 +10,8 @@
 		"frontend": "workspace:*",
 		"classnames": "^2.5.1",
 		"svelte-i18n": "^4.0.1",
-		"addons": "workspace:*"
+		"addons": "workspace:*",
+		"qrcode": "^1.5.4"
 	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"

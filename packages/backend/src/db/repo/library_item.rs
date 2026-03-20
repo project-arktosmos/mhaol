@@ -210,6 +210,15 @@ impl LibraryItemRepo {
         .unwrap();
     }
 
+    pub fn update_path(&self, id: &str, path: &str) -> bool {
+        let conn = self.db.lock();
+        conn.execute(
+            "UPDATE library_items SET path = ?2 WHERE id = ?1",
+            params![id, path],
+        )
+        .is_ok()
+    }
+
     fn row_mapper(row: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryItemRow> {
         Ok(LibraryItemRow {
             id: row.get(0)?,

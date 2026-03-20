@@ -8,6 +8,15 @@ interface ThemeSettings {
 	theme: Theme;
 }
 
+const STORAGE_KEY = 'object-service:theme-settings';
+
+function getBrowserPreference(): Theme {
+	if (browser && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+		return 'dark';
+	}
+	return 'light';
+}
+
 const initialSettings: ThemeSettings = {
 	id: 'theme-settings',
 	theme: 'light'
@@ -20,6 +29,10 @@ class ThemeService extends ObjectServiceClass<ThemeSettings> {
 
 	initialize(): void {
 		if (!browser) return;
+		const hasStoredPreference = localStorage.getItem(STORAGE_KEY) !== null;
+		if (!hasStoredPreference) {
+			this.set({ id: 'theme-settings', theme: getBrowserPreference() });
+		}
 		const current = this.get();
 		document.documentElement.setAttribute('data-theme', current.theme);
 		this.store.subscribe((settings) => {

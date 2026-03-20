@@ -15,6 +15,7 @@ mhaol.git/
 ├── apps/                             # Thin SvelteKit wrappers (routes + assembly only)
 │   ├── mhaol-video/                  # Main media app (Vite, port 1531)
 │   ├── tube/                         # YouTube-focused app (port 1531)
+│   ├── video-cloud/                  # Video cloud app (headless, port 1540)
 │   ├── cloud/                        # Cloud library management (headless, port 1510)
 │   ├── video/                        # Full-featured video app
 │   ├── hub/                          # App dashboard & launcher (Tauri desktop, port 1400)
@@ -150,6 +151,7 @@ pnpm app:signaling        # Signaling headless (port 1420)
 pnpm app:cloud            # Cloud headless (port 1510)
 pnpm app:torrent          # Torrent headless (port 1520)
 pnpm app:flix             # Flix headless (port 1530)
+pnpm app:video-cloud      # Video Cloud headless (port 1540)
 
 # Signaling
 pnpm signaling:dev    # PartyKit local dev

@@ -56,6 +56,7 @@ export class SignalingAdapter extends AdapterClass {
 	playerConnectionLabel(state: PlayerConnectionState): string {
 		const labels: Record<PlayerConnectionState, string> = {
 			idle: 'Idle',
+			'waiting-for-stream': 'Finding stream...',
 			connecting: 'Connecting...',
 			signaling: 'Signaling...',
 			streaming: 'Streaming',
@@ -69,6 +70,7 @@ export class SignalingAdapter extends AdapterClass {
 	playerConnectionBadgeClass(state: PlayerConnectionState): string {
 		const map: Record<PlayerConnectionState, string> = {
 			idle: 'badge-ghost',
+			'waiting-for-stream': 'badge-info',
 			connecting: 'badge-info',
 			signaling: 'badge-info',
 			streaming: 'badge-success',

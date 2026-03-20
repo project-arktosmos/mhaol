@@ -23,7 +23,12 @@
 		"test:e2e:headed": "playwright test --headed",
 		"test:e2e:ui": "playwright test --ui",
 		"headless": "node scripts/headless.js",
-		"clean": "rm -rf dist-static .svelte-kit"
+		"clean": "rm -rf dist-static .svelte-kit",
+		"tauri": "pnpm exec tauri",
+		"tauri:dev": "pnpm exec tauri dev",
+		"tauri:build": "pnpm exec tauri build",
+		"tauri:android:dev": "pnpm exec tauri android dev",
+		"tauri:android:build": "pnpm exec tauri android build --apk"
 	},
 	"dependencies": {
 		"@sveltejs/adapter-static": "^3.0.10",
@@ -37,6 +42,7 @@
 		"viem": "^2.46.3"
 	},
 	"devDependencies": {
+		"@tauri-apps/cli": "^2.10",
 		"@eslint/compat": "^2.0.2",
 		"@eslint/js": "^9.39.3",
 		"@playwright/test": "^1.58.2",

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount, onDestroy } from 'svelte';
-	import { invalidateAll } from '$app/navigation';
 	import { apiUrl } from 'frontend/lib/api-base';
 	import { playerService } from 'frontend/services/player.service';
 	import { playerAdapter } from 'frontend/adapters/classes/player.adapter';
@@ -11,12 +10,10 @@
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import type { MediaDetailCardType } from 'frontend/types/media-detail.type';
 	import TmdbLinkModal from 'ui-lib/components/libraries/TmdbLinkModal.svelte';
-	import SeasonEpisodeMatchModal from 'ui-lib/components/libraries/SeasonEpisodeMatchModal.svelte';
-	import MediaCard from 'ui-lib/components/media/MediaCard.svelte';
-	import MediaListCard from 'ui-lib/components/media/MediaListCard.svelte';
+	import TmdbBrowseCard from 'ui-lib/components/tmdb-browse/TmdbBrowseCard.svelte';
 	import MediaDetail from 'ui-lib/components/media/MediaDetail.svelte';
-	import type { MediaList, MediaListLink } from 'frontend/types/media-list.type';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
+	import TmdbBrowseDetail from 'ui-lib/components/tmdb-browse/TmdbBrowseDetail.svelte';
 	import type { LibraryFile } from 'frontend/types/library.type';
 	import type {
 		MediaItem,
@@ -24,13 +21,17 @@
 		MediaLinkSource,
 		MediaCategory
 	} from 'frontend/types/media-card.type';
-	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
+	import type {
+		DisplayTMDBMovie,
+		DisplayTMDBTvShow,
+		DisplayTMDBMovieDetails,
+		DisplayTMDBTvShowDetails
+	} from 'addons/tmdb/types';
 	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'addons/tmdb/transform';
 	import { tmdbBrowseService } from 'frontend/services/tmdb-browse.service';
 	import { smartSearchService } from 'frontend/services/smart-search.service';
 	import { torrentService } from 'frontend/services/torrent.service';
 	import type { TorrentInfo } from 'frontend/types/torrent.type';
-	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 	import SearchTab from 'ui-lib/components/tmdb-browse/SearchTab.svelte';
 	import PopularTab from 'ui-lib/components/tmdb-browse/PopularTab.svelte';
 	import DiscoverTab from 'ui-lib/components/tmdb-browse/DiscoverTab.svelte';
@@ -43,13 +44,9 @@
 			linkSources: MediaLinkSource[];
 			itemsByCategory: Record<string, MediaItem[]>;
 			itemsByType: Record<string, MediaItem[]>;
-			lists: MediaList[];
 			libraries: Record<string, string>;
 		};
 	}
-
-	const MOVIES_TAB = 'movies';
-	const TV_TAB = 'tv';
 
 	const LIBRARY_SUB = 'library';
 	const SEARCH_SUB = 'search';
@@ -57,67 +54,14 @@
 	const DISCOVER_SUB = 'discover';
 	const RECOMMENDATIONS_SUB = 'recommendations';
 
-	type TabId = 'movies' | 'tv';
 	type SubTabId = 'library' | 'search' | 'popular' | 'discover' | 'recommendations';
 
 	let { data }: Props = $props();
 
-	let activeTab = $state<TabId>(MOVIES_TAB);
 	let activeSubTab = $state<SubTabId>(LIBRARY_SUB);
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
-	let linkModalList: MediaList | null = $state(null);
-	let linkModalListService: string | null = $state(null);
-	let seasonMatchModal: {
-		tmdbId: number;
-		seasonNumber: number;
-		showName: string;
-		seasonName: string;
-		files: LibraryFile[];
-	} | null = $state(null);
-	let selectedList: MediaList | null = $state(null);
-	let selectedShowGroup: { tmdbId: string; lists: MediaList[] } | null = $state(null);
 
-	type ListGridEntry =
-		| { type: 'single'; list: MediaList }
-		| { type: 'show-group'; tmdbId: string; lists: MediaList[] };
-
-	let tvListGridEntries: ListGridEntry[] = $derived.by(() => {
-		const tmdbGroups: Record<string, MediaList[]> = {};
-		const ungrouped: MediaList[] = [];
-
-		for (const list of data.lists.filter((l) => l.libraryType === 'tv')) {
-			const links = getListLinks(list);
-			const tmdbId = links.tmdb?.serviceId;
-			if (tmdbId) {
-				if (!tmdbGroups[tmdbId]) tmdbGroups[tmdbId] = [];
-				tmdbGroups[tmdbId].push(list);
-			} else {
-				ungrouped.push(list);
-			}
-		}
-
-		const entries: ListGridEntry[] = [];
-		for (const [tmdbId, lists] of Object.entries(tmdbGroups)) {
-			if (lists.length >= 2) {
-				const sorted = [...lists].sort((a, b) => {
-					const sa = getListLinks(a).tmdb?.seasonNumber ?? 999;
-					const sb = getListLinks(b).tmdb?.seasonNumber ?? 999;
-					return sa - sb;
-				});
-				entries.push({ type: 'show-group', tmdbId, lists: sorted });
-			} else {
-				entries.push({ type: 'single', list: lists[0] });
-			}
-		}
-		for (const list of ungrouped) {
-			entries.push({ type: 'single', list });
-		}
-		return entries;
-	});
-
-	let isMoviesTab = $derived(activeTab === MOVIES_TAB);
-	let isTvTab = $derived(activeTab === TV_TAB);
 	let isLibrarySub = $derived(activeSubTab === LIBRARY_SUB);
 	let isSearchSub = $derived(activeSubTab === SEARCH_SUB);
 	let isPopularSub = $derived(activeSubTab === POPULAR_SUB);
@@ -126,6 +70,94 @@
 
 	// TMDB browse state
 	const browseState = tmdbBrowseService.state;
+
+	// Browse detail selection state
+	let selectedBrowseMovie: DisplayTMDBMovie | null = $state(null);
+	let selectedBrowseTvShow: DisplayTMDBTvShow | null = $state(null);
+	let browseMovieDetails: DisplayTMDBMovieDetails | null = $state(null);
+	let browseTvShowDetails: DisplayTMDBTvShowDetails | null = $state(null);
+	let browseDetailLoading = $state(false);
+
+	let hasBrowseSelection = $derived(selectedBrowseMovie !== null || selectedBrowseTvShow !== null);
+
+	function handleBrowseSelectMovie(movie: DisplayTMDBMovie) {
+		selectedBrowseTvShow = null;
+		browseTvShowDetails = null;
+		if (selectedBrowseMovie?.id === movie.id) {
+			selectedBrowseMovie = null;
+			browseMovieDetails = null;
+			return;
+		}
+		selectedBrowseMovie = movie;
+		browseMovieDetails = null;
+		fetchBrowseMovieDetails(movie.id);
+	}
+
+	function handleBrowseSelectTvShow(tvShow: DisplayTMDBTvShow) {
+		selectedBrowseMovie = null;
+		browseMovieDetails = null;
+		if (selectedBrowseTvShow?.id === tvShow.id) {
+			selectedBrowseTvShow = null;
+			browseTvShowDetails = null;
+			return;
+		}
+		selectedBrowseTvShow = tvShow;
+		browseTvShowDetails = null;
+		fetchBrowseTvShowDetails(tvShow.id);
+	}
+
+	function closeBrowseDetail() {
+		selectedBrowseMovie = null;
+		selectedBrowseTvShow = null;
+		browseMovieDetails = null;
+		browseTvShowDetails = null;
+	}
+
+	async function fetchBrowseMovieDetails(tmdbId: number) {
+		browseDetailLoading = true;
+		try {
+			const res = await fetch(apiUrl(`/api/tmdb/movies/${tmdbId}`));
+			if (res.ok) {
+				const raw = await res.json();
+				browseMovieDetails = movieDetailsToDisplay(raw);
+			}
+		} catch (e) {
+			console.error('Failed to load browse movie details:', e);
+		} finally {
+			browseDetailLoading = false;
+		}
+	}
+
+	async function fetchBrowseTvShowDetails(tmdbId: number) {
+		browseDetailLoading = true;
+		try {
+			const res = await fetch(apiUrl(`/api/tmdb/tv/${tmdbId}`));
+			if (res.ok) {
+				const raw = await res.json();
+				browseTvShowDetails = tvShowDetailsToDisplay(raw);
+			}
+		} catch (e) {
+			console.error('Failed to load browse TV details:', e);
+		} finally {
+			browseDetailLoading = false;
+		}
+	}
+
+	function handleBrowseDetailDownload() {
+		if (selectedBrowseMovie) {
+			handleBrowseDownloadMovie(selectedBrowseMovie);
+		} else if (selectedBrowseTvShow) {
+			handleBrowseDownloadTvShow(selectedBrowseTvShow);
+		}
+	}
+
+	function handleBrowseDetailStream() {
+		if (selectedBrowseMovie) {
+			handleBrowseStreamMovie(selectedBrowseMovie);
+		} else if (selectedBrowseTvShow) {
+			handleBrowseStreamTvShow(selectedBrowseTvShow);
+		}
+	}
 
 	// Torrent state — match torrents to library items by path
 	const torrentState = torrentService.state;
@@ -140,7 +172,7 @@
 		return null;
 	}
 
-	// Collect linked items for recommendations dropdown
+	// Collect linked movie items for recommendations dropdown
 	let linkedItems = $derived.by(() => {
 		const items: Array<{ tmdbId: number; title: string; type: 'movie' | 'tv' }> = [];
 		const seen = new Set<string>();
@@ -159,21 +191,6 @@
 				}
 			}
 		}
-		for (const list of data.lists.filter((l) => l.libraryType === 'tv')) {
-			const links = getListLinks(list);
-			if (links.tmdb) {
-				const key = `tv:${links.tmdb.serviceId}`;
-				if (!seen.has(key)) {
-					seen.add(key);
-					const meta = listTmdbMetadata[links.tmdb.serviceId];
-					items.push({
-						tmdbId: Number(links.tmdb.serviceId),
-						title: meta?.name ?? list.title,
-						type: 'tv'
-					});
-				}
-			}
-		}
 		return items;
 	});
 
@@ -183,29 +200,9 @@
 	// Track category overrides so category changes are immediately reflected
 	let categoryOverrides: Record<string, string> = $state({});
 
-	// Track list link overrides
-	let listLinkOverrides: Record<string, Record<string, MediaListLink | null>> = $state({});
-
-	// List-level TMDB metadata state (keyed by tmdbId)
-	let listTmdbMetadata: Record<string, DisplayTMDBTvShowDetails> = $state({});
-	let listTmdbLoading: Set<string> = $state(new Set());
-
 	// TMDB metadata state
-	let tmdbMetadata: Record<string, DisplayTMDBMovieDetails | DisplayTMDBTvShowDetails> = $state({});
+	let tmdbMetadata: Record<string, DisplayTMDBMovieDetails> = $state({});
 	let tmdbLoading: Set<string> = $state(new Set());
-
-	// Scan all libraries state
-	let scanning = $state(false);
-
-	async function handleScanAll() {
-		scanning = true;
-		try {
-			await libraryService.scanAllLibraries();
-			await invalidateAll();
-		} finally {
-			scanning = false;
-		}
-	}
 
 	onMount(async () => {
 		libraryService.initialize();
@@ -253,6 +250,7 @@
 
 	// Player state
 	const playerState = playerService.state;
+	const playerDisplayMode = playerService.displayMode;
 
 	// Media detail selection
 	const mediaDetailStore = mediaDetailService.store;
@@ -260,7 +258,6 @@
 
 	function resolveCardType(item: MediaItem): MediaDetailCardType {
 		if (item.categoryId === 'movies' && item.links.tmdb) return 'movie';
-		if (item.categoryId === 'tv' && item.links.tmdb) return 'tv';
 		return 'video';
 	}
 
@@ -333,56 +330,66 @@
 		}
 	});
 
-	function selectTab(tab: TabId) {
-		activeTab = tab;
-		activeSubTab = LIBRARY_SUB;
-		selectedList = null;
-		selectedShowGroup = null;
-		closeMediaDetail();
-	}
-
 	function selectSubTab(sub: SubTabId) {
 		activeSubTab = sub;
-		selectedList = null;
-		selectedShowGroup = null;
 		closeMediaDetail();
+		closeBrowseDetail();
 
 		if (sub === POPULAR_SUB) {
 			const s = $browseState;
-			if (isMoviesTab && s.popularMovies.length === 0) tmdbBrowseService.loadPopularMovies();
-			if (isTvTab && s.popularTv.length === 0) tmdbBrowseService.loadPopularTv();
+			if (s.popularMovies.length === 0) tmdbBrowseService.loadPopularMovies();
 		} else if (sub === DISCOVER_SUB) {
 			tmdbBrowseService.loadGenres();
 			const s = $browseState;
-			if (isMoviesTab && s.discoverMovies.length === 0) tmdbBrowseService.loadDiscoverMovies();
-			if (isTvTab && s.discoverTv.length === 0) tmdbBrowseService.loadDiscoverTv();
+			if (s.discoverMovies.length === 0) tmdbBrowseService.loadDiscoverMovies();
 		} else if (sub === RECOMMENDATIONS_SUB) {
 			const s = $browseState;
-			const filteredLinked = linkedItems.filter(
-				(i) => i.type === (isMoviesTab ? 'movie' : 'tv')
-			);
-			if (s.recommendations.length === 0 && filteredLinked.length > 0) {
-				const first = filteredLinked[0];
+			if (s.recommendations.length === 0 && linkedItems.length > 0) {
+				const first = linkedItems[0];
 				tmdbBrowseService.loadRecommendations(first.tmdbId, first.type);
 			}
 		}
 	}
 
-	function handleBrowseSelectMovie(movie: DisplayTMDBMovie) {
+	function handleBrowseDownloadMovie(movie: DisplayTMDBMovie) {
 		smartSearchService.select({
 			title: movie.title,
 			year: movie.releaseYear,
 			type: 'movie',
-			tmdbId: movie.id
+			tmdbId: movie.id,
+			mode: 'download'
 		});
 	}
 
-	function handleBrowseSelectTvShow(tvShow: DisplayTMDBTvShow) {
+	function handleBrowseStreamMovie(movie: DisplayTMDBMovie) {
+		playerService.prepareStream(movie.title);
+		smartSearchService.select({
+			title: movie.title,
+			year: movie.releaseYear,
+			type: 'movie',
+			tmdbId: movie.id,
+			mode: 'stream'
+		});
+	}
+
+	function handleBrowseDownloadTvShow(tvShow: DisplayTMDBTvShow) {
 		smartSearchService.select({
 			title: tvShow.name,
 			year: tvShow.firstAirYear,
 			type: 'tv',
-			tmdbId: tvShow.id
+			tmdbId: tvShow.id,
+			mode: 'download'
+		});
+	}
+
+	function handleBrowseStreamTvShow(tvShow: DisplayTMDBTvShow) {
+		playerService.prepareStream(tvShow.name);
+		smartSearchService.select({
+			title: tvShow.name,
+			year: tvShow.firstAirYear,
+			type: 'tv',
+			tmdbId: tvShow.id,
+			mode: 'stream'
 		});
 	}
 
@@ -412,23 +419,12 @@
 		});
 
 		if (res.ok) {
-			const categoryId = type === 'movie' ? 'movies' : 'tv';
-			const needsCategoryUpdate = item.categoryId !== categoryId;
-
 			updateItemLinks(item.id, 'tmdb', {
 				serviceId: String(tmdbId),
 				seasonNumber,
 				episodeNumber
 			});
-			categoryOverrides = { ...categoryOverrides, [item.id]: categoryId };
-
-			if (needsCategoryUpdate) {
-				fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/category`), {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ categoryId })
-				});
-			}
+			categoryOverrides = { ...categoryOverrides, [item.id]: 'movies' };
 		}
 
 		linkModalItem = null;
@@ -459,142 +455,6 @@
 		playerService.play(playableFile);
 	}
 
-	function getListLinks(list: MediaList): Record<string, MediaListLink> {
-		const overrides = listLinkOverrides[list.id];
-		if (!overrides) return list.links;
-		const merged = { ...list.links };
-		for (const [service, link] of Object.entries(overrides)) {
-			if (link === null) {
-				delete merged[service];
-			} else {
-				merged[service] = link;
-			}
-		}
-		return merged;
-	}
-
-	function listAsLibraryFile(list: MediaList): LibraryFile {
-		return {
-			id: list.id,
-			name: list.title,
-			path: '',
-			extension: '',
-			mediaType: list.mediaType as LibraryFile['mediaType'],
-			categoryId: null,
-			links: {}
-		};
-	}
-
-	async function handleListTmdbLink(
-		tmdbId: number,
-		_seasonNumber: number | null,
-		_episodeNumber: number | null,
-		_type: 'movie' | 'tv'
-	) {
-		if (!linkModalList) return;
-		const list = linkModalList;
-		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/tmdb`), {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ tmdbId })
-		});
-		if (res.ok) {
-			const tmdbIdStr = String(tmdbId);
-			listLinkOverrides = {
-				...listLinkOverrides,
-				[list.id]: {
-					...listLinkOverrides[list.id],
-					tmdb: { serviceId: tmdbIdStr, seasonNumber: null }
-				}
-			};
-			// Clear metadata for this tmdbId so it gets re-fetched
-			const { [tmdbIdStr]: _, ...restTmdb } = listTmdbMetadata;
-			listTmdbMetadata = restTmdb;
-		}
-		linkModalList = null;
-		linkModalListService = null;
-	}
-
-	async function handleListUnlink(list: MediaList, service: string) {
-		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/${service}`), {
-			method: 'DELETE'
-		});
-		if (res.ok) {
-			listLinkOverrides = {
-				...listLinkOverrides,
-				[list.id]: { ...listLinkOverrides[list.id], [service]: null }
-			};
-		}
-	}
-
-	async function handleListSetSeason(list: MediaList, seasonNumber: number | null) {
-		const links = getListLinks(list);
-		const tmdbLink = links.tmdb;
-		if (!tmdbLink) return;
-		const res = await fetch(apiUrl(`/api/media-lists/${list.id}/tmdb`), {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ tmdbId: Number(tmdbLink.serviceId), seasonNumber })
-		});
-		if (res.ok) {
-			listLinkOverrides = {
-				...listLinkOverrides,
-				[list.id]: {
-					...listLinkOverrides[list.id],
-					tmdb: { serviceId: tmdbLink.serviceId, seasonNumber }
-				}
-			};
-		}
-	}
-
-	async function handleSeasonMatchLinkAll(
-		matches: Array<{ file: LibraryFile; seasonNumber: number; episodeNumber: number }>
-	) {
-		await Promise.all(
-			matches.map(async (m) => {
-				const item = data.lists.flatMap((l) => l.items).find((i) => i.id === m.file.id);
-				if (!item) return;
-				const tmdbId = seasonMatchModal ? seasonMatchModal.tmdbId : 0;
-				const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/tmdb`), {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						tmdbId,
-						seasonNumber: m.seasonNumber,
-						episodeNumber: m.episodeNumber
-					})
-				});
-				if (res.ok) {
-					updateItemLinks(item.id, 'tmdb', {
-						serviceId: String(tmdbId),
-						seasonNumber: m.seasonNumber,
-						episodeNumber: m.episodeNumber
-					});
-					categoryOverrides = { ...categoryOverrides, [item.id]: 'tv' };
-				}
-			})
-		);
-		seasonMatchModal = null;
-	}
-
-	async function fetchListTmdbMetadata(tmdbId: string) {
-		if (listTmdbMetadata[tmdbId] || listTmdbLoading.has(tmdbId)) return;
-		listTmdbLoading = new Set([...listTmdbLoading, tmdbId]);
-		try {
-			const res = await fetch(apiUrl(`/api/tmdb/tv/${tmdbId}`));
-			if (res.ok) {
-				const raw = await res.json();
-				listTmdbMetadata = { ...listTmdbMetadata, [tmdbId]: tvShowDetailsToDisplay(raw) };
-			}
-		} catch (e) {
-			console.error('Failed to load list TMDB metadata:', e);
-		} finally {
-			const next = new Set(listTmdbLoading);
-			next.delete(tmdbId);
-			listTmdbLoading = next;
-		}
-	}
-
 	function itemAsLibraryFile(item: MediaItem): LibraryFile {
 		return {
 			id: item.id,
@@ -613,16 +473,11 @@
 
 		tmdbLoading = new Set([...tmdbLoading, item.id]);
 
-		const isTv = item.categoryId === 'tv';
-		const endpoint = isTv
-			? `/api/tmdb/tv/${tmdbLink.serviceId}`
-			: `/api/tmdb/movies/${tmdbLink.serviceId}`;
-
 		try {
-			const res = await fetch(apiUrl(endpoint));
+			const res = await fetch(apiUrl(`/api/tmdb/movies/${tmdbLink.serviceId}`));
 			if (res.ok) {
 				const data = await res.json();
-				tmdbMetadata[item.id] = isTv ? tvShowDetailsToDisplay(data) : movieDetailsToDisplay(data);
+				tmdbMetadata[item.id] = movieDetailsToDisplay(data);
 			}
 		} catch (e) {
 			console.error('Failed to load TMDB metadata:', e);
@@ -640,442 +495,228 @@
 			}
 		}
 	});
-
-	// Fetch metadata for linked lists
-	$effect(() => {
-		for (const list of data.lists) {
-			const links = getListLinks(list);
-			if (links.tmdb) {
-				fetchListTmdbMetadata(links.tmdb.serviceId);
-			}
-		}
-	});
 </script>
 
-<div class="container mx-auto p-4">
-	<div class="mb-6 flex items-center justify-between">
-		<div>
-			<h1 class="text-3xl font-bold">Media</h1>
-			<p class="text-sm opacity-70">Browse your media library</p>
-		</div>
-		<button class="btn btn-sm btn-accent" onclick={handleScanAll} disabled={scanning}>
-			{#if scanning}
-				<span class="loading loading-xs loading-spinner"></span>
-			{:else}
-				Scan
-			{/if}
-		</button>
-	</div>
-
-	<!-- Main Tabs -->
-	<div class="mb-3 flex gap-2">
-		<button
-			class={classNames('btn btn-sm', {
-				'btn-primary': isMoviesTab,
-				'btn-ghost': !isMoviesTab
-			})}
-			onclick={() => selectTab(MOVIES_TAB)}
-		>
-			Movies
-		</button>
-		<button
-			class={classNames('btn btn-sm', {
-				'btn-primary': isTvTab,
-				'btn-ghost': !isTvTab
-			})}
-			onclick={() => selectTab(TV_TAB)}
-		>
-			TV Shows
-		</button>
-	</div>
-
-	<!-- Sub Tabs -->
-	<div class="mb-6 flex gap-1">
-		<button
-			class={classNames('btn btn-xs', {
-				'btn-secondary': isLibrarySub,
-				'btn-ghost': !isLibrarySub
-			})}
-			onclick={() => selectSubTab(LIBRARY_SUB)}
-		>
-			Library
-		</button>
-		<button
-			class={classNames('btn btn-xs', {
-				'btn-secondary': isSearchSub,
-				'btn-ghost': !isSearchSub
-			})}
-			onclick={() => selectSubTab(SEARCH_SUB)}
-		>
-			Search
-		</button>
-		<button
-			class={classNames('btn btn-xs', {
-				'btn-secondary': isPopularSub,
-				'btn-ghost': !isPopularSub
-			})}
-			onclick={() => selectSubTab(POPULAR_SUB)}
-		>
-			Popular
-		</button>
-		<button
-			class={classNames('btn btn-xs', {
-				'btn-secondary': isDiscoverSub,
-				'btn-ghost': !isDiscoverSub
-			})}
-			onclick={() => selectSubTab(DISCOVER_SUB)}
-		>
-			Discover
-		</button>
-		<button
-			class={classNames('btn btn-xs', {
-				'btn-secondary': isRecommendationsSub,
-				'btn-ghost': !isRecommendationsSub
-			})}
-			onclick={() => selectSubTab(RECOMMENDATIONS_SUB)}
-		>
-			Recommendations
-		</button>
-	</div>
-
-	{#if isSearchSub}
-		<SearchTab
-			movies={$browseState.searchMovies}
-			tvShows={$browseState.searchTv}
-			moviesPage={$browseState.searchMoviesPage}
-			tvPage={$browseState.searchTvPage}
-			moviesTotalPages={$browseState.searchMoviesTotalPages}
-			tvTotalPages={$browseState.searchTvTotalPages}
-			query={$browseState.searchQuery}
-			loadingMovies={$browseState.loading['searchMovies'] ?? false}
-			loadingTv={$browseState.loading['searchTv'] ?? false}
-			mediaType={isMoviesTab ? 'movies' : 'tv'}
-			onselectMovie={handleBrowseSelectMovie}
-			onselectTvShow={handleBrowseSelectTvShow}
-			onsearchMovies={(q, p) => tmdbBrowseService.searchMovies(q, p)}
-			onsearchTv={(q, p) => tmdbBrowseService.searchTv(q, p)}
-		/>
-	{:else if isPopularSub}
-		<PopularTab
-			movies={$browseState.popularMovies}
-			tvShows={$browseState.popularTv}
-			moviesPage={$browseState.popularMoviesPage}
-			tvPage={$browseState.popularTvPage}
-			moviesTotalPages={$browseState.popularMoviesTotalPages}
-			tvTotalPages={$browseState.popularTvTotalPages}
-			loadingMovies={$browseState.loading['popularMovies'] ?? false}
-			loadingTv={$browseState.loading['popularTv'] ?? false}
-			mediaType={isMoviesTab ? 'movies' : 'tv'}
-			onselectMovie={handleBrowseSelectMovie}
-			onselectTvShow={handleBrowseSelectTvShow}
-			onloadMovies={(p) => tmdbBrowseService.loadPopularMovies(p)}
-			onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
-		/>
-	{:else if isDiscoverSub}
-		<DiscoverTab
-			movies={$browseState.discoverMovies}
-			tvShows={$browseState.discoverTv}
-			moviesPage={$browseState.discoverMoviesPage}
-			tvPage={$browseState.discoverTvPage}
-			moviesTotalPages={$browseState.discoverMoviesTotalPages}
-			tvTotalPages={$browseState.discoverTvTotalPages}
-			movieGenres={$browseState.movieGenres}
-			tvGenres={$browseState.tvGenres}
-			selectedGenreId={$browseState.selectedGenreId}
-			loadingMovies={$browseState.loading['discoverMovies'] ?? false}
-			loadingTv={$browseState.loading['discoverTv'] ?? false}
-			mediaType={isMoviesTab ? 'movies' : 'tv'}
-			onselectMovie={handleBrowseSelectMovie}
-			onselectTvShow={handleBrowseSelectTvShow}
-			ondiscoverMovies={(p, g) => tmdbBrowseService.loadDiscoverMovies(p, g)}
-			ondiscoverTv={(p, g) => tmdbBrowseService.loadDiscoverTv(p, g)}
-		/>
-	{:else if isRecommendationsSub}
-		<RecommendationsTab
-			linkedItems={linkedItems.filter((i) => i.type === (isMoviesTab ? 'movie' : 'tv'))}
-			recommendations={$browseState.recommendations}
-			page={$browseState.recommendationsPage}
-			totalPages={$browseState.recommendationsTotalPages}
-			sourceId={$browseState.recommendationSourceId}
-			sourceType={$browseState.recommendationSourceType}
-			loading={$browseState.loading['recommendations'] ?? false}
-			onselectMovie={handleBrowseSelectMovie}
-			onselectTvShow={handleBrowseSelectTvShow}
-			onload={(id, type, p) => tmdbBrowseService.loadRecommendations(id, type, p)}
-		/>
-	{:else if isLibrarySub && isTvTab}
-		<!-- TV Shows view -->
-		{#if selectedList}
-			{@const currentListLinks = getListLinks(selectedList)}
-			{@const listTmdb = currentListLinks.tmdb
-				? (listTmdbMetadata[currentListLinks.tmdb.serviceId] ?? null)
-				: null}
-			{@const selectedSeason = currentListLinks.tmdb?.seasonNumber ?? null}
-			{@const seasonMeta =
-				listTmdb && selectedSeason != null
-					? (listTmdb.seasons.find((s) => s.seasonNumber === selectedSeason) ?? null)
-					: null}
-			<div class="mb-4 flex items-center gap-2">
-				<button
-					class="btn btn-ghost btn-sm"
-					onclick={() => {
-						selectedList = null;
-					}}
-				>
-					&larr; Back
-				</button>
-				<h2 class="text-xl font-semibold">{selectedList.title}</h2>
-				<div class="ml-auto flex gap-2">
-					{#if currentListLinks.tmdb}
-						<button
-							class="btn btn-outline btn-xs btn-error"
-							onclick={() => handleListUnlink(selectedList!, 'tmdb')}
-						>
-							Unlink TV Show
-						</button>
-					{:else}
-						<button
-							class="btn btn-outline btn-xs"
-							onclick={() => {
-								linkModalList = selectedList;
-								linkModalListService = 'tmdb';
-							}}
-						>
-							Link TV Show
-						</button>
-					{/if}
-				</div>
+<div class="flex flex-1 overflow-hidden">
+	<div class="min-w-0 flex-1 overflow-y-auto p-4">
+		<div class="container mx-auto">
+			<div class="mb-6">
+				<h1 class="text-3xl font-bold">Movies</h1>
+				<p class="text-sm opacity-70">Browse your movie library</p>
 			</div>
-			{#if listTmdb}
-				<div class="mb-4 flex gap-4 rounded-lg bg-base-200 p-4">
-					{#if seasonMeta?.posterUrl}
-						<img
-							src={seasonMeta.posterUrl}
-							alt={seasonMeta.name}
-							class="h-40 w-auto rounded-lg object-cover"
-						/>
-					{:else if listTmdb.posterUrl}
-						<img
-							src={listTmdb.posterUrl}
-							alt={listTmdb.name}
-							class="h-40 w-auto rounded-lg object-cover"
-						/>
-					{/if}
-					<div class="flex flex-1 flex-col gap-1">
-						<h3 class="text-lg font-semibold">{listTmdb.name}</h3>
-						{#if seasonMeta}
-							<p class="text-sm font-medium opacity-70">{seasonMeta.name}</p>
-						{/if}
-						<p class="text-xs opacity-50">
-							{listTmdb.firstAirYear}{listTmdb.lastAirYear ? `–${listTmdb.lastAirYear}` : ''}
-						</p>
-						<p class="line-clamp-3 text-sm opacity-70">
-							{seasonMeta?.overview || listTmdb.overview}
-						</p>
-						{#if listTmdb.seasons.length > 0}
-							<div class="mt-auto">
-								<select
-									class="select-bordered select select-xs"
-									value={selectedSeason ?? ''}
-									onchange={(e) => {
-										const val = (e.target as HTMLSelectElement).value;
-										handleListSetSeason(selectedList!, val === '' ? null : Number(val));
-									}}
-								>
-									<option value="">All Seasons</option>
-									{#each listTmdb.seasons as season}
-										<option value={season.seasonNumber}>{season.name}</option>
-									{/each}
-								</select>
-							</div>
-						{/if}
-					</div>
-				</div>
-			{/if}
-			{#if selectedList.items.length > 0}
-				<div
-					class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-				>
-					{#each selectedList.items as item (item.id)}
-						{@const torrent = findTorrentForItem(item)}
-						<MediaCard
-							{item}
-							tmdbMetadata={tmdbMetadata[item.id] ?? null}
-							metadataLoading={tmdbLoading.has(item.id)}
-							selected={selectedItemId === item.id}
-							torrentProgress={torrent?.progress ?? null}
-							torrentState={torrent?.state ?? null}
-							torrentSpeed={torrent?.downloadSpeed ?? null}
-							torrentEta={torrent?.eta ?? null}
-							onselect={(i) => handleSelect(i)}
-						/>
-					{/each}
-				</div>
-			{:else}
-				<div class="rounded-lg bg-base-200 p-8 text-center">
-					<p class="opacity-50">No items in this list.</p>
-				</div>
-			{/if}
-		{:else if selectedShowGroup}
-			{@const tmdbMeta = listTmdbMetadata[selectedShowGroup.tmdbId] ?? null}
-			<div class="mb-4 flex items-center gap-2">
+
+			<!-- Sub Tabs -->
+			<div class="mb-6 flex gap-1">
 				<button
-					class="btn btn-ghost btn-sm"
-					onclick={() => {
-						selectedShowGroup = null;
-					}}
+					class={classNames('btn btn-xs', {
+						'btn-secondary': isLibrarySub,
+						'btn-ghost': !isLibrarySub
+					})}
+					onclick={() => selectSubTab(LIBRARY_SUB)}
 				>
-					&larr; Back
+					Library
 				</button>
-				<h2 class="text-xl font-semibold">{tmdbMeta?.name ?? 'TV Show'}</h2>
+				<button
+					class={classNames('btn btn-xs', {
+						'btn-secondary': isSearchSub,
+						'btn-ghost': !isSearchSub
+					})}
+					onclick={() => selectSubTab(SEARCH_SUB)}
+				>
+					Search
+				</button>
+				<button
+					class={classNames('btn btn-xs', {
+						'btn-secondary': isPopularSub,
+						'btn-ghost': !isPopularSub
+					})}
+					onclick={() => selectSubTab(POPULAR_SUB)}
+				>
+					Popular
+				</button>
+				<button
+					class={classNames('btn btn-xs', {
+						'btn-secondary': isDiscoverSub,
+						'btn-ghost': !isDiscoverSub
+					})}
+					onclick={() => selectSubTab(DISCOVER_SUB)}
+				>
+					Discover
+				</button>
+				<button
+					class={classNames('btn btn-xs', {
+						'btn-secondary': isRecommendationsSub,
+						'btn-ghost': !isRecommendationsSub
+					})}
+					onclick={() => selectSubTab(RECOMMENDATIONS_SUB)}
+				>
+					Recommendations
+				</button>
 			</div>
-			{#if tmdbMeta}
-				<div class="mb-6 flex gap-4 rounded-lg bg-base-200 p-4">
-					{#if tmdbMeta.posterUrl}
-						<img
-							src={tmdbMeta.posterUrl}
-							alt={tmdbMeta.name}
-							class="h-40 w-auto rounded-lg object-cover"
-						/>
-					{/if}
-					<div class="flex flex-1 flex-col gap-1">
-						<h3 class="text-lg font-semibold">{tmdbMeta.name}</h3>
-						<p class="text-xs opacity-50">
-							{tmdbMeta.firstAirYear}{tmdbMeta.lastAirYear ? `–${tmdbMeta.lastAirYear}` : ''}
-						</p>
-						<p class="line-clamp-3 text-sm opacity-70">{tmdbMeta.overview}</p>
-					</div>
-				</div>
-			{/if}
-			{#each selectedShowGroup.lists as list (list.id)}
-				{@const links = getListLinks(list)}
-				{@const seasonNum = links.tmdb?.seasonNumber}
-				{@const seasonMeta =
-					tmdbMeta && seasonNum != null
-						? (tmdbMeta.seasons.find((s) => s.seasonNumber === seasonNum) ?? null)
-						: null}
-				<div class="mb-6">
-					<div class="mb-3 flex items-center gap-3">
-						{#if seasonMeta?.posterUrl}
-							<img
-								src={seasonMeta.posterUrl}
-								alt={seasonMeta.name}
-								class="h-16 w-auto rounded object-cover"
+
+			{#if isSearchSub}
+				<SearchTab
+					movies={$browseState.searchMovies}
+					tvShows={$browseState.searchTv}
+					moviesPage={$browseState.searchMoviesPage}
+					tvPage={$browseState.searchTvPage}
+					moviesTotalPages={$browseState.searchMoviesTotalPages}
+					tvTotalPages={$browseState.searchTvTotalPages}
+					query={$browseState.searchQuery}
+					loadingMovies={$browseState.loading['searchMovies'] ?? false}
+					loadingTv={$browseState.loading['searchTv'] ?? false}
+					error={$browseState.error}
+					mediaType="movies"
+					selectedMovieId={selectedBrowseMovie?.id ?? null}
+					onselectMovie={handleBrowseSelectMovie}
+					onsearchMovies={(q, p) => tmdbBrowseService.searchMovies(q, p)}
+					onsearchTv={(q, p) => tmdbBrowseService.searchTv(q, p)}
+				/>
+			{:else if isPopularSub}
+				<PopularTab
+					movies={$browseState.popularMovies}
+					tvShows={$browseState.popularTv}
+					moviesPage={$browseState.popularMoviesPage}
+					tvPage={$browseState.popularTvPage}
+					moviesTotalPages={$browseState.popularMoviesTotalPages}
+					tvTotalPages={$browseState.popularTvTotalPages}
+					loadingMovies={$browseState.loading['popularMovies'] ?? false}
+					loadingTv={$browseState.loading['popularTv'] ?? false}
+					error={$browseState.error}
+					mediaType="movies"
+					selectedMovieId={selectedBrowseMovie?.id ?? null}
+					onselectMovie={handleBrowseSelectMovie}
+					onloadMovies={(p) => tmdbBrowseService.loadPopularMovies(p)}
+					onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
+				/>
+			{:else if isDiscoverSub}
+				<DiscoverTab
+					movies={$browseState.discoverMovies}
+					tvShows={$browseState.discoverTv}
+					moviesPage={$browseState.discoverMoviesPage}
+					tvPage={$browseState.discoverTvPage}
+					moviesTotalPages={$browseState.discoverMoviesTotalPages}
+					tvTotalPages={$browseState.discoverTvTotalPages}
+					movieGenres={$browseState.movieGenres}
+					tvGenres={$browseState.tvGenres}
+					selectedGenreId={$browseState.selectedGenreId}
+					loadingMovies={$browseState.loading['discoverMovies'] ?? false}
+					loadingTv={$browseState.loading['discoverTv'] ?? false}
+					error={$browseState.error}
+					mediaType="movies"
+					selectedMovieId={selectedBrowseMovie?.id ?? null}
+					onselectMovie={handleBrowseSelectMovie}
+					ondiscoverMovies={(p, g) => tmdbBrowseService.loadDiscoverMovies(p, g)}
+					ondiscoverTv={(p, g) => tmdbBrowseService.loadDiscoverTv(p, g)}
+				/>
+			{:else if isRecommendationsSub}
+				<RecommendationsTab
+					{linkedItems}
+					recommendations={$browseState.recommendations}
+					page={$browseState.recommendationsPage}
+					totalPages={$browseState.recommendationsTotalPages}
+					sourceId={$browseState.recommendationSourceId}
+					sourceType={$browseState.recommendationSourceType}
+					loading={$browseState.loading['recommendations'] ?? false}
+					error={$browseState.error}
+					selectedMovieId={selectedBrowseMovie?.id ?? null}
+					selectedTvShowId={selectedBrowseTvShow?.id ?? null}
+					onselectMovie={handleBrowseSelectMovie}
+					onselectTvShow={handleBrowseSelectTvShow}
+					onload={(id, type, p) => tmdbBrowseService.loadRecommendations(id, type, p)}
+				/>
+			{:else if isLibrarySub}
+				<!-- Movies grid -->
+				{#if itemsWithOverrides.length > 0}
+					<div
+						class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+					>
+						{#each itemsWithOverrides as item (item.id)}
+							{@const meta = tmdbMetadata[item.id]}
+							<TmdbBrowseCard
+								movie={{
+									id: Number(item.links.tmdb?.serviceId ?? 0),
+									title: meta?.title ?? item.name,
+									originalTitle: meta?.originalTitle ?? item.name,
+									overview: meta?.overview ?? '',
+									posterUrl: meta?.posterUrl ?? null,
+									backdropUrl: meta?.backdropUrl ?? null,
+									releaseYear: meta?.releaseYear ?? '',
+									voteAverage: meta?.voteAverage ?? 0,
+									voteCount: meta?.voteCount ?? 0,
+									genres: meta?.genres ?? []
+								}}
+								selected={selectedItemId === item.id}
+								onclick={() => handleSelect(item)}
 							/>
-						{/if}
-						<div class="flex flex-1 items-center gap-3">
-							<div>
-								<h3 class="text-base font-semibold">
-									{seasonMeta?.name ?? list.title}
-								</h3>
-								{#if seasonMeta?.episodeCount}
-									<p class="text-xs opacity-50">{seasonMeta.episodeCount} episodes</p>
-								{/if}
-							</div>
-							{#if tmdbMeta && seasonNum != null && list.items.length > 0}
-								<button
-									class="btn ml-auto btn-ghost btn-xs"
-									onclick={() => {
-										seasonMatchModal = {
-											tmdbId: Number(selectedShowGroup!.tmdbId),
-											seasonNumber: seasonNum!,
-											showName: tmdbMeta!.name,
-											seasonName: seasonMeta?.name ?? list.title,
-											files: list.items.map((i) => itemAsLibraryFile(i))
-										};
-									}}
-								>
-									Match episodes
-								</button>
-							{/if}
-						</div>
+						{/each}
 					</div>
-					{#if list.items.length > 0}
-						<div
-							class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-						>
-							{#each list.items as item (item.id)}
-								{@const torrent = findTorrentForItem(item)}
-								<MediaCard
-									{item}
-									tmdbMetadata={tmdbMetadata[item.id] ?? null}
-									metadataLoading={tmdbLoading.has(item.id)}
-									selected={selectedItemId === item.id}
-									torrentProgress={torrent?.progress ?? null}
-									torrentState={torrent?.state ?? null}
-									torrentSpeed={torrent?.downloadSpeed ?? null}
-									torrentEta={torrent?.eta ?? null}
-									onselect={(i) => handleSelect(i)}
-								/>
-							{/each}
-						</div>
-					{:else}
-						<p class="text-sm opacity-50">No items in this season.</p>
-					{/if}
-				</div>
-			{/each}
-		{:else if tvListGridEntries.length > 0}
-			<div
-				class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-			>
-				{#each tvListGridEntries as entry}
-					{#if entry.type === 'single'}
-						{@const list = entry.list}
-						{@const links = getListLinks(list)}
-						<MediaListCard
-							{list}
-							tmdbMetadata={links.tmdb ? (listTmdbMetadata[links.tmdb.serviceId] ?? null) : null}
-							onselect={(l) => {
-								selectedList = l;
-							}}
-						/>
-					{:else}
-						{@const tmdbMeta = listTmdbMetadata[entry.tmdbId] ?? null}
-						{@const representative = entry.lists[0]}
-						<MediaListCard
-							list={representative}
-							tmdbMetadata={tmdbMeta}
-							seasonCount={entry.lists.length}
-							onselect={() => {
-								selectedShowGroup = { tmdbId: entry.tmdbId, lists: entry.lists };
-							}}
-						/>
-					{/if}
-				{/each}
-			</div>
-		{:else}
-			<div class="rounded-lg bg-base-200 p-8 text-center">
-				<p class="opacity-50">No TV shows yet. Add a TV library and scan it.</p>
-			</div>
-		{/if}
-	{:else if isLibrarySub && isMoviesTab}
-		<!-- Movies grid -->
-		{#if itemsWithOverrides.length > 0}
-			<div
-				class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-			>
-				{#each itemsWithOverrides as item (item.id)}
-					{@const torrent = findTorrentForItem(item)}
-					<MediaCard
-						{item}
-						tmdbMetadata={tmdbMetadata[item.id] ?? null}
-						metadataLoading={tmdbLoading.has(item.id)}
-						selected={selectedItemId === item.id}
-						torrentProgress={torrent?.progress ?? null}
-						torrentState={torrent?.state ?? null}
-						torrentSpeed={torrent?.downloadSpeed ?? null}
-						torrentEta={torrent?.eta ?? null}
-						onselect={(i) => handleSelect(i)}
-					/>
-				{/each}
-			</div>
-		{:else}
-			<div class="rounded-lg bg-base-200 p-8 text-center">
-				<p class="opacity-50">No movies yet. Add a Movies library and scan it.</p>
-			</div>
-		{/if}
+				{:else}
+					<div class="rounded-lg bg-base-200 p-8 text-center">
+						<p class="opacity-50">No movies yet. Add a Movies library and scan it.</p>
+					</div>
+				{/if}
+			{/if}
+		</div>
+	</div>
+
+	{#if hasBrowseSelection && !isLibrarySub}
+		<div class="hidden w-85 shrink-0 border-l border-base-300 bg-base-200 lg:block">
+			<TmdbBrowseDetail
+				movie={selectedBrowseMovie}
+				tvShow={selectedBrowseTvShow}
+				movieDetails={browseMovieDetails}
+				tvShowDetails={browseTvShowDetails}
+				loading={browseDetailLoading}
+				ondownload={handleBrowseDetailDownload}
+				onstream={handleBrowseDetailStream}
+				onclose={closeBrowseDetail}
+			/>
+		</div>
 	{/if}
 </div>
+
+{#if $playerState.currentFile && !$mediaDetailStore && $playerDisplayMode === 'fullscreen'}
+	<div class="fixed inset-0 z-40 flex flex-col bg-black">
+		<div class="flex items-center justify-between p-3">
+			<p class="truncate text-sm font-semibold text-white" title={$playerState.currentFile.name}>
+				{$playerState.currentFile.name}
+			</p>
+			<div class="flex items-center gap-1">
+				<button
+					class="btn btn-square btn-ghost btn-sm text-white"
+					onclick={() => playerService.setDisplayMode('sidebar')}
+					aria-label="Move to sidebar"
+					title="Move to sidebar"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M18 8L14 12L18 16" />
+						<rect x="3" y="3" width="18" height="18" rx="2" />
+						<line x1="14" y1="3" x2="14" y2="21" />
+					</svg>
+				</button>
+				<button
+					class="btn btn-square btn-ghost btn-sm text-white"
+					onclick={() => playerService.stop()}
+					aria-label="Close player"
+				>
+					&times;
+				</button>
+			</div>
+		</div>
+		<div class="min-h-0 flex-1">
+			<PlayerVideo
+				file={$playerState.currentFile}
+				connectionState={$playerState.connectionState}
+				positionSecs={$playerState.positionSecs}
+				durationSecs={$playerState.durationSecs}
+				streamUrl={$playerState.streamUrl}
+				buffering={$playerState.buffering}
+				fullscreen
+			/>
+		</div>
+	</div>
+{/if}
 
 <Modal open={!!$mediaDetailStore} maxWidth="max-w-lg" onclose={closeMediaDetail}>
 	{#if $mediaDetailStore}
@@ -1118,44 +759,6 @@
 		onclose={() => {
 			linkModalItem = null;
 			linkModalService = null;
-		}}
-	/>
-{/if}
-
-{#if linkModalItem && linkModalService === 'tmdb-tv'}
-	<TmdbLinkModal
-		file={itemAsLibraryFile(linkModalItem)}
-		type="tv"
-		onlink={handleLink}
-		onclose={() => {
-			linkModalItem = null;
-			linkModalService = null;
-		}}
-	/>
-{/if}
-
-{#if linkModalList && linkModalListService === 'tmdb'}
-	<TmdbLinkModal
-		file={listAsLibraryFile(linkModalList)}
-		type="tv"
-		onlink={handleListTmdbLink}
-		onclose={() => {
-			linkModalList = null;
-			linkModalListService = null;
-		}}
-	/>
-{/if}
-
-{#if seasonMatchModal}
-	<SeasonEpisodeMatchModal
-		tmdbId={seasonMatchModal.tmdbId}
-		seasonNumber={seasonMatchModal.seasonNumber}
-		showName={seasonMatchModal.showName}
-		seasonName={seasonMatchModal.seasonName}
-		files={seasonMatchModal.files}
-		onlinkall={handleSeasonMatchLinkAll}
-		onclose={() => {
-			seasonMatchModal = null;
 		}}
 	/>
 {/if}

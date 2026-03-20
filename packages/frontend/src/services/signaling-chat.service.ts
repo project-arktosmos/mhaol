@@ -5,7 +5,6 @@ import { p2pStreamService } from 'frontend/services/p2p-stream.service';
 import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
 import type {
 	SignalingChatState,
-	SignalingServerTarget,
 	SignalingServerMessage,
 	SignalingClientMessage,
 	SignalingChatMessage
@@ -17,7 +16,6 @@ const DATA_CHANNEL_LABEL = 'signaling-chat';
 
 const initialState: SignalingChatState = {
 	phase: 'disconnected',
-	serverTarget: 'dev',
 	roomId: '',
 	localPeerId: null,
 	peerIds: [],
@@ -42,14 +40,13 @@ class SignalingChatService {
 
 	// ===== Connection =====
 
-	async connect(serverUrl: string, roomId: string, target: SignalingServerTarget): Promise<void> {
+	async connect(serverUrl: string, roomId: string): Promise<void> {
 		if (!browser) return;
 		this.disconnect();
 
 		this.state.update((s) => ({
 			...s,
 			phase: 'connecting',
-			serverTarget: target,
 			roomId,
 			error: null
 		}));
@@ -107,7 +104,6 @@ class SignalingChatService {
 		}
 		this.state.update((s) => ({
 			...initialState,
-			serverTarget: s.serverTarget,
 			roomId: s.roomId
 		}));
 	}

@@ -13,7 +13,10 @@
 		query,
 		loadingMovies = false,
 		loadingTv = false,
+		error = null,
 		mediaType,
+		selectedMovieId = null,
+		selectedTvShowId = null,
 		onselectMovie,
 		onselectTvShow,
 		onsearchMovies,
@@ -28,7 +31,10 @@
 		query: string;
 		loadingMovies?: boolean;
 		loadingTv?: boolean;
+		error?: string | null;
 		mediaType?: 'movies' | 'tv';
+		selectedMovieId?: number | null;
+		selectedTvShowId?: number | null;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 		onsearchMovies: (query: string, page: number) => void;
@@ -79,12 +85,13 @@
 	<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
 		{#if isMovies}
 			{#each movies as movie (movie.id)}
-				<TmdbBrowseCard {movie} onclick={onselectMovie ? () => onselectMovie(movie) : undefined} />
+				<TmdbBrowseCard {movie} selected={selectedMovieId === movie.id} onclick={onselectMovie ? () => onselectMovie(movie) : undefined} />
 			{/each}
 		{:else}
 			{#each tvShows as tvShow (tvShow.id)}
 				<TmdbBrowseCard
 					{tvShow}
+					selected={selectedTvShowId === tvShow.id}
 					onclick={onselectTvShow ? () => onselectTvShow(tvShow) : undefined}
 				/>
 			{/each}
@@ -102,6 +109,10 @@
 			}
 		}}
 	/>
+{:else if error}
+	<div class="alert alert-error">
+		<p>{error}</p>
+	</div>
 {:else if hasSearched}
 	<div class="rounded-lg bg-base-200 p-8 text-center">
 		<p class="opacity-50">No {mediaType === 'tv' ? 'TV shows' : 'movies'} found for "{query}".</p>

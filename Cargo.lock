@@ -3633,6 +3633,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mhaol-flix-mobile"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "mhaol-backend",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-shell",
+ "tokio",
+]
+
+[[package]]
 name = "mhaol-http-stream"
 version = "0.1.0"
 dependencies = [

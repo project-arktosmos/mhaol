@@ -17,6 +17,9 @@
 		sourceId,
 		sourceType,
 		loading = false,
+		error = null,
+		selectedMovieId = null,
+		selectedTvShowId = null,
 		onselectMovie,
 		onselectTvShow,
 		onload
@@ -28,6 +31,9 @@
 		sourceId: number | null;
 		sourceType: 'movie' | 'tv' | null;
 		loading?: boolean;
+		error?: string | null;
+		selectedMovieId?: number | null;
+		selectedTvShowId?: number | null;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 		onload: (tmdbId: number, type: 'movie' | 'tv', page: number) => void;
@@ -85,9 +91,9 @@
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
 			{#each recommendations as item (item.id)}
 				{#if isMovie(item)}
-					<TmdbBrowseCard movie={item} onclick={onselectMovie ? () => onselectMovie(item as DisplayTMDBMovie) : undefined} />
+					<TmdbBrowseCard movie={item} selected={selectedMovieId === item.id} onclick={onselectMovie ? () => onselectMovie(item as DisplayTMDBMovie) : undefined} />
 				{:else}
-					<TmdbBrowseCard tvShow={item} onclick={onselectTvShow ? () => onselectTvShow(item as DisplayTMDBTvShow) : undefined} />
+					<TmdbBrowseCard tvShow={item} selected={selectedTvShowId === item.id} onclick={onselectTvShow ? () => onselectTvShow(item as DisplayTMDBTvShow) : undefined} />
 				{/if}
 			{/each}
 		</div>
@@ -99,6 +105,10 @@
 				onpage={(p) => onload(sourceId!, sourceType!, p)}
 			/>
 		{/if}
+	{:else if error}
+		<div class="alert alert-error">
+			<p>{error}</p>
+		</div>
 	{:else if sourceId != null}
 		<div class="rounded-lg bg-base-200 p-8 text-center">
 			<p class="opacity-50">No recommendations found for this title.</p>

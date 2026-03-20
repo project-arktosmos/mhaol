@@ -1,7 +1,7 @@
 # App: flix
 
 **Location:** `apps/flix/`
-**Type:** Thin SvelteKit 2 wrapper — unified media app (merged from mhaol-video + video)
+**Type:** Thin SvelteKit 2 wrapper — movies-only media app
 **Adapter:** `@sveltejs/adapter-static` (fallback to `index.html`)
 **Dev port:** 1531
 
@@ -16,7 +16,7 @@ src/
 ├── routes/              # SvelteKit pages
 │   ├── +layout.svelte   # App shell: Navbar (brand + items) + IdentitySidebar + ModalOutlet
 │   ├── +layout.ts       # SSR disabled
-│   ├── +page.svelte     # Media library grid with tabs (Movies, TV, Popular, Discover, Recommendations)
+│   ├── +page.svelte     # Movies library grid with sub-tabs (Library, Search, Popular, Discover, Recommendations)
 │   ├── +page.ts         # Page load (fetches /api/media)
 │   └── database/        # Database browser utility page
 ├── css/app.css          # Tailwind entry + @source for packages/frontend

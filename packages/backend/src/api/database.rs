@@ -225,8 +225,6 @@ async fn reset_database(State(state): State<AppState>) -> impl IntoResponse {
         params![library_id],
     ).unwrap();
 
-    tracing::info!("Database reset complete");
-
     let new_tables: Vec<String> = {
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
@@ -236,6 +234,18 @@ async fn reset_database(State(state): State<AppState>) -> impl IntoResponse {
             .filter_map(|r| r.ok())
             .collect()
     };
+
+    // Drop the DB lock before accessing the module registry
+    drop(conn);
+
+    // Re-seed settings from env vars and re-register link sources
+    {
+        let registry = state.module_registry.read();
+        registry.reseed_settings(&state);
+        registry.reregister_link_sources(&state);
+    }
+
+    tracing::info!("Database reset complete");
 
     Json(serde_json::json!({ "ok": true, "tables": new_tables }))
 }

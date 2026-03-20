@@ -26,6 +26,7 @@ pub fn router() -> Router<AppState> {
             "/{id}/items/{item_id}/tmdb",
             put(link_tmdb).delete(unlink_tmdb),
         )
+        .route("/{id}/items/{item_id}/torrent", put(link_torrent))
 
         .route("/{id}/files", get(get_library_files))
         .route("/{id}/scan", get(scan_library).post(scan_library))
@@ -216,6 +217,30 @@ async fn create_item(
         return (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Library not found" })),
+        )
+            .into_response();
+    }
+
+    // If an item with this path already exists, return it (and update TMDB link if provided)
+    if let Some(existing_id) = state.library_items.exists_by_path(&body.path) {
+        if let Some(tmdb_id) = body.tmdb_id {
+            state.library_item_links.upsert(
+                &uuid::Uuid::new_v4().to_string(),
+                &existing_id,
+                "tmdb",
+                &tmdb_id.to_string(),
+                None,
+                None,
+            );
+        }
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "id": existing_id,
+                "libraryId": library_id,
+                "name": body.name,
+                "path": body.path,
+            })),
         )
             .into_response();
     }
@@ -458,6 +483,36 @@ async fn unlink_tmdb(
     Json(serde_json::json!({ "ok": true })).into_response()
 }
 
+#[derive(Deserialize)]
+struct LinkTorrentBody {
+    #[serde(rename = "infoHash")]
+    info_hash: String,
+    #[serde(rename = "outputPath")]
+    output_path: String,
+    mode: String,
+}
+
+async fn link_torrent(
+    State(state): State<AppState>,
+    Path((lib_id, item_id)): Path<(String, String)>,
+    Json(body): Json<LinkTorrentBody>,
+) -> impl IntoResponse {
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+
+    state.library_items.update_path(&item_id, &body.output_path);
+
+    let service = format!("torrent-{}", body.mode);
+    state.library_item_links.upsert(
+        &uuid::Uuid::new_v4().to_string(),
+        &item_id,
+        &service,
+        &body.info_hash,
+        None,
+        None,
+    );
+
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
 
 // --- Scan helpers ---
 

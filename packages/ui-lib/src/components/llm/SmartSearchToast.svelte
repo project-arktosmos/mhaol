@@ -4,10 +4,17 @@
 	import { llmService } from 'frontend/services/llm.service';
 	import { smartSearchService } from 'frontend/services/smart-search.service';
 	import SmartSearchSection from './SmartSearchSection.svelte';
+	import type { SmartSearchTorrentResult } from 'frontend/types/smart-search.type';
 
 	const DEFAULT_MODEL = 'qwen2.5-1.5b-instruct-q4_k_m.gguf';
 
-	let { onlibrarychange }: { onlibrarychange?: () => void } = $props();
+	let {
+		onlibrarychange,
+		onstream
+	}: {
+		onlibrarychange?: () => void;
+		onstream?: (candidate: SmartSearchTorrentResult) => void;
+	} = $props();
 
 	const llmStore = llmService.store;
 	const searchStore = smartSearchService.store;
@@ -40,6 +47,7 @@
 				onUnloadModel={() => llmService.unloadModel()}
 				onDownloadModel={(repoId, fileName) => llmService.downloadModel(repoId, fileName)}
 				{onlibrarychange}
+				{onstream}
 			/>
 		</div>
 	</div>

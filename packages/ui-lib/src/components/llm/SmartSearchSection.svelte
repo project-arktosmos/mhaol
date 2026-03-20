@@ -11,6 +11,7 @@
 		getSeedersColor,
 		formatUploadDate
 	} from 'frontend/utils/torrent-search/format';
+	import type { SmartSearchTorrentResult } from 'frontend/types/smart-search.type';
 
 	let {
 		status,
@@ -20,7 +21,8 @@
 		onLoadModel,
 		onUnloadModel,
 		onDownloadModel,
-		onlibrarychange
+		onlibrarychange,
+		onstream
 	}: {
 		status: LlmStatus | null;
 		models: LocalModel[];
@@ -30,6 +32,7 @@
 		onUnloadModel: () => void;
 		onDownloadModel: (repoId: string, fileName: string) => void;
 		onlibrarychange?: () => void;
+		onstream?: (candidate: SmartSearchTorrentResult) => void;
 	} = $props();
 
 	let downloadedFileNames = $derived(new Set(models.map((m) => m.fileName)));
@@ -43,6 +46,7 @@
 
 	const searchStore = smartSearchService.store;
 	let selection = $derived($searchStore.selection);
+	let mode = $derived(selection?.mode ?? null);
 	let searching = $derived($searchStore.searching);
 	let analyzing = $derived($searchStore.analyzing);
 	let searchResults = $derived(
@@ -65,10 +69,18 @@
 	);
 	let searchError = $derived($searchStore.searchError);
 
+	let pendingItemId = $derived($searchStore.pendingItemId);
+
 	$effect(() => {
 		if (selection) {
 			candidateAdded = false;
 			addingCandidate = false;
+		}
+	});
+
+	$effect(() => {
+		if (pendingItemId) {
+			onlibrarychange?.();
 		}
 	});
 
@@ -88,10 +100,18 @@
 	let candidateAdded = $state(false);
 
 	$effect(() => {
-		if (bestCandidate && !candidateAdded && !addingCandidate) {
-			handleAddCandidate();
+		if (bestCandidate && !candidateAdded && !addingCandidate && mode) {
+			if (mode === 'download') {
+				handleAddCandidate();
+			} else if (mode === 'stream') {
+				onstream?.(bestCandidate);
+				candidateAdded = true;
+			}
 		}
 	});
+
+	let streamingHash = $derived($searchStore.streamingHash);
+	let streamingProgress = $derived(Math.round($searchStore.streamingProgress * 100));
 
 	async function handleAddCandidate() {
 		if (!bestCandidate || !selection) return;
@@ -118,63 +138,14 @@
 				const torrentInfo = await res.json();
 				candidateAdded = true;
 				const outputPath: string = torrentInfo.outputPath ?? downloadPath;
-				await addLibraryItem(selection, outputPath, basePath);
+				const infoHash: string = torrentInfo.infoHash ?? bestCandidate.infoHash;
+				await smartSearchService.updateItemWithTorrent(infoHash, outputPath, 'download');
+				onlibrarychange?.();
 			}
 		} catch {
 			// ignore
 		} finally {
 			addingCandidate = false;
-		}
-	}
-
-	async function addLibraryItem(
-		sel: NonNullable<typeof selection>,
-		outputPath: string,
-		basePath: string
-	) {
-		try {
-			const subdir = sel.type === 'movie' ? 'movies' : 'tv';
-			const targetPath = `${basePath}/${subdir}`;
-
-			// Find the library whose path matches the type-specific subdir
-			const libRes = await fetch(apiUrl('/api/libraries'));
-			if (!libRes.ok) return;
-			const libraries: Array<{ id: string; path: string; libraryType: string }> =
-				await libRes.json();
-			let library = libraries.find((l) => l.path === targetPath);
-
-			// Create library if it doesn't exist
-			if (!library) {
-				const createRes = await fetch(apiUrl('/api/libraries'), {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						name: sel.type === 'movie' ? 'Movies' : 'TV Shows',
-						path: targetPath,
-						libraryType: subdir
-					})
-				});
-				if (!createRes.ok) return;
-				library = await createRes.json();
-			}
-			if (!library) return;
-
-			const itemRes = await fetch(apiUrl(`/api/libraries/${library.id}/items`), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					name: sel.title,
-					path: outputPath,
-					mediaType: 'video',
-					categoryId: subdir,
-					tmdbId: sel.tmdbId
-				})
-			});
-			if (itemRes.ok) {
-				onlibrarychange?.();
-			}
-		} catch {
-			// best-effort
 		}
 	}
 
@@ -372,20 +343,22 @@
 				<span class={getSeedersColor(bestCandidate.seeders)}>{formatSeeders(bestCandidate.seeders)} SE</span>
 			</div>
 			<div class="mb-2 text-xs text-base-content/50">{bestCandidate.analysis?.reason}</div>
-			{#if candidateAdded}
+						{#if candidateAdded}
 				<span class="badge badge-sm badge-success">Added to downloads</span>
-			{:else}
-				<button
-					class="btn btn-sm btn-success"
-					onclick={handleAddCandidate}
-					disabled={addingCandidate}
-				>
-					{#if addingCandidate}
-						<span class="loading loading-xs loading-spinner"></span>
-					{:else}
-						Download & Add to Library
-					{/if}
-				</button>
+			{:else if streamingHash}
+				<div class="flex items-center gap-2">
+					<span class="loading loading-xs loading-spinner"></span>
+					<span class="text-xs">Buffering... {streamingProgress}%</span>
+				</div>
+			{:else if addingCandidate}
+				<div class="flex items-center gap-2">
+					<span class="loading loading-xs loading-spinner"></span>
+					<span class="text-xs">Adding torrent...</span>
+				</div>
+			{:else if mode === 'download'}
+				<span class="badge badge-sm badge-info">Downloading...</span>
+			{:else if mode === 'stream'}
+				<span class="badge badge-sm badge-info">Preparing stream...</span>
 			{/if}
 		</div>
 	{/if}

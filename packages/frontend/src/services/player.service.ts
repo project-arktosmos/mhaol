@@ -8,6 +8,7 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import type {
 	PlayerSettings,
 	PlayerState,
+	PlayerDisplayMode,
 	PlayableFile,
 	MediaInfoPayload,
 	PositionPayload
@@ -40,6 +41,11 @@ const initialState: PlayerState = {
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	public state: Writable<PlayerState> = writable(initialState);
+	public displayMode: Writable<PlayerDisplayMode> = writable('fullscreen');
+
+	setDisplayMode(mode: PlayerDisplayMode): void {
+		this.displayMode.set(mode);
+	}
 
 	private ws: WebSocket | null = null;
 	private pc: RTCPeerConnection | null = null;
@@ -181,12 +187,47 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		}
 	}
 
+	// ===== Prepare stream (show player immediately in waiting state) =====
+
+	prepareStream(name: string): void {
+		if (!browser) return;
+
+		const placeholder: PlayableFile = {
+			id: 'stream:pending',
+			type: 'torrent',
+			name,
+			outputPath: '',
+			mode: 'video',
+			format: null,
+			videoFormat: null,
+			thumbnailUrl: null,
+			durationSeconds: null,
+			size: 0,
+			completedAt: ''
+		};
+
+		this.state.update((s) => ({
+			...s,
+			currentFile: placeholder,
+			connectionState: 'waiting-for-stream',
+			error: null,
+			positionSecs: 0,
+			durationSecs: null,
+			streamUrl: null,
+			buffering: false,
+			isPaused: true
+		}));
+	}
+
 	// ===== HTTP streaming (for in-progress torrent downloads) =====
 
 	async playStream(file: PlayableFile): Promise<void> {
 		if (!browser) return;
 
-		await this.stop();
+		const current = get(this.state);
+		if (current.connectionState !== 'waiting-for-stream') {
+			await this.stop();
+		}
 
 		const infoHash = file.id.replace('torrent:', '');
 
@@ -610,6 +651,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			streamUrl: null,
 			buffering: false
 		}));
+		this.displayMode.set('fullscreen');
 	}
 
 	// ===== Settings =====

@@ -13,7 +13,10 @@
 		tvTotalPages,
 		loadingMovies = false,
 		loadingTv = false,
+		error = null,
 		mediaType,
+		selectedMovieId = null,
+		selectedTvShowId = null,
 		onselectMovie,
 		onselectTvShow,
 		onloadMovies,
@@ -27,7 +30,10 @@
 		tvTotalPages: number;
 		loadingMovies?: boolean;
 		loadingTv?: boolean;
+		error?: string | null;
 		mediaType?: 'movies' | 'tv';
+		selectedMovieId?: number | null;
+		selectedTvShowId?: number | null;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 		onloadMovies: (page: number) => void;
@@ -69,7 +75,7 @@
 	{:else if movies.length > 0}
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
 			{#each movies as movie (movie.id)}
-				<TmdbBrowseCard {movie} onclick={onselectMovie ? () => onselectMovie(movie) : undefined} />
+				<TmdbBrowseCard {movie} selected={selectedMovieId === movie.id} onclick={onselectMovie ? () => onselectMovie(movie) : undefined} />
 			{/each}
 		</div>
 		<TmdbPagination
@@ -78,6 +84,10 @@
 			loading={loadingMovies}
 			onpage={onloadMovies}
 		/>
+	{:else if error}
+		<div class="alert alert-error">
+			<p>{error}</p>
+		</div>
 	{:else}
 		<div class="rounded-lg bg-base-200 p-8 text-center">
 			<p class="opacity-50">No popular movies found.</p>
@@ -90,10 +100,14 @@
 {:else if tvShows.length > 0}
 	<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
 		{#each tvShows as tvShow (tvShow.id)}
-			<TmdbBrowseCard {tvShow} onclick={onselectTvShow ? () => onselectTvShow(tvShow) : undefined} />
+			<TmdbBrowseCard {tvShow} selected={selectedTvShowId === tvShow.id} onclick={onselectTvShow ? () => onselectTvShow(tvShow) : undefined} />
 		{/each}
 	</div>
 	<TmdbPagination page={tvPage} totalPages={tvTotalPages} loading={loadingTv} onpage={onloadTv} />
+{:else if error}
+	<div class="alert alert-error">
+		<p>{error}</p>
+	</div>
 {:else}
 	<div class="rounded-lg bg-base-200 p-8 text-center">
 		<p class="opacity-50">No popular TV shows found.</p>

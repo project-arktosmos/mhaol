@@ -10,6 +10,7 @@ pub mod identities;
 pub mod libraries;
 pub mod media;
 pub mod media_lists;
+pub mod network;
 pub mod p2p_stream;
 pub mod player;
 pub mod plugins;
@@ -56,6 +57,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/tmdb", tmdb::router())
         .nest("/api/addons", addons::router())
         .nest("/api/jackett", jackett::router())
+        .nest("/api/network", network::router())
         .nest("/api/signaling", signaling::router())
         .nest("/api/youtube", youtube::router())
         .nest("/api/youtube-search", youtube_search::router())

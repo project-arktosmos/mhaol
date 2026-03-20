@@ -1,7 +1,6 @@
 #[cfg(not(target_os = "android"))]
 pub mod p2p_stream;
 pub mod signaling;
-pub mod signaling_deploy;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
@@ -214,6 +213,56 @@ impl ModuleRegistry {
         }
 
         self.initialized = true;
+    }
+
+    /// Re-seed settings from env vars and defaults (e.g. after a DB reset).
+    pub fn reseed_settings(&self, state: &AppState) {
+        for module in &self.modules {
+            let manifest = module.manifest();
+            if manifest.settings.is_empty() {
+                continue;
+            }
+            let mut entries: HashMap<String, String> = HashMap::new();
+            for setting in &manifest.settings {
+                let env_val = setting
+                    .env_key
+                    .as_ref()
+                    .and_then(|k| std::env::var(k).ok());
+                let current = state.settings.get(&setting.key);
+                if current.is_none() {
+                    entries.insert(
+                        setting.key.clone(),
+                        env_val.unwrap_or_else(|| setting.default.clone()),
+                    );
+                } else if let Some(env_val) = &env_val {
+                    let db_val = current.unwrap();
+                    if db_val.is_empty() || db_val == setting.default {
+                        entries.insert(setting.key.clone(), env_val.clone());
+                    }
+                }
+            }
+            if !entries.is_empty() {
+                state.settings.set_many(&entries);
+            }
+        }
+    }
+
+    /// Re-register link sources for all modules (e.g. after a DB reset).
+    pub fn reregister_link_sources(&self, state: &AppState) {
+        for module in &self.modules {
+            let manifest = module.manifest();
+            for ls in &manifest.link_sources {
+                let row = crate::db::repo::link_source::LinkSourceRow {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    plugin: manifest.name.clone(),
+                    service: ls.service.clone(),
+                    label: ls.label.clone(),
+                    media_type_id: ls.media_type_id.clone(),
+                    category_id: ls.category_id.clone(),
+                };
+                state.link_sources.upsert(&row);
+            }
+        }
     }
 
     /// Get status for all registered modules.

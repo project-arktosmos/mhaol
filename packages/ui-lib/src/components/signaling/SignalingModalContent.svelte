@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { signalingChatService } from 'frontend/services/signaling-chat.service';
-	import SignalingServerStatus from 'ui-lib/components/signaling/SignalingServerStatus.svelte';
 	import SignalingConnectionControls from 'ui-lib/components/signaling/SignalingConnectionControls.svelte';
 	import SignalingChat from 'ui-lib/components/signaling/SignalingChat.svelte';
 
@@ -13,16 +12,11 @@
 <div class="pr-8">
 	<h3 class="text-lg font-bold">Signaling Server</h3>
 	<p class="text-sm text-base-content/60">
-		Manage the WebRTC signaling server and test peer-to-peer chat
+		Local WebRTC signaling server for peer-to-peer chat
 	</p>
 </div>
 
 <div class="mt-4 flex flex-col gap-3">
-	<h4 class="text-base font-semibold">Server Management</h4>
-	<SignalingServerStatus />
-</div>
-
-<div class="mt-6 flex flex-col gap-3">
 	<h4 class="text-base font-semibold">WebRTC Test Chat</h4>
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<SignalingConnectionControls />

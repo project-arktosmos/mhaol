@@ -4,41 +4,31 @@
 	import { apiUrl } from 'frontend/lib/api-base';
 	import { signalingChatService } from 'frontend/services/signaling-chat.service';
 	import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
-	import type { SignalingServerTarget, SignalingServerStatus } from 'frontend/types/signaling.type';
 
 	const chatStore = signalingChatService.state;
 
-	let serverTarget = $state<SignalingServerTarget>('dev');
 	let roomId = $state('test-room');
-	let serverStatus = $state<SignalingServerStatus | null>(null);
+	let serverUrl = $state('');
+	let serverAvailable = $state(false);
 
 	onMount(async () => {
 		try {
 			const res = await fetch(apiUrl('/api/signaling/status'));
-			if (res.ok) serverStatus = await res.json();
+			if (res.ok) {
+				const status = await res.json();
+				serverAvailable = status.devAvailable;
+				if (status.devUrl) {
+					serverUrl = signalingAdapter.resolveLocalUrl(status.devUrl);
+				}
+			}
 		} catch {
 			// Ignore
 		}
 	});
 
-	function getServerUrl(): string {
-		if (!serverStatus) return '';
-		if (serverTarget === 'dev') return signalingAdapter.resolveLocalUrl(serverStatus.devUrl);
-		const server = serverStatus.servers.find((s) => s.id === serverTarget);
-		return server?.url ?? '';
-	}
-
-	function isServerAvailable(): boolean {
-		if (!serverStatus) return false;
-		if (serverTarget === 'dev') return serverStatus.devAvailable;
-		const server = serverStatus.servers.find((s) => s.id === serverTarget);
-		return server?.available ?? false;
-	}
-
 	function handleConnect() {
-		const url = getServerUrl();
-		if (!url || !roomId.trim()) return;
-		signalingChatService.connect(url, roomId.trim(), serverTarget);
+		if (!serverUrl || !roomId.trim()) return;
+		signalingChatService.connect(serverUrl, roomId.trim());
 	}
 
 	function handleDisconnect() {
@@ -63,34 +53,18 @@
 			</span>
 		</div>
 
-		<!-- Server Selection -->
-		<select
-			class="select-bordered select select-sm"
-			bind:value={serverTarget}
-			disabled={$chatStore.phase !== 'disconnected'}
-		>
-			<option value="dev">Local</option>
-			{#if serverStatus}
-				{#each serverStatus.servers as server (server.id)}
-					<option value={server.id}>{server.name}</option>
-				{/each}
-			{/if}
-		</select>
-
 		<!-- Server URL display -->
-		{#if serverStatus}
-			<div class="flex items-center gap-2">
-				<span
-					class={classNames('h-2 w-2 rounded-full', {
-						'bg-success': isServerAvailable(),
-						'bg-error': !isServerAvailable()
-					})}
-				></span>
-				<span class="truncate font-mono text-xs text-base-content/60"
-					>{getServerUrl() || 'Not configured'}</span
-				>
-			</div>
-		{/if}
+		<div class="flex items-center gap-2">
+			<span
+				class={classNames('h-2 w-2 rounded-full', {
+					'bg-success': serverAvailable,
+					'bg-error': !serverAvailable
+				})}
+			></span>
+			<span class="truncate font-mono text-xs text-base-content/60">
+				{serverUrl || 'Not available'}
+			</span>
+		</div>
 
 		<!-- Room ID -->
 		<div class="form-control">
@@ -112,7 +86,7 @@
 		{#if $chatStore.phase === 'disconnected' || $chatStore.phase === 'error'}
 			<button
 				class="btn btn-sm btn-primary"
-				disabled={!getServerUrl() || !roomId.trim() || !isServerAvailable()}
+				disabled={!serverUrl || !roomId.trim() || !serverAvailable}
 				onclick={handleConnect}
 			>
 				Connect

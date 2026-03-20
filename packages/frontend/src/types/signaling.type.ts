@@ -1,7 +1,5 @@
 // ===== Signaling Server Connection =====
 
-export type SignalingServerTarget = 'dev' | string;
-
 export type SignalingConnectionPhase =
 	| 'disconnected'
 	| 'connecting'
@@ -110,31 +108,9 @@ export interface SignalingChatMessage {
 
 export interface SignalingChatState {
 	phase: SignalingConnectionPhase;
-	serverTarget: SignalingServerTarget;
 	roomId: string;
 	localPeerId: string | null;
 	peerIds: string[];
 	messages: SignalingChatMessage[];
 	error: string | null;
-}
-
-// ===== Signaling Server =====
-
-export interface SignalingServer {
-	id: string;
-	name: string;
-	url: string;
-	enabled: boolean;
-	available?: boolean;
-	created_at: string;
-	updated_at: string;
-}
-
-// ===== Server Status =====
-
-export interface SignalingServerStatus {
-	devAvailable: boolean;
-	devUrl: string;
-	identityAddress: string | null;
-	servers: SignalingServer[];
 }

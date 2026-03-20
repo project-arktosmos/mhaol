@@ -10,4 +10,5 @@ members = [
     "packages/p2p-stream",
     "packages/http-stream",
     "apps/hub/src-tauri",
+    "apps/flix/src-tauri",
 ]

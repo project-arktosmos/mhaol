@@ -18,10 +18,15 @@ export interface PlayableFile {
 	streamUrl?: string;
 }
 
+// ===== Player Display Mode =====
+
+export type PlayerDisplayMode = 'fullscreen' | 'sidebar';
+
 // ===== Player State =====
 
 export type PlayerConnectionState =
 	| 'idle'
+	| 'waiting-for-stream'
 	| 'connecting'
 	| 'signaling'
 	| 'streaming'

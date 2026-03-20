@@ -30,6 +30,9 @@
 		"app:identity": "pnpm --filter identity headless",
 		"app:signaling": "pnpm --filter signaling-app headless",
 		"app:flix": "pnpm --filter flix headless",
+		"app:flix:android:dev": "pnpm --filter flix tauri:android:dev",
+		"app:flix:android:build": "pnpm --filter flix tauri:android:build",
+		"app:video-cloud": "pnpm --filter video-cloud headless",
 		"app:storybook": "pnpm --filter storybook headless",
 		"install:deps": "sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev libonig-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav"
 	},

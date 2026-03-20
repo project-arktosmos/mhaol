@@ -132,6 +132,9 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.2.1(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
+      '@tauri-apps/cli':
+        specifier: ^2.10
+        version: 2.10.0
       '@testing-library/jest-dom':
         specifier: ^6.9.1
         version: 6.9.1
@@ -640,6 +643,118 @@ importers:
         specifier: ^4.0.6
         version: 4.0.18(@types/node@25.3.3)(@vitest/ui@4.0.18)(happy-dom@20.8.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(tsx@4.21.0)
 
+  apps/video-cloud:
+    dependencies:
+      '@sveltejs/adapter-static':
+        specifier: ^3.0.10
+        version: 3.0.10(@sveltejs/kit@2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))
+      addons:
+        specifier: workspace:*
+        version: link:../../packages/addons
+      classnames:
+        specifier: ^2.5.1
+        version: 2.5.1
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.2
+      frontend:
+        specifier: workspace:*
+        version: link:../../packages/frontend
+      html5-qrcode:
+        specifier: ^2.3.8
+        version: 2.3.8
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
+      ui-lib:
+        specifier: workspace:*
+        version: link:../../packages/ui-lib
+      viem:
+        specifier: ^2.46.3
+        version: 2.46.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)
+    devDependencies:
+      '@eslint/compat':
+        specifier: ^2.0.2
+        version: 2.0.2(eslint@9.39.3(jiti@2.6.1))
+      '@eslint/js':
+        specifier: ^9.39.3
+        version: 9.39.3
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.58.2
+      '@sveltejs/kit':
+        specifier: ^2.22.0
+        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^6.0.0
+        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.2.1(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
+      '@testing-library/jest-dom':
+        specifier: ^6.9.1
+        version: 6.9.1
+      '@testing-library/svelte':
+        specifier: ^5.2.8
+        version: 5.3.1(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))(vitest@4.0.18)
+      '@types/qrcode':
+        specifier: ^1.5.6
+        version: 1.5.6
+      '@vitest/coverage-v8':
+        specifier: ^4.0.6
+        version: 4.0.18(vitest@4.0.18)
+      '@vitest/ui':
+        specifier: ^4.0.6
+        version: 4.0.18(vitest@4.0.18)
+      daisyui:
+        specifier: ^5.0.50
+        version: 5.5.19
+      eslint:
+        specifier: ^9.18.0
+        version: 9.39.3(jiti@2.6.1)
+      eslint-config-prettier:
+        specifier: ^10.1.8
+        version: 10.1.8(eslint@9.39.3(jiti@2.6.1))
+      eslint-plugin-svelte:
+        specifier: ^3.15.0
+        version: 3.15.0(eslint@9.39.3(jiti@2.6.1))(svelte@5.53.7)
+      globals:
+        specifier: ^17.4.0
+        version: 17.4.0
+      happy-dom:
+        specifier: ^20.0.10
+        version: 20.8.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      prettier:
+        specifier: ^3.4.2
+        version: 3.8.1
+      prettier-plugin-svelte:
+        specifier: ^3.5.1
+        version: 3.5.1(prettier@3.8.1)(svelte@5.53.7)
+      prettier-plugin-tailwindcss:
+        specifier: ^0.7.2
+        version: 0.7.2(prettier-plugin-svelte@3.5.1(prettier@3.8.1)(svelte@5.53.7))(prettier@3.8.1)
+      svelte:
+        specifier: ^5.0.0
+        version: 5.53.7
+      svelte-check:
+        specifier: ^4.0.0
+        version: 4.4.4(picomatch@4.0.3)(svelte@5.53.7)(typescript@5.9.3)
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.2.1
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.56.1
+        version: 8.56.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)
+      vite:
+        specifier: ^7.0.4
+        version: 7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)
+      vitest:
+        specifier: ^4.0.6
+        version: 4.0.18(@types/node@25.3.3)(@vitest/ui@4.0.18)(happy-dom@20.8.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(tsx@4.21.0)
+
   apps/website:
     dependencies:
       '@sveltejs/adapter-static':
@@ -878,6 +993,9 @@ importers:
       frontend:
         specifier: workspace:*
         version: link:../frontend
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       svelte-i18n:
         specifier: ^4.0.1
         version: 4.0.1(svelte@5.53.7)

@@ -4,6 +4,16 @@
 @source '../../../../packages/ui-lib/src';
 @import 'ui-lib/css/themes.css';
 
+[data-theme='light'] {
+	--color-primary: oklch(0.705 0.191 47.604);
+	--color-primary-content: oklch(0.25 0.05 47);
+}
+
+[data-theme='dark'] {
+	--color-primary: oklch(0.705 0.191 47.604);
+	--color-primary-content: oklch(0.25 0.05 47);
+}
+
 body {
 	padding-top: env(safe-area-inset-top, 0px);
 }
