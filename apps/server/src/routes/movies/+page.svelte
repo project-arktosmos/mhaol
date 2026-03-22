@@ -236,6 +236,7 @@
 	// Sync browse detail state to the layout-level service
 	$effect(() => {
 		browseDetailService.set({
+			domain: selectedBrowseMovie ? 'movie' : selectedBrowseTvShow ? 'tv' : null,
 			movie: selectedBrowseMovie,
 			tvShow: selectedBrowseTvShow,
 			movieDetails: browseMovieDetails,

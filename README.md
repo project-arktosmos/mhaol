@@ -12,10 +12,6 @@ A WebRTC-powered alternative to Plex and Jellyfin for streaming your own movie a
 
 A collection of emulators with cloud save support, online multiplayer, achievements, and integrated torrent search for discovering games.
 
-### Mhaoltube
-
-A YouTube-like video platform with no ads and no tracking.
-
 ### Mhaoltunes
 
 The music counterpart to Mhaolserver — stream and manage your personal music library.

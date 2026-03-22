@@ -27,10 +27,8 @@
   import { page } from "$app/stores";
   import { youtubeService } from "frontend/services/youtube.service";
   import { youtubeLibraryService } from "frontend/services/youtube-library.service";
-  import RightPanel from "ui-lib/components/youtube/RightPanel.svelte";
   import TubeSettingsContent from "ui-lib/components/settings/TubeSettingsContent.svelte";
   import DiskContent from "ui-lib/components/settings/DiskContent.svelte";
-  import YouTubeDownloadQueue from "ui-lib/components/youtube/YouTubeDownloadQueue.svelte";
   import SmartSearchToast from "ui-lib/components/llm/SmartSearchToast.svelte";
   import SmartSearchModalContent from "ui-lib/components/llm/SmartSearchModalContent.svelte";
   import { smartSearchService } from "frontend/services/smart-search.service";
@@ -44,7 +42,7 @@
   import { get } from "svelte/store";
 
   setImageBaseUrl(apiUrl("/api/tmdb/image"));
-  import TmdbBrowseDetail from "ui-lib/components/tmdb-browse/TmdbBrowseDetail.svelte";
+  import BrowseDetailPanel from "ui-lib/components/browse/BrowseDetailPanel.svelte";
   import Modal from "ui-lib/components/core/Modal.svelte";
   import type { SmartSearchTorrentResult } from "frontend/types/smart-search.type";
   import type { PlayableFile } from "frontend/types/player.type";
@@ -63,7 +61,6 @@
   });
 
   const playerState = playerService.state;
-  const playerDisplayMode = playerService.displayMode;
   const browseDetail = browseDetailService.state;
 
   let isLargeScreen = $state(false);
@@ -78,8 +75,6 @@
     return () => mql.removeEventListener("change", handler);
   });
 
-  let isYouTubePage = $derived($page.url.pathname.startsWith("/youtube"));
-  let isPhotosPage = $derived($page.url.pathname.startsWith("/photos"));
 
   const ytState = youtubeService.state;
   const YT_ACTIVE_STATES = ["pending", "fetching", "downloading", "muxing"];
@@ -89,15 +84,12 @@
     ).length,
   );
 
-  let hasBrowseSelection = $derived(
-    $browseDetail.movie !== null || $browseDetail.tvShow !== null,
-  );
+  let hasBrowseSelection = $derived($browseDetail.domain !== null);
 
-  function handleSidebarAction(
-    action: keyof ReturnType<typeof browseDetailService.getCallbacks>,
-  ) {
+  function handleSidebarAction(action: string) {
     const cbs = browseDetailService.getCallbacks();
-    cbs[action]?.();
+    const cb = cbs[action as keyof typeof cbs];
+    if (typeof cb === 'function') (cb as () => void)();
   }
 
   const sections = [
@@ -119,11 +111,6 @@
     { id: "database", label: "Database", component: DatabaseModalContent },
     { id: "yt-settings", label: "YT Settings", component: TubeSettingsContent },
     { id: "yt-disk", label: "Disk", component: DiskContent },
-    {
-      id: "yt-downloads",
-      label: "YT Downloads",
-      component: YouTubeDownloadQueue,
-    },
   ];
 
   async function handleSmartSearchStream(candidate: SmartSearchTorrentResult) {
@@ -350,85 +337,23 @@
   </Navbar>
   <main class="flex min-w-0 flex-1 overflow-hidden">
     {@render children?.()}
-    {#if isYouTubePage}
-      <RightPanel />
-    {:else if !isPhotosPage}
-      <div
-        class="hidden w-85 shrink-0 overflow-y-auto border-l border-base-300 bg-base-200 lg:block"
-      >
-        {#if hasBrowseSelection || $playerState.currentFile}
-          <TmdbBrowseDetail
-            movie={$browseDetail.movie}
-            tvShow={$browseDetail.tvShow}
-            movieDetails={$browseDetail.movieDetails}
-            tvShowDetails={$browseDetail.tvShowDetails}
-            libraryItem={$browseDetail.libraryItem}
-            relatedData={$browseDetail.relatedData}
-            loading={$browseDetail.loading}
-            fetching={$browseDetail.fetching}
-            fetched={$browseDetail.fetched}
-            fetchSteps={$browseDetail.fetchSteps}
-            downloadStatus={$browseDetail.downloadStatus}
-            playerFile={$playerState.currentFile}
-            playerConnectionState={$playerState.connectionState}
-            playerPositionSecs={$playerState.positionSecs}
-            playerDurationSecs={$playerState.durationSecs}
-            playerStreamUrl={$playerState.streamUrl}
-            playerBuffering={$playerState.buffering}
-            playerFullscreen={$playerDisplayMode === "fullscreen"}
-            onfetch={() => handleSidebarAction("onfetch")}
-            ondownload={() => handleSidebarAction("ondownload")}
-            onstream={() => handleSidebarAction("onstream")}
-            onp2pstream={() => handleSidebarAction("onp2pstream")}
-            onshowsearch={() => handleSidebarAction("onshowsearch")}
-            onfullscreen={() => playerService.setDisplayMode("fullscreen")}
-            onminimize={() => playerService.setDisplayMode("sidebar")}
-            onstopplayer={() => playerService.stop()}
-            onclose={() => handleSidebarAction("onclose")}
-          />
-        {/if}
-      </div>
-    {/if}
+    <div
+      class="hidden w-85 shrink-0 overflow-y-auto border-l border-base-300 bg-base-200 lg:block"
+    >
+      <BrowseDetailPanel />
+    </div>
   </main>
 </div>
 
 <TabbedModalOutlet {sections} title="Options" />
 
-{#if !isLargeScreen && !isYouTubePage && !isPhotosPage}
+{#if !isLargeScreen}
   <Modal
     open={hasBrowseSelection || !!$playerState.currentFile}
     maxWidth="max-w-lg"
     onclose={() => handleSidebarAction("onclose")}
   >
-    <TmdbBrowseDetail
-      movie={$browseDetail.movie}
-      tvShow={$browseDetail.tvShow}
-      movieDetails={$browseDetail.movieDetails}
-      tvShowDetails={$browseDetail.tvShowDetails}
-      libraryItem={$browseDetail.libraryItem}
-      relatedData={$browseDetail.relatedData}
-      loading={$browseDetail.loading}
-      fetching={$browseDetail.fetching}
-      fetched={$browseDetail.fetched}
-      fetchSteps={$browseDetail.fetchSteps}
-      downloadStatus={$browseDetail.downloadStatus}
-      playerFile={$playerState.currentFile}
-      playerConnectionState={$playerState.connectionState}
-      playerPositionSecs={$playerState.positionSecs}
-      playerDurationSecs={$playerState.durationSecs}
-      playerStreamUrl={$playerState.streamUrl}
-      playerBuffering={$playerState.buffering}
-      playerFullscreen={$playerDisplayMode === "fullscreen"}
-      onfetch={() => handleSidebarAction("onfetch")}
-      ondownload={() => handleSidebarAction("ondownload")}
-      onstream={() => handleSidebarAction("onstream")}
-      onp2pstream={() => handleSidebarAction("onp2pstream")}
-      onshowsearch={() => handleSidebarAction("onshowsearch")}
-      onfullscreen={() => playerService.setDisplayMode("fullscreen")}
-      onminimize={() => playerService.setDisplayMode("sidebar")}
-      onstopplayer={() => playerService.stop()}
-      onclose={() => handleSidebarAction("onclose")}
-    />
+    <BrowseDetailPanel />
   </Modal>
 {/if}
 <SmartSearchToast

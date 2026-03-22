@@ -38,7 +38,7 @@ async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
     let mut files: Vec<PlayableFile> = Vec::new();
 
     // Torrent downloads (completed + in-progress with enough data to stream)
-    let torrent_downloads = state.torrent_downloads.get_all();
+    let torrent_downloads = state.downloads.get_by_type("torrent");
     for dl in torrent_downloads {
         let is_complete = dl.state == "seeding" || dl.progress >= 1.0;
         let is_streamable = dl.state == "downloading" && dl.progress >= 0.02;
@@ -53,14 +53,14 @@ async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
             let (progress, stream_url) = if is_streamable && !is_complete {
                 (
                     Some(dl.progress),
-                    Some(format!("/api/torrent/torrents/{}/stream", dl.info_hash)),
+                    Some(format!("/api/torrent/torrents/{}/stream", dl.id)),
                 )
             } else {
                 (None, None)
             };
 
             files.push(PlayableFile {
-                id: format!("torrent:{}", dl.info_hash),
+                id: format!("torrent:{}", dl.id),
                 name: dl.name,
                 path,
                 source: "torrent".to_string(),

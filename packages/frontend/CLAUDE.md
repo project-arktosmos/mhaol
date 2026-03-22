@@ -107,7 +107,7 @@ All in `src/adapters/classes/`:
 
 One file per domain in `src/types/`:
 
-`core.type.ts`, `download.type.ts`, `identity.type.ts`, `image-tagger.type.ts`, `library.type.ts`, `llm.type.ts`, `media-card.type.ts`, `media-detail.type.ts`, `media-list.type.ts`, `modal.type.ts`, `musicbrainz.type.ts`, `p2p-stream.type.ts`, `peer-library.type.ts`, `player.type.ts`, `retroachievements.type.ts`, `route.type.ts`, `sidebar.type.ts`, `signaling.type.ts`, `tmdb-browse.type.ts`, `toast.type.ts`, `torrent.type.ts`, `youtube.type.ts`, `youtube-search.type.ts`
+`browse-detail.type.ts`, `core.type.ts`, `download.type.ts`, `identity.type.ts`, `image-tagger.type.ts`, `library.type.ts`, `llm.type.ts`, `media-card.type.ts`, `media-detail.type.ts`, `media-list.type.ts`, `modal.type.ts`, `musicbrainz.type.ts`, `p2p-stream.type.ts`, `peer-library.type.ts`, `player.type.ts`, `retroachievements.type.ts`, `route.type.ts`, `sidebar.type.ts`, `signaling.type.ts`, `tmdb-browse.type.ts`, `toast.type.ts`, `torrent.type.ts`, `youtube.type.ts`, `youtube-search.type.ts`
 
 ---
 

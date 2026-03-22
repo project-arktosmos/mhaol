@@ -121,8 +121,8 @@ async fn list_torrents(State(state): State<AppState>) -> impl IntoResponse {
         Ok(mut torrents) => {
             let live_hashes: std::collections::HashSet<String> =
                 torrents.iter().map(|t| t.info_hash.clone()).collect();
-            for row in state.torrent_downloads.get_all() {
-                if live_hashes.contains(&row.info_hash) {
+            for row in state.downloads.get_by_type("torrent") {
+                if live_hashes.contains(&row.id) {
                     continue;
                 }
                 let torrent_state = match row.state.as_str() {
@@ -135,7 +135,7 @@ async fn list_torrents(State(state): State<AppState>) -> impl IntoResponse {
                 };
                 torrents.push(mhaol_torrent::TorrentInfo {
                     id: 0,
-                    info_hash: row.info_hash,
+                    info_hash: row.id,
                     name: row.name,
                     size: row.size as u64,
                     progress: row.progress,
@@ -144,7 +144,7 @@ async fn list_torrents(State(state): State<AppState>) -> impl IntoResponse {
                     peers: 0,
                     seeds: 0,
                     state: torrent_state,
-                    added_at: row.added_at,
+                    added_at: row.added_at.unwrap_or(0),
                     eta: None,
                     output_path: row.output_path,
                 });
@@ -176,7 +176,7 @@ async fn add_torrent(
     match state.torrent_manager.add(body).await {
         Ok(info) => {
             let state_str = format!("{:?}", info.state).to_lowercase();
-            state.torrent_downloads.upsert(
+            state.downloads.upsert_torrent(
                 &info.info_hash,
                 &info.name,
                 info.size as i64,
@@ -220,7 +220,7 @@ async fn remove_torrent(
                         .into_response();
                 }
             }
-            state.torrent_downloads.delete(&info_hash);
+            state.downloads.delete(&info_hash);
             Json(serde_json::json!({ "ok": true })).into_response()
         }
         Err(e) => (
@@ -241,7 +241,7 @@ async fn pause_torrent(
                 if let Ok(torrents) = state.torrent_manager.list().await {
                     if let Some(t) = torrents.iter().find(|t| t.info_hash == info_hash) {
                         let state_str = format!("{:?}", t.state).to_lowercase();
-                        state.torrent_downloads.update_state(
+                        state.downloads.update_torrent_state(
                             &info_hash,
                             t.progress,
                             &state_str,
@@ -280,7 +280,7 @@ async fn resume_torrent(
                 if let Ok(torrents) = state.torrent_manager.list().await {
                     if let Some(t) = torrents.iter().find(|t| t.info_hash == info_hash) {
                         let state_str = format!("{:?}", t.state).to_lowercase();
-                        state.torrent_downloads.update_state(
+                        state.downloads.update_torrent_state(
                             &info_hash,
                             t.progress,
                             &state_str,
@@ -312,7 +312,7 @@ async fn resume_torrent(
 async fn remove_all(State(state): State<AppState>) -> impl IntoResponse {
     match state.torrent_manager.remove_all().await {
         Ok(count) => {
-            state.torrent_downloads.delete_all();
+            state.downloads.delete_all_by_type("torrent");
             Json(serde_json::json!({ "ok": true, "removed": count })).into_response()
         }
         Err(e) => (
@@ -327,7 +327,7 @@ async fn torrent_events(
     State(state): State<AppState>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
     let torrent_manager = state.torrent_manager.clone();
-    let torrent_downloads = state.torrent_downloads.clone();
+    let downloads = state.downloads.clone();
 
     let stream = async_stream::stream! {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
@@ -336,7 +336,7 @@ async fn torrent_events(
             if let Ok(mut torrents) = torrent_manager.list().await {
                 for t in &torrents {
                     let state_str = format!("{:?}", t.state).to_lowercase();
-                    torrent_downloads.upsert(
+                    downloads.upsert_torrent(
                         &t.info_hash,
                         &t.name,
                         t.size as i64,
@@ -356,9 +356,9 @@ async fn torrent_events(
                 // Merge DB-only records (not currently live in the engine)
                 let live_hashes: std::collections::HashSet<String> =
                     torrents.iter().map(|t| t.info_hash.clone()).collect();
-                let db_rows = torrent_downloads.get_all();
+                let db_rows = downloads.get_by_type("torrent");
                 for row in db_rows {
-                    if live_hashes.contains(&row.info_hash) {
+                    if live_hashes.contains(&row.id) {
                         continue;
                     }
                     let state = match row.state.as_str() {
@@ -371,7 +371,7 @@ async fn torrent_events(
                     };
                     torrents.push(mhaol_torrent::TorrentInfo {
                         id: 0,
-                        info_hash: row.info_hash,
+                        info_hash: row.id,
                         name: row.name,
                         size: row.size as u64,
                         progress: row.progress,
@@ -380,7 +380,7 @@ async fn torrent_events(
                         peers: 0,
                         seeds: 0,
                         state,
-                        added_at: row.added_at,
+                        added_at: row.added_at.unwrap_or(0),
                         eta: None,
                         output_path: row.output_path,
                     });

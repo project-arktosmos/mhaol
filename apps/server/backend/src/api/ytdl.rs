@@ -13,6 +13,14 @@ use mhaol_yt_dlp::manager::SseEvent;
 use serde::Deserialize;
 use std::convert::Infallible;
 
+/// Map yt-dlp download mode to unified download type.
+fn youtube_download_type(mode: Option<&mhaol_yt_dlp::DownloadMode>) -> &'static str {
+    match mode {
+        Some(mhaol_yt_dlp::DownloadMode::Audio) => "youtube-audio",
+        _ => "youtube-video",
+    }
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/config", get(get_config).put(update_config))
@@ -83,32 +91,15 @@ async fn queue_download(
 
     let download_id = state.ytdl_manager.queue_download(body.clone());
 
-    state.youtube_downloads.upsert(
+    state.downloads.upsert_youtube(
         &download_id,
+        youtube_download_type(body.mode.as_ref()),
+        &body.title,
+        0,
         &body.url,
         &body.video_id,
-        &body.title,
         "pending",
         0.0,
-        0,
-        0,
-        None,
-        None,
-        body.mode
-            .as_ref()
-            .map(|m| serde_json::to_string(m).unwrap_or_default())
-            .as_deref()
-            .unwrap_or("\"both\""),
-        body.quality
-            .as_ref()
-            .map(|q| serde_json::to_string(q).unwrap_or_default())
-            .as_deref()
-            .unwrap_or("\"Best\""),
-        body.format
-            .as_ref()
-            .map(|f| serde_json::to_string(f).unwrap_or_default())
-            .as_deref()
-            .unwrap_or("\"Opus\""),
         None,
         None,
         body.thumbnail_url.as_deref(),
@@ -140,15 +131,15 @@ async fn delete_download(
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     state.ytdl_manager.cancel_download(&id);
-    state.youtube_downloads.delete(&id);
+    state.downloads.delete(&id);
     Json(serde_json::json!({ "ok": true }))
 }
 
 async fn clear_completed(State(state): State<AppState>) -> impl IntoResponse {
     state.ytdl_manager.clear_completed();
     state
-        .youtube_downloads
-        .delete_by_states(&["completed", "failed", "cancelled"]);
+        .downloads
+        .delete_youtube_by_states(&["completed", "failed", "cancelled"]);
     Json(serde_json::json!({ "ok": true }))
 }
 
@@ -188,7 +179,7 @@ async fn download_events(
     State(state): State<AppState>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
     let mut rx = state.ytdl_manager.subscribe_events();
-    let youtube_downloads = state.youtube_downloads.clone();
+    let downloads = state.downloads.clone();
     let youtube_content = state.youtube_content.clone();
 
     let stream = async_stream::stream! {
@@ -196,22 +187,18 @@ async fn download_events(
             match &event {
                 SseEvent::Progress(progress) => {
                     let state_str = format!("{:?}", progress.state).to_lowercase();
-                    youtube_downloads.upsert(
+                    let dl_type = youtube_download_type(Some(&progress.mode));
+                    downloads.upsert_youtube(
                         &progress.download_id,
+                        dl_type,
+                        &progress.title,
+                        progress.total_bytes as i64,
                         &progress.url,
                         &progress.video_id,
-                        &progress.title,
                         &state_str,
                         progress.progress,
-                        progress.downloaded_bytes as i64,
-                        progress.total_bytes as i64,
                         progress.output_path.as_deref(),
                         progress.error.as_deref(),
-                        &serde_json::to_string(&progress.mode).unwrap_or_default(),
-                        &serde_json::to_string(&progress.quality).unwrap_or_default(),
-                        &serde_json::to_string(&progress.format).unwrap_or_default(),
-                        progress.video_quality.as_ref().map(|q| serde_json::to_string(q).unwrap_or_default()).as_deref(),
-                        progress.video_format.as_ref().map(|f| serde_json::to_string(f).unwrap_or_default()).as_deref(),
                         progress.thumbnail_url.as_deref(),
                         progress.duration_seconds.map(|d| d as i64),
                     );

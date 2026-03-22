@@ -32,41 +32,57 @@ struct UnifiedDownload {
     seeds: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     eta: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(rename = "videoId", skip_serializing_if = "Option::is_none")]
+    video_id: Option<String>,
+    #[serde(rename = "thumbnailUrl", skip_serializing_if = "Option::is_none")]
+    thumbnail_url: Option<String>,
+    #[serde(rename = "durationSeconds", skip_serializing_if = "Option::is_none")]
+    duration_seconds: Option<i64>,
 }
 
 async fn get_downloads(State(state): State<AppState>) -> impl IntoResponse {
-    let torrent_rows = state.torrent_downloads.get_all();
+    let rows = state.downloads.get_all();
 
-    let mut downloads: Vec<UnifiedDownload> = Vec::new();
+    let downloads: Vec<UnifiedDownload> = rows
+        .into_iter()
+        .map(|row| {
+            let is_torrent = row.download_type == "torrent";
 
-    for row in torrent_rows {
-        let output_path = match (&row.output_path, &row.name) {
-            (Some(p), name) if !name.is_empty() => Some(format!("{}/{}", p, name)),
-            (Some(p), _) => Some(p.clone()),
-            _ => None,
-        };
+            let output_path = if is_torrent {
+                match (&row.output_path, &row.name) {
+                    (Some(p), name) if !name.is_empty() => Some(format!("{}/{}", p, name)),
+                    (Some(p), _) => Some(p.clone()),
+                    _ => None,
+                }
+            } else {
+                row.output_path
+            };
 
-        downloads.push(UnifiedDownload {
-            id: row.info_hash,
-            download_type: "torrent".to_string(),
-            name: row.name,
-            state: row.state,
-            progress: row.progress,
-            size: row.size,
-            output_path,
-            error: None,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            download_speed: Some(row.download_speed),
-            upload_speed: Some(row.upload_speed),
-            peers: Some(row.peers),
-            seeds: Some(row.seeds),
-            eta: row.eta,
-        });
-    }
-
-    // Sort by updated_at descending
-    downloads.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+            UnifiedDownload {
+                id: row.id,
+                download_type: row.download_type.clone(),
+                name: row.name,
+                state: row.state,
+                progress: row.progress,
+                size: row.size,
+                output_path,
+                error: row.error,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                download_speed: if is_torrent { Some(row.download_speed) } else { None },
+                upload_speed: if is_torrent { Some(row.upload_speed) } else { None },
+                peers: if is_torrent { Some(row.peers) } else { None },
+                seeds: if is_torrent { Some(row.seeds) } else { None },
+                eta: if is_torrent { row.eta } else { None },
+                url: row.url,
+                video_id: row.video_id,
+                thumbnail_url: row.thumbnail_url,
+                duration_seconds: row.duration_seconds,
+            }
+        })
+        .collect();
 
     Json(downloads)
 }

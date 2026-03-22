@@ -12,6 +12,7 @@ This package contains every UI component used across all apps. It depends on `pa
 src/
 ├── components/               # UI components organized by feature
 │   ├── addons/               # Addon management
+│   ├── browse/               # Unified browse components (BrowseGrid, BrowseHeader, BrowseDetailPanel)
 │   ├── core/                 # Shared reusable (Button, Modal, Navbar, ModalOutlet, ThemeToggle, etc.)
 │   ├── downloads/            # Download management
 │   ├── hub/                  # Hub dashboard (app management)

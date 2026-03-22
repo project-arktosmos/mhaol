@@ -98,23 +98,36 @@ CREATE TABLE IF NOT EXISTS link_sources (
     UNIQUE(service, media_type_id, category_id)
 );
 
-CREATE TABLE IF NOT EXISTS torrent_downloads (
-    info_hash TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS downloads (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
     name TEXT NOT NULL,
-    size INTEGER NOT NULL,
-    progress REAL NOT NULL,
+    size INTEGER NOT NULL DEFAULT 0,
+    progress REAL NOT NULL DEFAULT 0,
     state TEXT NOT NULL,
-    download_speed INTEGER NOT NULL,
-    upload_speed INTEGER NOT NULL,
-    peers INTEGER NOT NULL,
-    seeds INTEGER NOT NULL,
-    added_at INTEGER NOT NULL,
+    download_speed INTEGER NOT NULL DEFAULT 0,
+    upload_speed INTEGER NOT NULL DEFAULT 0,
+    peers INTEGER NOT NULL DEFAULT 0,
+    seeds INTEGER NOT NULL DEFAULT 0,
+    added_at INTEGER,
     eta INTEGER,
     output_path TEXT,
-    source TEXT NOT NULL,
+    error TEXT,
+    source TEXT,
+    url TEXT,
+    video_id TEXT,
+    thumbnail_url TEXT,
+    duration_seconds INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TRIGGER IF NOT EXISTS downloads_updated_at
+    AFTER UPDATE ON downloads
+    FOR EACH ROW
+BEGIN
+    UPDATE downloads SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
 
 CREATE TABLE IF NOT EXISTS llm_conversations (
     id TEXT PRIMARY KEY,
@@ -218,28 +231,6 @@ BEGIN
     UPDATE youtube_content SET updated_at = datetime('now') WHERE youtube_id = OLD.youtube_id;
 END;
 
-CREATE TABLE IF NOT EXISTS youtube_downloads (
-    download_id TEXT PRIMARY KEY,
-    url TEXT NOT NULL,
-    video_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    state TEXT NOT NULL,
-    progress REAL NOT NULL,
-    downloaded_bytes INTEGER NOT NULL,
-    total_bytes INTEGER NOT NULL,
-    output_path TEXT,
-    error TEXT,
-    mode TEXT NOT NULL,
-    quality TEXT NOT NULL,
-    format TEXT NOT NULL,
-    video_quality TEXT,
-    video_format TEXT,
-    thumbnail_url TEXT,
-    duration_seconds INTEGER,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
 CREATE TABLE IF NOT EXISTS youtube_channels (
     id TEXT PRIMARY KEY,
     handle TEXT NOT NULL UNIQUE,
@@ -274,7 +265,7 @@ CREATE INDEX IF NOT EXISTS idx_image_tags_tag ON image_tags(tag);
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '21', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '23', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -669,6 +660,30 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: unify torrent_downloads + youtube_downloads into downloads table
+    if has_table(conn, "torrent_downloads") && has_table(conn, "downloads") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO downloads (id, type, name, size, progress, state, download_speed, upload_speed, peers, seeds, added_at, eta, output_path, source, created_at, updated_at)
+             SELECT info_hash, 'torrent', name, size, progress, state, download_speed, upload_speed, peers, seeds, added_at, eta, output_path, source, created_at, updated_at
+             FROM torrent_downloads;
+             DROP TABLE torrent_downloads;",
+        );
+    }
+    if has_table(conn, "youtube_downloads") && has_table(conn, "downloads") {
+        // mode is stored as JSON string e.g. '"audio"' or '"video"' or '"both"'
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO downloads (id, type, name, size, progress, state, output_path, error, url, video_id, thumbnail_url, duration_seconds, created_at, updated_at)
+             SELECT download_id,
+                CASE
+                    WHEN LOWER(REPLACE(mode, '\"', '')) = 'audio' THEN 'youtube-audio'
+                    ELSE 'youtube-video'
+                END,
+                title, total_bytes, progress, state, output_path, error, url, video_id, thumbnail_url, duration_seconds, created_at, updated_at
+             FROM youtube_downloads;
+             DROP TABLE youtube_downloads;",
+        );
+    }
+
     // Migration: add torrent_fetch_cache table
     if !has_table(conn, "torrent_fetch_cache") {
         let _ = conn.execute_batch(
@@ -744,9 +759,8 @@ mod tests {
         assert!(has_table(&conn, "library_item_links"));
         assert!(has_table(&conn, "link_sources"));
         assert!(has_table(&conn, "youtube_content"));
-        assert!(has_table(&conn, "youtube_downloads"));
         assert!(has_table(&conn, "youtube_channels"));
-        assert!(has_table(&conn, "torrent_downloads"));
+        assert!(has_table(&conn, "downloads"));
         assert!(has_table(&conn, "image_tags"));
         assert!(has_table(&conn, "media_lists"));
         assert!(has_table(&conn, "media_list_items"));

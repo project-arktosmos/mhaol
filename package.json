@@ -21,7 +21,6 @@
 		"signaling:deploy": "pnpm --filter signaling run deploy",
 		"app:server": "pnpm --filter server headless",
 		"app:video": "pnpm --filter video dev",
-		"app:tube": "pnpm --filter tube dev",
 		"app:website": "pnpm --filter website dev",
 		"build:app:server": "pnpm --filter server build",
 		"app:server:android:dev": "pnpm --filter server tauri:android:dev",

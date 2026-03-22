@@ -3,7 +3,7 @@
 	import classNames from 'classnames';
 	import { apiUrl } from 'frontend/lib/api-base';
 	import { youtubeLibraryService } from 'frontend/services/youtube-library.service';
-	import { rightPanelService } from 'frontend/services/right-panel.service';
+	import { browseDetailService } from 'frontend/services/browse-detail.service';
 	import { youtubeService } from 'frontend/services/youtube.service';
 	import { youtubeSearchService } from 'frontend/services/youtube-search.service';
 	import type {
@@ -138,10 +138,13 @@
 	}
 
 	function handleFeedVideoClick(video: LibraryCardItem) {
-		rightPanelService.open({
-			videoId: video.videoId,
-			title: video.title,
-			thumbnail: video.thumbnailUrl ?? ''
+		browseDetailService.set({
+			domain: 'youtube',
+			youtubeVideo: {
+				videoId: video.videoId,
+				title: video.title,
+				thumbnail: video.thumbnailUrl ?? ''
+			}
 		});
 	}
 
@@ -206,13 +209,16 @@
 	});
 
 	function handleItemClick(item: LibraryCardItem) {
-		rightPanelService.open({
-			videoId: item.videoId,
-			title: item.title,
-			thumbnail: item.thumbnailUrl ?? '',
-			uploaderName: item.channelName ?? undefined,
-			hasVideo: item.hasVideo,
-			hasAudio: item.hasAudio
+		browseDetailService.set({
+			domain: 'youtube',
+			youtubeVideo: {
+				videoId: item.videoId,
+				title: item.title,
+				thumbnail: item.thumbnailUrl ?? '',
+				uploaderName: item.channelName ?? undefined,
+				hasVideo: item.hasVideo,
+				hasAudio: item.hasAudio
+			}
 		});
 	}
 
@@ -223,17 +229,20 @@
 	function handleSearchItemClick(cardItem: LibraryCardItem) {
 		const item = searchItemMap.get(cardItem.videoId);
 		if (item) {
-			rightPanelService.open({
-				videoId: item.videoId,
-				title: item.title,
-				thumbnail: item.thumbnail,
-				views: item.views,
-				viewsText: item.viewsText,
-				publishedText: item.uploadedDate || undefined,
-				uploaderName: item.uploaderName || undefined,
-				uploaderAvatar: item.uploaderAvatar || undefined,
-				uploaderUrl: item.uploaderUrl || undefined,
-				uploaderVerified: item.uploaderVerified
+			browseDetailService.set({
+				domain: 'youtube',
+				youtubeVideo: {
+					videoId: item.videoId,
+					title: item.title,
+					thumbnail: item.thumbnail,
+					views: item.views,
+					viewsText: item.viewsText,
+					publishedText: item.uploadedDate || undefined,
+					uploaderName: item.uploaderName || undefined,
+					uploaderAvatar: item.uploaderAvatar || undefined,
+					uploaderUrl: item.uploaderUrl || undefined,
+					uploaderVerified: item.uploaderVerified
+				}
 			});
 		}
 	}

@@ -24,19 +24,7 @@
     if (selectedBrowseTvShow?.id === tvShow.id) {
       selectedBrowseTvShow = null;
       browseTvShowDetails = null;
-      browseDetailService.set({
-        movie: null,
-        tvShow: null,
-        movieDetails: null,
-        tvShowDetails: null,
-        libraryItem: null,
-        relatedData: null,
-        loading: false,
-        fetching: false,
-        fetched: false,
-        downloadStatus: null,
-        fetchSteps: null,
-      });
+      browseDetailService.close();
       return;
     }
     selectedBrowseTvShow = tvShow;
@@ -61,6 +49,7 @@
 
   $effect(() => {
     browseDetailService.set({
+      domain: selectedBrowseTvShow ? 'tv' : null,
       movie: null,
       tvShow: selectedBrowseTvShow,
       movieDetails: null,

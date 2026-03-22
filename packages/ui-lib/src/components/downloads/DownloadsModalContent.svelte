@@ -20,14 +20,11 @@
 	}
 
 	interface YoutubeFilesResponse {
-		type: 'youtube';
+		type: 'youtube-video' | 'youtube-audio';
 		thumbnailUrl: string | null;
 		title: string;
 		url: string;
 		videoId: string;
-		mode: string;
-		quality: string;
-		format: string;
 		durationSeconds: number | null;
 		outputPath: string | null;
 	}
@@ -155,7 +152,7 @@
 						<td>
 							<span
 								class={classNames('badge badge-sm', {
-									'badge-secondary': dl.type === 'youtube',
+									'badge-secondary': dl.type.startsWith('youtube'),
 									'badge-accent': dl.type === 'torrent'
 								})}
 							>
@@ -258,7 +255,7 @@
 				</table>
 			</div>
 		{/if}
-	{:else if filesModalData?.type === 'youtube'}
+	{:else if filesModalData?.type === 'youtube-video' || filesModalData?.type === 'youtube-audio'}
 		<div class="mt-3 flex flex-col gap-3">
 			{#if filesModalData.thumbnailUrl}
 				<img
@@ -268,12 +265,8 @@
 				/>
 			{/if}
 			<div class="grid grid-cols-2 gap-2 text-sm">
-				<span class="opacity-50">Mode</span>
-				<span>{filesModalData.mode}</span>
-				<span class="opacity-50">Quality</span>
-				<span>{filesModalData.quality}</span>
-				<span class="opacity-50">Format</span>
-				<span>{filesModalData.format}</span>
+				<span class="opacity-50">Type</span>
+				<span>{filesModalData.type}</span>
 				<span class="opacity-50">Duration</span>
 				<span>{formatDuration(filesModalData.durationSeconds)}</span>
 				{#if filesModalData.outputPath}

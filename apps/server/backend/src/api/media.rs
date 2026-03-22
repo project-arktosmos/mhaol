@@ -451,8 +451,8 @@ async fn get_library_item_related(
             .and_then(|v| v.as_str())
             .map(|h| h.to_lowercase())
             .and_then(|hash| {
-                state.torrent_downloads.get(&hash).map(|td| RelatedTorrentDownload {
-                    info_hash: td.info_hash,
+                state.downloads.get(&hash).map(|td| RelatedTorrentDownload {
+                    info_hash: td.id,
                     name: td.name,
                     size: td.size,
                     progress: td.progress,
@@ -461,10 +461,10 @@ async fn get_library_item_related(
                     upload_speed: td.upload_speed,
                     peers: td.peers,
                     seeds: td.seeds,
-                    added_at: td.added_at,
+                    added_at: td.added_at.unwrap_or(0),
                     eta: td.eta,
                     output_path: td.output_path,
-                    source: td.source,
+                    source: td.source.unwrap_or_default(),
                     created_at: td.created_at,
                     updated_at: td.updated_at,
                 })

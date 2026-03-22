@@ -1,43 +1,13 @@
 import { writable } from 'svelte/store';
-import type {
-	DisplayTMDBMovie,
-	DisplayTMDBTvShow,
-	DisplayTMDBMovieDetails,
-	DisplayTMDBTvShowDetails
-} from 'addons/tmdb/types';
-import type { MediaItem } from 'frontend/types/media-card.type';
-import type { LibraryItemRelated } from 'frontend/types/library-item-related.type';
+import type { BrowseDetailState, BrowseDetailCallbacks } from 'frontend/types/browse-detail.type';
 
-export interface BrowseDetailState {
-	movie: DisplayTMDBMovie | null;
-	tvShow: DisplayTMDBTvShow | null;
-	movieDetails: DisplayTMDBMovieDetails | null;
-	tvShowDetails: DisplayTMDBTvShowDetails | null;
-	libraryItem: MediaItem | null;
-	relatedData: LibraryItemRelated | null;
-	loading: boolean;
-	fetching: boolean;
-	fetched: boolean;
-	downloadStatus: { state: string; progress: number } | null;
-	fetchSteps: {
-		terms: boolean;
-		search: boolean;
-		searching: boolean;
-		eval: boolean;
-		done: boolean;
-	} | null;
-}
-
-export interface BrowseDetailCallbacks {
-	onfetch?: () => void;
-	ondownload?: () => void;
-	onstream?: () => void;
-	onp2pstream?: () => void;
-	onshowsearch?: () => void;
-	onclose?: () => void;
-}
+export type { BrowseDetailState, BrowseDetailCallbacks };
+export type { BrowseDetailDomain, PhotoImageData } from 'frontend/types/browse-detail.type';
 
 const initialState: BrowseDetailState = {
+	domain: null,
+
+	// Movie/TV
 	movie: null,
 	tvShow: null,
 	movieDetails: null,
@@ -48,7 +18,25 @@ const initialState: BrowseDetailState = {
 	fetching: false,
 	fetched: false,
 	downloadStatus: null,
-	fetchSteps: null
+	fetchSteps: null,
+
+	// Music
+	musicAlbum: null,
+	musicRelease: null,
+	musicTorrent: null,
+
+	// Photo
+	photoImage: null,
+	photoTags: [],
+	photoTagging: false,
+
+	// Videogame
+	videogame: null,
+	videogameDetails: null,
+	videogameDetailsLoading: false,
+
+	// YouTube
+	youtubeVideo: null
 };
 
 function createBrowseDetailService() {
@@ -57,8 +45,11 @@ function createBrowseDetailService() {
 
 	return {
 		state: { subscribe: store.subscribe },
-		set(state: BrowseDetailState) {
-			store.set(state);
+		set(state: Partial<BrowseDetailState>) {
+			store.update((current) => ({ ...current, ...state }));
+		},
+		update(fn: (state: BrowseDetailState) => Partial<BrowseDetailState>) {
+			store.update((current) => ({ ...current, ...fn(current) }));
 		},
 		registerCallbacks(cbs: BrowseDetailCallbacks) {
 			callbacks = cbs;

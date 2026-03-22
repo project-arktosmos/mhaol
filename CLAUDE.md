@@ -15,7 +15,6 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 mhaol.git/
 ├── apps/                             # Thin SvelteKit wrappers (routes + assembly only)
 │   ├── mhaol-video/                  # Main media app (Vite, port 1531)
-│   ├── tube/                         # YouTube-focused app (port 1531)
 │   ├── video/                        # Full-featured video app
 │   ├── storybook/                    # Storybook component gallery (headless, port 1405)
 │   ├── website/                      # Marketing landing page (base: /mhaoltube)

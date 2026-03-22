@@ -1,6 +1,6 @@
 export interface UnifiedDownload {
 	id: string;
-	type: 'youtube' | 'torrent';
+	type: 'torrent' | 'youtube-video' | 'youtube-audio';
 	name: string;
 	state: string;
 	progress: number;
@@ -11,9 +11,9 @@ export interface UnifiedDownload {
 	updatedAt: string;
 	// YouTube-specific
 	url?: string;
-	mode?: string;
-	format?: string;
+	videoId?: string;
 	thumbnailUrl?: string | null;
+	durationSeconds?: number | null;
 	// Torrent-specific
 	downloadSpeed?: number;
 	uploadSpeed?: number;
