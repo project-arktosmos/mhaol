@@ -63,7 +63,15 @@ function makeMovieDetails(overrides: Partial<TMDBMovieDetails> = {}): TMDBMovieD
 		...makeMovie(),
 		credits: {
 			cast: [makeCastMember()],
-			crew: [{ id: 20, name: 'Director Name', job: 'Director', department: 'Directing', profile_path: null }]
+			crew: [
+				{
+					id: 20,
+					name: 'Director Name',
+					job: 'Director',
+					department: 'Directing',
+					profile_path: null
+				}
+			]
 		},
 		tagline: 'A great tagline',
 		runtime: 120,
@@ -229,7 +237,12 @@ describe('extractYear', () => {
 
 describe('movieToDisplay', () => {
 	it('maps all fields correctly', () => {
-		const movie = makeMovie({ genres: [{ id: 1, name: 'Action' }, { id: 2, name: 'Drama' }] });
+		const movie = makeMovie({
+			genres: [
+				{ id: 1, name: 'Action' },
+				{ id: 2, name: 'Drama' }
+			]
+		});
 		const display = movieToDisplay(movie);
 
 		expect(display.id).toBe(1);

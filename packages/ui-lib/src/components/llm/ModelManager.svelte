@@ -7,7 +7,7 @@
 		RecommendedModel
 	} from 'frontend/types/llm.type';
 	import { llmAdapter } from 'frontend/adapters/classes/llm.adapter';
-	import { recommendedModels } from 'frontend/data/recommended-models';
+	import { recommendedModels as allRecommendedModels } from 'frontend/data/recommended-models';
 
 	let {
 		status,
@@ -16,7 +16,8 @@
 		loading,
 		onLoadModel,
 		onUnloadModel,
-		onDownloadModel
+		onDownloadModel,
+		recommendedModels = allRecommendedModels
 	}: {
 		status: LlmStatus | null;
 		models: LocalModel[];
@@ -25,6 +26,7 @@
 		onLoadModel: (fileName: string) => void;
 		onUnloadModel: () => void;
 		onDownloadModel: (repoId: string, fileName: string) => void;
+		recommendedModels?: RecommendedModel[];
 	} = $props();
 
 	let downloadedFileNames = $derived(new Set(models.map((m) => m.fileName)));

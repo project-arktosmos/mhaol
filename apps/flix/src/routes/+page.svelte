@@ -1,5 +1,4 @@
 <script lang="ts">
-	import classNames from 'classnames';
 	import { onMount, onDestroy } from 'svelte';
 	import { apiUrl } from 'frontend/lib/api-base';
 	import { playerService } from 'frontend/services/player.service';
@@ -13,7 +12,6 @@
 	import LibraryTab from 'ui-lib/components/tmdb-browse/LibraryTab.svelte';
 	import MediaDetail from 'ui-lib/components/media/MediaDetail.svelte';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
-	import TmdbBrowseDetail from 'ui-lib/components/tmdb-browse/TmdbBrowseDetail.svelte';
 	import type { LibraryFile } from 'frontend/types/library.type';
 	import type {
 		MediaItem,
@@ -31,9 +29,11 @@
 	import { tmdbBrowseService } from 'frontend/services/tmdb-browse.service';
 	import { smartSearchService } from 'frontend/services/smart-search.service';
 	import { torrentService } from 'frontend/services/torrent.service';
+	import { browseDetailService } from 'frontend/services/browse-detail.service';
 	import type { TorrentInfo } from 'frontend/types/torrent.type';
 	import type { SmartSearchTorrentResult } from 'frontend/types/smart-search.type';
 	import type { PlayableFile } from 'frontend/types/player.type';
+	import type { LibraryItemRelated } from 'frontend/types/library-item-related.type';
 	import SearchTab from 'ui-lib/components/tmdb-browse/SearchTab.svelte';
 	import PopularTab from 'ui-lib/components/tmdb-browse/PopularTab.svelte';
 	import DiscoverTab from 'ui-lib/components/tmdb-browse/DiscoverTab.svelte';
@@ -47,28 +47,14 @@
 			itemsByCategory: Record<string, MediaItem[]>;
 			itemsByType: Record<string, MediaItem[]>;
 			libraries: Record<string, string>;
+			error?: string;
 		};
 	}
 
-	const LIBRARY_SUB = 'library';
-	const SEARCH_SUB = 'search';
-	const POPULAR_SUB = 'popular';
-	const DISCOVER_SUB = 'discover';
-	const RECOMMENDATIONS_SUB = 'recommendations';
-
-	type SubTabId = 'library' | 'search' | 'popular' | 'discover' | 'recommendations';
-
 	let { data }: Props = $props();
 
-	let activeSubTab = $state<SubTabId>(LIBRARY_SUB);
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
-
-	let isLibrarySub = $derived(activeSubTab === LIBRARY_SUB);
-	let isSearchSub = $derived(activeSubTab === SEARCH_SUB);
-	let isPopularSub = $derived(activeSubTab === POPULAR_SUB);
-	let isDiscoverSub = $derived(activeSubTab === DISCOVER_SUB);
-	let isRecommendationsSub = $derived(activeSubTab === RECOMMENDATIONS_SUB);
 
 	// TMDB browse state
 	const browseState = tmdbBrowseService.state;
@@ -79,12 +65,25 @@
 	let browseMovieDetails: DisplayTMDBMovieDetails | null = $state(null);
 	let browseTvShowDetails: DisplayTMDBTvShowDetails | null = $state(null);
 	let browseDetailLoading = $state(false);
+	let selectedLibraryItem: MediaItem | null = $state(null);
+	let relatedData: LibraryItemRelated | null = $state(null);
 
-	let hasBrowseSelection = $derived(selectedBrowseMovie !== null || selectedBrowseTvShow !== null);
+	async function fetchRelatedData(itemId: string) {
+		try {
+			const res = await fetch(apiUrl(`/api/media/library-items/${itemId}/related`));
+			if (res.ok) {
+				relatedData = await res.json();
+			}
+		} catch {
+			// best-effort
+		}
+	}
 
-	function handleBrowseSelectMovie(movie: DisplayTMDBMovie) {
+	async function handleBrowseSelectMovie(movie: DisplayTMDBMovie) {
 		selectedBrowseTvShow = null;
 		browseTvShowDetails = null;
+		selectedLibraryItem = null;
+		relatedData = null;
 		if (selectedBrowseMovie?.id === movie.id) {
 			selectedBrowseMovie = null;
 			browseMovieDetails = null;
@@ -93,9 +92,10 @@
 		selectedBrowseMovie = movie;
 		browseMovieDetails = null;
 		fetchBrowseMovieDetails(movie.id);
+		checkFetchCacheForTmdbId(movie.id);
 	}
 
-	function handleBrowseSelectTvShow(tvShow: DisplayTMDBTvShow) {
+	async function handleBrowseSelectTvShow(tvShow: DisplayTMDBTvShow) {
 		selectedBrowseMovie = null;
 		browseMovieDetails = null;
 		if (selectedBrowseTvShow?.id === tvShow.id) {
@@ -106,6 +106,39 @@
 		selectedBrowseTvShow = tvShow;
 		browseTvShowDetails = null;
 		fetchBrowseTvShowDetails(tvShow.id);
+		checkFetchCacheForTmdbId(tvShow.id);
+	}
+
+	async function checkFetchCacheForTmdbId(tmdbId: number, displayId?: number) {
+		const cached = await smartSearchService.checkFetchCache(tmdbId);
+		if (cached) {
+			fetchingTmdbId = displayId ?? tmdbId;
+			setSelectionForCurrentDetail();
+			smartSearchService.setFetchedCandidate(cached);
+		}
+	}
+
+	function setSelectionForCurrentDetail() {
+		if (selectedBrowseMovie) {
+			const realTmdbId = getRealTmdbId() ?? selectedBrowseMovie.id;
+			smartSearchService.setSelection({
+				title: selectedBrowseMovie.title,
+				year: selectedBrowseMovie.releaseYear,
+				type: 'movie',
+				tmdbId: realTmdbId,
+				mode: 'fetch',
+				existingItemId: selectedLibraryItem?.id,
+				existingLibraryId: selectedLibraryItem?.libraryId
+			});
+		} else if (selectedBrowseTvShow) {
+			smartSearchService.setSelection({
+				title: selectedBrowseTvShow.name,
+				year: selectedBrowseTvShow.firstAirYear,
+				type: 'tv',
+				tmdbId: selectedBrowseTvShow.id,
+				mode: 'fetch'
+			});
+		}
 	}
 
 	function closeBrowseDetail() {
@@ -113,6 +146,8 @@
 		selectedBrowseTvShow = null;
 		browseMovieDetails = null;
 		browseTvShowDetails = null;
+		selectedLibraryItem = null;
+		relatedData = null;
 		fetchingTmdbId = null;
 		smartSearchService.clear();
 	}
@@ -162,18 +197,100 @@
 		$searchStore.fetchedCandidate !== null && fetchingTmdbId === currentDetailTmdbId
 	);
 
-	function handleBrowseDetailFetch() {
+	let currentFetchSteps = $derived.by(() => {
+		if (!isFetching && !isFetchedForCurrent) return null;
+		if (isFetchedForCurrent) {
+			return { terms: true, search: true, searching: false, eval: true, done: true };
+		}
+		const s = $searchStore;
+		const hasResults = s.searchResults.length > 0;
+		const hasAnalysis = s.searchResults.some((r) => r.analysis !== null);
+		return {
+			terms: s.selection !== null,
+			search: !s.searching && hasResults,
+			searching: s.searching,
+			eval: hasAnalysis,
+			done: s.fetchedCandidate !== null
+		};
+	});
+
+	// Persist fetched candidate to cache when a new fetch completes
+	$effect(() => {
+		const candidate = $searchStore.fetchedCandidate;
+		const tmdbId = getRealTmdbId() ?? fetchingTmdbId;
+		if (candidate && tmdbId) {
+			const mediaType = selectedBrowseMovie ? 'movie' : 'tv';
+			smartSearchService.saveFetchCache(tmdbId, mediaType, candidate);
+			loadFetchCacheIds();
+			loadFetchCacheHashes();
+		}
+	});
+
+	// Sync browse detail state to the layout-level service
+	$effect(() => {
+		browseDetailService.set({
+			movie: selectedBrowseMovie,
+			tvShow: selectedBrowseTvShow,
+			movieDetails: browseMovieDetails,
+			tvShowDetails: browseTvShowDetails,
+			libraryItem: selectedLibraryItem,
+			relatedData,
+			loading: browseDetailLoading,
+			fetching: isFetching,
+			fetched: isFetchedForCurrent,
+			fetchSteps: currentFetchSteps
+		});
+	});
+
+	$effect(() => {
+		browseDetailService.registerCallbacks({
+			onfetch: handleBrowseDetailFetch,
+			ondownload: handleBrowseDetailDownload,
+			onstream: handleBrowseDetailStream,
+			onshowsearch: () => smartSearchService.show(),
+			onclose: closeBrowseDetail
+		});
+	});
+
+	function getRealTmdbId(): number | null {
+		if (selectedLibraryItem?.links.tmdb) return Number(selectedLibraryItem.links.tmdb.serviceId);
+		return null;
+	}
+
+	async function handleBrowseDetailFetch() {
+		const isRefetch = isFetchedForCurrent;
+
 		if (selectedBrowseMovie) {
+			const realTmdbId = getRealTmdbId() ?? selectedBrowseMovie.id;
 			fetchingTmdbId = selectedBrowseMovie.id;
+			if (!isRefetch) {
+				const cached = await smartSearchService.checkFetchCache(realTmdbId);
+				if (cached) {
+					setSelectionForCurrentDetail();
+					smartSearchService.setFetchedCandidate(cached);
+					return;
+				}
+			}
 			smartSearchService.select({
 				title: selectedBrowseMovie.title,
 				year: selectedBrowseMovie.releaseYear,
 				type: 'movie',
-				tmdbId: selectedBrowseMovie.id,
-				mode: 'fetch'
+				tmdbId: realTmdbId,
+				mode: 'fetch',
+				existingItemId: selectedLibraryItem?.id,
+				existingLibraryId: selectedLibraryItem?.libraryId
 			});
+			smartSearchService.show();
 		} else if (selectedBrowseTvShow) {
 			fetchingTmdbId = selectedBrowseTvShow.id;
+			if (!isRefetch) {
+				const cached = await smartSearchService.checkFetchCache(selectedBrowseTvShow.id);
+				if (cached) {
+					setSelectionForCurrentDetail();
+					smartSearchService.setFetchedCandidate(cached);
+					return;
+				}
+			}
 			smartSearchService.select({
 				title: selectedBrowseTvShow.name,
 				year: selectedBrowseTvShow.firstAirYear,
@@ -181,6 +298,7 @@
 				tmdbId: selectedBrowseTvShow.id,
 				mode: 'fetch'
 			});
+			smartSearchService.show();
 		}
 	}
 
@@ -195,6 +313,7 @@
 		if (!candidate) return;
 		const title = selectedBrowseMovie?.title ?? selectedBrowseTvShow?.name ?? '';
 		playerService.prepareStream(title);
+		playerService.setDisplayMode('sidebar');
 		handleStreamCandidate(candidate);
 	}
 
@@ -203,8 +322,10 @@
 		const infoHash = await smartSearchService.startStream(candidate);
 		if (!infoHash) return;
 
-		const unsubscribe = torrentService.state.subscribe((state) => {
-			const torrent = state.torrents.find((t) => t.infoHash === infoHash);
+		let ready = false;
+		const unsubscribe = torrentService.state.subscribe(() => {
+			if (!ready) return;
+			const torrent = torrentService.findByHash(infoHash);
 			if (!torrent) return;
 
 			smartSearchService.updateStreamingProgress(torrent.progress);
@@ -230,6 +351,7 @@
 				playerService.playStream(file);
 			}
 		});
+		ready = true;
 	}
 
 	// Torrent state — match torrents to library items by path
@@ -277,8 +399,40 @@
 	let tmdbMetadata: Record<string, DisplayTMDBMovieDetails> = $state({});
 	let tmdbLoading: Set<string> = $state(new Set());
 
+	// Fetch cache — tracks which TMDB IDs have been fetched
+	let fetchCachedTmdbIds: Set<number> = $state(new Set());
+	// Maps TMDB ID → infoHash for matching active torrent downloads
+	let fetchCacheHashes: Map<number, string> = $state(new Map());
+
+	async function loadFetchCacheIds() {
+		try {
+			const res = await fetch(apiUrl('/api/torrent/fetch-cache'));
+			if (res.ok) {
+				const ids: number[] = await res.json();
+				fetchCachedTmdbIds = new Set(ids);
+			}
+		} catch {
+			// best-effort
+		}
+	}
+
+	async function loadFetchCacheHashes() {
+		try {
+			const res = await fetch(apiUrl('/api/torrent/fetch-cache/hashes'));
+			if (res.ok) {
+				const entries: Array<{ tmdbId: number; infoHash: string }> = await res.json();
+				fetchCacheHashes = new Map(entries.map((e) => [e.tmdbId, e.infoHash]));
+			}
+		} catch {
+			// best-effort
+		}
+	}
+
 	onMount(async () => {
 		libraryService.initialize();
+		loadFetchCacheIds();
+		loadFetchCacheHashes();
+		initBrowseSections();
 	});
 
 	function getItemLinks(item: MediaItem): Record<string, MediaItemLink> {
@@ -354,10 +508,55 @@
 		new Map(itemsWithOverrides.map((item) => [stableNumericId(item.id), item]))
 	);
 
+	// Set of display IDs for items that have a fetch cache entry
+	let fetchedDisplayIds = $derived.by(() => {
+		const ids = new Set<number>();
+		for (const item of itemsWithOverrides) {
+			const tmdbLink = getItemLinks(item).tmdb;
+			if (tmdbLink && fetchCachedTmdbIds.has(Number(tmdbLink.serviceId))) {
+				ids.add(stableNumericId(item.id));
+			}
+		}
+		return ids;
+	});
+
+	// Download statuses: map display movie ID → { state, progress } from active torrents
+	let downloadStatuses = $derived.by(() => {
+		const torrents = $torrentState.torrents;
+		if (torrents.length === 0 || fetchCacheHashes.size === 0) return new Map();
+		const torrentsByHash = new Map(torrents.map((t) => [t.infoHash, t]));
+		const statuses = new Map<number, { state: TorrentInfo['state']; progress: number }>();
+		for (const item of itemsWithOverrides) {
+			const tmdbLink = getItemLinks(item).tmdb;
+			if (!tmdbLink) continue;
+			const infoHash = fetchCacheHashes.get(Number(tmdbLink.serviceId));
+			if (!infoHash) continue;
+			const torrent = torrentsByHash.get(infoHash);
+			if (!torrent) continue;
+			statuses.set(stableNumericId(item.id), {
+				state: torrent.state,
+				progress: torrent.progress
+			});
+		}
+		return statuses;
+	});
+
+	// Download statuses for browse tabs (keyed by TMDB ID directly)
+	let browseDownloadStatuses = $derived.by(() => {
+		const torrents = $torrentState.torrents;
+		if (torrents.length === 0 || fetchCacheHashes.size === 0) return new Map();
+		const torrentsByHash = new Map(torrents.map((t) => [t.infoHash, t]));
+		const statuses = new Map<number, { state: TorrentInfo['state']; progress: number }>();
+		for (const [tmdbId, infoHash] of fetchCacheHashes) {
+			const torrent = torrentsByHash.get(infoHash);
+			if (!torrent) continue;
+			statuses.set(tmdbId, { state: torrent.state, progress: torrent.progress });
+		}
+		return statuses;
+	});
+
 	// Player state
 	const playerState = playerService.state;
-	const playerDisplayMode = playerService.displayMode;
-
 	// Media detail selection
 	const mediaDetailStore = mediaDetailService.store;
 	let selectedItemId = $derived($mediaDetailStore?.item.id ?? null);
@@ -436,26 +635,21 @@
 		}
 	});
 
-	function selectSubTab(sub: SubTabId) {
-		activeSubTab = sub;
-		closeMediaDetail();
-		closeBrowseDetail();
-
-		if (sub === POPULAR_SUB) {
-			const s = $browseState;
-			if (s.popularMovies.length === 0) tmdbBrowseService.loadPopularMovies();
-		} else if (sub === DISCOVER_SUB) {
-			tmdbBrowseService.loadGenres();
-			const s = $browseState;
-			if (s.discoverMovies.length === 0) tmdbBrowseService.loadDiscoverMovies();
-		} else if (sub === RECOMMENDATIONS_SUB) {
-			const s = $browseState;
-			if (s.recommendations.length === 0 && linkedItems.length > 0) {
-				const first = linkedItems[0];
-				tmdbBrowseService.loadRecommendations(first.tmdbId, first.type);
-			}
-		}
+	function initBrowseSections() {
+		tmdbBrowseService.loadPopularMovies();
+		tmdbBrowseService.loadGenres();
+		tmdbBrowseService.loadDiscoverMovies();
 	}
+
+	// Load recommendations once linked items are available
+	let recommendationsRequested = false;
+	$effect(() => {
+		if (linkedItems.length > 0 && !recommendationsRequested) {
+			recommendationsRequested = true;
+			const first = linkedItems[0];
+			tmdbBrowseService.loadRecommendations(first.tmdbId, first.type);
+		}
+	});
 
 
 	function updateItemLinks(itemId: string, service: string, link: MediaItemLink | null) {
@@ -532,9 +726,12 @@
 		};
 	}
 
+	const tmdbFailed = new Set<string>();
+
 	async function fetchTmdbMetadata(item: MediaItem) {
 		const tmdbLink = item.links.tmdb;
-		if (!tmdbLink || tmdbMetadata[item.id] || tmdbLoading.has(item.id)) return;
+		if (!tmdbLink || tmdbMetadata[item.id] || tmdbLoading.has(item.id) || tmdbFailed.has(item.id))
+			return;
 
 		tmdbLoading = new Set([...tmdbLoading, item.id]);
 
@@ -543,8 +740,11 @@
 			if (res.ok) {
 				const data = await res.json();
 				tmdbMetadata[item.id] = movieDetailsToDisplay(data);
+			} else {
+				tmdbFailed.add(item.id);
 			}
 		} catch (e) {
+			tmdbFailed.add(item.id);
 			console.error('Failed to load TMDB metadata:', e);
 		} finally {
 			const next = new Set(tmdbLoading);
@@ -562,64 +762,17 @@
 	});
 </script>
 
-<div class="flex flex-1 overflow-hidden">
-	<div class="min-w-0 flex-1 overflow-y-auto p-4">
+{#if data.error}
+<div class="flex min-h-[50vh] items-center justify-center p-4">
+	<div class="alert alert-error max-w-xl">
+		<span class="font-mono text-sm whitespace-pre-wrap">{data.error}</span>
+	</div>
+</div>
+{:else}
+<div class="min-w-0 flex-1 overflow-y-auto p-4">
 		<div class="container mx-auto">
-			<div class="mb-6">
-				<h1 class="text-3xl font-bold">Movies</h1>
-				<p class="text-sm opacity-70">Browse your movie library</p>
-			</div>
-
-			<!-- Sub Tabs -->
-			<div class="mb-6 flex gap-1">
-				<button
-					class={classNames('btn btn-xs', {
-						'btn-secondary': isLibrarySub,
-						'btn-ghost': !isLibrarySub
-					})}
-					onclick={() => selectSubTab(LIBRARY_SUB)}
-				>
-					Library
-				</button>
-				<button
-					class={classNames('btn btn-xs', {
-						'btn-secondary': isSearchSub,
-						'btn-ghost': !isSearchSub
-					})}
-					onclick={() => selectSubTab(SEARCH_SUB)}
-				>
-					Search
-				</button>
-				<button
-					class={classNames('btn btn-xs', {
-						'btn-secondary': isPopularSub,
-						'btn-ghost': !isPopularSub
-					})}
-					onclick={() => selectSubTab(POPULAR_SUB)}
-				>
-					Popular
-				</button>
-				<button
-					class={classNames('btn btn-xs', {
-						'btn-secondary': isDiscoverSub,
-						'btn-ghost': !isDiscoverSub
-					})}
-					onclick={() => selectSubTab(DISCOVER_SUB)}
-				>
-					Discover
-				</button>
-				<button
-					class={classNames('btn btn-xs', {
-						'btn-secondary': isRecommendationsSub,
-						'btn-ghost': !isRecommendationsSub
-					})}
-					onclick={() => selectSubTab(RECOMMENDATIONS_SUB)}
-				>
-					Recommendations
-				</button>
-			</div>
-
-			{#if isSearchSub}
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Search</h2>
 				<SearchTab
 					movies={$browseState.searchMovies}
 					tvShows={$browseState.searchTv}
@@ -633,11 +786,56 @@
 					error={$browseState.error}
 					mediaType="movies"
 					selectedMovieId={selectedBrowseMovie?.id ?? null}
+					fetchedIds={fetchCachedTmdbIds}
+					downloadStatuses={browseDownloadStatuses}
 					onselectMovie={handleBrowseSelectMovie}
 					onsearchMovies={(q, p) => tmdbBrowseService.searchMovies(q, p)}
 					onsearchTv={(q, p) => tmdbBrowseService.searchTv(q, p)}
 				/>
-			{:else if isPopularSub}
+			</section>
+
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Library</h2>
+				<LibraryTab
+					movies={libraryMovies}
+					selectedMovieId={selectedBrowseMovie?.id ?? null}
+					fetchedIds={fetchedDisplayIds}
+					downloadStatuses={downloadStatuses}
+					onselectMovie={(movie) => {
+						const item = libraryItemsByMovieId.get(movie.id);
+						if (!item) return;
+						selectedBrowseTvShow = null;
+						browseTvShowDetails = null;
+						if (selectedBrowseMovie?.id === movie.id) {
+							selectedBrowseMovie = null;
+							browseMovieDetails = null;
+							selectedLibraryItem = null;
+							fetchingTmdbId = null;
+							smartSearchService.clear();
+							return;
+						}
+						fetchingTmdbId = null;
+						smartSearchService.clear();
+
+						selectedBrowseMovie = movie;
+						selectedLibraryItem = item;
+						relatedData = null;
+						fetchRelatedData(item.id);
+						const meta = tmdbMetadata[item.id] ?? null;
+						browseMovieDetails = meta;
+						if (!meta && item.links.tmdb) {
+							fetchBrowseMovieDetails(Number(item.links.tmdb.serviceId));
+						}
+						const realTmdbId = item.links.tmdb ? Number(item.links.tmdb.serviceId) : null;
+						if (realTmdbId) {
+							checkFetchCacheForTmdbId(realTmdbId, movie.id);
+						}
+					}}
+				/>
+			</section>
+
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Popular</h2>
 				<PopularTab
 					movies={$browseState.popularMovies}
 					tvShows={$browseState.popularTv}
@@ -650,11 +848,16 @@
 					error={$browseState.error}
 					mediaType="movies"
 					selectedMovieId={selectedBrowseMovie?.id ?? null}
+					fetchedIds={fetchCachedTmdbIds}
+					downloadStatuses={browseDownloadStatuses}
 					onselectMovie={handleBrowseSelectMovie}
 					onloadMovies={(p) => tmdbBrowseService.loadPopularMovies(p)}
 					onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
 				/>
-			{:else if isDiscoverSub}
+			</section>
+
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Discover</h2>
 				<DiscoverTab
 					movies={$browseState.discoverMovies}
 					tvShows={$browseState.discoverTv}
@@ -670,11 +873,16 @@
 					error={$browseState.error}
 					mediaType="movies"
 					selectedMovieId={selectedBrowseMovie?.id ?? null}
+					fetchedIds={fetchCachedTmdbIds}
+					downloadStatuses={browseDownloadStatuses}
 					onselectMovie={handleBrowseSelectMovie}
 					ondiscoverMovies={(p, g) => tmdbBrowseService.loadDiscoverMovies(p, g)}
 					ondiscoverTv={(p, g) => tmdbBrowseService.loadDiscoverTv(p, g)}
 				/>
-			{:else if isRecommendationsSub}
+			</section>
+
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Recommendations</h2>
 				<RecommendationsTab
 					{linkedItems}
 					recommendations={$browseState.recommendations}
@@ -686,130 +894,15 @@
 					error={$browseState.error}
 					selectedMovieId={selectedBrowseMovie?.id ?? null}
 					selectedTvShowId={selectedBrowseTvShow?.id ?? null}
+					fetchedIds={fetchCachedTmdbIds}
+					downloadStatuses={browseDownloadStatuses}
 					onselectMovie={handleBrowseSelectMovie}
 					onselectTvShow={handleBrowseSelectTvShow}
 					onload={(id, type, p) => tmdbBrowseService.loadRecommendations(id, type, p)}
 				/>
-			{:else if isLibrarySub}
-				<LibraryTab
-					movies={libraryMovies}
-					selectedMovieId={selectedBrowseMovie?.id ?? null}
-					onselectMovie={(movie) => {
-						const item = libraryItemsByMovieId.get(movie.id);
-						if (!item) return;
-						selectedBrowseTvShow = null;
-						browseTvShowDetails = null;
-						if (selectedBrowseMovie?.id === movie.id) {
-							selectedBrowseMovie = null;
-							browseMovieDetails = null;
-							return;
-						}
-						selectedBrowseMovie = movie;
-						const meta = tmdbMetadata[item.id] ?? null;
-						browseMovieDetails = meta;
-						if (!meta && item.links.tmdb) {
-							fetchBrowseMovieDetails(Number(item.links.tmdb.serviceId));
-						}
-					}}
-				/>
-			{/if}
+			</section>
 		</div>
-	</div>
-
-	{#if hasBrowseSelection || ($playerState.currentFile && $playerDisplayMode === 'sidebar')}
-		<div class="hidden w-85 shrink-0 border-l border-base-300 bg-base-200 lg:block">
-			<TmdbBrowseDetail
-				movie={selectedBrowseMovie}
-				tvShow={selectedBrowseTvShow}
-				movieDetails={browseMovieDetails}
-				tvShowDetails={browseTvShowDetails}
-				loading={browseDetailLoading}
-				fetching={isFetching}
-				fetched={isFetchedForCurrent}
-				playerFile={$playerDisplayMode === 'sidebar' ? $playerState.currentFile : null}
-				playerConnectionState={$playerState.connectionState}
-				playerPositionSecs={$playerState.positionSecs}
-				playerDurationSecs={$playerState.durationSecs}
-				playerStreamUrl={$playerState.streamUrl}
-				playerBuffering={$playerState.buffering}
-				onfetch={handleBrowseDetailFetch}
-				ondownload={handleBrowseDetailDownload}
-				onstream={handleBrowseDetailStream}
-				onfullscreen={() => playerService.setDisplayMode('fullscreen')}
-				onstopplayer={() => playerService.stop()}
-				onclose={closeBrowseDetail}
-			/>
-		</div>
-	{/if}
 </div>
-
-<div class="lg:hidden">
-<Modal open={hasBrowseSelection || !!($playerState.currentFile && $playerDisplayMode === 'sidebar')} maxWidth="max-w-lg" onclose={closeBrowseDetail}>
-	<TmdbBrowseDetail
-		movie={selectedBrowseMovie}
-		tvShow={selectedBrowseTvShow}
-		movieDetails={browseMovieDetails}
-		tvShowDetails={browseTvShowDetails}
-		loading={browseDetailLoading}
-		fetching={isFetching}
-		fetched={isFetchedForCurrent}
-		playerFile={$playerDisplayMode === 'sidebar' ? $playerState.currentFile : null}
-		playerConnectionState={$playerState.connectionState}
-		playerPositionSecs={$playerState.positionSecs}
-		playerDurationSecs={$playerState.durationSecs}
-		playerStreamUrl={$playerState.streamUrl}
-		playerBuffering={$playerState.buffering}
-		onfetch={handleBrowseDetailFetch}
-		ondownload={handleBrowseDetailDownload}
-		onstream={handleBrowseDetailStream}
-		onfullscreen={() => playerService.setDisplayMode('fullscreen')}
-		onstopplayer={() => playerService.stop()}
-		onclose={closeBrowseDetail}
-	/>
-</Modal>
-</div>
-
-{#if $playerState.currentFile && !$mediaDetailStore && $playerDisplayMode === 'fullscreen'}
-	<div class="fixed inset-0 z-40 flex flex-col bg-black">
-		<div class="flex items-center justify-between p-3">
-			<p class="truncate text-sm font-semibold text-white" title={$playerState.currentFile.name}>
-				{$playerState.currentFile.name}
-			</p>
-			<div class="flex items-center gap-1">
-				<button
-					class="btn btn-square btn-ghost btn-sm text-white"
-					onclick={() => playerService.setDisplayMode('sidebar')}
-					aria-label="Move to sidebar"
-					title="Move to sidebar"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M18 8L14 12L18 16" />
-						<rect x="3" y="3" width="18" height="18" rx="2" />
-						<line x1="14" y1="3" x2="14" y2="21" />
-					</svg>
-				</button>
-				<button
-					class="btn btn-square btn-ghost btn-sm text-white"
-					onclick={() => playerService.stop()}
-					aria-label="Close player"
-				>
-					&times;
-				</button>
-			</div>
-		</div>
-		<div class="min-h-0 flex-1">
-			<PlayerVideo
-				file={$playerState.currentFile}
-				connectionState={$playerState.connectionState}
-				positionSecs={$playerState.positionSecs}
-				durationSecs={$playerState.durationSecs}
-				streamUrl={$playerState.streamUrl}
-				buffering={$playerState.buffering}
-				fullscreen
-			/>
-		</div>
-	</div>
-{/if}
 
 <Modal open={!!$mediaDetailStore} maxWidth="max-w-lg" onclose={closeMediaDetail}>
 	{#if $mediaDetailStore}
@@ -854,4 +947,5 @@
 			linkModalService = null;
 		}}
 	/>
+{/if}
 {/if}

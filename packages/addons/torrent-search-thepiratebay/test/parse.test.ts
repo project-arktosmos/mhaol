@@ -58,7 +58,9 @@ describe('parseResult', () => {
 	});
 
 	it('parses numeric string fields to numbers', () => {
-		const result = parseResult(makePirateBayResult({ seeders: '100', leechers: '25', size: '500' }));
+		const result = parseResult(
+			makePirateBayResult({ seeders: '100', leechers: '25', size: '500' })
+		);
 		expect(result.seeders).toBe(100);
 		expect(result.leechers).toBe(25);
 		expect(result.size).toBe(500);

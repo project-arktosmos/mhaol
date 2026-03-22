@@ -108,3 +108,127 @@ impl ImageTagRepo {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::open_test_database;
+
+    fn setup() -> (ImageTagRepo, crate::db::DbPool) {
+        let db = open_test_database();
+        // Insert parent records required by foreign keys
+        {
+            let conn = db.lock();
+            conn.execute(
+                "INSERT INTO libraries (id, name, path, media_types, date_added) VALUES ('lib1', 'Test', '/tmp', '[]', 0)",
+                [],
+            ).unwrap();
+        }
+        let repo = ImageTagRepo::new(db.clone());
+        (repo, db)
+    }
+
+    fn insert_library_item(db: &crate::db::DbPool, id: &str) {
+        let conn = db.lock();
+        conn.execute(
+            "INSERT OR IGNORE INTO library_items (id, library_id, path, extension, media_type) VALUES (?1, 'lib1', ?2, 'jpg', 'image')",
+            rusqlite::params![id, format!("/tmp/{}.jpg", id)],
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_add_tag_and_get_by_item() {
+        let (repo, db) = setup();
+        insert_library_item(&db, "item1");
+
+        repo.add_tag("item1", "landscape", 0.95);
+        repo.add_tag("item1", "sunset", 0.80);
+
+        let tags = repo.get_by_item("item1");
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0].tag, "landscape");
+        assert_eq!(tags[1].tag, "sunset");
+    }
+
+    #[test]
+    fn test_get_by_item_empty() {
+        let (repo, _db) = setup();
+        assert!(repo.get_by_item("nonexistent").is_empty());
+    }
+
+    #[test]
+    fn test_replace_for_item() {
+        let (repo, db) = setup();
+        insert_library_item(&db, "item1");
+
+        repo.add_tag("item1", "old_tag", 0.5);
+        repo.replace_for_item("item1", &[("new_tag1", 0.9), ("new_tag2", 0.7)]);
+
+        let tags = repo.get_by_item("item1");
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0].tag, "new_tag1");
+        assert_eq!(tags[1].tag, "new_tag2");
+    }
+
+    #[test]
+    fn test_delete_tag() {
+        let (repo, db) = setup();
+        insert_library_item(&db, "item1");
+
+        repo.add_tag("item1", "landscape", 0.9);
+        repo.add_tag("item1", "sunset", 0.8);
+
+        repo.delete_tag("item1", "landscape");
+        let tags = repo.get_by_item("item1");
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].tag, "sunset");
+    }
+
+    #[test]
+    fn test_delete_by_item() {
+        let (repo, db) = setup();
+        insert_library_item(&db, "item1");
+        insert_library_item(&db, "item2");
+
+        repo.add_tag("item1", "tag1", 0.9);
+        repo.add_tag("item1", "tag2", 0.8);
+        repo.add_tag("item2", "tag1", 0.7);
+
+        repo.delete_by_item("item1");
+        assert!(repo.get_by_item("item1").is_empty());
+        assert_eq!(repo.get_by_item("item2").len(), 1);
+    }
+
+    #[test]
+    fn test_search_by_tag() {
+        let (repo, db) = setup();
+        insert_library_item(&db, "item1");
+        insert_library_item(&db, "item2");
+        insert_library_item(&db, "item3");
+
+        repo.add_tag("item1", "landscape", 0.95);
+        repo.add_tag("item2", "landscape", 0.80);
+        repo.add_tag("item3", "portrait", 0.90);
+
+        let results = repo.search_by_tag("landscape");
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].score, 0.95);
+
+        assert!(repo.search_by_tag("nonexistent").is_empty());
+    }
+
+    #[test]
+    fn test_get_by_items() {
+        let (repo, db) = setup();
+        insert_library_item(&db, "item1");
+        insert_library_item(&db, "item2");
+        insert_library_item(&db, "item3");
+
+        repo.add_tag("item1", "tag1", 0.9);
+        repo.add_tag("item2", "tag2", 0.8);
+        repo.add_tag("item3", "tag3", 0.7);
+
+        let results = repo.get_by_items(&["item1", "item3"]);
+        assert_eq!(results.len(), 2);
+    }
+}

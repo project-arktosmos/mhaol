@@ -2,7 +2,11 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { youtubeService } from 'frontend/services/youtube.service';
-	import { extractVideoId, extractPlaylistId, type YouTubeOEmbedData } from 'frontend/types/youtube.type';
+	import {
+		extractVideoId,
+		extractPlaylistId,
+		type YouTubeOEmbedData
+	} from 'frontend/types/youtube.type';
 	import { apiUrl } from 'frontend/lib/api-base';
 
 	export let initialUrl: string = '';

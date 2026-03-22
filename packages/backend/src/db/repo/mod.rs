@@ -15,6 +15,8 @@ pub mod media_list;
 pub mod media_list_item;
 pub mod media_list_link;
 pub mod llm_conversation;
+pub mod torrent_fetch_cache;
+pub mod tmdb_api_cache;
 
 pub use settings::SettingsRepo;
 pub use metadata::MetadataRepo;
@@ -33,3 +35,5 @@ pub use media_list::MediaListRepo;
 pub use media_list_item::MediaListItemRepo;
 pub use media_list_link::MediaListLinkRepo;
 pub use llm_conversation::LlmConversationRepo;
+pub use torrent_fetch_cache::TorrentFetchCacheRepo;
+pub use tmdb_api_cache::TmdbApiCacheRepo;

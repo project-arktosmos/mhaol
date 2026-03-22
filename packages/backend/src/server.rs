@@ -24,7 +24,7 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "mhaol_backend=info".into()),
+                .unwrap_or_else(|_| "info,mhaol_backend=debug,mhaol_torrent=debug,mhaol_http_stream=debug,mhaol_p2p_stream=debug,librqbit=info".into()),
         )
         .init();
 
@@ -48,7 +48,7 @@ async fn main() {
                 .and_then(|p| p.parent()) // workspace root
                 .map(|root| root.join("packages/database/mhaol.db"));
             match candidate {
-                Some(p) if p.parent().map_or(false, |d| d.exists()) => p,
+                Some(p) if p.parent().is_some_and(|d| d.exists()) => p,
                 _ => PathBuf::from("mhaol.db"),
             }
         });

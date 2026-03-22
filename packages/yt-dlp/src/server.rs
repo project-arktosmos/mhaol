@@ -257,7 +257,7 @@ async fn download_events(
         loop {
             match rx.recv().await {
                 Ok(mhaol_yt_dlp::manager::SseEvent::Progress(progress)) => {
-                    if let Ok(data) = serde_json::to_string(&progress) {
+                    if let Ok(data) = serde_json::to_string(&*progress) {
                         yield Ok(Event::default().event("progress").data(data));
                     }
                 }

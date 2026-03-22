@@ -11,9 +11,7 @@
 	let { href, label, currentPath, classes = '' }: Props = $props();
 
 	let isActive = $derived(
-		href === '/'
-			? currentPath === '/'
-			: currentPath === href || currentPath.startsWith(href + '/')
+		href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(href + '/')
 	);
 
 	let linkClasses = $derived(

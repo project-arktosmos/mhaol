@@ -43,16 +43,12 @@ export class TmdbCacheRepository {
 				ON CONFLICT(tmdb_id) DO UPDATE SET data = excluded.data, fetched_at = datetime('now')
 			`),
 			deleteTvShow: db.prepare('DELETE FROM tmdb_tv_shows WHERE tmdb_id = ?'),
-			getSeason: db.prepare(
-				'SELECT * FROM tmdb_seasons WHERE tmdb_id = ? AND season_number = ?'
-			),
+			getSeason: db.prepare('SELECT * FROM tmdb_seasons WHERE tmdb_id = ? AND season_number = ?'),
 			upsertSeason: db.prepare(`
 				INSERT INTO tmdb_seasons (tmdb_id, season_number, data) VALUES (?, ?, ?)
 				ON CONFLICT(tmdb_id, season_number) DO UPDATE SET data = excluded.data, fetched_at = datetime('now')
 			`),
-			deleteSeason: db.prepare(
-				'DELETE FROM tmdb_seasons WHERE tmdb_id = ? AND season_number = ?'
-			),
+			deleteSeason: db.prepare('DELETE FROM tmdb_seasons WHERE tmdb_id = ? AND season_number = ?'),
 			deleteSeasonsByShow: db.prepare('DELETE FROM tmdb_seasons WHERE tmdb_id = ?')
 		};
 	}

@@ -25,8 +25,10 @@
 		MediaCategory
 	} from 'frontend/types/media-card.type';
 	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
-	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'addons/tmdb/transform';
+	import { movieDetailsToDisplay, tvShowDetailsToDisplay, setImageBaseUrl } from 'addons/tmdb/transform';
 	import { tmdbBrowseService } from 'frontend/services/tmdb-browse.service';
+
+	setImageBaseUrl(apiUrl('/api/tmdb/image'));
 	import { smartSearchService } from 'frontend/services/smart-search.service';
 	import { torrentService } from 'frontend/services/torrent.service';
 	import type { TorrentInfo } from 'frontend/types/torrent.type';
@@ -607,9 +609,12 @@
 		};
 	}
 
+	const tmdbFailed = new Set<string>();
+
 	async function fetchTmdbMetadata(item: MediaItem) {
 		const tmdbLink = item.links.tmdb;
-		if (!tmdbLink || tmdbMetadata[item.id] || tmdbLoading.has(item.id)) return;
+		if (!tmdbLink || tmdbMetadata[item.id] || tmdbLoading.has(item.id) || tmdbFailed.has(item.id))
+			return;
 
 		tmdbLoading = new Set([...tmdbLoading, item.id]);
 
@@ -623,8 +628,11 @@
 			if (res.ok) {
 				const data = await res.json();
 				tmdbMetadata[item.id] = isTv ? tvShowDetailsToDisplay(data) : movieDetailsToDisplay(data);
+			} else {
+				tmdbFailed.add(item.id);
 			}
 		} catch (e) {
+			tmdbFailed.add(item.id);
 			console.error('Failed to load TMDB metadata:', e);
 		} finally {
 			const next = new Set(tmdbLoading);

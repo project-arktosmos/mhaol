@@ -22,9 +22,30 @@ function makeResult(overrides: Partial<TorrentSearchResult> = {}): TorrentSearch
 
 describe('sortSearchResults', () => {
 	const results: TorrentSearchResult[] = [
-		makeResult({ id: '1', name: 'Bravo', seeders: 20, leechers: 5, size: 300, uploadedAt: new Date('2024-03-01') }),
-		makeResult({ id: '2', name: 'Alpha', seeders: 50, leechers: 2, size: 100, uploadedAt: new Date('2024-01-01') }),
-		makeResult({ id: '3', name: 'Charlie', seeders: 10, leechers: 15, size: 200, uploadedAt: new Date('2024-02-01') })
+		makeResult({
+			id: '1',
+			name: 'Bravo',
+			seeders: 20,
+			leechers: 5,
+			size: 300,
+			uploadedAt: new Date('2024-03-01')
+		}),
+		makeResult({
+			id: '2',
+			name: 'Alpha',
+			seeders: 50,
+			leechers: 2,
+			size: 100,
+			uploadedAt: new Date('2024-01-01')
+		}),
+		makeResult({
+			id: '3',
+			name: 'Charlie',
+			seeders: 10,
+			leechers: 15,
+			size: 200,
+			uploadedAt: new Date('2024-02-01')
+		})
 	];
 
 	it('sorts by seeders descending', () => {

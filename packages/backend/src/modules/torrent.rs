@@ -7,6 +7,12 @@ pub struct TorrentModule {
     pub manager: Arc<TorrentManager>,
 }
 
+impl Default for TorrentModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TorrentModule {
     pub fn new() -> Self {
         Self {

@@ -3,7 +3,10 @@
 	import { torrentService } from 'frontend/services/torrent.service';
 	import TorrentSearchInput from './TorrentSearchInput.svelte';
 	import TorrentSearchResults from './TorrentSearchResults.svelte';
-	import type { TorrentCategory, TorrentSearchSortField } from 'addons/torrent-search-thepiratebay/types';
+	import type {
+		TorrentCategory,
+		TorrentSearchSortField
+	} from 'addons/torrent-search-thepiratebay/types';
 
 	const searchState = torrentSearchService.state;
 	const torrentState = torrentService.state;

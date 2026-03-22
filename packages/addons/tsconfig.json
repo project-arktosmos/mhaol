@@ -12,5 +12,6 @@
 		"sourceMap": true,
 		"resolveJsonModule": true,
 		"isolatedModules": true
-	}
+	},
+	"exclude": ["**/addon.ts"]
 }

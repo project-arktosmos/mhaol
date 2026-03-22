@@ -34,6 +34,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	private eventSource: EventSource | null = null;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private reconnectDelay = 1000;
+	private allTorrents: TorrentInfo[] = [];
 
 	constructor() {
 		super('torrent-settings', initialSettings);
@@ -99,6 +100,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 		this.eventSource.addEventListener('torrents', (event) => {
 			try {
 				const allTorrents: TorrentInfo[] = JSON.parse(event.data);
+				this.allTorrents = allTorrents;
 				const torrents = this.appName
 					? allTorrents.filter((t) => t.outputPath && t.outputPath.startsWith(this.appDownloadPath))
 					: allTorrents;
@@ -124,6 +126,11 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 			this.connectEvents();
 			this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000);
 		}, this.reconnectDelay);
+	}
+
+	/** Find a torrent by hash across ALL torrents (ignores app-name filtering). */
+	findByHash(infoHash: string): TorrentInfo | undefined {
+		return this.allTorrents.find((t) => t.infoHash === infoHash);
 	}
 
 	// ===== Torrent Operations =====

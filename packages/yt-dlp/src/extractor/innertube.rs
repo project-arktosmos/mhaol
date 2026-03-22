@@ -12,6 +12,12 @@ pub struct InnertubeApi {
     http: reqwest::Client,
 }
 
+impl Default for InnertubeApi {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InnertubeApi {
     pub fn new() -> Self {
         let http = reqwest::Client::builder()

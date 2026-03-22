@@ -250,7 +250,7 @@ fn find_largest_video(dir: &std::path::Path) -> Option<String> {
             if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
                 if VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                    if best.as_ref().map_or(true, |(s, _)| size > *s) {
+                    if best.as_ref().is_none_or(|(s, _)| size > *s) {
                         best = Some((size, entry_path.to_string_lossy().to_string()));
                     }
                 }
@@ -258,7 +258,7 @@ fn find_largest_video(dir: &std::path::Path) -> Option<String> {
         } else if ft.is_dir() {
             if let Some(found) = find_largest_video(&entry_path) {
                 let size = std::fs::metadata(&found).map(|m| m.len()).unwrap_or(0);
-                if best.as_ref().map_or(true, |(s, _)| size > *s) {
+                if best.as_ref().is_none_or(|(s, _)| size > *s) {
                     best = Some((size, found));
                 }
             }

@@ -826,7 +826,7 @@ fn parse_rss_feed(xml: &str) -> (String, Vec<RssVideo>) {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
                 let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                let local = tag_name.split(':').last().unwrap_or(&tag_name).to_string();
+                let local = tag_name.split(':').next_back().unwrap_or(&tag_name).to_string();
 
                 if local == "entry" {
                     in_entry = true;
@@ -870,7 +870,7 @@ fn parse_rss_feed(xml: &str) -> (String, Vec<RssVideo>) {
             }
             Ok(Event::End(e)) => {
                 let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                let local = tag_name.split(':').last().unwrap_or(&tag_name);
+                let local = tag_name.split(':').next_back().unwrap_or(&tag_name);
 
                 if local == "entry" && in_entry {
                     if !video_id.is_empty() {

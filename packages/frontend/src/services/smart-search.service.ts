@@ -43,7 +43,7 @@ class SmartSearchService {
 		this.store.update((s) => ({
 			...s,
 			selection,
-			visible: true,
+			visible: false,
 			searching: false,
 			analyzing: false,
 			searchResults: [],
@@ -160,8 +160,42 @@ class SmartSearchService {
 		this.store.update((s) => ({ ...s, fetchedCandidate: candidate }));
 	}
 
+	/** Set the selection without triggering searches (used when restoring from cache). */
+	setSelection(selection: SmartSearchSelection) {
+		this.store.update((s) => ({ ...s, selection }));
+	}
+
 	getFetchedCandidate(): SmartSearchTorrentResult | null {
 		return this.getState().fetchedCandidate;
+	}
+
+	async checkFetchCache(tmdbId: number): Promise<SmartSearchTorrentResult | null> {
+		try {
+			const res = await fetch(apiUrl(`/api/torrent/fetch-cache/${tmdbId}`));
+			if (!res.ok) return null;
+			const data = await res.json();
+			const candidate = data.candidate as SmartSearchTorrentResult;
+			candidate.uploadedAt = new Date(candidate.uploadedAt);
+			return candidate;
+		} catch {
+			return null;
+		}
+	}
+
+	async saveFetchCache(
+		tmdbId: number,
+		mediaType: string,
+		candidate: SmartSearchTorrentResult
+	): Promise<void> {
+		try {
+			await fetch(apiUrl('/api/torrent/fetch-cache'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tmdbId, mediaType, candidate })
+			});
+		} catch {
+			// best-effort
+		}
 	}
 
 	async startDownload(candidate: SmartSearchTorrentResult): Promise<string | null> {
@@ -266,6 +300,10 @@ class SmartSearchService {
 		this.store.update((s) => ({ ...s, streamingProgress: progress }));
 	}
 
+	show() {
+		this.store.update((s) => ({ ...s, visible: true }));
+	}
+
 	hide() {
 		this.store.update((s) => ({ ...s, visible: false }));
 	}
@@ -285,6 +323,16 @@ class SmartSearchService {
 	}
 
 	private async createPendingItem(selection: SmartSearchSelection) {
+		// If the item already exists in the library, skip creation
+		if (selection.type !== 'music' && selection.existingItemId && selection.existingLibraryId) {
+			this.store.update((s) => ({
+				...s,
+				pendingItemId: selection.existingItemId!,
+				pendingLibraryId: selection.existingLibraryId!
+			}));
+			return;
+		}
+
 		try {
 			const configRes = await fetch(apiUrl('/api/torrent/config'));
 			if (!configRes.ok) return;

@@ -20,6 +20,12 @@ pub struct SignatureResolver {
     sts: Option<u64>,
 }
 
+impl Default for SignatureResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SignatureResolver {
     pub fn new() -> Self {
         Self {
@@ -295,7 +301,7 @@ fn extract_function_by_name(source: &str, name: &str) -> Result<String> {
     ];
 
     for pattern in &patterns {
-        if let Ok(re) = Regex::new(&pattern) {
+        if let Ok(re) = Regex::new(pattern) {
             if let Some(m) = re.find(source) {
                 // Find the opening paren of the function parameters
                 let start_from = m.start();

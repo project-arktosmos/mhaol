@@ -59,7 +59,7 @@
 					<div class="flex items-center justify-between">
 						<div class="flex items-center gap-2">
 							{#if isBusy(app)}
-								<span class="loading loading-spinner h-3 w-3 text-info"></span>
+								<span class="loading h-3 w-3 loading-spinner text-info"></span>
 							{:else}
 								<div
 									class={classNames('h-2.5 w-2.5 rounded-full', {
@@ -99,46 +99,36 @@
 
 						<div class="flex gap-1">
 							{#if app.logs.length > 0}
-								<button
-									class="btn btn-ghost btn-xs"
-									onclick={() => (logsModalApp = app.name)}
-								>
+								<button class="btn btn-ghost btn-xs" onclick={() => (logsModalApp = app.name)}>
 									Logs
 								</button>
 							{/if}
 
 							{#if app.has_headless}
 								{#if app.status === 'starting'}
-									<button class="btn btn-xs btn-disabled" disabled>
-										<span class="loading loading-spinner loading-xs"></span>
+									<button class="btn btn-disabled btn-xs" disabled>
+										<span class="loading loading-xs loading-spinner"></span>
 										Starting
 									</button>
 								{:else if app.status === 'running'}
-									<button class="btn btn-error btn-xs" onclick={() => onstop(app.name)}>
+									<button class="btn btn-xs btn-error" onclick={() => onstop(app.name)}>
 										Stop
 									</button>
 								{:else if app.status === 'failed'}
-									<button
-										class="btn btn-ghost btn-xs"
-										onclick={() => ondismiss(app.name)}
-									>
+									<button class="btn btn-ghost btn-xs" onclick={() => ondismiss(app.name)}>
 										Dismiss
 									</button>
-									<button
-										class="btn btn-warning btn-xs"
-										onclick={() => onstart(app.name)}
-									>
+									<button class="btn btn-xs btn-warning" onclick={() => onstart(app.name)}>
 										Retry
 									</button>
 								{:else}
-									<button class="btn btn-primary btn-xs" onclick={() => onstart(app.name)}>
+									<button class="btn btn-xs btn-primary" onclick={() => onstart(app.name)}>
 										Start
 									</button>
 								{/if}
 							{/if}
 						</div>
 					</div>
-
 				</div>
 			</div>
 		{/each}
@@ -155,7 +145,7 @@
 				class="max-h-[70vh] overflow-y-auto rounded bg-base-300 p-3 font-mono text-xs leading-relaxed"
 			>
 				{#each logsModalLines as line}
-					<div class="whitespace-pre-wrap break-all text-base-content/70">{line}</div>
+					<div class="break-all whitespace-pre-wrap text-base-content/70">{line}</div>
 				{/each}
 				<div bind:this={logEndRef}></div>
 			</div>

@@ -1,7 +1,8 @@
 <script lang="ts">
-	import TmdbBrowseCard from './TmdbBrowseCard.svelte';
+	import TmdbBrowseGrid from './TmdbBrowseGrid.svelte';
 	import TmdbPagination from './TmdbPagination.svelte';
 	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
+	import type { TorrentState } from 'frontend/types/torrent.type';
 
 	interface LinkedItem {
 		tmdbId: number;
@@ -20,6 +21,8 @@
 		error = null,
 		selectedMovieId = null,
 		selectedTvShowId = null,
+		fetchedIds,
+		downloadStatuses,
 		onselectMovie,
 		onselectTvShow,
 		onload
@@ -34,6 +37,8 @@
 		error?: string | null;
 		selectedMovieId?: number | null;
 		selectedTvShowId?: number | null;
+		fetchedIds?: Set<number>;
+		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 		onload: (tmdbId: number, type: 'movie' | 'tv', page: number) => void;
@@ -54,9 +59,12 @@
 		onload(Number(id), type as 'movie' | 'tv', 1);
 	}
 
-	function isMovie(item: DisplayTMDBMovie | DisplayTMDBTvShow): item is DisplayTMDBMovie {
-		return 'title' in item;
-	}
+	let recMovies = $derived(
+		recommendations.filter((r): r is DisplayTMDBMovie => 'title' in r)
+	);
+	let recTvShows = $derived(
+		recommendations.filter((r): r is DisplayTMDBTvShow => !('title' in r))
+	);
 </script>
 
 {#if linkedItems.length === 0}
@@ -88,15 +96,16 @@
 			<span class="loading loading-lg loading-spinner"></span>
 		</div>
 	{:else if recommendations.length > 0}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-			{#each recommendations as item (item.id)}
-				{#if isMovie(item)}
-					<TmdbBrowseCard movie={item} selected={selectedMovieId === item.id} onclick={onselectMovie ? () => onselectMovie(item as DisplayTMDBMovie) : undefined} />
-				{:else}
-					<TmdbBrowseCard tvShow={item} selected={selectedTvShowId === item.id} onclick={onselectTvShow ? () => onselectTvShow(item as DisplayTMDBTvShow) : undefined} />
-				{/if}
-			{/each}
-		</div>
+		<TmdbBrowseGrid
+			movies={recMovies}
+			tvShows={recTvShows}
+			{selectedMovieId}
+			{selectedTvShowId}
+			{fetchedIds}
+			{downloadStatuses}
+			{onselectMovie}
+			{onselectTvShow}
+		/>
 		{#if sourceId != null && sourceType != null}
 			<TmdbPagination
 				{page}

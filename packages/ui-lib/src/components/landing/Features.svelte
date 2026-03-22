@@ -92,9 +92,15 @@
 	<div class="mx-auto max-w-6xl px-6">
 		<div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
 			{#each apps as app}
-				<div data-theme={`${app.variant}-${mode}`} class="card bg-base-100 shadow-md transition-shadow hover:shadow-lg" class:opacity-50={!featuredKeys.has(app.key)}>
+				<div
+					data-theme={`${app.variant}-${mode}`}
+					class="card bg-base-100 shadow-md transition-shadow hover:shadow-lg"
+					class:opacity-50={!featuredKeys.has(app.key)}
+				>
 					<div class="card-body items-center text-center">
-						<div class="mb-2 flex aspect-4/3 w-full items-center justify-center rounded-lg bg-primary/10">
+						<div
+							class="mb-2 flex aspect-4/3 w-full items-center justify-center rounded-lg bg-primary/10"
+						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								fill="none"
@@ -112,11 +118,7 @@
 						<p class="text-sm text-base-content/60">{$_(`apps.${app.key}.description`)}</p>
 						<div class="mt-3 flex flex-wrap justify-center gap-2">
 							{#each app.platforms as platform}
-								<a
-									href="#"
-									class="btn btn-outline btn-xs gap-1"
-									title={platformLabels[platform]}
-								>
+								<a href="#" class="btn gap-1 btn-outline btn-xs" title={platformLabels[platform]}>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
 										viewBox="0 0 24 24"

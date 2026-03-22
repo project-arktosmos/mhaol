@@ -16,6 +16,7 @@ export {
 } from './client.js';
 
 export {
+	setImageBaseUrl,
 	getPosterUrl,
 	getBackdropUrl,
 	getProfileUrl,

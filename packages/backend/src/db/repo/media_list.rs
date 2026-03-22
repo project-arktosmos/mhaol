@@ -79,6 +79,7 @@ impl MediaListRepo {
         .ok()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn insert(
         &self,
         id: &str,

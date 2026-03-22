@@ -131,3 +131,111 @@ impl YouTubeChannelRepo {
             .unwrap_or(false)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::open_test_database;
+
+    fn make_repo() -> YouTubeChannelRepo {
+        YouTubeChannelRepo::new(open_test_database())
+    }
+
+    fn sample_channel(id: &str, name: &str) -> YouTubeChannelRow {
+        YouTubeChannelRow {
+            id: id.to_string(),
+            handle: format!("@{}", name.to_lowercase()),
+            name: name.to_string(),
+            url: format!("https://youtube.com/channel/{}", id),
+            subscriber_text: Some("1M subscribers".to_string()),
+            image_url: Some("https://img.com/avatar.jpg".to_string()),
+            created_at: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn test_insert_and_get() {
+        let repo = make_repo();
+        let channel = sample_channel("ch1", "TestChannel");
+
+        let inserted = repo.insert(&channel);
+        assert!(inserted);
+
+        let row = repo.get("ch1").unwrap();
+        assert_eq!(row.name, "TestChannel");
+        assert_eq!(row.handle, "@testchannel");
+        assert_eq!(row.subscriber_text, Some("1M subscribers".to_string()));
+    }
+
+    #[test]
+    fn test_get_not_found() {
+        let repo = make_repo();
+        assert!(repo.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_insert_duplicate_ignored() {
+        let repo = make_repo();
+        let channel = sample_channel("ch1", "TestChannel");
+
+        assert!(repo.insert(&channel));
+        let second = repo.insert(&channel);
+        assert!(!second);
+        assert_eq!(repo.get_all().len(), 1);
+    }
+
+    #[test]
+    fn test_get_all_ordered_by_name() {
+        let repo = make_repo();
+        repo.insert(&sample_channel("ch2", "Bravo"));
+        repo.insert(&sample_channel("ch1", "Alpha"));
+        repo.insert(&sample_channel("ch3", "Charlie"));
+
+        let all = repo.get_all();
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].name, "Alpha");
+        assert_eq!(all[1].name, "Bravo");
+        assert_eq!(all[2].name, "Charlie");
+    }
+
+    #[test]
+    fn test_update() {
+        let repo = make_repo();
+        repo.insert(&sample_channel("ch1", "OldName"));
+
+        let updated = repo.update("ch1", &YouTubeChannelUpdate {
+            name: Some("NewName".to_string()),
+            subscriber_text: Some("2M subscribers".to_string()),
+            image_url: None,
+        });
+        assert!(updated);
+
+        let row = repo.get("ch1").unwrap();
+        assert_eq!(row.name, "NewName");
+        assert_eq!(row.subscriber_text, Some("2M subscribers".to_string()));
+    }
+
+    #[test]
+    fn test_update_empty_returns_false() {
+        let repo = make_repo();
+        repo.insert(&sample_channel("ch1", "Name"));
+
+        let updated = repo.update("ch1", &YouTubeChannelUpdate {
+            name: None,
+            subscriber_text: None,
+            image_url: None,
+        });
+        assert!(!updated);
+    }
+
+    #[test]
+    fn test_delete() {
+        let repo = make_repo();
+        repo.insert(&sample_channel("ch1", "Name"));
+
+        assert!(repo.delete("ch1"));
+        assert!(repo.get("ch1").is_none());
+        assert!(!repo.delete("ch1"));
+    }
+}

@@ -171,3 +171,96 @@ impl YouTubeDownloadRepo {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::open_test_database;
+
+    fn make_repo() -> YouTubeDownloadRepo {
+        YouTubeDownloadRepo::new(open_test_database())
+    }
+
+    fn insert_sample(repo: &YouTubeDownloadRepo, id: &str, state: &str) {
+        repo.upsert(
+            id, "https://youtube.com/watch?v=abc", "abc", "Test Video",
+            state, 0.0, 0, 1000, None, None,
+            "video", "best", "mp4", None, None, None, None,
+        );
+    }
+
+    #[test]
+    fn test_upsert_and_get() {
+        let repo = make_repo();
+        insert_sample(&repo, "dl1", "pending");
+
+        let row = repo.get("dl1").unwrap();
+        assert_eq!(row.download_id, "dl1");
+        assert_eq!(row.title, "Test Video");
+        assert_eq!(row.state, "pending");
+        assert_eq!(row.mode, "video");
+        assert_eq!(row.format, "mp4");
+    }
+
+    #[test]
+    fn test_get_not_found() {
+        let repo = make_repo();
+        assert!(repo.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_upsert_updates_existing() {
+        let repo = make_repo();
+        insert_sample(&repo, "dl1", "pending");
+        repo.upsert(
+            "dl1", "https://youtube.com/watch?v=abc", "abc", "Updated Title",
+            "downloading", 0.5, 500, 1000, None, None,
+            "video", "best", "mp4", Some("720p"), None, None, None,
+        );
+
+        let row = repo.get("dl1").unwrap();
+        assert_eq!(row.title, "Updated Title");
+        assert_eq!(row.state, "downloading");
+        assert_eq!(row.video_quality, Some("720p".to_string()));
+    }
+
+    #[test]
+    fn test_get_all_and_get_by_state() {
+        let repo = make_repo();
+        insert_sample(&repo, "dl1", "pending");
+        insert_sample(&repo, "dl2", "downloading");
+        insert_sample(&repo, "dl3", "pending");
+
+        assert_eq!(repo.get_all().len(), 3);
+        assert_eq!(repo.get_by_state("pending").len(), 2);
+        assert_eq!(repo.get_by_state("downloading").len(), 1);
+        assert_eq!(repo.get_by_state("completed").len(), 0);
+    }
+
+    #[test]
+    fn test_update_state() {
+        let repo = make_repo();
+        insert_sample(&repo, "dl1", "pending");
+
+        repo.update_state("dl1", "completed", 1.0, Some("/out.mp4"), None);
+        let row = repo.get("dl1").unwrap();
+        assert_eq!(row.state, "completed");
+        assert_eq!(row.progress, 1.0);
+        assert_eq!(row.output_path, Some("/out.mp4".to_string()));
+    }
+
+    #[test]
+    fn test_delete_and_delete_by_states() {
+        let repo = make_repo();
+        insert_sample(&repo, "dl1", "completed");
+        insert_sample(&repo, "dl2", "failed");
+        insert_sample(&repo, "dl3", "pending");
+
+        repo.delete("dl1");
+        assert!(repo.get("dl1").is_none());
+        assert_eq!(repo.get_all().len(), 2);
+
+        repo.delete_by_states(&["failed", "pending"]);
+        assert!(repo.get_all().is_empty());
+    }
+}

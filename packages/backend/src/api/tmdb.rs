@@ -1,7 +1,7 @@
 use crate::AppState;
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     response::IntoResponse,
     routing::get,
     Json, Router,
@@ -9,6 +9,7 @@ use axum::{
 use serde::Deserialize;
 
 const TMDB_BASE: &str = "https://api.themoviedb.org/3";
+const TMDB_IMAGE_BASE: &str = "https://image.tmdb.org/t/p";
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -26,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/discover/tv", get(discover_tv))
         .route("/movies/{id}/recommendations", get(movie_recommendations))
         .route("/tv/{id}/recommendations", get(tv_recommendations))
+        .route("/image/{*path}", get(serve_tmdb_image))
 }
 
 async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
@@ -55,48 +57,13 @@ async fn search_movies(
         }
     };
 
-    let api_key = match state.settings.get("tmdb.apiKey") {
-        Some(key) if !key.is_empty() => key,
-        _ => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({ "error": "TMDB API key not configured" })),
-            )
-                .into_response()
-        }
-    };
-
-    let page = query.page.unwrap_or(1);
-    let mut url = format!(
-        "{}/search/movie?api_key={}&query={}&page={}",
-        TMDB_BASE, api_key, q, page
-    );
-    if let Some(year) = &query.year {
-        url.push_str(&format!("&year={}", year));
+    let page = query.page.unwrap_or(1).to_string();
+    let mut params: Vec<(&str, &str)> = vec![("query", q), ("page", &page)];
+    let year = query.year.clone().unwrap_or_default();
+    if !year.is_empty() {
+        params.push(("year", &year));
     }
-
-    match reqwest::get(&url).await {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => Json(data).into_response(),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
-            }
-        }
-        Ok(resp) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": format!("TMDB API error: {}", resp.status()) })),
-        )
-            .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
-    }
+    tmdb_cached_proxy(&state, "/search/movie", &params).await
 }
 
 async fn search_tv(
@@ -114,56 +81,44 @@ async fn search_tv(
         }
     };
 
-    let api_key = match state.settings.get("tmdb.apiKey") {
-        Some(key) if !key.is_empty() => key,
-        _ => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({ "error": "TMDB API key not configured" })),
-            )
-                .into_response()
-        }
-    };
-
-    let page = query.page.unwrap_or(1);
-    let mut url = format!(
-        "{}/search/tv?api_key={}&query={}&page={}",
-        TMDB_BASE, api_key, q, page
-    );
-    if let Some(year) = &query.year {
-        url.push_str(&format!("&first_air_date_year={}", year));
+    let page = query.page.unwrap_or(1).to_string();
+    let mut params: Vec<(&str, &str)> = vec![("query", q), ("page", &page)];
+    let year = query.year.clone().unwrap_or_default();
+    if !year.is_empty() {
+        params.push(("first_air_date_year", &year));
     }
-
-    match reqwest::get(&url).await {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => Json(data).into_response(),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
-            }
-        }
-        Ok(resp) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": format!("TMDB API error: {}", resp.status()) })),
-        )
-            .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
-    }
+    tmdb_cached_proxy(&state, "/search/tv", &params).await
 }
 
-/// Helper: proxy a TMDB list endpoint (no caching needed for browsing).
-async fn tmdb_proxy(
+/// Build a cache key from the TMDB path and params (excludes api_key).
+fn build_cache_key(path: &str, params: &[(&str, &str)]) -> String {
+    let mut key = path.to_string();
+    if !params.is_empty() {
+        key.push('?');
+        let pairs: Vec<String> = params.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+        key.push_str(&pairs.join("&"));
+    }
+    key
+}
+
+/// Cached proxy: check SQLite cache (24h TTL), fetch from TMDB on miss/stale,
+/// fall back to stale cache on network error.
+async fn tmdb_cached_proxy(
     state: &AppState,
     path: &str,
     extra_params: &[(&str, &str)],
 ) -> axum::response::Response {
+    let cache_key = build_cache_key(path, extra_params);
+
+    // Check cache
+    if let Some((data, is_stale)) = state.tmdb_api_cache.get(&cache_key) {
+        if !is_stale {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                return Json(parsed).into_response();
+            }
+        }
+    }
+
     let api_key = match state.settings.get("tmdb.apiKey") {
         Some(key) if !key.is_empty() => key,
         _ => {
@@ -183,7 +138,11 @@ async fn tmdb_proxy(
     match reqwest::get(&url).await {
         Ok(resp) if resp.status().is_success() => {
             match resp.json::<serde_json::Value>().await {
-                Ok(data) => Json(data).into_response(),
+                Ok(data) => {
+                    let data_str = serde_json::to_string(&data).unwrap_or_default();
+                    state.tmdb_api_cache.upsert(&cache_key, &data_str);
+                    Json(data).into_response()
+                }
                 Err(e) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(serde_json::json!({ "error": e.to_string() })),
@@ -191,16 +150,19 @@ async fn tmdb_proxy(
                     .into_response(),
             }
         }
-        Ok(resp) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": format!("TMDB API error: {}", resp.status()) })),
-        )
-            .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
+        _ => {
+            // Graceful degradation: return stale cache on error
+            if let Some((data, _)) = state.tmdb_api_cache.get(&cache_key) {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                    return Json(parsed).into_response();
+                }
+            }
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "TMDB API unavailable" })),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -214,7 +176,7 @@ async fn popular_movies(
     Query(query): Query<PageQuery>,
 ) -> impl IntoResponse {
     let page = query.page.unwrap_or(1).to_string();
-    tmdb_proxy(&state, "/movie/popular", &[("page", &page)]).await
+    tmdb_cached_proxy(&state,"/movie/popular", &[("page", &page)]).await
 }
 
 async fn popular_tv(
@@ -222,15 +184,15 @@ async fn popular_tv(
     Query(query): Query<PageQuery>,
 ) -> impl IntoResponse {
     let page = query.page.unwrap_or(1).to_string();
-    tmdb_proxy(&state, "/tv/popular", &[("page", &page)]).await
+    tmdb_cached_proxy(&state,"/tv/popular", &[("page", &page)]).await
 }
 
 async fn genres_movie(State(state): State<AppState>) -> impl IntoResponse {
-    tmdb_proxy(&state, "/genre/movie/list", &[]).await
+    tmdb_cached_proxy(&state,"/genre/movie/list", &[]).await
 }
 
 async fn genres_tv(State(state): State<AppState>) -> impl IntoResponse {
-    tmdb_proxy(&state, "/genre/tv/list", &[]).await
+    tmdb_cached_proxy(&state,"/genre/tv/list", &[]).await
 }
 
 #[derive(Deserialize)]
@@ -251,7 +213,7 @@ async fn discover_movies(
     if !genres.is_empty() {
         params.push(("with_genres", &genres));
     }
-    tmdb_proxy(&state, "/discover/movie", &params).await
+    tmdb_cached_proxy(&state,"/discover/movie", &params).await
 }
 
 async fn discover_tv(
@@ -265,7 +227,7 @@ async fn discover_tv(
     if !genres.is_empty() {
         params.push(("with_genres", &genres));
     }
-    tmdb_proxy(&state, "/discover/tv", &params).await
+    tmdb_cached_proxy(&state,"/discover/tv", &params).await
 }
 
 async fn movie_recommendations(
@@ -284,7 +246,7 @@ async fn movie_recommendations(
         }
     };
     let page = query.page.unwrap_or(1).to_string();
-    tmdb_proxy(
+    tmdb_cached_proxy(
         &state,
         &format!("/movie/{}/recommendations", tmdb_id),
         &[("page", &page)],
@@ -308,7 +270,7 @@ async fn tv_recommendations(
         }
     };
     let page = query.page.unwrap_or(1).to_string();
-    tmdb_proxy(
+    tmdb_cached_proxy(
         &state,
         &format!("/tv/{}/recommendations", tmdb_id),
         &[("page", &page)],
@@ -365,7 +327,7 @@ async fn get_movie(
     };
 
     let url = format!(
-        "{}/movie/{}?api_key={}&append_to_response=credits",
+        "{}/movie/{}?api_key={}&append_to_response=credits,images&include_image_language=en,null",
         TMDB_BASE, tmdb_id, api_key
     );
 
@@ -552,7 +514,7 @@ async fn get_tv(
     };
 
     let url = format!(
-        "{}/tv/{}?api_key={}&append_to_response=credits",
+        "{}/tv/{}?api_key={}&append_to_response=credits,images&include_image_language=en,null",
         TMDB_BASE, tmdb_id, api_key
     );
 
@@ -598,5 +560,83 @@ async fn get_tv(
             )
                 .into_response()
         }
+    }
+}
+
+/// GET /api/tmdb/image/{*path} — serve TMDB images from local disk cache.
+/// Path format: {size}/{filename} e.g. w342/abc123.jpg
+async fn serve_tmdb_image(
+    State(state): State<AppState>,
+    Path(path): Path<String>,
+) -> impl IntoResponse {
+    // Reject path traversal
+    if path.contains("..") {
+        return (StatusCode::BAD_REQUEST, "Invalid path").into_response();
+    }
+
+    let image_dir = state.data_dir.join("tmdb-images");
+    let local_path = image_dir.join(&path);
+
+    // Serve from disk cache if available
+    if local_path.exists() {
+        if let Ok(bytes) = tokio::fs::read(&local_path).await {
+            let content_type = mime_from_ext(&path);
+            return (
+                [
+                    (header::CONTENT_TYPE, content_type),
+                    (header::CACHE_CONTROL, "public, max-age=604800"),
+                ],
+                bytes,
+            )
+                .into_response();
+        }
+    }
+
+    // Download from TMDB CDN
+    let tmdb_url = format!("{}/{}", TMDB_IMAGE_BASE, path);
+    match reqwest::get(&tmdb_url).await {
+        Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+            Ok(bytes) => {
+                // Save to disk
+                if let Some(parent) = local_path.parent() {
+                    let _ = tokio::fs::create_dir_all(parent).await;
+                }
+                let _ = tokio::fs::write(&local_path, &bytes).await;
+
+                let content_type = mime_from_ext(&path);
+                (
+                    [
+                        (header::CONTENT_TYPE, content_type),
+                        (header::CACHE_CONTROL, "public, max-age=604800"),
+                    ],
+                    bytes.to_vec(),
+                )
+                    .into_response()
+            }
+            Err(e) => (
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
+        _ => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Image not found" })),
+        )
+            .into_response(),
+    }
+}
+
+fn mime_from_ext(path: &str) -> &'static str {
+    if path.ends_with(".png") {
+        "image/png"
+    } else if path.ends_with(".webp") {
+        "image/webp"
+    } else if path.ends_with(".gif") {
+        "image/gif"
+    } else if path.ends_with(".svg") {
+        "image/svg+xml"
+    } else {
+        "image/jpeg"
     }
 }

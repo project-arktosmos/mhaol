@@ -1,10 +1,14 @@
 <script lang="ts">
+	import classNames from 'classnames';
 	import type {
 		DisplayTMDBMovie,
 		DisplayTMDBTvShow,
 		DisplayTMDBMovieDetails,
-		DisplayTMDBTvShowDetails
+		DisplayTMDBTvShowDetails,
+		DisplayTMDBImage
 	} from 'addons/tmdb/types';
+	import type { MediaItem } from 'frontend/types/media-card.type';
+	import type { LibraryItemRelated } from 'frontend/types/library-item-related.type';
 	import type { PlayableFile, PlayerConnectionState } from 'frontend/types/player.type';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 	let {
@@ -12,41 +16,53 @@
 		tvShow = null,
 		movieDetails = null,
 		tvShowDetails = null,
+		libraryItem = null,
+		relatedData = null,
 		loading = false,
 		fetching = false,
 		fetched = false,
+		fetchSteps = null,
 		playerFile = null,
 		playerConnectionState = 'idle',
 		playerPositionSecs = 0,
 		playerDurationSecs = 0,
 		playerStreamUrl = null,
 		playerBuffering = false,
+		playerFullscreen = false,
 		onfetch,
 		ondownload,
 		onstream,
 		onfullscreen,
+		onminimize,
 		onstopplayer,
-		onclose
+		onclose,
+		onshowsearch
 	}: {
 		movie?: DisplayTMDBMovie | null;
 		tvShow?: DisplayTMDBTvShow | null;
 		movieDetails?: DisplayTMDBMovieDetails | null;
 		tvShowDetails?: DisplayTMDBTvShowDetails | null;
+		libraryItem?: MediaItem | null;
+		relatedData?: LibraryItemRelated | null;
 		loading?: boolean;
 		fetching?: boolean;
 		fetched?: boolean;
+		fetchSteps?: { terms: boolean; search: boolean; searching: boolean; eval: boolean; done: boolean } | null;
 		playerFile?: PlayableFile | null;
 		playerConnectionState?: PlayerConnectionState;
 		playerPositionSecs?: number;
 		playerDurationSecs?: number | null;
 		playerStreamUrl?: string | null;
 		playerBuffering?: boolean;
+		playerFullscreen?: boolean;
 		onfetch?: () => void;
 		ondownload?: () => void;
 		onstream?: () => void;
 		onfullscreen?: () => void;
+		onminimize?: () => void;
 		onstopplayer?: () => void;
 		onclose?: () => void;
+		onshowsearch?: () => void;
 	} = $props();
 
 	let title = $derived(movie?.title ?? tvShow?.name ?? '');
@@ -70,40 +86,89 @@
 		tvShow?.numberOfEpisodes ?? tvShowDetails?.numberOfEpisodes ?? null
 	);
 	let lastAirYear = $derived(tvShow?.lastAirYear ?? tvShowDetails?.lastAirYear ?? null);
+	let images: DisplayTMDBImage[] = $derived(movieDetails?.images ?? tvShowDetails?.images ?? []);
+
+	function formatBytes(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+	}
+
+	function formatProgress(p: number): string {
+		return `${(p * 100).toFixed(1)}%`;
+	}
 </script>
 
 <div class="flex h-full flex-col overflow-y-auto">
 	<div class="flex items-center justify-between p-3">
 		<h2 class="min-w-0 truncate text-sm font-semibold" {title}>{title}</h2>
 		{#if onclose}
-			<button class="btn btn-square btn-ghost btn-xs shrink-0" onclick={onclose} aria-label="Close">
+			<button class="btn btn-square shrink-0 btn-ghost btn-xs" onclick={onclose} aria-label="Close">
 				&times;
 			</button>
 		{/if}
 	</div>
 
 	{#if playerFile}
-		<div class="bg-black">
-			<div class="flex items-center justify-between px-2 py-1">
-				<p class="min-w-0 truncate text-xs font-semibold text-white" title={playerFile.name}>
+		<div
+			class={classNames('bg-black', {
+				'fixed inset-0 z-50 flex flex-col': playerFullscreen
+			})}
+		>
+			<div class={classNames('flex items-center justify-between px-2 py-1', { 'p-3': playerFullscreen })}>
+				<p
+					class={classNames('min-w-0 truncate font-semibold text-white', {
+						'text-xs': !playerFullscreen,
+						'text-sm': playerFullscreen
+					})}
+					title={playerFile.name}
+				>
 					{playerFile.name}
 				</p>
 				<div class="flex shrink-0 items-center gap-1">
-					{#if onfullscreen}
+					{#if playerFullscreen && onminimize}
 						<button
-							class="btn btn-square btn-ghost btn-xs text-white"
+							class="btn btn-square text-white btn-ghost btn-sm"
+							onclick={onminimize}
+							aria-label="Move to sidebar"
+							title="Move to sidebar"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M18 8L14 12L18 16" />
+								<rect x="3" y="3" width="18" height="18" rx="2" />
+								<line x1="14" y1="3" x2="14" y2="21" />
+							</svg>
+						</button>
+					{:else if !playerFullscreen && onfullscreen}
+						<button
+							class="btn btn-square text-white btn-ghost btn-xs"
 							onclick={onfullscreen}
 							aria-label="Fullscreen player"
 							title="Fullscreen player"
 						>
-							<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								class="h-3.5 w-3.5"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"
+								/>
 							</svg>
 						</button>
 					{/if}
 					{#if onstopplayer}
 						<button
-							class="btn btn-square btn-ghost btn-xs text-white"
+							class={classNames('btn btn-square text-white btn-ghost', {
+								'btn-sm': playerFullscreen,
+								'btn-xs': !playerFullscreen
+							})}
 							onclick={onstopplayer}
 							aria-label="Close player"
 						>
@@ -112,14 +177,17 @@
 					{/if}
 				</div>
 			</div>
-			<PlayerVideo
-				file={playerFile}
-				connectionState={playerConnectionState}
-				positionSecs={playerPositionSecs}
-				durationSecs={playerDurationSecs}
-				streamUrl={playerStreamUrl}
-				buffering={playerBuffering}
-			/>
+			<div class={playerFullscreen ? 'min-h-0 flex-1' : ''}>
+				<PlayerVideo
+					file={playerFile}
+					connectionState={playerConnectionState}
+					positionSecs={playerPositionSecs}
+					durationSecs={playerDurationSecs}
+					streamUrl={playerStreamUrl}
+					buffering={playerBuffering}
+					fullscreen={playerFullscreen}
+				/>
+			</div>
 		</div>
 	{:else if backdropUrl}
 		<div class="relative">
@@ -170,7 +238,9 @@
 
 		{#if numberOfSeasons != null}
 			<p class="text-xs opacity-60">
-				{numberOfSeasons} season{numberOfSeasons !== 1 ? 's' : ''}{numberOfEpisodes != null ? `, ${numberOfEpisodes} episodes` : ''}
+				{numberOfSeasons} season{numberOfSeasons !== 1 ? 's' : ''}{numberOfEpisodes != null
+					? `, ${numberOfEpisodes} episodes`
+					: ''}
 				{#if status}&middot; {status}{/if}
 			</p>
 		{/if}
@@ -185,7 +255,7 @@
 
 		<div class="flex gap-2">
 			{#if onfetch}
-				<button class="btn btn-sm btn-info flex-1" onclick={onfetch} disabled={fetching || fetched}>
+				<button class="btn flex-1 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}" onclick={onfetch} disabled={fetching}>
 					{#if fetching}
 						<span class="loading loading-xs loading-spinner"></span>
 					{:else}
@@ -204,11 +274,11 @@
 							/>
 						</svg>
 					{/if}
-					{fetched ? 'Fetched' : 'Fetch'}
+					{fetched ? 'Re-fetch' : 'Fetch'}
 				</button>
 			{/if}
 			{#if ondownload}
-				<button class="btn btn-sm btn-success flex-1" onclick={ondownload} disabled={!fetched}>
+				<button class="btn flex-1 btn-sm btn-success" onclick={ondownload} disabled={!fetched}>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						class="h-4 w-4"
@@ -227,7 +297,7 @@
 				</button>
 			{/if}
 			{#if onstream}
-				<button class="btn btn-sm btn-primary flex-1" onclick={onstream} disabled={!fetched}>
+				<button class="btn flex-1 btn-sm btn-primary" onclick={onstream} disabled={!fetched}>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						class="h-4 w-4"
@@ -253,9 +323,27 @@
 			{/if}
 		</div>
 
+		{#if fetchSteps}
+			<button
+				class="w-full cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
+				onclick={onshowsearch}
+			>
+				<ul class="steps steps-horizontal w-full text-xs">
+					<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.search })}>
+						{fetchSteps.searching ? 'Searching...' : 'Search'}
+					</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.done })}>
+						{fetchSteps.done ? 'Done' : 'Candidate'}
+					</li>
+				</ul>
+			</button>
+		{/if}
+
 		{#if overview}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Overview</h3>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Overview</h3>
 				<p class="text-sm leading-relaxed opacity-80">{overview}</p>
 			</div>
 		{/if}
@@ -268,28 +356,28 @@
 
 		{#if director}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Director</h3>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Director</h3>
 				<p class="text-sm">{director}</p>
 			</div>
 		{/if}
 
 		{#if createdBy.length > 0}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Created by</h3>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Created by</h3>
 				<p class="text-sm">{createdBy.join(', ')}</p>
 			</div>
 		{/if}
 
 		{#if networks.length > 0}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Networks</h3>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Networks</h3>
 				<p class="text-sm">{networks.join(', ')}</p>
 			</div>
 		{/if}
 
 		{#if cast.length > 0}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Cast</h3>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Cast</h3>
 				<div class="flex flex-col gap-1">
 					{#each cast.slice(0, 8) as member}
 						<div class="flex items-center gap-2">
@@ -301,7 +389,9 @@
 									loading="lazy"
 								/>
 							{:else}
-								<div class="flex h-8 w-8 items-center justify-center rounded-full bg-base-300 text-xs opacity-40">
+								<div
+									class="flex h-8 w-8 items-center justify-center rounded-full bg-base-300 text-xs opacity-40"
+								>
 									?
 								</div>
 							{/if}
@@ -312,6 +402,166 @@
 						</div>
 					{/each}
 				</div>
+			</div>
+		{/if}
+
+		{#if images.length > 0}
+			<div>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Images</h3>
+				<div class="grid grid-cols-3 gap-1">
+					{#each images as image}
+						<a href={image.fullUrl} target="_blank" rel="noopener noreferrer">
+							<img
+								src={image.thumbnailUrl}
+								alt="{title} image"
+								class={classNames('w-full rounded object-cover transition-opacity hover:opacity-80', {
+									'aspect-video': image.width > image.height,
+									'aspect-[2/3]': image.width <= image.height
+								})}
+								loading="lazy"
+							/>
+						</a>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		{#if libraryItem}
+			<div>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Library Item</h3>
+				<table class="table table-xs">
+					<tbody>
+						<tr><td class="font-medium opacity-60">ID</td><td class="break-all">{libraryItem.id}</td></tr>
+						<tr><td class="font-medium opacity-60">Name</td><td class="break-all">{libraryItem.name}</td></tr>
+						<tr><td class="font-medium opacity-60">Path</td><td class="break-all">{libraryItem.path}</td></tr>
+						<tr><td class="font-medium opacity-60">Extension</td><td>{libraryItem.extension}</td></tr>
+						<tr><td class="font-medium opacity-60">Media Type</td><td>{libraryItem.mediaTypeId}</td></tr>
+						<tr><td class="font-medium opacity-60">Category</td><td>{libraryItem.categoryId ?? '—'}</td></tr>
+						<tr><td class="font-medium opacity-60">Created</td><td>{libraryItem.createdAt}</td></tr>
+						{#each Object.entries(libraryItem.links) as [service, link]}
+							<tr><td class="font-medium opacity-60">Link: {service}</td><td class="break-all">{link.serviceId}</td></tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+
+		{#if relatedData?.library}
+			<div>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Library</h3>
+				<table class="table table-xs">
+					<tbody>
+						<tr><td class="font-medium opacity-60">Name</td><td class="break-all">{relatedData.library.name}</td></tr>
+						<tr><td class="font-medium opacity-60">Path</td><td class="break-all">{relatedData.library.path}</td></tr>
+						<tr><td class="font-medium opacity-60">Media Types</td><td>{relatedData.library.mediaTypes}</td></tr>
+						<tr><td class="font-medium opacity-60">Created</td><td>{relatedData.library.createdAt}</td></tr>
+					</tbody>
+				</table>
+			</div>
+		{/if}
+
+		{#if relatedData?.links && relatedData.links.length > 0}
+			<div>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Item Links</h3>
+				<table class="table table-xs">
+					<tbody>
+						{#each relatedData.links as link}
+							<tr><td class="font-medium opacity-60">{link.service}</td><td class="break-all">{link.serviceId}</td></tr>
+							{#if link.seasonNumber != null}
+								<tr><td class="pl-4 font-medium opacity-60">Season</td><td>{link.seasonNumber}</td></tr>
+							{/if}
+							{#if link.episodeNumber != null}
+								<tr><td class="pl-4 font-medium opacity-60">Episode</td><td>{link.episodeNumber}</td></tr>
+							{/if}
+							<tr><td class="pl-4 font-medium opacity-60">Linked</td><td>{link.createdAt}</td></tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+
+		{#if relatedData?.fetchCache}
+			<div>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Fetch Cache</h3>
+				<table class="table table-xs">
+					<tbody>
+						<tr><td class="font-medium opacity-60">TMDB ID</td><td>{relatedData.fetchCache.tmdbId}</td></tr>
+						<tr><td class="font-medium opacity-60">Media Type</td><td>{relatedData.fetchCache.mediaType}</td></tr>
+						<tr><td class="font-medium opacity-60">Created</td><td>{relatedData.fetchCache.createdAt}</td></tr>
+						{#if relatedData.fetchCache.candidate.name}
+							<tr><td class="font-medium opacity-60">Torrent</td><td class="break-all">{relatedData.fetchCache.candidate.name}</td></tr>
+						{/if}
+						{#if relatedData.fetchCache.candidate.infoHash}
+							<tr><td class="font-medium opacity-60">Info Hash</td><td class="break-all font-mono text-[10px]">{relatedData.fetchCache.candidate.infoHash}</td></tr>
+						{/if}
+						{#if relatedData.fetchCache.candidate.size}
+							<tr><td class="font-medium opacity-60">Size</td><td>{formatBytes(Number(relatedData.fetchCache.candidate.size))}</td></tr>
+						{/if}
+						{#if relatedData.fetchCache.candidate.seeds != null}
+							<tr><td class="font-medium opacity-60">Seeds</td><td>{relatedData.fetchCache.candidate.seeds}</td></tr>
+						{/if}
+						{#if relatedData.fetchCache.candidate.peers != null}
+							<tr><td class="font-medium opacity-60">Peers</td><td>{relatedData.fetchCache.candidate.peers}</td></tr>
+						{/if}
+						{#if relatedData.fetchCache.candidate.magnetUrl}
+							<tr><td class="font-medium opacity-60">Magnet</td><td class="break-all font-mono text-[10px]">{relatedData.fetchCache.candidate.magnetUrl}</td></tr>
+						{/if}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+
+		{#if relatedData?.torrentDownload}
+			<div>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Torrent Download</h3>
+				<table class="table table-xs">
+					<tbody>
+						<tr><td class="font-medium opacity-60">Name</td><td class="break-all">{relatedData.torrentDownload.name}</td></tr>
+						<tr><td class="font-medium opacity-60">Info Hash</td><td class="break-all font-mono text-[10px]">{relatedData.torrentDownload.infoHash}</td></tr>
+						<tr><td class="font-medium opacity-60">State</td><td>{relatedData.torrentDownload.state}</td></tr>
+						<tr><td class="font-medium opacity-60">Progress</td><td>{formatProgress(relatedData.torrentDownload.progress)}</td></tr>
+						<tr><td class="font-medium opacity-60">Size</td><td>{formatBytes(relatedData.torrentDownload.size)}</td></tr>
+						<tr><td class="font-medium opacity-60">DL Speed</td><td>{formatBytes(relatedData.torrentDownload.downloadSpeed)}/s</td></tr>
+						<tr><td class="font-medium opacity-60">UL Speed</td><td>{formatBytes(relatedData.torrentDownload.uploadSpeed)}/s</td></tr>
+						<tr><td class="font-medium opacity-60">Peers</td><td>{relatedData.torrentDownload.peers}</td></tr>
+						<tr><td class="font-medium opacity-60">Seeds</td><td>{relatedData.torrentDownload.seeds}</td></tr>
+						<tr><td class="font-medium opacity-60">Source</td><td>{relatedData.torrentDownload.source}</td></tr>
+						{#if relatedData.torrentDownload.outputPath}
+							<tr><td class="font-medium opacity-60">Output</td><td class="break-all">{relatedData.torrentDownload.outputPath}</td></tr>
+						{/if}
+						<tr><td class="font-medium opacity-60">Added</td><td>{new Date(relatedData.torrentDownload.addedAt * 1000).toLocaleString()}</td></tr>
+						<tr><td class="font-medium opacity-60">Created</td><td>{relatedData.torrentDownload.createdAt}</td></tr>
+						<tr><td class="font-medium opacity-60">Updated</td><td>{relatedData.torrentDownload.updatedAt}</td></tr>
+					</tbody>
+				</table>
+			</div>
+		{/if}
+
+		{#if relatedData?.tmdbCache}
+			<div>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">TMDB Cache</h3>
+				<table class="table table-xs">
+					<tbody>
+						<tr><td class="font-medium opacity-60">TMDB ID</td><td>{relatedData.tmdbCache.tmdbId}</td></tr>
+						<tr><td class="font-medium opacity-60">Fetched</td><td>{relatedData.tmdbCache.fetchedAt}</td></tr>
+						<tr><td class="font-medium opacity-60">Title</td><td class="break-all">{relatedData.tmdbCache.data.title ?? relatedData.tmdbCache.data.name ?? '—'}</td></tr>
+						{#if relatedData.tmdbCache.data.release_date}
+							<tr><td class="font-medium opacity-60">Release</td><td>{relatedData.tmdbCache.data.release_date}</td></tr>
+						{/if}
+						{#if relatedData.tmdbCache.data.runtime}
+							<tr><td class="font-medium opacity-60">Runtime</td><td>{relatedData.tmdbCache.data.runtime} min</td></tr>
+						{/if}
+						{#if relatedData.tmdbCache.data.status}
+							<tr><td class="font-medium opacity-60">Status</td><td>{relatedData.tmdbCache.data.status}</td></tr>
+						{/if}
+						{#if relatedData.tmdbCache.data.original_language}
+							<tr><td class="font-medium opacity-60">Language</td><td>{relatedData.tmdbCache.data.original_language}</td></tr>
+						{/if}
+						{#if relatedData.tmdbCache.data.imdb_id}
+							<tr><td class="font-medium opacity-60">IMDB ID</td><td>{relatedData.tmdbCache.data.imdb_id}</td></tr>
+						{/if}
+					</tbody>
+				</table>
 			</div>
 		{/if}
 	</div>

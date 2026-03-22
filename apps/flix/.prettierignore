@@ -5,3 +5,6 @@ dist/
 
 # Large binary files
 models/
+
+# Tauri generated files
+src-tauri/gen/

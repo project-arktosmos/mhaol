@@ -7,6 +7,12 @@ pub struct JsEngine {
     context: Context,
 }
 
+impl Default for JsEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JsEngine {
     pub fn new() -> Self {
         Self {

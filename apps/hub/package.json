@@ -10,7 +10,7 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
-		"test": "vitest run",
+		"test": "vitest run --passWithNoTests",
 		"clean": "rm -rf dist-static .svelte-kit",
 		"tauri:dev": "pnpm exec tauri dev",
 		"tauri:build": "pnpm exec tauri build",

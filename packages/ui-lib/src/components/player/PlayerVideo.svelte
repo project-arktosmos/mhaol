@@ -150,7 +150,9 @@
 			<video
 				bind:this={videoElement}
 				src={streamUrl}
-				class={fullscreen ? 'h-full w-full cursor-pointer bg-black object-contain' : 'w-full cursor-pointer rounded-lg bg-black'}
+				class={fullscreen
+					? 'h-full w-full cursor-pointer bg-black object-contain'
+					: 'w-full cursor-pointer rounded-lg bg-black'}
 				playsinline
 				autoplay
 				on:click={handleVideoClick}
@@ -170,7 +172,9 @@
 		{:else if isVideo}
 			<video
 				bind:this={videoElement}
-				class={fullscreen ? 'h-full w-full cursor-pointer bg-black object-contain' : 'w-full cursor-pointer rounded-lg bg-black'}
+				class={fullscreen
+					? 'h-full w-full cursor-pointer bg-black object-contain'
+					: 'w-full cursor-pointer rounded-lg bg-black'}
 				playsinline
 				on:click={handleVideoClick}
 			>

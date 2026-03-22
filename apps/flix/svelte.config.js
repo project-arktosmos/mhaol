@@ -6,6 +6,7 @@ const config = {
   preprocess: vitePreprocess(),
 
   kit: {
+    appDir: "app",
     adapter: adapterStatic({
       fallback: "index.html",
       pages: "dist-static",

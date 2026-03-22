@@ -91,12 +91,10 @@ export async function getTopRated(
 	});
 }
 
-export async function fetchMovie(
-	apiKey: string,
-	id: number
-): Promise<TMDBMovieDetails | null> {
+export async function fetchMovie(apiKey: string, id: number): Promise<TMDBMovieDetails | null> {
 	return tmdbFetch<TMDBMovieDetails>(apiKey, `/movie/${id}`, {
-		append_to_response: 'credits'
+		append_to_response: 'credits,images',
+		include_image_language: 'en,null'
 	});
 }
 
@@ -155,12 +153,10 @@ export async function getTvTopRated(
 	});
 }
 
-export async function fetchTvShow(
-	apiKey: string,
-	id: number
-): Promise<TMDBTvShowDetails | null> {
+export async function fetchTvShow(apiKey: string, id: number): Promise<TMDBTvShowDetails | null> {
 	return tmdbFetch<TMDBTvShowDetails>(apiKey, `/tv/${id}`, {
-		append_to_response: 'credits'
+		append_to_response: 'credits,images',
+		include_image_language: 'en,null'
 	});
 }
 

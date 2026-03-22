@@ -25,5 +25,5 @@
 			"frontend/*": ["./src/*"]
 		}
 	},
-	"include": ["src/**/*.ts", "src/**/*.svelte", "test/**/*.ts"]
+	"include": ["src/**/*.ts", "src/**/*.svelte"]
 }

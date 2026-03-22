@@ -5,6 +5,12 @@ pub struct P2pStreamModule {
     initialized: std::sync::atomic::AtomicBool,
 }
 
+impl Default for P2pStreamModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl P2pStreamModule {
     pub fn new() -> Self {
         Self {

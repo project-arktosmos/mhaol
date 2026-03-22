@@ -11,9 +11,7 @@
 
 <div class="pr-8">
 	<h3 class="text-lg font-bold">Signaling Server</h3>
-	<p class="text-sm text-base-content/60">
-		Local WebRTC signaling server for peer-to-peer chat
-	</p>
+	<p class="text-sm text-base-content/60">Local WebRTC signaling server for peer-to-peer chat</p>
 </div>
 
 <div class="mt-4 flex flex-col gap-3">

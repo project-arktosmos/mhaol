@@ -52,7 +52,7 @@
 
 <div class="pr-8">
 	<h3 class="text-lg font-bold">Cloud Libraries</h3>
-	<p class="text-base-content/60 text-sm">Manage local and peer cloud libraries</p>
+	<p class="text-sm text-base-content/60">Manage local and peer cloud libraries</p>
 </div>
 
 <div class="mt-4 flex gap-2">
@@ -86,11 +86,10 @@
 				<input
 					id="cloud-lib-name"
 					type="text"
-					class="input input-bordered w-full"
+					class="input-bordered input w-full"
 					placeholder="My Media Library"
 					value={svc.selectedName}
-					oninput={(e) =>
-						cloudLibraryService.setSelectedName((e.target as HTMLInputElement).value)}
+					oninput={(e) => cloudLibraryService.setSelectedName((e.target as HTMLInputElement).value)}
 				/>
 			</div>
 
@@ -99,13 +98,13 @@
 					<span class="label-text">Select Directory</span>
 				</label>
 				{#if svc.selectedPath}
-					<div class="badge badge-primary badge-lg mb-2">{svc.selectedPath}</div>
+					<div class="mb-2 badge badge-lg badge-primary">{svc.selectedPath}</div>
 				{/if}
 
-				<div class="bg-base-100 max-h-64 overflow-y-auto rounded-lg border p-2">
+				<div class="max-h-64 overflow-y-auto rounded-lg border bg-base-100 p-2">
 					{#if svc.browseParent}
 						<button
-							class="btn btn-ghost btn-sm w-full justify-start"
+							class="btn w-full justify-start btn-ghost btn-sm"
 							onclick={() => handleBrowse(svc.browseParent!)}
 						>
 							..
@@ -113,7 +112,7 @@
 					{/if}
 					{#each svc.browseDirectories as dir (dir.path)}
 						<button
-							class={classNames('btn btn-ghost btn-sm w-full justify-start', {
+							class={classNames('btn w-full justify-start btn-ghost btn-sm', {
 								'btn-active': svc.selectedPath === dir.path
 							})}
 							onclick={() => handleSelectDir(dir)}
@@ -126,9 +125,7 @@
 			</div>
 
 			<div class="flex justify-end gap-2">
-				<button class="btn btn-ghost" onclick={() => (activeTab = 'libraries')}>
-					Cancel
-				</button>
+				<button class="btn btn-ghost" onclick={() => (activeTab = 'libraries')}> Cancel </button>
 				<button
 					class="btn btn-primary"
 					disabled={!svc.selectedPath || !svc.selectedName}
@@ -146,12 +143,12 @@
 						<div class="flex items-start justify-between">
 							<div class="min-w-0 flex-1">
 								<h4 class="font-medium">{library.name}</h4>
-								<p class="text-base-content/60 truncate text-xs">{library.path}</p>
+								<p class="truncate text-xs text-base-content/60">{library.path}</p>
 							</div>
-							<span class="badge badge-info badge-sm ml-2">Local</span>
+							<span class="ml-2 badge badge-sm badge-info">Local</span>
 						</div>
 						<div class="mt-2 flex flex-wrap items-center gap-1">
-							<span class="badge badge-neutral badge-xs">{library.itemCount} items</span>
+							<span class="badge badge-xs badge-neutral">{library.itemCount} items</span>
 							<span
 								class={classNames('badge badge-xs', {
 									'badge-success': library.scanStatus === 'idle',
@@ -167,14 +164,14 @@
 						{/if}
 						<div class="mt-2 flex justify-end gap-2">
 							<button
-								class="btn btn-secondary btn-xs"
+								class="btn btn-xs btn-secondary"
 								disabled={svc.itemsLoading[library.id]}
 								onclick={() => handleScan(library.id)}
 							>
 								{svc.itemsLoading[library.id] ? 'Scanning...' : 'Scan'}
 							</button>
 							<button
-								class="btn btn-error btn-xs btn-outline"
+								class="btn btn-outline btn-xs btn-error"
 								onclick={() => handleDelete(library.id)}
 							>
 								Delete
@@ -190,14 +187,14 @@
 						<div class="flex items-start justify-between">
 							<div class="min-w-0 flex-1">
 								<h4 class="font-medium">{peerLib.name}</h4>
-								<p class="text-base-content/60 truncate text-xs">
+								<p class="truncate text-xs text-base-content/60">
 									via {peerLib.peerId.slice(0, 8)}...
 								</p>
 							</div>
-							<span class="badge badge-warning badge-sm ml-2">Peer</span>
+							<span class="ml-2 badge badge-sm badge-warning">Peer</span>
 						</div>
 						<div class="mt-2 flex flex-wrap items-center gap-1">
-							<span class="badge badge-neutral badge-xs">{peerLib.itemCount} items</span>
+							<span class="badge badge-xs badge-neutral">{peerLib.itemCount} items</span>
 							<span class="badge badge-ghost badge-xs">{peerLib.kind}</span>
 						</div>
 					</div>
@@ -207,7 +204,7 @@
 			{#if libraries.length === 0 && peerLibraries.length === 0}
 				<div class="py-8 text-center">
 					<p class="text-base-content/60">No cloud libraries yet</p>
-					<button class="btn btn-primary btn-sm mt-3" onclick={() => switchTab('add')}>
+					<button class="btn mt-3 btn-sm btn-primary" onclick={() => switchTab('add')}>
 						Add your first library
 					</button>
 				</div>

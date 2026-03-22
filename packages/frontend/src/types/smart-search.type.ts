@@ -11,6 +11,8 @@ interface SmartSearchBaseSelection {
 export interface SmartSearchMovieSelection extends SmartSearchBaseSelection {
 	type: 'movie' | 'tv';
 	tmdbId: number;
+	existingItemId?: string;
+	existingLibraryId?: string;
 }
 
 export interface SmartSearchMusicSelection extends SmartSearchBaseSelection {

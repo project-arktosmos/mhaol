@@ -23,8 +23,7 @@
 	$: isPaused = torrent.state === 'paused';
 	$: isActive = torrent.state === 'downloading' || torrent.state === 'initializing';
 	$: isSeeding = torrent.state === 'seeding';
-	$: isStreamable =
-		(torrent.state === 'downloading' && torrent.progress >= 0.02) || isSeeding;
+	$: isStreamable = (torrent.state === 'downloading' && torrent.progress >= 0.02) || isSeeding;
 	$: stateColor = getStateColor(torrent.state);
 </script>
 
@@ -96,7 +95,7 @@
 		<div class="flex items-center gap-1">
 			{#if isStreamable}
 				<button
-					class="btn btn-ghost btn-sm text-primary"
+					class="btn text-primary btn-ghost btn-sm"
 					on:click={() => dispatch('stream', { infoHash: torrent.infoHash })}
 					title="Stream"
 					aria-label="Stream torrent"

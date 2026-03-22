@@ -98,6 +98,8 @@ pub struct AppState {
     pub image_tagger_manager: Arc<modules::image_tagger::ImageTaggerManager>,
     pub data_dir: PathBuf,
     pub llm_conversations: LlmConversationRepo,
+    pub torrent_fetch_cache: TorrentFetchCacheRepo,
+    pub tmdb_api_cache: TmdbApiCacheRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
     pub worker_bridge: Arc<WorkerBridge>,
     pub cloud: Arc<CloudManager>,
@@ -166,6 +168,8 @@ impl AppState {
             #[cfg(not(target_os = "android"))]
             image_tagger_manager: Arc::new(modules::image_tagger::ImageTaggerManager::new()),
             llm_conversations: LlmConversationRepo::new(Arc::clone(&db)),
+            torrent_fetch_cache: TorrentFetchCacheRepo::new(Arc::clone(&db)),
+            tmdb_api_cache: TmdbApiCacheRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
             cloud: Arc::new(CloudManager::new(Arc::clone(&db))),

@@ -216,6 +216,12 @@ pub struct ImageTaggerManager {
     init_lock: tokio::sync::Mutex<()>,
 }
 
+impl Default for ImageTaggerManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ImageTaggerManager {
     pub fn new() -> Self {
         Self {

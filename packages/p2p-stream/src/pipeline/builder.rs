@@ -290,7 +290,7 @@ impl PipelineBuilder {
                 encoder.set_property_from_str("tune", "zerolatency");
                 encoder.set_property_from_str("speed-preset", "ultrafast");
                 // x264enc uses bitrate in kbit/sec
-                encoder.set_property("bitrate", (bitrate / 1000) as u32);
+                encoder.set_property("bitrate", bitrate / 1000);
             }
             VideoCodec::Vp9 => {
                 encoder.set_property("target-bitrate", bitrate as i32);

@@ -400,6 +400,7 @@ impl DownloadPipeline {
     ///   1. Direct download of an audio-only adaptive stream (`audio_selected` is Some) — no ffmpeg needed.
     ///   2. Extract audio from the downloaded video file via ffmpeg.
     ///   3. Skip audio (ffmpeg unavailable and no audio-only stream).
+    #[allow(clippy::too_many_arguments)]
     async fn execute_both(
         &self,
         config: &DownloadTaskConfig,
@@ -504,6 +505,7 @@ impl DownloadPipeline {
     }
 
     /// Execute download for a single mode (Audio or Video).
+    #[allow(clippy::too_many_arguments)]
     async fn execute_single_mode(
         &self,
         config: &DownloadTaskConfig,
@@ -689,10 +691,8 @@ impl DownloadPipeline {
                     log::warn!("Signature resolution failed: {}", e);
                 }
             }
-        } else {
-            if let Err(e) = self.ensure_player_js_loaded(video_id).await {
-                log::warn!("Failed to load player.js for n-param transformation: {}", e);
-            }
+        } else if let Err(e) = self.ensure_player_js_loaded(video_id).await {
+            log::warn!("Failed to load player.js for n-param transformation: {}", e);
         }
 
         let resolver = self.sig_resolver.lock();
@@ -764,6 +764,7 @@ impl DownloadPipeline {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn download_single(
         &self,
         format: &ResolvedFormat,
@@ -815,6 +816,7 @@ impl DownloadPipeline {
 
     /// Like `download_single`, but on a CDN 403 invalidates the player.js cache and retries once
     /// with a freshly transformed n-parameter.
+    #[allow(clippy::too_many_arguments)]
     async fn download_single_with_retry(
         &self,
         format: &ResolvedFormat,
@@ -878,6 +880,7 @@ impl DownloadPipeline {
     /// Like `download_single_with_retry`, but on a persistent CDN 403 (after n-param refresh)
     /// re-fetches the player response with the WEB client and retries with browser headers.
     /// Returns the original error if the WEB client also fails or has no audio-only stream.
+    #[allow(clippy::too_many_arguments)]
     async fn download_audio_with_client_fallback(
         &self,
         format: &ResolvedFormat,
@@ -904,7 +907,7 @@ impl DownloadPipeline {
                 );
                 match self.fetch_player_response_from_client(
                     &config.video_id,
-                    &*WEB,
+                    &WEB,
                     config.po_token.as_deref(),
                     config.visitor_data.as_deref(),
                 ).await {
@@ -957,6 +960,7 @@ impl DownloadPipeline {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn download_and_mux(
         &self,
         config: &DownloadTaskConfig,

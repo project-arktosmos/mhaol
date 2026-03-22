@@ -10,7 +10,11 @@
 				"sql": "CREATE TABLE IF NOT EXISTS tmdb_movies (\n    tmdb_id INTEGER PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS tmdb_tv_shows (\n    tmdb_id INTEGER PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS tmdb_seasons (\n    tmdb_id INTEGER NOT NULL,\n    season_number INTEGER NOT NULL,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),\n    PRIMARY KEY (tmdb_id, season_number)\n);"
 			},
 			"settings": [
-				{ "key": "tmdb.apiKey", "default": "", "envKey": "TMDB_API_KEY" }
+				{
+					"key": "tmdb.apiKey",
+					"default": "",
+					"envKey": "TMDB_API_KEY"
+				}
 			]
 		},
 		"torrent-search-thepiratebay": {
@@ -28,13 +32,22 @@
 		"./common/utils": "./common/src/utils.ts"
 	},
 	"scripts": {
+		"lint": "prettier --check . && eslint .",
+		"check": "tsc --noEmit",
+		"format": "prettier --write .",
 		"test": "vitest run"
 	},
 	"devDependencies": {
+		"@eslint/js": "^9.39.3",
 		"@types/better-sqlite3": "^7.6.12",
 		"@types/node": "^22.15.3",
 		"better-sqlite3": "^11.7.0",
+		"eslint": "^9.18.0",
+		"eslint-config-prettier": "^10.1.8",
+		"globals": "^17.4.0",
+		"prettier": "^3.4.2",
 		"typescript": "^5.8.3",
+		"typescript-eslint": "^8.56.1",
 		"vitest": "^4.0.6"
 	}
 }

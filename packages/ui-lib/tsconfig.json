@@ -13,7 +13,15 @@
 		"module": "ES2022",
 		"paths": {
 			"frontend/*": ["../frontend/src/*"],
-			"ui-lib/*": ["./src/*"]
+			"ui-lib/*": ["./src/*"],
+			"addons/*": ["../addons/*"],
+			"torrent-search-thepiratebay": ["../addons/torrent-search-thepiratebay/src/index.ts"],
+			"$types/*": ["../frontend/src/types/*"],
+			"$utils/*": ["../frontend/src/utils/*"],
+			"$adapters/*": ["../frontend/src/adapters/*"],
+			"$services/*": ["../frontend/src/services/*"],
+			"$app/*": ["./src/app-shims/*"],
+			"$data/*": ["../frontend/src/data/*"]
 		}
 	},
 	"include": ["src/**/*.ts", "src/**/*.svelte"]

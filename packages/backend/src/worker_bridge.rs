@@ -46,6 +46,12 @@ pub struct WorkerBridge {
     ready: std::sync::atomic::AtomicBool,
 }
 
+impl Default for WorkerBridge {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkerBridge {
     pub fn new() -> Self {
         Self {

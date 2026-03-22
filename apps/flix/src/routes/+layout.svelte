@@ -1,113 +1,235 @@
 <script lang="ts">
-	import '../css/app.css';
-	import 'frontend/services/i18n';
-	import { onMount, onDestroy } from 'svelte';
-	import { playerService } from 'frontend/services/player.service';
-	import { identityService } from 'frontend/services/identity.service';
-	import { torrentService } from 'frontend/services/torrent.service';
-	import { themeService } from 'frontend/services/theme.service';
-	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
-	import Navbar from 'ui-lib/components/core/Navbar.svelte';
-	import ModalOutlet from 'ui-lib/components/core/ModalOutlet.svelte';
-	import TorrentModalContent from 'ui-lib/components/torrent/TorrentModalContent.svelte';
-	import DownloadsModalContent from 'ui-lib/components/downloads/DownloadsModalContent.svelte';
-	import SignalingModalContent from 'ui-lib/components/signaling/SignalingModalContent.svelte';
-	import IdentityModalContent from 'ui-lib/components/identity/IdentityModalContent.svelte';
-	import VideoSettingsModalContent from 'ui-lib/components/settings/VideoSettingsModalContent.svelte';
-	import ShareModalContent from 'ui-lib/components/share/ShareModalContent.svelte';
-	import AddonsModalContent from 'ui-lib/components/addons/AddonsModalContent.svelte';
-	import PluginsModalContent from 'ui-lib/components/plugins/PluginsModalContent.svelte';
-	import { invalidateAll } from '$app/navigation';
-	import SmartSearchToast from 'ui-lib/components/llm/SmartSearchToast.svelte';
-	import { smartSearchService } from 'frontend/services/smart-search.service';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import type { SmartSearchTorrentResult } from 'frontend/types/smart-search.type';
-	import type { PlayableFile } from 'frontend/types/player.type';
+  import "../css/app.css";
+  import "frontend/services/i18n";
+  import { onMount, onDestroy } from "svelte";
+  import { playerService } from "frontend/services/player.service";
+  import { identityService } from "frontend/services/identity.service";
+  import { torrentService } from "frontend/services/torrent.service";
+  import { themeService } from "frontend/services/theme.service";
+  import ThemeToggle from "ui-lib/components/core/ThemeToggle.svelte";
+  import Navbar from "ui-lib/components/core/Navbar.svelte";
+  import TabbedModalOutlet from "ui-lib/components/core/TabbedModalOutlet.svelte";
+  import TorrentModalContent from "ui-lib/components/torrent/TorrentModalContent.svelte";
+  import DownloadsModalContent from "ui-lib/components/downloads/DownloadsModalContent.svelte";
+  import SignalingModalContent from "ui-lib/components/signaling/SignalingModalContent.svelte";
+  import IdentityModalContent from "ui-lib/components/identity/IdentityModalContent.svelte";
+  import VideoSettingsModalContent from "ui-lib/components/settings/VideoSettingsModalContent.svelte";
+  import ShareModalContent from "ui-lib/components/share/ShareModalContent.svelte";
+  import AddonsModalContent from "ui-lib/components/addons/AddonsModalContent.svelte";
+  import LlmModelsModalContent from "ui-lib/components/llm/LlmModelsModalContent.svelte";
+  import { invalidateAll } from "$app/navigation";
+  import SmartSearchToast from "ui-lib/components/llm/SmartSearchToast.svelte";
+  import { smartSearchService } from "frontend/services/smart-search.service";
+  import { modalRouterService } from "frontend/services/modal-router.service";
+  import { apiUrl } from "frontend/lib/api-base";
+  import { setImageBaseUrl } from "addons/tmdb/transform";
+  import { browseDetailService } from "frontend/services/browse-detail.service";
 
-	let { children } = $props();
+  setImageBaseUrl(apiUrl("/api/tmdb/image"));
+  import TmdbBrowseDetail from "ui-lib/components/tmdb-browse/TmdbBrowseDetail.svelte";
+  import Modal from "ui-lib/components/core/Modal.svelte";
+  import type { SmartSearchTorrentResult } from "frontend/types/smart-search.type";
+  import type { PlayableFile } from "frontend/types/player.type";
 
-	const playerState = playerService.state;
+  let { children } = $props();
 
-	const navItems = [
-		{ id: 'torrent', label: 'Torrent', classes: 'btn-primary' },
-		{ id: 'downloads', label: 'Downloads', classes: 'btn-secondary' },
-		{ id: 'signaling', label: 'Signaling' },
-		{ id: 'identity', label: 'Identity' },
-		{ id: 'plugins', label: 'Plugins' },
-		{ id: 'addons', label: 'Addons' },
-		{ id: 'share', label: 'Share' },
-		{ id: 'settings', label: 'Settings' }
-	];
+  const playerState = playerService.state;
+  const playerDisplayMode = playerService.displayMode;
+  const browseDetail = browseDetailService.state;
 
-	const modals = {
-		torrent: { component: TorrentModalContent, maxWidth: 'max-w-5xl' },
-		downloads: { component: DownloadsModalContent, maxWidth: 'max-w-5xl' },
-		signaling: { component: SignalingModalContent, maxWidth: 'max-w-5xl' },
-		identity: { component: IdentityModalContent, maxWidth: 'max-w-3xl' },
-		plugins: { component: PluginsModalContent, maxWidth: 'max-w-4xl' },
-		addons: { component: AddonsModalContent, maxWidth: 'max-w-4xl' },
-		share: { component: ShareModalContent, maxWidth: 'max-w-md' },
-		settings: { component: VideoSettingsModalContent, maxWidth: 'max-w-2xl' },
-	};
+  let isLargeScreen = $state(false);
 
-	async function handleSmartSearchStream(candidate: SmartSearchTorrentResult) {
-		smartSearchService.hide();
-		const infoHash = await smartSearchService.startStream(candidate);
-		if (!infoHash) return;
-		invalidateAll();
+  $effect(() => {
+    const mql = window.matchMedia("(min-width: 1024px)");
+    isLargeScreen = mql.matches;
+    const handler = (e: MediaQueryListEvent) => {
+      isLargeScreen = e.matches;
+    };
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  });
 
-		const unsubscribe = torrentService.state.subscribe((state) => {
-			const torrent = state.torrents.find((t) => t.infoHash === infoHash);
-			if (!torrent) return;
+  let hasBrowseSelection = $derived(
+    $browseDetail.movie !== null || $browseDetail.tvShow !== null,
+  );
 
-			smartSearchService.updateStreamingProgress(torrent.progress);
+  function handleSidebarAction(
+    action: keyof ReturnType<typeof browseDetailService.getCallbacks>,
+  ) {
+    const cbs = browseDetailService.getCallbacks();
+    cbs[action]?.();
+  }
 
-			if (torrent.progress >= 0.02 || torrent.state === 'seeding') {
-				unsubscribe();
-				smartSearchService.clearStreaming();
+  const sections = [
+    { id: "torrent", label: "Torrent", component: TorrentModalContent },
+    { id: "downloads", label: "Downloads", component: DownloadsModalContent },
+    { id: "signaling", label: "Signaling", component: SignalingModalContent },
+    { id: "identity", label: "Identity", component: IdentityModalContent },
+    { id: "addons", label: "Addons", component: AddonsModalContent },
+    { id: "llm", label: "LLM", component: LlmModelsModalContent },
+    { id: "share", label: "Share", component: ShareModalContent },
+    { id: "settings", label: "Settings", component: VideoSettingsModalContent },
+  ];
 
-				const file: PlayableFile = {
-					id: `torrent:${infoHash}`,
-					type: 'torrent',
-					name: torrent.name,
-					outputPath: torrent.outputPath ?? '',
-					mode: 'video',
-					format: null,
-					videoFormat: null,
-					thumbnailUrl: null,
-					durationSeconds: null,
-					size: torrent.size,
-					completedAt: '',
-					streamUrl: `/api/torrent/torrents/${infoHash}/stream`
-				};
-				playerService.playStream(file);
-			}
-		});
-	}
+  async function handleSmartSearchStream(candidate: SmartSearchTorrentResult) {
+    smartSearchService.hide();
+    const infoHash = await smartSearchService.startStream(candidate);
+    if (!infoHash) return;
+    invalidateAll();
+    playerService.setDisplayMode("sidebar");
 
-	onMount(async () => {
-		themeService.initialize('flix');
-		await playerService.initialize();
-		await identityService.initialize();
-		torrentService.initialize('flix');
-	});
+    let ready = false;
+    const unsubscribe = torrentService.state.subscribe(() => {
+      if (!ready) return;
+      const torrent = torrentService.findByHash(infoHash);
+      if (!torrent) return;
 
-	onDestroy(() => {
-		playerService.destroy();
-		torrentService.destroy();
-	});
+      smartSearchService.updateStreamingProgress(torrent.progress);
+
+      if (torrent.progress >= 0.02 || torrent.state === "seeding") {
+        unsubscribe();
+        smartSearchService.clearStreaming();
+
+        const file: PlayableFile = {
+          id: `torrent:${infoHash}`,
+          type: "torrent",
+          name: torrent.name,
+          outputPath: torrent.outputPath ?? "",
+          mode: "video",
+          format: null,
+          videoFormat: null,
+          thumbnailUrl: null,
+          durationSeconds: null,
+          size: torrent.size,
+          completedAt: "",
+          streamUrl: `/api/torrent/torrents/${infoHash}/stream`,
+        };
+        playerService.playStream(file);
+      }
+    });
+    ready = true;
+  }
+
+  onMount(async () => {
+    themeService.initialize("flix");
+    await playerService.initialize();
+    await identityService.initialize();
+    torrentService.initialize("flix");
+  });
+
+  onDestroy(() => {
+    playerService.destroy();
+    torrentService.destroy();
+  });
 </script>
 
-<div class="flex min-h-screen flex-col">
-	<Navbar brand={{ label: 'Mhaol', highlight: 'Flix' }} items={navItems}>
-		{#snippet end()}
-			<ThemeToggle />
-		{/snippet}
-	</Navbar>
-	<main class="flex min-w-0 flex-1 overflow-hidden">
-		{@render children?.()}
-	</main>
+<div class="flex h-screen flex-col">
+  <Navbar brand={{ label: "Mhaol", highlight: "Flix" }}>
+    {#snippet end()}
+      <button
+        class="btn btn-circle btn-ghost btn-sm"
+        onclick={() => modalRouterService.openNavbar(sections[0].id)}
+        aria-label="Settings"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+          class="h-5 w-5"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+          />
+        </svg>
+      </button>
+      <ThemeToggle />
+    {/snippet}
+  </Navbar>
+  <main class="flex min-w-0 flex-1 overflow-hidden">
+    {@render children?.()}
+    <div
+      class="hidden w-85 shrink-0 overflow-y-auto border-l border-base-300 bg-base-200 lg:block"
+    >
+      {#if hasBrowseSelection || $playerState.currentFile}
+        <TmdbBrowseDetail
+          movie={$browseDetail.movie}
+          tvShow={$browseDetail.tvShow}
+          movieDetails={$browseDetail.movieDetails}
+          tvShowDetails={$browseDetail.tvShowDetails}
+          libraryItem={$browseDetail.libraryItem}
+          relatedData={$browseDetail.relatedData}
+          loading={$browseDetail.loading}
+          fetching={$browseDetail.fetching}
+          fetched={$browseDetail.fetched}
+          fetchSteps={$browseDetail.fetchSteps}
+          playerFile={$playerState.currentFile}
+          playerConnectionState={$playerState.connectionState}
+          playerPositionSecs={$playerState.positionSecs}
+          playerDurationSecs={$playerState.durationSecs}
+          playerStreamUrl={$playerState.streamUrl}
+          playerBuffering={$playerState.buffering}
+          playerFullscreen={$playerDisplayMode === "fullscreen"}
+          onfetch={() => handleSidebarAction("onfetch")}
+          ondownload={() => handleSidebarAction("ondownload")}
+          onstream={() => handleSidebarAction("onstream")}
+          onshowsearch={() => handleSidebarAction("onshowsearch")}
+          onfullscreen={() => playerService.setDisplayMode("fullscreen")}
+          onminimize={() => playerService.setDisplayMode("sidebar")}
+          onstopplayer={() => playerService.stop()}
+          onclose={() => handleSidebarAction("onclose")}
+        />
+      {/if}
+    </div>
+  </main>
 </div>
 
-<ModalOutlet {modals} />
-<SmartSearchToast onlibrarychange={() => invalidateAll()} onstream={handleSmartSearchStream} />
+<TabbedModalOutlet {sections} title="Options" />
+
+{#if !isLargeScreen}
+  <Modal
+    open={hasBrowseSelection || !!$playerState.currentFile}
+    maxWidth="max-w-lg"
+    onclose={() => handleSidebarAction("onclose")}
+  >
+    <TmdbBrowseDetail
+      movie={$browseDetail.movie}
+      tvShow={$browseDetail.tvShow}
+      movieDetails={$browseDetail.movieDetails}
+      tvShowDetails={$browseDetail.tvShowDetails}
+      libraryItem={$browseDetail.libraryItem}
+      relatedData={$browseDetail.relatedData}
+      loading={$browseDetail.loading}
+      fetching={$browseDetail.fetching}
+      fetched={$browseDetail.fetched}
+      fetchSteps={$browseDetail.fetchSteps}
+      playerFile={$playerState.currentFile}
+      playerConnectionState={$playerState.connectionState}
+      playerPositionSecs={$playerState.positionSecs}
+      playerDurationSecs={$playerState.durationSecs}
+      playerStreamUrl={$playerState.streamUrl}
+      playerBuffering={$playerState.buffering}
+      playerFullscreen={$playerDisplayMode === "fullscreen"}
+      onfetch={() => handleSidebarAction("onfetch")}
+      ondownload={() => handleSidebarAction("ondownload")}
+      onstream={() => handleSidebarAction("onstream")}
+      onshowsearch={() => handleSidebarAction("onshowsearch")}
+      onfullscreen={() => playerService.setDisplayMode("fullscreen")}
+      onminimize={() => playerService.setDisplayMode("sidebar")}
+      onstopplayer={() => playerService.stop()}
+      onclose={() => handleSidebarAction("onclose")}
+    />
+  </Modal>
+{/if}
+<SmartSearchToast
+  onlibrarychange={() => invalidateAll()}
+  onstream={handleSmartSearchStream}
+/>

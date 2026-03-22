@@ -11,6 +11,12 @@ pub struct FfmpegMuxer {
     ffmpeg_path: Option<String>,
 }
 
+impl Default for FfmpegMuxer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FfmpegMuxer {
     pub fn new() -> Self {
         let path = detect_ffmpeg();

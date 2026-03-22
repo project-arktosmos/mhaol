@@ -35,6 +35,7 @@ impl CloudItemAttributeRepo {
         })).unwrap().filter_map(|r| r.ok()).collect()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn set(&self, id: &str, item_id: &str, key: &str, value: &str, attribute_type_id: &str, source: &str, confidence: Option<f64>) {
         let conn = self.db.lock();
         conn.execute(

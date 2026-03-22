@@ -1,5 +1,10 @@
 use crate::AppState;
-use axum::{extract::State, response::IntoResponse, routing::get, Json, Router};
+use axum::{
+    extract::{Path as AxumPath, State},
+    response::IntoResponse,
+    routing::get,
+    Json, Router,
+};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -7,6 +12,7 @@ use std::path::Path;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(get_media))
+        .route("/library-items/{id}/related", get(get_library_item_related))
 }
 
 #[derive(Serialize)]
@@ -293,4 +299,215 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
         lists,
         libraries: lib_type_map,
     })
+}
+
+#[derive(Serialize)]
+struct RelatedLibrary {
+    id: String,
+    name: String,
+    path: String,
+    #[serde(rename = "mediaTypes")]
+    media_types: String,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+}
+
+#[derive(Serialize)]
+struct RelatedLink {
+    id: String,
+    service: String,
+    #[serde(rename = "serviceId")]
+    service_id: String,
+    #[serde(rename = "seasonNumber")]
+    season_number: Option<i64>,
+    #[serde(rename = "episodeNumber")]
+    episode_number: Option<i64>,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+}
+
+#[derive(Serialize)]
+struct RelatedTorrentDownload {
+    #[serde(rename = "infoHash")]
+    info_hash: String,
+    name: String,
+    size: i64,
+    progress: f64,
+    state: String,
+    #[serde(rename = "downloadSpeed")]
+    download_speed: i64,
+    #[serde(rename = "uploadSpeed")]
+    upload_speed: i64,
+    peers: i64,
+    seeds: i64,
+    #[serde(rename = "addedAt")]
+    added_at: i64,
+    eta: Option<i64>,
+    #[serde(rename = "outputPath")]
+    output_path: Option<String>,
+    source: String,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+    #[serde(rename = "updatedAt")]
+    updated_at: String,
+}
+
+#[derive(Serialize)]
+struct RelatedFetchCache {
+    #[serde(rename = "tmdbId")]
+    tmdb_id: i64,
+    #[serde(rename = "mediaType")]
+    media_type: String,
+    candidate: serde_json::Value,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+}
+
+#[derive(Serialize)]
+struct RelatedTmdbCache {
+    #[serde(rename = "tmdbId")]
+    tmdb_id: i64,
+    data: serde_json::Value,
+    #[serde(rename = "fetchedAt")]
+    fetched_at: String,
+}
+
+#[derive(Serialize)]
+struct LibraryItemRelatedResponse {
+    library: Option<RelatedLibrary>,
+    links: Vec<RelatedLink>,
+    #[serde(rename = "fetchCache")]
+    fetch_cache: Option<RelatedFetchCache>,
+    #[serde(rename = "torrentDownload")]
+    torrent_download: Option<RelatedTorrentDownload>,
+    #[serde(rename = "tmdbCache")]
+    tmdb_cache: Option<RelatedTmdbCache>,
+}
+
+async fn get_library_item_related(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> impl IntoResponse {
+    // Get the library item
+    let item = match state.library_items.get(&id) {
+        Some(item) => item,
+        None => return (axum::http::StatusCode::NOT_FOUND, "Not found").into_response(),
+    };
+
+    // Library
+    let library = state.libraries.get(&item.library_id).map(|lib| RelatedLibrary {
+        id: lib.id,
+        name: lib.name,
+        path: lib.path,
+        media_types: lib.media_types,
+        created_at: lib.created_at,
+    });
+
+    // Links
+    let link_rows = state.library_item_links.get_by_item(&id);
+    let links: Vec<RelatedLink> = link_rows
+        .into_iter()
+        .map(|l| RelatedLink {
+            id: l.id,
+            service: l.service,
+            service_id: l.service_id,
+            season_number: l.season_number,
+            episode_number: l.episode_number,
+            created_at: l.created_at,
+        })
+        .collect();
+
+    // Find TMDB ID from links
+    let tmdb_id: Option<i64> = links
+        .iter()
+        .find(|l| l.service == "tmdb")
+        .and_then(|l| l.service_id.parse().ok());
+
+    // Fetch cache (by TMDB ID)
+    let fetch_cache = tmdb_id.and_then(|tid| {
+        state.torrent_fetch_cache.get(tid).map(|fc| {
+            let candidate: serde_json::Value =
+                serde_json::from_str(&fc.candidate_json).unwrap_or(serde_json::Value::Null);
+            RelatedFetchCache {
+                tmdb_id: fc.tmdb_id,
+                media_type: fc.media_type,
+                candidate,
+                created_at: fc.created_at,
+            }
+        })
+    });
+
+    // Torrent download (by info_hash from fetch cache candidate)
+    let torrent_download = fetch_cache.as_ref().and_then(|fc| {
+        fc.candidate
+            .get("infoHash")
+            .and_then(|v| v.as_str())
+            .and_then(|hash| {
+                state.torrent_downloads.get(hash).map(|td| RelatedTorrentDownload {
+                    info_hash: td.info_hash,
+                    name: td.name,
+                    size: td.size,
+                    progress: td.progress,
+                    state: td.state,
+                    download_speed: td.download_speed,
+                    upload_speed: td.upload_speed,
+                    peers: td.peers,
+                    seeds: td.seeds,
+                    added_at: td.added_at,
+                    eta: td.eta,
+                    output_path: td.output_path,
+                    source: td.source,
+                    created_at: td.created_at,
+                    updated_at: td.updated_at,
+                })
+            })
+    });
+
+    // TMDB cache
+    let tmdb_cache = tmdb_id.and_then(|tid| {
+        let conn = state.db.lock();
+        // Try movies first, then TV shows
+        conn.query_row(
+            "SELECT tmdb_id, data, fetched_at FROM tmdb_movies WHERE tmdb_id = ?1",
+            rusqlite::params![tid],
+            |row| {
+                let tmdb_id: i64 = row.get(0)?;
+                let data_str: String = row.get(1)?;
+                let fetched_at: String = row.get(2)?;
+                Ok((tmdb_id, data_str, fetched_at))
+            },
+        )
+        .ok()
+        .or_else(|| {
+            conn.query_row(
+                "SELECT tmdb_id, data, fetched_at FROM tmdb_tv_shows WHERE tmdb_id = ?1",
+                rusqlite::params![tid],
+                |row| {
+                    let tmdb_id: i64 = row.get(0)?;
+                    let data_str: String = row.get(1)?;
+                    let fetched_at: String = row.get(2)?;
+                    Ok((tmdb_id, data_str, fetched_at))
+                },
+            )
+            .ok()
+        })
+        .map(|(tmdb_id, data_str, fetched_at)| {
+            let data: serde_json::Value =
+                serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
+            RelatedTmdbCache {
+                tmdb_id,
+                data,
+                fetched_at,
+            }
+        })
+    });
+
+    Json(LibraryItemRelatedResponse {
+        library,
+        links,
+        fetch_cache,
+        torrent_download,
+        tmdb_cache,
+    })
+    .into_response()
 }

@@ -1,7 +1,8 @@
 <script lang="ts">
-	import TmdbBrowseCard from './TmdbBrowseCard.svelte';
+	import TmdbBrowseGrid from './TmdbBrowseGrid.svelte';
 	import TmdbPagination from './TmdbPagination.svelte';
 	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
+	import type { TorrentState } from 'frontend/types/torrent.type';
 
 	let {
 		movies,
@@ -17,6 +18,8 @@
 		mediaType,
 		selectedMovieId = null,
 		selectedTvShowId = null,
+		fetchedIds,
+		downloadStatuses,
 		onselectMovie,
 		onselectTvShow,
 		onsearchMovies,
@@ -35,6 +38,8 @@
 		mediaType?: 'movies' | 'tv';
 		selectedMovieId?: number | null;
 		selectedTvShowId?: number | null;
+		fetchedIds?: Set<number>;
+		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 		onsearchMovies: (query: string, page: number) => void;
@@ -54,8 +59,8 @@
 	}
 
 	let isMovies = $derived(mediaType !== 'tv');
-	let results = $derived(isMovies ? movies : tvShows);
 	let loading = $derived(isMovies ? loadingMovies : loadingTv);
+	let results = $derived(isMovies ? movies : tvShows);
 	let page = $derived(isMovies ? moviesPage : tvPage);
 	let totalPages = $derived(isMovies ? moviesTotalPages : tvTotalPages);
 	let hasSearched = $derived(query.length > 0);
@@ -64,7 +69,7 @@
 <form class="mb-4 flex gap-2" onsubmit={handleSubmit}>
 	<input
 		type="text"
-		class="input input-bordered input-sm flex-1"
+		class="input-bordered input input-sm flex-1"
 		placeholder="Search {mediaType === 'tv' ? 'TV shows' : 'movies'}..."
 		bind:value={inputValue}
 	/>
@@ -82,21 +87,11 @@
 		<span class="loading loading-lg loading-spinner"></span>
 	</div>
 {:else if results.length > 0}
-	<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-		{#if isMovies}
-			{#each movies as movie (movie.id)}
-				<TmdbBrowseCard {movie} selected={selectedMovieId === movie.id} onclick={onselectMovie ? () => onselectMovie(movie) : undefined} />
-			{/each}
-		{:else}
-			{#each tvShows as tvShow (tvShow.id)}
-				<TmdbBrowseCard
-					{tvShow}
-					selected={selectedTvShowId === tvShow.id}
-					onclick={onselectTvShow ? () => onselectTvShow(tvShow) : undefined}
-				/>
-			{/each}
-		{/if}
-	</div>
+	{#if isMovies}
+		<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {onselectMovie} />
+	{:else}
+		<TmdbBrowseGrid {tvShows} {selectedTvShowId} {onselectTvShow} />
+	{/if}
 	<TmdbPagination
 		{page}
 		{totalPages}

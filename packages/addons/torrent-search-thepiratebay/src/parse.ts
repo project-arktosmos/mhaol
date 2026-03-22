@@ -2,9 +2,7 @@ import type { PirateBayApiResult, TorrentSearchResult } from './types.js';
 import { buildMagnetLink } from './magnet.js';
 
 export function isNoResults(results: PirateBayApiResult[]): boolean {
-	return (
-		results.length === 1 && results[0].id === '0' && results[0].name === 'No results returned'
-	);
+	return results.length === 1 && results[0].id === '0' && results[0].name === 'No results returned';
 }
 
 export function parseResult(raw: PirateBayApiResult): TorrentSearchResult {

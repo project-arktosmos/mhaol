@@ -66,6 +66,7 @@ Feature services (all in `src/services/`):
 | `signaling-chat.service.ts`         | Signaling chat                                          |
 | `theme.service.ts`                  | Light/dark theme + DOM sync                             |
 | `tmdb-browse.service.ts`            | TMDB popular/discover                                   |
+| `browse-detail.service.ts`          | Browse detail sidebar state (layout-level)              |
 | `torrent-search.service.ts`         | Torrent search                                          |
 | `torrent.service.ts`                | Torrent management                                      |
 | `wallet.service.ts`                 | Crypto wallet                                           |

@@ -60,6 +60,7 @@ impl YouTubeContentRepo {
             .collect()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn upsert(
         &self,
         youtube_id: &str,
@@ -196,5 +197,111 @@ impl YouTubeContentRepo {
             created_at: row.get(10)?,
             updated_at: row.get(11)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::open_test_database;
+
+    fn make_repo() -> YouTubeContentRepo {
+        YouTubeContentRepo::new(open_test_database())
+    }
+
+    #[test]
+    fn test_upsert_and_get() {
+        let repo = make_repo();
+        repo.upsert("vid1", "Title 1", Some("http://thumb.jpg"), Some(120), Some("Channel"), Some("ch1"), None, None);
+
+        let row = repo.get("vid1").unwrap();
+        assert_eq!(row.title, "Title 1");
+        assert_eq!(row.thumbnail_url, Some("http://thumb.jpg".to_string()));
+        assert_eq!(row.duration_seconds, Some(120));
+        assert_eq!(row.channel_name, Some("Channel".to_string()));
+        assert_eq!(row.channel_id, Some("ch1".to_string()));
+        assert!(!row.is_favorite);
+    }
+
+    #[test]
+    fn test_get_not_found() {
+        let repo = make_repo();
+        assert!(repo.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_upsert_updates_existing() {
+        let repo = make_repo();
+        repo.upsert("vid1", "Title 1", Some("http://thumb.jpg"), Some(120), None, None, None, None);
+        repo.upsert("vid1", "Title Updated", None, None, Some("New Channel"), None, None, None);
+
+        let row = repo.get("vid1").unwrap();
+        assert_eq!(row.title, "Title Updated");
+        // COALESCE keeps old thumbnail when new is NULL
+        assert_eq!(row.thumbnail_url, Some("http://thumb.jpg".to_string()));
+        assert_eq!(row.channel_name, Some("New Channel".to_string()));
+    }
+
+    #[test]
+    fn test_get_all_and_get_by_channel() {
+        let repo = make_repo();
+        repo.upsert("vid1", "A", None, None, None, Some("ch1"), None, None);
+        repo.upsert("vid2", "B", None, None, None, Some("ch1"), None, None);
+        repo.upsert("vid3", "C", None, None, None, Some("ch2"), None, None);
+
+        assert_eq!(repo.get_all().len(), 3);
+        assert_eq!(repo.get_by_channel("ch1").len(), 2);
+        assert_eq!(repo.get_by_channel("ch2").len(), 1);
+    }
+
+    #[test]
+    fn test_update_paths_and_clear() {
+        let repo = make_repo();
+        repo.upsert("vid1", "Title", None, None, None, None, None, None);
+
+        repo.update_video_path("vid1", "/video.mp4");
+        repo.update_audio_path("vid1", "/audio.mp3");
+        let row = repo.get("vid1").unwrap();
+        assert_eq!(row.video_path, Some("/video.mp4".to_string()));
+        assert_eq!(row.audio_path, Some("/audio.mp3".to_string()));
+
+        repo.clear_video_path("vid1");
+        repo.clear_audio_path("vid1");
+        let row = repo.get("vid1").unwrap();
+        assert!(row.video_path.is_none());
+        assert!(row.audio_path.is_none());
+    }
+
+    #[test]
+    fn test_toggle_favorite_and_get_favorites() {
+        let repo = make_repo();
+        repo.upsert("vid1", "Title", None, None, None, None, None, None);
+
+        assert!(repo.get_favorites().is_empty());
+
+        let is_fav = repo.toggle_favorite("vid1");
+        assert!(is_fav);
+        assert_eq!(repo.get_favorites().len(), 1);
+
+        let is_fav = repo.toggle_favorite("vid1");
+        assert!(!is_fav);
+        assert!(repo.get_favorites().is_empty());
+    }
+
+    #[test]
+    fn test_delete_and_missing_duration() {
+        let repo = make_repo();
+        repo.upsert("vid1", "A", None, None, None, None, None, None);
+        repo.upsert("vid2", "B", None, Some(60), None, None, None, None);
+
+        let missing = repo.get_ids_missing_duration();
+        assert_eq!(missing, vec!["vid1".to_string()]);
+
+        repo.update_duration("vid1", 90);
+        assert!(repo.get_ids_missing_duration().is_empty());
+
+        repo.delete("vid1");
+        assert!(repo.get("vid1").is_none());
+        assert_eq!(repo.get_all().len(), 1);
     }
 }

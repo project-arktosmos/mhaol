@@ -48,8 +48,24 @@ export interface TMDBCredits {
 	crew: TMDBCrewMember[];
 }
 
+export interface TMDBImage {
+	file_path: string;
+	width: number;
+	height: number;
+	aspect_ratio: number;
+	vote_average: number;
+	vote_count: number;
+}
+
+export interface TMDBImages {
+	backdrops: TMDBImage[];
+	posters: TMDBImage[];
+	logos: TMDBImage[];
+}
+
 export interface TMDBMovieDetails extends TMDBMovie {
 	credits?: TMDBCredits;
+	images?: TMDBImages;
 }
 
 export interface TMDBSearchResponse {
@@ -81,6 +97,7 @@ export interface DisplayTMDBMovieDetails extends DisplayTMDBMovie {
 	imdbId: string | null;
 	cast: DisplayTMDBCastMember[];
 	director: string | null;
+	images: DisplayTMDBImage[];
 }
 
 export interface DisplayTMDBCastMember {
@@ -88,6 +105,13 @@ export interface DisplayTMDBCastMember {
 	name: string;
 	character: string;
 	profileUrl: string | null;
+}
+
+export interface DisplayTMDBImage {
+	thumbnailUrl: string;
+	fullUrl: string;
+	width: number;
+	height: number;
 }
 
 // TMDB TV Show types
@@ -165,6 +189,7 @@ export interface TMDBSeasonDetails {
 export interface TMDBTvShowDetails extends TMDBTvShow {
 	seasons?: TMDBSeason[];
 	credits?: TMDBCredits;
+	images?: TMDBImages;
 }
 
 export interface TMDBTvSearchResponse {
@@ -198,6 +223,7 @@ export interface DisplayTMDBTvShowDetails extends DisplayTMDBTvShow {
 	createdBy: string[];
 	cast: DisplayTMDBCastMember[];
 	seasons: DisplayTMDBSeason[];
+	images: DisplayTMDBImage[];
 }
 
 export interface DisplayTMDBSeason {

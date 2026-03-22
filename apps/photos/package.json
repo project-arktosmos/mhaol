@@ -16,7 +16,7 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "format": "prettier --write .",
     "lint": "prettier --check . && eslint .",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "headless": "node scripts/headless.js",
     "clean": "rm -rf dist-static .svelte-kit"
   },

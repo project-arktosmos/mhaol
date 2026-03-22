@@ -41,7 +41,28 @@
 	let preferredLanguage = $state('English');
 	let preferredQuality = $state('1080p');
 
-	const languages = ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian', 'Japanese', 'Korean', 'Chinese', 'Hindi', 'Arabic', 'Dutch', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Polish', 'Turkish', 'Thai'];
+	const languages = [
+		'English',
+		'Spanish',
+		'French',
+		'German',
+		'Italian',
+		'Portuguese',
+		'Russian',
+		'Japanese',
+		'Korean',
+		'Chinese',
+		'Hindi',
+		'Arabic',
+		'Dutch',
+		'Swedish',
+		'Norwegian',
+		'Danish',
+		'Finnish',
+		'Polish',
+		'Turkish',
+		'Thai'
+	];
 	const videoQualities = ['4K', '2160p', '1080p', '720p', '480p'];
 	const audioQualities = ['FLAC', 'ALAC', 'Lossless', '320kbps', 'MP3', 'AAC', 'WAV', 'OGG'];
 
@@ -64,12 +85,12 @@
 		[...$searchStore.searchResults].sort((a, b) => {
 			if (!isMusic) {
 				const matchA = a.analysis
-					? (a.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0)
-					+ (a.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
+					? (a.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0) +
+						(a.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
 					: -1;
 				const matchB = b.analysis
-					? (b.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0)
-					+ (b.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
+					? (b.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0) +
+						(b.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
 					: -1;
 				if (matchB !== matchA) return matchB - matchA;
 			}
@@ -141,7 +162,8 @@
 			const basePath: string = config.downloadPath ?? '';
 			if (!basePath) return;
 
-			const subdir = selection.type === 'music' ? 'music' : selection.type === 'movie' ? 'movies' : 'tv';
+			const subdir =
+				selection.type === 'music' ? 'music' : selection.type === 'movie' ? 'movies' : 'tv';
 			const downloadPath = `${basePath}/${subdir}`;
 
 			const res = await fetch(apiUrl('/api/torrent/torrents'), {
@@ -190,9 +212,13 @@
 
 <ul class="steps steps-horizontal mb-4 w-full text-xs">
 	<li class={classNames('step', { 'step-success': stepTerms })}>Terms</li>
-	<li class={classNames('step', { 'step-success': stepSearch })}>{searching ? 'Searching...' : 'Search'}</li>
+	<li class={classNames('step', { 'step-success': stepSearch })}>
+		{searching ? 'Searching...' : 'Search'}
+	</li>
 	<li class={classNames('step', { 'step-success': stepEval })}>Analysis</li>
-	<li class={classNames('step', { 'step-success': stepDone })}>{bestCandidate && !candidateAdded ? 'Ready' : candidateAdded ? 'Done' : 'Candidate'}</li>
+	<li class={classNames('step', { 'step-success': stepDone })}>
+		{bestCandidate && !candidateAdded ? 'Ready' : candidateAdded ? 'Done' : 'Candidate'}
+	</li>
 </ul>
 
 {#if !isMusic}
@@ -217,11 +243,13 @@
 				<div class="truncate text-xs font-semibold">{selection.title}</div>
 				<div class="flex items-center gap-1 text-xs text-base-content/50">
 					<span>{selection.year}</span>
-					<span class={classNames('badge badge-xs', {
-						'badge-primary': selection.type === 'movie',
-						'badge-info': selection.type === 'tv',
-						'badge-secondary': selection.type === 'music'
-					})}>
+					<span
+						class={classNames('badge badge-xs', {
+							'badge-primary': selection.type === 'movie',
+							'badge-info': selection.type === 'tv',
+							'badge-secondary': selection.type === 'music'
+						})}
+					>
 						{selection.type === 'music' ? 'Music' : selection.type === 'movie' ? 'Movie' : 'TV'}
 					</span>
 				</div>
@@ -229,17 +257,14 @@
 					<div class="truncate text-xs text-base-content/40">{selection.artist}</div>
 				{/if}
 			</div>
-			<button
-				class="btn btn-ghost btn-xs"
-				onclick={() => smartSearchService.clear()}
-			>
+			<button class="btn btn-ghost btn-xs" onclick={() => smartSearchService.clear()}>
 				&times;
 			</button>
 		</div>
 	</div>
 
 	{#if searchTerms.length > 0}
-		<table class="table-xs table w-full">
+		<table class="table w-full table-xs">
 			<thead>
 				<tr>
 					<th class="text-base-content/50">Search Term</th>
@@ -276,12 +301,12 @@
 				<span class="text-xs font-semibold text-base-content/50">
 					{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
 					{#if analyzing}
-						<span class="loading loading-xs loading-spinner ml-1"></span>
+						<span class="loading ml-1 loading-xs loading-spinner"></span>
 					{/if}
 				</span>
 			</div>
 			<div class="overflow-x-auto">
-				<table class="table-xs table w-full">
+				<table class="table w-full table-xs">
 					<thead>
 						<tr>
 							<th>Name</th>
@@ -330,14 +355,17 @@
 										<span class="loading loading-xs loading-spinner"></span>
 									</td>
 								{:else if result.analysis}
-									<td class="text-nowrap text-xs">{result.analysis.quality}</td>
-									<td class="text-nowrap text-xs">{result.analysis.languages}</td>
-									{#if !isMusic}<td class="text-nowrap text-xs">{result.analysis.subs}</td>{/if}
-									<td class={classNames('text-right text-xs font-medium', {
-										'text-success': result.analysis.relevance >= 80,
-										'text-warning': result.analysis.relevance >= 50 && result.analysis.relevance < 80,
-										'text-error': result.analysis.relevance < 50
-									})}>
+									<td class="text-xs text-nowrap">{result.analysis.quality}</td>
+									<td class="text-xs text-nowrap">{result.analysis.languages}</td>
+									{#if !isMusic}<td class="text-xs text-nowrap">{result.analysis.subs}</td>{/if}
+									<td
+										class={classNames('text-right text-xs font-medium', {
+											'text-success': result.analysis.relevance >= 80,
+											'text-warning':
+												result.analysis.relevance >= 50 && result.analysis.relevance < 80,
+											'text-error': result.analysis.relevance < 50
+										})}
+									>
 										{result.analysis.relevance}%
 									</td>
 									<td class="max-w-xs text-xs text-base-content/60" title={result.analysis.reason}>
@@ -370,10 +398,12 @@
 					<span>Subs: {bestCandidate.analysis.subs}</span>
 				{/if}
 				<span>{formatSearchSize(bestCandidate.size)}</span>
-				<span class={getSeedersColor(bestCandidate.seeders)}>{formatSeeders(bestCandidate.seeders)} SE</span>
+				<span class={getSeedersColor(bestCandidate.seeders)}
+					>{formatSeeders(bestCandidate.seeders)} SE</span
+				>
 			</div>
 			<div class="mb-2 text-xs text-base-content/50">{bestCandidate.analysis?.reason}</div>
-						{#if candidateAdded && mode === 'fetch'}
+			{#if candidateAdded && mode === 'fetch'}
 				<span class="badge badge-sm badge-success">Torrent located</span>
 			{:else if candidateAdded}
 				<span class="badge badge-sm badge-success">Added to downloads</span>
@@ -445,7 +475,11 @@
 {#if downloadProgress}
 	<div class="mt-2 rounded bg-base-100 p-2">
 		<div class="mb-1 truncate text-xs font-medium">{downloadProgress.modelName}</div>
-		<progress class="progress w-full progress-primary progress-sm" value={downloadProgress.percent} max="100"></progress>
+		<progress
+			class="progress-sm progress w-full progress-primary"
+			value={downloadProgress.percent}
+			max="100"
+		></progress>
 		<p class="mt-0.5 text-xs text-base-content/40">
 			{downloadProgress.percent.toFixed(1)}%
 		</p>
@@ -453,10 +487,7 @@
 {/if}
 
 <div class="mt-2">
-	<button
-		class="btn btn-ghost btn-xs w-full"
-		onclick={() => (showRecommended = !showRecommended)}
-	>
+	<button class="btn w-full btn-ghost btn-xs" onclick={() => (showRecommended = !showRecommended)}>
 		{showRecommended ? 'Hide' : 'Download models'}
 	</button>
 

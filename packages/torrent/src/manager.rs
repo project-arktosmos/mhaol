@@ -221,7 +221,7 @@ impl TorrentManager {
 
             let options = AddTorrentOptions {
                 overwrite: true,
-                output_folder: request.download_path.clone().map(|p| p.into()),
+                output_folder: request.download_path.clone(),
                 ..Default::default()
             };
 
@@ -298,7 +298,7 @@ impl TorrentManager {
             let add_torrent = AddTorrent::from_url(&source);
             let options = AddTorrentOptions {
                 overwrite: true,
-                output_folder: download_path.map(|p| p.into()),
+                output_folder: download_path,
                 ..Default::default()
             };
 

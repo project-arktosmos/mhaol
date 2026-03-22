@@ -39,6 +39,9 @@ pub fn router() -> Router<AppState> {
             "/torrents/{info_hash}/stream/stop",
             post(stop_streaming),
         )
+        .route("/fetch-cache/hashes", get(list_fetch_cache_hashes))
+        .route("/fetch-cache/{tmdb_id}", get(get_fetch_cache).delete(delete_fetch_cache))
+        .route("/fetch-cache", get(list_fetch_cache_ids).post(save_fetch_cache))
 }
 
 async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
@@ -575,6 +578,67 @@ async fn stop_streaming(State(state): State<AppState>) -> impl IntoResponse {
     }
 
     Json(serde_json::json!({ "ok": true }))
+}
+
+// --- Fetch cache endpoints ---
+
+async fn list_fetch_cache_ids(State(state): State<AppState>) -> impl IntoResponse {
+    Json(state.torrent_fetch_cache.get_all_tmdb_ids())
+}
+
+async fn list_fetch_cache_hashes(State(state): State<AppState>) -> impl IntoResponse {
+    let entries: Vec<serde_json::Value> = state
+        .torrent_fetch_cache
+        .get_all_info_hashes()
+        .into_iter()
+        .map(|(tmdb_id, info_hash)| {
+            serde_json::json!({ "tmdbId": tmdb_id, "infoHash": info_hash })
+        })
+        .collect();
+    Json(entries)
+}
+
+async fn get_fetch_cache(
+    State(state): State<AppState>,
+    Path(tmdb_id): Path<i64>,
+) -> impl IntoResponse {
+    match state.torrent_fetch_cache.get(tmdb_id) {
+        Some(row) => Json(serde_json::json!({
+            "tmdbId": row.tmdb_id,
+            "mediaType": row.media_type,
+            "candidate": serde_json::from_str::<serde_json::Value>(&row.candidate_json).unwrap_or_default(),
+            "createdAt": row.created_at,
+        }))
+        .into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveFetchCacheBody {
+    tmdb_id: i64,
+    media_type: String,
+    candidate: serde_json::Value,
+}
+
+async fn save_fetch_cache(
+    State(state): State<AppState>,
+    Json(body): Json<SaveFetchCacheBody>,
+) -> impl IntoResponse {
+    let candidate_json = serde_json::to_string(&body.candidate).unwrap_or_default();
+    state
+        .torrent_fetch_cache
+        .upsert(body.tmdb_id, &body.media_type, &candidate_json);
+    StatusCode::CREATED
+}
+
+async fn delete_fetch_cache(
+    State(state): State<AppState>,
+    Path(tmdb_id): Path<i64>,
+) -> impl IntoResponse {
+    state.torrent_fetch_cache.delete(tmdb_id);
+    StatusCode::NO_CONTENT
 }
 
 async fn find_torrent_id(state: &AppState, info_hash: &str) -> Option<usize> {

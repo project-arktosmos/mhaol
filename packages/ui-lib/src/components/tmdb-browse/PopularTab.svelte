@@ -1,8 +1,9 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import TmdbBrowseCard from './TmdbBrowseCard.svelte';
+	import TmdbBrowseGrid from './TmdbBrowseGrid.svelte';
 	import TmdbPagination from './TmdbPagination.svelte';
 	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
+	import type { TorrentState } from 'frontend/types/torrent.type';
 
 	let {
 		movies,
@@ -17,6 +18,8 @@
 		mediaType,
 		selectedMovieId = null,
 		selectedTvShowId = null,
+		fetchedIds,
+		downloadStatuses,
 		onselectMovie,
 		onselectTvShow,
 		onloadMovies,
@@ -34,6 +37,8 @@
 		mediaType?: 'movies' | 'tv';
 		selectedMovieId?: number | null;
 		selectedTvShowId?: number | null;
+		fetchedIds?: Set<number>;
+		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 		onloadMovies: (page: number) => void;
@@ -73,11 +78,7 @@
 			<span class="loading loading-lg loading-spinner"></span>
 		</div>
 	{:else if movies.length > 0}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-			{#each movies as movie (movie.id)}
-				<TmdbBrowseCard {movie} selected={selectedMovieId === movie.id} onclick={onselectMovie ? () => onselectMovie(movie) : undefined} />
-			{/each}
-		</div>
+		<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {onselectMovie} />
 		<TmdbPagination
 			page={moviesPage}
 			totalPages={moviesTotalPages}
@@ -98,11 +99,7 @@
 		<span class="loading loading-lg loading-spinner"></span>
 	</div>
 {:else if tvShows.length > 0}
-	<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-		{#each tvShows as tvShow (tvShow.id)}
-			<TmdbBrowseCard {tvShow} selected={selectedTvShowId === tvShow.id} onclick={onselectTvShow ? () => onselectTvShow(tvShow) : undefined} />
-		{/each}
-	</div>
+	<TmdbBrowseGrid {tvShows} {selectedTvShowId} {onselectTvShow} />
 	<TmdbPagination page={tvPage} totalPages={tvTotalPages} loading={loadingTv} onpage={onloadTv} />
 {:else if error}
 	<div class="alert alert-error">

@@ -264,8 +264,7 @@ pub fn list_models(engine: &LlmEngine) -> Vec<ModelInfo> {
         let size_bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
         let name = file_name
             .trim_end_matches(".gguf")
-            .replace('-', " ")
-            .replace('_', " ");
+            .replace(['-', '_'], " ");
 
         let is_loaded = current_model.as_ref().map(|m| m == &file_name).unwrap_or(false);
 

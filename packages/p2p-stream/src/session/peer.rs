@@ -75,7 +75,7 @@ impl PeerSession {
                     use glib::translate::FromGlibPtrNone;
                     let ptr = glib::gobject_ffi::g_value_get_object(
                         ret.as_ptr() as *const _,
-                    ) as *mut glib::gobject_ffi::GObject;
+                    );
                     assert!(!ptr.is_null(), "create-data-channel returned null");
                     glib::Object::from_glib_none(ptr)
                 }
@@ -280,8 +280,8 @@ impl PeerSession {
 
                     let duration_secs = query_pipeline_duration(&pipeline);
 
-                    if !sent_media_info {
-                        if duration_secs.is_some() {
+                    if !sent_media_info
+                        && duration_secs.is_some() {
                             let msg = serde_json::json!({
                                 "type": "MediaInfo",
                                 "payload": { "duration_secs": duration_secs }
@@ -289,7 +289,6 @@ impl PeerSession {
                             send_string_on_dc(dc_addr, &msg.to_string());
                             sent_media_info = true;
                         }
-                    }
 
                     let position_secs = query_pipeline_position(&pipeline).unwrap_or(0.0);
 

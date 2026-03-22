@@ -360,6 +360,12 @@ CREATE TABLE IF NOT EXISTS tmdb_seasons (
     fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (tmdb_id, season_number)
 );
+
+CREATE TABLE IF NOT EXISTS tmdb_api_cache (
+    cache_key TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 ";
 
 
@@ -620,6 +626,29 @@ fn run_migrations(conn: &Connection) {
              END;",
         );
     }
+
+    // Migration: add tmdb_api_cache table
+    if !has_table(conn, "tmdb_api_cache") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE tmdb_api_cache (
+                cache_key TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        );
+    }
+
+    // Migration: add torrent_fetch_cache table
+    if !has_table(conn, "torrent_fetch_cache") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE torrent_fetch_cache (
+                tmdb_id INTEGER PRIMARY KEY,
+                media_type TEXT NOT NULL,
+                candidate_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        );
+    }
 }
 
 /// Initialize the database schema, run migrations, and seed data.
@@ -668,6 +697,7 @@ mod tests {
         assert!(has_table(&conn, "media_list_links"));
         assert!(has_table(&conn, "signaling_servers"));
         assert!(has_table(&conn, "llm_conversations"));
+        assert!(has_table(&conn, "torrent_fetch_cache"));
 
         // Verify seed data
         let count: i64 = conn

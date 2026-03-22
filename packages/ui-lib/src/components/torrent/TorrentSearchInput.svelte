@@ -1,7 +1,10 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { createEventDispatcher } from 'svelte';
-	import { TorrentCategory, TORRENT_CATEGORY_LABELS } from 'addons/torrent-search-thepiratebay/types';
+	import {
+		TorrentCategory,
+		TORRENT_CATEGORY_LABELS
+	} from 'addons/torrent-search-thepiratebay/types';
 
 	export let query: string = '';
 	export let category: TorrentCategory = TorrentCategory.All;

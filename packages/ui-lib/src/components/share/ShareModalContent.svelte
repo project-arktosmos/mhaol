@@ -51,7 +51,7 @@
 
 {#if loading}
 	<div class="mt-6 flex justify-center">
-		<span class="loading loading-spinner loading-lg"></span>
+		<span class="loading loading-lg loading-spinner"></span>
 	</div>
 {:else}
 	<div class="mt-4 flex flex-col items-center gap-4">
@@ -64,9 +64,9 @@
 				type="text"
 				readonly
 				value={shareUrl}
-				class="input input-bordered w-full font-mono text-sm"
+				class="input-bordered input w-full font-mono text-sm"
 			/>
-			<button class="btn btn-primary btn-sm whitespace-nowrap" onclick={copyUrl}>
+			<button class="btn whitespace-nowrap btn-sm btn-primary" onclick={copyUrl}>
 				{copied ? 'Copied!' : 'Copy'}
 			</button>
 		</div>

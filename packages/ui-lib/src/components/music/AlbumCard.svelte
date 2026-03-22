@@ -30,9 +30,7 @@
 		torrentProgress !== null && torrentState !== null && torrentState !== 'seeding'
 	);
 	let isCompleted = $derived(torrentState === 'seeding');
-	let progressPercent = $derived(
-		torrentProgress !== null ? Math.round(torrentProgress * 100) : 0
-	);
+	let progressPercent = $derived(torrentProgress !== null ? Math.round(torrentProgress * 100) : 0);
 </script>
 
 <div
@@ -80,18 +78,20 @@
 			</div>
 		{/if}
 		{#if isCompleted}
-			<div class="absolute right-1 top-1">
-				<span class="badge badge-success badge-xs">Done</span>
+			<div class="absolute top-1 right-1">
+				<span class="badge badge-xs badge-success">Done</span>
 			</div>
 		{:else if isDownloading}
 			<div class="absolute inset-x-0 bottom-0 bg-black/70 px-2 py-1.5">
 				<div class="mb-1 flex items-center justify-between text-xs text-white">
-					<span class={classNames('font-medium', {
-						'text-info': torrentState === 'initializing' || torrentState === 'checking',
-						'text-primary': torrentState === 'downloading',
-						'text-warning': torrentState === 'paused',
-						'text-error': torrentState === 'error'
-					})}>
+					<span
+						class={classNames('font-medium', {
+							'text-info': torrentState === 'initializing' || torrentState === 'checking',
+							'text-primary': torrentState === 'downloading',
+							'text-warning': torrentState === 'paused',
+							'text-error': torrentState === 'error'
+						})}
+					>
 						{progressPercent}%
 					</span>
 					<span class="opacity-70">

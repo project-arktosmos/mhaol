@@ -2,9 +2,11 @@ import type {
 	TMDBMovie,
 	TMDBMovieDetails,
 	TMDBCastMember,
+	TMDBImage,
 	DisplayTMDBMovie,
 	DisplayTMDBMovieDetails,
 	DisplayTMDBCastMember,
+	DisplayTMDBImage,
 	TMDBTvShow,
 	TMDBTvShowDetails,
 	TMDBSeason,
@@ -20,7 +22,12 @@ import { extractYear } from '../../common/src/utils';
 
 export { extractYear };
 
-const BASE_IMAGE_URL = 'https://image.tmdb.org/t/p';
+let imageBaseUrl = 'https://image.tmdb.org/t/p';
+
+/** Set the base URL for TMDB images (e.g. to route through local backend cache). */
+export function setImageBaseUrl(url: string) {
+	imageBaseUrl = url;
+}
 
 // Image URL helpers
 
@@ -29,7 +36,7 @@ export function getPosterUrl(
 	size: 'w185' | 'w342' | 'w500' = 'w342'
 ): string | null {
 	if (!path) return null;
-	return `${BASE_IMAGE_URL}/${size}${path}`;
+	return `${imageBaseUrl}/${size}${path}`;
 }
 
 export function getBackdropUrl(
@@ -37,7 +44,7 @@ export function getBackdropUrl(
 	size: 'w780' | 'w1280' | 'original' = 'w780'
 ): string | null {
 	if (!path) return null;
-	return `${BASE_IMAGE_URL}/${size}${path}`;
+	return `${imageBaseUrl}/${size}${path}`;
 }
 
 export function getProfileUrl(
@@ -45,7 +52,7 @@ export function getProfileUrl(
 	size: 'w45' | 'w185' | 'h632' = 'w185'
 ): string | null {
 	if (!path) return null;
-	return `${BASE_IMAGE_URL}/${size}${path}`;
+	return `${imageBaseUrl}/${size}${path}`;
 }
 
 export function getStillUrl(
@@ -53,7 +60,7 @@ export function getStillUrl(
 	size: 'w185' | 'w300' | 'w500' = 'w300'
 ): string | null {
 	if (!path) return null;
-	return `${BASE_IMAGE_URL}/${size}${path}`;
+	return `${imageBaseUrl}/${size}${path}`;
 }
 
 // Formatting helpers
@@ -107,11 +114,32 @@ export function castMemberToDisplay(cast: TMDBCastMember): DisplayTMDBCastMember
 	};
 }
 
+export function imageToDisplay(image: TMDBImage, type: 'backdrop' | 'poster'): DisplayTMDBImage {
+	const thumbnailUrl =
+		type === 'backdrop'
+			? getBackdropUrl(image.file_path, 'w780')!
+			: getPosterUrl(image.file_path, 'w342')!;
+	const fullUrl = `${imageBaseUrl}/original${image.file_path}`;
+	return {
+		thumbnailUrl,
+		fullUrl,
+		width: image.width,
+		height: image.height
+	};
+}
+
+export function imagesToDisplay(
+	images: { backdrops: TMDBImage[]; posters: TMDBImage[] } | undefined
+): DisplayTMDBImage[] {
+	if (!images) return [];
+	const backdrops = images.backdrops.map((img) => imageToDisplay(img, 'backdrop'));
+	const posters = images.posters.map((img) => imageToDisplay(img, 'poster'));
+	return [...backdrops, ...posters];
+}
+
 export function movieDetailsToDisplay(movie: TMDBMovieDetails): DisplayTMDBMovieDetails {
 	const director = movie.credits?.crew.find((c) => c.job === 'Director');
-	const topCast = (movie.credits?.cast || [])
-		.slice(0, 10)
-		.map((c) => castMemberToDisplay(c));
+	const topCast = (movie.credits?.cast || []).slice(0, 10).map((c) => castMemberToDisplay(c));
 
 	return {
 		...movieToDisplay(movie),
@@ -121,7 +149,8 @@ export function movieDetailsToDisplay(movie: TMDBMovieDetails): DisplayTMDBMovie
 		revenue: formatCurrency(movie.revenue),
 		imdbId: movie.imdb_id || null,
 		cast: topCast,
-		director: director?.name || null
+		director: director?.name || null,
+		images: imagesToDisplay(movie.images)
 	};
 }
 
@@ -188,9 +217,7 @@ export function seasonDetailsToDisplay(season: TMDBSeasonDetails): DisplayTMDBSe
 }
 
 export function tvShowDetailsToDisplay(tvShow: TMDBTvShowDetails): DisplayTMDBTvShowDetails {
-	const topCast = (tvShow.credits?.cast || [])
-		.slice(0, 10)
-		.map((c) => castMemberToDisplay(c));
+	const topCast = (tvShow.credits?.cast || []).slice(0, 10).map((c) => castMemberToDisplay(c));
 	const seasons = (tvShow.seasons || []).map((s) => seasonToDisplay(s));
 
 	return {
@@ -200,6 +227,7 @@ export function tvShowDetailsToDisplay(tvShow: TMDBTvShowDetails): DisplayTMDBTv
 		networks: tvShow.networks?.map((n) => n.name) || [],
 		createdBy: tvShow.created_by?.map((c) => c.name) || [],
 		cast: topCast,
-		seasons
+		seasons,
+		images: imagesToDisplay(tvShow.images)
 	};
 }

@@ -99,6 +99,12 @@ pub struct HubManager {
     workspace_root: PathBuf,
 }
 
+impl Default for HubManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HubManager {
     pub fn new() -> Self {
         Self {
@@ -341,11 +347,10 @@ async fn start_app(
                         let mut lines = reader.lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             println!("[{}] {}", name_clone, line);
-                            if line.contains(&pattern) {
-                                if verify_health(&url).await {
+                            if line.contains(&pattern)
+                                && verify_health(&url).await {
                                     *status_clone.lock().await = AppStatus::Running;
                                 }
-                            }
                             let mut buf = logs_clone.lock().await;
                             push_log(&mut buf, line);
                         }
@@ -363,11 +368,10 @@ async fn start_app(
                         let mut lines = reader.lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             eprintln!("[{}] {}", name_clone, line);
-                            if line.contains(&pattern) {
-                                if verify_health(&url).await {
+                            if line.contains(&pattern)
+                                && verify_health(&url).await {
                                     *status_clone.lock().await = AppStatus::Running;
                                 }
-                            }
                             let mut buf = logs_clone.lock().await;
                             push_log(&mut buf, line);
                         }

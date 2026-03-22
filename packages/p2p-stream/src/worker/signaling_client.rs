@@ -15,6 +15,7 @@ struct SessionEntry {
     manager: SessionManager,
     /// Tracks which peers have been created (receiver already moved to forwarder).
     active_peers: HashMap<String, ()>,
+    #[allow(dead_code)]
     created_at: Instant,
 }
 

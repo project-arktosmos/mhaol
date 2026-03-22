@@ -88,11 +88,11 @@
 				<input
 					id="download-path"
 					type="text"
-					class="input input-bordered flex-1"
+					class="input-bordered input flex-1"
 					bind:value={pathInput}
 					onkeydown={(e) => e.key === 'Enter' && savePath()}
 				/>
-				<button class="btn btn-primary btn-sm" onclick={savePath}>Save</button>
+				<button class="btn btn-sm btn-primary" onclick={savePath}>Save</button>
 				<button class="btn btn-ghost btn-sm" onclick={cancelEditing}>Cancel</button>
 			</div>
 		{:else}
@@ -169,7 +169,7 @@
 	{#if showDebug}
 		<div class="flex flex-col gap-2">
 			<button
-				class="btn btn-ghost btn-xs self-end"
+				class="btn self-end btn-ghost btn-xs"
 				onclick={handleFetchDebug}
 				disabled={loadingDebug}
 			>

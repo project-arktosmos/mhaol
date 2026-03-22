@@ -16,6 +16,12 @@ pub struct SignalingRoomManager {
     port: u16,
 }
 
+impl Default for SignalingRoomManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SignalingRoomManager {
     pub fn new() -> Self {
         let port = std::env::var("PORT")

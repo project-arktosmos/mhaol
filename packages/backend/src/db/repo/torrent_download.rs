@@ -144,3 +144,90 @@ impl TorrentDownloadRepo {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::open_test_database;
+
+    fn make_repo() -> TorrentDownloadRepo {
+        TorrentDownloadRepo::new(open_test_database())
+    }
+
+    fn insert_sample(repo: &TorrentDownloadRepo, hash: &str, state: &str) {
+        repo.upsert(
+            hash, &format!("Torrent {}", hash), 1024000, 0.0, state,
+            0, 0, 5, 10, 1000, None, None, "magnet",
+        );
+    }
+
+    #[test]
+    fn test_upsert_and_get() {
+        let repo = make_repo();
+        insert_sample(&repo, "abc123", "downloading");
+
+        let row = repo.get("abc123").unwrap();
+        assert_eq!(row.info_hash, "abc123");
+        assert_eq!(row.name, "Torrent abc123");
+        assert_eq!(row.state, "downloading");
+        assert_eq!(row.size, 1024000);
+        assert_eq!(row.source, "magnet");
+    }
+
+    #[test]
+    fn test_get_not_found() {
+        let repo = make_repo();
+        assert!(repo.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_upsert_updates_existing() {
+        let repo = make_repo();
+        insert_sample(&repo, "abc123", "downloading");
+        repo.upsert(
+            "abc123", "Updated Name", 2048000, 0.5, "seeding",
+            100, 50, 3, 8, 1000, Some(60), Some("/out"), "magnet",
+        );
+
+        let row = repo.get("abc123").unwrap();
+        assert_eq!(row.name, "Updated Name");
+        assert_eq!(row.state, "seeding");
+        assert_eq!(row.progress, 0.5);
+        assert_eq!(row.output_path, Some("/out".to_string()));
+    }
+
+    #[test]
+    fn test_get_all() {
+        let repo = make_repo();
+        insert_sample(&repo, "hash1", "downloading");
+        insert_sample(&repo, "hash2", "seeding");
+
+        assert_eq!(repo.get_all().len(), 2);
+    }
+
+    #[test]
+    fn test_update_state() {
+        let repo = make_repo();
+        insert_sample(&repo, "hash1", "downloading");
+
+        repo.update_state("hash1", 1.0, "completed", 0, 0, 0, 0, None, Some("/done.mkv"));
+        let row = repo.get("hash1").unwrap();
+        assert_eq!(row.state, "completed");
+        assert_eq!(row.progress, 1.0);
+        assert_eq!(row.output_path, Some("/done.mkv".to_string()));
+    }
+
+    #[test]
+    fn test_delete_and_delete_all() {
+        let repo = make_repo();
+        insert_sample(&repo, "hash1", "downloading");
+        insert_sample(&repo, "hash2", "seeding");
+
+        repo.delete("hash1");
+        assert!(repo.get("hash1").is_none());
+        assert_eq!(repo.get_all().len(), 1);
+
+        repo.delete_all();
+        assert!(repo.get_all().is_empty());
+    }
+}

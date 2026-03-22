@@ -73,9 +73,10 @@ impl AudioCodec {
 }
 
 /// Video quality/resolution preset.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum VideoQuality {
+    #[default]
     Native,
     #[serde(rename = "1080p")]
     Q1080p,
@@ -114,11 +115,6 @@ impl VideoQuality {
     }
 }
 
-impl Default for VideoQuality {
-    fn default() -> Self {
-        VideoQuality::Native
-    }
-}
 
 /// Codec configuration for a streaming session.
 #[derive(Debug, Clone)]

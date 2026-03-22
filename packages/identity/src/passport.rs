@@ -76,7 +76,7 @@ pub fn sign_passport(name: &str, address: &str, private_key_hex: &str) -> Passpo
     prefixed.extend_from_slice(raw.as_bytes());
 
     let hash = Keccak256::digest(&prefixed);
-    let hash_hex = format!("0x{}", hex::encode(&hash));
+    let hash_hex = format!("0x{}", hex::encode(hash));
 
     // Sign
     let hex_str = private_key_hex

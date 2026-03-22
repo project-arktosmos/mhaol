@@ -16,7 +16,7 @@ use crate::util::extract_video_id;
 /// SSE event types broadcast to connected clients.
 #[derive(Debug, Clone)]
 pub enum SseEvent {
-    Progress(DownloadProgress),
+    Progress(Box<DownloadProgress>),
     Stats(ManagerStats),
     Connected,
 }
@@ -403,7 +403,7 @@ impl DownloadManager {
                     drop(map);
                     let _ = shared_fwd
                         .event_sender
-                        .send(SseEvent::Progress(progress_clone));
+                        .send(SseEvent::Progress(Box::new(progress_clone)));
                 }
             }
         });
@@ -446,7 +446,7 @@ impl DownloadManager {
 
                 let _ = shared_main
                     .event_sender
-                    .send(SseEvent::Progress(progress_clone));
+                    .send(SseEvent::Progress(Box::new(progress_clone)));
                 let _ = shared_main.event_sender.send(SseEvent::Stats(stats));
             } else {
                 drop(map);
@@ -468,7 +468,7 @@ impl DownloadManager {
         let _ = self
             .shared
             .event_sender
-            .send(SseEvent::Progress(progress.clone()));
+            .send(SseEvent::Progress(Box::new(progress.clone())));
     }
 
     fn broadcast_stats(&self) {

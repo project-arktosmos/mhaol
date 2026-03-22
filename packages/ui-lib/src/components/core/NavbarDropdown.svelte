@@ -12,9 +12,7 @@
 
 	let navigableChildren = $derived(route.children.filter((c) => !c.isDynamic));
 
-	let isActive = $derived(
-		currentPath === route.path || currentPath.startsWith(route.path + '/')
-	);
+	let isActive = $derived(currentPath === route.path || currentPath.startsWith(route.path + '/'));
 
 	let dropdownClasses = $derived(classNames('dropdown dropdown-end', classes));
 
