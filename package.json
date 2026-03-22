@@ -40,6 +40,7 @@
 		"app:shepperd": "pnpm --filter shepperd dev",
 		"app:shepperd:build": "pnpm --filter shepperd build",
 		"app:icons": "pnpm --filter icons dev",
+		"app:client": "pnpm --filter client tauri:dev",
 		"app:storybook": "pnpm --filter storybook headless",
 		"install:deps": "sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev libonig-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav"
 	},

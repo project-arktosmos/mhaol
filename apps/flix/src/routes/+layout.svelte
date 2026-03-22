@@ -17,6 +17,7 @@
   import ShareModalContent from "ui-lib/components/share/ShareModalContent.svelte";
   import AddonsModalContent from "ui-lib/components/addons/AddonsModalContent.svelte";
   import LlmModelsModalContent from "ui-lib/components/llm/LlmModelsModalContent.svelte";
+  import DatabaseModalContent from "ui-lib/components/database/DatabaseModalContent.svelte";
   import { invalidateAll } from "$app/navigation";
   import SmartSearchToast from "ui-lib/components/llm/SmartSearchToast.svelte";
   import { smartSearchService } from "frontend/services/smart-search.service";
@@ -69,6 +70,7 @@
     { id: "llm", label: "LLM", component: LlmModelsModalContent },
     { id: "share", label: "Share", component: ShareModalContent },
     { id: "settings", label: "Settings", component: VideoSettingsModalContent },
+    { id: "database", label: "Database", component: DatabaseModalContent },
   ];
 
   async function handleSmartSearchStream(candidate: SmartSearchTorrentResult) {
