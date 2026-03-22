@@ -55,7 +55,7 @@ models/
 apps/video/bin/
 
 # Android signing
-packages/tauri/src-tauri/gen/android/keystore.properties
+keystore.properties
 *.jks
 *.keystore
 

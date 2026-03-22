@@ -110,7 +110,9 @@
 		return null;
 	});
 
-	let candidateAdded = $derived($searchStore.fetchedCandidate !== null || $searchStore.downloadedHash !== null);
+	let candidateAdded = $derived(
+		$searchStore.fetchedCandidate !== null || $searchStore.downloadedHash !== null
+	);
 
 	let streamingHash = $derived($searchStore.streamingHash);
 	let streamingProgress = $derived(Math.round($searchStore.streamingProgress * 100));
