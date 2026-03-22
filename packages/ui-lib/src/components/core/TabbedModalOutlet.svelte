@@ -32,9 +32,11 @@
 		aria-modal="true"
 		tabindex="-1"
 	>
-		<div class="modal-box max-h-[90vh] max-w-6xl overflow-hidden p-0">
+		<div class="modal-box flex h-[90vh] max-w-6xl flex-col overflow-hidden p-0">
 			{#if title}
-				<div class="flex items-center justify-between border-b border-base-300 px-6 py-4">
+				<div
+					class="flex shrink-0 items-center justify-between border-b border-base-300 px-6 py-4"
+				>
 					<h3 class="text-lg font-semibold">{title}</h3>
 					<button class="btn btn-circle btn-ghost btn-sm" onclick={handleClose}>
 						&times;
@@ -49,7 +51,7 @@
 				</button>
 			{/if}
 
-			<div class="flex min-h-[70vh]">
+			<div class="flex min-h-0 flex-1">
 				<!-- Desktop sidebar -->
 				<ul
 					class={classNames(
