@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { modalRouterService } from 'frontend/services/modal-router.service';
+	import { modalRouterService } from 'ui-lib/services/modal-router.service';
 
 	interface TabbedModalSection {
 		id: string;

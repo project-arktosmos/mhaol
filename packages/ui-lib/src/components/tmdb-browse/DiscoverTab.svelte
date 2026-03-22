@@ -3,8 +3,8 @@
 	import TmdbBrowseGrid from './TmdbBrowseGrid.svelte';
 	import TmdbPagination from './TmdbPagination.svelte';
 	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
-	import type { TmdbGenre } from 'frontend/types/tmdb-browse.type';
-	import type { TorrentState } from 'frontend/types/torrent.type';
+	import type { TmdbGenre } from 'ui-lib/types/tmdb-browse.type';
+	import type { TorrentState } from 'ui-lib/types/torrent.type';
 
 	let {
 		movies,

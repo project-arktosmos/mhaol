@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { RaGameMetadata } from 'frontend/types/retroachievements.type';
+	import type { RaGameMetadata } from 'ui-lib/types/retroachievements.type';
 
 	interface Props {
 		game: RaGameMetadata;

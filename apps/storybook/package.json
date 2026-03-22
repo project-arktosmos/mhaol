@@ -10,7 +10,6 @@
 	},
 	"dependencies": {
 		"addons": "workspace:*",
-		"frontend": "workspace:*",
 		"ui-lib": "workspace:*"
 	},
 	"devDependencies": {

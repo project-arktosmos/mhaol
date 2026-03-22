@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { torrentService } from 'frontend/services/torrent.service';
-	import { libraryService } from 'frontend/services/library.service';
-	import type { Library } from 'frontend/types/library.type';
+	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { libraryService } from 'ui-lib/services/library.service';
+	import type { Library } from 'ui-lib/types/library.type';
 	import LibraryAddForm from 'ui-lib/components/libraries/LibraryAddForm.svelte';
 
 	const state = torrentService.state;
@@ -13,11 +13,6 @@
 	let selectedLibraryId: string = '';
 	let showInlineAddForm = false;
 	let previousLibraryCount = 0;
-
-	// Debug info
-	let showDebug = false;
-	let debugLogs: string[] = [];
-	let loadingDebug = false;
 
 	// Clear storage confirmation
 	let confirmClear = false;
@@ -65,12 +60,6 @@
 	function handleShowAddForm() {
 		showInlineAddForm = true;
 		libraryService.openAddForm();
-	}
-
-	async function handleFetchDebug() {
-		loadingDebug = true;
-		debugLogs = await torrentService.getDebugInfo();
-		loadingDebug = false;
 	}
 
 	async function handleClearStorage() {
@@ -184,53 +173,5 @@
 			{/if}
 		</div>
 
-		<!-- Debug Info (Collapsible) -->
-		<div class="divider my-1"></div>
-		<button
-			class="flex w-full items-center justify-between text-sm text-base-content/70 hover:text-base-content"
-			on:click={() => {
-				showDebug = !showDebug;
-				if (showDebug && debugLogs.length === 0) {
-					handleFetchDebug();
-				}
-			}}
-		>
-			<span>Debug Info</span>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				class="h-4 w-4 transition-transform"
-				class:rotate-180={showDebug}
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-			>
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-			</svg>
-		</button>
-
-		{#if showDebug}
-			<div class="mt-2 flex flex-col gap-2">
-				<button
-					class="btn self-end btn-ghost btn-xs"
-					on:click={handleFetchDebug}
-					disabled={loadingDebug}
-				>
-					{#if loadingDebug}
-						<span class="loading loading-xs loading-spinner"></span>
-					{:else}
-						Refresh
-					{/if}
-				</button>
-				<div class="max-h-64 overflow-auto rounded-lg bg-base-300 p-3 font-mono text-xs">
-					{#if debugLogs.length === 0}
-						<p class="text-base-content/50">No debug info available</p>
-					{:else}
-						{#each debugLogs as line}
-							<p class="whitespace-pre-wrap">{line}</p>
-						{/each}
-					{/if}
-				</div>
-			</div>
-		{/if}
 	</div>
 </div>

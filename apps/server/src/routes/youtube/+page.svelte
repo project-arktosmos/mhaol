@@ -1,20 +1,20 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import { youtubeLibraryService } from 'frontend/services/youtube-library.service';
-	import { browseDetailService } from 'frontend/services/browse-detail.service';
-	import { youtubeService } from 'frontend/services/youtube.service';
-	import { youtubeSearchService } from 'frontend/services/youtube-search.service';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
+	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
+	import { youtubeService } from 'ui-lib/services/youtube.service';
+	import { youtubeSearchService } from 'ui-lib/services/youtube-search.service';
 	import type {
 		YouTubeDownloadProgress,
 		YouTubeChannelMeta,
 		YouTubeRssVideo,
 		YouTubeRssFeedResponse
-	} from 'frontend/types/youtube.type';
-	import { youTubeCardAdapter } from 'frontend/adapters/classes/youtube-card.adapter';
-	import type { LibraryCardItem } from 'frontend/types/library.type';
-	import type { YouTubeSearchChannelItem } from 'frontend/types/youtube-search.type';
+	} from 'ui-lib/types/youtube.type';
+	import { youTubeCardAdapter } from 'ui-lib/adapters/classes/youtube-card.adapter';
+	import type { LibraryCardItem } from 'ui-lib/types/library.type';
+	import type { YouTubeSearchChannelItem } from 'ui-lib/types/youtube-search.type';
 	import LibraryContentGrid from 'ui-lib/components/libraries/LibraryContentGrid.svelte';
 	import YouTubeSearchInput from 'ui-lib/components/youtube-search/YouTubeSearchInput.svelte';
 	import YouTubeChannelCard from 'ui-lib/components/youtube-search/YouTubeChannelCard.svelte';

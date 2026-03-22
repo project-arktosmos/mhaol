@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import releases from '$data/releases.json';
+	import releases from 'ui-lib/data/releases.json';
 
 	const platforms = [
 		{

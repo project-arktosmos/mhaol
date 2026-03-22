@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { apiUrl } from 'frontend/lib/api-base';
+	import { apiUrl } from 'ui-lib/lib/api-base';
 
 	interface TableInfo {
 		name: string;

@@ -7,9 +7,11 @@ import { networkInterfaces, homedir } from "node:os";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const PORT = 1530;
+const CLIENT_PORT = 1570;
 const DATA_DIR = join(homedir(), "mhaol-server");
 const HEALTH_URL = `http://localhost:${PORT}/api/health`;
 const STATIC_DIR = join(__dirname, "..", "dist-static");
+const CLIENT_STATIC_DIR = join(__dirname, "..", "..", "client", "dist-static");
 
 await checkPort(PORT);
 
@@ -21,6 +23,14 @@ if (skipBuild && existsSync(join(STATIC_DIR, "index.html"))) {
 } else {
   console.log("Building frontend...");
   execSync("pnpm --filter server build", { stdio: "inherit", cwd: "../.." });
+}
+
+// Build client app
+if (skipBuild && existsSync(join(CLIENT_STATIC_DIR, "index.html"))) {
+  console.log("Client app already built, skipping.");
+} else {
+  console.log("Building client app...");
+  execSync("pnpm --filter client build", { stdio: "inherit", cwd: "../.." });
 }
 
 // Build backend
@@ -50,7 +60,9 @@ const backend = spawn(serverBin, [], {
   env: {
     ...process.env,
     PORT: String(PORT),
+    CLIENT_PORT: String(CLIENT_PORT),
     STATIC_DIR,
+    CLIENT_STATIC_DIR,
     DATA_DIR,
     APP_ID: "server",
   },
@@ -61,8 +73,12 @@ await waitForBackend();
 
 const lanIp = getLanIp();
 console.log(`Server app running on:`);
-console.log(`  Local:   http://localhost:${PORT}`);
-if (lanIp) console.log(`  Network: http://${lanIp}:${PORT}`);
+console.log(`  Server:  http://localhost:${PORT}`);
+console.log(`  Client:  http://localhost:${CLIENT_PORT}`);
+if (lanIp) {
+  console.log(`  Network: http://${lanIp}:${PORT}`);
+  console.log(`  Network: http://${lanIp}:${CLIENT_PORT} (client)`);
+}
 
 function getLanIp() {
   const nets = networkInterfaces();

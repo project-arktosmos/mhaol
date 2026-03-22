@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { sidebarService } from 'frontend/services/sidebar.service';
+	import { sidebarService } from 'ui-lib/services/sidebar.service';
 	import DownloadsSummary from 'ui-lib/components/downloads/DownloadsSummary.svelte';
-	import type { SidebarWidthMode } from 'frontend/types/sidebar.type';
+	import type { SidebarWidthMode } from 'ui-lib/types/sidebar.type';
 
 	interface Props {
 		classes?: string;

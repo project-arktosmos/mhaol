@@ -1,7 +1,7 @@
 <script lang="ts">
 	import TmdbBrowseGrid from './TmdbBrowseGrid.svelte';
 	import type { DisplayTMDBMovie } from 'addons/tmdb/types';
-	import type { TorrentState } from 'frontend/types/torrent.type';
+	import type { TorrentState } from 'ui-lib/types/torrent.type';
 
 	let {
 		movies,

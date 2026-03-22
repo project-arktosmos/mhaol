@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Modal from 'ui-lib/components/core/Modal.svelte';
-	import { modalRouterService } from 'frontend/services/modal-router.service';
+	import { modalRouterService } from 'ui-lib/services/modal-router.service';
 	interface ModalConfig {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		component: any;

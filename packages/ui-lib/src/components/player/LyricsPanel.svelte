@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { tick } from 'svelte';
-	import { lyricsService } from 'frontend/services/lyrics.service';
-	import type { PlayableFile } from 'frontend/types/player.type';
+	import { lyricsService } from 'ui-lib/services/lyrics.service';
+	import type { PlayableFile } from 'ui-lib/types/player.type';
 
 	interface Props {
 		currentFile: PlayableFile | null;

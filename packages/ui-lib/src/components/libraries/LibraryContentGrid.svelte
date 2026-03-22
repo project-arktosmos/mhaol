@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { LibraryCardItem } from 'frontend/types/library.type';
-	import type { YouTubeDownloadProgress } from 'frontend/types/youtube.type';
+	import type { LibraryCardItem } from 'ui-lib/types/library.type';
+	import type { YouTubeDownloadProgress } from 'ui-lib/types/youtube.type';
 	import LibraryContentCard from './LibraryContentCard.svelte';
 
 	let {

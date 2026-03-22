@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import classNames from 'classnames';
-	import { rosterService } from 'frontend/services/roster.service';
-	import { identityAdapter } from 'frontend/adapters/classes/identity.adapter';
-	import type { RosterPeerStatus } from 'frontend/types/roster.type';
+	import { rosterService } from 'ui-lib/services/roster.service';
+	import { identityAdapter } from 'ui-lib/adapters/classes/identity.adapter';
+	import type { RosterPeerStatus } from 'ui-lib/types/roster.type';
 
 	const rosterStore = rosterService.state;
 

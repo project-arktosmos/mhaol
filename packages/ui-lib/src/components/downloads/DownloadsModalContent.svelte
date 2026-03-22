@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import classNames from 'classnames';
-	import { downloadsService } from 'frontend/services/downloads.service';
+	import { downloadsService } from 'ui-lib/services/downloads.service';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
-	import type { UnifiedDownload } from 'frontend/types/download.type';
-	import { formatBytes } from 'frontend/types/torrent.type';
+	import type { UnifiedDownload } from 'ui-lib/types/download.type';
+	import { formatBytes } from 'ui-lib/types/torrent.type';
 
 	interface FileEntry {
 		name: string;

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import type { Snippet } from 'svelte';
-	import { modalRouterService } from 'frontend/services/modal-router.service';
+	import { modalRouterService } from 'ui-lib/services/modal-router.service';
 
 	interface NavbarItem {
 		id: string;

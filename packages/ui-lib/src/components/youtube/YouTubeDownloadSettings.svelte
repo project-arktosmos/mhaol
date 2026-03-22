@@ -1,22 +1,22 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { youtubeService } from 'frontend/services/youtube.service';
-	import { libraryService } from 'frontend/services/library.service';
-	import type { Library } from 'frontend/types/library.type';
+	import { youtubeService } from 'ui-lib/services/youtube.service';
+	import { libraryService } from 'ui-lib/services/library.service';
+	import type { Library } from 'ui-lib/types/library.type';
 	import LibraryAddForm from 'ui-lib/components/libraries/LibraryAddForm.svelte';
 	import {
 		AUDIO_QUALITY_OPTIONS,
 		AUDIO_FORMAT_OPTIONS,
 		VIDEO_QUALITY_OPTIONS,
 		VIDEO_FORMAT_OPTIONS
-	} from 'frontend/types/youtube.type';
+	} from 'ui-lib/types/youtube.type';
 	import type {
 		AudioQuality,
 		AudioFormat,
 		DownloadMode,
 		VideoQuality,
 		VideoFormat
-	} from 'frontend/types/youtube.type';
+	} from 'ui-lib/types/youtube.type';
 
 	const state = youtubeService.state;
 	const settings = youtubeService.store;

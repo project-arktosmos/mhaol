@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { libraryService } from 'frontend/services/library.service';
-	import type { DirectoryEntry } from 'frontend/types/library.type';
+	import { libraryService } from 'ui-lib/services/library.service';
+	import type { DirectoryEntry } from 'ui-lib/types/library.type';
 
 	interface Props {
 		onselect: (path: string, name: string) => void;

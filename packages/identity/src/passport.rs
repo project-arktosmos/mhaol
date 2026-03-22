@@ -66,8 +66,8 @@ pub fn eip191_recover(message: &str, signature_hex: &str) -> Result<String, Stri
 }
 
 /// Sign a passport message using EIP-191 personal_sign.
-pub fn sign_passport(name: &str, address: &str, private_key_hex: &str) -> Passport {
-    let raw = serde_json::json!({ "name": name, "address": address }).to_string();
+pub fn sign_passport(name: &str, address: &str, instance_type: &str, signaling_url: &str, private_key_hex: &str) -> Passport {
+    let raw = serde_json::json!({ "name": name, "address": address, "instanceType": instance_type, "signalingUrl": signaling_url }).to_string();
 
     // EIP-191: "\x19Ethereum Signed Message:\n" + len + message
     let prefix = format!("\x19Ethereum Signed Message:\n{}", raw.len());

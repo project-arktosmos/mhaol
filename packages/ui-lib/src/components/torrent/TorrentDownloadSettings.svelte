@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { torrentService } from 'frontend/services/torrent.service';
+	import { torrentService } from 'ui-lib/services/torrent.service';
 
 	const torrentState = torrentService.state;
 

@@ -1,16 +1,16 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { browseDetailService } from 'frontend/services/browse-detail.service';
-	import { playerService } from 'frontend/services/player.service';
-	import { youtubeService } from 'frontend/services/youtube.service';
-	import { youtubeLibraryService } from 'frontend/services/youtube-library.service';
-	import { mediaModeService } from 'frontend/services/media-mode.service';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import { formatDuration } from 'frontend/utils/musicbrainz/transform';
-	import { getStateLabel, getStateColor } from 'frontend/types/youtube.type';
-	import type { YouTubeChannelMeta } from 'frontend/types/youtube.type';
+	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
+	import { playerService } from 'ui-lib/services/player.service';
+	import { youtubeService } from 'ui-lib/services/youtube.service';
+	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
+	import { mediaModeService } from 'ui-lib/services/media-mode.service';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { formatDuration } from 'ui-lib/utils/musicbrainz/transform';
+	import { getStateLabel, getStateColor } from 'ui-lib/types/youtube.type';
+	import type { YouTubeChannelMeta } from 'ui-lib/types/youtube.type';
 	import type { DisplayTMDBImage } from 'addons/tmdb/types';
-	import type { YouTubeSearchChannelItem } from 'frontend/types/youtube-search.type';
+	import type { YouTubeSearchChannelItem } from 'ui-lib/types/youtube-search.type';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 	import MediaPlayer from 'ui-lib/components/player/MediaPlayer.svelte';
 	import TagPill from 'ui-lib/components/images/TagPill.svelte';

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { torrentService } from 'frontend/services/torrent.service';
-	import { playerService } from 'frontend/services/player.service';
+	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { playerService } from 'ui-lib/services/player.service';
 	import TorrentListItem from './TorrentListItem.svelte';
 
 	const state = torrentService.state;

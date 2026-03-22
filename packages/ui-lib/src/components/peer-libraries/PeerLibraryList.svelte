@@ -1,10 +1,10 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
-	import { peerLibraryAdapter } from 'frontend/adapters/classes/peer-library.adapter';
-	import { peerLibraryService } from 'frontend/services/peer-library.service';
+	import { signalingAdapter } from 'ui-lib/adapters/classes/signaling.adapter';
+	import { peerLibraryAdapter } from 'ui-lib/adapters/classes/peer-library.adapter';
+	import { peerLibraryService } from 'ui-lib/services/peer-library.service';
 	import PeerLibraryFileList from './PeerLibraryFileList.svelte';
-	import type { PeerLibraryData } from 'frontend/types/peer-library.type';
+	import type { PeerLibraryData } from 'ui-lib/types/peer-library.type';
 
 	let {
 		peerId,

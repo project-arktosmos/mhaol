@@ -1,42 +1,26 @@
 <script lang="ts">
   import "../css/app.css";
-  import "frontend/services/i18n";
+  import "ui-lib/services/i18n";
   import { onMount, onDestroy, setContext } from "svelte";
-  import { playerService } from "frontend/services/player.service";
-  import { identityService } from "frontend/services/identity.service";
-  import { torrentService } from "frontend/services/torrent.service";
-  import { themeService } from "frontend/services/theme.service";
-  import { signalingChatService } from "frontend/services/signaling-chat.service";
-  import { DEFAULT_SIGNALING_URL } from "frontend/lib/api-base";
-  import { toastService } from "frontend/services/toast.service";
+  import { playerService } from "ui-lib/services/player.service";
+  import { identityService } from "ui-lib/services/identity.service";
+  import { torrentService } from "ui-lib/services/torrent.service";
+  import { themeService } from "ui-lib/services/theme.service";
+  import { signalingChatService } from "ui-lib/services/signaling-chat.service";
+  import { DEFAULT_SIGNALING_URL } from "ui-lib/lib/api-base";
+  import { toastService } from "ui-lib/services/toast.service";
   import ThemeToggle from "ui-lib/components/core/ThemeToggle.svelte";
   import ToastOutlet from "ui-lib/components/core/ToastOutlet.svelte";
   import Navbar from "ui-lib/components/core/Navbar.svelte";
-  import TabbedModalOutlet from "ui-lib/components/core/TabbedModalOutlet.svelte";
-  import TorrentModalContent from "ui-lib/components/torrent/TorrentModalContent.svelte";
-  import DownloadsModalContent from "ui-lib/components/downloads/DownloadsModalContent.svelte";
-  import IdentityModalContent from "ui-lib/components/identity/IdentityModalContent.svelte";
-  import VideoSettingsModalContent from "ui-lib/components/settings/VideoSettingsModalContent.svelte";
-  import ShareModalContent from "ui-lib/components/share/ShareModalContent.svelte";
-  import AddonsModalContent from "ui-lib/components/addons/AddonsModalContent.svelte";
-  import LlmModelsModalContent from "ui-lib/components/llm/LlmModelsModalContent.svelte";
-  import DatabaseModalContent from "ui-lib/components/database/DatabaseModalContent.svelte";
-  import SignalingInfoContent from "ui-lib/components/signaling/SignalingInfoContent.svelte";
-  import LibraryModalContent from "ui-lib/components/libraries/LibraryModalContent.svelte";
   import { invalidateAll } from "$app/navigation";
-  import { page } from "$app/stores";
-  import { youtubeService } from "frontend/services/youtube.service";
-  import { youtubeLibraryService } from "frontend/services/youtube-library.service";
-  import TubeSettingsContent from "ui-lib/components/settings/TubeSettingsContent.svelte";
-  import DiskContent from "ui-lib/components/settings/DiskContent.svelte";
+  import { youtubeService } from "ui-lib/services/youtube.service";
+  import { youtubeLibraryService } from "ui-lib/services/youtube-library.service";
   import SmartSearchToast from "ui-lib/components/llm/SmartSearchToast.svelte";
-  import SmartSearchModalContent from "ui-lib/components/llm/SmartSearchModalContent.svelte";
-  import { smartSearchService } from "frontend/services/smart-search.service";
-  import { modalRouterService } from "frontend/services/modal-router.service";
-  import { apiUrl } from "frontend/lib/api-base";
+  import { smartSearchService } from "ui-lib/services/smart-search.service";
+  import { apiUrl } from "ui-lib/lib/api-base";
   import { setImageBaseUrl } from "addons/tmdb/transform";
-  import { browseDetailService } from "frontend/services/browse-detail.service";
-  import { signalingAdapter } from "frontend/adapters/classes/signaling.adapter";
+  import { browseDetailService } from "ui-lib/services/browse-detail.service";
+  import { signalingAdapter } from "ui-lib/adapters/classes/signaling.adapter";
   import { contactHandshakeService } from "webrtc/service";
   import type { PassportData, ContactHandshakeMessage } from "webrtc/types";
   import { get } from "svelte/store";
@@ -44,8 +28,8 @@
   setImageBaseUrl(apiUrl("/api/tmdb/image"));
   import BrowseDetailPanel from "ui-lib/components/browse/BrowseDetailPanel.svelte";
   import Modal from "ui-lib/components/core/Modal.svelte";
-  import type { SmartSearchTorrentResult } from "frontend/types/smart-search.type";
-  import type { PlayableFile } from "frontend/types/player.type";
+  import type { SmartSearchTorrentResult } from "ui-lib/types/smart-search.type";
+  import type { PlayableFile } from "ui-lib/types/player.type";
 
   let { children } = $props();
 
@@ -91,27 +75,6 @@
     const cb = cbs[action as keyof typeof cbs];
     if (typeof cb === 'function') (cb as () => void)();
   }
-
-  const sections = [
-    {
-      id: "libraries",
-      label: "Libraries",
-      component: LibraryModalContent,
-      props: { fixedMediaTypes: ["video"] },
-    },
-    { id: "torrent", label: "Torrent", component: TorrentModalContent },
-    { id: "downloads", label: "Downloads", component: DownloadsModalContent },
-    { id: "identity", label: "Identity", component: IdentityModalContent },
-    { id: "addons", label: "Addons", component: AddonsModalContent },
-    { id: "llm", label: "LLM", component: LlmModelsModalContent },
-    { id: "share", label: "Share", component: ShareModalContent },
-    { id: "signaling", label: "Signaling", component: SignalingInfoContent },
-    { id: "smart-search", label: "Smart Search", component: SmartSearchModalContent },
-    { id: "settings", label: "Settings", component: VideoSettingsModalContent },
-    { id: "database", label: "Database", component: DatabaseModalContent },
-    { id: "yt-settings", label: "YT Settings", component: TubeSettingsContent },
-    { id: "yt-disk", label: "Disk", component: DiskContent },
-  ];
 
   async function handleSmartSearchStream(candidate: SmartSearchTorrentResult) {
     smartSearchService.hide();
@@ -307,10 +270,10 @@
           </svg>
         {/if}
       </button>
-      <button
+      <a
+        href="/options"
         class="btn btn-circle btn-ghost btn-sm"
-        onclick={() => modalRouterService.openNavbar(sections[0].id)}
-        aria-label="Settings"
+        aria-label="Options"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -331,7 +294,7 @@
             d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
           />
         </svg>
-      </button>
+      </a>
       <ThemeToggle />
     {/snippet}
   </Navbar>
@@ -344,8 +307,6 @@
     </div>
   </main>
 </div>
-
-<TabbedModalOutlet {sections} title="Options" />
 
 {#if !isLargeScreen}
   <Modal

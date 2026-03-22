@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { signalingChatService } from 'frontend/services/signaling-chat.service';
+	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
 	import SignalingConnectionControls from 'ui-lib/components/signaling/SignalingConnectionControls.svelte';
 	import SignalingChat from 'ui-lib/components/signaling/SignalingChat.svelte';
 

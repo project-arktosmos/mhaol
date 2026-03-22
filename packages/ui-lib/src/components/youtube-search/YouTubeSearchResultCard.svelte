@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { YouTubeSearchItem } from 'frontend/types/youtube-search.type';
+	import type { YouTubeSearchItem } from 'ui-lib/types/youtube-search.type';
 
 	let {
 		item,

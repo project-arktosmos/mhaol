@@ -1,10 +1,10 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { MediaList } from 'frontend/types/media-list.type';
-	import { libraryFileAdapter } from 'frontend/adapters/classes/library-file.adapter';
-	import type { MediaType } from 'frontend/types/library.type';
+	import type { MediaList } from 'ui-lib/types/media-list.type';
+	import { libraryFileAdapter } from 'ui-lib/adapters/classes/library-file.adapter';
+	import type { MediaType } from 'ui-lib/types/library.type';
 	import type { DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
-	import type { DisplayMusicBrainzReleaseGroup } from '$types/musicbrainz.type';
+	import type { DisplayMusicBrainzReleaseGroup } from 'ui-lib/types/musicbrainz.type';
 
 	interface Props {
 		list: MediaList;

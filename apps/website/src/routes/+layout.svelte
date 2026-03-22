@@ -1,8 +1,8 @@
 <script lang="ts">
 	import '../css/app.css';
-	import 'frontend/services/i18n';
+	import 'ui-lib/services/i18n';
 	import { onMount } from 'svelte';
-	import { themeService } from 'frontend/services/theme.service';
+	import { themeService } from 'ui-lib/services/theme.service';
 	import LandingNavbar from 'ui-lib/components/landing/LandingNavbar.svelte';
 
 	let { children } = $props();

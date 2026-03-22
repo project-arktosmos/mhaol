@@ -42,12 +42,11 @@ const config: StorybookConfig = {
 			resolve: {
 				alias: {
 					$components: resolve(__dirname, '../../../packages/ui-lib/src/components'),
-					$utils: resolve(__dirname, '../../../packages/frontend/src/utils'),
-					$types: resolve(__dirname, '../../../packages/frontend/src/types'),
-					$data: resolve(__dirname, '../../../packages/frontend/src/data'),
-					$adapters: resolve(__dirname, '../../../packages/frontend/src/adapters'),
-					$services: resolve(__dirname, '../../../packages/frontend/src/services'),
-					frontend: resolve(__dirname, '../../../packages/frontend/src'),
+					$utils: resolve(__dirname, '../../../packages/ui-lib/src/utils'),
+					$types: resolve(__dirname, '../../../packages/ui-lib/src/types'),
+					$data: resolve(__dirname, '../../../packages/ui-lib/src/data'),
+					$adapters: resolve(__dirname, '../../../packages/ui-lib/src/adapters'),
+					$services: resolve(__dirname, '../../../packages/ui-lib/src/services'),
 					'ui-lib': resolve(__dirname, '../../../packages/ui-lib/src'),
 					'$app/environment': resolve(__dirname, '../src/mocks/app-environment.ts'),
 					'$app/paths': resolve(__dirname, '../src/mocks/app-paths.ts'),

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import type { YouTubeSearchChannelItem } from 'frontend/types/youtube-search.type';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import type { YouTubeSearchChannelItem } from 'ui-lib/types/youtube-search.type';
 
 	let {
 		channel,

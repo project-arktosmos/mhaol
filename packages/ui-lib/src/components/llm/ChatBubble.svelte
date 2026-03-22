@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { ChatMessage } from 'frontend/types/llm.type';
+	import type { ChatMessage } from 'ui-lib/types/llm.type';
 
 	let {
 		message,

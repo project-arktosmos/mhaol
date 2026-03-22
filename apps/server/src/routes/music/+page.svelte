@@ -1,20 +1,20 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import { releaseGroupsToDisplay, releaseToDisplay } from 'frontend/utils/musicbrainz/transform';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { releaseGroupsToDisplay, releaseToDisplay } from 'ui-lib/utils/musicbrainz/transform';
 	import type {
 		DisplayMusicBrainzReleaseGroup,
 		DisplayMusicBrainzRelease,
 		MusicBrainzReleaseGroup,
 		MusicBrainzRelease
-	} from 'frontend/types/musicbrainz.type';
-	import type { TorrentInfo } from 'frontend/types/torrent.type';
+	} from 'ui-lib/types/musicbrainz.type';
+	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 	import AlbumCard from 'ui-lib/components/music/AlbumCard.svelte';
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
-	import { smartSearchService } from 'frontend/services/smart-search.service';
-	import { torrentService } from 'frontend/services/torrent.service';
-	import { browseDetailService } from 'frontend/services/browse-detail.service';
+	import { smartSearchService } from 'ui-lib/services/smart-search.service';
+	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
 	import classNames from 'classnames';
 
 	const GENRES = [

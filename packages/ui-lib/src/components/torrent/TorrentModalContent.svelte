@@ -1,11 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { torrentService } from 'frontend/services/torrent.service';
-	import { libraryService } from 'frontend/services/library.service';
+	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { libraryService } from 'ui-lib/services/library.service';
 	import TorrentAddInput from 'ui-lib/components/torrent/TorrentAddInput.svelte';
 	import TorrentSettings from 'ui-lib/components/torrent/TorrentSettings.svelte';
-	import TorrentStats from 'ui-lib/components/torrent/TorrentStats.svelte';
-	import TorrentList from 'ui-lib/components/torrent/TorrentList.svelte';
 	import TorrentSearch from 'ui-lib/components/torrent/TorrentSearch.svelte';
 
 	const state = torrentService.state;
@@ -58,16 +56,7 @@
 	<TorrentSearch />
 </div>
 
-<div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-	<!-- Left column: Add input and settings -->
-	<div class="flex flex-col gap-4 lg:col-span-1">
-		<TorrentAddInput />
-		<TorrentSettings />
-	</div>
-
-	<!-- Right column: Stats and list -->
-	<div class="flex flex-col gap-4 lg:col-span-2">
-		<TorrentStats />
-		<TorrentList />
-	</div>
+<div class="mt-6 flex flex-col gap-4">
+	<TorrentAddInput />
+	<TorrentSettings />
 </div>

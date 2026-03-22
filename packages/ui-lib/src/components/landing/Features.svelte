@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { themeService } from 'frontend/services/theme.service';
+	import { themeService } from 'ui-lib/services/theme.service';
 
 	const themeStore = themeService.store;
 	let mode = $derived($themeStore.theme);

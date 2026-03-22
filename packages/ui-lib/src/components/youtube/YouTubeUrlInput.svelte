@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { youtubeService } from 'frontend/services/youtube.service';
+	import { youtubeService } from 'ui-lib/services/youtube.service';
 	import {
 		extractVideoId,
 		extractPlaylistId,
 		type YouTubeOEmbedData
-	} from 'frontend/types/youtube.type';
-	import { apiUrl } from 'frontend/lib/api-base';
+	} from 'ui-lib/types/youtube.type';
+	import { apiUrl } from 'ui-lib/lib/api-base';
 
 	export let initialUrl: string = '';
 

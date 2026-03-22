@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { LibraryFile } from 'frontend/types/library.type';
+	import type { LibraryFile } from 'ui-lib/types/library.type';
 	import type { TMDBMovie, TMDBTvShow, TMDBTvShowDetails, TMDBEpisode } from 'addons/tmdb/types';
 	import { getPosterUrl, extractYear } from 'addons/tmdb/transform';
 

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import PeerChatLayout from 'ui-lib/components/signaling/PeerChatLayout.svelte';
-	import { signalingChatService } from 'frontend/services/signaling-chat.service';
-	import { rosterService } from 'frontend/services/roster.service';
+	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
+	import { rosterService } from 'ui-lib/services/roster.service';
 	import { get } from 'svelte/store';
 
 	onMount(() => {

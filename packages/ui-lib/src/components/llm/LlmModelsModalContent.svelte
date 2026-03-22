@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { llmService } from 'frontend/services/llm.service';
-	import { recommendedModels } from 'frontend/data/recommended-models';
+	import { llmService } from 'ui-lib/services/llm.service';
+	import { recommendedModels } from 'ui-lib/data/recommended-models';
 	import ModelManager from 'ui-lib/components/llm/ModelManager.svelte';
 
 	const store = llmService.store;

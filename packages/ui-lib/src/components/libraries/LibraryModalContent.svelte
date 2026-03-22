@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { libraryService } from 'frontend/services/library.service';
-	import type { MediaType } from 'frontend/types/library.type';
+	import { libraryService } from 'ui-lib/services/library.service';
+	import type { MediaType } from 'ui-lib/types/library.type';
 	import LibraryAddForm from './LibraryAddForm.svelte';
 	import LibraryList from './LibraryList.svelte';
 

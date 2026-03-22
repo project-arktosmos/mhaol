@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { createEventDispatcher } from 'svelte';
-	import { ThemeColors, ThemeSizes } from 'frontend/types/core.type';
+	import { ThemeColors, ThemeSizes } from 'ui-lib/types/core.type';
 
 	export let label: string = '';
 	export let href: string = '';

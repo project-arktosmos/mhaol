@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { LibraryFile } from 'frontend/types/library.type';
+	import type { LibraryFile } from 'ui-lib/types/library.type';
 	import LibraryFileItem from './LibraryFileItem.svelte';
 	import TmdbLinkModal from './TmdbLinkModal.svelte';
 	import MusicBrainzLinkModal from './MusicBrainzLinkModal.svelte';

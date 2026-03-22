@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { cloudLibraryService } from 'frontend/services/cloud-library.service';
-	import { cloudPeerService } from 'frontend/services/cloud-peer.service';
-	import type { DirectoryEntry } from 'frontend/types/cloud.type';
+	import { cloudLibraryService } from 'ui-lib/services/cloud-library.service';
+	import { cloudPeerService } from 'ui-lib/services/cloud-peer.service';
+	import type { DirectoryEntry } from 'ui-lib/types/cloud.type';
 
 	const libStore = cloudLibraryService.store;
 	const libState = cloudLibraryService.state;

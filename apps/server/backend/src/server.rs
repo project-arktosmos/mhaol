@@ -80,6 +80,29 @@ async fn main() {
 
     tracing::info!("Backend server listening on {}", addr);
 
+    // Optionally serve the client SPA on a separate port
+    if let Ok(client_dir) = std::env::var("CLIENT_STATIC_DIR") {
+        let client_port: u16 = std::env::var("CLIENT_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(1570);
+        let client_index = PathBuf::from(&client_dir).join("index.html");
+        let client_app = axum::Router::new().fallback_service(
+            tower_http::services::ServeDir::new(&client_dir)
+                .fallback(tower_http::services::ServeFile::new(client_index)),
+        );
+        let client_addr = format!("{}:{}", host, client_port);
+        let client_listener = TcpListener::bind(&client_addr)
+            .await
+            .unwrap_or_else(|e| panic!("Failed to bind client to {}: {}", client_addr, e));
+        tracing::info!("Client SPA listening on {}", client_addr);
+        tokio::spawn(async move {
+            axum::serve(client_listener, client_app)
+                .await
+                .expect("Client server error");
+        });
+    }
+
     axum::serve(listener, app)
         .await
         .expect("Server error");

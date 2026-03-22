@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { signalingChatService } from 'frontend/services/signaling-chat.service';
+	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
 	import PeerSidebar from 'ui-lib/components/signaling/PeerSidebar.svelte';
 	import SignalingChat from 'ui-lib/components/signaling/SignalingChat.svelte';
 

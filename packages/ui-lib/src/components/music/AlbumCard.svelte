@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { DisplayMusicBrainzReleaseGroup } from 'frontend/types/musicbrainz.type';
-	import type { TorrentState } from 'frontend/types/torrent.type';
-	import { formatSpeed, formatEta } from 'frontend/types/torrent.type';
+	import type { DisplayMusicBrainzReleaseGroup } from 'ui-lib/types/musicbrainz.type';
+	import type { TorrentState } from 'ui-lib/types/torrent.type';
+	import { formatSpeed, formatEta } from 'ui-lib/types/torrent.type';
 
 	interface Props {
 		album: DisplayMusicBrainzReleaseGroup;

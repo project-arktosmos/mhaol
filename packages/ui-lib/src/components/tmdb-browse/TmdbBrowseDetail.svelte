@@ -7,9 +7,9 @@
 		DisplayTMDBTvShowDetails,
 		DisplayTMDBImage
 	} from 'addons/tmdb/types';
-	import type { MediaItem } from 'frontend/types/media-card.type';
-	import type { LibraryItemRelated } from 'frontend/types/library-item-related.type';
-	import type { PlayableFile, PlayerConnectionState } from 'frontend/types/player.type';
+	import type { MediaItem } from 'ui-lib/types/media-card.type';
+	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
+	import type { PlayableFile, PlayerConnectionState } from 'ui-lib/types/player.type';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 	let {
 		movie = null,

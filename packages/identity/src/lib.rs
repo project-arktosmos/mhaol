@@ -13,12 +13,13 @@ use std::path::{Path, PathBuf};
 #[derive(Clone)]
 pub struct IdentityManager {
     dir_path: PathBuf,
+    instance_type: String,
 }
 
 impl IdentityManager {
-    pub fn new(dir_path: PathBuf) -> Self {
+    pub fn new(dir_path: PathBuf, instance_type: String) -> Self {
         let _ = fs::create_dir_all(&dir_path);
-        Self { dir_path }
+        Self { dir_path, instance_type }
     }
 
     /// Validate that a name is safe for use as a filename.
@@ -144,7 +145,7 @@ impl IdentityManager {
     pub fn get_passport(&self, name: &str) -> Option<passport::Passport> {
         let private_key_hex = self.load_one(name)?;
         let address = Self::private_key_to_address(&private_key_hex);
-        Some(passport::sign_passport(name, &address, &private_key_hex))
+        Some(passport::sign_passport(name, &address, &self.instance_type, &private_key_hex))
     }
 
     /// Ensure an identity exists; create one if missing.
@@ -205,7 +206,7 @@ mod tests {
     #[test]
     fn test_identity_lifecycle() {
         let tmp_dir = std::env::temp_dir().join(format!("test_identities_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
 
         // Start empty
         assert!(mgr.get_all().is_empty());
@@ -243,7 +244,7 @@ mod tests {
     #[test]
     fn test_migration_from_env_file() {
         let tmp_dir = std::env::temp_dir().join(format!("test_migrate_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
 
         // Create a legacy .env.identities file
         let env_file = std::env::temp_dir().join(format!("test_env_{}", uuid::Uuid::new_v4()));
@@ -266,7 +267,7 @@ mod tests {
     #[test]
     fn test_name_validation() {
         let tmp_dir = std::env::temp_dir().join(format!("test_validate_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
 
         // Valid names work
         let addr = mgr.regenerate("GOOD_NAME");

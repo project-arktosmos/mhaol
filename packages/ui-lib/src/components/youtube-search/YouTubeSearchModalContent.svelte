@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { youtubeSearchService } from 'frontend/services/youtube-search.service';
-	import { youtubeService } from 'frontend/services/youtube.service';
-	import { modalRouterService } from 'frontend/services/modal-router.service';
+	import { youtubeSearchService } from 'ui-lib/services/youtube-search.service';
+	import { youtubeService } from 'ui-lib/services/youtube.service';
+	import { modalRouterService } from 'ui-lib/services/modal-router.service';
 	import YouTubeSearchInput from 'ui-lib/components/youtube-search/YouTubeSearchInput.svelte';
 	import YouTubeSearchResultCard from 'ui-lib/components/youtube-search/YouTubeSearchResultCard.svelte';
-	import type { YouTubeSearchItem } from 'frontend/types/youtube-search.type';
+	import type { YouTubeSearchItem } from 'ui-lib/types/youtube-search.type';
 
 	const searchState = youtubeSearchService.state;
 

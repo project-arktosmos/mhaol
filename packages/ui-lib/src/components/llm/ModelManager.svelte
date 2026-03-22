@@ -5,9 +5,9 @@
 		LocalModel,
 		LlmDownloadProgress,
 		RecommendedModel
-	} from 'frontend/types/llm.type';
-	import { llmAdapter } from 'frontend/adapters/classes/llm.adapter';
-	import { recommendedModels as allRecommendedModels } from 'frontend/data/recommended-models';
+	} from 'ui-lib/types/llm.type';
+	import { llmAdapter } from 'ui-lib/adapters/classes/llm.adapter';
+	import { recommendedModels as allRecommendedModels } from 'ui-lib/data/recommended-models';
 
 	let {
 		status,

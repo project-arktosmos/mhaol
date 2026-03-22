@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { LlmConversation } from 'frontend/types/llm.type';
+	import type { LlmConversation } from 'ui-lib/types/llm.type';
 
 	let {
 		conversations,

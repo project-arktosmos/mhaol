@@ -26,7 +26,6 @@
 	"dependencies": {
 		"@sveltejs/adapter-static": "^3.0.10",
 		"classnames": "^2.5.1",
-		"frontend": "workspace:*",
 		"ui-lib": "workspace:*",
 		"webrtc": "workspace:*",
 		"viem": "^2.46.3"

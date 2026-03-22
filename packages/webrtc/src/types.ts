@@ -11,6 +11,8 @@ export interface PassportData {
 export interface PassportPayload {
 	name: string;
 	address: string;
+	instanceType: string;
+	signalingUrl: string;
 }
 
 // ===== Data Channel Protocol =====

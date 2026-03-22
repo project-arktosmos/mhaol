@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { libraryService } from 'frontend/services/library.service';
-	import { MEDIA_TYPE_OPTIONS, type MediaType } from 'frontend/types/library.type';
+	import { libraryService } from 'ui-lib/services/library.service';
+	import { MEDIA_TYPE_OPTIONS, type MediaType } from 'ui-lib/types/library.type';
 	import DirectoryBrowser from './DirectoryBrowser.svelte';
 
 	let {

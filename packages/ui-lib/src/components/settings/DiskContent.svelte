@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import type { LibraryFs, LibraryFsEntry } from 'frontend/types/library.type';
-	import type { YouTubeContent } from 'frontend/types/youtube.type';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import type { LibraryFs, LibraryFsEntry } from 'ui-lib/types/library.type';
+	import type { YouTubeContent } from 'ui-lib/types/youtube.type';
 
 	let fsData = $state<LibraryFs | null>(null);
 	let contentMap = $state<Map<string, YouTubeContent>>(new Map());

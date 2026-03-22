@@ -4,8 +4,8 @@ import type { PassportData, PassportPayload } from 'webrtc/types';
 export async function verifyPassport(passport: PassportData): Promise<PassportPayload> {
 	const payload: PassportPayload = JSON.parse(passport.raw);
 
-	if (!payload.name || !payload.address) {
-		throw new Error('Passport payload missing name or address');
+	if (!payload.name || !payload.address || !payload.instanceType || !payload.signalingUrl) {
+		throw new Error('Passport payload missing required fields');
 	}
 
 	const recoveredAddress = await recoverMessageAddress({

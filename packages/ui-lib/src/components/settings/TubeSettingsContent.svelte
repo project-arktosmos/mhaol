@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { apiUrl } from 'frontend/lib/api-base';
+	import { apiUrl } from 'ui-lib/lib/api-base';
 	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
-	import { youtubeLibraryService } from 'frontend/services/youtube-library.service';
+	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
 
 	let resetting = $state(false);
 	let error = $state<string | null>(null);

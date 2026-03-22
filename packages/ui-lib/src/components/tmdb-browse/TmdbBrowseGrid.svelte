@@ -3,7 +3,7 @@
 	import classNames from 'classnames';
 	import TmdbBrowseCard from './TmdbBrowseCard.svelte';
 	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
-	import type { TorrentState } from 'frontend/types/torrent.type';
+	import type { TorrentState } from 'ui-lib/types/torrent.type';
 
 	interface DownloadStatus {
 		state: TorrentState;

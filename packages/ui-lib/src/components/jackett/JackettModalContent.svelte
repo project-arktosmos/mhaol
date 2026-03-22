@@ -7,14 +7,14 @@
 		JACKETT_CATEGORY_LABELS,
 		type JackettSearchResult,
 		type JackettSortField
-	} from 'frontend/services/jackett-search.service';
-	import { torrentService } from 'frontend/services/torrent.service';
+	} from 'ui-lib/services/jackett-search.service';
+	import { torrentService } from 'ui-lib/services/torrent.service';
 	import {
 		formatSearchSize,
 		formatSeeders,
 		getSeedersColor,
 		formatUploadDate
-	} from 'frontend/utils/torrent-search/format';
+	} from 'ui-lib/utils/torrent-search/format';
 
 	const searchState = jackettSearchService.state;
 	const torrentState = torrentService.state;

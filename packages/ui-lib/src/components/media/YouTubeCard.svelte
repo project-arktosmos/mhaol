@@ -1,8 +1,8 @@
 <script lang="ts">
 	import MediaCardBase from './MediaCardBase.svelte';
-	import { getThumbnailUrl } from '$utils/youtube/embed';
-	import type { MediaItem } from 'frontend/types/media-card.type';
-	import type { YouTubeOEmbedResponse } from '$types/youtube-oembed.type';
+	import { getThumbnailUrl } from 'ui-lib/utils/youtube/embed';
+	import type { MediaItem } from 'ui-lib/types/media-card.type';
+	import type { YouTubeOEmbedResponse } from 'ui-lib/types/youtube-oembed.type';
 
 	interface Props {
 		item: MediaItem;

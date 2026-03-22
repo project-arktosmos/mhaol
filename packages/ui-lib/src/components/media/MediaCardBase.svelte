@@ -1,10 +1,10 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { MediaItem } from 'frontend/types/media-card.type';
-	import { libraryFileAdapter } from 'frontend/adapters/classes/library-file.adapter';
-	import type { MediaType } from 'frontend/types/library.type';
-	import type { TorrentState } from 'frontend/types/torrent.type';
-	import { formatSpeed, formatEta } from 'frontend/types/torrent.type';
+	import type { MediaItem } from 'ui-lib/types/media-card.type';
+	import { libraryFileAdapter } from 'ui-lib/adapters/classes/library-file.adapter';
+	import type { MediaType } from 'ui-lib/types/library.type';
+	import type { TorrentState } from 'ui-lib/types/torrent.type';
+	import { formatSpeed, formatEta } from 'ui-lib/types/torrent.type';
 	import type { Snippet } from 'svelte';
 
 	interface Props {

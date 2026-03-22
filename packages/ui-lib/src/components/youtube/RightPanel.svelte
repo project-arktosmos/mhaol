@@ -1,15 +1,15 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { rightPanelService } from 'frontend/services/right-panel.service';
-	import { youtubeLibraryService } from 'frontend/services/youtube-library.service';
-	import { youtubeService } from 'frontend/services/youtube.service';
-	import { mediaModeService } from 'frontend/services/media-mode.service';
-	import { getStateLabel, getStateColor } from 'frontend/types/youtube.type';
-	import type { YouTubeChannelMeta } from 'frontend/types/youtube.type';
-	import { apiUrl } from 'frontend/lib/api-base';
+	import { rightPanelService } from 'ui-lib/services/right-panel.service';
+	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
+	import { youtubeService } from 'ui-lib/services/youtube.service';
+	import { mediaModeService } from 'ui-lib/services/media-mode.service';
+	import { getStateLabel, getStateColor } from 'ui-lib/types/youtube.type';
+	import type { YouTubeChannelMeta } from 'ui-lib/types/youtube.type';
+	import { apiUrl } from 'ui-lib/lib/api-base';
 	import MediaPlayer from 'ui-lib/components/player/MediaPlayer.svelte';
 	import YouTubeChannelCard from 'ui-lib/components/youtube-search/YouTubeChannelCard.svelte';
-	import type { YouTubeSearchChannelItem } from 'frontend/types/youtube-search.type';
+	import type { YouTubeSearchChannelItem } from 'ui-lib/types/youtube-search.type';
 
 	const panelStore = rightPanelService.store;
 	const ytState = youtubeService.state;

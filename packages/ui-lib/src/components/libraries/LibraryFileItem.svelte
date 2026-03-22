@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { LibraryFile } from 'frontend/types/library.type';
-	import { libraryFileAdapter } from 'frontend/adapters/classes/library-file.adapter';
+	import type { LibraryFile } from 'ui-lib/types/library.type';
+	import { libraryFileAdapter } from 'ui-lib/adapters/classes/library-file.adapter';
 
 	interface Props {
 		file: LibraryFile;

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { apiUrl } from "frontend/lib/api-base";
-  import { tmdbBrowseService } from "frontend/services/tmdb-browse.service";
-  import { browseDetailService } from "frontend/services/browse-detail.service";
+  import { apiUrl } from "ui-lib/lib/api-base";
+  import { tmdbBrowseService } from "ui-lib/services/tmdb-browse.service";
+  import { browseDetailService } from "ui-lib/services/browse-detail.service";
   import { tvShowDetailsToDisplay } from "addons/tmdb/transform";
   import type {
     DisplayTMDBTvShow,

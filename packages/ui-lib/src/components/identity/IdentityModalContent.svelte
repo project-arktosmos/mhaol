@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import type { Identity } from 'frontend/types/identity.type';
-	import { identityService } from 'frontend/services/identity.service';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import type { Identity } from 'ui-lib/types/identity.type';
+	import { identityService } from 'ui-lib/services/identity.service';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 
 	let identities = $state<Identity[]>([]);

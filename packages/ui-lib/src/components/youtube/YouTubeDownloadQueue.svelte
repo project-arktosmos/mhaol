@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { youtubeService } from 'frontend/services/youtube.service';
-	import { getStateLabel } from 'frontend/types/youtube.type';
-	import type { YouTubeDownloadProgress } from 'frontend/types/youtube.type';
+	import { youtubeService } from 'ui-lib/services/youtube.service';
+	import { getStateLabel } from 'ui-lib/types/youtube.type';
+	import type { YouTubeDownloadProgress } from 'ui-lib/types/youtube.type';
 
 	const state = youtubeService.state;
 

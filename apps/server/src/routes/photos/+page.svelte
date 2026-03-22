@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import classNames from 'classnames';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import { imageTaggerService } from 'frontend/services/image-tagger.service';
-	import { browseDetailService } from 'frontend/services/browse-detail.service';
-	import type { PhotoImageData } from 'frontend/types/browse-detail.type';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { imageTaggerService } from 'ui-lib/services/image-tagger.service';
+	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
+	import type { PhotoImageData } from 'ui-lib/types/browse-detail.type';
 	import ImageUncategorizedCard from 'ui-lib/components/media/ImageUncategorizedCard.svelte';
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
-	import type { MediaItem, MediaCategory, MediaLinkSource } from 'frontend/types/media-card.type';
-	import type { ImageTag } from 'frontend/types/image-tagger.type';
+	import type { MediaItem, MediaCategory, MediaLinkSource } from 'ui-lib/types/media-card.type';
+	import type { ImageTag } from 'ui-lib/types/image-tagger.type';
 
 	interface Props {
 		data: {

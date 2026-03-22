@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { themeService } from 'frontend/services/theme.service';
+	import { themeService } from 'ui-lib/services/theme.service';
 
 	const themeStore = themeService.store;
 

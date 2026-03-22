@@ -1,8 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { createEventDispatcher, onDestroy } from 'svelte';
-	import { playerService } from 'frontend/services/player.service';
-	import type { PlayerConnectionState } from 'frontend/types/player.type';
+	import { playerService } from 'ui-lib/services/player.service';
+	import type { PlayerConnectionState } from 'ui-lib/types/player.type';
 	import PlayerSeekBar from './PlayerSeekBar.svelte';
 
 	export let mediaElement: HTMLMediaElement | null = null;

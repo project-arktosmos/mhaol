@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { peerLibraryService } from 'frontend/services/peer-library.service';
-	import { signalingChatService } from 'frontend/services/signaling-chat.service';
+	import { peerLibraryService } from 'ui-lib/services/peer-library.service';
+	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
 	import PeerLibraryList from './PeerLibraryList.svelte';
 
 	const peerState = peerLibraryService.state;

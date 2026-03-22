@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { torrentSearchService } from 'frontend/services/torrent-search.service';
-	import { torrentService } from 'frontend/services/torrent.service';
+	import { torrentSearchService } from 'ui-lib/services/torrent-search.service';
+	import { torrentService } from 'ui-lib/services/torrent.service';
 	import TorrentSearchInput from './TorrentSearchInput.svelte';
 	import TorrentSearchResults from './TorrentSearchResults.svelte';
 	import type {

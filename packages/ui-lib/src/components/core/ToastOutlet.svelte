@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { toastService } from 'frontend/services/toast.service';
-	import type { ToastLevel } from 'frontend/types/toast.type';
+	import { toastService } from 'ui-lib/services/toast.service';
+	import type { ToastLevel } from 'ui-lib/types/toast.type';
 
 	const alertClass: Record<ToastLevel, string> = {
 		info: 'alert-info',

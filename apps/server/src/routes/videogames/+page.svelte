@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import { retroAchievementsAdapter } from 'frontend/adapters/classes/retroachievements.adapter';
-	import type { RaGameMetadata } from 'frontend/types/retroachievements.type';
-	import { RA_CONSOLES } from 'frontend/types/retroachievements.type';
-	import { browseDetailService } from 'frontend/services/browse-detail.service';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { retroAchievementsAdapter } from 'ui-lib/adapters/classes/retroachievements.adapter';
+	import type { RaGameMetadata } from 'ui-lib/types/retroachievements.type';
+	import { RA_CONSOLES } from 'ui-lib/types/retroachievements.type';
+	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
 	import GameCard from 'ui-lib/components/videogames/GameCard.svelte';
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';

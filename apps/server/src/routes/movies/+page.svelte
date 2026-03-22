@@ -1,24 +1,24 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import { playerService } from 'frontend/services/player.service';
-	import { playerAdapter } from 'frontend/adapters/classes/player.adapter';
-	import { mediaDetailService } from 'frontend/services/media-detail.service';
-	import { libraryService } from 'frontend/services/library.service';
-	import { modalRouterService } from 'frontend/services/modal-router.service';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { playerService } from 'ui-lib/services/player.service';
+	import { playerAdapter } from 'ui-lib/adapters/classes/player.adapter';
+	import { mediaDetailService } from 'ui-lib/services/media-detail.service';
+	import { libraryService } from 'ui-lib/services/library.service';
+	import { modalRouterService } from 'ui-lib/services/modal-router.service';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
-	import type { MediaDetailCardType } from 'frontend/types/media-detail.type';
+	import type { MediaDetailCardType } from 'ui-lib/types/media-detail.type';
 	import TmdbLinkModal from 'ui-lib/components/libraries/TmdbLinkModal.svelte';
 	import LibraryTab from 'ui-lib/components/tmdb-browse/LibraryTab.svelte';
 	import MediaDetail from 'ui-lib/components/media/MediaDetail.svelte';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
-	import type { LibraryFile } from 'frontend/types/library.type';
+	import type { LibraryFile } from 'ui-lib/types/library.type';
 	import type {
 		MediaItem,
 		MediaItemLink,
 		MediaLinkSource,
 		MediaCategory
-	} from 'frontend/types/media-card.type';
+	} from 'ui-lib/types/media-card.type';
 	import type {
 		DisplayTMDBMovie,
 		DisplayTMDBTvShow,
@@ -26,14 +26,14 @@
 		DisplayTMDBTvShowDetails
 	} from 'addons/tmdb/types';
 	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'addons/tmdb/transform';
-	import { tmdbBrowseService } from 'frontend/services/tmdb-browse.service';
-	import { smartSearchService } from 'frontend/services/smart-search.service';
-	import { torrentService } from 'frontend/services/torrent.service';
-	import { browseDetailService } from 'frontend/services/browse-detail.service';
-	import type { TorrentInfo } from 'frontend/types/torrent.type';
-	import type { SmartSearchTorrentResult } from 'frontend/types/smart-search.type';
-	import type { PlayableFile } from 'frontend/types/player.type';
-	import type { LibraryItemRelated } from 'frontend/types/library-item-related.type';
+	import { tmdbBrowseService } from 'ui-lib/services/tmdb-browse.service';
+	import { smartSearchService } from 'ui-lib/services/smart-search.service';
+	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
+	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
+	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
+	import type { PlayableFile } from 'ui-lib/types/player.type';
+	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
 	import SearchTab from 'ui-lib/components/tmdb-browse/SearchTab.svelte';
 	import PopularTab from 'ui-lib/components/tmdb-browse/PopularTab.svelte';
 	import classNames from 'classnames';

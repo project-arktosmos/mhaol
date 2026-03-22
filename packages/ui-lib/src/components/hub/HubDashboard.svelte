@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
-	import type { HubApp } from 'frontend/types/hub.type';
+	import type { HubApp } from 'ui-lib/types/hub.type';
 
 	let {
 		apps,

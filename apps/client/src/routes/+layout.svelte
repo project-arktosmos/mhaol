@@ -8,14 +8,13 @@
 	import ToastOutlet from 'ui-lib/components/core/ToastOutlet.svelte';
 	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
 	import RosterModalContent from 'ui-lib/components/roster/RosterModalContent.svelte';
-	import { themeService } from 'frontend/services/theme.service';
-	import { rosterService } from 'frontend/services/roster.service';
-	import { identityService } from 'frontend/services/identity.service';
-	import { toastService } from 'frontend/services/toast.service';
-	import { signalingChatService } from 'frontend/services/signaling-chat.service';
-	import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
+	import { themeService } from 'ui-lib/services/theme.service';
+	import { rosterService } from 'ui-lib/services/roster.service';
+	import { clientIdentityService } from 'ui-lib/services/client-identity.service';
+	import { toastService } from 'ui-lib/services/toast.service';
+	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
+	import { signalingAdapter } from 'ui-lib/adapters/classes/signaling.adapter';
 	import { contactHandshakeService } from 'webrtc/service';
-	import type { PassportData } from 'webrtc/types';
 	import type { ContactHandshakeMessage } from 'webrtc/types';
 
 	let { children } = $props();
@@ -35,13 +34,12 @@
 		themeService.initialize();
 		rosterService.initialize();
 
-		// Initialize identity and contact handshake asynchronously
-		identityService.initialize().then(() => {
-			const identities = get(identityService.state).identities;
-			if (identities.length > 0 && identities[0].passport) {
-				const passport: PassportData = JSON.parse(identities[0].passport);
+		// Initialize client-side identity and contact handshake
+		clientIdentityService.initialize().then(() => {
+			const { identity } = get(clientIdentityService.state);
+			if (identity) {
 				contactHandshakeService.initialize({
-					passport,
+					passport: identity.passport,
 					adapter: {
 						sendToPeer: (peerId, envelope) => signalingChatService.sendToPeer(peerId, envelope),
 						disconnectPeer: (peerId) => signalingChatService.disconnectPeer(peerId),

@@ -3,8 +3,7 @@
 This document guides Claude (and developers) on implementing features in this monorepo. Follow these conventions strictly to maintain consistency across all packages.
 
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
-- `packages/ui-lib/CLAUDE.md` — UI components, CSS/themes
-- `packages/frontend/CLAUDE.md` — Services, adapters, types, utils
+- `packages/ui-lib/CLAUDE.md` — UI components, services, types, adapters, utils, CSS/themes
 - `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
 - `apps/server/backend/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
 ---
@@ -14,16 +13,14 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 ```
 mhaol.git/
 ├── apps/                             # Thin SvelteKit wrappers (routes + assembly only)
-│   ├── mhaol-video/                  # Main media app (Vite, port 1531)
-│   ├── video/                        # Full-featured video app
-│   ├── storybook/                    # Storybook component gallery (headless, port 1405)
-│   ├── website/                      # Marketing landing page (base: /mhaoltube)
+│   ├── storybook/                    # Storybook component gallery (headless, port 1550)
+│   ├── website/                      # Marketing landing page (base: /mhaol)
+│   ├── client/                       # Minimal P2P contact management app
 │   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
-│   └── server/                       # Movies-only media app (headless, port 1530)
+│   └── server/                       # Media app (headless, port 1530)
 │       └── backend/                  # Rust Axum server (integrated, port 1530)
 ├── packages/
-│   ├── ui-lib/                       # UI components + CSS/themes (Svelte, Tailwind, DaisyUI)
-│   ├── frontend/                     # Shared frontend logic (services, adapters, types, utils)
+│   ├── ui-lib/                       # Shared frontend: UI components, services, types, adapters, utils, CSS/themes
 │   ├── addons/                       # Addon modules (TMDB metadata, torrent search, shared utils)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── signaling/                    # PartyKit signaling service
@@ -40,16 +37,14 @@ mhaol.git/
 
 ## App Architecture: Import & Assemble
 
-Apps under `apps/` are **thin wrappers** that import UI from `packages/ui-lib` and logic from `packages/frontend`, then assemble them. They contain **only**:
+Apps under `apps/` are **thin wrappers** that import everything from `packages/ui-lib`, then assemble them. They contain **only**:
 
 - `src/routes/` — SvelteKit route files (+page.svelte, +layout.svelte)
-- `src/css/app.css` — CSS entry point (imports Tailwind, DaisyUI, scans both ui-lib and frontend)
+- `src/css/app.css` — CSS entry point (imports Tailwind, DaisyUI, scans ui-lib)
 - `src/app.html`, `src/app.d.ts` — SvelteKit boilerplate
 - Config files (svelte.config.js, vite.config.ts, package.json, tsconfig.json)
 
-Apps **never** implement their own components, services, adapters, types, or utils. Components live in `packages/ui-lib`, everything else in `packages/frontend`.
-
-### Tauri Desktop Build (Hub Only)
+Apps **never** implement their own components, services, adapters, types, or utils. Everything lives in `packages/ui-lib`.
 
 ### Server Backend
 
@@ -68,7 +63,7 @@ Each app's `+layout.svelte` assembles the shared components:
   import Navbar from 'ui-lib/components/core/Navbar.svelte';
   import ModalOutlet from 'ui-lib/components/core/ModalOutlet.svelte';
   import TorrentModalContent from 'ui-lib/components/torrent/TorrentModalContent.svelte';
-  import { modalRouterService } from 'frontend/services/modal-router.service';
+  import { modalRouterService } from 'ui-lib/services/modal-router.service';
   // ...
 
   // Data-driven navbar: pass items array
@@ -91,27 +86,25 @@ Each app's `+layout.svelte` assembles the shared components:
 
 ### App alias configuration
 
-Every app's `svelte.config.js` points aliases to both `packages/ui-lib` and `packages/frontend`:
+Every app's `svelte.config.js` points aliases to `packages/ui-lib`:
 
 ```javascript
 alias: {
   $components: '../../packages/ui-lib/src/components',
-  $services: '../../packages/frontend/src/services',
-  $types: '../../packages/frontend/src/types',
-  $adapters: '../../packages/frontend/src/adapters',
-  $utils: '../../packages/frontend/src/utils',
-  $data: '../../packages/frontend/src/data',
-  frontend: '../../packages/frontend/src',
+  $services: '../../packages/ui-lib/src/services',
+  $types: '../../packages/ui-lib/src/types',
+  $adapters: '../../packages/ui-lib/src/adapters',
+  $utils: '../../packages/ui-lib/src/utils',
+  $data: '../../packages/ui-lib/src/data',
   'ui-lib': '../../packages/ui-lib/src'
 }
 ```
 
-Every app's `src/css/app.css` scans both packages for Tailwind classes:
+Every app's `src/css/app.css` scans ui-lib for Tailwind classes:
 
 ```css
 @import 'tailwindcss';
 @plugin 'daisyui';
-@source '../../packages/frontend/src';
 @source '../../packages/ui-lib/src';
 @import 'ui-lib/css/themes.css';
 ```
@@ -139,7 +132,7 @@ pnpm test             # vitest + cargo test
 pnpm format           # Prettier write
 
 # Headless apps (browser + backend, no native window)
-pnpm app:storybook        # Storybook headless (port 1405)
+pnpm app:storybook        # Storybook headless (port 1550)
 pnpm app:server           # Server headless (port 1530)
 
 # Browser extension
@@ -173,7 +166,7 @@ After every change, immediately commit the affected files:
 pnpm lint && pnpm check && pnpm build && pnpm test
 
 # Then commit
-git add packages/frontend/src/components/media/MediaCard.svelte
+git add packages/ui-lib/src/components/media/MediaCard.svelte
 git commit -m "add thumbnail fallback to MediaCard"
 ```
 
@@ -189,31 +182,27 @@ When adding a new feature that spans the full stack:
 - [ ] Register route in `build_router()`: `.nest("/api/{feature}", {feature}::router())`
 - [ ] Add any new repos to `AppState`
 
-**Frontend (`packages/frontend`)**
+**Shared Frontend (`packages/ui-lib`)**
 - [ ] Define types in `src/types/{feature}.type.ts`
 - [ ] Create adapter in `src/adapters/classes/{feature}.adapter.ts`
 - [ ] Create/extend service in `src/services/{feature}.service.ts`
-- [ ] Use `frontend/...` import paths for cross-module references
-- [ ] Write tests in `test/`
-
-**UI Library (`packages/ui-lib`)**
 - [ ] Create component(s) in `src/components/{feature}/`
+- [ ] Use `ui-lib/...` import paths for all cross-module references
 - [ ] Use `classnames` for all conditional styling
 - [ ] No `<style>` tags or inline styles
 - [ ] Components use callback props, contain no business logic
-- [ ] Use `ui-lib/...` for cross-component imports, `frontend/...` for services/types
+- [ ] Write tests in `test/`
 - [ ] Add a `.stories.svelte` file in `apps/storybook/src/stories/{feature}/` for each new component
 
 **Apps (if the feature needs UI wiring)**
-- [ ] Import the new component(s) from `ui-lib/components/...`
-- [ ] Import services/types from `frontend/...`
+- [ ] Import components from `ui-lib/components/...`
+- [ ] Import services/types from `ui-lib/services/...`, `ui-lib/types/...`
 - [ ] Add to navbar items and/or modal outlet if needed
 - [ ] The app only assembles — never implements logic
 
 **Always**
 - [ ] Commit each logical change immediately after completing it
-- [ ] Update `packages/ui-lib/CLAUDE.md` if adding new component directories
-- [ ] Update `packages/frontend/CLAUDE.md` if adding new services or adapters
+- [ ] Update `packages/ui-lib/CLAUDE.md` if adding new component directories, services, or adapters
 
 ---
 
@@ -222,7 +211,6 @@ When adding a new feature that spans the full stack:
 When making significant structural changes (new packages, new component directories, new services, renaming files, changing the app architecture), update the relevant CLAUDE.md files immediately:
 
 - **Root CLAUDE.md** — Monorepo structure, app architecture, workspace scripts
-- **packages/ui-lib/CLAUDE.md** — Component directories, CSS/themes
-- **packages/frontend/CLAUDE.md** — Services list, adapters list, types, utils
+- **packages/ui-lib/CLAUDE.md** — Components, services, adapters, types, utils, CSS/themes
 - **App CLAUDE.md files** — Which features the app uses, how it assembles them
 - **apps/server/backend/CLAUDE.md** — API modules, routes

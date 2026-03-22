@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
-	import type { PeerConnectionStatus } from 'frontend/types/signaling.type';
+	import { signalingAdapter } from 'ui-lib/adapters/classes/signaling.adapter';
+	import type { PeerConnectionStatus } from 'ui-lib/types/signaling.type';
 
 	let {
 		roomPeerIds = [],

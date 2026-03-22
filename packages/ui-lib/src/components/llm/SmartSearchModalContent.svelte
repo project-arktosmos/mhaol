@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
-	import { llmService } from 'frontend/services/llm.service';
+	import { llmService } from 'ui-lib/services/llm.service';
 	import SmartSearchSection from './SmartSearchSection.svelte';
 
 	const DEFAULT_MODEL = 'qwen2.5-1.5b-instruct-q4_k_m.gguf';

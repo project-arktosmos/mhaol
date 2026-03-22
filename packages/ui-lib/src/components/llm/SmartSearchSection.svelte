@@ -1,15 +1,15 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { LlmStatus, LocalModel, LlmDownloadProgress } from 'frontend/types/llm.type';
-	import { llmAdapter } from 'frontend/adapters/classes/llm.adapter';
-	import { recommendedModels } from 'frontend/data/recommended-models';
-	import { smartSearchService } from 'frontend/services/smart-search.service';
+	import type { LlmStatus, LocalModel, LlmDownloadProgress } from 'ui-lib/types/llm.type';
+	import { llmAdapter } from 'ui-lib/adapters/classes/llm.adapter';
+	import { recommendedModels } from 'ui-lib/data/recommended-models';
+	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import {
 		formatSearchSize,
 		formatSeeders,
 		getSeedersColor,
 		formatUploadDate
-	} from 'frontend/utils/torrent-search/format';
+	} from 'ui-lib/utils/torrent-search/format';
 	let {
 		status,
 		models,

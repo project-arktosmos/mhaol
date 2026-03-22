@@ -12,16 +12,16 @@
 		"target": "ES2022",
 		"module": "ES2022",
 		"paths": {
-			"frontend/*": ["../frontend/src/*"],
 			"ui-lib/*": ["./src/*"],
+			"$types/*": ["./src/types/*"],
+			"$utils/*": ["./src/utils/*"],
+			"$adapters/*": ["./src/adapters/*"],
+			"$services/*": ["./src/services/*"],
+			"$data/*": ["./src/data/*"],
+			"$app/*": ["./src/app-shims/*"],
 			"addons/*": ["../addons/*"],
 			"torrent-search-thepiratebay": ["../addons/torrent-search-thepiratebay/src/index.ts"],
-			"$types/*": ["../frontend/src/types/*"],
-			"$utils/*": ["../frontend/src/utils/*"],
-			"$adapters/*": ["../frontend/src/adapters/*"],
-			"$services/*": ["../frontend/src/services/*"],
-			"$app/*": ["./src/app-shims/*"],
-			"$data/*": ["../frontend/src/data/*"]
+			"webrtc/*": ["../webrtc/src/*"]
 		}
 	},
 	"include": ["src/**/*.ts", "src/**/*.svelte"]

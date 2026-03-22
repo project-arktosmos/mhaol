@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
-	import { llmService } from 'frontend/services/llm.service';
-	import { smartSearchService } from 'frontend/services/smart-search.service';
+	import { llmService } from 'ui-lib/services/llm.service';
+	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import SmartSearchSection from './SmartSearchSection.svelte';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
-	import type { SmartSearchTorrentResult } from 'frontend/types/smart-search.type';
-	import { apiUrl } from 'frontend/lib/api-base';
+	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
+	import { apiUrl } from 'ui-lib/lib/api-base';
 
 	const DEFAULT_MODEL = 'qwen2.5-1.5b-instruct-q4_k_m.gguf';
 

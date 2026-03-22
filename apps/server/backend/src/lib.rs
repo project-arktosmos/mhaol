@@ -116,7 +116,7 @@ impl AppState {
             .ok()
             .map(|d| PathBuf::from(d).join("identities"))
             .unwrap_or_else(mhaol_identity::default_identities_dir);
-        let identity_manager = IdentityManager::new(identities_dir);
+        let identity_manager = IdentityManager::new(identities_dir, "server".to_string());
 
         // One-time migration from old .env.identities format
         let old_env_path = find_env_identities_path();

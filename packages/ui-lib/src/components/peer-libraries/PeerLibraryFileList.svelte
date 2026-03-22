@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { PeerLibraryFileInfo } from 'frontend/types/peer-library.type';
+	import type { PeerLibraryFileInfo } from 'ui-lib/types/peer-library.type';
 
 	let {
 		files,

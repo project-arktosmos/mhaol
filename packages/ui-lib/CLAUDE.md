@@ -1,10 +1,10 @@
 # Package: ui-lib
 
 **Location:** `packages/ui-lib/`
-**Role:** All Svelte UI components and CSS themes
+**Role:** All shared frontend code — UI components, services, types, adapters, utils, and CSS themes
 **Framework:** Svelte 5 + TailwindCSS v4 + DaisyUI v5
 
-This package contains every UI component used across all apps. It depends on `packages/frontend` for services, types, adapters, and utils.
+This package contains everything shared across all apps: UI components, state management services, data adapters, type definitions, utilities, and styling.
 
 ## Source Structure
 
@@ -23,17 +23,38 @@ src/
 │   ├── libraries/            # Media libraries (list, files, link modals, content grid/card)
 │   ├── llm/                  # LLM chat
 │   ├── media/                # Media cards (Movie, TV, Audio, Image, YouTube, uncategorized)
+│   ├── music/                # Music components (AlbumCard)
 │   ├── p2p-stream/           # P2P streaming
 │   ├── peer-libraries/       # Peer library browsing
 │   ├── player/               # Video/audio player (PlayerVideo, PlayerControls, MediaPlayer, LyricsPanel)
 │   ├── plugins/              # Plugin management
+│   ├── roster/               # Peer roster
 │   ├── settings/             # Settings (SettingsModalContent, DiskContent, TubeSettingsContent)
+│   ├── share/                # Share modal
 │   ├── signaling/            # Signaling/WebRTC
 │   ├── tmdb-browse/          # TMDB movie/TV browsing
 │   ├── torrent/              # Torrent management
 │   ├── videogames/           # Videogame browsing (GameCard — RetroAchievements)
 │   ├── youtube/              # YouTube download (queue, settings, preview, RightPanel)
 │   └── youtube-search/       # YouTube search (input, results, channel cards)
+├── services/                 # State management + API calls (singleton services)
+│   ├── classes/              # Base classes: ArrayServiceClass, ObjectServiceClass
+│   ├── i18n/                 # svelte-i18n locales (en.json, qq.json)
+│   └── *.service.ts          # Feature services
+├── adapters/                 # Data transformation logic
+│   └── classes/              # Adapter singletons (player, signaling, library-file, etc.)
+├── types/                    # TypeScript type definitions (one file per domain)
+├── utils/                    # Pure utility functions
+│   ├── localStorageWritableStore.ts
+│   ├── string/               # capitalize, normalize
+│   ├── musicbrainz/          # MusicBrainz API client + transforms
+│   ├── torrent-search/       # Torrent result formatting + name parsing
+│   └── youtube/              # YouTube embed/thumbnail helpers
+├── lib/                      # Platform detection + API base URL
+│   ├── platform.ts           # isTauri, isMobile detection
+│   └── api-base.ts           # apiUrl() helper with Tauri fallback
+├── data/                     # Static data (releases.json, recommended-models.ts)
+├── app-shims/                # SvelteKit virtual module shims ($app/environment)
 └── css/                      # Styling
     ├── app.css               # Base Tailwind + DaisyUI
     └── themes.css            # Custom light/dark themes (OKLCH)
@@ -41,26 +62,19 @@ src/
 
 ## Import Conventions
 
-**Within ui-lib** — use `ui-lib/...` for other components:
+**All imports within ui-lib and from consuming apps** use `ui-lib/...` paths:
 
 ```typescript
 import Modal from 'ui-lib/components/core/Modal.svelte';
-import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
+import { modalRouterService } from 'ui-lib/services/modal-router.service';
+import type { ID } from 'ui-lib/types/core.type';
+import { apiUrl } from 'ui-lib/lib/api-base';
+import { playerAdapter } from 'ui-lib/adapters/classes/player.adapter';
 ```
-
-**For services, types, adapters, utils** — use `frontend/...` paths:
-
-```typescript
-import { modalRouterService } from 'frontend/services/modal-router.service';
-import type { ID } from 'frontend/types/core.type';
-import { apiUrl } from 'frontend/lib/api-base';
-```
-
-**From consuming apps** — use `ui-lib/...` for components, `frontend/...` for everything else.
 
 ## Component Rules
 
-1. No business logic — delegate to services/adapters in `packages/frontend`
+1. No business logic in components — delegate to services/adapters
 2. No `<style>` tags — use Tailwind classes only
 3. No inline `style` attributes
 4. Use `classnames` for all conditional class rendering
@@ -69,6 +83,16 @@ import { apiUrl } from 'frontend/lib/api-base';
 7. Keep components small — split when they grow
 8. Use Svelte 5 runes (`$state`, `$derived`, `$effect`, `$props`)
 9. Every new component must have a `.stories.svelte` file in `apps/storybook/src/stories/{category}/`
+
+## Service Classes
+
+```typescript
+// ArrayServiceClass<T> — for collections
+export const myItemsService = new ArrayServiceClass<MyItem>('my-items', []);
+
+// ObjectServiceClass<T> — for single objects
+export const settingsService = new ObjectServiceClass<Settings>('settings', initialSettings);
+```
 
 ## CSS & Styling
 
@@ -79,9 +103,22 @@ import { apiUrl } from 'frontend/lib/api-base';
 | ALWAYS use `classnames`   | For conditional classes     |
 | Stack                     | TailwindCSS v4 + DaisyUI v5 |
 
+## Testing
+
+Tests live in `packages/ui-lib/test/` mirroring `src/`.
+
+```bash
+pnpm test             # vitest
+pnpm test:ui          # interactive UI
+pnpm test:coverage    # coverage report
+```
+
 ## Dependencies
 
-- `frontend` (workspace) — services, types, adapters, utils
 - `classnames` — conditional CSS class composition
-- `svelte-i18n` — internationalization in landing components
-- `addons` (workspace) — TMDB and torrent search type imports (use `addons/tmdb/...` and `addons/torrent-search-thepiratebay/...` paths)
+- `svelte-i18n` — internationalization
+- `viem` — Ethereum signing (signaling, player services)
+- `fflate` — compression
+- `html5-qrcode`, `qrcode` — QR code generation/scanning
+- `addons` (workspace) — TMDB and torrent search (use `addons/tmdb/...` paths)
+- `webrtc` (workspace) — WebRTC contact handshake layer

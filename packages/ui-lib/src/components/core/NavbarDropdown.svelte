@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { RouteEntry } from 'frontend/types/route.type';
+	import type { RouteEntry } from 'ui-lib/types/route.type';
 
 	interface Props {
 		route: RouteEntry;

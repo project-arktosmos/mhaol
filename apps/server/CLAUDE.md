@@ -1,13 +1,13 @@
 # App: server
 
 **Location:** `apps/server/`
-**Type:** Thin SvelteKit 2 wrapper — movies-only media app
+**Type:** Thin SvelteKit 2 wrapper — media app
 **Adapter:** `@sveltejs/adapter-static` (fallback to `index.html`)
 **Dev port:** 1531
 
 ## Architecture
 
-This app is an **assembly-only wrapper** around `packages/frontend`. It contains no components, services, adapters, types, or utils of its own. All shared code is imported from `packages/frontend` via the `frontend` workspace dependency and path aliases.
+This app is an **assembly-only wrapper** around `packages/ui-lib`. It contains no components, services, adapters, types, or utils of its own. All shared code is imported from `packages/ui-lib` via the `ui-lib` workspace dependency and path aliases.
 
 ## What lives here
 
@@ -33,31 +33,30 @@ src/
 │   ├── tv/              # TV show browsing (TMDB browse)
 │   ├── videogames/      # Videogame browsing (RetroAchievements, console tabs)
 │   └── database/        # Database browser utility page
-├── css/app.css          # Tailwind entry + @source for packages/frontend
+├── css/app.css          # Tailwind entry + @source for packages/ui-lib
 ├── app.html             # HTML template
 └── app.d.ts             # SvelteKit type declarations (includes reference paths)
 ```
 
 ## Key features wired in layout
 
-- **Navbar**: Brand "Mhaol" + `items` array with 11 modal buttons (Torrent, Jackett, Downloads, Signaling, Peers, Identity, Plugins, Addons, Libraries, LLM, Settings)
-- **ModalOutlet**: Maps all 11 modal IDs to their content components from packages/frontend
+- **Navbar**: Brand "Mhaol" + `items` array with modal buttons
+- **ModalOutlet**: Maps modal IDs to their content components from ui-lib
 - **IdentitySidebar**: Always-visible identity sidebar
 - **Services initialized**: `playerService`, `identityService`, `peerLibraryService`
 
 ## Dependencies
 
-- `frontend` (workspace) — all shared UI code
+- `ui-lib` (workspace) — all shared frontend code (components, services, types, adapters, utils)
 - `addons` (workspace) — TMDB metadata types and transforms (use `addons/tmdb/...` paths)
-- `fflate`, `html5-qrcode`, `qrcode`, `viem` — compression, QR codes, blockchain
 
 ## Import pattern
 
-Component imports use `ui-lib/...` paths, services/types use `frontend/...`:
+All imports use `ui-lib/...` paths:
 
 ```typescript
 import Navbar from "ui-lib/components/core/Navbar.svelte";
-import { playerService } from "frontend/services/player.service";
+import { playerService } from "ui-lib/services/player.service";
 import type { DisplayTMDBMovieDetails } from "addons/tmdb/types";
 ```
 
@@ -75,4 +74,4 @@ cargo build --release --bin mhaol-server  # Release build
 
 ## Adding features
 
-To add UI features to this app, add the component to `packages/ui-lib` and the service/type to `packages/frontend`, then import and wire it in this app's route files.
+To add UI features to this app, add the component and service/type to `packages/ui-lib`, then import and wire it in this app's route files.

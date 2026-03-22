@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { apiUrl } from 'frontend/lib/api-base';
-	import { p2pStreamService } from 'frontend/services/p2p-stream.service';
+	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { p2pStreamService } from 'ui-lib/services/p2p-stream.service';
 	import P2pStreamSettings from 'ui-lib/components/p2p-stream/P2pStreamSettings.svelte';
 
 	let resetting = $state(false);

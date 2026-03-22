@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { libraryService } from 'frontend/services/library.service';
-	import type { Library, LibraryFile } from 'frontend/types/library.type';
+	import { libraryService } from 'ui-lib/services/library.service';
+	import type { Library, LibraryFile } from 'ui-lib/types/library.type';
 	import LibraryListItem from './LibraryListItem.svelte';
 
 	const store = libraryService.store;

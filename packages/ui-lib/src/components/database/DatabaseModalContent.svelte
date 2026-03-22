@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { databaseService } from 'frontend/services/database.service';
+	import { databaseService } from 'ui-lib/services/database.service';
 
 	const dbState = databaseService.state;
 

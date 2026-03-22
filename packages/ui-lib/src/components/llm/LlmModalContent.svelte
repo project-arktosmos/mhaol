@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { llmService } from 'frontend/services/llm.service';
+	import { llmService } from 'ui-lib/services/llm.service';
 	import ConversationList from 'ui-lib/components/llm/ConversationList.svelte';
 	import ChatView from 'ui-lib/components/llm/ChatView.svelte';
 	import ModelManager from 'ui-lib/components/llm/ModelManager.svelte';

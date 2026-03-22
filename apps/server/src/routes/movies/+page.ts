@@ -1,4 +1,4 @@
-import { apiUrl } from "frontend/lib/api-base";
+import { apiUrl } from "ui-lib/lib/api-base";
 import type { PageLoad } from "./$types";
 
 export const load: PageLoad = async ({ fetch }) => {

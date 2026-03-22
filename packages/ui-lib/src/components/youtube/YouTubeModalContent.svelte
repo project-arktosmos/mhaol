@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { youtubeService } from 'frontend/services/youtube.service';
-	import { libraryService } from 'frontend/services/library.service';
+	import { youtubeService } from 'ui-lib/services/youtube.service';
+	import { libraryService } from 'ui-lib/services/library.service';
 	import YouTubeUrlInput from 'ui-lib/components/youtube/YouTubeUrlInput.svelte';
 	import YouTubeVideoPreview from 'ui-lib/components/youtube/YouTubeVideoPreview.svelte';
 	import YouTubePlaylistPreview from 'ui-lib/components/youtube/YouTubePlaylistPreview.svelte';

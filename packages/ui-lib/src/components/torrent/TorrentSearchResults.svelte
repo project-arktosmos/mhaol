@@ -12,7 +12,7 @@
 		formatSeeders,
 		getSeedersColor,
 		formatUploadDate
-	} from 'frontend/utils/torrent-search/format';
+	} from 'ui-lib/utils/torrent-search/format';
 
 	export let results: TorrentSearchResult[] = [];
 	export let sort: TorrentSearchSort;
