@@ -29,6 +29,7 @@
 		"app:hub:headless": "pnpm --filter hub headless",
 		"app:identity": "pnpm --filter identity headless",
 		"app:signaling": "pnpm --filter signaling-app headless",
+		"build:app:flix": "pnpm --filter flix build",
 		"app:flix": "pnpm --filter flix headless",
 		"app:flix:android:dev": "pnpm --filter flix tauri:android:dev",
 		"app:flix:android:build": "pnpm --filter flix tauri:android:build",
