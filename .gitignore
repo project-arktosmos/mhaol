@@ -50,6 +50,7 @@ downloads/
 # LLM models
 models/*
 !models/.gitkeep
+*.gguf
 
 # Prebuilt binaries
 apps/video/bin/
