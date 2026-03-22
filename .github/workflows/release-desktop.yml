@@ -1,13 +1,8 @@
 name: Release Desktop Apps
 
 on:
-  workflow_dispatch:
-    inputs:
-      apps:
-        description: 'Apps to build (comma-separated, or "all")'
-        required: true
-        default: 'all'
-        type: string
+  push:
+    branches: [disabled]
 
 permissions:
   contents: write

@@ -302,7 +302,6 @@
 				existingItemId: selectedLibraryItem?.id,
 				existingLibraryId: selectedLibraryItem?.libraryId
 			});
-			smartSearchService.show();
 		} else if (selectedBrowseTvShow) {
 			fetchingTmdbId = selectedBrowseTvShow.id;
 			if (!isRefetch) {
@@ -320,7 +319,6 @@
 				tmdbId: selectedBrowseTvShow.id,
 				mode: 'fetch'
 			});
-			smartSearchService.show();
 		}
 	}
 

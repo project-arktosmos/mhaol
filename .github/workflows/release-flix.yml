@@ -2,7 +2,7 @@ name: Release Flix
 
 on:
   push:
-    tags: ['v*']
+    branches: [disabled]
 
 permissions:
   contents: write

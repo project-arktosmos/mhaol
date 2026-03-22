@@ -4,15 +4,12 @@
 	import { llmAdapter } from 'frontend/adapters/classes/llm.adapter';
 	import { recommendedModels } from 'frontend/data/recommended-models';
 	import { smartSearchService } from 'frontend/services/smart-search.service';
-	import { apiUrl } from 'frontend/lib/api-base';
 	import {
 		formatSearchSize,
 		formatSeeders,
 		getSeedersColor,
 		formatUploadDate
 	} from 'frontend/utils/torrent-search/format';
-	import type { SmartSearchTorrentResult } from 'frontend/types/smart-search.type';
-
 	let {
 		status,
 		models,
@@ -20,9 +17,7 @@
 		loading,
 		onLoadModel,
 		onUnloadModel,
-		onDownloadModel,
-		onlibrarychange,
-		onstream
+		onDownloadModel
 	}: {
 		status: LlmStatus | null;
 		models: LocalModel[];
@@ -31,8 +26,6 @@
 		onLoadModel: (fileName: string) => void;
 		onUnloadModel: () => void;
 		onDownloadModel: (repoId: string, fileName: string) => void;
-		onlibrarychange?: () => void;
-		onstream?: (candidate: SmartSearchTorrentResult) => void;
 	} = $props();
 
 	let downloadedFileNames = $derived(new Set(models.map((m) => m.fileName)));
@@ -103,21 +96,6 @@
 	);
 	let searchError = $derived($searchStore.searchError);
 
-	let pendingItemId = $derived($searchStore.pendingItemId);
-
-	$effect(() => {
-		if (selection) {
-			candidateAdded = false;
-			addingCandidate = false;
-		}
-	});
-
-	$effect(() => {
-		if (pendingItemId) {
-			onlibrarychange?.();
-		}
-	});
-
 	let bestCandidate = $derived.by(() => {
 		if (analyzing || searching) return null;
 		for (const r of searchResults) {
@@ -132,62 +110,10 @@
 		return null;
 	});
 
-	let addingCandidate = $state(false);
-	let candidateAdded = $state(false);
-
-	$effect(() => {
-		if (bestCandidate && !candidateAdded && !addingCandidate && mode) {
-			if (mode === 'download') {
-				handleAddCandidate();
-			} else if (mode === 'stream') {
-				onstream?.(bestCandidate);
-				candidateAdded = true;
-			} else if (mode === 'fetch') {
-				smartSearchService.setFetchedCandidate(bestCandidate);
-				candidateAdded = true;
-			}
-		}
-	});
+	let candidateAdded = $derived($searchStore.fetchedCandidate !== null || $searchStore.downloadedHash !== null);
 
 	let streamingHash = $derived($searchStore.streamingHash);
 	let streamingProgress = $derived(Math.round($searchStore.streamingProgress * 100));
-
-	async function handleAddCandidate() {
-		if (!bestCandidate || !selection) return;
-		addingCandidate = true;
-		try {
-			const configRes = await fetch(apiUrl('/api/torrent/config'));
-			if (!configRes.ok) return;
-			const config = await configRes.json();
-			const basePath: string = config.downloadPath ?? '';
-			if (!basePath) return;
-
-			const subdir =
-				selection.type === 'music' ? 'music' : selection.type === 'movie' ? 'movies' : 'tv';
-			const downloadPath = `${basePath}/${subdir}`;
-
-			const res = await fetch(apiUrl('/api/torrent/torrents'), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					source: bestCandidate.magnetLink,
-					downloadPath
-				})
-			});
-			if (res.ok) {
-				const torrentInfo = await res.json();
-				candidateAdded = true;
-				const outputPath: string = torrentInfo.outputPath ?? downloadPath;
-				const infoHash: string = torrentInfo.infoHash ?? bestCandidate.infoHash;
-				await smartSearchService.updateItemWithTorrent(infoHash, outputPath, 'download');
-				onlibrarychange?.();
-			}
-		} catch {
-			// ignore
-		} finally {
-			addingCandidate = false;
-		}
-	}
 
 	let searchTerms = $derived.by(() => {
 		if (!selection) return [];
@@ -411,11 +337,6 @@
 				<div class="flex items-center gap-2">
 					<span class="loading loading-xs loading-spinner"></span>
 					<span class="text-xs">Buffering... {streamingProgress}%</span>
-				</div>
-			{:else if addingCandidate}
-				<div class="flex items-center gap-2">
-					<span class="loading loading-xs loading-spinner"></span>
-					<span class="text-xs">Adding torrent...</span>
 				</div>
 			{:else if mode === 'download'}
 				<span class="badge badge-sm badge-info">Downloading...</span>

@@ -2,7 +2,7 @@ name: Build Hub
 
 on:
   push:
-    branches: [main]
+    branches: [disabled]
 
 permissions:
   contents: write

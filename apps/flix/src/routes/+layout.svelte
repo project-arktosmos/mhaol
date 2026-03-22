@@ -11,7 +11,6 @@
   import TabbedModalOutlet from "ui-lib/components/core/TabbedModalOutlet.svelte";
   import TorrentModalContent from "ui-lib/components/torrent/TorrentModalContent.svelte";
   import DownloadsModalContent from "ui-lib/components/downloads/DownloadsModalContent.svelte";
-  import SignalingModalContent from "ui-lib/components/signaling/SignalingModalContent.svelte";
   import IdentityModalContent from "ui-lib/components/identity/IdentityModalContent.svelte";
   import VideoSettingsModalContent from "ui-lib/components/settings/VideoSettingsModalContent.svelte";
   import ShareModalContent from "ui-lib/components/share/ShareModalContent.svelte";
@@ -71,7 +70,6 @@
     { id: "libraries", label: "Libraries", component: LibraryModalContent, props: { fixedMediaTypes: ['video'] } },
     { id: "torrent", label: "Torrent", component: TorrentModalContent },
     { id: "downloads", label: "Downloads", component: DownloadsModalContent },
-    { id: "signaling", label: "Signaling", component: SignalingModalContent },
     { id: "identity", label: "Identity", component: IdentityModalContent },
     { id: "addons", label: "Addons", component: AddonsModalContent },
     { id: "llm", label: "LLM", component: LlmModelsModalContent },

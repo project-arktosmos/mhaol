@@ -50,7 +50,7 @@ describe('SmartSearchService', () => {
 		expect(state.streamingHash).toBeNull();
 	});
 
-	it('select sets selection and makes visible', () => {
+	it('select sets selection and starts search', () => {
 		// Mock fetch so the async searches don't fail
 		vi.stubGlobal('fetch', mockFetch({ downloadPath: '/tmp' }));
 
@@ -65,7 +65,7 @@ describe('SmartSearchService', () => {
 
 		const state = get(smartSearchService.store);
 		expect(state.selection).toEqual(selection);
-		expect(state.visible).toBe(true);
+		expect(state.visible).toBe(false);
 		expect(state.searchResults).toEqual([]);
 		expect(state.downloadedHash).toBeNull();
 	});

@@ -8,6 +8,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
+const DEFAULT_SIGNALING_URL: &str = "https://mhaol-signaling.project-arktosmos.partykit.dev";
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/playable", get(list_playable))
@@ -141,20 +143,7 @@ async fn create_session(
             .into_response();
     }
 
-    // Prefer local signaling server
-    let signaling_url = if state.signaling_rooms.is_available() {
-        state.signaling_rooms.dev_url()
-    } else {
-        state.settings.get("signaling.partyUrl").unwrap_or_default()
-    };
-
-    if signaling_url.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": "Signaling server URL is not configured" })),
-        )
-            .into_response();
-    }
+    let signaling_url = DEFAULT_SIGNALING_URL.to_string();
 
     if !state.worker_bridge.is_ready() {
         return (

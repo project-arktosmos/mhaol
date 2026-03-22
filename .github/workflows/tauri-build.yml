@@ -1,16 +1,8 @@
 name: Tauri Build
 
 on:
-  workflow_call:
-    inputs:
-      app:
-        description: 'App to build (tube, cloud)'
-        required: true
-        type: string
-      platform:
-        description: 'Platform (macos-latest, ubuntu-latest, windows-latest)'
-        required: true
-        type: string
+  push:
+    branches: [disabled]
 
 permissions:
   contents: write

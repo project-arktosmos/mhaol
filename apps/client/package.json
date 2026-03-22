@@ -20,7 +20,8 @@
 		"tauri:android:dev": "pnpm exec tauri android dev",
 		"tauri:android:copy-assets": "cp -r dist-static/* src-tauri/gen/android/app/src/main/assets/",
 		"tauri:android:emulator": "adb devices | grep -q emulator || ($ANDROID_HOME/emulator/emulator -avd Medium_Phone_API_36.1 -no-snapshot-load &>/dev/null & adb wait-for-device && adb shell getprop sys.boot_completed | grep -q 1 || (echo 'Waiting for boot...' && while ! adb shell getprop sys.boot_completed 2>/dev/null | grep -q 1; do sleep 2; done))",
-		"tauri:android:build": "pnpm run tauri:android:emulator && pnpm run build && pnpm run tauri:android:copy-assets && pnpm exec tauri android build --apk --debug --target aarch64 && adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk && adb shell am start -n com.arktosmos.mhaol_client/.MainActivity"
+		"tauri:android:build": "pnpm run tauri:android:emulator && pnpm run build && pnpm run tauri:android:copy-assets && pnpm exec tauri android build --apk --debug --target aarch64 && adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk && adb shell am start -n com.arktosmos.mhaol_client/.MainActivity",
+		"tauri:android:build:signed": "pnpm run build && pnpm run tauri:android:copy-assets && pnpm exec tauri android build --apk"
 	},
 	"dependencies": {
 		"@sveltejs/adapter-static": "^3.0.10",
