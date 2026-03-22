@@ -45,6 +45,7 @@ target/
 # Downloads
 downloads/
 **/downloads/
+!packages/ui-lib/src/components/downloads/
 
 # LLM models
 models/
