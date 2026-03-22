@@ -69,6 +69,7 @@ class SignalingChatService {
 			const params = new URLSearchParams({ address, signature, timestamp });
 			const fullUrl = `${wsUrl}?${params.toString()}`;
 
+			console.log(`[SignalingChat] Connecting to ${wsUrl}`);
 			this.ws = new WebSocket(fullUrl);
 
 			this.ws.onmessage = (event) => {
@@ -254,7 +255,7 @@ class SignalingChatService {
 				this.handleAnswer(msg.from_peer_id, msg.sdp);
 				break;
 			case 'ice-candidate':
-				this.handleIceCandidate(msg.from_peer_id, msg.candidate, msg.sdp_m_line_index);
+				this.handleIceCandidate(msg.from_peer_id, msg.candidate, msg.sdp_m_line_index, msg.sdp_mid);
 				break;
 			case 'error':
 				this.state.update((s) => ({ ...s, error: msg.message }));
@@ -285,7 +286,8 @@ class SignalingChatService {
 					type: 'ice-candidate',
 					target_peer_id: peerId,
 					candidate: event.candidate.candidate,
-					sdp_m_line_index: event.candidate.sdpMLineIndex ?? 0
+					sdp_m_line_index: event.candidate.sdpMLineIndex ?? 0,
+					sdp_mid: event.candidate.sdpMid ?? undefined
 				});
 			} else {
 				console.log(`[SignalingChat] ICE gathering complete for ${peerId}`);
@@ -396,9 +398,14 @@ class SignalingChatService {
 	private async handleIceCandidate(
 		fromPeerId: string,
 		candidate: string,
-		sdpMLineIndex: number
+		sdpMLineIndex: number,
+		sdpMid?: string
 	): Promise<void> {
-		const candidateInit: RTCIceCandidateInit = { candidate, sdpMLineIndex };
+		const candidateInit: RTCIceCandidateInit = {
+			candidate,
+			sdpMLineIndex,
+			sdpMid: sdpMid ?? null
+		};
 
 		if (this.remoteDescriptionSet.get(fromPeerId) && this.peerConnections.has(fromPeerId)) {
 			console.log(
@@ -406,7 +413,7 @@ class SignalingChatService {
 				candidate.substring(0, 60)
 			);
 			const pc = this.peerConnections.get(fromPeerId)!;
-			pc.addIceCandidate(new RTCIceCandidate(candidateInit)).catch((err) => {
+			pc.addIceCandidate(candidateInit).catch((err) => {
 				console.error('[SignalingChat] Failed to add ICE candidate:', err);
 			});
 		} else {
@@ -422,7 +429,11 @@ class SignalingChatService {
 		if (!pc || pending.length === 0) return;
 
 		for (const candidate of pending) {
-			await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+			try {
+				await pc.addIceCandidate(candidate);
+			} catch (err) {
+				console.error('[SignalingChat] Failed to flush ICE candidate:', err);
+			}
 		}
 		this.pendingCandidates.set(peerId, []);
 	}

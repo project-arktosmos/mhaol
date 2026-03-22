@@ -28,6 +28,7 @@ export interface SignalingIceCandidateMessage {
 	target_peer_id: string;
 	candidate: string;
 	sdp_m_line_index: number;
+	sdp_mid?: string;
 }
 
 export type SignalingClientMessage =
@@ -80,6 +81,7 @@ export interface SignalingRelayedIceCandidateMessage {
 	from_peer_id: string;
 	candidate: string;
 	sdp_m_line_index: number;
+	sdp_mid?: string;
 }
 
 export interface SignalingErrorMessage {

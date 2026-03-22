@@ -100,7 +100,7 @@ class LibraryService {
 		try {
 			const library = await this.fetchJson<Library>('/api/libraries', {
 				method: 'POST',
-				body: JSON.stringify({ name, path, mediaTypes })
+				body: JSON.stringify({ name, path, libraryType: mediaTypes[0] || 'movies' })
 			});
 
 			this.store.update((items) => [...items, library]);

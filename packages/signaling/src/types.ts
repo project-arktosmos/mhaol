@@ -23,6 +23,7 @@ export interface IceCandidateMessage {
 	target_peer_id: string;
 	candidate: string;
 	sdp_m_line_index: number;
+	sdp_mid?: string;
 }
 
 export type ClientMessage = OfferMessage | AnswerMessage | IceCandidateMessage;
@@ -72,6 +73,7 @@ export interface RelayedIceCandidateMessage {
 	from_peer_id: string;
 	candidate: string;
 	sdp_m_line_index: number;
+	sdp_mid?: string;
 }
 
 export interface ErrorMessage {

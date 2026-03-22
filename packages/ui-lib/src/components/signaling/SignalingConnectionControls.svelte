@@ -1,7 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { onMount } from 'svelte';
-	import { apiUrl, DEFAULT_SIGNALING_URL } from 'frontend/lib/api-base';
+	import { DEFAULT_SIGNALING_URL } from 'frontend/lib/api-base';
 	import { signalingChatService } from 'frontend/services/signaling-chat.service';
 	import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
 
@@ -9,21 +8,6 @@
 
 	let serverUrl = $state(DEFAULT_SIGNALING_URL);
 	let serverAvailable = $state(true);
-
-	onMount(async () => {
-		try {
-			const res = await fetch(apiUrl('/api/signaling/status'));
-			if (res.ok) {
-				const status = await res.json();
-				if (status.devAvailable && status.devUrl) {
-					serverUrl = signalingAdapter.resolveLocalUrl(status.devUrl);
-					serverAvailable = true;
-				}
-			}
-		} catch {
-			// Ignore — default PartyKit URL is already set
-		}
-	});
 
 	function handleConnect() {
 		if (!serverUrl) return;

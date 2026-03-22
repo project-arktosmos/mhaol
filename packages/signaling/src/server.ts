@@ -172,7 +172,8 @@ export default class SignalingRoom implements Party.Server {
 					room_id: this.room.id,
 					from_peer_id: fromPeerId,
 					candidate: msg.candidate,
-					sdp_m_line_index: msg.sdp_m_line_index
+					sdp_m_line_index: msg.sdp_m_line_index,
+					sdp_mid: msg.sdp_mid
 				});
 				break;
 		}
