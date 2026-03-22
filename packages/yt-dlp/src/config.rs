@@ -45,6 +45,9 @@ impl YtDownloadConfig {
 }
 
 fn default_output_path() -> String {
+    if let Ok(dir) = std::env::var("DATA_DIR") {
+        return format!("{}/youtube", dir);
+    }
     std::env::var("HOME")
         .map(|home| format!("{}/Downloads/youtube", home))
         .unwrap_or_else(|_| "/tmp/youtube-downloads".to_string())

@@ -58,6 +58,7 @@ export interface TorrentServiceState {
 	loading: boolean;
 	error: string | null;
 	torrents: TorrentInfo[];
+	allTorrents: TorrentInfo[];
 	stats: TorrentStats | null;
 	downloadPath: string;
 	appName: string;

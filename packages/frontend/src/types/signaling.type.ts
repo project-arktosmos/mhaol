@@ -7,6 +7,8 @@ export type SignalingConnectionPhase =
 	| 'connected'
 	| 'error';
 
+export type PeerConnectionStatus = 'idle' | 'offering' | 'answering' | 'connected' | 'failed';
+
 // ===== Client → Server Messages =====
 
 export interface SignalingOfferMessage {
@@ -102,6 +104,7 @@ export interface SignalingChatMessage {
 	address: string;
 	content: string;
 	timestamp: string;
+	system?: boolean;
 }
 
 // ===== Service State =====
@@ -111,6 +114,9 @@ export interface SignalingChatState {
 	roomId: string;
 	localPeerId: string | null;
 	peerIds: string[];
+	roomPeerIds: string[];
+	activePeerId: string | null;
+	peerConnectionStates: Record<string, PeerConnectionStatus>;
 	messages: SignalingChatMessage[];
 	error: string | null;
 }

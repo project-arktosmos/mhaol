@@ -18,7 +18,7 @@
 		"check": "pnpm -r run check && cargo check -p mhaol-backend",
 		"clean": "pnpm -r run clean && cargo clean",
 		"signaling:dev": "pnpm --filter signaling dev",
-		"signaling:deploy": "pnpm --filter signaling deploy",
+		"signaling:deploy": "pnpm --filter signaling run deploy",
 		"app:server": "pnpm --filter server dev",
 		"app:video": "pnpm --filter video dev",
 		"app:tube": "pnpm --filter tube dev",
@@ -41,6 +41,7 @@
 		"app:shepperd:build": "pnpm --filter shepperd build",
 		"app:icons": "pnpm --filter icons dev",
 		"app:client": "pnpm --filter client tauri:dev",
+		"app:client:android": "pnpm --filter client tauri:android:build",
 		"app:storybook": "pnpm --filter storybook headless",
 		"install:deps": "sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev libonig-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav"
 	},

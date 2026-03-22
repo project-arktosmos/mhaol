@@ -3,10 +3,11 @@ import { createServer as createNetServer } from "node:net";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { networkInterfaces } from "node:os";
+import { networkInterfaces, homedir } from "node:os";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const PORT = 1530;
+const DATA_DIR = join(homedir(), "mhaol-flix");
 const HEALTH_URL = `http://localhost:${PORT}/api/health`;
 const STATIC_DIR = join(__dirname, "..", "dist-static");
 
@@ -46,7 +47,7 @@ if (skipBuild && existsSync(serverBin)) {
 console.log(`Starting backend on port ${PORT}`);
 const backend = spawn(serverBin, [], {
   stdio: "inherit",
-  env: { ...process.env, PORT: String(PORT), STATIC_DIR },
+  env: { ...process.env, PORT: String(PORT), STATIC_DIR, DATA_DIR, APP_ID: "flix" },
 });
 
 console.log("Waiting for backend...");

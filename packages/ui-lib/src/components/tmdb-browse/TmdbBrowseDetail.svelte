@@ -29,9 +29,11 @@
 		playerStreamUrl = null,
 		playerBuffering = false,
 		playerFullscreen = false,
+		downloadStatus = null,
 		onfetch,
 		ondownload,
 		onstream,
+		onp2pstream,
 		onfullscreen,
 		onminimize,
 		onstopplayer,
@@ -55,9 +57,11 @@
 		playerStreamUrl?: string | null;
 		playerBuffering?: boolean;
 		playerFullscreen?: boolean;
+		downloadStatus?: { state: string; progress: number } | null;
 		onfetch?: () => void;
 		ondownload?: () => void;
 		onstream?: () => void;
+		onp2pstream?: () => void;
 		onfullscreen?: () => void;
 		onminimize?: () => void;
 		onstopplayer?: () => void;
@@ -87,6 +91,7 @@
 	);
 	let lastAirYear = $derived(tvShow?.lastAirYear ?? tvShowDetails?.lastAirYear ?? null);
 	let images: DisplayTMDBImage[] = $derived(movieDetails?.images ?? tvShowDetails?.images ?? []);
+	let heroImageUrl = $derived(images.length > 0 ? images[0].thumbnailUrl : backdropUrl);
 
 	function formatBytes(bytes: number): string {
 		if (bytes < 1024) return `${bytes} B`;
@@ -98,6 +103,13 @@
 	function formatProgress(p: number): string {
 		return `${(p * 100).toFixed(1)}%`;
 	}
+
+	let dlState = $derived(downloadStatus?.state ?? null);
+	let isDownloading = $derived(
+		dlState === 'downloading' || dlState === 'initializing' || dlState === 'paused' || dlState === 'checking'
+	);
+	let isDownloaded = $derived(dlState === 'completed' || dlState === 'seeding');
+	let downloadButtonDisabled = $derived(!fetched || isDownloading || isDownloaded);
 </script>
 
 <div class="flex h-full flex-col overflow-y-auto">
@@ -189,9 +201,9 @@
 				/>
 			</div>
 		</div>
-	{:else if backdropUrl}
+	{:else if heroImageUrl}
 		<div class="relative">
-			<img src={backdropUrl} alt={title} class="h-40 w-full object-cover" />
+			<img src={heroImageUrl} alt={title} class="h-40 w-full object-cover" />
 			<div class="absolute inset-0 bg-gradient-to-t from-base-200 to-transparent"></div>
 		</div>
 	{:else if posterUrl}
@@ -253,9 +265,9 @@
 			</div>
 		{/if}
 
-		<div class="flex gap-2">
+		<div class="grid grid-cols-2 gap-2">
 			{#if onfetch}
-				<button class="btn flex-1 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}" onclick={onfetch} disabled={fetching}>
+				<button class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}" onclick={onfetch} disabled={fetching}>
 					{#if fetching}
 						<span class="loading loading-xs loading-spinner"></span>
 					{:else}
@@ -274,30 +286,64 @@
 							/>
 						</svg>
 					{/if}
-					{fetched ? 'Re-fetch' : 'Fetch'}
+					Smart Search
+				</button>
+			{/if}
+			{#if fetchSteps}
+				<button
+					class="col-span-2 cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
+					onclick={onshowsearch}
+				>
+					<ul class="steps steps-horizontal w-full text-xs">
+						<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
+						<li class={classNames('step', { 'step-success': fetchSteps.search })}>
+							{fetchSteps.searching ? 'Searching...' : 'Search'}
+						</li>
+						<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
+						<li class={classNames('step', { 'step-success': fetchSteps.done })}>
+							{fetchSteps.done ? 'Done' : 'Candidate'}
+						</li>
+					</ul>
 				</button>
 			{/if}
 			{#if ondownload}
-				<button class="btn flex-1 btn-sm btn-success" onclick={ondownload} disabled={!fetched}>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-4 w-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-						/>
-					</svg>
-					Download
+				<button
+					class={classNames('btn btn-sm', {
+						'btn-ghost': isDownloaded,
+						'btn-success': !isDownloaded
+					})}
+					onclick={ondownload}
+					disabled={downloadButtonDisabled}
+				>
+					{#if isDownloading}
+						<span class="loading loading-xs loading-spinner"></span>
+						Downloading
+					{:else if isDownloaded}
+						<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+						</svg>
+						Downloaded
+					{:else}
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							class="h-4 w-4"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+							/>
+						</svg>
+						Download
+					{/if}
 				</button>
 			{/if}
 			{#if onstream}
-				<button class="btn flex-1 btn-sm btn-primary" onclick={onstream} disabled={!fetched}>
+				<button class="btn btn-sm btn-primary" onclick={onstream} disabled={!fetched}>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						class="h-4 w-4"
@@ -318,28 +364,29 @@
 							d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
 						/>
 					</svg>
-					Stream
+					Torrent
+				</button>
+			{/if}
+			{#if onp2pstream}
+				<button class="btn btn-sm btn-secondary" onclick={onp2pstream} disabled={!fetched}>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="h-4 w-4"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0M1.394 9.393c5.857-5.858 15.355-5.858 21.213 0"
+						/>
+					</svg>
+					P2P
 				</button>
 			{/if}
 		</div>
-
-		{#if fetchSteps}
-			<button
-				class="w-full cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
-				onclick={onshowsearch}
-			>
-				<ul class="steps steps-horizontal w-full text-xs">
-					<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
-					<li class={classNames('step', { 'step-success': fetchSteps.search })}>
-						{fetchSteps.searching ? 'Searching...' : 'Search'}
-					</li>
-					<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
-					<li class={classNames('step', { 'step-success': fetchSteps.done })}>
-						{fetchSteps.done ? 'Done' : 'Candidate'}
-					</li>
-				</ul>
-			</button>
-		{/if}
 
 		{#if overview}
 			<div>
@@ -405,9 +452,29 @@
 			</div>
 		{/if}
 
+		{#if backdropUrl || posterUrl}
+			<div>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Primary Images</h3>
+				<div class="flex flex-col gap-2">
+					{#if backdropUrl}
+						<div>
+							<p class="mb-0.5 text-xs font-mono opacity-40">backdrop_path</p>
+							<img src={backdropUrl} alt="{title} backdrop" class="w-full rounded object-cover aspect-video" loading="lazy" />
+						</div>
+					{/if}
+					{#if posterUrl}
+						<div>
+							<p class="mb-0.5 text-xs font-mono opacity-40">poster_path</p>
+							<img src={posterUrl} alt="{title} poster" class="w-32 rounded object-cover aspect-[2/3]" loading="lazy" />
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
 		{#if images.length > 0}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Images</h3>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">All Images</h3>
 				<div class="grid grid-cols-3 gap-1">
 					{#each images as image}
 						<a href={image.fullUrl} target="_blank" rel="noopener noreferrer">

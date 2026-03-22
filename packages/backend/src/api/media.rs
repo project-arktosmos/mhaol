@@ -109,8 +109,15 @@ struct MediaResponse {
     #[serde(rename = "itemsByType")]
     items_by_type: HashMap<String, Vec<MappedItem>>,
     lists: Vec<MappedMediaList>,
-    /// Map of library id → library type ("movies" | "tv")
-    libraries: HashMap<String, String>,
+    /// Map of library id → library info (name + type)
+    libraries: HashMap<String, MappedLibraryInfo>,
+}
+
+#[derive(Serialize)]
+struct MappedLibraryInfo {
+    name: String,
+    #[serde(rename = "type")]
+    library_type: String,
 }
 
 async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
@@ -204,8 +211,8 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
         items_by_type.insert(mt.id.clone(), map_rows(rows, &mt.id));
     }
 
-    // Build library type map: id → "movies" | "tv"
-    let lib_type_map: HashMap<String, String> = state
+    // Build library info map: id → { name, type }
+    let lib_type_map: HashMap<String, MappedLibraryInfo> = state
         .libraries
         .get_all()
         .into_iter()
@@ -214,7 +221,7 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
             let raw = types.into_iter().next().unwrap_or_else(|| "movies".to_string());
             // Normalize "video" → "movies" so the flix UI filters work correctly
             let lt = if raw == "video" { "movies".to_string() } else { raw };
-            (lib.id, lt)
+            (lib.id, MappedLibraryInfo { name: lib.name, library_type: lt })
         })
         .collect();
 
@@ -271,7 +278,7 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
             }
             let library_type = lib_type_map
                 .get(&list.library_id)
-                .cloned()
+                .map(|info| info.library_type.clone())
                 .unwrap_or_else(|| "movies".to_string());
             MappedMediaList {
                 id: list.id,
@@ -442,8 +449,9 @@ async fn get_library_item_related(
         fc.candidate
             .get("infoHash")
             .and_then(|v| v.as_str())
+            .map(|h| h.to_lowercase())
             .and_then(|hash| {
-                state.torrent_downloads.get(hash).map(|td| RelatedTorrentDownload {
+                state.torrent_downloads.get(&hash).map(|td| RelatedTorrentDownload {
                     info_hash: td.info_hash,
                     name: td.name,
                     size: td.size,

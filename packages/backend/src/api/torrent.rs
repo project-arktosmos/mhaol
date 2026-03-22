@@ -118,7 +118,39 @@ async fn clear_storage(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn list_torrents(State(state): State<AppState>) -> impl IntoResponse {
     match state.torrent_manager.list().await {
-        Ok(torrents) => Json(serde_json::to_value(torrents).unwrap()).into_response(),
+        Ok(mut torrents) => {
+            let live_hashes: std::collections::HashSet<String> =
+                torrents.iter().map(|t| t.info_hash.clone()).collect();
+            for row in state.torrent_downloads.get_all() {
+                if live_hashes.contains(&row.info_hash) {
+                    continue;
+                }
+                let torrent_state = match row.state.as_str() {
+                    "initializing" => mhaol_torrent::TorrentState::Initializing,
+                    "downloading" => mhaol_torrent::TorrentState::Downloading,
+                    "seeding" => mhaol_torrent::TorrentState::Seeding,
+                    "paused" => mhaol_torrent::TorrentState::Paused,
+                    "checking" => mhaol_torrent::TorrentState::Checking,
+                    _ => mhaol_torrent::TorrentState::Paused,
+                };
+                torrents.push(mhaol_torrent::TorrentInfo {
+                    id: 0,
+                    info_hash: row.info_hash,
+                    name: row.name,
+                    size: row.size as u64,
+                    progress: row.progress,
+                    download_speed: 0,
+                    upload_speed: 0,
+                    peers: 0,
+                    seeds: 0,
+                    state: torrent_state,
+                    added_at: row.added_at,
+                    eta: None,
+                    output_path: row.output_path,
+                });
+            }
+            Json(serde_json::to_value(torrents).unwrap()).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -301,7 +333,7 @@ async fn torrent_events(
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
         loop {
             interval.tick().await;
-            if let Ok(torrents) = torrent_manager.list().await {
+            if let Ok(mut torrents) = torrent_manager.list().await {
                 for t in &torrents {
                     let state_str = format!("{:?}", t.state).to_lowercase();
                     torrent_downloads.upsert(
@@ -320,6 +352,40 @@ async fn torrent_events(
                         "magnet",
                     );
                 }
+
+                // Merge DB-only records (not currently live in the engine)
+                let live_hashes: std::collections::HashSet<String> =
+                    torrents.iter().map(|t| t.info_hash.clone()).collect();
+                let db_rows = torrent_downloads.get_all();
+                for row in db_rows {
+                    if live_hashes.contains(&row.info_hash) {
+                        continue;
+                    }
+                    let state = match row.state.as_str() {
+                        "initializing" => mhaol_torrent::TorrentState::Initializing,
+                        "downloading" => mhaol_torrent::TorrentState::Downloading,
+                        "seeding" => mhaol_torrent::TorrentState::Seeding,
+                        "paused" => mhaol_torrent::TorrentState::Paused,
+                        "checking" => mhaol_torrent::TorrentState::Checking,
+                        _ => mhaol_torrent::TorrentState::Paused,
+                    };
+                    torrents.push(mhaol_torrent::TorrentInfo {
+                        id: 0,
+                        info_hash: row.info_hash,
+                        name: row.name,
+                        size: row.size as u64,
+                        progress: row.progress,
+                        download_speed: 0,
+                        upload_speed: 0,
+                        peers: 0,
+                        seeds: 0,
+                        state,
+                        added_at: row.added_at,
+                        eta: None,
+                        output_path: row.output_path,
+                    });
+                }
+
                 if let Ok(json) = serde_json::to_string(&torrents) {
                     yield Ok(Event::default().event("torrents").data(json));
                 }

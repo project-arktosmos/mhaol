@@ -4,7 +4,24 @@
 	import { MEDIA_TYPE_OPTIONS, type MediaType } from 'frontend/types/library.type';
 	import DirectoryBrowser from './DirectoryBrowser.svelte';
 
+	let {
+		fixedMediaTypes = null
+	}: {
+		fixedMediaTypes?: MediaType[] | null;
+	} = $props();
+
 	const state = libraryService.state;
+
+	// When fixedMediaTypes is set, auto-apply them on mount
+	$effect(() => {
+		if (fixedMediaTypes) {
+			for (const mt of fixedMediaTypes) {
+				if (!$state.selectedMediaTypes.includes(mt)) {
+					libraryService.toggleMediaType(mt);
+				}
+			}
+		}
+	});
 
 	function handleDirectorySelect(path: string, name: string) {
 		libraryService.selectDirectory(path, name);
@@ -85,24 +102,26 @@
 		</div>
 
 		<!-- Media types -->
-		<div class="form-control">
-			<div class="label">
-				<span class="label-text font-medium">Media Types</span>
+		{#if !fixedMediaTypes}
+			<div class="form-control">
+				<div class="label">
+					<span class="label-text font-medium">Media Types</span>
+				</div>
+				<div class="flex flex-wrap gap-3">
+					{#each MEDIA_TYPE_OPTIONS as option (option.value)}
+						<label class="label cursor-pointer gap-2">
+							<input
+								type="checkbox"
+								class="checkbox checkbox-sm checkbox-primary"
+								checked={$state.selectedMediaTypes.includes(option.value)}
+								onchange={() => handleToggleMediaType(option.value)}
+							/>
+							<span class="label-text">{option.label}</span>
+						</label>
+					{/each}
+				</div>
 			</div>
-			<div class="flex flex-wrap gap-3">
-				{#each MEDIA_TYPE_OPTIONS as option (option.value)}
-					<label class="label cursor-pointer gap-2">
-						<input
-							type="checkbox"
-							class="checkbox checkbox-sm checkbox-primary"
-							checked={$state.selectedMediaTypes.includes(option.value)}
-							onchange={() => handleToggleMediaType(option.value)}
-						/>
-						<span class="label-text">{option.label}</span>
-					</label>
-				{/each}
-			</div>
-		</div>
+		{/if}
 
 		<!-- Actions -->
 		<div class="flex justify-end gap-2">

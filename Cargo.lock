@@ -3967,6 +3967,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mhaol-client-desktop"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "mhaol-backend",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-shell",
+ "tokio",
+]
+
+[[package]]
 name = "mhaol-cloud"
 version = "0.1.0"
 dependencies = [

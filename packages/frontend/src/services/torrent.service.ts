@@ -18,6 +18,7 @@ const initialState: TorrentServiceState = {
 	loading: false,
 	error: null,
 	torrents: [],
+	allTorrents: [],
 	stats: null,
 	downloadPath: '',
 	appName: '',
@@ -104,7 +105,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 				const torrents = this.appName
 					? allTorrents.filter((t) => t.outputPath && t.outputPath.startsWith(this.appDownloadPath))
 					: allTorrents;
-				this.state.update((s) => ({ ...s, torrents }));
+				this.state.update((s) => ({ ...s, torrents, allTorrents }));
 			} catch {
 				// ignore parse errors
 			}

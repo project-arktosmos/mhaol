@@ -1,6 +1,7 @@
 use rusqlite::Connection;
 
-const SCHEMA_SQL: &str = "
+/// Core tables needed by every app.
+const CORE_SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -97,6 +98,104 @@ CREATE TABLE IF NOT EXISTS link_sources (
     UNIQUE(service, media_type_id, category_id)
 );
 
+CREATE TABLE IF NOT EXISTS torrent_downloads (
+    info_hash TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    progress REAL NOT NULL,
+    state TEXT NOT NULL,
+    download_speed INTEGER NOT NULL,
+    upload_speed INTEGER NOT NULL,
+    peers INTEGER NOT NULL,
+    seeds INTEGER NOT NULL,
+    added_at INTEGER NOT NULL,
+    eta INTEGER,
+    output_path TEXT,
+    source TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS llm_conversations (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    system_prompt TEXT,
+    messages TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS llm_conversations_updated_at
+    AFTER UPDATE ON llm_conversations
+    FOR EACH ROW
+BEGIN
+    UPDATE llm_conversations SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
+";
+
+/// Media lists and signaling servers (video-cloud, tunes apps).
+const MEDIA_LISTS_SQL: &str = "
+CREATE TABLE IF NOT EXISTS media_lists (
+    id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    cover_image TEXT,
+    media_type TEXT NOT NULL REFERENCES media_types(id),
+    source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'user')),
+    source_path TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS media_lists_updated_at
+    AFTER UPDATE ON media_lists
+    FOR EACH ROW
+BEGIN
+    UPDATE media_lists SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
+
+CREATE TABLE IF NOT EXISTS media_list_items (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+    library_item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(list_id, library_item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
+CREATE INDEX IF NOT EXISTS idx_media_lists_source_path ON media_lists(source_path);
+
+CREATE TABLE IF NOT EXISTS media_list_links (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
+    service TEXT NOT NULL,
+    service_id TEXT NOT NULL,
+    season_number INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(list_id, service)
+);
+
+CREATE TABLE IF NOT EXISTS signaling_servers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS signaling_servers_updated_at
+    AFTER UPDATE ON signaling_servers
+    FOR EACH ROW
+BEGIN
+    UPDATE signaling_servers SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
+";
+
+/// YouTube tables (tube app).
+const YOUTUBE_TABLES_SQL: &str = "
 CREATE TABLE IF NOT EXISTS youtube_content (
     youtube_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -158,25 +257,10 @@ CREATE TRIGGER IF NOT EXISTS youtube_channels_updated_at
 BEGIN
     UPDATE youtube_channels SET updated_at = datetime('now') WHERE id = OLD.id;
 END;
+";
 
-CREATE TABLE IF NOT EXISTS torrent_downloads (
-    info_hash TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    size INTEGER NOT NULL,
-    progress REAL NOT NULL,
-    state TEXT NOT NULL,
-    download_speed INTEGER NOT NULL,
-    upload_speed INTEGER NOT NULL,
-    peers INTEGER NOT NULL,
-    seeds INTEGER NOT NULL,
-    added_at INTEGER NOT NULL,
-    eta INTEGER,
-    output_path TEXT,
-    source TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
+/// Image tagging tables (photos app).
+const IMAGE_TAGS_SQL: &str = "
 CREATE TABLE IF NOT EXISTS image_tags (
     id TEXT PRIMARY KEY,
     library_item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
@@ -187,80 +271,6 @@ CREATE TABLE IF NOT EXISTS image_tags (
 
 CREATE INDEX IF NOT EXISTS idx_image_tags_library_item_id ON image_tags(library_item_id);
 CREATE INDEX IF NOT EXISTS idx_image_tags_tag ON image_tags(tag);
-
-CREATE TABLE IF NOT EXISTS media_lists (
-    id TEXT PRIMARY KEY,
-    library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    description TEXT,
-    cover_image TEXT,
-    media_type TEXT NOT NULL REFERENCES media_types(id),
-    source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'user')),
-    source_path TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TRIGGER IF NOT EXISTS media_lists_updated_at
-    AFTER UPDATE ON media_lists
-    FOR EACH ROW
-BEGIN
-    UPDATE media_lists SET updated_at = datetime('now') WHERE id = OLD.id;
-END;
-
-CREATE TABLE IF NOT EXISTS media_list_items (
-    id TEXT PRIMARY KEY,
-    list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
-    library_item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
-    position INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(list_id, library_item_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
-CREATE INDEX IF NOT EXISTS idx_media_lists_source_path ON media_lists(source_path);
-
-CREATE TABLE IF NOT EXISTS media_list_links (
-    id TEXT PRIMARY KEY,
-    list_id TEXT NOT NULL REFERENCES media_lists(id) ON DELETE CASCADE,
-    service TEXT NOT NULL,
-    service_id TEXT NOT NULL,
-    season_number INTEGER,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(list_id, service)
-);
-
-CREATE TABLE IF NOT EXISTS signaling_servers (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    url TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TRIGGER IF NOT EXISTS signaling_servers_updated_at
-    AFTER UPDATE ON signaling_servers
-    FOR EACH ROW
-BEGIN
-    UPDATE signaling_servers SET updated_at = datetime('now') WHERE id = OLD.id;
-END;
-
-CREATE TABLE IF NOT EXISTS llm_conversations (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    system_prompt TEXT,
-    messages TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TRIGGER IF NOT EXISTS llm_conversations_updated_at
-    AFTER UPDATE ON llm_conversations
-    FOR EACH ROW
-BEGIN
-    UPDATE llm_conversations SET updated_at = datetime('now') WHERE id = OLD.id;
-END;
 ";
 
 const SEED_SQL: &str = "
@@ -278,6 +288,7 @@ INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('audio-uncat
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('image-uncategorized', 'image', 'Uncategorized');
 ";
 
+/// YouTube video metadata cache (module schema).
 pub const YOUTUBE_SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS youtube_videos (
     video_id TEXT PRIMARY KEY,
@@ -651,21 +662,46 @@ fn run_migrations(conn: &Connection) {
     }
 }
 
+/// App identifiers used to select which schema features to include.
+pub fn app_id() -> Option<String> {
+    std::env::var("APP_ID").ok()
+}
+
 /// Initialize the database schema, run migrations, and seed data.
+/// Uses APP_ID env var to determine which feature tables to create.
 pub fn initialize_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
-    conn.execute_batch(SCHEMA_SQL)?;
+    conn.execute_batch(CORE_SCHEMA_SQL)?;
+
+    let app = app_id();
+    let is_flix = app.as_deref() == Some("flix");
+
+    if !is_flix {
+        conn.execute_batch(MEDIA_LISTS_SQL)?;
+        conn.execute_batch(YOUTUBE_TABLES_SQL)?;
+        conn.execute_batch(IMAGE_TAGS_SQL)?;
+    }
+
     run_migrations(conn);
     conn.execute_batch(SEED_SQL)?;
     Ok(())
 }
 
 /// Apply module schemas (addon tables).
+/// Uses APP_ID env var to determine which module schemas to create.
 pub fn initialize_module_schemas(conn: &Connection) -> Result<(), rusqlite::Error> {
-    conn.execute_batch(YOUTUBE_SCHEMA_SQL)?;
+    let app = app_id();
+    let is_flix = app.as_deref() == Some("flix");
+
+    // TMDB is used by flix and other apps
     conn.execute_batch(TMDB_SCHEMA_SQL)?;
-    conn.execute_batch(MUSICBRAINZ_SCHEMA_SQL)?;
-    conn.execute_batch(LYRICS_SCHEMA_SQL)?;
-    mhaol_cloud::initialize_cloud_schema(conn)?;
+
+    if !is_flix {
+        conn.execute_batch(YOUTUBE_SCHEMA_SQL)?;
+        conn.execute_batch(MUSICBRAINZ_SCHEMA_SQL)?;
+        conn.execute_batch(LYRICS_SCHEMA_SQL)?;
+        mhaol_cloud::initialize_cloud_schema(conn)?;
+    }
+
     Ok(())
 }
 
@@ -676,6 +712,7 @@ mod tests {
     #[test]
     fn test_initialize_schema() {
         let conn = Connection::open_in_memory().unwrap();
+        // Test with no APP_ID (all tables)
         initialize_schema(&conn).unwrap();
 
         // Verify core tables exist

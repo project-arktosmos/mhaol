@@ -1,44 +1,37 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount } from 'svelte';
-	import { apiUrl } from 'frontend/lib/api-base';
+	import { apiUrl, DEFAULT_SIGNALING_URL } from 'frontend/lib/api-base';
 	import { signalingChatService } from 'frontend/services/signaling-chat.service';
 	import { signalingAdapter } from 'frontend/adapters/classes/signaling.adapter';
 
 	const chatStore = signalingChatService.state;
 
-	let roomId = $state('test-room');
-	let serverUrl = $state('');
-	let serverAvailable = $state(false);
+	let serverUrl = $state(DEFAULT_SIGNALING_URL);
+	let serverAvailable = $state(true);
 
 	onMount(async () => {
 		try {
 			const res = await fetch(apiUrl('/api/signaling/status'));
 			if (res.ok) {
 				const status = await res.json();
-				serverAvailable = status.devAvailable;
-				if (status.devUrl) {
+				if (status.devAvailable && status.devUrl) {
 					serverUrl = signalingAdapter.resolveLocalUrl(status.devUrl);
+					serverAvailable = true;
 				}
 			}
 		} catch {
-			// Ignore
+			// Ignore — default PartyKit URL is already set
 		}
 	});
 
 	function handleConnect() {
-		if (!serverUrl || !roomId.trim()) return;
-		signalingChatService.connect(serverUrl, roomId.trim());
+		if (!serverUrl) return;
+		signalingChatService.connect(serverUrl, 'default');
 	}
 
 	function handleDisconnect() {
 		signalingChatService.disconnect();
-	}
-
-	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter' && $chatStore.phase === 'disconnected') {
-			handleConnect();
-		}
 	}
 </script>
 
@@ -66,27 +59,11 @@
 			</span>
 		</div>
 
-		<!-- Room ID -->
-		<div class="form-control">
-			<label class="label" for="room-id-input">
-				<span class="label-text text-sm">Room ID</span>
-			</label>
-			<input
-				id="room-id-input"
-				type="text"
-				class="input-bordered input input-sm font-mono"
-				placeholder="Enter room ID..."
-				bind:value={roomId}
-				onkeydown={handleKeydown}
-				disabled={$chatStore.phase !== 'disconnected'}
-			/>
-		</div>
-
 		<!-- Connect / Disconnect -->
 		{#if $chatStore.phase === 'disconnected' || $chatStore.phase === 'error'}
 			<button
 				class="btn btn-sm btn-primary"
-				disabled={!serverUrl || !roomId.trim() || !serverAvailable}
+				disabled={!serverUrl || !serverAvailable}
 				onclick={handleConnect}
 			>
 				Connect

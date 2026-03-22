@@ -2,8 +2,15 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { libraryService } from 'frontend/services/library.service';
+	import type { MediaType } from 'frontend/types/library.type';
 	import LibraryAddForm from './LibraryAddForm.svelte';
 	import LibraryList from './LibraryList.svelte';
+
+	let {
+		fixedMediaTypes = null
+	}: {
+		fixedMediaTypes?: MediaType[] | null;
+	} = $props();
 
 	let activeTab: 'add' | 'libraries' = $state('libraries');
 
@@ -49,7 +56,7 @@
 
 <div class="mt-4">
 	{#if activeTab === 'add'}
-		<LibraryAddForm />
+		<LibraryAddForm {fixedMediaTypes} />
 	{:else}
 		<LibraryList />
 	{/if}

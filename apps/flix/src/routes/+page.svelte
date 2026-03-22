@@ -46,7 +46,7 @@
 			linkSources: MediaLinkSource[];
 			itemsByCategory: Record<string, MediaItem[]>;
 			itemsByType: Record<string, MediaItem[]>;
-			libraries: Record<string, string>;
+			libraries: Record<string, { name: string; type: string }>;
 			error?: string;
 		};
 	}
@@ -226,6 +226,26 @@
 		}
 	});
 
+	// Download status for currently selected detail item, checked from multiple sources
+	let currentDownloadStatus = $derived.by((): { state: string; progress: number } | null => {
+		// Source 1: path-match library item against active torrents (most direct)
+		if (selectedLibraryItem) {
+			const t = findTorrentForItem(selectedLibraryItem);
+			if (t) return { state: t.state, progress: t.progress };
+		}
+		// Source 2: relatedData from API (DB lookup via fetch cache)
+		if (relatedData?.torrentDownload) {
+			return { state: relatedData.torrentDownload.state, progress: relatedData.torrentDownload.progress };
+		}
+		// Source 3: TMDB ID → fetch cache hash → live SSE torrent state
+		const tmdbId = getRealTmdbId() ?? currentDetailTmdbId;
+		if (tmdbId) {
+			const status = browseDownloadStatuses.get(tmdbId);
+			if (status) return status;
+		}
+		return null;
+	});
+
 	// Sync browse detail state to the layout-level service
 	$effect(() => {
 		browseDetailService.set({
@@ -238,6 +258,7 @@
 			loading: browseDetailLoading,
 			fetching: isFetching,
 			fetched: isFetchedForCurrent,
+			downloadStatus: currentDownloadStatus,
 			fetchSteps: currentFetchSteps
 		});
 	});
@@ -247,6 +268,7 @@
 			onfetch: handleBrowseDetailFetch,
 			ondownload: handleBrowseDetailDownload,
 			onstream: handleBrowseDetailStream,
+			onp2pstream: handleBrowseDetailP2pStream,
 			onshowsearch: () => smartSearchService.show(),
 			onclose: closeBrowseDetail
 		});
@@ -354,17 +376,120 @@
 		ready = true;
 	}
 
+	function handleBrowseDetailP2pStream() {
+		const candidate = smartSearchService.getFetchedCandidate();
+		if (!candidate) return;
+		const title = selectedBrowseMovie?.title ?? selectedBrowseTvShow?.name ?? '';
+
+		// Check if the torrent is already downloaded and has a file path
+		const existingTorrent = candidate.infoHash
+			? torrentService.findByHash(candidate.infoHash)
+			: null;
+
+		if (existingTorrent?.outputPath && (existingTorrent.state === 'seeding' || existingTorrent.progress >= 1.0)) {
+			// File is already on disk — start P2P WebRTC session directly
+			const file: PlayableFile = {
+				id: `p2p:${existingTorrent.infoHash}`,
+				type: 'torrent',
+				name: existingTorrent.name,
+				outputPath: existingTorrent.outputPath,
+				mode: 'video',
+				format: null,
+				videoFormat: null,
+				thumbnailUrl: null,
+				durationSeconds: null,
+				size: existingTorrent.size,
+				completedAt: ''
+			};
+			// play() calls stop() which resets displayMode, so set it after
+			playerService.play(file).then(() => playerService.setDisplayMode('sidebar'));
+			return;
+		}
+
+		// Not yet downloaded — start torrent download and wait for completion
+		playerService.prepareStream(title);
+		playerService.setDisplayMode('sidebar');
+		handleP2pStreamCandidate(candidate);
+	}
+
+	async function handleP2pStreamCandidate(candidate: SmartSearchTorrentResult) {
+		smartSearchService.hide();
+		const infoHash = await smartSearchService.startStream(candidate);
+		if (!infoHash) return;
+
+		let ready = false;
+		const unsubscribe = torrentService.state.subscribe(() => {
+			if (!ready) return;
+			const torrent = torrentService.findByHash(infoHash);
+			if (!torrent) return;
+
+			smartSearchService.updateStreamingProgress(torrent.progress);
+
+			if (torrent.progress >= 1.0 || torrent.state === 'seeding') {
+				unsubscribe();
+				smartSearchService.clearStreaming();
+
+				const file: PlayableFile = {
+					id: `p2p:${infoHash}`,
+					type: 'torrent',
+					name: torrent.name,
+					outputPath: torrent.outputPath ?? '',
+					mode: 'video',
+					format: null,
+					videoFormat: null,
+					thumbnailUrl: null,
+					durationSeconds: null,
+					size: torrent.size,
+					completedAt: ''
+				};
+				playerService.play(file).then(() => playerService.setDisplayMode('sidebar'));
+			}
+		});
+		ready = true;
+	}
+
 	// Torrent state — match torrents to library items by path
 	const torrentState = torrentService.state;
 
 	function findTorrentForItem(item: MediaItem): TorrentInfo | null {
-		const torrents = $torrentState.torrents;
+		const torrents = $torrentState.allTorrents;
 		if (torrents.length === 0) return null;
 		for (const t of torrents) {
 			if (!t.outputPath) continue;
 			if (item.path.startsWith(t.outputPath)) return t;
 		}
 		return null;
+	}
+
+	function handleLibrarySelectMovie(movie: DisplayTMDBMovie) {
+		const item = libraryItemsByMovieId.get(movie.id);
+		if (!item) return;
+		selectedBrowseTvShow = null;
+		browseTvShowDetails = null;
+		if (selectedBrowseMovie?.id === movie.id) {
+			selectedBrowseMovie = null;
+			browseMovieDetails = null;
+			selectedLibraryItem = null;
+			fetchingTmdbId = null;
+			smartSearchService.clear();
+			return;
+		}
+		fetchingTmdbId = null;
+		smartSearchService.clear();
+
+		selectedBrowseMovie = movie;
+		selectedLibraryItem = item;
+		relatedData = null;
+		fetchRelatedData(item.id);
+		const meta = tmdbMetadata[item.id] ?? null;
+		browseMovieDetails = meta;
+		if (!meta && item.links.tmdb) {
+			fetchBrowseMovieDetails(Number(item.links.tmdb.serviceId));
+		}
+		const realTmdbId = item.links.tmdb ? Number(item.links.tmdb.serviceId) : null;
+		if (realTmdbId) {
+			checkFetchCacheForTmdbId(realTmdbId, movie.id);
+		}
 	}
 
 	// Collect linked movie items for recommendations dropdown
@@ -452,7 +577,7 @@
 	let movieItems = $derived(
 		Object.values(data.itemsByType)
 			.flat()
-			.filter((i) => (data.libraries[i.libraryId] ?? 'movies') === 'movies')
+			.filter((i) => (data.libraries[i.libraryId]?.type ?? 'movies') === 'movies')
 	);
 
 	// Apply link and category overrides to items for card rendering
@@ -475,8 +600,7 @@
 		})
 	);
 
-	// Convert library items to DisplayTMDBMovie[] for LibraryTab
-	// Use a stable unique numeric id per item (hash from item.id string)
+	// Stable unique numeric id per item (hash from item.id string)
 	function stableNumericId(str: string): number {
 		let hash = 0;
 		for (let i = 0; i < str.length; i++) {
@@ -485,28 +609,48 @@
 		return Math.abs(hash);
 	}
 
-	let libraryMovies = $derived(
-		itemsWithOverrides.map((item): DisplayTMDBMovie => {
-			const meta = tmdbMetadata[item.id];
-			return {
-				id: stableNumericId(item.id),
-				title: meta?.title ?? item.name,
-				originalTitle: meta?.originalTitle ?? item.name,
-				overview: meta?.overview ?? '',
-				posterUrl: meta?.posterUrl ?? null,
-				backdropUrl: meta?.backdropUrl ?? null,
-				releaseYear: meta?.releaseYear ?? '',
-				voteAverage: meta?.voteAverage ?? 0,
-				voteCount: meta?.voteCount ?? 0,
-				genres: meta?.genres ?? []
-			};
-		})
-	);
+	function itemToDisplayMovie(item: MediaItem): DisplayTMDBMovie {
+		const meta = tmdbMetadata[item.id];
+		return {
+			id: stableNumericId(item.id),
+			title: meta?.title ?? item.name,
+			originalTitle: meta?.originalTitle ?? item.name,
+			overview: meta?.overview ?? '',
+			posterUrl: meta?.posterUrl ?? null,
+			backdropUrl: meta?.backdropUrl ?? null,
+			releaseYear: meta?.releaseYear ?? '',
+			voteAverage: meta?.voteAverage ?? 0,
+			voteCount: meta?.voteCount ?? 0,
+			genres: meta?.genres ?? []
+		};
+	}
+
+	// Group items by library for per-library grids
+	let libraryGroups = $derived.by(() => {
+		const grouped = new Map<string, MediaItem[]>();
+		for (const item of itemsWithOverrides) {
+			const list = grouped.get(item.libraryId);
+			if (list) {
+				list.push(item);
+			} else {
+				grouped.set(item.libraryId, [item]);
+			}
+		}
+		return Array.from(grouped.entries())
+			.map(([libraryId, items]) => ({
+				libraryId,
+				name: data.libraries[libraryId]?.name ?? libraryId,
+				movies: items.map(itemToDisplayMovie)
+			}))
+			.filter((g) => g.movies.length > 0);
+	});
 
 	// Map numeric id back to MediaItem for selection handling
 	let libraryItemsByMovieId = $derived(
 		new Map(itemsWithOverrides.map((item) => [stableNumericId(item.id), item]))
 	);
+
+	// No overrides needed — card reads backdropUrl directly from movie/tvShow prop
 
 	// Set of display IDs for items that have a fetch cache entry
 	let fetchedDisplayIds = $derived.by(() => {
@@ -521,8 +665,9 @@
 	});
 
 	// Download statuses: map display movie ID → { state, progress } from active torrents
+	// Use allTorrents to include downloads outside the app-filtered path (e.g. /movies/ vs /flix/)
 	let downloadStatuses = $derived.by(() => {
-		const torrents = $torrentState.torrents;
+		const torrents = $torrentState.allTorrents;
 		if (torrents.length === 0 || fetchCacheHashes.size === 0) return new Map();
 		const torrentsByHash = new Map(torrents.map((t) => [t.infoHash, t]));
 		const statuses = new Map<number, { state: TorrentInfo['state']; progress: number }>();
@@ -543,7 +688,7 @@
 
 	// Download statuses for browse tabs (keyed by TMDB ID directly)
 	let browseDownloadStatuses = $derived.by(() => {
-		const torrents = $torrentState.torrents;
+		const torrents = $torrentState.allTorrents;
 		if (torrents.length === 0 || fetchCacheHashes.size === 0) return new Map();
 		const torrentsByHash = new Map(torrents.map((t) => [t.infoHash, t]));
 		const statuses = new Map<number, { state: TorrentInfo['state']; progress: number }>();
@@ -794,45 +939,18 @@
 				/>
 			</section>
 
-			<section class="mb-8">
-				<h2 class="mb-3 text-lg font-semibold">Library</h2>
-				<LibraryTab
-					movies={libraryMovies}
-					selectedMovieId={selectedBrowseMovie?.id ?? null}
-					fetchedIds={fetchedDisplayIds}
-					downloadStatuses={downloadStatuses}
-					onselectMovie={(movie) => {
-						const item = libraryItemsByMovieId.get(movie.id);
-						if (!item) return;
-						selectedBrowseTvShow = null;
-						browseTvShowDetails = null;
-						if (selectedBrowseMovie?.id === movie.id) {
-							selectedBrowseMovie = null;
-							browseMovieDetails = null;
-							selectedLibraryItem = null;
-							fetchingTmdbId = null;
-							smartSearchService.clear();
-							return;
-						}
-						fetchingTmdbId = null;
-						smartSearchService.clear();
-
-						selectedBrowseMovie = movie;
-						selectedLibraryItem = item;
-						relatedData = null;
-						fetchRelatedData(item.id);
-						const meta = tmdbMetadata[item.id] ?? null;
-						browseMovieDetails = meta;
-						if (!meta && item.links.tmdb) {
-							fetchBrowseMovieDetails(Number(item.links.tmdb.serviceId));
-						}
-						const realTmdbId = item.links.tmdb ? Number(item.links.tmdb.serviceId) : null;
-						if (realTmdbId) {
-							checkFetchCacheForTmdbId(realTmdbId, movie.id);
-						}
-					}}
-				/>
-			</section>
+			{#each libraryGroups as group (group.libraryId)}
+				<section class="mb-8">
+					<h2 class="mb-3 text-lg font-semibold">{group.name}</h2>
+					<LibraryTab
+						movies={group.movies}
+						selectedMovieId={selectedBrowseMovie?.id ?? null}
+						fetchedIds={fetchedDisplayIds}
+						downloadStatuses={downloadStatuses}
+						onselectMovie={handleLibrarySelectMovie}
+					/>
+				</section>
+			{/each}
 
 			<section class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold">Popular</h2>

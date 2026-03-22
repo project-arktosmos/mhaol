@@ -13,15 +13,15 @@ fn setup_backend_on_port(app: &tauri::App, port: u16) -> Result<(), Box<dyn std:
         })?;
     std_listener.set_nonblocking(true)?;
 
-    let db_path = {
-        let app_dir = app
-            .path()
-            .app_data_dir()
-            .expect("failed to resolve app data directory");
-        std::fs::create_dir_all(&app_dir).expect("failed to create app data directory");
-        app_dir.join("mhaol.db")
-    };
-    eprintln!("[flix] db path: {:?}", db_path);
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .expect("failed to resolve app data directory");
+    std::fs::create_dir_all(&data_dir).expect("failed to create app data directory");
+    std::env::set_var("DATA_DIR", &data_dir);
+    std::env::set_var("APP_ID", "flix");
+    let db_path = data_dir.join("mhaol.db");
+    eprintln!("[flix] data dir: {:?}", data_dir);
 
     tauri::async_runtime::spawn(async move {
         eprintln!("[flix] initializing AppState...");

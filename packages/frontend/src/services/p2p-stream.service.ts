@@ -141,7 +141,16 @@ class P2pStreamService {
 		for (const turn of settings.turnServers) {
 			servers.push({ urls: turn });
 		}
-		return servers.length > 0 ? servers : [{ urls: 'stun:stun.l.google.com:19302' }];
+		if (servers.length === 0) {
+			servers.push({
+				urls: [
+					'stun:stun.l.google.com:19302',
+					'stun:stun1.l.google.com:19302',
+					'stun:stun2.l.google.com:19302'
+				]
+			});
+		}
+		return servers;
 	}
 
 	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

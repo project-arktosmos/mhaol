@@ -38,6 +38,7 @@ async fn main() {
     let db_path = std::env::var("DB_PATH")
         .ok()
         .map(PathBuf::from)
+        .or_else(|| std::env::var("DATA_DIR").ok().map(|d| PathBuf::from(d).join("mhaol.db")))
         .unwrap_or_else(|| {
             // Default: packages/database/mhaol.db relative to the workspace root.
             // The server binary lives at packages/backend/, so go up two levels.
@@ -52,6 +53,10 @@ async fn main() {
                 _ => PathBuf::from("mhaol.db"),
             }
         });
+
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
 
     let state = AppState::new(Some(db_path.as_path()))
         .expect("Failed to initialize database");

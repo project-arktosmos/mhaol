@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { getContext } from 'svelte';
 	import classNames from 'classnames';
 	import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 	import type { TorrentState } from 'frontend/types/torrent.type';
@@ -21,9 +22,14 @@
 		onclick?: () => void;
 	} = $props();
 
+	const browseViewMode = getContext<{ readonly value: 'poster' | 'backdrop' } | undefined>('browseViewMode');
+	let useBackdrop = $derived(browseViewMode?.value === 'backdrop');
+
 	let title = $derived(movie?.title ?? tvShow?.name ?? '');
 	let year = $derived(movie?.releaseYear ?? tvShow?.firstAirYear ?? '');
 	let posterUrl = $derived(movie?.posterUrl ?? tvShow?.posterUrl ?? null);
+	let backdropUrl = $derived(movie?.backdropUrl ?? tvShow?.backdropUrl ?? null);
+	let imageUrl = $derived(useBackdrop ? (backdropUrl ?? posterUrl) : posterUrl);
 	let voteAverage = $derived(movie?.voteAverage ?? tvShow?.voteAverage ?? 0);
 	let overview = $derived(movie?.overview ?? tvShow?.overview ?? '');
 	let genres = $derived(movie?.genres ?? tvShow?.genres ?? []);
@@ -91,7 +97,7 @@
 						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-2.5 w-2.5">
 							<path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
 						</svg>
-						fetched
+						downloaded
 					</span>
 				{/if}
 			</div>
@@ -105,10 +111,10 @@
 				></progress>
 			</div>
 		{/if}
-		{#if posterUrl}
-			<img src={posterUrl} alt={title} class="block w-full" loading="lazy" />
+		{#if imageUrl}
+			<img src={imageUrl} alt={title} class={classNames('block w-full', { 'aspect-video object-cover': useBackdrop })} loading="lazy" />
 		{:else}
-			<div class="flex aspect-2/3 w-full items-center justify-center text-base-content/20">
+			<div class={classNames('flex w-full items-center justify-center text-base-content/20', useBackdrop ? 'aspect-video' : 'aspect-2/3')}>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-12 w-12"
@@ -123,6 +129,11 @@
 						d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
 					/>
 				</svg>
+			</div>
+		{/if}
+		{#if useBackdrop}
+			<div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pt-6 pb-2">
+				<p class="truncate text-sm font-semibold text-white drop-shadow">{title}</p>
 			</div>
 		{/if}
 	</div>
@@ -145,8 +156,8 @@
 			: undefined}
 	>
 		<figure class="relative h-48 overflow-hidden bg-base-300">
-			{#if posterUrl}
-				<img src={posterUrl} alt={title} class="h-full w-full object-cover" loading="lazy" />
+			{#if imageUrl}
+				<img src={imageUrl} alt={title} class="h-full w-full object-cover" loading="lazy" />
 			{:else}
 				<div class="flex h-full w-full items-center justify-center text-base-content/20">
 					<svg

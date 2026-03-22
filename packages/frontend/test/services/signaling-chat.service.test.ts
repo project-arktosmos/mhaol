@@ -7,6 +7,9 @@ const initialState = {
 	roomId: '',
 	localPeerId: null,
 	peerIds: [],
+	roomPeerIds: [],
+	activePeerId: null,
+	peerConnectionStates: {},
 	messages: [],
 	error: null
 };
@@ -194,6 +197,9 @@ describe('SignalingChatService', () => {
 			roomId: 'test-room',
 			localPeerId: 'peer-1',
 			peerIds: ['peer-2'],
+			roomPeerIds: ['peer-2'],
+			activePeerId: 'peer-2',
+			peerConnectionStates: { 'peer-2': 'connected' },
 			messages: [{ id: '1', address: 'addr', content: 'hi', timestamp: '2024-01-01' }],
 			error: null
 		});
@@ -228,23 +234,11 @@ describe('SignalingChatService', () => {
 
 	// ===== sendMessage =====
 
-	it('sendMessage adds message to state', () => {
+	it('sendMessage does nothing without activePeerId', () => {
 		signalingChatService.sendMessage('hello world');
 
 		const state = get(signalingChatService.state);
-		expect(state.messages).toHaveLength(1);
-		expect(state.messages[0].content).toBe('hello world');
-		expect(state.messages[0].address).toMatch(/^0x[0-9a-f]{40}$/);
-		expect(state.messages[0].id).toBeDefined();
-	});
-
-	it('sendMessage accumulates messages', () => {
-		signalingChatService.sendMessage('first');
-		signalingChatService.sendMessage('second');
-		signalingChatService.sendMessage('third');
-
-		const state = get(signalingChatService.state);
-		expect(state.messages).toHaveLength(3);
+		expect(state.messages).toHaveLength(0);
 	});
 
 	// ===== sendToPeer / broadcast =====
@@ -314,13 +308,16 @@ describe('SignalingChatService', () => {
 		expect(state.error).toBe('Auth failed');
 	});
 
-	it('handles WebSocket room-peers message (no-op)', async () => {
+	it('handles WebSocket room-peers message by populating roomPeerIds', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		lastWsInstance!.onmessage!({ data: JSON.stringify({ type: 'room-peers', peers: ['p1'] }) });
+		lastWsInstance!.onmessage!({
+			data: JSON.stringify({ type: 'room-peers', room_id: 'test-room', peers: ['p1', 'p2'] })
+		});
 
-		// No change expected, this is a no-op
 		const state = get(signalingChatService.state);
+		expect(state.roomPeerIds).toContain('p1');
+		expect(state.roomPeerIds).toContain('p2');
 		expect(state.peerIds).toEqual([]);
 	});
 
@@ -355,29 +352,37 @@ describe('SignalingChatService', () => {
 
 	// ===== Peer-joined (creates RTCPeerConnection + offer) =====
 
-	it('handles peer-joined message by creating peer connection and offer', async () => {
+	it('handles peer-joined message by adding to roomPeerIds', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		// Simulate peer-joined
 		lastWsInstance!.onmessage!({
 			data: JSON.stringify({ type: 'peer-joined', peer_id: 'remote-peer' })
 		});
 
-		// Wait for async createPeerConnection
 		await new Promise((r) => setTimeout(r, 10));
 
 		const state = get(signalingChatService.state);
+		expect(state.roomPeerIds).toContain('remote-peer');
+		expect(state.peerIds).not.toContain('remote-peer');
+		expect(state.messages.some((m) => m.system && m.content.includes('joined'))).toBe(true);
+	});
+
+	it('connectToPeer creates peer connection and sends offer', async () => {
+		await signalingChatService.connect('http://localhost:1999', 'test-room');
+
+		signalingChatService.connectToPeer('remote-peer');
+
+		await new Promise((r) => setTimeout(r, 10));
+
+		const state = get(signalingChatService.state);
+		expect(state.activePeerId).toBe('remote-peer');
 		expect(state.peerIds).toContain('remote-peer');
 
-		// Should have sent an offer via WebSocket
 		const offerMsg = lastWsInstance!.sent.find((s) => {
 			const parsed = JSON.parse(s);
 			return parsed.type === 'offer';
 		});
 		expect(offerMsg).toBeDefined();
-		const parsed = JSON.parse(offerMsg!);
-		expect(parsed.target_peer_id).toBe('remote-peer');
-		expect(parsed.sdp).toBe('mock-offer-sdp');
 	});
 
 	// ===== Offer handling =====
@@ -410,10 +415,8 @@ describe('SignalingChatService', () => {
 	it('handles answer message for existing peer', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		// First create a peer via peer-joined
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'remote-peer' })
-		});
+		// First create a peer via connectToPeer
+		signalingChatService.connectToPeer('remote-peer');
 		await new Promise((r) => setTimeout(r, 10));
 
 		// Now handle answer
@@ -422,7 +425,6 @@ describe('SignalingChatService', () => {
 		});
 		await new Promise((r) => setTimeout(r, 10));
 
-		// Should not throw - peer connection should handle the answer
 		const state = get(signalingChatService.state);
 		expect(state.peerIds).toContain('remote-peer');
 	});
@@ -444,10 +446,8 @@ describe('SignalingChatService', () => {
 	it('handles ice-candidate message for existing peer', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		// Create peer first
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'remote-peer' })
-		});
+		// Create peer first via connectToPeer
+		signalingChatService.connectToPeer('remote-peer');
 		await new Promise((r) => setTimeout(r, 10));
 
 		// Send ICE candidate
@@ -461,7 +461,6 @@ describe('SignalingChatService', () => {
 		});
 		await new Promise((r) => setTimeout(r, 10));
 
-		// Should not crash
 		const state = get(signalingChatService.state);
 		expect(state.peerIds).toContain('remote-peer');
 	});
@@ -488,10 +487,8 @@ describe('SignalingChatService', () => {
 	it('handles peer-left message and removes peer connection', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		// Add a peer first
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'remote-peer' })
-		});
+		// Add a peer first via connectToPeer
+		signalingChatService.connectToPeer('remote-peer');
 		await new Promise((r) => setTimeout(r, 10));
 
 		expect(get(signalingChatService.state).peerIds).toContain('remote-peer');
@@ -504,6 +501,7 @@ describe('SignalingChatService', () => {
 
 		const state = get(signalingChatService.state);
 		expect(state.peerIds).not.toContain('remote-peer');
+		expect(state.roomPeerIds).not.toContain('remote-peer');
 	});
 
 	it('handles peer-left message and calls onPeerDisconnected callback', async () => {
@@ -513,9 +511,7 @@ describe('SignalingChatService', () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
 		// Add then remove peer
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'remote-peer' })
-		});
+		signalingChatService.connectToPeer('remote-peer');
 		await new Promise((r) => setTimeout(r, 10));
 
 		lastWsInstance!.onmessage!({
@@ -549,10 +545,7 @@ describe('SignalingChatService', () => {
 
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		// peer-joined creates a data channel directly
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'remote-peer' })
-		});
+		signalingChatService.connectToPeer('remote-peer');
 		await new Promise((r) => setTimeout(r, 10));
 	});
 
@@ -562,9 +555,7 @@ describe('SignalingChatService', () => {
 
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'remote-peer' })
-		});
+		signalingChatService.connectToPeer('remote-peer');
 		await new Promise((r) => setTimeout(r, 10));
 	});
 
@@ -573,10 +564,8 @@ describe('SignalingChatService', () => {
 	it('sendSignaling only sends when WebSocket is open', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		// Trigger a peer-joined which sends an offer via sendSignaling
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'test-peer' })
-		});
+		// Trigger connectToPeer which sends an offer via sendSignaling
+		signalingChatService.connectToPeer('test-peer');
 		await new Promise((r) => setTimeout(r, 10));
 
 		// Verify offer was sent
@@ -588,7 +577,7 @@ describe('SignalingChatService', () => {
 	it('destroy calls disconnect', () => {
 		signalingChatService.state.set({
 			...initialState,
-			phase: 'connected',
+			phase: 'connected' as const,
 			localPeerId: 'peer-1'
 		});
 
@@ -612,13 +601,9 @@ describe('SignalingChatService', () => {
 	it('forwards ICE candidates via sendSignaling when peer connection emits them', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		// Create a peer
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'remote-peer' })
-		});
+		signalingChatService.connectToPeer('remote-peer');
 		await new Promise((r) => setTimeout(r, 10));
 
-		// Check that offer was sent
 		const sentMessages = lastWsInstance!.sent.map((s) => JSON.parse(s));
 		const offerSent = sentMessages.find((m) => m.type === 'offer');
 		expect(offerSent).toBeDefined();
@@ -629,14 +614,10 @@ describe('SignalingChatService', () => {
 	it('handles multiple peers joining', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'peer-a' })
-		});
+		signalingChatService.connectToPeer('peer-a');
 		await new Promise((r) => setTimeout(r, 10));
 
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'peer-b' })
-		});
+		signalingChatService.connectToPeer('peer-b');
 		await new Promise((r) => setTimeout(r, 10));
 
 		const state = get(signalingChatService.state);
@@ -648,14 +629,10 @@ describe('SignalingChatService', () => {
 	it('cleanupAllPeers removes all peers on disconnect', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'peer-a' })
-		});
+		signalingChatService.connectToPeer('peer-a');
 		await new Promise((r) => setTimeout(r, 10));
 
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'peer-b' })
-		});
+		signalingChatService.connectToPeer('peer-b');
 		await new Promise((r) => setTimeout(r, 10));
 
 		signalingChatService.disconnect();
@@ -672,10 +649,7 @@ describe('SignalingChatService', () => {
 
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
-		// peer-joined creates a data channel via createPeerConnection(peerId, true)
-		lastWsInstance!.onmessage!({
-			data: JSON.stringify({ type: 'peer-joined', peer_id: 'remote-peer' })
-		});
+		signalingChatService.connectToPeer('remote-peer');
 		await new Promise((r) => setTimeout(r, 10));
 
 		// The data channel's onopen won't fire automatically from our mock.

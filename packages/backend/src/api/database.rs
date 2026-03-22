@@ -205,8 +205,7 @@ async fn reset_database(State(state): State<AppState>) -> impl IntoResponse {
     crate::db::schema::initialize_module_schemas(&conn).unwrap();
 
     // Re-seed default library
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let downloads_path = format!("{}/Downloads", home);
+    let downloads_path = state.data_dir.join("downloads").to_string_lossy().to_string();
     let library_id = uuid::Uuid::new_v4().to_string();
 
     conn.execute(

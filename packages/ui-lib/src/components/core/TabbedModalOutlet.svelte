@@ -7,6 +7,8 @@
 		label: string;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		component: any;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		props?: Record<string, any>;
 	}
 
 	let { sections, title }: { sections: TabbedModalSection[]; title?: string } = $props();
@@ -30,7 +32,7 @@
 		aria-modal="true"
 		tabindex="-1"
 	>
-		<div class="modal-box max-h-[90vh] max-w-6xl overflow-y-auto p-0">
+		<div class="modal-box max-h-[90vh] max-w-6xl overflow-hidden p-0">
 			{#if title}
 				<div class="flex items-center justify-between border-b border-base-300 px-6 py-4">
 					<h3 class="text-lg font-semibold">{title}</h3>
@@ -82,7 +84,7 @@
 
 				<!-- Content area -->
 				<div class="min-w-0 flex-1 overflow-y-auto p-6 pt-12 lg:pt-6">
-					<activeSection.component />
+					<activeSection.component {...(activeSection.props ?? {})} />
 				</div>
 			</div>
 		</div>

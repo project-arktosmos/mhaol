@@ -24,6 +24,11 @@ use std::sync::Arc;
 /// Return the default mhaol data directory: `<Documents>/mhaol`.
 /// Creates the directory if it does not exist.
 pub fn default_data_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("DATA_DIR") {
+        let p = PathBuf::from(dir);
+        std::fs::create_dir_all(&p).ok();
+        return p;
+    }
     let doc_dir = dirs::document_dir().unwrap_or_else(|| {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         PathBuf::from(home).join("Documents")
@@ -110,7 +115,10 @@ impl AppState {
     /// Create a new AppState with a database at the given path (or in-memory if None).
     pub fn new(db_path: Option<&Path>) -> Result<Self, rusqlite::Error> {
         let db = db::open_database(db_path)?;
-        let identities_dir = mhaol_identity::default_identities_dir();
+        let identities_dir = std::env::var("DATA_DIR")
+            .ok()
+            .map(|d| PathBuf::from(d).join("identities"))
+            .unwrap_or_else(mhaol_identity::default_identities_dir);
         let identity_manager = IdentityManager::new(identities_dir);
 
         // One-time migration from old .env.identities format
@@ -129,13 +137,7 @@ impl AppState {
         let data_dir = default_data_dir();
 
         #[cfg(not(target_os = "android"))]
-        let llm_models_dir = {
-            let base = db_path
-                .and_then(|p| p.parent())
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| PathBuf::from("."));
-            base.join("models")
-        };
+        let llm_models_dir = data_dir.join("models");
 
         Ok(Self {
             settings: SettingsRepo::new(Arc::clone(&db)),
@@ -200,21 +202,24 @@ impl AppState {
         };
 
         let mut registry = self.module_registry.write();
+        let is_flix = std::env::var("APP_ID").ok().as_deref() == Some("flix");
 
-        // YouTube
-        registry.register(Box::new(YoutubeMetaModule));
-        #[cfg(not(target_os = "android"))]
-        registry.register(Box::new(YtdlModule {
-            manager: Arc::clone(&self.ytdl_manager),
-        }));
+        if !is_flix {
+            // YouTube
+            registry.register(Box::new(YoutubeMetaModule));
+            #[cfg(not(target_os = "android"))]
+            registry.register(Box::new(YtdlModule {
+                manager: Arc::clone(&self.ytdl_manager),
+            }));
 
-        // Music & Images
-        registry.register(Box::new(LyricsModule));
-        registry.register(Box::new(MusicbrainzModule));
-        #[cfg(not(target_os = "android"))]
-        registry.register(Box::new(ImageTaggerModule {
-            manager: Arc::clone(&self.image_tagger_manager),
-        }));
+            // Music & Images
+            registry.register(Box::new(LyricsModule));
+            registry.register(Box::new(MusicbrainzModule));
+            #[cfg(not(target_os = "android"))]
+            registry.register(Box::new(ImageTaggerModule {
+                manager: Arc::clone(&self.image_tagger_manager),
+            }));
+        }
 
         // Addons
         registry.register(Box::new(TmdbModule));
@@ -242,8 +247,7 @@ impl AppState {
     /// Seed a default "Downloads" library if no libraries exist.
     pub fn seed_default_library(&self) {
         if self.libraries.get_all().is_empty() {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-            let downloads_path = format!("{}/Downloads", home);
+            let downloads_path = self.data_dir.join("downloads").to_string_lossy().to_string();
             let library_id = uuid::Uuid::new_v4().to_string();
             self.libraries.insert(
                 &library_id,

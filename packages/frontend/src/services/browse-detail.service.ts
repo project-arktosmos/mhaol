@@ -18,6 +18,7 @@ export interface BrowseDetailState {
 	loading: boolean;
 	fetching: boolean;
 	fetched: boolean;
+	downloadStatus: { state: string; progress: number } | null;
 	fetchSteps: {
 		terms: boolean;
 		search: boolean;
@@ -31,6 +32,7 @@ export interface BrowseDetailCallbacks {
 	onfetch?: () => void;
 	ondownload?: () => void;
 	onstream?: () => void;
+	onp2pstream?: () => void;
 	onshowsearch?: () => void;
 	onclose?: () => void;
 }
@@ -45,6 +47,7 @@ const initialState: BrowseDetailState = {
 	loading: false,
 	fetching: false,
 	fetched: false,
+	downloadStatus: null,
 	fetchSteps: null
 };
 

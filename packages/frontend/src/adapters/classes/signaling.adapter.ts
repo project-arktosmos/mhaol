@@ -1,5 +1,9 @@
 import { AdapterClass } from 'frontend/adapters/classes/adapter.class';
-import type { SignalingChatMessage, SignalingConnectionPhase } from 'frontend/types/signaling.type';
+import type {
+	PeerConnectionStatus,
+	SignalingChatMessage,
+	SignalingConnectionPhase
+} from 'frontend/types/signaling.type';
 import type { PlayerConnectionState } from 'frontend/types/player.type';
 
 export class SignalingAdapter extends AdapterClass {
@@ -79,6 +83,28 @@ export class SignalingAdapter extends AdapterClass {
 			closed: 'badge-ghost'
 		};
 		return map[state];
+	}
+
+	peerConnectionStatusLabel(status: PeerConnectionStatus): string {
+		const labels: Record<PeerConnectionStatus, string> = {
+			idle: 'Idle',
+			offering: 'Offering...',
+			answering: 'Answering...',
+			connected: 'Connected',
+			failed: 'Failed'
+		};
+		return labels[status];
+	}
+
+	peerConnectionStatusBadgeClass(status: PeerConnectionStatus): string {
+		const map: Record<PeerConnectionStatus, string> = {
+			idle: 'badge-ghost',
+			offering: 'badge-info',
+			answering: 'badge-info',
+			connected: 'badge-success',
+			failed: 'badge-error'
+		};
+		return map[status];
 	}
 
 	resolveLocalUrl(url: string): string {

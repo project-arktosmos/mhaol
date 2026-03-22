@@ -11,4 +11,5 @@ members = [
     "packages/http-stream",
     "apps/hub/src-tauri",
     "apps/flix/src-tauri",
+    "apps/client/src-tauri",
 ]

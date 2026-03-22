@@ -69,7 +69,7 @@ impl TorrentFetchCacheRepo {
         .filter_map(|r| r.ok())
         .filter_map(|(tmdb_id, json)| {
             let v: serde_json::Value = serde_json::from_str(&json).ok()?;
-            let hash = v.get("infoHash")?.as_str()?.to_string();
+            let hash = v.get("infoHash")?.as_str()?.to_lowercase();
             Some((tmdb_id, hash))
         })
         .collect()

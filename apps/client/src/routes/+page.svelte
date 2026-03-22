@@ -1,24 +1,28 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import SignalingConnectionControls from 'ui-lib/components/signaling/SignalingConnectionControls.svelte';
-	import SignalingChat from 'ui-lib/components/signaling/SignalingChat.svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import PeerChatLayout from 'ui-lib/components/signaling/PeerChatLayout.svelte';
 	import { signalingChatService } from 'frontend/services/signaling-chat.service';
+	import { rosterService } from 'frontend/services/roster.service';
+	import { get } from 'svelte/store';
+
+	onMount(() => {
+		const { signalingServerUrl, signalingRoomId } = get(rosterService.state);
+		signalingChatService.connect(signalingServerUrl, signalingRoomId);
+	});
 
 	onDestroy(() => {
 		signalingChatService.destroy();
 	});
 </script>
 
-<div class="mx-auto flex max-w-4xl flex-col gap-6">
-	<div>
+<div class="flex h-[calc(100vh-5rem)] flex-col">
+	<div class="mb-2">
 		<h1 class="text-2xl font-bold">Peer Chat</h1>
 		<p class="text-sm text-base-content/60">
-			Connect to a signaling server and chat with peers over WebRTC
+			Select a peer to connect via WebRTC and chat directly
 		</p>
 	</div>
-
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<SignalingConnectionControls />
-		<SignalingChat />
+	<div class="min-h-0 flex-1">
+		<PeerChatLayout />
 	</div>
 </div>
