@@ -1,11 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { get } from 'svelte/store';
 
+// Track listeners registered via addPeerChannelOpenListener / addPeerDisconnectedListener
+let channelOpenListeners: ((peerId: string) => void)[] = [];
+let disconnectedListeners: ((peerId: string) => void)[] = [];
+
 // Mock signaling-chat service
 vi.mock('../../src/services/signaling-chat.service', () => ({
 	signalingChatService: {
-		onPeerChannelOpen: null as ((peerId: string) => void) | null,
-		onPeerDisconnected: null as ((peerId: string) => void) | null,
+		addPeerChannelOpenListener: vi.fn((fn: (peerId: string) => void) => {
+			channelOpenListeners.push(fn);
+			return () => {
+				channelOpenListeners = channelOpenListeners.filter((l) => l !== fn);
+			};
+		}),
+		addPeerDisconnectedListener: vi.fn((fn: (peerId: string) => void) => {
+			disconnectedListeners.push(fn);
+			return () => {
+				disconnectedListeners = disconnectedListeners.filter((l) => l !== fn);
+			};
+		}),
 		onPeerLibraryMessage: null as ((peerId: string, msg: unknown) => void) | null,
 		sendToPeer: vi.fn()
 	}
@@ -33,12 +47,24 @@ vi.mock('../../src/adapters/classes/peer-library.adapter', () => ({
 	}
 }));
 
+function triggerChannelOpen(peerId: string) {
+	channelOpenListeners.forEach((fn) => fn(peerId));
+}
+
+function triggerDisconnected(peerId: string) {
+	disconnectedListeners.forEach((fn) => fn(peerId));
+}
+
 describe('PeerLibraryService', () => {
 	let peerLibraryService: (typeof import('../../src/services/peer-library.service'))['peerLibraryService'];
 	let signalingChatService: (typeof import('../../src/services/signaling-chat.service'))['signalingChatService'];
 
 	beforeEach(async () => {
 		vi.clearAllMocks();
+		vi.resetModules();
+		channelOpenListeners = [];
+		disconnectedListeners = [];
+
 		const mod = await import('../../src/services/peer-library.service');
 		peerLibraryService = mod.peerLibraryService;
 
@@ -58,16 +84,15 @@ describe('PeerLibraryService', () => {
 	it('should register handlers on initialize', () => {
 		peerLibraryService.initialize();
 
-		expect(signalingChatService.onPeerChannelOpen).toBeTypeOf('function');
-		expect(signalingChatService.onPeerDisconnected).toBeTypeOf('function');
+		expect(signalingChatService.addPeerChannelOpenListener).toHaveBeenCalled();
+		expect(signalingChatService.addPeerDisconnectedListener).toHaveBeenCalled();
 		expect(signalingChatService.onPeerLibraryMessage).toBeTypeOf('function');
 	});
 
 	it('should add peer entry when peer connects', () => {
 		peerLibraryService.initialize();
 
-		// Simulate peer connection
-		signalingChatService.onPeerChannelOpen!('peer-1');
+		triggerChannelOpen('peer-1');
 
 		const state = get(peerLibraryService.state);
 		expect(state.peers['peer-1']).toBeDefined();
@@ -79,7 +104,7 @@ describe('PeerLibraryService', () => {
 	it('should share libraries when peer connects', () => {
 		peerLibraryService.initialize();
 
-		signalingChatService.onPeerChannelOpen!('peer-1');
+		triggerChannelOpen('peer-1');
 
 		expect(signalingChatService.sendToPeer).toHaveBeenCalledWith(
 			'peer-1',
@@ -93,9 +118,8 @@ describe('PeerLibraryService', () => {
 	it('should remove peer on disconnect', () => {
 		peerLibraryService.initialize();
 
-		// Connect then disconnect
-		signalingChatService.onPeerChannelOpen!('peer-1');
-		signalingChatService.onPeerDisconnected!('peer-1');
+		triggerChannelOpen('peer-1');
+		triggerDisconnected('peer-1');
 
 		const state = get(peerLibraryService.state);
 		expect(state.peers['peer-1']).toBeUndefined();
@@ -104,7 +128,7 @@ describe('PeerLibraryService', () => {
 	it('should handle share-libraries message', () => {
 		peerLibraryService.initialize();
 
-		signalingChatService.onPeerChannelOpen!('peer-1');
+		triggerChannelOpen('peer-1');
 		signalingChatService.onPeerLibraryMessage!('peer-1', {
 			type: 'share-libraries',
 			libraries: [{ id: 'lib-1', name: 'Videos', libraryType: 'local', fileCount: 10 }]
@@ -118,7 +142,7 @@ describe('PeerLibraryService', () => {
 	it('should handle files-response message', () => {
 		peerLibraryService.initialize();
 
-		signalingChatService.onPeerChannelOpen!('peer-1');
+		triggerChannelOpen('peer-1');
 		signalingChatService.onPeerLibraryMessage!('peer-1', {
 			type: 'files-response',
 			libraryId: 'lib-1',
@@ -133,8 +157,7 @@ describe('PeerLibraryService', () => {
 	it('should request files and set loading state', () => {
 		peerLibraryService.initialize();
 
-		// Set up peer
-		signalingChatService.onPeerChannelOpen!('peer-1');
+		triggerChannelOpen('peer-1');
 
 		peerLibraryService.requestFiles('peer-1', 'lib-1');
 
@@ -153,7 +176,7 @@ describe('PeerLibraryService', () => {
 	it('should handle request-files message by responding with files', () => {
 		peerLibraryService.initialize();
 
-		signalingChatService.onPeerChannelOpen!('peer-1');
+		triggerChannelOpen('peer-1');
 		vi.mocked(signalingChatService.sendToPeer).mockClear();
 
 		signalingChatService.onPeerLibraryMessage!('peer-1', {

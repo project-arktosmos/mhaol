@@ -28,12 +28,12 @@
 		chrome: 'Chrome'
 	};
 
-	const featuredKeys = new Set(['flix', 'tube', 'tunes']);
+	const featuredKeys = new Set(['server', 'tube', 'tunes']);
 
 	const apps = [
 		{
-			key: 'flix',
-			variant: 'flix',
+			key: 'server',
+			variant: 'server',
 			icon: 'M3.375 19.5h17.25a1.125 1.125 0 0 0 0-2.25H3.375a1.125 1.125 0 0 0 0 2.25ZM5.625 15V5.625a1.875 1.875 0 0 1 1.875-1.875h9a1.875 1.875 0 0 1 1.875 1.875V15m-13.5 0h13.5',
 			platforms: ['windows', 'macos', 'linux', 'android'] as Platform[]
 		},

@@ -21,8 +21,10 @@ class PeerLibraryService {
 		if (this.initialized) return;
 		this.initialized = true;
 
-		signalingChatService.onPeerChannelOpen = (peerId) => this.handlePeerConnected(peerId);
-		signalingChatService.onPeerDisconnected = (peerId) => this.handlePeerDisconnected(peerId);
+		signalingChatService.addPeerChannelOpenListener((peerId) => this.handlePeerConnected(peerId));
+		signalingChatService.addPeerDisconnectedListener((peerId) =>
+			this.handlePeerDisconnected(peerId)
+		);
 		signalingChatService.onPeerLibraryMessage = (peerId, msg) => this.handleMessage(peerId, msg);
 	}
 

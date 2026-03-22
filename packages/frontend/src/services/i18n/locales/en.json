@@ -39,21 +39,9 @@
 	"apps": {
 		"heading": "The Apps",
 		"subheading": "Each app in the ecosystem has its own identity, purpose, and personality.",
-		"flix": {
-			"title": "Flix",
+		"server": {
+			"title": "Server",
 			"description": "Your movie library. AI-powered torrent search, TMDB metadata, and instant streaming."
-		},
-		"tunes": {
-			"title": "Tunes",
-			"description": "Music library and player. Lyrics, MusicBrainz metadata, and audio downloads."
-		},
-		"photos": {
-			"title": "Photos",
-			"description": "Photo library with AI image tagging, smart albums, and local-first storage."
-		},
-		"emu": {
-			"title": "Emu",
-			"description": "Retro gaming emulation hub. ROM management, save states, and controller support."
 		},
 		"tube": {
 			"title": "Tube",
@@ -62,10 +50,6 @@
 		"tv": {
 			"title": "TV",
 			"description": "TV show tracker and streamer. Browse series, manage episodes, and stream with torrent integration."
-		},
-		"cloud": {
-			"title": "Cloud",
-			"description": "Self-hosted cloud storage manager. Sync, share, and access your files across devices on your own terms."
 		},
 		"books": {
 			"title": "Books",

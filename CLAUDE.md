@@ -5,7 +5,8 @@ This document guides Claude (and developers) on implementing features in this mo
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `packages/ui-lib/CLAUDE.md` — UI components, CSS/themes
 - `packages/frontend/CLAUDE.md` — Services, adapters, types, utils
-- `packages/backend/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
+- `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
+- `apps/server/backend/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
 ---
 
 ## Monorepo Overview
@@ -15,28 +16,21 @@ mhaol.git/
 ├── apps/                             # Thin SvelteKit wrappers (routes + assembly only)
 │   ├── mhaol-video/                  # Main media app (Vite, port 1531)
 │   ├── tube/                         # YouTube-focused app (port 1531)
-│   ├── video-cloud/                  # Video cloud app (headless, port 1540)
-│   ├── cloud/                        # Cloud library management (headless, port 1510)
 │   ├── video/                        # Full-featured video app
-│   ├── hub/                          # App dashboard & launcher (Tauri desktop, port 1400)
-│   ├── identity/                     # Identity management (headless, port 1410)
-│   ├── signaling/                    # Signaling server management dashboard (headless, port 1420)
-│   ├── tunes/                        # Music library app (headless, port 1550)
-│   ├── photos/                       # Photo gallery app (headless, port 1560)
 │   ├── storybook/                    # Storybook component gallery (headless, port 1405)
 │   ├── website/                      # Marketing landing page (base: /mhaoltube)
 │   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
-│   └── server/                       # Server orchestrator (starts frontend + backend)
+│   └── server/                       # Movies-only media app (headless, port 1530)
+│       └── backend/                  # Rust Axum server (integrated, port 1530)
 ├── packages/
 │   ├── ui-lib/                       # UI components + CSS/themes (Svelte, Tailwind, DaisyUI)
 │   ├── frontend/                     # Shared frontend logic (services, adapters, types, utils)
-│   ├── backend/                      # Rust Axum server (port 1530)
 │   ├── addons/                       # Addon modules (TMDB metadata, torrent search, shared utils)
-│   ├── cloud/                        # Rust cloud library management (Axum + rusqlite)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── signaling/                    # PartyKit signaling service
 │   ├── p2p-stream/                   # Rust P2P streaming library
-│   └── torrent/                      # Rust torrent implementation
+│   ├── torrent/                      # Rust torrent implementation
+│   └── webrtc/                       # WebRTC contact handshake layer (TypeScript)
 ├── pnpm-workspace.yaml
 └── package.json                      # Root workspace scripts
 ```
@@ -58,11 +52,13 @@ Apps **never** implement their own components, services, adapters, types, or uti
 
 ### Tauri Desktop Build (Hub Only)
 
-Only the **hub** app has a Tauri desktop build. Its `src-tauri/` directory contains the embedded backend server directly (no shared library). All other apps run in **headless mode** (browser + backend, no native window).
+### Server Backend
 
-- `apps/hub/src-tauri/Cargo.toml` — Depends on `mhaol-backend` and `axum` directly
-- `apps/hub/src-tauri/src/lib.rs` — Embeds the backend server on port 1500 (fallback 1501)
-- Assets (icons, capabilities, loading screen) live directly in `apps/hub/src-tauri/`
+The server app integrates the Rust backend directly at `apps/server/backend/`. This is a standalone Cargo crate (`mhaol-server`) that produces the `mhaol-server` binary. No other app embeds or depends on this crate — they connect to a running server instance.
+
+- `apps/server/backend/Cargo.toml` — Crate manifest
+- `apps/server/backend/src/lib.rs` — AppState, modules, database layer
+- `apps/server/backend/src/server.rs` — Binary entry point (HTTP server)
 
 ### How apps wire up
 
@@ -143,20 +139,9 @@ pnpm check            # svelte-check + cargo check
 pnpm test             # vitest + cargo test
 pnpm format           # Prettier write
 
-# Desktop (Tauri) — hub only
-pnpm app:hub              # Hub Tauri desktop dev (port 1400)
-pnpm app:hub:headless     # Hub headless mode (port 1400)
-
 # Headless apps (browser + backend, no native window)
 pnpm app:storybook        # Storybook headless (port 1405)
-pnpm app:identity         # Identity headless (port 1410)
-pnpm app:signaling        # Signaling headless (port 1420)
-pnpm app:cloud            # Cloud headless (port 1510)
-pnpm app:torrent          # Torrent headless (port 1520)
-pnpm app:flix             # Flix headless (port 1530)
-pnpm app:tunes            # Tunes headless (port 1550)
-pnpm app:photos           # Photos headless (port 1560)
-pnpm app:video-cloud      # Video Cloud headless (port 1540)
+pnpm app:server           # Server headless (port 1530)
 
 # Browser extension
 pnpm app:shepperd         # Shepperd dev (watch mode)
@@ -199,7 +184,7 @@ git commit -m "add thumbnail fallback to MediaCard"
 
 When adding a new feature that spans the full stack:
 
-**Backend (`packages/backend`)**
+**Backend (`apps/server/backend`)**
 - [ ] Create API module in `src/api/{feature}.rs`
 - [ ] Add `pub mod {feature};` to `src/api/mod.rs`
 - [ ] Register route in `build_router()`: `.nest("/api/{feature}", {feature}::router())`
@@ -241,4 +226,4 @@ When making significant structural changes (new packages, new component director
 - **packages/ui-lib/CLAUDE.md** — Component directories, CSS/themes
 - **packages/frontend/CLAUDE.md** — Services list, adapters list, types, utils
 - **App CLAUDE.md files** — Which features the app uses, how it assembles them
-- **packages/backend/CLAUDE.md** — API modules, routes
+- **apps/server/backend/CLAUDE.md** — API modules, routes

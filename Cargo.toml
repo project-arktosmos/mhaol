@@ -1,15 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "packages/backend",
-    "packages/cloud",
+    "apps/server/backend",
     "packages/identity",
     "packages/llm",
     "packages/yt-dlp",
     "packages/torrent",
     "packages/p2p-stream",
     "packages/http-stream",
-    "apps/hub/src-tauri",
-    "apps/flix/src-tauri",
     "apps/client/src-tauri",
 ]

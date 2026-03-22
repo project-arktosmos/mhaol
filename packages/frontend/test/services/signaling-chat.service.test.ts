@@ -506,7 +506,7 @@ describe('SignalingChatService', () => {
 
 	it('handles peer-left message and calls onPeerDisconnected callback', async () => {
 		const disconnectCallback = vi.fn();
-		signalingChatService.onPeerDisconnected = disconnectCallback;
+		signalingChatService.addPeerDisconnectedListener(disconnectCallback);
 
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 

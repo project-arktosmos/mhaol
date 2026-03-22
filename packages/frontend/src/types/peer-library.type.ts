@@ -1,6 +1,7 @@
 import type { SignalingChatMessage } from 'frontend/types/signaling.type';
 import type { LibraryType } from 'frontend/types/library.type';
 import type { DataChannelCloudEnvelope } from 'frontend/types/cloud-peer.type';
+import type { DataChannelContactEnvelope } from 'webrtc/types';
 
 // ===== Data Channel Envelope =====
 
@@ -17,7 +18,8 @@ export interface DataChannelPeerLibraryEnvelope {
 export type DataChannelEnvelope =
 	| DataChannelChatEnvelope
 	| DataChannelPeerLibraryEnvelope
-	| DataChannelCloudEnvelope;
+	| DataChannelCloudEnvelope
+	| DataChannelContactEnvelope;
 
 // ===== Peer Library Protocol =====
 

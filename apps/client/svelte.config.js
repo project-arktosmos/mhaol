@@ -20,7 +20,8 @@ const config = {
 			$adapters: '../../packages/frontend/src/adapters',
 			$services: '../../packages/frontend/src/services',
 			frontend: '../../packages/frontend/src',
-			'ui-lib': '../../packages/ui-lib/src'
+			'ui-lib': '../../packages/ui-lib/src',
+			webrtc: '../../packages/webrtc/src'
 		}
 	}
 };

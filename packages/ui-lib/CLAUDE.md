@@ -30,6 +30,7 @@ src/
 │   ├── signaling/            # Signaling/WebRTC
 │   ├── tmdb-browse/          # TMDB movie/TV browsing
 │   ├── torrent/              # Torrent management
+│   ├── videogames/           # Videogame browsing (GameCard — RetroAchievements)
 │   ├── youtube/              # YouTube download (queue, settings, preview, RightPanel)
 │   └── youtube-search/       # YouTube search (input, results, channel cards)
 └── css/                      # Styling

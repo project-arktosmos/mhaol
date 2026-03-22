@@ -26,7 +26,8 @@
 		"qrcode": "^1.5.4",
 		"svelte-i18n": "^4.0.1",
 		"addons": "workspace:*",
-		"viem": "^2.46.3"
+		"viem": "^2.46.3",
+		"webrtc": "workspace:*"
 	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"

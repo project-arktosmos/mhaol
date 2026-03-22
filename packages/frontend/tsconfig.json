@@ -22,7 +22,8 @@
 			"$utils/*": ["./src/utils/*"],
 			"$data/*": ["./src/data/*"],
 			"$lib/*": ["./src/lib/*"],
-			"frontend/*": ["./src/*"]
+			"frontend/*": ["./src/*"],
+			"webrtc/*": ["../webrtc/src/*"]
 		}
 	},
 	"include": ["src/**/*.ts", "src/**/*.svelte"]

@@ -52,7 +52,7 @@ class YouTubeLibraryService {
 		this.state.update((s) => ({ ...s, contentLoading: true, contentError: null }));
 
 		try {
-			const content = await this.fetchJson<YouTubeContent[]>('/api/media');
+			const content = await this.fetchJson<YouTubeContent[]>('/api/youtube/content');
 			this.state.update((s) => ({ ...s, content, contentLoading: false }));
 
 			if (content.some((c) => c.durationSeconds == null)) {
@@ -67,7 +67,7 @@ class YouTubeLibraryService {
 	private async fillMissingDurations(): Promise<void> {
 		try {
 			const filled = await this.fetchJson<{ youtubeId: string; durationSeconds: number }[]>(
-				'/api/media/fill-durations',
+				'/api/youtube/content/fill-durations',
 				{ method: 'POST' }
 			);
 			if (filled.length === 0) return;
@@ -89,7 +89,7 @@ class YouTubeLibraryService {
 		this.state.update((s) => ({ ...s, favoritesLoading: true }));
 
 		try {
-			const favorites = await this.fetchJson<YouTubeContent[]>('/api/media/favorites');
+			const favorites = await this.fetchJson<YouTubeContent[]>('/api/youtube/content/favorites');
 			this.state.update((s) => ({ ...s, favorites, favoritesLoading: false }));
 		} catch {
 			this.state.update((s) => ({ ...s, favoritesLoading: false }));
@@ -110,7 +110,7 @@ class YouTubeLibraryService {
 
 	async toggleFavorite(youtubeId: string): Promise<boolean> {
 		const result = await this.fetchJson<{ isFavorite: boolean }>(
-			`/api/media/${youtubeId}/favorite`,
+			`/api/youtube/content/${youtubeId}/favorite`,
 			{
 				method: 'PUT'
 			}
@@ -126,13 +126,13 @@ class YouTubeLibraryService {
 	}
 
 	async deleteAudio(youtubeId: string): Promise<void> {
-		const response = await fetch(apiUrl(`/api/media/${youtubeId}/audio`), { method: 'DELETE' });
+		const response = await fetch(apiUrl(`/api/youtube/content/${youtubeId}/audio`), { method: 'DELETE' });
 		if (!response.ok) throw new Error(`HTTP ${response.status}`);
 		await this.fetchContent();
 	}
 
 	async deleteVideo(youtubeId: string): Promise<void> {
-		const response = await fetch(apiUrl(`/api/media/${youtubeId}/video`), { method: 'DELETE' });
+		const response = await fetch(apiUrl(`/api/youtube/content/${youtubeId}/video`), { method: 'DELETE' });
 		if (!response.ok) throw new Error(`HTTP ${response.status}`);
 		await this.fetchContent();
 	}

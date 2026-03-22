@@ -11,16 +11,10 @@ export default defineConfig({
 		port,
 		fs: {
 			allow: ['../..']
-		},
-		proxy: {
-			'/api': `http://localhost:${port}`
 		}
 	},
 	preview: {
 		host: true,
-		port,
-		proxy: {
-			'/api': `http://localhost:${port}`
-		}
+		port
 	}
 });

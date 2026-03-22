@@ -51,7 +51,7 @@ jobs:
           workspaces: '. -> target'
 
       - name: Build release binaries
-        run: cargo build --release --bin mhaol-server --features mhaol-backend/embed-frontend
+        run: cargo build --release --bin mhaol-server --features mhaol-server/embed-frontend
 
       - name: Strip binary
         run: strip target/release/mhaol-server

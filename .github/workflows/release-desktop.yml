@@ -16,7 +16,7 @@ jobs:
       - id: set
         run: |
           if [ "${{ inputs.apps }}" = "all" ]; then
-            echo 'matrix={"app":["tube","cloud"],"platform":["macos-latest","ubuntu-latest","windows-latest"]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"app":["tube"],"platform":["macos-latest","ubuntu-latest","windows-latest"]}' >> "$GITHUB_OUTPUT"
           else
             IFS=',' read -ra APPS <<< "${{ inputs.apps }}"
             JSON=$(printf '"%s",' "${APPS[@]}" | sed 's/,$//')

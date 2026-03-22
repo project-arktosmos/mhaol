@@ -4,7 +4,7 @@ A family of self-hosted media apps built on shared core components. Each app shi
 
 ## Apps
 
-### Mhaolflix
+### Mhaolserver
 
 A WebRTC-powered alternative to Plex and Jellyfin for streaming your own movie and TV show library. Includes a built-in torrent client for fetching media.
 
@@ -18,7 +18,7 @@ A YouTube-like video platform with no ads and no tracking.
 
 ### Mhaoltunes
 
-The music counterpart to Mhaolflix — stream and manage your personal music library.
+The music counterpart to Mhaolserver — stream and manage your personal music library.
 
 ### Mhaolship
 

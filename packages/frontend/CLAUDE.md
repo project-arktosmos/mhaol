@@ -63,7 +63,7 @@ Feature services (all in `src/services/`):
 | `player.service.ts`                 | Media player state                                      |
 | `right-panel.service.ts`            | Right panel video selection                             |
 | `sidebar.service.ts`                | Sidebar state                                           |
-| `signaling-chat.service.ts`         | Signaling chat                                          |
+| `signaling-chat.service.ts`         | Signaling chat (listener arrays for channel open/close) |
 | `theme.service.ts`                  | Light/dark theme + DOM sync                             |
 | `tmdb-browse.service.ts`            | TMDB popular/discover                                   |
 | `browse-detail.service.ts`          | Browse detail sidebar state (layout-level)              |
@@ -98,6 +98,7 @@ All in `src/adapters/classes/`:
 - `peer-library.adapter.ts` — peer library data
 - `player.adapter.ts` — media player data
 - `signaling.adapter.ts` — signaling/P2P data
+- `retroachievements.adapter.ts` — RetroAchievements API → RaGameMetadata
 - `youtube-card.adapter.ts` — YouTube content → LibraryCardItem
 
 ---
@@ -106,7 +107,7 @@ All in `src/adapters/classes/`:
 
 One file per domain in `src/types/`:
 
-`core.type.ts`, `download.type.ts`, `identity.type.ts`, `image-tagger.type.ts`, `library.type.ts`, `llm.type.ts`, `media-card.type.ts`, `media-detail.type.ts`, `media-list.type.ts`, `modal.type.ts`, `musicbrainz.type.ts`, `p2p-stream.type.ts`, `peer-library.type.ts`, `player.type.ts`, `route.type.ts`, `sidebar.type.ts`, `signaling.type.ts`, `tmdb-browse.type.ts`, `torrent.type.ts`, `youtube.type.ts`, `youtube-search.type.ts`
+`core.type.ts`, `download.type.ts`, `identity.type.ts`, `image-tagger.type.ts`, `library.type.ts`, `llm.type.ts`, `media-card.type.ts`, `media-detail.type.ts`, `media-list.type.ts`, `modal.type.ts`, `musicbrainz.type.ts`, `p2p-stream.type.ts`, `peer-library.type.ts`, `player.type.ts`, `retroachievements.type.ts`, `route.type.ts`, `sidebar.type.ts`, `signaling.type.ts`, `tmdb-browse.type.ts`, `toast.type.ts`, `torrent.type.ts`, `youtube.type.ts`, `youtube-search.type.ts`
 
 ---
 

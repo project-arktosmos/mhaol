@@ -161,7 +161,7 @@ describe('YouTubeLibraryService', () => {
 		await youtubeLibraryService.deleteAudio('v1');
 
 		expect(mock).toHaveBeenCalledWith(
-			expect.stringContaining('/api/media/v1/audio'),
+			expect.stringContaining('/api/youtube/content/v1/audio'),
 			expect.objectContaining({ method: 'DELETE' })
 		);
 	});

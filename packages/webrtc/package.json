@@ -1,0 +1,14 @@
+{
+	"name": "webrtc",
+	"version": "0.0.1",
+	"type": "module",
+	"exports": {
+		"./*": "./src/*"
+	},
+	"peerDependencies": {
+		"svelte": "^5.0.0"
+	},
+	"dependencies": {
+		"viem": "^2.46.3"
+	}
+}

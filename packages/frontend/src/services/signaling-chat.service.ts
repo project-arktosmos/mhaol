@@ -32,10 +32,26 @@ class SignalingChatService {
 
 	// ===== Peer Lifecycle Callbacks =====
 
-	public onPeerChannelOpen: ((peerId: string) => void) | null = null;
-	public onPeerDisconnected: ((peerId: string) => void) | null = null;
+	private peerChannelOpenListeners: ((peerId: string) => void)[] = [];
+	private peerDisconnectedListeners: ((peerId: string) => void)[] = [];
+
 	public onPeerLibraryMessage: ((peerId: string, msg: PeerLibraryMessage) => void) | null = null;
 	public onCloudMessage: ((peerId: string, msg: CloudPeerMessage) => void) | null = null;
+	public onContactMessage: ((peerId: string, msg: unknown) => void) | null = null;
+
+	addPeerChannelOpenListener(fn: (peerId: string) => void): () => void {
+		this.peerChannelOpenListeners.push(fn);
+		return () => {
+			this.peerChannelOpenListeners = this.peerChannelOpenListeners.filter((l) => l !== fn);
+		};
+	}
+
+	addPeerDisconnectedListener(fn: (peerId: string) => void): () => void {
+		this.peerDisconnectedListeners.push(fn);
+		return () => {
+			this.peerDisconnectedListeners = this.peerDisconnectedListeners.filter((l) => l !== fn);
+		};
+	}
 
 	private ws: WebSocket | null = null;
 	private peerConnections: Map<string, RTCPeerConnection> = new Map();
@@ -445,7 +461,7 @@ class SignalingChatService {
 
 		channel.onopen = () => {
 			this.updatePeerIds();
-			this.onPeerChannelOpen?.(peerId);
+			this.peerChannelOpenListeners.forEach((fn) => fn(peerId));
 		};
 		channel.onclose = () => this.updatePeerIds();
 		channel.onerror = () => this.updatePeerIds();
@@ -461,6 +477,8 @@ class SignalingChatService {
 					this.onPeerLibraryMessage?.(peerId, parsed.payload as PeerLibraryMessage);
 				} else if (parsed.channel === 'cloud') {
 					this.onCloudMessage?.(peerId, parsed.payload as CloudPeerMessage);
+				} else if (parsed.channel === 'contact') {
+					this.onContactMessage?.(peerId, parsed.payload);
 				} else if (parsed.id && parsed.address && parsed.content) {
 					// Legacy format: raw SignalingChatMessage (backward compat)
 					const msg = parsed as SignalingChatMessage;
@@ -476,7 +494,7 @@ class SignalingChatService {
 
 	private removePeer(peerId: string): void {
 		this.removePeerConnection(peerId);
-		this.onPeerDisconnected?.(peerId);
+		this.peerDisconnectedListeners.forEach((fn) => fn(peerId));
 		this.updatePeerIds();
 	}
 
@@ -542,7 +560,7 @@ class SignalingChatService {
 		this.state.update((s) => ({ ...s, messages: [...s.messages, message] }));
 	}
 
-	private getPeerConnectionStatus(peerId: string): PeerConnectionStatus | undefined {
+	getPeerConnectionStatus(peerId: string): PeerConnectionStatus | undefined {
 		let status: PeerConnectionStatus | undefined;
 		this.state.subscribe((s) => {
 			status = s.peerConnectionStates[peerId];
