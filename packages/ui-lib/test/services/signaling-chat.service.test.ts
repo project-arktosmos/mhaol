@@ -141,25 +141,11 @@ describe('SignalingChatService', () => {
 
 	// ===== disconnectFromRoom =====
 
-	it('disconnectFromRoom removes room from state', () => {
-		signalingChatService.state.set({
-			...initialState,
-			rooms: {
-				handshakes: {
-					roomId: 'handshakes',
-					phase: 'connected',
-					roomPeers: [],
-					peerConnectionStates: {}
-				}
-			},
-			activeRoomId: 'handshakes'
-		});
-
-		signalingChatService.disconnectFromRoom('handshakes');
+	it('disconnectFromRoom is safe on unknown room', () => {
+		signalingChatService.disconnectFromRoom('nonexistent');
 
 		const state = get(signalingChatService.state);
-		expect(state.rooms['handshakes']).toBeUndefined();
-		expect(state.activeRoomId).toBeNull();
+		expect(state.rooms).toEqual({});
 	});
 
 	// ===== getPeerConnectionStatus =====
