@@ -25,8 +25,9 @@
   import { rosterService } from "ui-lib/services/roster.service";
   import { signalingAdapter } from "ui-lib/adapters/classes/signaling.adapter";
   import { contactHandshakeService } from "webrtc/service";
-  import type { PassportData, ContactHandshakeMessage } from "webrtc/types";
+  import type { PassportData, ContactHandshakeMessage, Endorsement } from "webrtc/types";
   import { get } from "svelte/store";
+  import { getAddress } from "viem";
   import { serverCatalogService } from "ui-lib/services/server-catalog.service";
   import { p2pStreamService } from "ui-lib/services/p2p-stream.service";
   import { movieDetailsToDisplay } from "addons/tmdb/transform";
@@ -133,12 +134,28 @@
               [
                 {
                   label: "Accept",
-                  onclick: () => {
-                    contactHandshakeService.acceptRequest(request.address);
+                  onclick: async () => {
+                    // Fetch endorsement from backend before accepting
+                    let endorsement: Endorsement | undefined;
+                    try {
+                      const res = await fetch(apiUrl("/api/signaling/endorse"), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ passportRaw: request.passport.raw }),
+                      });
+                      if (res.ok) {
+                        endorsement = await res.json();
+                      }
+                    } catch {
+                      // Continue without endorsement
+                    }
+
+                    contactHandshakeService.acceptRequest(request.address, endorsement);
                     rosterService.addEntry({
                       name: request.name,
                       address: request.address,
                       passport: JSON.stringify(request.passport),
+                      endorsement: endorsement ? JSON.stringify(endorsement) : undefined,
                     });
                   },
                 },
@@ -156,6 +173,7 @@
               name: contact.name,
               address: contact.address,
               passport: JSON.stringify(contact.passport),
+              endorsement: contact.endorsement ? JSON.stringify(contact.endorsement) : undefined,
             });
           },
           onConnectionReady: async (peerId) => {
@@ -286,35 +304,51 @@
     const identities2 = get(identityService.state).identities;
     if (identities2.length > 0 && identities2[0].passport) {
       const sigPassport: PassportData = JSON.parse(identities2[0].passport);
-      signalingChatService.connect(
+      const serverAddress = JSON.parse(sigPassport.raw).address;
+      const personalRoom = getAddress(serverAddress as `0x${string}`);
+
+      const signFn = async (msg: string) => {
+        const parts = msg.match(/^partykit-auth:(.+):(\d+)$/);
+        if (!parts) throw new Error("Invalid auth message format");
+        const res = await fetch(
+          apiUrl(
+            `/api/signaling/auth?room_id=${encodeURIComponent(parts[1])}&timestamp=${parts[2]}`,
+          ),
+        );
+        if (!res.ok) throw new Error(`Auth signing failed: HTTP ${res.status}`);
+        const data = await res.json();
+        return data.signature;
+      };
+
+      // Connect to handshakes room for contact exchange
+      signalingChatService.connectToRoom(
         DEFAULT_SIGNALING_URL,
-        "default",
+        "handshakes",
         sigPassport,
-        async (msg: string) => {
-          // Parse room_id and timestamp from the auth message format
-          const parts = msg.match(/^partykit-auth:(.+):(\d+)$/);
-          if (!parts) throw new Error("Invalid auth message format");
-          const res = await fetch(
-            apiUrl(
-              `/api/signaling/auth?room_id=${encodeURIComponent(parts[1])}&timestamp=${parts[2]}`,
-            ),
-          );
-          if (!res.ok)
-            throw new Error(`Auth signing failed: HTTP ${res.status}`);
-          const data = await res.json();
-          return data.signature;
-        },
+        signFn,
+      );
+
+      // Connect to own personal room
+      signalingChatService.connectToRoom(
+        DEFAULT_SIGNALING_URL,
+        personalRoom,
+        sigPassport,
+        signFn,
       );
     }
 
     unsubChat = chatStore.subscribe((s) => {
+      // Derive aggregate phase from the handshakes room
+      const handshakesRoom = s.rooms["handshakes"];
+      const phase = handshakesRoom?.phase ?? "disconnected";
+
       if (prevPhase === null) {
-        prevPhase = s.phase;
+        prevPhase = phase;
         return;
       }
-      if (s.phase === prevPhase) return;
+      if (phase === prevPhase) return;
 
-      switch (s.phase) {
+      switch (phase) {
         case "connecting":
           toastService.info("Connecting to signaling server...");
           break;
@@ -330,7 +364,7 @@
           }
           break;
       }
-      prevPhase = s.phase;
+      prevPhase = phase;
     });
   });
 

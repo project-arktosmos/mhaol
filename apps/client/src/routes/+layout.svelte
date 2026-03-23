@@ -18,7 +18,8 @@
 	import { contactHandshakeService } from 'webrtc/service';
 	import { serverCatalogService } from 'ui-lib/services/server-catalog.service';
 	import { p2pStreamService } from 'ui-lib/services/p2p-stream.service';
-	import type { ContactHandshakeMessage } from 'webrtc/types';
+	import type { ContactHandshakeMessage, Endorsement } from 'webrtc/types';
+	import { getAddress } from 'viem';
 
 	let { children } = $props();
 
@@ -84,8 +85,22 @@
 								name: contact.name,
 								address: contact.address,
 								passport: JSON.stringify(contact.passport),
-								instanceType: acceptPayload.instanceType
+								instanceType: acceptPayload.instanceType,
+								endorsement: contact.endorsement ? JSON.stringify(contact.endorsement) : undefined
 							});
+
+							// Auto-join server's personal room if endorsed
+							if (contact.endorsement && acceptPayload.instanceType === 'server') {
+								const serverRoom = getAddress(contact.address as `0x${string}`);
+								const { signalingServerUrl } = get(rosterService.state);
+								signalingChatService.connectToRoom(
+									signalingServerUrl,
+									serverRoom,
+									identity.passport,
+									(m) => clientIdentityService.signMessage(m),
+									contact.endorsement
+								);
+							}
 						},
 						onConnectionReady: () => {
 							// Server will send catalog; client receives via serverCatalogService
@@ -102,22 +117,48 @@
 				signalingChatService.onContactMessage = (peerId, msg) =>
 					contactHandshakeService.handleMessage(peerId, msg as ContactHandshakeMessage);
 
-				// Connect to signaling with real passport
-				const { signalingServerUrl, signalingRoomId } = get(rosterService.state);
-				signalingChatService.connect(signalingServerUrl, signalingRoomId, identity.passport, (m) =>
-					clientIdentityService.signMessage(m)
+				// Connect to handshakes room
+				const { signalingServerUrl } = get(rosterService.state);
+				signalingChatService.connectToRoom(
+					signalingServerUrl,
+					'handshakes',
+					identity.passport,
+					(m) => clientIdentityService.signMessage(m)
 				);
+
+				// Reconnect to endorsed server rooms from stored roster entries
+				const entries = get(rosterService.state).entries;
+				for (const entry of entries) {
+					if (entry.endorsement && entry.instanceType === 'server') {
+						try {
+							const endorsement: Endorsement = JSON.parse(entry.endorsement);
+							const serverRoom = getAddress(entry.address as `0x${string}`);
+							signalingChatService.connectToRoom(
+								signalingServerUrl,
+								serverRoom,
+								identity.passport,
+								(m) => clientIdentityService.signMessage(m),
+								endorsement
+							);
+						} catch {
+							// Skip invalid endorsements
+						}
+					}
+				}
 			}
 		});
 
 		const unsubChat = chatStore.subscribe((s) => {
+			const handshakesRoom = s.rooms['handshakes'];
+			const phase = handshakesRoom?.phase ?? 'disconnected';
+
 			if (prevPhase === null) {
-				prevPhase = s.phase;
+				prevPhase = phase;
 				return;
 			}
-			if (s.phase === prevPhase) return;
+			if (phase === prevPhase) return;
 
-			switch (s.phase) {
+			switch (phase) {
 				case 'connecting':
 					toastService.info('Connecting to signaling server...');
 					break;
@@ -133,7 +174,7 @@
 					}
 					break;
 			}
-			prevPhase = s.phase;
+			prevPhase = phase;
 		});
 
 		return () => {
