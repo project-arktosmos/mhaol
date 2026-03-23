@@ -20,7 +20,9 @@
 	"dependencies": {
 		"@sveltejs/adapter-static": "^3.0.9",
 		"ui-lib": "workspace:*",
-		"svelte-i18n": "^4.0.1"
+		"webrtc": "workspace:*",
+		"svelte-i18n": "^4.0.1",
+		"viem": "^2.46.3"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.2",

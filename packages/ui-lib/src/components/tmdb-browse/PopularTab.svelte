@@ -20,8 +20,11 @@
 		selectedTvShowId = null,
 		fetchedIds,
 		downloadStatuses,
+		fetchCacheSummaries,
+		smartSearchingId = null,
 		onselectMovie,
 		onselectTvShow,
+		onsmartSearch,
 		onloadMovies,
 		onloadTv
 	}: {
@@ -39,8 +42,11 @@
 		selectedTvShowId?: number | null;
 		fetchedIds?: Set<number>;
 		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
+		fetchCacheSummaries?: Map<number, string>;
+		smartSearchingId?: number | null;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
+		onsmartSearch?: (movie: DisplayTMDBMovie) => void;
 		onloadMovies: (page: number) => void;
 		onloadTv: (page: number) => void;
 	} = $props();
@@ -78,7 +84,7 @@
 			<span class="loading loading-lg loading-spinner"></span>
 		</div>
 	{:else if movies.length > 0}
-		<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {onselectMovie} />
+		<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {fetchCacheSummaries} {smartSearchingId} {onselectMovie} {onsmartSearch} />
 		<TmdbPagination
 			page={moviesPage}
 			totalPages={moviesTotalPages}

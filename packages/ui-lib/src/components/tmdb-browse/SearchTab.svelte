@@ -20,8 +20,11 @@
 		selectedTvShowId = null,
 		fetchedIds,
 		downloadStatuses,
+		fetchCacheSummaries,
+		smartSearchingId = null,
 		onselectMovie,
 		onselectTvShow,
+		onsmartSearch,
 		onsearchMovies,
 		onsearchTv
 	}: {
@@ -40,8 +43,11 @@
 		selectedTvShowId?: number | null;
 		fetchedIds?: Set<number>;
 		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
+		fetchCacheSummaries?: Map<number, string>;
+		smartSearchingId?: number | null;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
+		onsmartSearch?: (movie: DisplayTMDBMovie) => void;
 		onsearchMovies: (query: string, page: number) => void;
 		onsearchTv: (query: string, page: number) => void;
 	} = $props();
@@ -88,7 +94,7 @@
 	</div>
 {:else if results.length > 0}
 	{#if isMovies}
-		<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {onselectMovie} />
+		<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {fetchCacheSummaries} {smartSearchingId} {onselectMovie} {onsmartSearch} />
 	{:else}
 		<TmdbBrowseGrid {tvShows} {selectedTvShowId} {onselectTvShow} />
 	{/if}

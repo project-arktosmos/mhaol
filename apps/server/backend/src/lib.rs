@@ -5,6 +5,8 @@ pub mod http_stream;
 #[cfg(not(target_os = "android"))]
 pub mod llm_worker;
 pub mod modules;
+#[cfg(not(target_os = "android"))]
+pub mod peer_service;
 pub mod signaling_rooms;
 pub mod worker_bridge;
 

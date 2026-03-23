@@ -1,5 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
+	import { onDestroy } from 'svelte';
 	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
 	import { signalingAdapter } from 'ui-lib/adapters/classes/signaling.adapter';
 	import { contactHandshakeService } from 'webrtc/service';
@@ -11,6 +12,17 @@
 	import type { ContactHandshakePhase } from 'webrtc/types';
 	import type { DisplayTMDBMovie } from 'addons/tmdb/types';
 	import type { CatalogMovie } from 'ui-lib/types/server-catalog.type';
+
+	// Periodically request fresh catalog from all connected server peers
+	const catalogRefreshInterval = setInterval(() => {
+		const movies = serverCatalogService.state;
+		let peerIds: string[] = [];
+		movies.subscribe((s) => (peerIds = Object.keys(s.movies)))();
+		for (const peerId of peerIds) {
+			serverCatalogService.requestCatalog(peerId);
+		}
+	}, 10_000);
+	onDestroy(() => clearInterval(catalogRefreshInterval));
 
 	const chatStore = signalingChatService.state;
 	const handshakeStore = contactHandshakeService.state;
@@ -93,10 +105,19 @@
 		return steps;
 	}
 
+	function stableNumericId(str: string): number {
+		let hash = 0;
+		for (let i = 0; i < str.length; i++) {
+			hash = (hash * 31 + str.charCodeAt(i)) | 0;
+		}
+		return Math.abs(hash);
+	}
+
 	function catalogToDisplayMovie(entry: CatalogMovie): DisplayTMDBMovie {
 		const tmdb = entry.tmdb;
+		const id = tmdb?.id ?? stableNumericId(entry.item.id);
 		return {
-			id: 0, // overridden by displayMovies with array index
+			id,
 			title: tmdb?.title ?? entry.item.name,
 			originalTitle: tmdb?.originalTitle ?? entry.item.name,
 			overview: tmdb?.overview ?? '',
@@ -111,7 +132,7 @@
 
 	let activePeerId = $derived($chatStore.activePeerId);
 
-	// Flatten all catalog entries with their peerId, using array index as stable ID
+	// Flatten all catalog entries with their peerId
 	let allCatalogEntries = $derived(
 		Object.entries($catalogStore.movies).flatMap(([peerId, movies]) =>
 			movies.map((entry) => ({ peerId, entry }))
@@ -119,10 +140,18 @@
 	);
 
 	let displayMovies = $derived(
-		allCatalogEntries.map((e, i) => {
-			const movie = catalogToDisplayMovie(e.entry);
-			return { ...movie, id: i };
-		})
+		[...allCatalogEntries]
+			.sort((a, b) => (b.entry.streamable ? 1 : 0) - (a.entry.streamable ? 1 : 0))
+			.map((e) => catalogToDisplayMovie(e.entry))
+	);
+
+	// IDs of items that are not streamable (shown at 50% opacity)
+	let dimmedIds = $derived(
+		new Set(
+			allCatalogEntries
+				.filter((e) => !e.entry.streamable)
+				.map((e) => e.entry.tmdb?.id ?? stableNumericId(e.entry.item.id))
+		)
 	);
 
 	// Derive aggregate phase and peerConnectionStates from all rooms
@@ -176,19 +205,18 @@
 	let isPlaying = $derived($playerState.currentFile !== null);
 
 	function handleSelectMovie(movie: DisplayTMDBMovie) {
-		const entry = allCatalogEntries[movie.id];
-		if (!entry) {
-			console.error('[ConnectionDashboard] No catalog entry for movie.id:', movie.id);
-			return;
-		}
-		console.log('[ConnectionDashboard] Stream request:', {
-			movieId: movie.id,
-			title: movie.title,
-			itemId: entry.entry.item.id,
-			itemPath: entry.entry.item.path,
-			itemName: entry.entry.item.name
+		if (dimmedIds.has(movie.id)) return;
+		// Find the catalog entry matching this movie by TMDB ID or fallback hash
+		const entry = allCatalogEntries.find((e) => {
+			const tmdbLink = e.entry.item.links?.tmdb;
+			if (tmdbLink && Number(tmdbLink.serviceId) === movie.id) return true;
+			return stableNumericId(e.entry.item.id) === movie.id;
 		});
-		serverCatalogService.requestStream(entry.peerId, entry.entry.item.path);
+		if (!entry) return;
+		const tmdbLink = entry.entry.item.links?.tmdb;
+		if (!tmdbLink) return;
+		serverCatalogService.requestStream(entry.peerId, Number(tmdbLink.serviceId));
+		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
 	let roomEntries = $derived(Object.entries($chatStore.rooms));
@@ -242,7 +270,8 @@
 		</div>
 	{/if}
 
-	<!-- Signaling Rooms -->
+	<!-- Signaling Rooms (hidden once catalog is loaded) -->
+	{#if displayMovies.length === 0}
 	{#each roomEntries as [roomId, room] (roomId)}
 		<div class="card bg-base-200">
 			<div class="card-body gap-3 p-4">
@@ -332,12 +361,13 @@
 			</div>
 		</div>
 	{/each}
+	{/if}
 
 	<!-- Movie Catalog Grid -->
 	{#if displayMovies.length > 0}
 		<div>
 			<h2 class="mb-3 text-lg font-semibold">Server Movies</h2>
-			<TmdbBrowseGrid movies={displayMovies} onselectMovie={handleSelectMovie} />
+			<TmdbBrowseGrid movies={displayMovies} {dimmedIds} onselectMovie={handleSelectMovie} />
 		</div>
 	{/if}
 

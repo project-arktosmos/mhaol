@@ -500,6 +500,8 @@
 	let fetchCachedTmdbIds: Set<number> = $state(new Set());
 	// Maps TMDB ID → infoHash for matching active torrent downloads
 	let fetchCacheHashes: Map<number, string> = $state(new Map());
+	// Maps TMDB ID → torrent name from smart search
+	let fetchCacheSummaries: Map<number, string> = $state(new Map());
 
 	async function loadFetchCacheIds() {
 		try {
@@ -507,6 +509,18 @@
 			if (res.ok) {
 				const ids: number[] = await res.json();
 				fetchCachedTmdbIds = new Set(ids);
+			}
+		} catch {
+			// best-effort
+		}
+	}
+
+	async function loadFetchCacheSummaries() {
+		try {
+			const res = await fetch(apiUrl('/api/torrent/fetch-cache/summaries'));
+			if (res.ok) {
+				const entries: Array<{ tmdbId: number; name: string }> = await res.json();
+				fetchCacheSummaries = new Map(entries.map((e) => [e.tmdbId, e.name]));
 			}
 		} catch {
 			// best-effort
@@ -525,11 +539,69 @@
 		}
 	}
 
+	// Smart search — individual + batch
+	let smartSearchingId: number | null = $state(null);
+	let batchSearching = $state(false);
+	let batchProgress = $state({ current: 0, total: 0 });
+
+	async function handleSmartSearch(movie: DisplayTMDBMovie) {
+		smartSearchingId = movie.id;
+		try {
+			await smartSearchService.selectAndWaitForBest({
+				title: movie.title,
+				year: movie.releaseYear,
+				type: 'movie',
+				tmdbId: movie.id,
+				mode: 'fetch'
+			});
+			await Promise.all([loadFetchCacheIds(), loadFetchCacheHashes(), loadFetchCacheSummaries()]);
+		} finally {
+			smartSearchingId = null;
+		}
+	}
+
+	async function handleBatchSmartSearch() {
+		const unsearched = pinnedMovies.filter((m) => !fetchCachedTmdbIds.has(m.id));
+		if (unsearched.length === 0) return;
+
+		batchSearching = true;
+		batchProgress = { current: 0, total: unsearched.length };
+
+		for (const movie of unsearched) {
+			batchProgress = { current: batchProgress.current + 1, total: batchProgress.total };
+			smartSearchingId = movie.id;
+			try {
+				await smartSearchService.selectAndWaitForBest({
+					title: movie.title,
+					year: movie.releaseYear,
+					type: 'movie',
+					tmdbId: movie.id,
+					mode: 'fetch'
+				});
+				await Promise.all([
+					loadFetchCacheIds(),
+					loadFetchCacheHashes(),
+					loadFetchCacheSummaries()
+				]);
+			} catch {
+				// continue with next movie
+			}
+		}
+
+		smartSearchingId = null;
+		batchSearching = false;
+	}
+
+	let pinnedUnsearchedCount = $derived(
+		pinnedMovies.filter((m) => !fetchCachedTmdbIds.has(m.id)).length
+	);
+
 	onMount(async () => {
 		libraryService.initialize();
 		loadMovieImageOverrides();
 		loadFetchCacheIds();
 		loadFetchCacheHashes();
+		loadFetchCacheSummaries();
 		initBrowseSections();
 		smartPairService.loadPinned().then((pinned) => {
 			pinnedMovies = pinned.movies;
@@ -893,13 +965,32 @@
 		<div class="container mx-auto">
 			{#if pinnedMovies.length > 0}
 				<section class="mb-8">
-					<h2 class="mb-3 text-lg font-semibold">Pinned</h2>
+					<div class="mb-3 flex items-center gap-2">
+						<h2 class="text-lg font-semibold">Pinned</h2>
+						{#if pinnedUnsearchedCount > 0}
+							<button
+								class="btn btn-outline btn-xs"
+								onclick={handleBatchSmartSearch}
+								disabled={batchSearching}
+							>
+								{#if batchSearching}
+									<span class="loading loading-xs loading-spinner"></span>
+									{batchProgress.current}/{batchProgress.total}
+								{:else}
+									Smart Search All ({pinnedUnsearchedCount})
+								{/if}
+							</button>
+						{/if}
+					</div>
 					<TmdbBrowseGrid
 						movies={pinnedMovies}
 						selectedMovieId={selectedBrowseMovie?.id ?? null}
 						fetchedIds={fetchCachedTmdbIds}
 						downloadStatuses={browseDownloadStatuses}
+						{fetchCacheSummaries}
+						{smartSearchingId}
 						onselectMovie={handleBrowseSelectMovie}
+						onsmartSearch={handleSmartSearch}
 					/>
 				</section>
 			{/if}
@@ -921,7 +1012,10 @@
 					selectedMovieId={selectedBrowseMovie?.id ?? null}
 					fetchedIds={fetchCachedTmdbIds}
 					downloadStatuses={browseDownloadStatuses}
+					{fetchCacheSummaries}
+					{smartSearchingId}
 					onselectMovie={handleBrowseSelectMovie}
+					onsmartSearch={handleSmartSearch}
 					onsearchMovies={(q, p) => tmdbBrowseService.searchMovies(q, p)}
 					onsearchTv={(q, p) => tmdbBrowseService.searchTv(q, p)}
 				/>
@@ -935,7 +1029,10 @@
 						selectedMovieId={selectedBrowseMovie?.id ?? null}
 						fetchedIds={fetchedDisplayIds}
 						downloadStatuses={downloadStatuses}
+						{fetchCacheSummaries}
+						{smartSearchingId}
 						onselectMovie={handleLibrarySelectMovie}
+						onsmartSearch={handleSmartSearch}
 					/>
 				</section>
 			{/each}
@@ -956,7 +1053,10 @@
 					selectedMovieId={selectedBrowseMovie?.id ?? null}
 					fetchedIds={fetchCachedTmdbIds}
 					downloadStatuses={browseDownloadStatuses}
+					{fetchCacheSummaries}
+					{smartSearchingId}
 					onselectMovie={handleBrowseSelectMovie}
+					onsmartSearch={handleSmartSearch}
 					onloadMovies={(p) => tmdbBrowseService.loadPopularMovies(p)}
 					onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
 				/>
@@ -993,7 +1093,10 @@
 							selectedMovieId={selectedBrowseMovie?.id ?? null}
 							fetchedIds={fetchCachedTmdbIds}
 							downloadStatuses={browseDownloadStatuses}
+							{fetchCacheSummaries}
+							{smartSearchingId}
 							onselectMovie={handleBrowseSelectMovie}
+							onsmartSearch={handleSmartSearch}
 						/>
 						<TmdbPagination
 							page={$browseState.discoverMoviesPage}

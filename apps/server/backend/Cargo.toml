@@ -54,6 +54,11 @@ ndarray = "0.17"
 tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp"] }
 hf-hub = { version = "0.5", features = ["tokio"] }
+webrtc = "0.12"
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
+k256 = { version = "0.13", features = ["ecdsa"] }
+sha3 = "0.10"
+hex = "0.4"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

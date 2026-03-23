@@ -8,18 +8,24 @@
 		selectedMovieId = null,
 		fetchedIds = new Set<number>(),
 		downloadStatuses,
-		onselectMovie
+		fetchCacheSummaries,
+		smartSearchingId = null,
+		onselectMovie,
+		onsmartSearch
 	}: {
 		movies: DisplayTMDBMovie[];
 		selectedMovieId?: number | null;
 		fetchedIds?: Set<number>;
 		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
+		fetchCacheSummaries?: Map<number, string>;
+		smartSearchingId?: number | null;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
+		onsmartSearch?: (movie: DisplayTMDBMovie) => void;
 	} = $props();
 </script>
 
 {#if movies.length > 0}
-	<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {onselectMovie} />
+	<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {fetchCacheSummaries} {smartSearchingId} {onselectMovie} {onsmartSearch} />
 {:else}
 	<div class="rounded-lg bg-base-200 p-8 text-center">
 		<p class="opacity-50">No movies yet. Add a Movies library and scan it.</p>

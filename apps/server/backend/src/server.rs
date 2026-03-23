@@ -80,6 +80,28 @@ async fn main() {
         });
     }
 
+    // Ensure dual identities: backend (SIGNALING_WALLET) + frontend (CLIENT_WALLET)
+    state.identity_manager.ensure_identity("SIGNALING_WALLET");
+    state.identity_manager.ensure_identity("CLIENT_WALLET");
+
+    // Start peer service (signaling + WebRTC + catalog serving) in the background
+    #[cfg(not(target_os = "android"))]
+    {
+        let peer_state = state.clone();
+        tokio::spawn(async move {
+            match mhaol_server::peer_service::PeerServiceManager::new(peer_state) {
+                Ok(mut manager) => {
+                    if let Err(e) = manager.start().await {
+                        tracing::error!("[peer-service] Event loop error: {}", e);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("[peer-service] Failed to initialize: {}", e);
+                }
+            }
+        });
+    }
+
     let app = api::build_router(state);
 
     let addr = format!("{}:{}", host, port);

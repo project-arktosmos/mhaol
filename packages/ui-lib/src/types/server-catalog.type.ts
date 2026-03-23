@@ -6,6 +6,7 @@ import type { DisplayTMDBMovieDetails } from 'addons/tmdb/types';
 export interface CatalogMovie {
 	item: MediaItem;
 	tmdb: DisplayTMDBMovieDetails | null;
+	streamable: boolean;
 }
 
 export interface ServerCatalogMoviesMessage {
@@ -15,7 +16,7 @@ export interface ServerCatalogMoviesMessage {
 
 export interface ServerCatalogStreamRequestMessage {
 	type: 'stream-request';
-	itemPath: string;
+	tmdbId: number;
 }
 
 export interface ServerCatalogStreamSessionMessage {
@@ -30,11 +31,16 @@ export interface ServerCatalogStreamErrorMessage {
 	error: string;
 }
 
+export interface ServerCatalogRequestMessage {
+	type: 'catalog-request';
+}
+
 export type ServerCatalogMessage =
 	| ServerCatalogMoviesMessage
 	| ServerCatalogStreamRequestMessage
 	| ServerCatalogStreamSessionMessage
-	| ServerCatalogStreamErrorMessage;
+	| ServerCatalogStreamErrorMessage
+	| ServerCatalogRequestMessage;
 
 export interface DataChannelServerCatalogEnvelope {
 	channel: 'server-catalog';

@@ -146,9 +146,9 @@ async fn handle_create_session(
         }
         (None, Some(url)) => {
             let source = if is_audio_only {
-                HttpSource::new(&url).audio_only()
+                AppSrcSource::new(&url).audio_only()
             } else {
-                HttpSource::new(&url)
+                AppSrcSource::new(&url)
             };
             Box::new(source)
         }

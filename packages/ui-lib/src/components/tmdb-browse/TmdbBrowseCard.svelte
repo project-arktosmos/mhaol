@@ -9,6 +9,7 @@
 		tvShow = null,
 		selected = false,
 		fetched = false,
+		dimmed = false,
 		downloadState = null,
 		downloadProgress = null,
 		onclick
@@ -17,14 +18,15 @@
 		tvShow?: DisplayTMDBTvShow | null;
 		selected?: boolean;
 		fetched?: boolean;
+		dimmed?: boolean;
 		downloadState?: TorrentState | null;
 		downloadProgress?: number | null;
 		onclick?: () => void;
 	} = $props();
 
-	const browseViewMode = getContext<{ readonly value: 'poster' | 'backdrop' } | undefined>(
-		'browseViewMode'
-	);
+	const browseViewMode = getContext<
+		{ readonly value: 'poster' | 'backdrop' | 'table' } | undefined
+	>('browseViewMode');
 	let useBackdrop = $derived(browseViewMode?.value === 'backdrop');
 
 	let title = $derived(movie?.title ?? tvShow?.name ?? '');
@@ -73,7 +75,8 @@
 	<div
 		class={classNames('relative overflow-hidden rounded-lg bg-base-300', {
 			'cursor-pointer transition-shadow hover:shadow-md': !!onclick,
-			'ring-2 ring-primary': selected
+			'ring-2 ring-primary': selected,
+			'opacity-50': dimmed
 		})}
 		{onclick}
 		role={onclick ? 'button' : undefined}
@@ -108,7 +111,7 @@
 								clip-rule="evenodd"
 							/>
 						</svg>
-						downloaded
+						smart searched
 					</span>
 				{/if}
 			</div>

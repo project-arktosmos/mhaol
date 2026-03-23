@@ -18,7 +18,7 @@ class ServerCatalogService {
 	private initialized = false;
 
 	// Callback for server-side stream request handling
-	public onStreamRequest: ((peerId: string, itemPath: string) => void) | null = null;
+	public onStreamRequest: ((peerId: string, tmdbId: number) => void) | null = null;
 
 	initialize(): void {
 		if (this.initialized) return;
@@ -38,10 +38,18 @@ class ServerCatalogService {
 		signalingChatService.sendToPeer(peerId, envelope);
 	}
 
-	requestStream(peerId: string, itemPath: string): void {
+	requestCatalog(peerId: string): void {
 		const envelope: DataChannelEnvelope = {
 			channel: 'server-catalog',
-			payload: { type: 'stream-request', itemPath }
+			payload: { type: 'catalog-request' }
+		};
+		signalingChatService.sendToPeer(peerId, envelope);
+	}
+
+	requestStream(peerId: string, tmdbId: number): void {
+		const envelope: DataChannelEnvelope = {
+			channel: 'server-catalog',
+			payload: { type: 'stream-request', tmdbId }
 		};
 		signalingChatService.sendToPeer(peerId, envelope);
 	}
@@ -78,7 +86,7 @@ class ServerCatalogService {
 				break;
 
 			case 'stream-request':
-				this.onStreamRequest?.(peerId, msg.itemPath);
+				this.onStreamRequest?.(peerId, msg.tmdbId);
 				break;
 
 			case 'stream-session':

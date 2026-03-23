@@ -342,13 +342,13 @@ async fn delete_session(
     Json(serde_json::json!({ "ok": true }))
 }
 
-const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "wmv", "webm", "flv", "m4v"];
+pub(crate) const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "wmv", "webm", "flv", "m4v"];
 
 /// Resolve a media path to an actual video file.
 /// - If it's a file, return as-is.
 /// - If it's a directory, find the largest video file inside.
 /// - If it doesn't exist, search the parent directory for the largest video file.
-fn resolve_media_path(path: &str) -> String {
+pub(crate) fn resolve_media_path(path: &str) -> String {
     let p = std::path::Path::new(path);
     if p.is_file() {
         return path.to_string();

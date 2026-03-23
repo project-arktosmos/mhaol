@@ -23,7 +23,8 @@ const config = {
 			$data: '../../packages/ui-lib/src/data',
 			$adapters: '../../packages/ui-lib/src/adapters',
 			$services: '../../packages/ui-lib/src/services',
-			'ui-lib': '../../packages/ui-lib/src'
+			'ui-lib': '../../packages/ui-lib/src',
+			webrtc: '../../packages/webrtc/src'
 		}
 	}
 };

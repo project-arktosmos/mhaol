@@ -75,6 +75,26 @@ impl TorrentFetchCacheRepo {
         .collect()
     }
 
+    pub fn get_all_summaries(&self) -> Vec<(i64, String)> {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare("SELECT tmdb_id, candidate_json FROM torrent_fetch_cache")
+            .unwrap();
+        stmt.query_map([], |row| {
+            let tmdb_id: i64 = row.get(0)?;
+            let json: String = row.get(1)?;
+            Ok((tmdb_id, json))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .filter_map(|(tmdb_id, json)| {
+            let v: serde_json::Value = serde_json::from_str(&json).ok()?;
+            let name = v.get("name")?.as_str()?.to_string();
+            Some((tmdb_id, name))
+        })
+        .collect()
+    }
+
     pub fn delete(&self, tmdb_id: i64) {
         let conn = self.db.lock();
         conn.execute(

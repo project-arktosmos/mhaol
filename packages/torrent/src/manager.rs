@@ -199,6 +199,9 @@ impl TorrentManager {
             .api()
             .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
 
+        let should_pause = request.paused.unwrap_or(false)
+            || self.active_download_count().await >= 10;
+
         let is_magnet = request.source.starts_with("magnet:");
         let is_url =
             request.source.starts_with("http://") || request.source.starts_with("https://");
@@ -221,6 +224,7 @@ impl TorrentManager {
 
             let options = AddTorrentOptions {
                 overwrite: true,
+                paused: should_pause,
                 output_folder: request.download_path.clone(),
                 ..Default::default()
             };
@@ -298,6 +302,7 @@ impl TorrentManager {
             let add_torrent = AddTorrent::from_url(&source);
             let options = AddTorrentOptions {
                 overwrite: true,
+                paused: should_pause,
                 output_folder: download_path,
                 ..Default::default()
             };
@@ -449,6 +454,20 @@ impl TorrentManager {
         }
 
         Ok(torrents)
+    }
+
+    pub async fn active_download_count(&self) -> usize {
+        match self.list().await {
+            Ok(torrents) => torrents
+                .iter()
+                .filter(|t| matches!(t.state, TorrentState::Downloading))
+                .count(),
+            Err(_) => 0,
+        }
+    }
+
+    pub fn is_auto_paused(&self, info_hash: &str) -> bool {
+        self.auto_paused.read().contains(&info_hash.to_string())
     }
 
     pub async fn pause(&self, id: usize) -> Result<()> {

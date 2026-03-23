@@ -3,6 +3,8 @@ import { apiUrl } from 'ui-lib/lib/api-base';
 import type {
 	SmartSearchState,
 	SmartSearchSelection,
+	SmartSearchMovieSelection,
+	SmartSearchTvSelection,
 	SmartSearchTorrentResult,
 	SmartSearchMode,
 	SmartSearchMediaType,
@@ -315,7 +317,7 @@ class SmartSearchService {
 					: undefined;
 		const consoleName = selection.type === 'game' ? selection.consoleName : undefined;
 
-		// Step 1: Immediate heuristic analysis (parseTorrentName)
+		// Step 1: Immediate heuristic analysis (parseTorrentName) — completes synchronously
 		this.store.update((s) => {
 			const results = s.searchResults.map((r) => {
 				if (!analyzeHashes.has(r.infoHash)) return r;
@@ -326,19 +328,26 @@ class SmartSearchService {
 					artist,
 					consoleName
 				);
-				return { ...r, analysis, analyzing: true };
+				return { ...r, analysis };
 			});
-			return { ...s, searchResults: results, analyzing: true };
+			return { ...s, searchResults: results, analyzing: false };
 		});
 
-		// Step 2: Subscribe to SSE before creating tasks to avoid missing completion events
+		// Step 2: Fire off LLM tasks in background to enhance heuristic results
+		this.enhanceWithLlm(selection, analyzeHashes, artist, consoleName);
+	}
+
+	private async enhanceWithLlm(
+		selection: SmartSearchSelection,
+		analyzeHashes: Set<string>,
+		artist: string | undefined,
+		consoleName: string | undefined
+	) {
 		queueService.subscribe();
 
-		// Step 3: Enqueue LLM analysis tasks
 		const config = this.getConfigForType(selection.type);
-		const taskMap = new Map<string, string>(); // taskId -> infoHash
-
 		const state = this.getState();
+
 		for (const hash of analyzeHashes) {
 			const result = state.searchResults.find((r) => r.infoHash === hash);
 			if (!result) continue;
@@ -351,20 +360,18 @@ class SmartSearchService {
 				consoleName: consoleName ?? null,
 				promptTemplate: config.smartSearchPrompt ?? ''
 			});
-			if (task) taskMap.set(task.id, hash);
-		}
+			if (!task) continue;
 
-		// Step 4: Wait for LLM tasks and enhance results
-		if (taskMap.size > 0) {
-			const promises = [...taskMap.entries()].map(async ([taskId, hash]) => {
-				try {
-					const completed = await queueService.waitForTask(taskId);
+			// Each task resolves independently — update results as they arrive
+			queueService
+				.waitForTask(task.id)
+				.then((completed) => {
 					if (completed.status === 'completed' && completed.result) {
+						const llmResult = completed.result;
 						this.store.update((s) => ({
 							...s,
 							searchResults: s.searchResults.map((r) => {
 								if (r.infoHash !== hash) return r;
-								const llmResult = completed.result!;
 								const base = r.analysis ?? {
 									quality: '',
 									languages: '',
@@ -384,25 +391,16 @@ class SmartSearchService {
 										subs: (llmResult.subs as string) ?? base.subs,
 										relevance: (llmResult.relevance as number) ?? base.relevance,
 										reason: (llmResult.reason as string) ?? base.reason
-									},
-									analyzing: false
+									}
 								};
 							})
 						}));
 					}
-				} catch {
+				})
+				.catch(() => {
 					// LLM analysis failed; heuristic fallback already applied
-				}
-			});
-			await Promise.allSettled(promises);
+				});
 		}
-
-		// Step 5: Mark analyzing as done
-		this.store.update((s) => ({
-			...s,
-			analyzing: false,
-			searchResults: s.searchResults.map((r) => ({ ...r, analyzing: false }))
-		}));
 	}
 
 	private async runTvSearches(
@@ -483,88 +481,28 @@ class SmartSearchService {
 	}
 
 	private async analyzeTvResults(selection: SmartSearchSelection, analyzeHashes: Set<string>) {
-		// Step 1: Immediate heuristic analysis
+		// Step 1: Immediate heuristic analysis — completes synchronously
 		this.store.update((s) => {
 			const results = s.searchResults.map((r) => {
 				if (!analyzeHashes.has(r.infoHash)) return r;
 				const analysis = parseTorrentName(r.name, selection.title, selection.year);
-				return { ...r, analysis, analyzing: true };
+				return { ...r, analysis };
 			});
-			return { ...s, searchResults: results, analyzing: true };
+			return { ...s, searchResults: results, analyzing: false };
 		});
 
-		// Step 2: Subscribe to SSE before creating tasks to avoid missing completion events
-		queueService.subscribe();
+		// Step 2: Build initial TV structure from heuristic results
+		this.rebuildTvResults();
 
-		// Step 3: Enqueue LLM analysis tasks for TV
-		const config = this.getConfigForType(selection.type);
-		const taskMap = new Map<string, string>();
-		const state = this.getState();
+		// Step 3: Fire off LLM tasks in background to enhance heuristic results
+		this.enhanceWithLlm(selection, analyzeHashes, undefined, undefined);
+	}
 
-		for (const hash of analyzeHashes) {
-			const result = state.searchResults.find((r) => r.infoHash === hash);
-			if (!result) continue;
-
-			const task = await queueService.createTask('llm:analyze-torrent', {
-				torrentName: result.name,
-				mediaTitle: selection.title,
-				mediaYear: selection.year,
-				artist: null,
-				consoleName: null,
-				promptTemplate: config.smartSearchPrompt ?? ''
-			});
-			if (task) taskMap.set(task.id, hash);
-		}
-
-		// Step 4: Wait for LLM tasks
-		if (taskMap.size > 0) {
-			const promises = [...taskMap.entries()].map(async ([taskId, hash]) => {
-				try {
-					const completed = await queueService.waitForTask(taskId);
-					if (completed.status === 'completed' && completed.result) {
-						this.store.update((s) => ({
-							...s,
-							searchResults: s.searchResults.map((r) => {
-								if (r.infoHash !== hash) return r;
-								const llmResult = completed.result!;
-								const base = r.analysis ?? {
-									quality: '',
-									languages: '',
-									subs: '',
-									relevance: 0,
-									reason: '',
-									seasonNumber: null,
-									episodeNumber: null,
-									isCompleteSeries: false
-								};
-								return {
-									...r,
-									analysis: {
-										...base,
-										quality: (llmResult.quality as string) ?? base.quality,
-										languages: (llmResult.languages as string) ?? base.languages,
-										subs: (llmResult.subs as string) ?? base.subs,
-										relevance: (llmResult.relevance as number) ?? base.relevance,
-										reason: (llmResult.reason as string) ?? base.reason
-									},
-									analyzing: false
-								};
-							})
-						}));
-					}
-				} catch {
-					// LLM failed; heuristic fallback already applied
-				}
-			});
-			await Promise.allSettled(promises);
-		}
-
-		// Step 5: Rebuild TV result structure and mark done
+	private rebuildTvResults() {
 		this.store.update((s) => {
-			const results = s.searchResults.map((r) => ({ ...r, analyzing: false }));
 			const tvResults: TvSmartSearchResults = { complete: [], seasons: {} };
 
-			for (const r of results) {
+			for (const r of s.searchResults) {
 				if (!r.analysis) continue;
 				if (r.analysis.isCompleteSeries) {
 					tvResults.complete.push(r);
@@ -587,7 +525,7 @@ class SmartSearchService {
 				}
 			}
 
-			return { ...s, searchResults: results, analyzing: false, tvResults };
+			return { ...s, tvResults };
 		});
 	}
 
@@ -678,6 +616,39 @@ class SmartSearchService {
 
 	setFetchedCandidate(candidate: SmartSearchTorrentResult) {
 		this.store.update((s) => ({ ...s, fetchedCandidate: candidate }));
+	}
+
+	async selectAndWaitForBest(
+		selection: SmartSearchMovieSelection | SmartSearchTvSelection
+	): Promise<SmartSearchTorrentResult | null> {
+		const cached = await this.checkFetchCache(selection.tmdbId);
+		if (cached) return cached;
+
+		const best = await new Promise<SmartSearchTorrentResult | null>((resolve) => {
+			let started = false;
+			this.select(selection);
+
+			const unsubscribe = this.store.subscribe((state) => {
+				if (state.searching) started = true;
+				if (started && !state.searching) {
+					unsubscribe();
+					if (state.searchError || state.searchResults.length === 0) {
+						resolve(null);
+						return;
+					}
+					resolve(this.pickBestFromList(state.searchResults));
+				}
+			});
+		});
+
+		if (best) {
+			this.setFetchedCandidate(best);
+			const mediaType = selection.type === 'tv' ? 'tv' : 'movie';
+			this.saveFetchCache(selection.tmdbId, mediaType, best);
+			await this.startDownload(best);
+		}
+
+		return best;
 	}
 
 	setSelection(selection: SmartSearchSelection) {

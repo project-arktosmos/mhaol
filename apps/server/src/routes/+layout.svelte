@@ -21,18 +21,8 @@
   import { smartSearchService } from "ui-lib/services/smart-search.service";
   import { apiUrl } from "ui-lib/lib/api-base";
   import { setImageBaseUrl } from "addons/tmdb/transform";
-  // browseDetailService still used by movies page library tab (will be removed in cleanup)
   import { rosterService } from "ui-lib/services/roster.service";
-  import { signalingAdapter } from "ui-lib/adapters/classes/signaling.adapter";
-  import { contactHandshakeService } from "webrtc/service";
-  import type { PassportData, ContactHandshakeMessage, Endorsement } from "webrtc/types";
-  import { get } from "svelte/store";
-  import { getAddress } from "viem";
-  import { serverCatalogService } from "ui-lib/services/server-catalog.service";
-  import { p2pStreamService } from "ui-lib/services/p2p-stream.service";
-  import { movieDetailsToDisplay } from "addons/tmdb/transform";
-  import type { MediaItem } from "ui-lib/types/media-card.type";
-  import type { CatalogMovie } from "ui-lib/types/server-catalog.type";
+  import type { PassportData } from "webrtc/types";
 
   setImageBaseUrl(apiUrl("/api/tmdb/image"));
   import PlayerOverlay from "ui-lib/components/player/PlayerOverlay.svelte";
@@ -41,17 +31,14 @@
 
   let { children } = $props();
 
-  const chatStore = signalingChatService.state;
-
-  let prevPhase: string | null = null;
-
-  let browseViewModeValue = $state<"poster" | "backdrop">("poster");
+  type BrowseViewMode = "poster" | "backdrop" | "table";
+  let browseViewModeValue = $state<BrowseViewMode>("poster");
   setContext("browseViewMode", {
     get value() {
       return browseViewModeValue;
     },
-    toggle() {
-      browseViewModeValue = browseViewModeValue === "poster" ? "backdrop" : "poster";
+    set(mode: BrowseViewMode) {
+      browseViewModeValue = mode;
     },
   });
 
@@ -104,278 +91,55 @@
     ready = true;
   }
 
-  let unsubChat: (() => void) | undefined;
-
   onMount(async () => {
     themeService.initialize("flix");
     await playerService.initialize();
     await identityService.initialize();
     rosterService.initialize("api");
-
-    // Initialize contact handshake with local passport
-    const identities = get(identityService.state).identities;
-    if (identities.length > 0 && identities[0].passport) {
-      const passport: PassportData = JSON.parse(identities[0].passport);
-      contactHandshakeService.initialize({
-        passport,
-        adapter: {
-          sendToPeer: (peerId, envelope) =>
-            signalingChatService.sendToPeer(peerId, envelope),
-          disconnectPeer: (peerId) =>
-            signalingChatService.disconnectPeer(peerId),
-          connectToPeer: (peerId) => signalingChatService.connectToPeer(peerId),
-          getPeerConnectionStatus: (peerId) =>
-            signalingChatService.getPeerConnectionStatus(peerId),
-        },
-        callbacks: {
-          onRequestReceived: (request) => {
-            toastService.addWithActions(
-              `Contact request from ${request.name} (${signalingAdapter.shortAddress(request.address)})`,
-              [
-                {
-                  label: "Accept",
-                  onclick: async () => {
-                    // Fetch endorsement from backend before accepting
-                    let endorsement: Endorsement | undefined;
-                    try {
-                      const res = await fetch(apiUrl("/api/signaling/endorse"), {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ passportRaw: request.passport.raw }),
-                      });
-                      if (res.ok) {
-                        endorsement = await res.json();
-                      }
-                    } catch {
-                      // Continue without endorsement
-                    }
-
-                    contactHandshakeService.acceptRequest(request.address, endorsement);
-                    rosterService.addEntry({
-                      name: request.name,
-                      address: request.address,
-                      passport: JSON.stringify(request.passport),
-                      endorsement: endorsement ? JSON.stringify(endorsement) : undefined,
-                    });
-                  },
-                },
-                {
-                  label: "Reject",
-                  onclick: () =>
-                    contactHandshakeService.rejectRequest(request.address),
-                },
-              ],
-              "info",
-            );
-          },
-          onRequestAccepted: (contact) => {
-            rosterService.addEntry({
-              name: contact.name,
-              address: contact.address,
-              passport: JSON.stringify(contact.passport),
-              endorsement: contact.endorsement ? JSON.stringify(contact.endorsement) : undefined,
-            });
-          },
-          onConnectionReady: async (peerId) => {
-            try {
-              const res = await fetch(apiUrl("/api/media"));
-              if (!res.ok) return;
-              const data = (await res.json()) as {
-                libraries: Record<string, { name: string; type: string }>;
-                itemsByType: Record<string, MediaItem[]>;
-              };
-              const movieLibIds = new Set(
-                Object.entries(data.libraries)
-                  .filter(([, lib]) => lib.type === "movies")
-                  .map(([id]) => id),
-              );
-              const movieItems = (data.itemsByType?.video ?? []).filter(
-                (item) => movieLibIds.has(item.libraryId),
-              );
-
-              // Fetch TMDB metadata for each item that has a tmdb link
-              const origin = window.location.origin;
-              const abs = (url: string | null) =>
-                url && url.startsWith("/") ? `${origin}${url}` : url;
-
-              const catalog: CatalogMovie[] = await Promise.all(
-                movieItems.map(async (item) => {
-                  const tmdbLink = item.links?.tmdb;
-                  let tmdb = null;
-                  if (tmdbLink) {
-                    try {
-                      const r = await fetch(
-                        apiUrl(`/api/tmdb/movies/${tmdbLink.serviceId}`),
-                      );
-                      if (r.ok) {
-                        const details = movieDetailsToDisplay(await r.json());
-                        tmdb = {
-                          ...details,
-                          posterUrl: abs(details.posterUrl),
-                          backdropUrl: abs(details.backdropUrl),
-                          images: details.images.map((img) => ({
-                            ...img,
-                            thumbnailUrl: abs(img.thumbnailUrl) ?? "",
-                            fullUrl: abs(img.fullUrl) ?? "",
-                          })),
-                          cast: details.cast.map((c) => ({
-                            ...c,
-                            profileUrl: abs(c.profileUrl),
-                          })),
-                        };
-                      }
-                    } catch {
-                      // best-effort
-                    }
-                  }
-                  return { item, tmdb };
-                }),
-              );
-              serverCatalogService.sendMovieCatalog(peerId, catalog);
-            } catch {
-              // Silently fail — catalog is best-effort
-            }
-          },
-          onError: (message) => {
-            toastService.error(message);
-          },
-        },
-      });
-
-      signalingChatService.addPeerChannelOpenListener((peerId) =>
-        contactHandshakeService.handleChannelOpen(peerId),
-      );
-      signalingChatService.onContactMessage = (peerId, msg) =>
-        contactHandshakeService.handleMessage(
-          peerId,
-          msg as ContactHandshakeMessage,
-        );
-    }
-
-    serverCatalogService.initialize();
-    serverCatalogService.onStreamRequest = async (peerId, itemPath) => {
-      console.log("[ServerCatalog] Stream request received:", {
-        peerId,
-        itemPath,
-      });
-      try {
-        const streamConfig = p2pStreamService.getSessionConfig();
-        const res = await fetch(apiUrl("/api/player/sessions"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            file_path: itemPath,
-            mode: "video",
-            video_codec: streamConfig.video_codec,
-            video_quality: streamConfig.video_quality,
-          }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          serverCatalogService.sendStreamError(
-            peerId,
-            (body as { error?: string }).error ?? `HTTP ${res.status}`,
-          );
-          return;
-        }
-        const session = (await res.json()) as {
-          session_id: string;
-          room_id: string;
-          signaling_url: string;
-        };
-        serverCatalogService.sendStreamSession(
-          peerId,
-          session.session_id,
-          session.room_id,
-          session.signaling_url,
-        );
-      } catch (err) {
-        serverCatalogService.sendStreamError(
-          peerId,
-          err instanceof Error ? err.message : "Failed to create session",
-        );
-      }
-    };
-
     youtubeService.initialize();
     youtubeLibraryService.initialize();
     torrentService.initialize("server");
-    // Connect to signaling with real identity via backend signing
-    const identities2 = get(identityService.state).identities;
-    if (identities2.length > 0 && identities2[0].passport) {
-      const sigPassport: PassportData = JSON.parse(identities2[0].passport);
-      const serverAddress = JSON.parse(sigPassport.raw).address;
-      const personalRoom = getAddress(serverAddress as `0x${string}`);
 
-      const signFn = async (msg: string) => {
-        const parts = msg.match(/^partykit-auth:(.+):(\d+)$/);
-        if (!parts) throw new Error("Invalid auth message format");
-        const res = await fetch(
-          apiUrl(
-            `/api/signaling/auth?room_id=${encodeURIComponent(parts[1])}&timestamp=${parts[2]}`,
-          ),
-        );
-        if (!res.ok) throw new Error(`Auth signing failed: HTTP ${res.status}`);
+    // Connect to signaling as a client using CLIENT_WALLET identity
+    try {
+      const res = await fetch(apiUrl("/api/signaling/client-identity"));
+      if (res.ok) {
         const data = await res.json();
-        return data.signature;
-      };
+        const passport: PassportData = data.passport;
+        const serverRoom: string = data.serverRoom;
 
-      // Connect to handshakes room for contact exchange
-      signalingChatService.connectToRoom(
-        DEFAULT_SIGNALING_URL,
-        "handshakes",
-        sigPassport,
-        signFn,
-      );
+        const signFn = async (msg: string) => {
+          const parts = msg.match(/^partykit-auth:(.+):(\d+)$/);
+          if (!parts) throw new Error("Invalid auth message format");
+          const authRes = await fetch(
+            apiUrl(
+              `/api/signaling/auth?room_id=${encodeURIComponent(parts[1])}&timestamp=${parts[2]}`,
+            ),
+          );
+          if (!authRes.ok)
+            throw new Error(`Auth signing failed: HTTP ${authRes.status}`);
+          const authData = await authRes.json();
+          return authData.signature;
+        };
 
-      // Connect to own personal room
-      signalingChatService.connectToRoom(
-        DEFAULT_SIGNALING_URL,
-        personalRoom,
-        sigPassport,
-        signFn,
-      );
+        // Connect to the server's personal room as a client
+        signalingChatService.connectToRoom(
+          DEFAULT_SIGNALING_URL,
+          serverRoom,
+          passport,
+          signFn,
+        );
+      }
+    } catch {
+      // Signaling is optional for the admin frontend
     }
-
-    unsubChat = chatStore.subscribe((s) => {
-      // Derive aggregate phase from the handshakes room
-      const handshakesRoom = s.rooms["handshakes"];
-      const phase = handshakesRoom?.phase ?? "disconnected";
-
-      if (prevPhase === null) {
-        prevPhase = phase;
-        return;
-      }
-      if (phase === prevPhase) return;
-
-      switch (phase) {
-        case "connecting":
-          toastService.info("Connecting to signaling server...");
-          break;
-        case "connected":
-          toastService.success("Connected to signaling server");
-          break;
-        case "error":
-          toastService.error(s.error || "Connection error");
-          break;
-        case "disconnected":
-          if (prevPhase === "connected") {
-            toastService.warning("Disconnected from signaling server");
-          }
-          break;
-      }
-      prevPhase = phase;
-    });
   });
 
   onDestroy(() => {
     playerService.destroy();
     torrentService.destroy();
     signalingChatService.destroy();
-    contactHandshakeService.destroy();
     rosterService.destroy();
-    serverCatalogService.destroy();
-    unsubChat?.();
   });
 </script>
 

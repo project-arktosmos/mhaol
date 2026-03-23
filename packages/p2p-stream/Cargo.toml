@@ -30,6 +30,7 @@ sha3 = "0.10"
 http = "1"
 futures-util = "0.3"
 hex = "0.4"
+ureq = "3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]

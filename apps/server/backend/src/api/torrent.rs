@@ -40,6 +40,7 @@ pub fn router() -> Router<AppState> {
             post(stop_streaming),
         )
         .route("/fetch-cache/hashes", get(list_fetch_cache_hashes))
+        .route("/fetch-cache/summaries", get(list_fetch_cache_summaries))
         .route("/fetch-cache/{tmdb_id}", get(get_fetch_cache).delete(delete_fetch_cache))
         .route("/fetch-cache", get(list_fetch_cache_ids).post(save_fetch_cache))
         .route("/tv-fetch-cache/{tmdb_id}", get(get_tv_fetch_cache).delete(delete_tv_fetch_cache))
@@ -416,6 +417,24 @@ async fn torrent_events(
                     });
                 }
 
+                // Auto-resume queued torrents if under the concurrency limit
+                let downloading_count = torrents.iter()
+                    .filter(|t| matches!(t.state, mhaol_torrent::TorrentState::Downloading))
+                    .count();
+                if downloading_count < 10 {
+                    let slots = 10 - downloading_count;
+                    let to_resume: Vec<usize> = torrents.iter()
+                        .filter(|t| matches!(t.state, mhaol_torrent::TorrentState::Paused)
+                            && t.id > 0
+                            && !torrent_manager.is_auto_paused(&t.info_hash))
+                        .take(slots)
+                        .map(|t| t.id)
+                        .collect();
+                    for id in to_resume {
+                        let _ = torrent_manager.resume(id).await;
+                    }
+                }
+
                 if let Ok(json) = serde_json::to_string(&torrents) {
                     yield Ok(Event::default().event("torrents").data(json));
                 }
@@ -680,6 +699,16 @@ async fn stop_streaming(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn list_fetch_cache_ids(State(state): State<AppState>) -> impl IntoResponse {
     Json(state.torrent_fetch_cache.get_all_tmdb_ids())
+}
+
+async fn list_fetch_cache_summaries(State(state): State<AppState>) -> impl IntoResponse {
+    let entries: Vec<serde_json::Value> = state
+        .torrent_fetch_cache
+        .get_all_summaries()
+        .into_iter()
+        .map(|(tmdb_id, name)| serde_json::json!({ "tmdbId": tmdb_id, "name": name }))
+        .collect();
+    Json(entries)
 }
 
 async fn list_fetch_cache_hashes(State(state): State<AppState>) -> impl IntoResponse {

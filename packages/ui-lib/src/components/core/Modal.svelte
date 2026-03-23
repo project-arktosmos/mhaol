@@ -10,7 +10,7 @@
 		children?: Snippet;
 	}
 
-	let { open = false, maxWidth = 'max-w-lg', zIndex = 50, onclose, children }: Props = $props();
+	let { open = false, maxWidth = 'max-w-lg', zIndex, onclose, children }: Props = $props();
 
 	let boxClasses = $derived(classNames('modal-box max-h-[90vh] overflow-y-auto', maxWidth));
 
@@ -23,7 +23,7 @@
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
 		class="modal-open modal"
-		style:z-index={zIndex}
+		style:z-index={zIndex ?? undefined}
 		onkeydown={handleKeydown}
 		role="dialog"
 		aria-modal="true"

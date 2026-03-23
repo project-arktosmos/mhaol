@@ -16,8 +16,6 @@
 
 	const searchStore = smartSearchService.store;
 
-	let visible = $derived($searchStore.visible);
-
 	// Auto-candidate logic runs even when modal is closed
 	let selection = $derived($searchStore.selection);
 	let mode = $derived(selection?.mode ?? null);
@@ -163,7 +161,11 @@
 	});
 </script>
 
-<Modal open={visible} maxWidth="max-w-[90vw]" onclose={() => smartSearchService.hide()}>
+<Modal
+	open={$searchStore.visible}
+	maxWidth="max-w-[90vw]"
+	onclose={() => smartSearchService.hide()}
+>
 	<h2 class="mb-3 text-sm font-semibold tracking-wide text-base-content/50 uppercase">
 		Smart Search
 	</h2>
