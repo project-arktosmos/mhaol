@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import classNames from 'classnames';
 	import { smartPairService } from 'ui-lib/services/smart-pair.service';
-	import SmartPairResults from './SmartPairResults.svelte';
+	import type { SmartPairResult } from 'ui-lib/types/smart-pair.type';
 
 	interface ShepperdItem {
 		title: string;
@@ -14,10 +14,29 @@
 		imageUrl?: string;
 	}
 
+	const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
+
 	const typeLabels: Record<string, string> = {
 		movies: 'Movies',
 		tv: 'TV',
 		music: 'Music'
+	};
+
+	const confidenceBadge: Record<string, string> = {
+		high: 'badge-success',
+		medium: 'badge-warning',
+		low: 'badge-error',
+		none: 'badge-ghost'
+	};
+
+	const tmdbTypeBadge: Record<string, string> = {
+		movie: 'badge-primary',
+		tv: 'badge-info'
+	};
+
+	const tmdbTypeLabel: Record<string, string> = {
+		movie: 'Movie',
+		tv: 'TV'
 	};
 
 	let items = $state<ShepperdItem[]>([]);
@@ -38,9 +57,15 @@
 	);
 
 	const pairStore = smartPairService.store;
-	let showPairResults = $derived(
-		$pairStore.pairing || $pairStore.results.length > 0 || $pairStore.error !== null
-	);
+
+	// Map sourceId -> pair result for fast lookup per table row
+	let pairMap = $derived(new Map($pairStore.results.map((r) => [`${r.source}::${r.sourceId}`, r])));
+
+	let matchedCount = $derived($pairStore.results.filter((r) => r.matched).length);
+
+	function getPairResult(item: ShepperdItem): SmartPairResult | undefined {
+		return pairMap.get(`${item.source}::${item.id}`);
+	}
 
 	function handleSmartPair() {
 		smartPairService.pair(filtered.map((i) => ({ title: i.title, id: i.id, source: i.source })));
@@ -106,6 +131,13 @@
 		</div>
 	</div>
 
+	{#if $pairStore.error}
+		<div class="alert alert-error">
+			<span>{$pairStore.error}</span>
+			<button class="btn btn-ghost btn-sm" onclick={() => smartPairService.reset()}>Dismiss</button>
+		</div>
+	{/if}
+
 	{#if loading}
 		<div class="flex items-center justify-center py-8">
 			<span class="loading loading-md loading-spinner text-primary"></span>
@@ -127,6 +159,17 @@
 	{:else}
 		<div class="flex flex-wrap items-center gap-2">
 			<span class="badge badge-primary">{filtered.length} of {items.length} items</span>
+
+			{#if $pairStore.pairing}
+				<span class="loading loading-sm loading-spinner text-secondary"></span>
+				<span class="text-sm text-base-content/60">
+					{$pairStore.results.length} paired ({matchedCount} matched)
+				</span>
+			{:else if $pairStore.results.length > 0}
+				<span class="badge badge-secondary">
+					{matchedCount}/{$pairStore.results.length} matched
+				</span>
+			{/if}
 
 			<select
 				class="select-bordered select select-sm"
@@ -151,15 +194,6 @@
 			</select>
 		</div>
 
-		{#if showPairResults}
-			<SmartPairResults
-				results={$pairStore.results}
-				pairing={$pairStore.pairing}
-				error={$pairStore.error}
-				onreset={() => smartPairService.reset()}
-			/>
-		{/if}
-
 		<div class="overflow-x-auto rounded-lg border border-base-300">
 			<table class="table table-zebra table-sm">
 				<thead>
@@ -168,21 +202,32 @@
 						<th>Title</th>
 						<th>Type</th>
 						<th>Source</th>
-						<th>Artist</th>
 						<th>Category</th>
+						<th>TMDB Match</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each filtered as item (item.source + '::' + item.id)}
+						{@const pair = getPairResult(item)}
 						<tr>
 							<td class="w-12">
-								{#if item.imageUrl}
+								{#if pair?.tmdbPosterPath}
+									<img
+										src="{TMDB_IMAGE_BASE}/w92{pair.tmdbPosterPath}"
+										alt=""
+										class="h-10 w-7 rounded object-cover"
+									/>
+								{:else if item.imageUrl}
 									<img src={item.imageUrl} alt="" class="h-8 w-8 rounded object-cover" />
 								{/if}
 							</td>
 							<td class="font-medium">{item.title}</td>
 							<td>
-								{#if item.mediaType}
+								{#if pair?.tmdbType}
+									<span class={classNames('badge badge-sm', tmdbTypeBadge[pair.tmdbType] ?? '')}>
+										{tmdbTypeLabel[pair.tmdbType] ?? pair.tmdbType}
+									</span>
+								{:else if item.mediaType}
 									<span
 										class={classNames('badge badge-sm', {
 											'badge-primary': item.mediaType === 'movies',
@@ -195,8 +240,26 @@
 								{/if}
 							</td>
 							<td class="text-base-content/60">{item.source}</td>
-							<td class="text-base-content/60">{item.artist ?? ''}</td>
 							<td class="text-base-content/60">{item.category}</td>
+							<td>
+								{#if pair}
+									{#if pair.matched}
+										<div class="flex items-center gap-2">
+											<span class="text-sm font-medium">{pair.tmdbTitle}</span>
+											{#if pair.tmdbYear}
+												<span class="text-xs text-base-content/50">({pair.tmdbYear})</span>
+											{/if}
+											<span
+												class={classNames('badge badge-xs', confidenceBadge[pair.confidence] ?? '')}
+											>
+												{pair.confidence}
+											</span>
+										</div>
+									{:else}
+										<span class="text-xs text-base-content/40 italic">no match</span>
+									{/if}
+								{/if}
+							</td>
 						</tr>
 					{/each}
 				</tbody>
