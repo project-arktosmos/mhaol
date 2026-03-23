@@ -8,6 +8,7 @@ import type {
 	PassportData,
 	PendingContactRequest,
 	AcceptedContact,
+	Endorsement,
 	WebRTCAdapter,
 	ContactHandshakeCallbacks
 } from 'webrtc/types';
@@ -49,6 +50,7 @@ class ContactHandshakeService {
 	private adapter: WebRTCAdapter | null = null;
 	private callbacks: ContactHandshakeCallbacks | null = null;
 	private peerIdToAddress: Map<string, string> = new Map();
+	private pendingEndorsements: Map<string, Endorsement> = new Map();
 
 	initialize(config: ContactHandshakeConfig): void {
 		this.localPassport = config.passport;
@@ -116,12 +118,12 @@ class ContactHandshakeService {
 				await this.handleContactRequest(peerId, msg.passport);
 				break;
 			case 'contact-accept':
-				await this.handleContactAccept(peerId, msg.passport);
+				await this.handleContactAccept(peerId, msg.passport, msg.endorsement);
 				break;
 		}
 	}
 
-	acceptRequest(address: string): void {
+	acceptRequest(address: string, endorsement?: Endorsement): void {
 		if (!this.adapter) return;
 
 		const s = get(this.state);
@@ -130,12 +132,18 @@ class ContactHandshakeService {
 		);
 		if (!request) return;
 
+		// Store endorsement for inclusion in the acceptance message
+		if (endorsement) {
+			this.pendingEndorsements.set(request.peerId, endorsement);
+		}
+
 		// Add to contacts
 		const contact: AcceptedContact = {
 			name: request.name,
 			address: request.address,
 			passport: request.passport,
-			acceptedAt: new Date().toISOString()
+			acceptedAt: new Date().toISOString(),
+			endorsement
 		};
 
 		this.state.update((s) => {
@@ -195,6 +203,7 @@ class ContactHandshakeService {
 		this.adapter = null;
 		this.callbacks = null;
 		this.peerIdToAddress.clear();
+		this.pendingEndorsements.clear();
 	}
 
 	// ===== Private =====
@@ -242,7 +251,8 @@ class ContactHandshakeService {
 
 	private async handleContactAccept(
 		peerId: string,
-		passport: PassportData
+		passport: PassportData,
+		endorsement?: Endorsement
 	): Promise<void> {
 		try {
 			const payload = await verifyPassport(passport);
@@ -253,7 +263,8 @@ class ContactHandshakeService {
 				name: payload.name,
 				address: payload.address,
 				passport,
-				acceptedAt: new Date().toISOString()
+				acceptedAt: new Date().toISOString(),
+				endorsement
 			};
 
 			const alreadyKnown = this.isKnownContact(payload.address);
@@ -284,9 +295,12 @@ class ContactHandshakeService {
 	private sendAcceptance(peerId: string): void {
 		if (!this.localPassport || !this.adapter) return;
 
+		const endorsement = this.pendingEndorsements.get(peerId);
+		this.pendingEndorsements.delete(peerId);
+
 		const envelope: DataChannelContactEnvelope = {
 			channel: 'contact',
-			payload: { type: 'contact-accept', passport: this.localPassport }
+			payload: { type: 'contact-accept', passport: this.localPassport, endorsement }
 		};
 		this.adapter.sendToPeer(peerId, envelope);
 		this.setPeerPhase(peerId, 'accepted');

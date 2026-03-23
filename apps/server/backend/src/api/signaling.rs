@@ -2,7 +2,7 @@ use crate::AppState;
 use axum::{
     extract::{Query, State},
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -11,6 +11,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/status", get(get_status))
         .route("/auth", get(get_auth))
+        .route("/endorse", post(endorse_passport))
 }
 
 /// GET /api/signaling/status
@@ -80,6 +81,48 @@ async fn get_auth(
             "raw": passport.raw,
             "signature": passport.signature,
         },
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EndorseBody {
+    passport_raw: String,
+}
+
+/// POST /api/signaling/endorse
+///
+/// Signs a client's passport raw string as an endorsement for room access.
+async fn endorse_passport(
+    State(state): State<AppState>,
+    Json(body): Json<EndorseBody>,
+) -> impl IntoResponse {
+    let identities = state.identity_manager.get_all();
+    let Some((name, address)) = identities.into_iter().next() else {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": "No identity configured" })),
+        )
+            .into_response();
+    };
+
+    let Some(private_key) = state.identity_manager.get_private_key(&name) else {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": "Failed to load identity key" })),
+        )
+            .into_response();
+    };
+
+    let signature = mhaol_identity::eip191_sign(&body.passport_raw, &private_key);
+    let checksummed = mhaol_identity::to_eip55_checksum(&address);
+
+    Json(serde_json::json!({
+        "passportRaw": body.passport_raw,
+        "endorserSignature": signature,
+        "endorserAddress": checksummed,
+        "endorsedAt": chrono::Utc::now().to_rfc3339(),
     }))
     .into_response()
 }
