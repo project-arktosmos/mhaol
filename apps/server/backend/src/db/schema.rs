@@ -276,7 +276,7 @@ CREATE TABLE IF NOT EXISTS roster_contacts (
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '29', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '30', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -290,6 +290,8 @@ INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('video-uncat
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('audio-uncategorized', 'audio', 'Uncategorized');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('image-uncategorized', 'image', 'Uncategorized');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('books', 'document', 'Books');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-movies', 'video', 'Pinned Movies');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-tv', 'video', 'Pinned TV');
 ";
 
 /// YouTube video metadata cache (module schema).
@@ -811,6 +813,14 @@ fn run_migrations(conn: &Connection) {
             );",
         );
     }
+
+    // Migration: add pinned categories (db_version 30)
+    {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-movies', 'video', 'Pinned Movies');
+             INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-tv', 'video', 'Pinned TV');",
+        );
+    }
 }
 
 /// App identifiers used to select which schema features to include.
@@ -900,7 +910,7 @@ mod tests {
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 6);
+        assert_eq!(count, 8);
     }
 
     #[test]

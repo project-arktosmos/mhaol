@@ -1,9 +1,8 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { youtubeService } from 'ui-lib/services/youtube.service';
-	import { libraryService } from 'ui-lib/services/library.service';
-	import type { Library } from 'ui-lib/types/library.type';
-	import LibraryAddForm from 'ui-lib/components/libraries/LibraryAddForm.svelte';
+	import LibrarySelector from 'ui-lib/components/libraries/LibrarySelector.svelte';
+	import ConnectionStatus from 'ui-lib/components/core/ConnectionStatus.svelte';
 	import {
 		AUDIO_QUALITY_OPTIONS,
 		AUDIO_FORMAT_OPTIONS,
@@ -20,53 +19,22 @@
 		SubtitleMode
 	} from 'ui-lib/types/youtube.type';
 
-	const state = youtubeService.state;
+	const ytState = youtubeService.state;
 	const settings = youtubeService.store;
-	const libraries = libraryService.store;
-	const libraryState = libraryService.state;
 
 	// Advanced config state
-	let showAdvanced = false;
-	let poToken = '';
-	let cookies = '';
-	let configSaving = false;
-
-	// Library selection
-	let selectedLibraryId: string = '';
-	let showInlineAddForm = false;
-	let previousLibraryCount = 0;
+	let showAdvanced = $state(false);
+	let poToken = $state('');
+	let cookies = $state('');
+	let configSaving = $state(false);
 
 	// Sync auth fields from settings store
-	$: if ($settings.poToken !== undefined) poToken = $settings.poToken;
-	$: if ($settings.cookies !== undefined) cookies = $settings.cookies;
-
-	// Auto-select library matching current libraryId, or first library if none matches
-	$: if ($libraries.length > 0) {
-		if ($settings.libraryId) {
-			const match = $libraries.find((lib: Library) => String(lib.id) === $settings.libraryId);
-			if (match) {
-				selectedLibraryId = String(match.id);
-			}
-		}
-		if (!selectedLibraryId) {
-			const first = $libraries[0];
-			selectedLibraryId = String(first.id);
-			youtubeService.setLibrary(String(first.id));
-		}
-	}
-
-	// Detect when inline add form closes (cancel or successful add)
-	$: if (showInlineAddForm && !$libraryState.showAddForm) {
-		showInlineAddForm = false;
-		// If a new library was added, auto-select it
-		if ($libraries.length > previousLibraryCount) {
-			const newest = $libraries[$libraries.length - 1];
-			selectedLibraryId = String(newest.id);
-			youtubeService.setLibrary(String(newest.id));
-		}
-	}
-
-	$: previousLibraryCount = $libraries.length;
+	$effect(() => {
+		if ($settings.poToken !== undefined) poToken = $settings.poToken;
+	});
+	$effect(() => {
+		if ($settings.cookies !== undefined) cookies = $settings.cookies;
+	});
 
 	function handleModeChange(mode: DownloadMode) {
 		youtubeService.setDownloadMode(mode);
@@ -105,21 +73,8 @@
 		youtubeService.setSubtitleLangs(langs);
 	}
 
-	async function handleLibrarySelect(event: Event) {
-		const target = event.target as HTMLSelectElement;
-		const libraryId = target.value;
-		if (!libraryId) return;
-
-		const library = $libraries.find((lib: Library) => String(lib.id) === libraryId);
-		if (library) {
-			selectedLibraryId = String(library.id);
-			youtubeService.setLibrary(String(library.id));
-		}
-	}
-
-	function handleShowAddForm() {
-		showInlineAddForm = true;
-		libraryService.openAddForm();
+	function handleLibrarySelect(libraryId: string) {
+		youtubeService.setLibrary(libraryId);
 	}
 
 	async function handleSaveConfig() {
@@ -132,8 +87,8 @@
 	}
 
 	// Reactive downloader status
-	$: downloaderStatus = $state.downloaderStatus;
-	$: downloaderAvailable = downloaderStatus?.available ?? false;
+	let downloaderStatus = $derived($ytState.downloaderStatus);
+	let downloaderAvailable = $derived(downloaderStatus?.available ?? false);
 </script>
 
 <div class="card bg-base-200">
@@ -141,40 +96,22 @@
 		<h2 class="card-title text-lg">Download Settings</h2>
 
 		<!-- Downloader Status -->
-		<div
-			class={classNames('rounded-lg p-3', {
-				'bg-success/10': downloaderAvailable,
-				'bg-warning/10': !downloaderAvailable
-			})}
+		<ConnectionStatus
+			connected={downloaderAvailable}
+			connectedLabel="Downloader Ready"
+			disconnectedLabel="Downloader Unavailable"
 		>
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-2">
-					<div
-						class={classNames('h-2 w-2 rounded-full', {
-							'bg-success': downloaderAvailable,
-							'bg-warning': !downloaderAvailable
-						})}
-					></div>
-					<span class="text-sm font-medium">
-						{#if downloaderAvailable}
-							Downloader Ready
-						{:else}
-							Downloader Unavailable
-						{/if}
-					</span>
-				</div>
-
+			{#snippet extra()}
 				{#if downloaderAvailable && downloaderStatus?.version}
 					<span class="text-xs text-base-content/60">{downloaderStatus.version}</span>
 				{/if}
-			</div>
-
+			{/snippet}
 			{#if !downloaderAvailable}
 				<p class="mt-2 text-xs text-base-content/70">
 					Could not connect to the download service. Make sure the backend is running.
 				</p>
 			{/if}
-		</div>
+		</ConnectionStatus>
 
 		<!-- Download Mode Toggle -->
 		<div class="form-control">
@@ -187,7 +124,7 @@
 						'btn-primary': $settings.downloadMode === 'audio',
 						'btn-ghost': $settings.downloadMode !== 'audio'
 					})}
-					on:click={() => handleModeChange('audio')}
+					onclick={() => handleModeChange('audio')}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -210,7 +147,7 @@
 						'btn-primary': $settings.downloadMode === 'video',
 						'btn-ghost': $settings.downloadMode !== 'video'
 					})}
-					on:click={() => handleModeChange('video')}
+					onclick={() => handleModeChange('video')}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -241,7 +178,7 @@
 					id="quality-select"
 					class="select-bordered select w-full"
 					value={$settings.defaultQuality}
-					on:change={handleQualityChange}
+					onchange={handleQualityChange}
 				>
 					{#each AUDIO_QUALITY_OPTIONS as option}
 						<option value={option.value}>
@@ -260,7 +197,7 @@
 					id="format-select"
 					class="select-bordered select w-full"
 					value={$settings.defaultFormat}
-					on:change={handleFormatChange}
+					onchange={handleFormatChange}
 				>
 					{#each AUDIO_FORMAT_OPTIONS as option}
 						<option value={option.value}>
@@ -279,7 +216,7 @@
 					id="video-quality-select"
 					class="select-bordered select w-full"
 					value={$settings.defaultVideoQuality}
-					on:change={handleVideoQualityChange}
+					onchange={handleVideoQualityChange}
 				>
 					{#each VIDEO_QUALITY_OPTIONS as option}
 						<option value={option.value}>
@@ -298,7 +235,7 @@
 					id="video-format-select"
 					class="select-bordered select w-full"
 					value={$settings.defaultVideoFormat}
-					on:change={handleVideoFormatChange}
+					onchange={handleVideoFormatChange}
 				>
 					{#each VIDEO_FORMAT_OPTIONS as option}
 						<option value={option.value}>
@@ -321,7 +258,7 @@
 							'btn-primary': $settings.subtitleMode === option.value,
 							'btn-ghost': $settings.subtitleMode !== option.value
 						})}
-						on:click={() => handleSubtitleModeChange(option.value)}
+						onclick={() => handleSubtitleModeChange(option.value)}
 						title={option.description}
 					>
 						{option.label}
@@ -341,67 +278,21 @@
 					class="input-bordered input input-sm w-full"
 					placeholder="en, es, fr"
 					value={$settings.subtitleLangs?.join(', ') ?? ''}
-					on:change={handleSubtitleLangsChange}
+					onchange={handleSubtitleLangsChange}
 				/>
 			</div>
 		{/if}
 
 		<!-- Download Library -->
-		<div class="form-control">
-			<label class="label" for="library-select">
-				<span class="label-text">Download Library</span>
-			</label>
-
-			{#if $libraries.length > 0}
-				<div class="flex items-center gap-2">
-					<select
-						id="library-select"
-						class="select-bordered select flex-1"
-						value={selectedLibraryId}
-						on:change={handleLibrarySelect}
-					>
-						<option value="" disabled>Select a library...</option>
-						{#each $libraries as library (library.id)}
-							<option value={String(library.id)}>
-								{library.name}
-							</option>
-						{/each}
-					</select>
-					<button class="btn btn-ghost btn-sm" on:click={handleShowAddForm} title="Add new library">
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							class="h-4 w-4"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke="currentColor"
-							stroke-width="2"
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-						</svg>
-					</button>
-				</div>
-			{:else}
-				<div class="rounded-lg bg-base-300 p-4 text-center">
-					<p class="mb-2 text-sm text-base-content/60">No libraries configured</p>
-					<button class="btn btn-sm btn-primary" on:click={handleShowAddForm}>
-						Create Library
-					</button>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Inline Library Add Form -->
-		{#if showInlineAddForm && $libraryState.showAddForm}
-			<LibraryAddForm />
-		{/if}
+		<LibrarySelector currentLibraryId={$settings.libraryId} onselect={handleLibrarySelect} />
 
 		<!-- Stats -->
-		{#if $state.stats}
+		{#if $ytState.stats}
 			<div class="divider my-1"></div>
 			<div class="flex justify-between text-sm text-base-content/60">
-				<span>Active: {$state.stats.activeDownloads}</span>
-				<span>Completed: {$state.stats.completedDownloads}</span>
-				<span>Failed: {$state.stats.failedDownloads}</span>
+				<span>Active: {$ytState.stats.activeDownloads}</span>
+				<span>Completed: {$ytState.stats.completedDownloads}</span>
+				<span>Failed: {$ytState.stats.failedDownloads}</span>
 			</div>
 		{/if}
 
@@ -409,13 +300,12 @@
 		<div class="divider my-1"></div>
 		<button
 			class="flex w-full items-center justify-between text-sm text-base-content/70 hover:text-base-content"
-			on:click={() => (showAdvanced = !showAdvanced)}
+			onclick={() => (showAdvanced = !showAdvanced)}
 		>
 			<span>Advanced (Auth Config)</span>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
-				class="h-4 w-4 transition-transform"
-				class:rotate-180={showAdvanced}
+				class={classNames('h-4 w-4 transition-transform', { 'rotate-180': showAdvanced })}
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
@@ -459,7 +349,7 @@
 				</div>
 
 				<!-- Save Button -->
-				<button class="btn btn-sm btn-primary" on:click={handleSaveConfig} disabled={configSaving}>
+				<button class="btn btn-sm btn-primary" onclick={handleSaveConfig} disabled={configSaving}>
 					{#if configSaving}
 						<span class="loading loading-xs loading-spinner"></span>
 					{/if}

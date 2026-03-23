@@ -133,6 +133,8 @@ function scanAllDetailLinks(): void {
 
 export const primevideo: Ingestor = {
   source: "primevideo.com",
+  instructions:
+    'To capture your watchlist, click "My Stuff" in the top navigation bar, then select "Watchlist". Scrolling the homepage will also capture featured and recommended titles.',
 
   matches(hostname: string): boolean {
     return (

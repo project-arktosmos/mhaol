@@ -1,6 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { torrentService } from 'ui-lib/services/torrent.service';
+	import ConnectionStatus from 'ui-lib/components/core/ConnectionStatus.svelte';
 
 	const torrentState = torrentService.state;
 
@@ -54,28 +55,7 @@
 
 <div class="mt-4 flex flex-col gap-4">
 	<!-- Connection Status -->
-	<div
-		class={classNames('rounded-lg p-3', {
-			'bg-success/10': $torrentState.initialized,
-			'bg-warning/10': !$torrentState.initialized
-		})}
-	>
-		<div class="flex items-center gap-2">
-			<div
-				class={classNames('h-2 w-2 rounded-full', {
-					'bg-success': $torrentState.initialized,
-					'bg-warning': !$torrentState.initialized
-				})}
-			></div>
-			<span class="text-sm font-medium">
-				{#if $torrentState.initialized}
-					Server Connected
-				{:else}
-					Server Disconnected
-				{/if}
-			</span>
-		</div>
-	</div>
+	<ConnectionStatus connected={$torrentState.initialized} />
 
 	<!-- Download Path -->
 	<div class="form-control">
@@ -156,8 +136,7 @@
 		<span>Debug Info</span>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
-			class="h-4 w-4 transition-transform"
-			class:rotate-180={showDebug}
+			class={classNames('h-4 w-4 transition-transform', { 'rotate-180': showDebug })}
 			fill="none"
 			viewBox="0 0 24 24"
 			stroke="currentColor"

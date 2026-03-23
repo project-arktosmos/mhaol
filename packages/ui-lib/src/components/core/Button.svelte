@@ -1,20 +1,49 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { createEventDispatcher } from 'svelte';
+	import type { Snippet } from 'svelte';
 	import { ThemeColors, ThemeSizes } from 'ui-lib/types/core.type';
 
-	export let label: string = '';
-	export let href: string = '';
-	export let color: ThemeColors = ThemeColors.Primary;
-	export let outline: boolean = false;
-	export let disabled: boolean = false;
-	export let wide: boolean = false;
-	export let tall: boolean = false;
-	export let size: ThemeSizes = ThemeSizes.Medium;
-	export let target: string = '_self';
-	export let join: boolean = false;
-	export let classes = '';
-	const dispatch = createEventDispatcher();
+	let {
+		label = '',
+		href = '',
+		color = ThemeColors.Primary,
+		outline = false,
+		disabled = false,
+		wide = false,
+		tall = false,
+		size = ThemeSizes.Medium,
+		target = '_self',
+		join = false,
+		classes = '',
+		onclick,
+		ontouchstart,
+		ontouchend,
+		onmousedown,
+		onmouseup,
+		onmouseenter,
+		onmouseleave,
+		children
+	}: {
+		label?: string;
+		href?: string;
+		color?: ThemeColors;
+		outline?: boolean;
+		disabled?: boolean;
+		wide?: boolean;
+		tall?: boolean;
+		size?: ThemeSizes;
+		target?: string;
+		join?: boolean;
+		classes?: string;
+		onclick?: () => void;
+		ontouchstart?: (e: TouchEvent) => void;
+		ontouchend?: (e: TouchEvent) => void;
+		onmousedown?: (e: MouseEvent) => void;
+		onmouseup?: (e: MouseEvent) => void;
+		onmouseenter?: () => void;
+		onmouseleave?: () => void;
+		children?: Snippet;
+	} = $props();
 
 	const typesToClasses: Record<string, string> = {
 		primary: 'btn-primary',
@@ -33,49 +62,53 @@
 		lg: 'btn-lg'
 	};
 
-	$: wrapperClasses = classNames(
-		'btn',
-		'relative',
-		typesToClasses[color || ThemeColors.Neutral],
-		sizesToClasses[size || 'md'],
-		outline ? 'btn-outline' : null,
-		wide ? 'w-full' : null,
-		tall ? 'h-full' : null,
-		join ? 'join-item' : null,
-		classes,
-		'pointer',
-		'justify-center flex'
+	let wrapperClasses = $derived(
+		classNames(
+			'btn',
+			'relative',
+			typesToClasses[color || ThemeColors.Neutral],
+			sizesToClasses[size || 'md'],
+			outline ? 'btn-outline' : null,
+			wide ? 'w-full' : null,
+			tall ? 'h-full' : null,
+			join ? 'join-item' : null,
+			classes,
+			'pointer',
+			'justify-center flex'
+		)
 	);
-
-	function handleClick() {
-		dispatch('click');
-	}
 </script>
 
 {#if href && !disabled}
 	<a {href} class={wrapperClasses} {target}>
 		{#if label}
 			{label}
-		{:else}
-			<slot />
+		{:else if children}
+			{@render children()}
 		{/if}
 	</a>
 {:else}
 	<button
-		on:touchstart|preventDefault={(e) => dispatch('touchstart', { e })}
-		on:touchend|preventDefault={(e) => dispatch('touchend', { e })}
-		on:mousedown={(e) => dispatch('mousedown', { e })}
-		on:mouseup={(e) => dispatch('mouseup', { e })}
-		on:mouseenter={() => dispatch('mouseenter')}
-		on:mouseleave={() => dispatch('mouseleave')}
-		on:click={handleClick}
+		ontouchstart={(e) => {
+			e.preventDefault();
+			ontouchstart?.(e);
+		}}
+		ontouchend={(e) => {
+			e.preventDefault();
+			ontouchend?.(e);
+		}}
+		onmousedown={(e) => onmousedown?.(e)}
+		onmouseup={(e) => onmouseup?.(e)}
+		onmouseenter={() => onmouseenter?.()}
+		onmouseleave={() => onmouseleave?.()}
+		{onclick}
 		{disabled}
 		class={wrapperClasses}
 	>
 		{#if label}
 			{label}
-		{:else}
-			<slot />
+		{:else if children}
+			{@render children()}
 		{/if}
 	</button>
 {/if}

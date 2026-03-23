@@ -1,6 +1,5 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { createEventDispatcher } from 'svelte';
 	import type {
 		TorrentSearchResult,
 		TorrentSearchSort,
@@ -14,24 +13,30 @@
 		formatUploadDate
 	} from 'addons/torrent-search-thepiratebay/format';
 
-	export let results: TorrentSearchResult[] = [];
-	export let sort: TorrentSearchSort;
-	export let addingTorrents: Set<string> = new Set();
-	export let disableAdd: boolean = false;
+	let {
+		results = [],
+		sort,
+		addingTorrents = new Set<string>(),
+		disableAdd = false,
+		onadd,
+		onsort
+	}: {
+		results?: TorrentSearchResult[];
+		sort: TorrentSearchSort;
+		addingTorrents?: Set<string>;
+		disableAdd?: boolean;
+		onadd?: (detail: { magnetLink: string; infoHash: string; name: string }) => void;
+		onsort?: (detail: { field: TorrentSearchSortField }) => void;
+	} = $props();
 
-	const dispatch = createEventDispatcher<{
-		add: { magnetLink: string; infoHash: string; name: string };
-		sort: { field: TorrentSearchSortField };
-	}>();
-
-	$: sortedResults = sortSearchResults(results, sort);
+	let sortedResults = $derived(sortSearchResults(results, sort));
 
 	function handleSort(field: TorrentSearchSortField) {
-		dispatch('sort', { field });
+		onsort?.({ field });
 	}
 
 	function handleAdd(result: TorrentSearchResult) {
-		dispatch('add', {
+		onadd?.({
 			magnetLink: result.magnetLink,
 			infoHash: result.infoHash,
 			name: result.name
@@ -53,30 +58,30 @@
 		<table class="table table-sm">
 			<thead>
 				<tr>
-					<th class="cursor-pointer hover:bg-base-300" on:click={() => handleSort('name')}>
+					<th class="cursor-pointer hover:bg-base-300" onclick={() => handleSort('name')}>
 						Name{getSortIndicator('name')}
 					</th>
 					<th
 						class="w-24 cursor-pointer text-right hover:bg-base-300"
-						on:click={() => handleSort('size')}
+						onclick={() => handleSort('size')}
 					>
 						Size{getSortIndicator('size')}
 					</th>
 					<th
 						class="w-20 cursor-pointer text-right hover:bg-base-300"
-						on:click={() => handleSort('seeders')}
+						onclick={() => handleSort('seeders')}
 					>
 						SE{getSortIndicator('seeders')}
 					</th>
 					<th
 						class="w-20 cursor-pointer text-right hover:bg-base-300"
-						on:click={() => handleSort('leechers')}
+						onclick={() => handleSort('leechers')}
 					>
 						LE{getSortIndicator('leechers')}
 					</th>
 					<th
 						class="hidden w-24 cursor-pointer text-right hover:bg-base-300 md:table-cell"
-						on:click={() => handleSort('uploadedAt')}
+						onclick={() => handleSort('uploadedAt')}
 					>
 						Uploaded{getSortIndicator('uploadedAt')}
 					</th>
@@ -112,7 +117,7 @@
 						<td class="text-right">
 							<button
 								class="btn btn-xs btn-primary"
-								on:click={() => handleAdd(result)}
+								onclick={() => handleAdd(result)}
 								disabled={isAdding || disableAdd}
 							>
 								{#if isAdding}

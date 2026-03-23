@@ -20,12 +20,11 @@ pub fn router() -> Router<AppState> {
 #[derive(Deserialize)]
 struct GameListQuery {
     console: Option<u32>,
-    hacks: Option<bool>,
 }
 
-fn ra_credentials() -> Option<(String, String)> {
-    let user = std::env::var("RA_API_USER").ok()?;
-    let key = std::env::var("RA_API_KEY").ok()?;
+fn ra_credentials(state: &AppState) -> Option<(String, String)> {
+    let user = state.settings.get("ra.apiUser").unwrap_or_default();
+    let key = state.settings.get("ra.apiKey").unwrap_or_default();
     if user.is_empty() || key.is_empty() {
         return None;
     }
@@ -52,7 +51,7 @@ async fn get_game_list(
         }
     }
 
-    let (user, key) = match ra_credentials() {
+    let (user, key) = match ra_credentials(&state) {
         Some(creds) => creds,
         None => {
             return (
@@ -133,7 +132,7 @@ async fn get_game_details(
         }
     }
 
-    let (user, key) = match ra_credentials() {
+    let (user, key) = match ra_credentials(&state) {
         Some(creds) => creds,
         None => {
             return (

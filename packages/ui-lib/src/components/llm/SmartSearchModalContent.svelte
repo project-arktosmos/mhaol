@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import classNames from 'classnames';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { RA_CONSOLES } from 'addons/retroachievements/types';
 	import type { SmartSearchMediaType } from 'ui-lib/types/smart-search.type';
@@ -57,8 +58,7 @@
 			{#each tabs as tab}
 				<button
 					role="tab"
-					class="tab"
-					class:tab-active={activeTab === tab.id}
+					class={classNames('tab', { 'tab-active': activeTab === tab.id })}
 					onclick={() => (activeTab = tab.id)}
 				>
 					{tab.label}

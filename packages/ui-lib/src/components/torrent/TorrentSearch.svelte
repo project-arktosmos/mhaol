@@ -11,25 +11,23 @@
 	const searchState = torrentSearchService.state;
 	const torrentState = torrentService.state;
 
-	export let onadded: (() => void) | undefined = undefined;
+	let { onadded }: { onadded?: () => void } = $props();
 
-	$: canAddTorrents = $torrentState.initialized;
+	let canAddTorrents = $derived($torrentState.initialized);
 
-	$: hasResults = $searchState.results.length > 0;
-	$: showResults = hasResults || $searchState.error;
+	let hasResults = $derived($searchState.results.length > 0);
+	let showResults = $derived(hasResults || $searchState.error);
 
-	async function handleSearch(event: CustomEvent<{ query: string; category: TorrentCategory }>) {
-		await torrentSearchService.search(event.detail.query, event.detail.category);
+	async function handleSearch(detail: { query: string; category: TorrentCategory }) {
+		await torrentSearchService.search(detail.query, detail.category);
 	}
 
-	function handleSort(event: CustomEvent<{ field: TorrentSearchSortField }>) {
-		torrentSearchService.toggleSort(event.detail.field);
+	function handleSort(detail: { field: TorrentSearchSortField }) {
+		torrentSearchService.toggleSort(detail.field);
 	}
 
-	async function handleAdd(
-		event: CustomEvent<{ magnetLink: string; infoHash: string; name: string }>
-	) {
-		const { magnetLink, infoHash } = event.detail;
+	async function handleAdd(detail: { magnetLink: string; infoHash: string; name: string }) {
+		const { magnetLink, infoHash } = detail;
 		torrentSearchService.markAdding(infoHash);
 		const result = await torrentService.addTorrent(magnetLink);
 		torrentSearchService.unmarkAdding(infoHash);
@@ -40,7 +38,7 @@
 <div class="flex flex-col gap-4">
 	{#if hasResults}
 		<div class="flex justify-end">
-			<button class="btn btn-ghost btn-sm" on:click={() => torrentSearchService.clearResults()}>
+			<button class="btn btn-ghost btn-sm" onclick={() => torrentSearchService.clearResults()}>
 				Clear
 			</button>
 		</div>
@@ -50,7 +48,7 @@
 		bind:query={$searchState.query}
 		bind:category={$searchState.category}
 		searching={$searchState.searching}
-		on:search={handleSearch}
+		onsearch={handleSearch}
 	/>
 
 	{#if $searchState.error}
@@ -69,8 +67,8 @@
 			sort={$searchState.sort}
 			addingTorrents={$searchState.addingTorrents}
 			disableAdd={!canAddTorrents}
-			on:add={handleAdd}
-			on:sort={handleSort}
+			onadd={handleAdd}
+			onsort={handleSort}
 		/>
 	{/if}
 </div>

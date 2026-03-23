@@ -1,6 +1,5 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { createEventDispatcher } from 'svelte';
 	import {
 		formatBytes,
 		formatSpeed,
@@ -10,21 +9,28 @@
 	} from 'ui-lib/types/torrent.type';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 
-	export let torrent: TorrentInfo;
+	let {
+		torrent,
+		onpause,
+		onresume,
+		onremove,
+		onstream
+	}: {
+		torrent: TorrentInfo;
+		onpause?: (infoHash: string) => void;
+		onresume?: (infoHash: string) => void;
+		onremove?: (infoHash: string) => void;
+		onstream?: (infoHash: string) => void;
+	} = $props();
 
-	const dispatch = createEventDispatcher<{
-		pause: { infoHash: string };
-		resume: { infoHash: string };
-		remove: { infoHash: string };
-		stream: { infoHash: string };
-	}>();
-
-	$: progressPercent = Math.round(torrent.progress * 100);
-	$: isPaused = torrent.state === 'paused';
-	$: isActive = torrent.state === 'downloading' || torrent.state === 'initializing';
-	$: isSeeding = torrent.state === 'seeding';
-	$: isStreamable = (torrent.state === 'downloading' && torrent.progress >= 0.02) || isSeeding;
-	$: stateColor = getStateColor(torrent.state);
+	let progressPercent = $derived(Math.round(torrent.progress * 100));
+	let isPaused = $derived(torrent.state === 'paused');
+	let isActive = $derived(torrent.state === 'downloading' || torrent.state === 'initializing');
+	let isSeeding = $derived(torrent.state === 'seeding');
+	let isStreamable = $derived(
+		(torrent.state === 'downloading' && torrent.progress >= 0.02) || isSeeding
+	);
+	let stateColor = $derived(getStateColor(torrent.state));
 </script>
 
 <div class="rounded-lg bg-base-100 p-4">
@@ -96,7 +102,7 @@
 			{#if isStreamable}
 				<button
 					class="btn text-primary btn-ghost btn-sm"
-					on:click={() => dispatch('stream', { infoHash: torrent.infoHash })}
+					onclick={() => onstream?.(torrent.infoHash)}
 					title="Stream"
 					aria-label="Stream torrent"
 				>
@@ -114,7 +120,7 @@
 			{#if isActive || isSeeding}
 				<button
 					class="btn btn-ghost btn-sm"
-					on:click={() => dispatch('pause', { infoHash: torrent.infoHash })}
+					onclick={() => onpause?.(torrent.infoHash)}
 					title="Pause"
 					aria-label="Pause torrent"
 				>
@@ -136,7 +142,7 @@
 			{:else if isPaused}
 				<button
 					class="btn btn-ghost btn-sm"
-					on:click={() => dispatch('resume', { infoHash: torrent.infoHash })}
+					onclick={() => onresume?.(torrent.infoHash)}
 					title="Resume"
 					aria-label="Resume torrent"
 				>
@@ -165,7 +171,7 @@
 
 			<button
 				class="btn btn-ghost btn-sm"
-				on:click={() => dispatch('remove', { infoHash: torrent.infoHash })}
+				onclick={() => onremove?.(torrent.infoHash)}
 				title="Remove"
 				aria-label="Remove torrent"
 			>

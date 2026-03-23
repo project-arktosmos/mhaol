@@ -1,20 +1,21 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { p2pStreamService } from 'ui-lib/services/p2p-stream.service';
+	import ConnectionStatus from 'ui-lib/components/core/ConnectionStatus.svelte';
 	import { P2P_VIDEO_CODEC_OPTIONS, P2P_VIDEO_QUALITY_OPTIONS } from 'ui-lib/types/p2p-stream.type';
 	import type { P2pVideoCodec, P2pVideoQuality, P2pStreamMode } from 'ui-lib/types/p2p-stream.type';
 
 	const settings = p2pStreamService.store;
-	const state = p2pStreamService.state;
+	const p2pState = p2pStreamService.state;
 
 	// TURN server input
-	let newTurnUrl = '';
-	let newTurnUsername = '';
-	let newTurnCredential = '';
-	let showAdvanced = false;
+	let newTurnUrl = $state('');
+	let newTurnUsername = $state('');
+	let newTurnCredential = $state('');
+	let showAdvanced = $state(false);
 
 	// Debounced STUN server save
-	let stunTimeout: ReturnType<typeof setTimeout> | null = null;
+	let stunTimeout: ReturnType<typeof setTimeout> | null = $state(null);
 
 	function handleStunChange(event: Event) {
 		const value = (event.target as HTMLInputElement).value;
@@ -77,29 +78,13 @@
 		<h2 class="card-title text-lg">P2P Streaming</h2>
 
 		<!-- Server Status -->
-		<div
-			class={classNames('rounded-lg p-3', {
-				'bg-success/10': $state.serverAvailable,
-				'bg-warning/10': !$state.serverAvailable
-			})}
+		<ConnectionStatus
+			connected={$p2pState.serverAvailable}
+			connectedLabel="Stream Server Running"
+			disconnectedLabel="Stream Server Not Available"
 		>
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-2">
-					<div
-						class={classNames('h-2 w-2 rounded-full', {
-							'bg-success': $state.serverAvailable,
-							'bg-warning': !$state.serverAvailable
-						})}
-					></div>
-					<span class="text-sm font-medium">
-						{#if $state.serverAvailable}
-							Stream Server Running
-						{:else}
-							Stream Server Not Available
-						{/if}
-					</span>
-				</div>
-				<button class="btn btn-ghost btn-xs" on:click={handleRefreshHealth} title="Refresh status">
+			{#snippet extra()}
+				<button class="btn btn-ghost btn-xs" onclick={handleRefreshHealth} title="Refresh status">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						class="h-4 w-4"
@@ -115,8 +100,8 @@
 						/>
 					</svg>
 				</button>
-			</div>
-		</div>
+			{/snippet}
+		</ConnectionStatus>
 
 		<!-- Default Stream Mode Toggle -->
 		<div class="form-control">
@@ -129,7 +114,7 @@
 						'btn-primary': $settings.defaultStreamMode === 'video',
 						'btn-ghost': $settings.defaultStreamMode !== 'video'
 					})}
-					on:click={() => handleModeChange('video')}
+					onclick={() => handleModeChange('video')}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -152,7 +137,7 @@
 						'btn-primary': $settings.defaultStreamMode === 'audio',
 						'btn-ghost': $settings.defaultStreamMode !== 'audio'
 					})}
-					on:click={() => handleModeChange('audio')}
+					onclick={() => handleModeChange('audio')}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -182,7 +167,7 @@
 				id="video-quality-select"
 				class="select-bordered select w-full"
 				value={$settings.videoQuality}
-				on:change={handleVideoQualityChange}
+				onchange={handleVideoQualityChange}
 			>
 				{#each P2P_VIDEO_QUALITY_OPTIONS as option}
 					<option value={option.value}>
@@ -206,7 +191,7 @@
 				id="video-codec-select"
 				class="select-bordered select w-full"
 				value={$settings.videoCodec}
-				on:change={handleVideoCodecChange}
+				onchange={handleVideoCodecChange}
 			>
 				{#each P2P_VIDEO_CODEC_OPTIONS as option}
 					<option value={option.value}>
@@ -247,7 +232,7 @@
 				class="input-bordered input w-full font-mono text-sm"
 				placeholder="stun:stun.l.google.com:19302"
 				value={$settings.stunServer}
-				on:input={handleStunChange}
+				oninput={handleStunChange}
 			/>
 			<label class="label" for="stun-server-input">
 				<span class="label-text-alt text-base-content/50">
@@ -260,13 +245,12 @@
 		<div class="divider my-1"></div>
 		<button
 			class="flex w-full items-center justify-between text-sm text-base-content/70 hover:text-base-content"
-			on:click={() => (showAdvanced = !showAdvanced)}
+			onclick={() => (showAdvanced = !showAdvanced)}
 		>
 			<span>TURN Servers</span>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
-				class="h-4 w-4 transition-transform"
-				class:rotate-180={showAdvanced}
+				class={classNames('h-4 w-4 transition-transform', { 'rotate-180': showAdvanced })}
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
@@ -298,7 +282,7 @@
 								</div>
 								<button
 									class="btn text-error btn-ghost btn-xs"
-									on:click={() => handleRemoveTurnServer(server.url)}
+									onclick={() => handleRemoveTurnServer(server.url)}
 									title="Remove server"
 								>
 									<svg
@@ -326,7 +310,7 @@
 						class="input-bordered input input-sm w-full font-mono text-xs"
 						placeholder="turn:example.com:3478"
 						bind:value={newTurnUrl}
-						on:keydown={handleTurnKeydown}
+						onkeydown={handleTurnKeydown}
 					/>
 					<div class="flex gap-2">
 						<input
@@ -344,7 +328,7 @@
 					</div>
 					<button
 						class="btn btn-sm btn-primary"
-						on:click={handleAddTurnServer}
+						onclick={handleAddTurnServer}
 						disabled={!newTurnUrl.trim()}
 					>
 						Add TURN Server
@@ -354,9 +338,9 @@
 		{/if}
 
 		<!-- Error display -->
-		{#if $state.error}
+		{#if $p2pState.error}
 			<div class="alert text-sm alert-error">
-				<span>{$state.error}</span>
+				<span>{$p2pState.error}</span>
 			</div>
 		{/if}
 	</div>

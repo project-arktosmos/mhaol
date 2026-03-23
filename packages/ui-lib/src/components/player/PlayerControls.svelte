@@ -1,29 +1,38 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { createEventDispatcher, onDestroy } from 'svelte';
 	import { playerService } from 'ui-lib/services/player.service';
 	import type { PlayerConnectionState } from 'ui-lib/types/player.type';
 	import PlayerSeekBar from './PlayerSeekBar.svelte';
 
-	export let mediaElement: HTMLMediaElement | null = null;
-	export let isVideo: boolean = false;
-	export let positionSecs: number = 0;
-	export let durationSecs: number | null = null;
-	export let connectionState: PlayerConnectionState = 'idle';
-	export let containerElement: HTMLElement | null = null;
+	let {
+		mediaElement = null,
+		isVideo = false,
+		positionSecs = 0,
+		durationSecs = null,
+		connectionState = 'idle',
+		containerElement = null,
+		onseek,
+		onseekstart,
+		onseekend,
+		onstop
+	}: {
+		mediaElement?: HTMLMediaElement | null;
+		isVideo?: boolean;
+		positionSecs?: number;
+		durationSecs?: number | null;
+		connectionState?: PlayerConnectionState;
+		containerElement?: HTMLElement | null;
+		onseek?: (positionSecs: number) => void;
+		onseekstart?: () => void;
+		onseekend?: () => void;
+		onstop?: () => void;
+	} = $props();
 
-	const dispatch = createEventDispatcher<{
-		seek: { positionSecs: number };
-		seekstart: void;
-		seekend: void;
-		stop: void;
-	}>();
-
-	let isPaused = true;
-	let volume = playerService.getVolume();
-	let isMuted = false;
-	let isFullscreen = false;
-	let volumeBeforeMute = volume;
+	let isPaused = $state(true);
+	let volume = $state(playerService.getVolume());
+	let isMuted = $state(false);
+	let isFullscreen = $state(false);
+	let volumeBeforeMute = $state(playerService.getVolume());
 
 	function onPlay(): void {
 		isPaused = false;
@@ -47,22 +56,41 @@
 
 	let currentElement: HTMLMediaElement | null = null;
 
-	$: if (mediaElement !== currentElement) {
-		if (currentElement) {
-			currentElement.removeEventListener('play', onPlay);
-			currentElement.removeEventListener('pause', onPause);
-			currentElement.removeEventListener('volumechange', onVolumeChange);
+	$effect(() => {
+		if (mediaElement !== currentElement) {
+			if (currentElement) {
+				currentElement.removeEventListener('play', onPlay);
+				currentElement.removeEventListener('pause', onPause);
+				currentElement.removeEventListener('volumechange', onVolumeChange);
+			}
+			currentElement = mediaElement;
+			if (mediaElement) {
+				mediaElement.addEventListener('play', onPlay);
+				mediaElement.addEventListener('pause', onPause);
+				mediaElement.addEventListener('volumechange', onVolumeChange);
+				mediaElement.volume = volume;
+				isPaused = mediaElement.paused;
+				isMuted = mediaElement.muted;
+			}
 		}
-		currentElement = mediaElement;
-		if (mediaElement) {
-			mediaElement.addEventListener('play', onPlay);
-			mediaElement.addEventListener('pause', onPause);
-			mediaElement.addEventListener('volumechange', onVolumeChange);
-			mediaElement.volume = volume;
-			isPaused = mediaElement.paused;
-			isMuted = mediaElement.muted;
+
+		return () => {
+			if (currentElement) {
+				currentElement.removeEventListener('play', onPlay);
+				currentElement.removeEventListener('pause', onPause);
+				currentElement.removeEventListener('volumechange', onVolumeChange);
+			}
+		};
+	});
+
+	$effect(() => {
+		if (typeof document !== 'undefined') {
+			document.addEventListener('fullscreenchange', onFullscreenChange);
 		}
-	}
+		return () => {
+			document.removeEventListener('fullscreenchange', onFullscreenChange);
+		};
+	});
 
 	function togglePlayPause(): void {
 		if (!mediaElement) return;
@@ -109,32 +137,26 @@
 		}
 	}
 
-	$: disabled = connectionState !== 'streaming';
+	let disabled = $derived(connectionState !== 'streaming');
 
-	onDestroy(() => {
-		if (currentElement) {
-			currentElement.removeEventListener('play', onPlay);
-			currentElement.removeEventListener('pause', onPause);
-			currentElement.removeEventListener('volumechange', onVolumeChange);
-		}
-		document.removeEventListener('fullscreenchange', onFullscreenChange);
-	});
-
-	if (typeof document !== 'undefined') {
-		document.addEventListener('fullscreenchange', onFullscreenChange);
-	}
-
-	$: volumeDisplay = isMuted || volume === 0 ? 'muted' : volume < 0.5 ? 'low' : 'high';
+	let volumeDisplay = $derived(isMuted || volume === 0 ? 'muted' : volume < 0.5 ? 'low' : 'high');
 </script>
 
 <div class={classNames('flex flex-col gap-1', { 'pointer-events-none opacity-50': disabled })}>
-	<PlayerSeekBar {positionSecs} {durationSecs} {disabled} on:seek on:seekstart on:seekend />
+	<PlayerSeekBar
+		{positionSecs}
+		{durationSecs}
+		{disabled}
+		onseek={(pos) => onseek?.(pos)}
+		onseekstart={() => onseekstart?.()}
+		onseekend={() => onseekend?.()}
+	/>
 
 	<div class="flex items-center gap-0.5">
 		<!-- Play/Pause -->
 		<button
 			class="btn btn-square btn-ghost btn-xs"
-			on:click={togglePlayPause}
+			onclick={togglePlayPause}
 			aria-label={isPaused ? 'Play' : 'Pause'}
 		>
 			{#if isPaused}
@@ -179,7 +201,7 @@
 		<!-- Volume -->
 		<button
 			class="btn btn-square btn-ghost btn-xs"
-			on:click={toggleMute}
+			onclick={toggleMute}
 			aria-label={isMuted ? 'Unmute' : 'Mute'}
 		>
 			{#if volumeDisplay === 'muted'}
@@ -254,7 +276,7 @@
 		{#if isVideo}
 			<button
 				class="btn btn-square btn-ghost btn-xs"
-				on:click={toggleFullscreen}
+				onclick={toggleFullscreen}
 				aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
 			>
 				{#if isFullscreen}
@@ -292,11 +314,7 @@
 		{/if}
 
 		<!-- Stop -->
-		<button
-			class="btn btn-square btn-ghost btn-xs"
-			on:click={() => dispatch('stop')}
-			aria-label="Stop"
-		>
+		<button class="btn btn-square btn-ghost btn-xs" onclick={() => onstop?.()} aria-label="Stop">
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				class="h-4 w-4"

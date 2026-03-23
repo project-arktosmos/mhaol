@@ -398,6 +398,7 @@
         {/if}
       </a>
       <a href="/roster" class="btn btn-ghost btn-sm">Roster</a>
+      <a href="/import" class="btn btn-ghost btn-sm">Import</a>
       <a href="/options" class="btn btn-ghost btn-sm">Options</a>
       <SignalingStatusBadge />
       <ThemeToggle />

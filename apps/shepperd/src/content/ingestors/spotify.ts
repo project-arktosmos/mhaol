@@ -4,35 +4,47 @@ import type { Ingestor } from "./ingestor";
 const seenIds = new Set<string>();
 const items: MediaItem[] = [];
 
-function scanCards(): void {
-  const cards = document.querySelectorAll<HTMLElement>(
-    '[data-encore-id="card"]',
+function getLibraryGrid(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
+    '[role="grid"][aria-label="Your Library"]',
   );
-  for (const card of cards) {
-    const link = card.querySelector<HTMLAnchorElement>(
-      'a[href*="/playlist/"], a[href*="/album/"]',
-    );
-    if (!link) continue;
+}
 
-    const href = link.getAttribute("href") ?? "";
-    const playlistMatch = href.match(/\/playlist\/([A-Za-z0-9]+)/);
-    const albumMatch = href.match(/\/album\/([A-Za-z0-9]+)/);
-    const id = playlistMatch?.[1] ?? albumMatch?.[1];
-    const mediaType = playlistMatch ? "playlist" : "album";
-    if (!id || seenIds.has(id)) continue;
+function scanLibraryRows(
+  uriType: string,
+  mediaType: MediaItem["mediaType"],
+  category: string,
+  extractArtist?: (subtitleText: string) => string | undefined,
+): void {
+  const grid = getLibraryGrid();
+  if (!grid) return;
 
-    const titleEl = card.querySelector<HTMLElement>(
-      'p[data-encore-id="cardTitle"]',
+  const rows = grid.querySelectorAll<HTMLElement>('[data-encore-id="listRow"]');
+  for (const row of rows) {
+    const labelledBy = row.getAttribute("aria-labelledby") ?? "";
+    const match = labelledBy.match(
+      new RegExp(`listrow-title-spotify:${uriType}:(\\S+)`),
     );
-    const title =
-      titleEl?.getAttribute("title")?.trim() ?? titleEl?.textContent?.trim();
+    if (!match) continue;
+
+    const id = match[1];
+    if (seenIds.has(id)) continue;
+
+    const titleEl = row.querySelector<HTMLElement>(
+      '[data-encore-id="listRowTitle"] .e-10180-line-clamp',
+    );
+    const title = titleEl?.textContent?.trim();
     if (!title) continue;
 
-    const img = card.querySelector<HTMLImageElement>(
-      'img[data-testid="card-image"]',
+    const subtitleEl = row.querySelector<HTMLElement>(
+      '[data-encore-id="listRowSubtitle"]',
     );
-    const shelf = card.closest("section[aria-label]");
-    const category = shelf?.getAttribute("aria-label")?.trim() ?? "Library";
+    const subtitleText = subtitleEl?.textContent?.trim() ?? "";
+    const artist = extractArtist?.(subtitleText);
+
+    const img = row.querySelector<HTMLImageElement>(
+      '[data-testid="entity-image"]',
+    );
 
     seenIds.add(id);
     items.push({
@@ -41,68 +53,45 @@ function scanCards(): void {
       category,
       mediaType,
       source: "open.spotify.com",
+      artist,
       imageUrl: img?.src,
     });
   }
 }
 
-function scanTracks(): void {
-  const grid = document.querySelector<HTMLElement>(
-    '[data-testid="playlist-tracklist"]',
-  );
-  const playlistName = grid?.getAttribute("aria-label")?.trim() ?? "Tracks";
+function scanLibraryPlaylists(): void {
+  scanLibraryRows("playlist", "music", "Library", (subtitle) => {
+    const match = subtitle.match(/Playlist\s*[•·]\s*(.+)/);
+    return match?.[1]?.trim() || undefined;
+  });
+}
 
-  const rows = document.querySelectorAll<HTMLElement>(
-    '[data-testid="tracklist-row"]',
-  );
-  for (const row of rows) {
-    const trackLink = row.querySelector<HTMLAnchorElement>(
-      'a[data-testid="internal-track-link"]',
+function scanLibraryArtists(): void {
+  scanLibraryRows("artist", "music", "Library");
+}
+
+function scanLibraryAlbums(): void {
+  scanLibraryRows("album", "music", "Library", (subtitle) => {
+    const match = subtitle.match(
+      /(?:Single|EP|Compilation|Album)\s*[•·]\s*(.+)/,
     );
-    if (!trackLink) continue;
-
-    const href = trackLink.getAttribute("href") ?? "";
-    const match = href.match(/\/track\/([A-Za-z0-9]+)/);
-    const id = match?.[1];
-    if (!id || seenIds.has(id)) continue;
-
-    const title = trackLink.textContent?.trim();
-    if (!title) continue;
-
-    // Extract artist names from artist links
-    const artistLinks = row.querySelectorAll<HTMLAnchorElement>(
-      'a[href*="/artist/"]',
-    );
-    const artist = Array.from(artistLinks)
-      .map((a) => a.textContent?.trim())
-      .filter(Boolean)
-      .join(", ");
-
-    const img = row.querySelector<HTMLImageElement>("img");
-
-    seenIds.add(id);
-    items.push({
-      title,
-      id,
-      category: playlistName,
-      mediaType: "song",
-      source: "open.spotify.com",
-      artist: artist || undefined,
-      imageUrl: img?.src,
-    });
-  }
+    return match?.[1]?.trim() || subtitle || undefined;
+  });
 }
 
 export const spotify: Ingestor = {
   source: "open.spotify.com",
+  instructions:
+    'To capture your library, open "Your Library" in the left sidebar. Filter by "Playlists", "Artists", or "Albums" using the tabs at the top. The list is virtualized — scroll through it slowly so all items load into view, then click Refresh.',
 
   matches(hostname: string): boolean {
     return hostname.includes("open.spotify.com");
   },
 
   scan(): MediaItem[] {
-    scanCards();
-    scanTracks();
+    scanLibraryPlaylists();
+    scanLibraryArtists();
+    scanLibraryAlbums();
     return items;
   },
 };

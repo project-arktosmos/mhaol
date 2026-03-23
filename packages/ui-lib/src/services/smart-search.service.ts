@@ -331,7 +331,10 @@ class SmartSearchService {
 			return { ...s, searchResults: results, analyzing: true };
 		});
 
-		// Step 2: Enqueue LLM analysis tasks
+		// Step 2: Subscribe to SSE before creating tasks to avoid missing completion events
+		queueService.subscribe();
+
+		// Step 3: Enqueue LLM analysis tasks
 		const config = this.getConfigForType(selection.type);
 		const taskMap = new Map<string, string>(); // taskId -> infoHash
 
@@ -351,9 +354,8 @@ class SmartSearchService {
 			if (task) taskMap.set(task.id, hash);
 		}
 
-		// Step 3: Wait for LLM tasks and enhance results
+		// Step 4: Wait for LLM tasks and enhance results
 		if (taskMap.size > 0) {
-			queueService.subscribe();
 			const promises = [...taskMap.entries()].map(async ([taskId, hash]) => {
 				try {
 					const completed = await queueService.waitForTask(taskId);
@@ -395,7 +397,7 @@ class SmartSearchService {
 			await Promise.allSettled(promises);
 		}
 
-		// Step 4: Mark analyzing as done
+		// Step 5: Mark analyzing as done
 		this.store.update((s) => ({
 			...s,
 			analyzing: false,
@@ -491,7 +493,10 @@ class SmartSearchService {
 			return { ...s, searchResults: results, analyzing: true };
 		});
 
-		// Step 2: Enqueue LLM analysis tasks for TV
+		// Step 2: Subscribe to SSE before creating tasks to avoid missing completion events
+		queueService.subscribe();
+
+		// Step 3: Enqueue LLM analysis tasks for TV
 		const config = this.getConfigForType(selection.type);
 		const taskMap = new Map<string, string>();
 		const state = this.getState();
@@ -511,9 +516,8 @@ class SmartSearchService {
 			if (task) taskMap.set(task.id, hash);
 		}
 
-		// Step 3: Wait for LLM tasks
+		// Step 4: Wait for LLM tasks
 		if (taskMap.size > 0) {
-			queueService.subscribe();
 			const promises = [...taskMap.entries()].map(async ([taskId, hash]) => {
 				try {
 					const completed = await queueService.waitForTask(taskId);
@@ -555,7 +559,7 @@ class SmartSearchService {
 			await Promise.allSettled(promises);
 		}
 
-		// Step 4: Rebuild TV result structure and mark done
+		// Step 5: Rebuild TV result structure and mark done
 		this.store.update((s) => {
 			const results = s.searchResults.map((r) => ({ ...r, analyzing: false }));
 			const tvResults: TvSmartSearchResults = { complete: [], seasons: {} };

@@ -1,28 +1,34 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { createEventDispatcher, onDestroy } from 'svelte';
 	import { playerAdapter } from 'ui-lib/adapters/classes/player.adapter';
 
-	export let positionSecs: number = 0;
-	export let durationSecs: number | null = null;
-	export let disabled: boolean = false;
+	let {
+		positionSecs = 0,
+		durationSecs = null,
+		disabled = false,
+		onseek,
+		onseekstart,
+		onseekend
+	}: {
+		positionSecs?: number;
+		durationSecs?: number | null;
+		disabled?: boolean;
+		onseek?: (positionSecs: number) => void;
+		onseekstart?: () => void;
+		onseekend?: () => void;
+	} = $props();
 
-	const dispatch = createEventDispatcher<{
-		seek: { positionSecs: number };
-		seekstart: void;
-		seekend: void;
-	}>();
-
-	let isDragging = false;
-	let dragPosition = 0;
+	let isDragging = $state(false);
+	let dragPosition = $state(0);
 	let trackElement: HTMLDivElement;
 
-	$: progress =
+	let progress = $derived(
 		durationSecs && durationSecs > 0
 			? ((isDragging ? dragPosition : positionSecs) / durationSecs) * 100
-			: 0;
+			: 0
+	);
 
-	$: displayPosition = isDragging ? dragPosition : positionSecs;
+	let displayPosition = $derived(isDragging ? dragPosition : positionSecs);
 
 	function getPositionFromEvent(event: MouseEvent): number {
 		if (!trackElement || !durationSecs) return 0;
@@ -35,7 +41,7 @@
 		if (disabled || !durationSecs) return;
 		isDragging = true;
 		dragPosition = getPositionFromEvent(event);
-		dispatch('seekstart');
+		onseekstart?.();
 		window.addEventListener('mousemove', handleMouseMove);
 		window.addEventListener('mouseup', handleMouseUp);
 	}
@@ -49,15 +55,17 @@
 		if (!isDragging) return;
 		isDragging = false;
 		const finalPosition = getPositionFromEvent(event);
-		dispatch('seek', { positionSecs: finalPosition });
-		dispatch('seekend');
+		onseek?.(finalPosition);
+		onseekend?.();
 		window.removeEventListener('mousemove', handleMouseMove);
 		window.removeEventListener('mouseup', handleMouseUp);
 	}
 
-	onDestroy(() => {
-		window.removeEventListener('mousemove', handleMouseMove);
-		window.removeEventListener('mouseup', handleMouseUp);
+	$effect(() => {
+		return () => {
+			window.removeEventListener('mousemove', handleMouseMove);
+			window.removeEventListener('mouseup', handleMouseUp);
+		};
 	});
 </script>
 
@@ -71,7 +79,7 @@
 		aria-valuemax={durationSecs ?? 0}
 		aria-valuenow={displayPosition}
 		tabindex="0"
-		on:mousedown={handleMouseDown}
+		onmousedown={handleMouseDown}
 	>
 		<div class="absolute inset-y-0 left-0 rounded-full bg-primary" style:width="{progress}%"></div>
 

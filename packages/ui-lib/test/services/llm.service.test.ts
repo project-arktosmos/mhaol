@@ -199,8 +199,8 @@ describe('LlmService', () => {
 
 		await llmService.unloadModel();
 
-		// Should not throw, just log
-		expect(true).toBe(true);
+		const state = get(llmService.store);
+		expect(state.loading).toBe(false);
 	});
 
 	// ===== downloadModel =====
@@ -298,8 +298,8 @@ describe('LlmService', () => {
 
 		await llmService.updateConfig({ temperature: 0.8 } as never);
 
-		// Should not throw
-		expect(true).toBe(true);
+		const state = get(llmService.store);
+		expect(state.loading).toBe(false);
 	});
 
 	// ===== fetchJson error handling =====

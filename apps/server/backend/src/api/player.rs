@@ -14,6 +14,10 @@ use tokio::sync::Mutex;
 const DEFAULT_SIGNALING_URL: &str = "https://mhaol-signaling.project-arktosmos.partykit.dev";
 const ICE_CACHE_TTL_MS: u128 = 12 * 60 * 60 * 1000;
 
+fn get_signaling_url() -> String {
+    std::env::var("SIGNALING_URL").unwrap_or_else(|_| DEFAULT_SIGNALING_URL.to_string())
+}
+
 struct IceCache {
     servers: Vec<IceServerEntry>,
     expires_at: u128,
@@ -37,14 +41,21 @@ async fn fetch_ice_servers() -> Option<Vec<IceServerEntry>> {
         }
     }
 
-    let domain = std::env::var("METERED_DOMAIN").ok()?;
-    let secret_key = std::env::var("METERED_SECRET_KEY").ok()?;
-    if domain.is_empty() || secret_key.is_empty() {
-        tracing::warn!("[player] METERED_DOMAIN or METERED_SECRET_KEY not set");
-        return None;
-    }
-
-    let url = format!("https://{domain}/api/v1/turn/credentials?apiKey={secret_key}");
+    // Priority: TURN_CREDENTIAL_URL (self-hosted) > METERED_DOMAIN+KEY (Metered.ca)
+    let url = if let Ok(credential_url) = std::env::var("TURN_CREDENTIAL_URL") {
+        if credential_url.is_empty() {
+            return None;
+        }
+        credential_url
+    } else {
+        let domain = std::env::var("METERED_DOMAIN").ok()?;
+        let secret_key = std::env::var("METERED_SECRET_KEY").ok()?;
+        if domain.is_empty() || secret_key.is_empty() {
+            tracing::warn!("[player] No TURN credential source configured (set TURN_CREDENTIAL_URL or METERED_DOMAIN+METERED_SECRET_KEY)");
+            return None;
+        }
+        format!("https://{domain}/api/v1/turn/credentials?apiKey={secret_key}")
+    };
     match reqwest::get(&url).await {
         Ok(resp) if resp.status().is_success() => {
             match resp.json::<Vec<IceServerEntry>>().await {
@@ -200,7 +211,7 @@ async fn create_session(
     State(state): State<AppState>,
     Json(body): Json<CreateSessionBody>,
 ) -> impl IntoResponse {
-    let signaling_url = DEFAULT_SIGNALING_URL.to_string();
+    let signaling_url = get_signaling_url();
 
     if !state.worker_bridge.is_ready() {
         return (

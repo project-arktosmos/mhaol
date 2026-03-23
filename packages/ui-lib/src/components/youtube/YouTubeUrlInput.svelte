@@ -9,50 +9,54 @@
 	} from 'ui-lib/types/youtube.type';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 
-	export let initialUrl: string = '';
+	let { initialUrl = '' }: { initialUrl?: string } = $props();
 
-	const state = youtubeService.state;
+	const ytState = youtubeService.state;
 
-	let urlInput = initialUrl;
-	let oembedData: YouTubeOEmbedData | null = null;
-	let oembedLoading = false;
-	let lastOembedVideoId: string | null = null;
+	let urlInput = $state(initialUrl);
+	let oembedData: YouTubeOEmbedData | null = $state(null);
+	let oembedLoading = $state(false);
+	let lastOembedVideoId: string | null = $state(null);
 
 	// Sync from service state when opened with a pre-filled URL (e.g. from YT Search)
 	onMount(() => {
-		if (!urlInput && $state.currentUrl) {
-			urlInput = $state.currentUrl;
+		if (!urlInput && $ytState.currentUrl) {
+			urlInput = $ytState.currentUrl;
 		}
-		if (initialUrl && $state.initialized) {
+		if (initialUrl && $ytState.initialized) {
 			handleFetchInfo();
 		}
 	});
 
 	// Also watch for when initialized becomes true with an initial URL
-	$: if (
-		initialUrl &&
-		$state.initialized &&
-		urlInput === initialUrl &&
-		!$state.currentVideoInfo &&
-		!$state.fetchingInfo
-	) {
-		handleFetchInfo();
-	}
+	$effect(() => {
+		if (
+			initialUrl &&
+			$ytState.initialized &&
+			urlInput === initialUrl &&
+			!$ytState.currentVideoInfo &&
+			!$ytState.fetchingInfo
+		) {
+			handleFetchInfo();
+		}
+	});
 
 	// YouTube URL validation regex (supports videos and playlists)
 	const youtubeRegex =
 		/^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/|playlist\?list=)|youtu\.be\/)[\w-]+/;
 
-	$: isValidUrl =
-		youtubeRegex.test(urlInput) || (urlInput.includes('youtube.com') && urlInput.includes('list='));
-	$: videoId = extractVideoId(urlInput);
-	$: playlistId = extractPlaylistId(urlInput);
-	$: hasVideoId = videoId !== null;
-	$: hasPlaylistId = playlistId !== null;
-	$: isPurePlaylist = !hasVideoId && hasPlaylistId;
-	$: canFetch = isValidUrl && !$state.fetchingInfo && $state.initialized;
-	$: canFetchPlaylist =
-		isValidUrl && hasPlaylistId && !$state.fetchingPlaylistInfo && $state.initialized;
+	let isValidUrl = $derived(
+		youtubeRegex.test(urlInput) || (urlInput.includes('youtube.com') && urlInput.includes('list='))
+	);
+	let videoId = $derived(extractVideoId(urlInput));
+	let playlistId = $derived(extractPlaylistId(urlInput));
+	let hasVideoId = $derived(videoId !== null);
+	let hasPlaylistId = $derived(playlistId !== null);
+	let isPurePlaylist = $derived(!hasVideoId && hasPlaylistId);
+	let canFetch = $derived(isValidUrl && !$ytState.fetchingInfo && $ytState.initialized);
+	let canFetchPlaylist = $derived(
+		isValidUrl && hasPlaylistId && !$ytState.fetchingPlaylistInfo && $ytState.initialized
+	);
 
 	async function handleFetchInfo() {
 		if (!canFetch) return;
@@ -77,7 +81,7 @@
 
 	function handlePaste() {
 		setTimeout(() => {
-			if (isValidUrl && $state.initialized) {
+			if (isValidUrl && $ytState.initialized) {
 				handleFetchInfo();
 			}
 		}, 100);
@@ -100,12 +104,14 @@
 		}
 	}
 
-	$: if (videoId) {
-		fetchOEmbedData(videoId);
-	} else {
-		oembedData = null;
-		lastOembedVideoId = null;
-	}
+	$effect(() => {
+		if (videoId) {
+			fetchOEmbedData(videoId);
+		} else {
+			oembedData = null;
+			lastOembedVideoId = null;
+		}
+	});
 </script>
 
 <div class="card bg-base-200">
@@ -117,17 +123,17 @@
 				<input
 					type="text"
 					bind:value={urlInput}
-					on:keydown={handleKeydown}
-					on:paste={handlePaste}
+					onkeydown={handleKeydown}
+					onpaste={handlePaste}
 					placeholder="https://youtube.com/watch?v=... or playlist link"
 					class={classNames('input-bordered input join-item flex-1', {
 						'input-error': urlInput && !isValidUrl,
 						'input-success': isValidUrl
 					})}
-					disabled={!$state.initialized}
+					disabled={!$ytState.initialized}
 				/>
-				<button class="btn join-item btn-primary" on:click={handleFetchInfo} disabled={!canFetch}>
-					{#if $state.fetchingInfo}
+				<button class="btn join-item btn-primary" onclick={handleFetchInfo} disabled={!canFetch}>
+					{#if $ytState.fetchingInfo}
 						<span class="loading loading-sm loading-spinner"></span>
 					{:else}
 						Fetch
@@ -143,10 +149,10 @@
 					<span class="text-xs text-info">This video is part of a playlist</span>
 					<button
 						class="btn text-info btn-ghost btn-xs"
-						on:click={handleFetchAsPlaylist}
+						onclick={handleFetchAsPlaylist}
 						disabled={!canFetchPlaylist}
 					>
-						{#if $state.fetchingPlaylistInfo}
+						{#if $ytState.fetchingPlaylistInfo}
 							<span class="loading loading-xs loading-spinner"></span>
 						{:else}
 							Fetch full playlist

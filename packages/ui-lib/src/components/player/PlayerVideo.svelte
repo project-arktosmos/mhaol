@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, tick } from 'svelte';
+	import { tick } from 'svelte';
 	import { playerService } from 'ui-lib/services/player.service';
 	import type {
 		PlayableFile,
@@ -8,29 +8,52 @@
 	} from 'ui-lib/types/player.type';
 	import PlayerControls from './PlayerControls.svelte';
 
-	export let file: PlayableFile | null = null;
-	export let connectionState: PlayerConnectionState = 'idle';
-	export let positionSecs: number = 0;
-	export let durationSecs: number | null = null;
-	export let buffering: boolean = false;
-	export let fullscreen: boolean = false;
+	let {
+		file = null,
+		connectionState = 'idle',
+		positionSecs = 0,
+		durationSecs = null,
+		buffering = false,
+		fullscreen = false
+	}: {
+		file?: PlayableFile | null;
+		connectionState?: PlayerConnectionState;
+		positionSecs?: number;
+		durationSecs?: number | null;
+		buffering?: boolean;
+		fullscreen?: boolean;
+	} = $props();
 
-	let videoElement: HTMLVideoElement | null = null;
-	let audioElement: HTMLAudioElement | null = null;
-	let containerElement: HTMLElement | null = null;
-	let streamAttached = false;
+	let videoElement = $state<HTMLVideoElement | null>(null);
+	let audioElement = $state<HTMLAudioElement | null>(null);
+	let containerElement = $state<HTMLElement | null>(null);
+	let streamAttached = $state(false);
 
-	$: isVideo = file?.mode !== 'audio';
-	$: isStreaming = connectionState === 'streaming';
-	$: activeMediaElement = (isVideo ? videoElement : audioElement) as HTMLMediaElement | null;
+	let isVideo = $derived(file?.mode !== 'audio');
+	let isStreaming = $derived(connectionState === 'streaming');
+	let activeMediaElement = $derived(
+		(isVideo ? videoElement : audioElement) as HTMLMediaElement | null
+	);
+	let subtitles = $derived(file?.subtitles ?? []);
+	let statusLabel = $derived(getStatusLabel(connectionState));
 
-	$: if (isStreaming && !streamAttached) {
-		tryAttachStream();
-	}
+	$effect(() => {
+		if (isStreaming && !streamAttached) {
+			tryAttachStream();
+		}
+	});
 
-	$: if (connectionState === 'idle') {
-		streamAttached = false;
-	}
+	$effect(() => {
+		if (connectionState === 'idle') {
+			streamAttached = false;
+		}
+	});
+
+	$effect(() => {
+		return () => {
+			streamAttached = false;
+		};
+	});
 
 	async function tryAttachStream(): Promise<void> {
 		// Wait for the DOM to settle after branch switches ({#if isVideo})
@@ -55,7 +78,7 @@
 				return;
 			}
 
-			// Element not bound yet — wait a frame and retry
+			// Element not bound yet -- wait a frame and retry
 			await new Promise((r) => requestAnimationFrame(r));
 		}
 	}
@@ -65,8 +88,8 @@
 		streamAttached = false;
 	}
 
-	function handleSeek(event: CustomEvent<{ positionSecs: number }>): void {
-		playerService.seek(event.detail.positionSecs);
+	function handleSeek(positionSecs: number): void {
+		playerService.seek(positionSecs);
 	}
 
 	function handleSeekStart(): void {
@@ -109,13 +132,6 @@
 				return 'Stream ended';
 		}
 	}
-
-	onDestroy(() => {
-		streamAttached = false;
-	});
-
-	$: subtitles = file?.subtitles ?? [];
-	$: statusLabel = getStatusLabel(connectionState);
 </script>
 
 <div class={fullscreen ? 'flex h-full flex-col' : ''}>
@@ -127,9 +143,9 @@
 					? 'h-full w-full cursor-pointer bg-black object-contain'
 					: 'w-full cursor-pointer rounded-lg bg-black'}
 				playsinline
-				on:click={handleVideoClick}
-				on:waiting={handleWaiting}
-				on:playing={handlePlaying}
+				onclick={handleVideoClick}
+				onwaiting={handleWaiting}
+				onplaying={handlePlaying}
 			>
 				{#each subtitles as sub}
 					<track
@@ -175,7 +191,7 @@
 				{:else if connectionState === 'error'}
 					<div class="text-center text-error">
 						<p class="text-xs font-medium">Connection failed</p>
-						<button class="btn mt-1 btn-xs btn-error" on:click={handleStop}> Close </button>
+						<button class="btn mt-1 btn-xs btn-error" onclick={handleStop}> Close </button>
 					</div>
 				{:else if connectionState === 'closed'}
 					<div class="text-center">
@@ -195,10 +211,9 @@
 				{durationSecs}
 				{connectionState}
 				{containerElement}
-				on:seek={handleSeek}
-				on:seekstart={handleSeekStart}
-				on:seekend
-				on:stop={handleStop}
+				onseek={handleSeek}
+				onseekstart={handleSeekStart}
+				onstop={handleStop}
 			/>
 		</div>
 	{/if}

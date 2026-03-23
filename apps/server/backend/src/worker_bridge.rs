@@ -58,7 +58,7 @@ type PendingRequests = Arc<Mutex<HashMap<String, oneshot::Sender<WorkerEvent>>>>
 pub struct WorkerBridge {
     stdin_tx: Mutex<Option<tokio::sync::mpsc::Sender<String>>>,
     pending: PendingRequests,
-    ready: std::sync::atomic::AtomicBool,
+    ready: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Default for WorkerBridge {
@@ -72,7 +72,7 @@ impl WorkerBridge {
         Self {
             stdin_tx: Mutex::new(None),
             pending: Arc::new(Mutex::new(HashMap::new())),
-            ready: std::sync::atomic::AtomicBool::new(false),
+            ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -173,14 +173,10 @@ impl WorkerBridge {
         });
 
         // Task: wait for child to exit
-        let ready = &self.ready as *const std::sync::atomic::AtomicBool as usize;
+        let ready = Arc::clone(&self.ready);
         tokio::spawn(async move {
             let _ = child.wait().await;
-            // SAFETY: AtomicBool is Send+Sync and lives as long as AppState
-            unsafe {
-                let ready = &*(ready as *const std::sync::atomic::AtomicBool);
-                ready.store(false, std::sync::atomic::Ordering::SeqCst);
-            }
+            ready.store(false, std::sync::atomic::Ordering::SeqCst);
             tracing::info!("[worker-bridge] Worker process exited");
         });
 

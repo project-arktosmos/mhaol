@@ -1,4 +1,4 @@
-export type MediaType = "movie" | "tv" | "song" | "playlist" | "album";
+export type MediaType = "movies" | "tv" | "music";
 
 export interface MediaItem {
   title: string;
@@ -13,4 +13,5 @@ export interface MediaItem {
 export interface CatalogResponse {
   items: MediaItem[];
   source: string | null;
+  instructions: string | null;
 }

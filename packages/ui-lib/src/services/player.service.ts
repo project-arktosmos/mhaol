@@ -410,7 +410,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 						if (s.credential) entry.credential = s.credential;
 						return entry;
 					});
-					console.log('[Player] Received', this.serverIceServers.length, 'ICE servers from signaling');
+					console.log(
+						'[Player] Received',
+						this.serverIceServers.length,
+						'ICE servers from signaling'
+					);
 				}
 				this.state.update((s) => ({ ...s, localPeerId: this.localPeerId }));
 				break;

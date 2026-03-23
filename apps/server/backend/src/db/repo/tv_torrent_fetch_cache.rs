@@ -85,7 +85,7 @@ impl TvTorrentFetchCacheRepo {
         candidate_json: &str,
     ) {
         let conn = self.db.lock();
-        let id = format!("{:032x}", rand_id());
+        let id = uuid::Uuid::new_v4().to_string();
         conn.execute(
             "INSERT INTO tv_torrent_fetch_cache (id, tmdb_id, scope, season_number, episode_number, candidate_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -118,18 +118,3 @@ impl TvTorrentFetchCacheRepo {
     }
 }
 
-fn rand_id() -> u128 {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    let s = RandomState::new();
-    let mut h = s.build_hasher();
-    h.write_u64(std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos() as u64);
-    let a = h.finish() as u128;
-    let mut h2 = s.build_hasher();
-    h2.write_u64(a as u64 ^ 0xdeadbeef);
-    let b = h2.finish() as u128;
-    (a << 64) | b
-}

@@ -12,7 +12,7 @@ class QueueService {
 	private abortController: AbortController | null = null;
 	private waiters = new Map<
 		string,
-		{ resolve: (task: QueueTask) => void; reject: (err: Error) => void }
+		{ resolve: (task: QueueTask) => void; reject: (err: Error) => void; cleanup?: () => void }
 	>();
 
 	async fetchTasks(status?: QueueTaskStatus, taskType?: string): Promise<void> {
@@ -88,7 +88,7 @@ class QueueService {
 		this.store.update((s) => ({ ...s, connected: false }));
 	}
 
-	waitForTask(id: string): Promise<QueueTask> {
+	waitForTask(id: string, timeoutMs = 30000): Promise<QueueTask> {
 		// Check if already complete
 		const state = get(this.store);
 		const existing = state.tasks.find((t) => t.id === id);
@@ -97,7 +97,30 @@ class QueueService {
 		}
 
 		return new Promise<QueueTask>((resolve, reject) => {
-			this.waiters.set(id, { resolve, reject });
+			// Poll as fallback in case SSE events are missed
+			const pollInterval = setInterval(async () => {
+				try {
+					const res = await fetch(apiUrl(`/api/queue/tasks/${id}`));
+					if (!res.ok) return;
+					const task: QueueTask = await res.json();
+					if (task.status === 'completed' || task.status === 'failed') {
+						this.resolveWaiter(task);
+					}
+				} catch {
+					// best-effort polling
+				}
+			}, 3000);
+
+			const timeout = setTimeout(() => {
+				this.rejectWaiter(id, new Error(`Task ${id} timed out after ${timeoutMs}ms`));
+			}, timeoutMs);
+
+			const cleanup = () => {
+				clearInterval(pollInterval);
+				clearTimeout(timeout);
+			};
+
+			this.waiters.set(id, { resolve, reject, cleanup });
 		});
 	}
 
@@ -198,6 +221,11 @@ class QueueService {
 		const waiter = this.waiters.get(task.id);
 		if (waiter) {
 			this.waiters.delete(task.id);
+			waiter.cleanup?.();
+			this.store.update((s) => ({
+				...s,
+				tasks: s.tasks.map((t) => (t.id === task.id ? task : t))
+			}));
 			waiter.resolve(task);
 		}
 	}
@@ -206,6 +234,7 @@ class QueueService {
 		const waiter = this.waiters.get(id);
 		if (waiter) {
 			this.waiters.delete(id);
+			waiter.cleanup?.();
 			waiter.reject(error);
 		}
 	}

@@ -79,7 +79,7 @@
 
 				<!-- Actions -->
 				<div class="flex flex-shrink-0 flex-col gap-2">
-					<button class="btn btn-primary" on:click={handleDownload}>
+					<button class="btn btn-primary" onclick={handleDownload}>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							class="h-5 w-5"
@@ -96,7 +96,7 @@
 						</svg>
 						Download
 					</button>
-					<button class="btn btn-ghost btn-sm" on:click={handleClear}> Cancel </button>
+					<button class="btn btn-ghost btn-sm" onclick={handleClear}> Cancel </button>
 				</div>
 			</div>
 		</div>

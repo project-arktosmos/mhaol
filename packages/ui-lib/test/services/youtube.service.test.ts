@@ -462,8 +462,9 @@ describe('YouTubeService', () => {
 		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Clear failed')));
 
 		await youtubeService.clearCompleted();
-		// Should not throw
-		expect(true).toBe(true);
+
+		const state = get(youtubeService.state);
+		expect(state.error).toBeNull();
 	});
 
 	// ===== downloadPlaylist =====
@@ -609,8 +610,9 @@ describe('YouTubeService', () => {
 		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Clear failed')));
 
 		await youtubeService.clearQueue();
-		// Should not throw
-		expect(true).toBe(true);
+
+		const state = get(youtubeService.state);
+		expect(state.error).toBeNull();
 	});
 
 	// ===== queueDownloadWithMode =====
@@ -1041,8 +1043,10 @@ describe('YouTubeService', () => {
 		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed')));
 
 		await youtubeService.refreshDownloaderStatus();
-		// Should not throw
-		expect(true).toBe(true);
+
+		const state = get(youtubeService.state);
+		expect(state.downloaderStatus).toBeNull();
+		expect(state.error).toBeNull();
 	});
 
 	// ===== destroy =====

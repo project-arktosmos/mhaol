@@ -3,26 +3,26 @@
 	import { playerService } from 'ui-lib/services/player.service';
 	import TorrentListItem from './TorrentListItem.svelte';
 
-	const state = torrentService.state;
+	const torrentState = torrentService.state;
 
-	function handlePause(event: CustomEvent<{ infoHash: string }>) {
-		torrentService.pauseTorrent(event.detail.infoHash);
+	function handlePause(infoHash: string) {
+		torrentService.pauseTorrent(infoHash);
 	}
 
-	function handleResume(event: CustomEvent<{ infoHash: string }>) {
-		torrentService.resumeTorrent(event.detail.infoHash);
+	function handleResume(infoHash: string) {
+		torrentService.resumeTorrent(infoHash);
 	}
 
-	function handleRemove(event: CustomEvent<{ infoHash: string }>) {
-		torrentService.removeTorrent(event.detail.infoHash);
+	function handleRemove(infoHash: string) {
+		torrentService.removeTorrent(infoHash);
 	}
 
 	function handleRemoveAll() {
 		torrentService.removeAll();
 	}
 
-	function handleStream(event: CustomEvent<{ infoHash: string }>) {
-		const torrent = $state.torrents.find((t) => t.infoHash === event.detail.infoHash);
+	function handleStream(infoHash: string) {
+		const torrent = $torrentState.torrents.find((t) => t.infoHash === infoHash);
 		if (!torrent) return;
 
 		playerService.play({
@@ -47,12 +47,12 @@
 	<div class="card-body">
 		<div class="flex items-center justify-between">
 			<h2 class="card-title text-lg">Torrents</h2>
-			{#if $state.torrents.length > 0}
-				<button class="btn btn-ghost btn-sm" on:click={handleRemoveAll}> Remove All </button>
+			{#if $torrentState.torrents.length > 0}
+				<button class="btn btn-ghost btn-sm" onclick={handleRemoveAll}> Remove All </button>
 			{/if}
 		</div>
 
-		{#if $state.torrents.length === 0}
+		{#if $torrentState.torrents.length === 0}
 			<div class="py-8 text-center text-base-content/50">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -73,13 +73,13 @@
 			</div>
 		{:else}
 			<div class="flex flex-col gap-3">
-				{#each $state.torrents as torrent (torrent.infoHash)}
+				{#each $torrentState.torrents as torrent (torrent.infoHash)}
 					<TorrentListItem
 						{torrent}
-						on:pause={handlePause}
-						on:resume={handleResume}
-						on:remove={handleRemove}
-						on:stream={handleStream}
+						onpause={handlePause}
+						onresume={handleResume}
+						onremove={handleRemove}
+						onstream={handleStream}
 					/>
 				{/each}
 			</div>

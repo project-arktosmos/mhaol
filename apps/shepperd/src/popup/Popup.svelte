@@ -6,36 +6,23 @@
 	let pageUrl = $state('');
 	let error = $state('');
 	let source = $state<string | null>(null);
+	let instructions = $state<string | null>(null);
 	let catalogItems = $state<MediaItem[]>([]);
 	let newCount = $state(0);
 	let loading = $state(true);
 
 	const typeLabels: Record<string, string> = {
-		movie: 'Movie',
-		tv: 'TV Show',
-		song: 'Song',
-		playlist: 'Playlist',
-		album: 'Album'
+		movies: 'Movies',
+		tv: 'TV',
+		music: 'Music'
 	};
-
-	function categoryLabel(item: MediaItem): string {
-		switch (item.mediaType) {
-			case 'song':
-				return 'Playlist';
-			case 'movie':
-			case 'tv':
-				return 'Category';
-			default:
-				return 'Category';
-		}
-	}
 
 	function itemFields(item: MediaItem): [string, string][] {
 		const fields: [string, string][] = [['Title', item.title]];
 		if (item.mediaType) fields.push(['Type', typeLabels[item.mediaType]]);
 		if (item.artist) fields.push(['Artist', item.artist]);
 		fields.push(['Source', item.source]);
-		fields.push([categoryLabel(item), item.category]);
+		fields.push(['Category', item.category]);
 		fields.push(['ID', item.id]);
 		return fields;
 	}
@@ -62,6 +49,7 @@
 				type: 'GET_CATALOG'
 			});
 			source = response.source;
+			instructions = response.instructions;
 
 			if (response.items?.length) {
 				const countBefore = catalogItems.length;
@@ -122,6 +110,11 @@
 			<span class="loading loading-spinner loading-md text-primary"></span>
 		</div>
 	{:else if catalogItems.length > 0}
+		{#if instructions}
+			<div class="bg-info/10 mt-2 rounded-lg p-2.5 text-xs leading-relaxed text-info">
+				{instructions}
+			</div>
+		{/if}
 		<div class="mt-2 flex-1 overflow-y-auto" style="max-height: 420px;">
 			<div class="flex flex-col gap-2">
 				{#each catalogItems as item (item.id)}
@@ -165,6 +158,11 @@
 			{/if}
 		</div>
 	{:else if source}
+		{#if instructions}
+			<div class="bg-info/10 mt-2 rounded-lg p-2.5 text-xs leading-relaxed text-info">
+				{instructions}
+			</div>
+		{/if}
 		<p class="py-4 text-center text-sm text-gray-400">
 			No titles found yet. Scroll the page and refresh.
 		</p>

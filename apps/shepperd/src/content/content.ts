@@ -8,6 +8,7 @@ function scan(): CatalogResponse {
   return {
     items: ingestor?.scan() ?? [],
     source: ingestor?.source ?? null,
+    instructions: ingestor?.instructions ?? null,
   };
 }
 
@@ -33,4 +34,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse(scan());
   }
   return true;
+});
+
+// Bridge for web pages to request stored catalog via window.postMessage
+window.addEventListener("message", (event) => {
+  if (event.source !== window || event.data?.type !== "SHEPPERD_GET_CATALOG")
+    return;
+
+  chrome.storage.local
+    .get("shepperd_catalog")
+    .then((result) => {
+      window.postMessage(
+        {
+          type: "SHEPPERD_CATALOG_RESPONSE",
+          items: result.shepperd_catalog ?? [],
+        },
+        "*",
+      );
+    })
+    .catch(() => {
+      window.postMessage(
+        { type: "SHEPPERD_CATALOG_RESPONSE", items: [], error: true },
+        "*",
+      );
+    });
 });

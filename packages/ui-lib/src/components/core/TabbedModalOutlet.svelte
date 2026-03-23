@@ -68,7 +68,12 @@
 				</ul>
 
 				<!-- Mobile dropdown -->
-				<div class="absolute left-4 z-10 lg:hidden" class:top-14={!!title} class:top-2={!title}>
+				<div
+					class={classNames('absolute left-4 z-10 lg:hidden', {
+						'top-14': !!title,
+						'top-2': !title
+					})}
+				>
 					<select
 						class="select-bordered select select-sm"
 						value={activeId}

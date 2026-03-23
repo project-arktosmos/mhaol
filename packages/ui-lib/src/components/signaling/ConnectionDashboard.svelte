@@ -19,7 +19,7 @@
 
 	interface HandshakeStep {
 		label: string;
-		status: 'pending' | 'active' | 'done' | 'error';
+		status: 'pending' | 'active' | 'waiting' | 'done' | 'error';
 	}
 
 	function getSteps(
@@ -47,7 +47,7 @@
 		const hasPeers = activePeerId !== null;
 		steps.push({
 			label: 'Discover peers in room',
-			status: !signalingDone ? 'pending' : hasPeers ? 'done' : 'active'
+			status: !signalingDone ? 'pending' : hasPeers ? 'done' : 'waiting'
 		});
 
 		const peerStatus = activePeerId ? peerConnectionStates[activePeerId] : undefined;
@@ -154,6 +154,25 @@
 		)
 	);
 
+	let currentStepInfo = $derived.by(() => {
+		const allDone = steps.every((s) => s.status === 'done');
+		if (allDone) return { index: steps.length, label: 'Connected', status: 'done' as const };
+		const errorIdx = steps.findIndex((s) => s.status === 'error');
+		if (errorIdx !== -1)
+			return { index: errorIdx + 1, label: steps[errorIdx].label, status: 'error' as const };
+		const waitingIdx = steps.findIndex((s) => s.status === 'waiting');
+		if (waitingIdx !== -1)
+			return {
+				index: waitingIdx + 1,
+				label: steps[waitingIdx].label,
+				status: 'waiting' as const
+			};
+		const activeIdx = steps.findIndex((s) => s.status === 'active');
+		if (activeIdx !== -1)
+			return { index: activeIdx + 1, label: steps[activeIdx].label, status: 'active' as const };
+		return { index: 1, label: steps[0].label, status: 'pending' as const };
+	});
+
 	let isPlaying = $derived($playerState.currentFile !== null);
 
 	function handleSelectMovie(movie: DisplayTMDBMovie) {
@@ -172,14 +191,12 @@
 		serverCatalogService.requestStream(entry.peerId, entry.entry.item.path);
 	}
 
+	let roomEntries = $derived(Object.entries($chatStore.rooms));
+
 	let {
-		roomPeers = [],
-		peerConnectionStates = {},
 		onPeerClick,
 		onPeerDisconnect
 	}: {
-		roomPeers: SignalingPeerInfo[];
-		peerConnectionStates: Record<string, PeerConnectionStatus>;
 		onPeerClick: (peerId: string) => void;
 		onPeerDisconnect: (peerId: string) => void;
 	} = $props();
@@ -207,107 +224,114 @@
 		</div>
 	{/if}
 
-	<!-- Handshake Steps -->
-	<div class="card bg-base-200">
-		<div class="card-body gap-3 p-4">
-			<h2 class="card-title text-base">Connection Steps</h2>
-			<ul class="steps steps-vertical">
-				{#each steps as step, i (i)}
-					<li
-						class={classNames('step', {
-							'step-success': step.status === 'done',
-							'step-primary': step.status === 'active',
-							'step-error': step.status === 'error'
-						})}
-					>
-						<div class="flex items-center gap-2 text-left text-sm">
-							{#if step.status === 'active'}
-								<span class="loading loading-xs loading-spinner"></span>
-							{/if}
-							<span
-								class={classNames({
-									'text-base-content/40': step.status === 'pending',
-									'text-error': step.status === 'error'
-								})}
-							>
-								{step.label}
-							</span>
-						</div>
-					</li>
-				{/each}
-			</ul>
+	<!-- Connection Status Badge -->
+	{#if currentStepInfo.status !== 'done'}
+		<div
+			class={classNames('badge gap-1.5 py-3', {
+				'badge-primary': currentStepInfo.status === 'active',
+				'badge-success': currentStepInfo.status === 'waiting',
+				'badge-error': currentStepInfo.status === 'error',
+				'badge-ghost': currentStepInfo.status === 'pending'
+			})}
+		>
+			{#if currentStepInfo.status === 'active'}
+				<span class="loading loading-xs loading-spinner"></span>
+			{/if}
+			<span>{currentStepInfo.index}/{steps.length}</span>
+			<span>{currentStepInfo.label}</span>
 		</div>
-	</div>
+	{/if}
 
-	<!-- Peers in Room -->
-	{#if roomPeers.length > 0}
+	<!-- Signaling Rooms -->
+	{#each roomEntries as [roomId, room] (roomId)}
 		<div class="card bg-base-200">
 			<div class="card-body gap-3 p-4">
 				<div class="flex items-center justify-between">
-					<h2 class="card-title text-base">Peers</h2>
-					<span class="badge badge-ghost badge-sm">{roomPeers.length}</span>
+					<h2 class="card-title text-base">
+						{roomId.length > 12 ? signalingAdapter.shortAddress(roomId) : roomId}
+					</h2>
+					<span class={classNames('badge badge-sm', signalingAdapter.phaseBadgeClass(room.phase))}>
+						{signalingAdapter.phaseLabel(room.phase)}
+					</span>
 				</div>
-				<div class="flex flex-col gap-1">
-					{#each roomPeers as peer (peer.peer_id)}
-						{@const status = peerConnectionStates[peer.peer_id] ?? 'idle'}
-						{@const isActive = peer.peer_id === activePeerId}
-						<div
-							class={classNames(
-								'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 transition-colors',
-								{
-									'bg-primary/10': isActive,
-									'hover:bg-base-300': !isActive
-								}
-							)}
-							role="button"
-							tabindex="0"
-							onclick={() => onPeerClick(peer.peer_id)}
-							onkeydown={(e: KeyboardEvent) => {
-								if (e.key === 'Enter' || e.key === ' ') onPeerClick(peer.peer_id);
-							}}
-						>
-							<span
-								class={classNames('h-2.5 w-2.5 shrink-0 rounded-full', {
-									'bg-base-content/30': status === 'idle',
-									'animate-pulse bg-warning': status === 'offering' || status === 'answering',
-									'bg-success': status === 'connected',
-									'bg-error': status === 'failed'
-								})}
-							></span>
-							<div class="min-w-0 flex-1">
-								{#if peer.name}
+				{#if room.roomPeers.length > 0}
+					<div class="flex flex-col gap-1">
+						{#each room.roomPeers as peer (peer.peer_id)}
+							{@const status = room.peerConnectionStates[peer.peer_id] ?? 'idle'}
+							{@const handshakePhase = $handshakeStore.peerPhases[peer.peer_id]}
+							{@const isActive = peer.peer_id === activePeerId}
+							<div
+								class={classNames(
+									'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 transition-colors',
+									{
+										'bg-primary/10': isActive,
+										'hover:bg-base-300': !isActive
+									}
+								)}
+								role="button"
+								tabindex="0"
+								onclick={() => onPeerClick(peer.peer_id)}
+								onkeydown={(e: KeyboardEvent) => {
+									if (e.key === 'Enter' || e.key === ' ') onPeerClick(peer.peer_id);
+								}}
+							>
+								<span
+									class={classNames('h-2.5 w-2.5 shrink-0 rounded-full', {
+										'bg-base-content/30': status === 'idle',
+										'animate-pulse bg-warning': status === 'offering' || status === 'answering',
+										'bg-success': status === 'connected',
+										'bg-error': status === 'failed'
+									})}
+								></span>
+								<div class="min-w-0 flex-1">
+									{#if peer.name}
+										<div class="flex items-center gap-1.5">
+											<span class="block truncate text-sm font-medium">{peer.name}</span>
+											{#if peer.instance_type}
+												<span class="badge badge-outline badge-xs">{peer.instance_type}</span>
+											{/if}
+										</div>
+									{/if}
+									<span class="block truncate font-mono text-xs">
+										{signalingAdapter.shortAddress(peer.peer_id)}
+									</span>
 									<div class="flex items-center gap-1.5">
-										<span class="block truncate text-sm font-medium">{peer.name}</span>
-										{#if peer.instance_type}
-											<span class="badge badge-outline badge-xs">{peer.instance_type}</span>
+										<span
+											class={classNames(
+												'badge badge-xs',
+												signalingAdapter.peerConnectionStatusBadgeClass(status)
+											)}
+										>
+											{signalingAdapter.peerConnectionStatusLabel(status)}
+										</span>
+										{#if handshakePhase && handshakePhase !== 'idle'}
+											<span class="text-[10px] text-base-content/50">
+												{handshakePhase}
+											</span>
 										{/if}
 									</div>
+								</div>
+								{#if status === 'connected'}
+									<button
+										class="btn text-error btn-ghost btn-xs"
+										onclick={(e: MouseEvent) => {
+											e.stopPropagation();
+											onPeerDisconnect(peer.peer_id);
+										}}
+										title="Disconnect"
+									>
+										x
+									</button>
 								{/if}
-								<span class="block truncate font-mono text-xs">
-									{signalingAdapter.shortAddress(peer.peer_id)}
-								</span>
-								<span class="text-[10px] text-base-content/40">
-									{signalingAdapter.peerConnectionStatusLabel(status)}
-								</span>
 							</div>
-							{#if status === 'connected'}
-								<button
-									class="btn text-error btn-ghost btn-xs"
-									onclick={(e: MouseEvent) => {
-										e.stopPropagation();
-										onPeerDisconnect(peer.peer_id);
-									}}
-									title="Disconnect"
-								>
-									x
-								</button>
-							{/if}
-						</div>
-					{/each}
-				</div>
+						{/each}
+					</div>
+				{:else}
+					<span class="text-xs text-base-content/40">No peers in this room</span>
+				{/if}
 			</div>
 		</div>
-	{/if}
+	{/each}
 
 	<!-- Movie Catalog Grid -->
 	{#if displayMovies.length > 0}

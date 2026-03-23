@@ -69,7 +69,7 @@
 				</div>
 
 				<div class="flex flex-col gap-2">
-					<button class="btn btn-primary" on:click={handleDownloadAll} disabled={downloadingAll}>
+					<button class="btn btn-primary" onclick={handleDownloadAll} disabled={downloadingAll}>
 						{#if downloadingAll}
 							<span class="loading loading-sm loading-spinner"></span>
 						{:else}
@@ -90,7 +90,7 @@
 						{/if}
 						Download All
 					</button>
-					<button class="btn btn-ghost btn-sm" on:click={handleClear}>Cancel</button>
+					<button class="btn btn-ghost btn-sm" onclick={handleClear}>Cancel</button>
 				</div>
 			</div>
 
@@ -171,7 +171,7 @@
 							<!-- Download button -->
 							<button
 								class="btn btn-square btn-ghost btn-sm"
-								on:click={() => handleDownloadSingle(video.videoId, video.title)}
+								onclick={() => handleDownloadSingle(video.videoId, video.title)}
 								disabled={downloadingIds.has(video.videoId)}
 								title="Download this video"
 							>

@@ -91,20 +91,187 @@
 </script>
 
 <DetailPageLayout>
-		<button class="btn self-start btn-ghost btn-sm" onclick={onback}>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				class="h-4 w-4"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-			</svg>
-			Back
-		</button>
+	<button class="btn self-start btn-ghost btn-sm" onclick={onback}>
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			class="h-4 w-4"
+			fill="none"
+			viewBox="0 0 24 24"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+		</svg>
+		Back
+	</button>
 
+	{#if backdropUrl}
+		<div class="relative">
+			<img
+				src={backdropUrl}
+				alt="{title} backdrop"
+				class="aspect-video w-full rounded-lg object-cover"
+				loading="lazy"
+			/>
+			<div class="absolute inset-0 rounded-lg bg-gradient-to-t from-base-200 to-transparent"></div>
+		</div>
+	{/if}
+
+	<h1 class="text-xl font-bold">{title}</h1>
+
+	{#if tagline}
+		<p class="text-sm italic opacity-60">{tagline}</p>
+	{/if}
+
+	<div class="flex flex-wrap items-center gap-2 text-sm">
+		<span class="font-medium">{year}</span>
+		{#if voteAverage > 0}
+			<span class="flex items-center gap-1">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+					class="h-4 w-4 text-yellow-500"
+				>
+					<path
+						fill-rule="evenodd"
+						d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z"
+						clip-rule="evenodd"
+					/>
+				</svg>
+				<span class="font-semibold">{voteAverage.toFixed(1)}</span>
+				<span class="text-xs opacity-50">({voteCount})</span>
+			</span>
+		{/if}
+		<span class="badge badge-sm badge-primary">Movie</span>
+	</div>
+
+	{#if runtime}
+		<p class="text-sm opacity-60">{runtime}</p>
+	{/if}
+
+	{#if genres.length > 0}
+		<div class="flex flex-wrap gap-1">
+			{#each genres as genre}
+				<span class="badge badge-outline badge-sm">{genre}</span>
+			{/each}
+		</div>
+	{/if}
+
+	<div class="grid grid-cols-2 gap-2">
+		<button
+			class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
+			onclick={onfetch}
+			disabled={fetching}
+		>
+			{#if fetching}
+				<span class="loading loading-xs loading-spinner"></span>
+			{:else}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+					/>
+				</svg>
+			{/if}
+			Smart Search
+		</button>
+		{#if fetchSteps}
+			<button
+				class="col-span-2 cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
+				onclick={onshowsearch}
+			>
+				<ul class="steps steps-horizontal w-full text-xs">
+					<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.search })}>
+						{fetchSteps.searching ? 'Searching...' : 'Search'}
+					</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.done })}>
+						{fetchSteps.done ? 'Done' : 'Candidate'}
+					</li>
+				</ul>
+			</button>
+		{/if}
+		{#if fetchedTorrent}
+			<div class="col-span-2 flex items-center gap-2">
+				<p class="min-w-0 flex-1 truncate text-xs opacity-60" title={fetchedTorrent.name}>
+					{fetchedTorrent.name}
+				</p>
+				{#if fetchedTorrent.quality}
+					<span class="badge badge-xs badge-info">{fetchedTorrent.quality}</span>
+				{/if}
+				{#if fetchedTorrent.languages}
+					<span class="badge badge-ghost badge-xs">{fetchedTorrent.languages}</span>
+				{/if}
+			</div>
+		{/if}
+		<button
+			class={classNames('btn btn-sm', {
+				'btn-ghost': isDownloaded,
+				'btn-success': !isDownloaded
+			})}
+			onclick={ondownload}
+			disabled={downloadButtonDisabled}
+		>
+			{#if isDownloading}
+				<span class="loading loading-xs loading-spinner"></span> Downloading
+			{:else if isDownloaded}
+				Downloaded
+			{:else}
+				Download
+			{/if}
+		</button>
+		<button
+			class="btn btn-sm btn-primary"
+			onclick={() => {
+				streamingTorrent = true;
+				onstream();
+			}}
+			disabled={downloadButtonDisabled || streamingTorrent}
+		>
+			{#if streamingTorrent}
+				<span class="loading loading-xs loading-spinner"></span>
+			{/if}
+			Stream Torrent
+		</button>
+		<button
+			class="btn btn-sm btn-secondary"
+			onclick={() => {
+				streamingP2p = true;
+				onp2pstream();
+			}}
+			disabled={!downloadButtonDisabled || streamingP2p}
+		>
+			{#if streamingP2p}
+				<span class="loading loading-xs loading-spinner"></span>
+			{/if}
+			P2P Stream
+		</button>
+		{#if isDownloading || isDownloaded}
+			<div class="col-span-2 flex items-center gap-2">
+				<progress
+					class={classNames('progress flex-1', {
+						'progress-info': isDownloading,
+						'progress-success': isDownloaded
+					})}
+					value={dlPercent}
+					max="100"
+				></progress>
+				<span class="text-xs font-medium opacity-60">{dlPercent}%</span>
+			</div>
+		{/if}
+	</div>
+
+	{#snippet cellA()}
 		{#if posterUrl}
 			<img
 				src={posterUrl}
@@ -112,170 +279,6 @@
 				class="w-full rounded-lg object-cover"
 				loading="lazy"
 			/>
-		{/if}
-
-		<h1 class="text-xl font-bold">{title}</h1>
-
-		{#if tagline}
-			<p class="text-sm italic opacity-60">{tagline}</p>
-		{/if}
-
-		<div class="flex flex-wrap items-center gap-2 text-sm">
-			<span class="font-medium">{year}</span>
-			{#if voteAverage > 0}
-				<span class="flex items-center gap-1">
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="currentColor"
-						class="h-4 w-4 text-yellow-500"
-					>
-						<path
-							fill-rule="evenodd"
-							d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z"
-							clip-rule="evenodd"
-						/>
-					</svg>
-					<span class="font-semibold">{voteAverage.toFixed(1)}</span>
-					<span class="text-xs opacity-50">({voteCount})</span>
-				</span>
-			{/if}
-			<span class="badge badge-sm badge-primary">Movie</span>
-		</div>
-
-		{#if runtime}
-			<p class="text-sm opacity-60">{runtime}</p>
-		{/if}
-
-		{#if genres.length > 0}
-			<div class="flex flex-wrap gap-1">
-				{#each genres as genre}
-					<span class="badge badge-outline badge-sm">{genre}</span>
-				{/each}
-			</div>
-		{/if}
-
-		<div class="grid grid-cols-2 gap-2">
-			<button
-				class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
-				onclick={onfetch}
-				disabled={fetching}
-			>
-				{#if fetching}
-					<span class="loading loading-xs loading-spinner"></span>
-				{:else}
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-4 w-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-						/>
-					</svg>
-				{/if}
-				Smart Search
-			</button>
-			{#if fetchSteps}
-				<button
-					class="col-span-2 cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
-					onclick={onshowsearch}
-				>
-					<ul class="steps steps-horizontal w-full text-xs">
-						<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
-						<li class={classNames('step', { 'step-success': fetchSteps.search })}>
-							{fetchSteps.searching ? 'Searching...' : 'Search'}
-						</li>
-						<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
-						<li class={classNames('step', { 'step-success': fetchSteps.done })}>
-							{fetchSteps.done ? 'Done' : 'Candidate'}
-						</li>
-					</ul>
-				</button>
-			{/if}
-			{#if fetchedTorrent}
-				<div class="col-span-2 flex items-center gap-2">
-					<p class="min-w-0 flex-1 truncate text-xs opacity-60" title={fetchedTorrent.name}>
-						{fetchedTorrent.name}
-					</p>
-					{#if fetchedTorrent.quality}
-						<span class="badge badge-xs badge-info">{fetchedTorrent.quality}</span>
-					{/if}
-					{#if fetchedTorrent.languages}
-						<span class="badge badge-xs badge-ghost">{fetchedTorrent.languages}</span>
-					{/if}
-				</div>
-			{/if}
-			<button
-				class={classNames('btn btn-sm', {
-					'btn-ghost': isDownloaded,
-					'btn-success': !isDownloaded
-				})}
-				onclick={ondownload}
-				disabled={downloadButtonDisabled}
-			>
-				{#if isDownloading}
-					<span class="loading loading-xs loading-spinner"></span> Downloading
-				{:else if isDownloaded}
-					Downloaded
-				{:else}
-					Download
-				{/if}
-			</button>
-			<button
-				class="btn btn-sm btn-primary"
-				onclick={() => { streamingTorrent = true; onstream(); }}
-				disabled={downloadButtonDisabled || streamingTorrent}
-			>
-				{#if streamingTorrent}
-					<span class="loading loading-xs loading-spinner"></span>
-				{/if}
-				Stream Torrent
-			</button>
-			<button
-				class="btn btn-sm btn-secondary"
-				onclick={() => { streamingP2p = true; onp2pstream(); }}
-				disabled={!downloadButtonDisabled || streamingP2p}
-			>
-				{#if streamingP2p}
-					<span class="loading loading-xs loading-spinner"></span>
-				{/if}
-				P2P Stream
-			</button
-			>
-			{#if isDownloading || isDownloaded}
-				<div class="col-span-2 flex items-center gap-2">
-					<progress
-						class={classNames('progress flex-1', {
-							'progress-info': isDownloading,
-							'progress-success': isDownloaded
-						})}
-						value={dlPercent}
-						max="100"
-					></progress>
-					<span class="text-xs font-medium opacity-60">{dlPercent}%</span>
-				</div>
-			{/if}
-		</div>
-
-	{#snippet cellA()}
-		{#if backdropUrl}
-			<div class="relative">
-				<img
-					src={backdropUrl}
-					alt="{title} backdrop"
-					class="aspect-video w-full rounded-lg object-cover"
-					loading="lazy"
-				/>
-				<div
-					class="absolute inset-0 rounded-lg bg-gradient-to-t from-base-200 to-transparent"
-				></div>
-			</div>
 		{/if}
 
 		{#if overview}
@@ -334,7 +337,7 @@
 			<div>
 				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">All Images</h3>
 				{#if !imagesVisible}
-					<button class="btn btn-outline btn-sm w-full" onclick={ontoggleimages}>
+					<button class="btn w-full btn-outline btn-sm" onclick={ontoggleimages}>
 						Show Images ({images.length})
 					</button>
 				{:else}
@@ -364,7 +367,7 @@
 									<button
 										class={classNames('btn btn-xs', {
 											'btn-success': imageOverrides?.poster === image.filePath,
-											'btn-ghost text-white': imageOverrides?.poster !== image.filePath
+											'text-white btn-ghost': imageOverrides?.poster !== image.filePath
 										})}
 										onclick={(e: MouseEvent) => {
 											e.preventDefault();
@@ -377,7 +380,7 @@
 									<button
 										class={classNames('btn btn-xs', {
 											'btn-success': imageOverrides?.backdrop === image.filePath,
-											'btn-ghost text-white': imageOverrides?.backdrop !== image.filePath
+											'text-white btn-ghost': imageOverrides?.backdrop !== image.filePath
 										})}
 										onclick={(e: MouseEvent) => {
 											e.preventDefault();

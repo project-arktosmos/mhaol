@@ -92,217 +92,211 @@
 </script>
 
 <DetailPageLayout>
-		<button class="btn self-start btn-ghost btn-sm" onclick={onback}>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				class="h-4 w-4"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-			</svg>
-			Back
-		</button>
+	<button class="btn self-start btn-ghost btn-sm" onclick={onback}>
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			class="h-4 w-4"
+			fill="none"
+			viewBox="0 0 24 24"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+		</svg>
+		Back
+	</button>
 
-		{#key video.videoId}
-			{#if mediaMode === 'video' && videoSrc}
-				<MediaPlayer source={{ type: 'video', src: videoSrc, subtitles: subtitlesForPlayer }} />
-			{:else if mediaMode === 'audio' && hasAudio}
-				<MediaPlayer
-					source={{
-						type: 'audio',
-						src: youtubeLibraryService.streamAudioUrl(video.videoId),
-						thumbnail: video.thumbnail
-					}}
-				/>
-			{:else if streamLoading}
-				<div class="flex aspect-video w-full items-center justify-center rounded-lg bg-base-300">
-					<span class="loading loading-md loading-spinner"></span>
-				</div>
-			{:else if streamUrl}
-				<MediaPlayer
-					source={{
-						type: 'video',
-						src: streamUrl,
-						mimeType: streamMimeType ?? 'video/mp4'
-					}}
-				/>
-			{:else}
-				<MediaPlayer source={{ type: 'youtube', videoId: video.videoId, title: video.title }} />
-			{/if}
-		{/key}
-
-		<div class="flex flex-col gap-1">
-			<div class="flex items-start justify-between gap-2">
-				<h1 class="text-xl leading-snug font-bold">{video.title}</h1>
-				<button
-					class={classNames(
-						'btn btn-circle shrink-0 btn-ghost btn-sm',
-						isFavorite ? 'text-error' : 'text-base-content/30'
-					)}
-					disabled={togglingFavorite}
-					onclick={ontogglefavorite}
-					aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-				>
-					{#if togglingFavorite}
-						<span class="loading loading-xs loading-spinner"></span>
-					{:else}
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 24 24"
-							fill={isFavorite ? 'currentColor' : 'none'}
-							stroke="currentColor"
-							stroke-width="2"
-							class="h-5 w-5"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
-							/>
-						</svg>
-					{/if}
-				</button>
+	{#key video.videoId}
+		{#if mediaMode === 'video' && videoSrc}
+			<MediaPlayer source={{ type: 'video', src: videoSrc, subtitles: subtitlesForPlayer }} />
+		{:else if mediaMode === 'audio' && hasAudio}
+			<MediaPlayer
+				source={{
+					type: 'audio',
+					src: youtubeLibraryService.streamAudioUrl(video.videoId),
+					thumbnail: video.thumbnail
+				}}
+			/>
+		{:else if streamLoading}
+			<div class="flex aspect-video w-full items-center justify-center rounded-lg bg-base-300">
+				<span class="loading loading-md loading-spinner"></span>
 			</div>
-			{#if channelItem}
-				<YouTubeChannelCard channel={channelItem} />
-			{/if}
-			{#if video.viewsText}
-				<p class="mt-1 text-sm text-base-content/60">{video.viewsText}</p>
-			{/if}
-			{#if video.publishedText}
-				<p class="text-sm text-base-content/60">{video.publishedText}</p>
-			{/if}
-		</div>
+		{:else if streamUrl}
+			<MediaPlayer
+				source={{
+					type: 'video',
+					src: streamUrl,
+					mimeType: streamMimeType ?? 'video/mp4'
+				}}
+			/>
+		{:else}
+			<MediaPlayer source={{ type: 'youtube', videoId: video.videoId, title: video.title }} />
+		{/if}
+	{/key}
 
-		{#if availableTracks.length > 0}
-			<div class="divider my-0 text-xs opacity-50">Subtitles</div>
-			<div class="flex flex-wrap gap-1">
+	<div class="flex flex-col gap-1">
+		<div class="flex items-start justify-between gap-2">
+			<h1 class="text-xl leading-snug font-bold">{video.title}</h1>
+			<button
+				class={classNames(
+					'btn btn-circle shrink-0 btn-ghost btn-sm',
+					isFavorite ? 'text-error' : 'text-base-content/30'
+				)}
+				disabled={togglingFavorite}
+				onclick={ontogglefavorite}
+				aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+			>
+				{#if togglingFavorite}
+					<span class="loading loading-xs loading-spinner"></span>
+				{:else}
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill={isFavorite ? 'currentColor' : 'none'}
+						stroke="currentColor"
+						stroke-width="2"
+						class="h-5 w-5"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
+						/>
+					</svg>
+				{/if}
+			</button>
+		</div>
+		{#if channelItem}
+			<YouTubeChannelCard channel={channelItem} />
+		{/if}
+		{#if video.viewsText}
+			<p class="mt-1 text-sm text-base-content/60">{video.viewsText}</p>
+		{/if}
+		{#if video.publishedText}
+			<p class="text-sm text-base-content/60">{video.publishedText}</p>
+		{/if}
+	</div>
+
+	{#if availableTracks.length > 0}
+		<div class="divider my-0 text-xs opacity-50">Subtitles</div>
+		<div class="flex flex-wrap gap-1">
+			<button
+				class={classNames('btn btn-xs', {
+					'btn-primary': activeSubLang === null,
+					'btn-ghost': activeSubLang !== null
+				})}
+				onclick={() => onselectsubtitle(null)}
+			>
+				Off
+			</button>
+			{#each availableTracks as track}
 				<button
 					class={classNames('btn btn-xs', {
-						'btn-primary': activeSubLang === null,
-						'btn-ghost': activeSubLang !== null
+						'btn-primary': activeSubLang === track.languageCode,
+						'btn-ghost': activeSubLang !== track.languageCode
 					})}
-					onclick={() => onselectsubtitle(null)}
+					disabled={fetchingSubs}
+					onclick={() => onselectsubtitle(track.languageCode)}
 				>
-					Off
+					{track.languageName}
 				</button>
-				{#each availableTracks as track}
+			{/each}
+			{#if fetchingSubs}
+				<span class="loading loading-xs loading-spinner"></span>
+			{/if}
+		</div>
+	{/if}
+
+	{#if hasAudio || hasVideo}
+		<div class="divider my-0 text-xs opacity-50">Files</div>
+		<div class="flex flex-col gap-2">
+			{#if hasAudio}
+				<div class="flex items-center justify-between gap-2">
+					<div class="flex items-center gap-2">
+						<span class="badge badge-xs badge-neutral">Audio</span>
+						{#if liveContent?.audioSize}
+							<span class="text-xs text-base-content/60">{formatBytes(liveContent.audioSize)}</span>
+						{/if}
+					</div>
 					<button
-						class={classNames('btn btn-xs', {
-							'btn-primary': activeSubLang === track.languageCode,
-							'btn-ghost': activeSubLang !== track.languageCode
-						})}
-						disabled={fetchingSubs}
-						onclick={() => onselectsubtitle(track.languageCode)}
+						class="btn text-error btn-ghost btn-xs"
+						disabled={deletingAudio}
+						onclick={ondeleteaudio}
+						aria-label="Delete audio"
 					>
-						{track.languageName}
+						{#if deletingAudio}<span class="loading loading-xs loading-spinner"
+							></span>{:else}Delete{/if}
 					</button>
-				{/each}
-				{#if fetchingSubs}
-					<span class="loading loading-xs loading-spinner"></span>
-				{/if}
-			</div>
-		{/if}
-
-		{#if hasAudio || hasVideo}
-			<div class="divider my-0 text-xs opacity-50">Files</div>
-			<div class="flex flex-col gap-2">
-				{#if hasAudio}
-					<div class="flex items-center justify-between gap-2">
-						<div class="flex items-center gap-2">
-							<span class="badge badge-xs badge-neutral">Audio</span>
-							{#if liveContent?.audioSize}
-								<span class="text-xs text-base-content/60"
-									>{formatBytes(liveContent.audioSize)}</span
-								>
-							{/if}
-						</div>
-						<button
-							class="btn text-error btn-ghost btn-xs"
-							disabled={deletingAudio}
-							onclick={ondeleteaudio}
-							aria-label="Delete audio"
-						>
-							{#if deletingAudio}<span class="loading loading-xs loading-spinner"
-								></span>{:else}Delete{/if}
-						</button>
-					</div>
-				{/if}
-				{#if hasVideo}
-					<div class="flex items-center justify-between gap-2">
-						<div class="flex items-center gap-2">
-							<span class="badge badge-xs badge-neutral">Video</span>
-							{#if liveContent?.videoSize}
-								<span class="text-xs text-base-content/60"
-									>{formatBytes(liveContent.videoSize)}</span
-								>
-							{/if}
-						</div>
-						<button
-							class="btn text-error btn-ghost btn-xs"
-							disabled={deletingVideo}
-							onclick={ondeletevideo}
-							aria-label="Delete video"
-						>
-							{#if deletingVideo}<span class="loading loading-xs loading-spinner"
-								></span>{:else}Delete{/if}
-						</button>
-					</div>
-				{/if}
-			</div>
-		{/if}
-
-		{#if activeDownload && ['pending', 'fetching', 'downloading', 'muxing'].includes(activeDownload.state)}
-			<div class="divider my-0 text-xs opacity-50">Download Progress</div>
-			<div class="flex flex-col gap-2">
-				<div class="flex items-center justify-between">
-					<span class="text-sm font-medium">{getStateLabel(activeDownload.state)}</span>
-					<span class="badge badge-xs badge-{getStateColor(activeDownload.state)}"
-						>{activeDownload.mode}</span
-					>
 				</div>
-				{#if activeDownload.state === 'downloading' || activeDownload.state === 'muxing'}
-					<progress class="progress w-full progress-primary" value={activeDownload.progress} max="1"
-					></progress>
-					<p class="text-right text-xs text-base-content/50">
-						{Math.round(activeDownload.progress * 100)}%
-					</p>
-				{:else}
-					<progress class="progress w-full progress-primary"></progress>
-				{/if}
-			</div>
-		{/if}
+			{/if}
+			{#if hasVideo}
+				<div class="flex items-center justify-between gap-2">
+					<div class="flex items-center gap-2">
+						<span class="badge badge-xs badge-neutral">Video</span>
+						{#if liveContent?.videoSize}
+							<span class="text-xs text-base-content/60">{formatBytes(liveContent.videoSize)}</span>
+						{/if}
+					</div>
+					<button
+						class="btn text-error btn-ghost btn-xs"
+						disabled={deletingVideo}
+						onclick={ondeletevideo}
+						aria-label="Delete video"
+					>
+						{#if deletingVideo}<span class="loading loading-xs loading-spinner"
+							></span>{:else}Delete{/if}
+					</button>
+				</div>
+			{/if}
+		</div>
+	{/if}
 
-		{#if !hasAudio || !hasVideo}
-			<div class="divider my-0 text-xs opacity-50">Download</div>
-			<div class="grid grid-cols-2 gap-2">
-				{#if !hasAudio}
-					<button
-						class="btn w-full gap-2 btn-sm btn-error"
-						disabled={audioInProgress || downloadingAudio}
-						onclick={ondownloadaudio}
-					>
-						{#if downloadingAudio || audioInProgress}<span
-								class="loading loading-xs loading-spinner"
-							></span>{/if}
-						Audio
-					</button>
-				{/if}
-				{#if !hasVideo}
-					<button
-						class="btn w-full gap-2 btn-sm btn-error"
-						disabled={videoInProgress || downloadingVideo}
-						onclick={ondownloadvideo}
-					>
-						{#if downloadingVideo || videoInProgress}<span
-								class="loading loading-xs loading-spinner"
-							></span>{/if}
-						Video
-					</button>
-				{/if}
+	{#if activeDownload && ['pending', 'fetching', 'downloading', 'muxing'].includes(activeDownload.state)}
+		<div class="divider my-0 text-xs opacity-50">Download Progress</div>
+		<div class="flex flex-col gap-2">
+			<div class="flex items-center justify-between">
+				<span class="text-sm font-medium">{getStateLabel(activeDownload.state)}</span>
+				<span class="badge badge-xs badge-{getStateColor(activeDownload.state)}"
+					>{activeDownload.mode}</span
+				>
 			</div>
-		{/if}
+			{#if activeDownload.state === 'downloading' || activeDownload.state === 'muxing'}
+				<progress class="progress w-full progress-primary" value={activeDownload.progress} max="1"
+				></progress>
+				<p class="text-right text-xs text-base-content/50">
+					{Math.round(activeDownload.progress * 100)}%
+				</p>
+			{:else}
+				<progress class="progress w-full progress-primary"></progress>
+			{/if}
+		</div>
+	{/if}
+
+	{#if !hasAudio || !hasVideo}
+		<div class="divider my-0 text-xs opacity-50">Download</div>
+		<div class="grid grid-cols-2 gap-2">
+			{#if !hasAudio}
+				<button
+					class="btn w-full gap-2 btn-sm btn-error"
+					disabled={audioInProgress || downloadingAudio}
+					onclick={ondownloadaudio}
+				>
+					{#if downloadingAudio || audioInProgress}<span class="loading loading-xs loading-spinner"
+						></span>{/if}
+					Audio
+				</button>
+			{/if}
+			{#if !hasVideo}
+				<button
+					class="btn w-full gap-2 btn-sm btn-error"
+					disabled={videoInProgress || downloadingVideo}
+					onclick={ondownloadvideo}
+				>
+					{#if downloadingVideo || videoInProgress}<span class="loading loading-xs loading-spinner"
+						></span>{/if}
+					Video
+				</button>
+			{/if}
+		</div>
+	{/if}
 </DetailPageLayout>

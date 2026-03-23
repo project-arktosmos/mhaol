@@ -13,13 +13,13 @@ src/
 ├── components/               # UI components organized by feature
 │   ├── addons/               # Addon management
 │   ├── browse/               # Unified browse components (BrowseGrid, BrowseHeader, BrowseDetailPanel)
-│   ├── core/                 # Shared reusable (Button, Modal, Navbar, ModalOutlet, ThemeToggle, etc.)
+│   ├── core/                 # Shared reusable (Button, Modal, Navbar, ModalOutlet, ThemeToggle, ConnectionStatus, etc.)
 │   ├── downloads/            # Download management
 │   ├── hub/                  # Hub dashboard (app management)
 │   ├── identity/             # Identity/wallet
 │   ├── images/               # Image tagging
 │   ├── landing/              # Marketing/landing page (Hero, Features, Platforms, Footer, LandingNavbar)
-│   ├── libraries/            # Media libraries (list, files, link modals, content grid/card)
+│   ├── libraries/            # Media libraries (list, files, link modals, LibrarySelector, content grid/card)
 │   ├── llm/                  # LLM model management + smart search config
 │   ├── queue/                # Queue task monitor (real-time visualization)
 │   ├── media/                # Media cards (Movie, TV, Audio, Image, YouTube, uncategorized)
@@ -33,7 +33,7 @@ src/
 │   ├── share/                # Share modal
 │   ├── signaling/            # Signaling/WebRTC
 │   ├── tmdb-browse/          # TMDB movie/TV browsing
-│   ├── torrent/              # Torrent management
+│   ├── torrent/              # Torrent management (TorrentProgressOverlay, TorrentSettings, etc.)
 │   ├── videogames/           # Videogame browsing (GameCard — RetroAchievements)
 │   ├── youtube/              # YouTube download (queue, settings, preview, RightPanel)
 │   └── youtube-search/       # YouTube search (input, results, channel cards)

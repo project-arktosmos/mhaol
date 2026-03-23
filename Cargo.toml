@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "apps/server/backend",
+    "apps/signaling",
     "packages/identity",
     "packages/llm",
     "packages/queue",

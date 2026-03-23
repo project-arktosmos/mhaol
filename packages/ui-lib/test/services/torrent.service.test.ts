@@ -240,7 +240,8 @@ describe('TorrentService', () => {
 
 	it('should clean up on destroy', () => {
 		torrentService.destroy();
-		// Should not throw
-		expect(true).toBe(true);
+
+		const state = get(torrentService.state);
+		expect(state.initialized).toBe(false);
 	});
 });

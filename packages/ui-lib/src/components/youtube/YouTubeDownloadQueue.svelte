@@ -4,7 +4,7 @@
 	import { getStateLabel } from 'ui-lib/types/youtube.type';
 	import type { YouTubeDownloadProgress } from 'ui-lib/types/youtube.type';
 
-	const state = youtubeService.state;
+	const ytState = youtubeService.state;
 
 	function handleCancel(downloadId: string) {
 		youtubeService.cancelDownload(downloadId);
@@ -22,8 +22,10 @@
 		navigator.clipboard.writeText(path);
 	}
 
-	$: hasCompletedOrFailed = $state.downloads.some(
-		(d) => d.state === 'completed' || d.state === 'failed' || d.state === 'cancelled'
+	let hasCompletedOrFailed = $derived(
+		$ytState.downloads.some(
+			(d) => d.state === 'completed' || d.state === 'failed' || d.state === 'cancelled'
+		)
 	);
 </script>
 
@@ -32,13 +34,13 @@
 		<div class="flex items-center justify-between">
 			<h2 class="card-title text-lg">Downloads</h2>
 			{#if hasCompletedOrFailed}
-				<button class="btn btn-ghost btn-sm" on:click={handleClearCompleted}>
+				<button class="btn btn-ghost btn-sm" onclick={handleClearCompleted}>
 					Clear Finished
 				</button>
 			{/if}
 		</div>
 
-		{#if $state.downloads.length === 0}
+		{#if $ytState.downloads.length === 0}
 			<div class="py-8 text-center text-base-content/50">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -59,7 +61,7 @@
 			</div>
 		{:else}
 			<div class="flex flex-col gap-3">
-				{#each $state.downloads as download (download.downloadId)}
+				{#each $ytState.downloads as download (download.downloadId)}
 					<div class="rounded-lg bg-base-100 p-4">
 						<div class="flex items-start justify-between gap-4">
 							<div class="flex-1 overflow-hidden">
@@ -110,7 +112,7 @@
 									<!-- Copy path button -->
 									<button
 										class="btn btn-ghost btn-sm"
-										on:click={() => download.outputPath && handleCopyPath(download.outputPath)}
+										onclick={() => download.outputPath && handleCopyPath(download.outputPath)}
 										title="Copy file path"
 										aria-label="Copy file path"
 									>
@@ -134,7 +136,7 @@
 								{#if download.state === 'downloading' || download.state === 'fetching' || download.state === 'pending' || download.state === 'muxing'}
 									<button
 										class="btn btn-ghost btn-sm"
-										on:click={() => handleCancel(download.downloadId)}
+										onclick={() => handleCancel(download.downloadId)}
 										title="Cancel download"
 										aria-label="Cancel download"
 									>

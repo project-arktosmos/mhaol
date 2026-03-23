@@ -1,0 +1,38 @@
+[package]
+name = "mhaol-signaling"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "mhaol_signaling"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mhaol-signaling"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+mhaol-identity = { path = "../../packages/identity" }
+uuid = { version = "1", features = ["v4"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+parking_lot = "0.12"
+hmac = "0.12"
+sha1 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+dialoguer = "0.11"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }

@@ -167,34 +167,7 @@ impl ModuleRegistry {
             }
 
             // 2. Seed settings defaults
-            if !manifest.settings.is_empty() {
-                let mut entries: HashMap<String, String> = HashMap::new();
-                for setting in &manifest.settings {
-                    let env_val = setting
-                        .env_key
-                        .as_ref()
-                        .and_then(|k| std::env::var(k).ok());
-                    let current = state.settings.get(&setting.key);
-                    if let Some(db_val) = &current {
-                        // Setting exists but env var is set — override if DB value
-                        // is empty or matches the default (i.e. not user-configured)
-                        if let Some(env_val) = &env_val {
-                            if db_val.is_empty() || db_val == &setting.default {
-                                entries.insert(setting.key.clone(), env_val.clone());
-                            }
-                        }
-                    } else {
-                        // Setting doesn't exist yet — seed with env value or default
-                        entries.insert(
-                            setting.key.clone(),
-                            env_val.unwrap_or_else(|| setting.default.clone()),
-                        );
-                    }
-                }
-                if !entries.is_empty() {
-                    state.settings.set_many(&entries);
-                }
-            }
+            seed_settings(&manifest.settings, state);
 
             // 3. Register link sources
             for ls in &manifest.link_sources {
@@ -224,32 +197,7 @@ impl ModuleRegistry {
     pub fn reseed_settings(&self, state: &AppState) {
         for module in &self.modules {
             let manifest = module.manifest();
-            if manifest.settings.is_empty() {
-                continue;
-            }
-            let mut entries: HashMap<String, String> = HashMap::new();
-            for setting in &manifest.settings {
-                let env_val = setting
-                    .env_key
-                    .as_ref()
-                    .and_then(|k| std::env::var(k).ok());
-                let current = state.settings.get(&setting.key);
-                if let Some(db_val) = &current {
-                    if let Some(env_val) = &env_val {
-                        if db_val.is_empty() || db_val == &setting.default {
-                            entries.insert(setting.key.clone(), env_val.clone());
-                        }
-                    }
-                } else {
-                    entries.insert(
-                        setting.key.clone(),
-                        env_val.unwrap_or_else(|| setting.default.clone()),
-                    );
-                }
-            }
-            if !entries.is_empty() {
-                state.settings.set_many(&entries);
-            }
+            seed_settings(&manifest.settings, state);
         }
     }
 
@@ -348,6 +296,39 @@ impl ModuleRegistry {
 impl Default for ModuleRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Seed settings from env vars and defaults. For each setting definition, if no
+/// DB value exists yet the setting is created with the env var value (or the
+/// default). If a DB value exists but is empty or still equal to the default,
+/// an env var override will replace it.
+fn seed_settings(settings: &[ModuleSettingDef], state: &AppState) {
+    if settings.is_empty() {
+        return;
+    }
+    let mut entries: HashMap<String, String> = HashMap::new();
+    for setting in settings {
+        let env_val = setting
+            .env_key
+            .as_ref()
+            .and_then(|k| std::env::var(k).ok());
+        let current = state.settings.get(&setting.key);
+        if let Some(db_val) = &current {
+            if let Some(env_val) = &env_val {
+                if db_val.is_empty() || db_val == &setting.default {
+                    entries.insert(setting.key.clone(), env_val.clone());
+                }
+            }
+        } else {
+            entries.insert(
+                setting.key.clone(),
+                env_val.unwrap_or_else(|| setting.default.clone()),
+            );
+        }
+    }
+    if !entries.is_empty() {
+        state.settings.set_many(&entries);
     }
 }
 

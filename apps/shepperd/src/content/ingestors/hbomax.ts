@@ -9,7 +9,7 @@ function resolveType(tile: HTMLAnchorElement): MediaType | null {
   if (sonicType === "show") return "tv";
 
   const href = tile.getAttribute("href") ?? "";
-  if (href.startsWith("/movie/")) return "movie";
+  if (href.startsWith("/movie/")) return "movies";
   if (href.startsWith("/show/") || href.startsWith("/mini-series/"))
     return "tv";
 
@@ -82,6 +82,8 @@ function scanTiles(): void {
 
 export const hbomax: Ingestor = {
   source: "play.hbomax.com",
+  instructions:
+    'To capture your saved titles, click "My List" from the top navigation menu. Scrolling the homepage will also capture titles from each content row.',
 
   matches(hostname: string): boolean {
     return hostname.includes("play.hbomax.com");

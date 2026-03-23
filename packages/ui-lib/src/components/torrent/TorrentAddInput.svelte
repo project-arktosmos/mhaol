@@ -2,15 +2,17 @@
 	import classNames from 'classnames';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 
-	const state = torrentService.state;
+	const torrentState = torrentService.state;
 
-	let magnetInput = '';
-	let adding = false;
+	let magnetInput = $state('');
+	let adding = $state(false);
 
-	$: isMagnet = magnetInput.startsWith('magnet:');
-	$: isUrl = magnetInput.startsWith('http://') || magnetInput.startsWith('https://');
-	$: isValidSource = isMagnet || isUrl || magnetInput.endsWith('.torrent');
-	$: canAdd = magnetInput.trim() && isValidSource && !adding && $state.initialized;
+	let isMagnet = $derived(magnetInput.startsWith('magnet:'));
+	let isUrl = $derived(magnetInput.startsWith('http://') || magnetInput.startsWith('https://'));
+	let isValidSource = $derived(isMagnet || isUrl || magnetInput.endsWith('.torrent'));
+	let canAdd = $derived(
+		magnetInput.trim() && isValidSource && !adding && $torrentState.initialized
+	);
 
 	async function handleAdd() {
 		if (!canAdd) return;
@@ -32,7 +34,7 @@
 
 	function handlePaste() {
 		setTimeout(() => {
-			if (isValidSource && $state.initialized) {
+			if (isValidSource && $torrentState.initialized) {
 				handleAdd();
 			}
 		}, 100);
@@ -44,16 +46,16 @@
 		<input
 			type="text"
 			bind:value={magnetInput}
-			on:keydown={handleKeydown}
-			on:paste={handlePaste}
+			onkeydown={handleKeydown}
+			onpaste={handlePaste}
 			placeholder="magnet:?xt=urn:btih:... or torrent URL"
 			class={classNames('input-bordered input join-item flex-1', {
 				'input-error': magnetInput && !isValidSource,
 				'input-success': isValidSource && magnetInput
 			})}
-			disabled={!$state.initialized}
+			disabled={!$torrentState.initialized}
 		/>
-		<button class="btn join-item btn-primary" on:click={handleAdd} disabled={!canAdd}>
+		<button class="btn join-item btn-primary" onclick={handleAdd} disabled={!canAdd}>
 			{#if adding}
 				<span class="loading loading-sm loading-spinner"></span>
 			{:else}

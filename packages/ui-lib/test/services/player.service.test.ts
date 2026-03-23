@@ -711,8 +711,9 @@ describe('PlayerService', () => {
 		});
 		await new Promise((r) => setTimeout(r, 10));
 
-		// Should not crash
-		expect(true).toBe(true);
+		const state = get(playerService.state);
+		expect(state.error).toBeNull();
+		expect(state.remotePeerId).toBe('server');
 	});
 
 	it('handles ice-candidate message', async () => {
@@ -756,8 +757,9 @@ describe('PlayerService', () => {
 		});
 		await new Promise((r) => setTimeout(r, 10));
 
-		// Should not crash
-		expect(true).toBe(true);
+		const state = get(playerService.state);
+		expect(state.error).toBeNull();
+		expect(state.connectionState).not.toBe('error');
 	});
 
 	it('queues ice-candidate when remote description not set', async () => {
@@ -794,8 +796,9 @@ describe('PlayerService', () => {
 			})
 		});
 
-		// Should not crash
-		expect(true).toBe(true);
+		const state = get(playerService.state);
+		expect(state.error).toBeNull();
+		expect(state.connectionState).not.toBe('error');
 	});
 
 	it('handles peer-left by calling stop', async () => {
@@ -917,9 +920,11 @@ describe('PlayerService', () => {
 		playerService.state.update((s) => ({ ...s, streamServerAvailable: true }));
 		await playerService.play(file as never);
 
-		// Should not throw
 		lastWsInstance!.onmessage!({ data: 'not-json' });
-		expect(true).toBe(true);
+
+		const state = get(playerService.state);
+		expect(state.error).toBeNull();
+		expect(state.connectionState).not.toBe('error');
 	});
 
 	it('handles room-peers and peer-joined as no-ops', async () => {
@@ -946,11 +951,15 @@ describe('PlayerService', () => {
 		playerService.state.update((s) => ({ ...s, streamServerAvailable: true }));
 		await playerService.play(file as never);
 
+		const stateBefore = get(playerService.state);
+		const connectionBefore = stateBefore.connectionState;
+
 		lastWsInstance!.onmessage!({ data: JSON.stringify({ type: 'room-peers', peers: ['p1'] }) });
 		lastWsInstance!.onmessage!({ data: JSON.stringify({ type: 'peer-joined', peer_id: 'p1' }) });
 
-		// These are no-ops for the player, just verify no crash
-		expect(true).toBe(true);
+		const stateAfter = get(playerService.state);
+		expect(stateAfter.connectionState).toBe(connectionBefore);
+		expect(stateAfter.error).toBeNull();
 	});
 
 	// ===== stop =====
@@ -1057,7 +1066,10 @@ describe('PlayerService', () => {
 	it('destroy calls stop', () => {
 		vi.stubGlobal('fetch', mockFetch({}));
 		playerService.destroy();
-		expect(true).toBe(true);
+
+		const state = get(playerService.state);
+		expect(state.connectionState).toBe('idle');
+		expect(state.currentFile).toBeNull();
 	});
 
 	// ===== fetchJson =====
@@ -1087,6 +1099,9 @@ describe('PlayerService', () => {
 		);
 
 		await playerService.refreshFiles();
-		expect(true).toBe(true);
+
+		const state = get(playerService.state);
+		expect(state.error).toBeNull();
+		expect(state.files).toEqual([]);
 	});
 });

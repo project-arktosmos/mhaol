@@ -107,33 +107,27 @@ fn build_cache_key(path: &str, params: &[(&str, &str)]) -> String {
     key
 }
 
-/// Cached proxy: check SQLite cache (24h TTL), fetch from TMDB on miss/stale,
-/// fall back to stale cache on network error.
-async fn tmdb_cached_proxy(
+/// Fetch JSON from TMDB with caching. Returns the parsed JSON value on success.
+/// Used by both the HTTP proxy endpoints and the smart pairing module.
+pub(crate) async fn tmdb_fetch_json(
     state: &AppState,
     path: &str,
     extra_params: &[(&str, &str)],
-) -> axum::response::Response {
+) -> Result<serde_json::Value, String> {
     let cache_key = build_cache_key(path, extra_params);
 
     // Check cache
     if let Some((data, is_stale)) = state.tmdb_api_cache.get(&cache_key) {
         if !is_stale {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-                return Json(parsed).into_response();
+                return Ok(parsed);
             }
         }
     }
 
     let api_key = match state.settings.get("tmdb.apiKey") {
         Some(key) if !key.is_empty() => key,
-        _ => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({ "error": "TMDB API key not configured" })),
-            )
-                .into_response()
-        }
+        _ => return Err("TMDB API key not configured".to_string()),
     };
 
     let mut url = format!("{}{}?api_key={}", TMDB_BASE, path, api_key);
@@ -147,28 +141,41 @@ async fn tmdb_cached_proxy(
                 Ok(data) => {
                     let data_str = serde_json::to_string(&data).unwrap_or_default();
                     state.tmdb_api_cache.upsert(&cache_key, &data_str);
-                    Json(data).into_response()
+                    Ok(data)
                 }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                Err(e) => Err(e.to_string()),
             }
         }
         _ => {
             // Graceful degradation: return stale cache on error
             if let Some((data, _)) = state.tmdb_api_cache.get(&cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-                    return Json(parsed).into_response();
+                    return Ok(parsed);
                 }
             }
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": "TMDB API unavailable" })),
-            )
-                .into_response()
+            Err("TMDB API unavailable".to_string())
         }
+    }
+}
+
+/// Cached proxy: wraps tmdb_fetch_json into an HTTP response.
+async fn tmdb_cached_proxy(
+    state: &AppState,
+    path: &str,
+    extra_params: &[(&str, &str)],
+) -> axum::response::Response {
+    match tmdb_fetch_json(state, path, extra_params).await {
+        Ok(data) => Json(data).into_response(),
+        Err(e) if e.contains("not configured") => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": e })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e })),
+        )
+            .into_response(),
     }
 }
 

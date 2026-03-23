@@ -24,7 +24,7 @@ export async function mergeItems(newItems: MediaItem[]): Promise<MediaItem[]> {
   }
 
   if (added.length > 0) {
-    const merged = [...existing, ...added];
+    const merged = [...added, ...existing];
     await chrome.storage.local.set({ [STORAGE_KEY]: merged });
     return merged;
   }

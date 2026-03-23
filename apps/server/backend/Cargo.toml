@@ -36,10 +36,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2.0"
 parking_lot = "0.12"
 chrono = "0.4"
-anyhow = "1"
 urlencoding = "2"
 quick-xml = "0.37"
 dirs = "5"
+strsim = "0.11"
 libc = "0.2"
 rust-embed = { version = "8", optional = true }
 mime_guess = { version = "2", optional = true }

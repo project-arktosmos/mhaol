@@ -1,26 +1,29 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { createEventDispatcher } from 'svelte';
 	import {
 		TorrentCategory,
 		TORRENT_CATEGORY_LABELS
 	} from 'addons/torrent-search-thepiratebay/types';
 
-	export let query: string = '';
-	export let category: TorrentCategory = TorrentCategory.All;
-	export let searching: boolean = false;
-
-	const dispatch = createEventDispatcher<{
-		search: { query: string; category: TorrentCategory };
-	}>();
+	let {
+		query = $bindable(''),
+		category = $bindable(TorrentCategory.All),
+		searching = false,
+		onsearch
+	}: {
+		query?: string;
+		category?: TorrentCategory;
+		searching?: boolean;
+		onsearch?: (detail: { query: string; category: TorrentCategory }) => void;
+	} = $props();
 
 	const categories = Object.entries(TORRENT_CATEGORY_LABELS) as [TorrentCategory, string][];
 
-	$: canSearch = query.trim().length > 0 && !searching;
+	let canSearch = $derived(query.trim().length > 0 && !searching);
 
 	function handleSubmit() {
 		if (canSearch) {
-			dispatch('search', { query: query.trim(), category });
+			onsearch?.({ query: query.trim(), category });
 		}
 	}
 
@@ -40,13 +43,13 @@
 	<input
 		type="text"
 		bind:value={query}
-		on:keydown={handleKeydown}
+		onkeydown={handleKeydown}
 		placeholder="Search torrents..."
 		class="input-bordered input join-item flex-1"
 	/>
 	<button
 		class={classNames('btn join-item btn-primary', { 'btn-disabled': !canSearch })}
-		on:click={handleSubmit}
+		onclick={handleSubmit}
 		disabled={!canSearch}
 	>
 		{#if searching}
