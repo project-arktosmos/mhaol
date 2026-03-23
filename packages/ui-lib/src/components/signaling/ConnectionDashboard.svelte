@@ -125,11 +125,30 @@
 		})
 	);
 
+	// Derive aggregate phase and peerConnectionStates from all rooms
+	let aggregatePhase = $derived.by(() => {
+		const rooms = Object.values($chatStore.rooms);
+		if (rooms.length === 0) return 'disconnected';
+		if (rooms.some((r) => r.phase === 'connected')) return 'connected';
+		if (rooms.some((r) => r.phase === 'connecting' || r.phase === 'authenticated'))
+			return 'connecting';
+		if (rooms.some((r) => r.phase === 'error')) return 'error';
+		return 'disconnected';
+	});
+
+	let allPeerConnectionStates = $derived.by((): Record<string, PeerConnectionStatus> => {
+		const result: Record<string, PeerConnectionStatus> = {};
+		for (const room of Object.values($chatStore.rooms)) {
+			Object.assign(result, room.peerConnectionStates);
+		}
+		return result;
+	});
+
 	let steps = $derived(
 		getSteps(
-			$chatStore.phase,
+			aggregatePhase,
 			activePeerId,
-			$chatStore.peerConnectionStates,
+			allPeerConnectionStates,
 			$handshakeStore.peerPhases,
 			displayMovies.length > 0
 		)

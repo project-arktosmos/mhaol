@@ -6,8 +6,9 @@
 	const peerState = peerLibraryService.state;
 	const signalingState = signalingChatService.state;
 
-	let phase = $derived($signalingState.phase);
-	let isConnected = $derived(phase === 'connected');
+	let isConnected = $derived(
+		Object.values($signalingState.rooms).some((r) => r.phase === 'connected')
+	);
 	let peers = $derived(Object.entries($peerState.peers));
 	let peerCount = $derived(peers.length);
 </script>

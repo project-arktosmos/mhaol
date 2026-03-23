@@ -1,8 +1,9 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { DEFAULT_SIGNALING_URL } from 'ui-lib/lib/api-base';
+	import { getSignalingUrl } from 'ui-lib/lib/api-base';
 	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
 	import { signalingAdapter } from 'ui-lib/adapters/classes/signaling.adapter';
+	import type { SignalingConnectionPhase } from 'ui-lib/types/signaling.type';
 
 	const chatStore = signalingChatService.state;
 
@@ -12,8 +13,18 @@
 		onConnect?: () => void;
 	} = $props();
 
-	let serverUrl = $state(DEFAULT_SIGNALING_URL);
+	let serverUrl = $state(getSignalingUrl());
 	let serverAvailable = $state(true);
+
+	let aggregatePhase = $derived.by((): SignalingConnectionPhase => {
+		const rooms = Object.values($chatStore.rooms);
+		if (rooms.length === 0) return 'disconnected';
+		if (rooms.some((r) => r.phase === 'connected')) return 'connected';
+		if (rooms.some((r) => r.phase === 'connecting' || r.phase === 'authenticated'))
+			return 'connecting';
+		if (rooms.some((r) => r.phase === 'error')) return 'error';
+		return 'disconnected';
+	});
 
 	function handleConnect() {
 		if (!serverUrl) return;
@@ -30,9 +41,9 @@
 		<div class="flex items-center justify-between">
 			<h2 class="card-title text-base">Connection</h2>
 			<span
-				class={classNames('badge badge-sm', signalingAdapter.phaseBadgeClass($chatStore.phase))}
+				class={classNames('badge badge-sm', signalingAdapter.phaseBadgeClass(aggregatePhase))}
 			>
-				{signalingAdapter.phaseLabel($chatStore.phase)}
+				{signalingAdapter.phaseLabel(aggregatePhase)}
 			</span>
 		</div>
 
@@ -50,7 +61,7 @@
 		</div>
 
 		<!-- Connect / Disconnect -->
-		{#if $chatStore.phase === 'disconnected' || $chatStore.phase === 'error'}
+		{#if aggregatePhase === 'disconnected' || aggregatePhase === 'error'}
 			<button
 				class="btn btn-sm btn-primary"
 				disabled={!serverUrl || !serverAvailable || !onConnect}
