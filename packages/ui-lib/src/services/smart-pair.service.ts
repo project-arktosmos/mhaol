@@ -6,8 +6,6 @@ import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 const initialState: SmartPairState = {
 	pairing: false,
 	results: [],
-	saving: false,
-	saved: false,
 	error: null
 };
 
@@ -34,7 +32,6 @@ class SmartPairService {
 				return;
 			}
 
-			// Stream NDJSON — each line is one PairResult, update UI per item
 			const reader = res.body?.getReader();
 			if (!reader) {
 				this.store.update((s) => ({ ...s, pairing: false, error: 'No response stream' }));
@@ -55,11 +52,7 @@ class SmartPairService {
 				for (const line of lines) {
 					if (!line.trim()) continue;
 					try {
-						const raw: Omit<SmartPairResult, 'accepted'> = JSON.parse(line);
-						const result: SmartPairResult = {
-							...raw,
-							accepted: raw.confidence === 'high' || raw.confidence === 'medium'
-						};
+						const result: SmartPairResult = JSON.parse(line);
 						this.store.update((s) => ({
 							...s,
 							results: [...s.results, result]
@@ -76,71 +69,6 @@ class SmartPairService {
 				...s,
 				pairing: false,
 				error: `Pairing failed: ${e instanceof Error ? e.message : String(e)}`
-			}));
-		}
-	}
-
-	toggleResult(sourceId: string) {
-		this.store.update((s) => ({
-			...s,
-			results: s.results.map((r) => (r.sourceId === sourceId ? { ...r, accepted: !r.accepted } : r))
-		}));
-	}
-
-	acceptAll() {
-		this.store.update((s) => ({
-			...s,
-			results: s.results.map((r) => ({ ...r, accepted: r.matched }))
-		}));
-	}
-
-	rejectAll() {
-		this.store.update((s) => ({
-			...s,
-			results: s.results.map((r) => ({ ...r, accepted: false }))
-		}));
-	}
-
-	async save() {
-		let state: SmartPairState = initialState;
-		this.store.subscribe((s) => (state = s))();
-
-		const accepted = state.results.filter((r) => r.accepted && r.matched && r.tmdbId);
-		if (accepted.length === 0) return;
-
-		this.store.update((s) => ({ ...s, saving: true, error: null }));
-
-		try {
-			const res = await fetch(apiUrl('/api/smart-pair/save'), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					items: accepted.map((r) => ({
-						sourceId: r.sourceId,
-						source: r.source,
-						title: r.sourceTitle,
-						tmdbId: r.tmdbId,
-						tmdbType: r.tmdbType
-					}))
-				})
-			});
-
-			if (!res.ok) {
-				const text = await res.text().catch(() => '');
-				this.store.update((s) => ({
-					...s,
-					saving: false,
-					error: `Save failed: ${res.status} ${text || res.statusText}`
-				}));
-				return;
-			}
-
-			this.store.update((s) => ({ ...s, saving: false, saved: true }));
-		} catch (e) {
-			this.store.update((s) => ({
-				...s,
-				saving: false,
-				error: `Save failed: ${e instanceof Error ? e.message : String(e)}`
 			}));
 		}
 	}

@@ -19,7 +19,6 @@ const PINNED_LIBRARY_PATH: &str = "pinned://";
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/pair", post(pair_items))
-        .route("/save", post(save_pinned_items))
         .route("/pinned", get(get_pinned))
 }
 
@@ -150,6 +149,8 @@ async fn pair_items(
         body.items.first().map(|i| i.source.as_str()).unwrap_or("?")
     );
 
+    let library_id = ensure_pinned_library(&state);
+
     let stream = async_stream::stream! {
         for (idx, item) in body.items.iter().enumerate() {
             let query = &item.title;
@@ -229,6 +230,47 @@ async fn pair_items(
                 }
             };
 
+            // Save matched items to DB immediately
+            if result.matched {
+                if let Some(tmdb_id) = result.tmdb_id {
+                    let category_id = if result.tmdb_type.as_deref() == Some("tv") {
+                        "pinned-tv"
+                    } else {
+                        "pinned-movies"
+                    };
+                    let path = format!("pinned://{}/{}", item.source, item.id);
+
+                    if let Some(existing_id) = state.library_items.exists_by_path(&path) {
+                        state.library_item_links.upsert(
+                            &uuid::Uuid::new_v4().to_string(),
+                            &existing_id,
+                            "tmdb",
+                            &tmdb_id.to_string(),
+                            None,
+                            None,
+                        );
+                    } else {
+                        let item_id = uuid::Uuid::new_v4().to_string();
+                        state.library_items.insert(&InsertLibraryItem {
+                            id: item_id.clone(),
+                            library_id: library_id.clone(),
+                            path,
+                            extension: String::new(),
+                            media_type: "video".to_string(),
+                            category_id: Some(category_id.to_string()),
+                        });
+                        state.library_item_links.upsert(
+                            &uuid::Uuid::new_v4().to_string(),
+                            &item_id,
+                            "tmdb",
+                            &tmdb_id.to_string(),
+                            None,
+                            None,
+                        );
+                    }
+                }
+            }
+
             let mut line = serde_json::to_string(&result).unwrap_or_default();
             line.push('\n');
             yield Ok::<_, std::convert::Infallible>(line);
@@ -248,32 +290,6 @@ async fn pair_items(
         .unwrap()
 }
 
-// --- Save endpoint ---
-
-#[derive(Deserialize)]
-struct SaveRequest {
-    items: Vec<SaveRequestItem>,
-}
-
-#[derive(Deserialize)]
-struct SaveRequestItem {
-    #[serde(rename = "sourceId")]
-    source_id: String,
-    source: String,
-    #[allow(dead_code)]
-    title: String,
-    #[serde(rename = "tmdbId")]
-    tmdb_id: i64,
-    #[serde(rename = "tmdbType")]
-    tmdb_type: String,
-}
-
-#[derive(Serialize)]
-struct SaveResponse {
-    created: usize,
-    skipped: usize,
-}
-
 fn ensure_pinned_library(state: &AppState) -> String {
     let libs = state.libraries.get_all();
     for lib in &libs {
@@ -287,60 +303,6 @@ fn ensure_pinned_library(state: &AppState) -> String {
         .libraries
         .insert(&id, "Pinned", PINNED_LIBRARY_PATH, "[\"video\"]", now);
     id
-}
-
-async fn save_pinned_items(
-    State(state): State<AppState>,
-    Json(body): Json<SaveRequest>,
-) -> impl IntoResponse {
-    let library_id = ensure_pinned_library(&state);
-    let mut created = 0usize;
-    let mut skipped = 0usize;
-
-    for item in &body.items {
-        let path = format!("pinned://{}/{}", item.source, item.source_id);
-        let category_id = if item.tmdb_type == "tv" {
-            "pinned-tv"
-        } else {
-            "pinned-movies"
-        };
-
-        if let Some(existing_id) = state.library_items.exists_by_path(&path) {
-            // Update TMDB link if it changed
-            state.library_item_links.upsert(
-                &uuid::Uuid::new_v4().to_string(),
-                &existing_id,
-                "tmdb",
-                &item.tmdb_id.to_string(),
-                None,
-                None,
-            );
-            skipped += 1;
-        } else {
-            let item_id = uuid::Uuid::new_v4().to_string();
-            state.library_items.insert(&InsertLibraryItem {
-                id: item_id.clone(),
-                library_id: library_id.clone(),
-                path,
-                extension: String::new(),
-                media_type: "video".to_string(),
-                category_id: Some(category_id.to_string()),
-            });
-
-            state.library_item_links.upsert(
-                &uuid::Uuid::new_v4().to_string(),
-                &item_id,
-                "tmdb",
-                &item.tmdb_id.to_string(),
-                None,
-                None,
-            );
-
-            created += 1;
-        }
-    }
-
-    Json(SaveResponse { created, skipped })
 }
 
 // --- Pinned endpoint ---

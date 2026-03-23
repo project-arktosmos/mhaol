@@ -39,10 +39,7 @@
 
 	const pairStore = smartPairService.store;
 	let showPairResults = $derived(
-		$pairStore.pairing ||
-			$pairStore.results.length > 0 ||
-			$pairStore.error !== null ||
-			$pairStore.saved
+		$pairStore.pairing || $pairStore.results.length > 0 || $pairStore.error !== null
 	);
 
 	function handleSmartPair() {
@@ -158,13 +155,7 @@
 			<SmartPairResults
 				results={$pairStore.results}
 				pairing={$pairStore.pairing}
-				saving={$pairStore.saving}
-				saved={$pairStore.saved}
 				error={$pairStore.error}
-				ontoggle={(id) => smartPairService.toggleResult(id)}
-				onacceptall={() => smartPairService.acceptAll()}
-				onrejectall={() => smartPairService.rejectAll()}
-				onsave={() => smartPairService.save()}
 				onreset={() => smartPairService.reset()}
 			/>
 		{/if}

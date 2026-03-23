@@ -5,30 +5,17 @@
 	let {
 		results,
 		pairing = false,
-		saving = false,
-		saved = false,
 		error = null,
-		ontoggle,
-		onacceptall,
-		onrejectall,
-		onsave,
 		onreset
 	}: {
 		results: SmartPairResult[];
 		pairing?: boolean;
-		saving?: boolean;
-		saved?: boolean;
 		error?: string | null;
-		ontoggle: (sourceId: string) => void;
-		onacceptall: () => void;
-		onrejectall: () => void;
-		onsave: () => void;
 		onreset: () => void;
 	} = $props();
 
 	const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
-	let acceptedCount = $derived(results.filter((r) => r.accepted).length);
 	let matchedCount = $derived(results.filter((r) => r.matched).length);
 
 	const confidenceBadge: Record<string, string> = {
@@ -55,11 +42,6 @@
 			<span>{error}</span>
 			<button class="btn btn-ghost btn-sm" onclick={onreset}>Dismiss</button>
 		</div>
-	{:else if saved}
-		<div class="alert alert-success">
-			<span>Pinned items saved to library.</span>
-			<button class="btn btn-ghost btn-sm" onclick={onreset}>Done</button>
-		</div>
 	{:else if pairing && results.length === 0}
 		<div class="flex items-center gap-3 py-8">
 			<span class="loading loading-md loading-spinner text-primary"></span>
@@ -70,11 +52,10 @@
 			{#if pairing}
 				<span class="loading loading-sm loading-spinner text-primary"></span>
 			{/if}
-			<span class="badge badge-primary">{matchedCount} of {results.length} matched</span>
-			<span class="badge badge-secondary">{acceptedCount} accepted</span>
-			<div class="flex-1"></div>
-			<button class="btn btn-ghost btn-xs" onclick={onacceptall}>Accept All</button>
-			<button class="btn btn-ghost btn-xs" onclick={onrejectall}>Reject All</button>
+			<span class="badge badge-primary">{matchedCount} of {results.length} paired</span>
+			{#if !pairing}
+				<button class="btn btn-ghost btn-xs" onclick={onreset}>Clear</button>
+			{/if}
 		</div>
 
 		<div class="overflow-x-auto rounded-lg border border-base-300">
@@ -88,7 +69,6 @@
 						<th>Type</th>
 						<th>Year</th>
 						<th>Confidence</th>
-						<th class="w-8"></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -131,33 +111,10 @@
 									{result.confidence}
 								</span>
 							</td>
-							<td>
-								{#if result.matched}
-									<input
-										type="checkbox"
-										class="checkbox checkbox-sm checkbox-primary"
-										checked={result.accepted}
-										onchange={() => ontoggle(result.sourceId)}
-									/>
-								{/if}
-							</td>
 						</tr>
 					{/each}
 				</tbody>
 			</table>
-		</div>
-
-		<div class="flex justify-end">
-			<button
-				class="btn btn-sm btn-primary"
-				disabled={acceptedCount === 0 || saving || pairing}
-				onclick={onsave}
-			>
-				{#if saving}
-					<span class="loading loading-xs loading-spinner"></span>
-				{/if}
-				Save {acceptedCount} to Library
-			</button>
 		</div>
 	{/if}
 </div>
