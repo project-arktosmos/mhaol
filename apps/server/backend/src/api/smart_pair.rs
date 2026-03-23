@@ -2,11 +2,13 @@ use crate::db::repo::library_item::InsertLibraryItem;
 use crate::AppState;
 use axum::{
     extract::State,
+    http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use super::tmdb::tmdb_fetch_json;
 
@@ -130,14 +132,33 @@ async fn pair_items(
     State(state): State<AppState>,
     Json(body): Json<PairRequest>,
 ) -> impl IntoResponse {
+    // Fail fast if TMDB API key is not configured
+    let has_key = state
+        .settings
+        .get("tmdb.apiKey")
+        .map(|k| !k.is_empty())
+        .unwrap_or(false);
+    if !has_key {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": "TMDB API key not configured" })),
+        )
+            .into_response();
+    }
+
+    info!(
+        "[smart-pair] Pairing {} items from {}",
+        body.items.len(),
+        body.items.first().map(|i| i.source.as_str()).unwrap_or("?")
+    );
+
     let mut results = Vec::with_capacity(body.items.len());
 
-    for item in &body.items {
+    for (idx, item) in body.items.iter().enumerate() {
         let query = &item.title;
-        let encoded_query = urlencoding::encode(query);
 
-        let movie_params: Vec<(&str, &str)> = vec![("query", &encoded_query), ("page", "1")];
-        let tv_params: Vec<(&str, &str)> = vec![("query", &encoded_query), ("page", "1")];
+        let movie_params: Vec<(&str, &str)> = vec![("query", query), ("page", "1")];
+        let tv_params: Vec<(&str, &str)> = vec![("query", query), ("page", "1")];
 
         let (movie_res, tv_res) = tokio::join!(
             tmdb_fetch_json(&state, "/search/movie", &movie_params),
@@ -175,8 +196,18 @@ async fn pair_items(
             }
         }
 
-        let result = match best {
+        let result = match &best {
             Some(c) => {
+                info!(
+                    "[smart-pair] ({}/{}) \"{}\" -> {} {} (id={}, confidence={})",
+                    idx + 1,
+                    body.items.len(),
+                    query,
+                    c.media_type,
+                    c.title,
+                    c.id,
+                    determine_confidence(query, &c.title, c.vote_count)
+                );
                 let confidence = determine_confidence(query, &c.title, c.vote_count);
                 PairResult {
                     source_id: item.id.clone(),
@@ -184,34 +215,51 @@ async fn pair_items(
                     source: item.source.clone(),
                     matched: true,
                     tmdb_id: Some(c.id),
-                    tmdb_title: Some(c.title),
-                    tmdb_type: Some(c.media_type),
-                    tmdb_year: Some(c.year),
-                    tmdb_poster_path: c.poster_path,
+                    tmdb_title: Some(c.title.clone()),
+                    tmdb_type: Some(c.media_type.clone()),
+                    tmdb_year: Some(c.year.clone()),
+                    tmdb_poster_path: c.poster_path.clone(),
                     confidence,
                 }
             }
-            None => PairResult {
-                source_id: item.id.clone(),
-                source_title: item.title.clone(),
-                source: item.source.clone(),
-                matched: false,
-                tmdb_id: None,
-                tmdb_title: None,
-                tmdb_type: None,
-                tmdb_year: None,
-                tmdb_poster_path: None,
-                confidence: "none".to_string(),
-            },
+            None => {
+                info!(
+                    "[smart-pair] ({}/{}) \"{}\" -> no match",
+                    idx + 1,
+                    body.items.len(),
+                    query
+                );
+                PairResult {
+                    source_id: item.id.clone(),
+                    source_title: item.title.clone(),
+                    source: item.source.clone(),
+                    matched: false,
+                    tmdb_id: None,
+                    tmdb_title: None,
+                    tmdb_type: None,
+                    tmdb_year: None,
+                    tmdb_poster_path: None,
+                    confidence: "none".to_string(),
+                }
+            }
         };
 
         results.push(result);
 
-        // Small delay to avoid TMDB rate limits
-        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        // Rate-limit: TMDB allows ~40 requests per 10s. Each item makes 2 requests.
+        // With cache hits this is often faster, but pace uncached requests.
+        if (idx + 1) % 15 == 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
     }
 
-    Json(PairResponse { results })
+    info!(
+        "[smart-pair] Done: {}/{} matched",
+        results.iter().filter(|r| r.matched).count(),
+        results.len()
+    );
+
+    Json(PairResponse { results }).into_response()
 }
 
 // --- Save endpoint ---
