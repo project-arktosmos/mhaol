@@ -74,7 +74,6 @@
 	let director = $derived(movieDetails?.director ?? null);
 	let cast = $derived(movieDetails?.cast ?? []);
 	let images: DisplayTMDBImage[] = $derived(movieDetails?.images ?? []);
-	let heroImageUrl = $derived(images.length > 0 ? images[0].thumbnailUrl : backdropUrl);
 
 	let dlState = $derived(downloadStatus?.state ?? null);
 	let isDownloading = $derived(
@@ -106,17 +105,13 @@
 			Back
 		</button>
 
-		{#if heroImageUrl}
-			<div class="relative">
-				<img src={heroImageUrl} alt={title} class="h-56 w-full rounded-lg object-cover" />
-				<div
-					class="absolute inset-0 rounded-lg bg-gradient-to-t from-base-200 to-transparent"
-				></div>
-			</div>
-		{:else if posterUrl}
-			<div class="flex justify-center bg-base-300 p-4">
-				<img src={posterUrl} alt={title} class="h-48 rounded-lg object-cover" />
-			</div>
+		{#if posterUrl}
+			<img
+				src={posterUrl}
+				alt="{title} poster"
+				class="w-full rounded-lg object-cover"
+				loading="lazy"
+			/>
 		{/if}
 
 		<h1 class="text-xl font-bold">{title}</h1>
@@ -269,6 +264,20 @@
 		</div>
 
 	{#snippet cellA()}
+		{#if backdropUrl}
+			<div class="relative">
+				<img
+					src={backdropUrl}
+					alt="{title} backdrop"
+					class="aspect-video w-full rounded-lg object-cover"
+					loading="lazy"
+				/>
+				<div
+					class="absolute inset-0 rounded-lg bg-gradient-to-t from-base-200 to-transparent"
+				></div>
+			</div>
+		{/if}
+
 		{#if overview}
 			<div>
 				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Overview</h3>
@@ -321,38 +330,6 @@
 	{/snippet}
 
 	{#snippet cellB()}
-		{#if backdropUrl || posterUrl}
-			<div>
-				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">
-					Primary Images
-				</h3>
-				<div class="flex flex-col gap-2">
-					{#if backdropUrl}
-						<div>
-							<p class="mb-0.5 font-mono text-xs opacity-40">backdrop_path</p>
-							<img
-								src={backdropUrl}
-								alt="{title} backdrop"
-								class="aspect-video w-full rounded object-cover"
-								loading="lazy"
-							/>
-						</div>
-					{/if}
-					{#if posterUrl}
-						<div>
-							<p class="mb-0.5 font-mono text-xs opacity-40">poster_path</p>
-							<img
-								src={posterUrl}
-								alt="{title} poster"
-								class="aspect-[2/3] w-32 rounded object-cover"
-								loading="lazy"
-							/>
-						</div>
-					{/if}
-				</div>
-			</div>
-		{/if}
-
 		{#if images.length > 0}
 			<div>
 				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">All Images</h3>

@@ -384,10 +384,24 @@ describe('imagesToDisplay', () => {
 	it('merges backdrops and posters with correct types', () => {
 		const images = {
 			backdrops: [
-				{ file_path: '/b1.jpg', width: 1920, height: 1080, aspect_ratio: 1.778, vote_average: 5, vote_count: 1 }
+				{
+					file_path: '/b1.jpg',
+					width: 1920,
+					height: 1080,
+					aspect_ratio: 1.778,
+					vote_average: 5,
+					vote_count: 1
+				}
 			],
 			posters: [
-				{ file_path: '/p1.jpg', width: 500, height: 750, aspect_ratio: 0.667, vote_average: 5, vote_count: 1 }
+				{
+					file_path: '/p1.jpg',
+					width: 500,
+					height: 750,
+					aspect_ratio: 0.667,
+					vote_average: 5,
+					vote_count: 1
+				}
 			]
 		};
 		const display = imagesToDisplay(images);

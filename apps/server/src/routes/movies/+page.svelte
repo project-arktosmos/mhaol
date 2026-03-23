@@ -26,7 +26,12 @@
 		DisplayTMDBMovieDetails,
 		DisplayTMDBTvShowDetails
 	} from 'addons/tmdb/types';
-	import { movieDetailsToDisplay, tvShowDetailsToDisplay } from 'addons/tmdb/transform';
+	import {
+		movieDetailsToDisplay,
+		tvShowDetailsToDisplay,
+		getPosterUrl,
+		getBackdropUrl
+	} from 'addons/tmdb/transform';
 	import { tmdbBrowseService } from 'ui-lib/services/tmdb-browse.service';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
@@ -58,6 +63,41 @@
 
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
+
+	// Image overrides: tmdbId -> { poster?: filePath, backdrop?: filePath }
+	let movieImageOverrides = $state<Map<number, Record<string, string>>>(new Map());
+
+	async function loadMovieImageOverrides() {
+		try {
+			const res = await fetch(apiUrl('/api/tmdb/image-overrides/movie'));
+			if (res.ok) {
+				const overrides: Array<{ tmdb_id: number; role: string; file_path: string }> =
+					await res.json();
+				const map = new Map<number, Record<string, string>>();
+				for (const o of overrides) {
+					const existing = map.get(o.tmdb_id) ?? {};
+					existing[o.role] = o.file_path;
+					map.set(o.tmdb_id, existing);
+				}
+				movieImageOverrides = map;
+			}
+		} catch {
+			// best-effort
+		}
+	}
+
+	function applyOverridesToMovies(movies: DisplayTMDBMovie[]): DisplayTMDBMovie[] {
+		if (movieImageOverrides.size === 0) return movies;
+		return movies.map((m) => {
+			const overrides = movieImageOverrides.get(m.id);
+			if (!overrides) return m;
+			return {
+				...m,
+				posterUrl: overrides.poster ? getPosterUrl(overrides.poster) : m.posterUrl,
+				backdropUrl: overrides.backdrop ? getBackdropUrl(overrides.backdrop) : m.backdropUrl
+			};
+		});
+	}
 
 	// TMDB browse state
 	const browseState = tmdbBrowseService.state;
@@ -483,6 +523,7 @@
 
 	onMount(async () => {
 		libraryService.initialize();
+		loadMovieImageOverrides();
 		loadFetchCacheIds();
 		loadFetchCacheHashes();
 		initBrowseSections();
@@ -539,13 +580,20 @@
 
 	function itemToDisplayMovie(item: MediaItem): DisplayTMDBMovie {
 		const meta = tmdbMetadata[item.id];
+		const tmdbLink = getItemLinks(item).tmdb;
+		const tmdbId = tmdbLink ? Number(tmdbLink.serviceId) : null;
+		const overrides = tmdbId ? movieImageOverrides.get(tmdbId) : null;
 		return {
 			id: stableNumericId(item.id),
 			title: meta?.title ?? item.name,
 			originalTitle: meta?.originalTitle ?? item.name,
 			overview: meta?.overview ?? '',
-			posterUrl: meta?.posterUrl ?? null,
-			backdropUrl: meta?.backdropUrl ?? null,
+			posterUrl: overrides?.poster
+				? getPosterUrl(overrides.poster)
+				: (meta?.posterUrl ?? null),
+			backdropUrl: overrides?.backdrop
+				? getBackdropUrl(overrides.backdrop)
+				: (meta?.backdropUrl ?? null),
 			releaseYear: meta?.releaseYear ?? '',
 			voteAverage: meta?.voteAverage ?? 0,
 			voteCount: meta?.voteCount ?? 0,
@@ -839,7 +887,7 @@
 			<section class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold">Search Movies</h2>
 				<SearchTab
-					movies={$browseState.searchMovies}
+					movies={applyOverridesToMovies($browseState.searchMovies)}
 					tvShows={$browseState.searchTv}
 					moviesPage={$browseState.searchMoviesPage}
 					tvPage={$browseState.searchTvPage}
@@ -875,7 +923,7 @@
 			<section class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold">Popular Movies</h2>
 				<PopularTab
-					movies={$browseState.popularMovies}
+					movies={applyOverridesToMovies($browseState.popularMovies)}
 					tvShows={$browseState.popularTv}
 					moviesPage={$browseState.popularMoviesPage}
 					tvPage={$browseState.popularTvPage}
@@ -921,7 +969,7 @@
 				{:else if $browseState.discoverMovies.length > 0}
 					<div class="mt-4">
 						<TmdbBrowseGrid
-							movies={$browseState.discoverMovies}
+							movies={applyOverridesToMovies($browseState.discoverMovies)}
 							selectedMovieId={selectedBrowseMovie?.id ?? null}
 							fetchedIds={fetchCachedTmdbIds}
 							downloadStatuses={browseDownloadStatuses}
