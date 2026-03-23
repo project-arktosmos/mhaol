@@ -158,6 +158,11 @@ impl IdentityManager {
         }
     }
 
+    /// Get the EIP-55 checksummed address for a named identity.
+    pub fn get_checksummed_address(&self, name: &str) -> Option<String> {
+        self.get_address(name).map(|a| to_eip55_checksum(&a))
+    }
+
     /// Get the address of the first identity, if any.
     pub fn get_default_address(&self) -> Option<String> {
         let entries = self.load_all();
@@ -166,6 +171,31 @@ impl IdentityManager {
             .next()
             .map(|pk| Self::private_key_to_address(pk))
     }
+}
+
+/// Convert a lowercase 0x-prefixed Ethereum address to EIP-55 mixed-case checksum format.
+pub fn to_eip55_checksum(address: &str) -> String {
+    use sha3::{Digest, Keccak256};
+
+    let addr = address.strip_prefix("0x").unwrap_or(address).to_lowercase();
+    let hash = Keccak256::digest(addr.as_bytes());
+    let hash_hex = hex::encode(hash);
+
+    let mut checksummed = String::with_capacity(42);
+    checksummed.push_str("0x");
+    for (i, c) in addr.chars().enumerate() {
+        if c.is_ascii_digit() {
+            checksummed.push(c);
+        } else {
+            let nibble = u8::from_str_radix(&hash_hex[i..i + 1], 16).unwrap();
+            if nibble >= 8 {
+                checksummed.push(c.to_ascii_uppercase());
+            } else {
+                checksummed.push(c);
+            }
+        }
+    }
+    checksummed
 }
 
 /// Return the default identity directory: `~/.mhaol-identities/`.
@@ -213,6 +243,44 @@ mod tests {
         assert!(mgr.get_address("TEST_WALLET").is_none());
         assert!(!tmp_dir.join("TEST_WALLET").exists());
 
+        let _ = fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn test_eip55_checksum() {
+        // EIP-55 test vectors from the spec
+        assert_eq!(
+            to_eip55_checksum("0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"),
+            "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
+        );
+        assert_eq!(
+            to_eip55_checksum("0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359"),
+            "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359"
+        );
+        assert_eq!(
+            to_eip55_checksum("0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb"),
+            "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB"
+        );
+        assert_eq!(
+            to_eip55_checksum("0xd1220a0cf47c7b9be7a2e6ba89f429762e7b9adb"),
+            "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb"
+        );
+
+        // Already checksummed input should produce the same output
+        assert_eq!(
+            to_eip55_checksum("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"),
+            "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
+        );
+
+        // Roundtrip from generated address
+        let tmp_dir = std::env::temp_dir().join(format!("test_eip55_{}", uuid::Uuid::new_v4()));
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
+        let addr = mgr.regenerate("EIP55_TEST");
+        let checksummed = to_eip55_checksum(&addr);
+        assert!(checksummed.starts_with("0x"));
+        assert_eq!(checksummed.len(), 42);
+        // Lowercase of both should match
+        assert_eq!(addr.to_lowercase(), checksummed.to_lowercase());
         let _ = fs::remove_dir_all(&tmp_dir);
     }
 
