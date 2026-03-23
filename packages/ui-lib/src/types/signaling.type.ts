@@ -128,16 +128,23 @@ export interface SignalingChatMessage {
 	system?: boolean;
 }
 
+// ===== Room State =====
+
+export interface RoomState {
+	roomId: string;
+	phase: SignalingConnectionPhase;
+	roomPeers: SignalingPeerInfo[];
+	peerConnectionStates: Record<string, PeerConnectionStatus>;
+}
+
 // ===== Service State =====
 
 export interface SignalingChatState {
-	phase: SignalingConnectionPhase;
-	roomId: string;
+	rooms: Record<string, RoomState>;
 	localPeerId: string | null;
 	peerIds: string[];
-	roomPeers: SignalingPeerInfo[];
 	activePeerId: string | null;
-	peerConnectionStates: Record<string, PeerConnectionStatus>;
+	activeRoomId: string | null;
 	messages: SignalingChatMessage[];
 	error: string | null;
 }
