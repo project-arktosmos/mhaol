@@ -34,6 +34,7 @@
 	} from 'addons/tmdb/transform';
 	import { tmdbBrowseService } from 'ui-lib/services/tmdb-browse.service';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
+	import { smartPairService } from 'ui-lib/services/smart-pair.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
@@ -63,6 +64,9 @@
 
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
+
+	// Pinned movies from smart pairing
+	let pinnedMovies = $state<DisplayTMDBMovie[]>([]);
 
 	// Image overrides: tmdbId -> { poster?: filePath, backdrop?: filePath }
 	let movieImageOverrides = $state<Map<number, Record<string, string>>>(new Map());
@@ -527,6 +531,9 @@
 		loadFetchCacheIds();
 		loadFetchCacheHashes();
 		initBrowseSections();
+		smartPairService.loadPinned().then((pinned) => {
+			pinnedMovies = pinned.movies;
+		});
 	});
 
 	function getItemLinks(item: MediaItem): Record<string, MediaItemLink> {
@@ -884,6 +891,19 @@
 			<BrowseViewToggle />
 		</div>
 		<div class="container mx-auto">
+			{#if pinnedMovies.length > 0}
+				<section class="mb-8">
+					<h2 class="mb-3 text-lg font-semibold">Pinned</h2>
+					<TmdbBrowseGrid
+						movies={pinnedMovies}
+						selectedMovieId={selectedBrowseMovie?.id ?? null}
+						fetchedIds={fetchCachedTmdbIds}
+						downloadStatuses={browseDownloadStatuses}
+						onselectMovie={handleBrowseSelectMovie}
+					/>
+				</section>
+			{/if}
+
 			<section class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold">Search Movies</h2>
 				<SearchTab

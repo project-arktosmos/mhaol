@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { tmdbBrowseService } from "ui-lib/services/tmdb-browse.service";
+  import { smartPairService } from "ui-lib/services/smart-pair.service";
   import type { DisplayTMDBTvShow } from "addons/tmdb/types";
   import SearchTab from "ui-lib/components/tmdb-browse/SearchTab.svelte";
   import PopularTab from "ui-lib/components/tmdb-browse/PopularTab.svelte";
@@ -12,6 +13,8 @@
 
   const browseState = tmdbBrowseService.state;
 
+  let pinnedTvShows = $state<DisplayTMDBTvShow[]>([]);
+
   function handleSelectTvShow(tvShow: DisplayTMDBTvShow) {
     goto(`/tv/${tvShow.id}`);
   }
@@ -20,6 +23,9 @@
     tmdbBrowseService.loadPopularTv();
     tmdbBrowseService.loadGenres();
     tmdbBrowseService.loadDiscoverTv();
+    smartPairService.loadPinned().then((pinned) => {
+      pinnedTvShows = pinned.tv;
+    });
   });
 </script>
 
@@ -28,6 +34,16 @@
     <BrowseViewToggle />
   </div>
   <div class="container mx-auto">
+    {#if pinnedTvShows.length > 0}
+      <section class="mb-8">
+        <h2 class="mb-3 text-lg font-semibold">Pinned</h2>
+        <TmdbBrowseGrid
+          tvShows={pinnedTvShows}
+          onselectTvShow={handleSelectTvShow}
+        />
+      </section>
+    {/if}
+
     <section class="mb-8">
       <h2 class="mb-3 text-lg font-semibold">Search TV Shows</h2>
       <SearchTab

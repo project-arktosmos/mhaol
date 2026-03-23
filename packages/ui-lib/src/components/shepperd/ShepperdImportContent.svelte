@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import classNames from 'classnames';
+	import { smartPairService } from 'ui-lib/services/smart-pair.service';
+	import SmartPairResults from './SmartPairResults.svelte';
 
 	interface ShepperdItem {
 		title: string;
@@ -34,6 +36,18 @@
 				(!filterSource || i.source === filterSource) && (!filterType || i.mediaType === filterType)
 		)
 	);
+
+	const pairStore = smartPairService.store;
+	let showPairResults = $derived(
+		$pairStore.pairing ||
+			$pairStore.results.length > 0 ||
+			$pairStore.error !== null ||
+			$pairStore.saved
+	);
+
+	function handleSmartPair() {
+		smartPairService.pair(filtered.map((i) => ({ title: i.title, id: i.id, source: i.source })));
+	}
 
 	let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -73,12 +87,26 @@
 <div class="flex flex-col gap-4">
 	<div class="flex items-center justify-between">
 		<h2 class="text-lg font-bold">Shepperd Import</h2>
-		<button class="btn btn-sm btn-primary" onclick={requestCatalog} disabled={loading}>
-			{#if loading}
-				<span class="loading loading-xs loading-spinner"></span>
+		<div class="flex gap-2">
+			{#if extensionDetected && filtered.length > 0}
+				<button
+					class="btn btn-sm btn-secondary"
+					onclick={handleSmartPair}
+					disabled={$pairStore.pairing}
+				>
+					{#if $pairStore.pairing}
+						<span class="loading loading-xs loading-spinner"></span>
+					{/if}
+					Smart Pair
+				</button>
 			{/if}
-			Refresh
-		</button>
+			<button class="btn btn-sm btn-primary" onclick={requestCatalog} disabled={loading}>
+				{#if loading}
+					<span class="loading loading-xs loading-spinner"></span>
+				{/if}
+				Refresh
+			</button>
+		</div>
 	</div>
 
 	{#if loading}
@@ -125,6 +153,21 @@
 				{/each}
 			</select>
 		</div>
+
+		{#if showPairResults}
+			<SmartPairResults
+				results={$pairStore.results}
+				pairing={$pairStore.pairing}
+				saving={$pairStore.saving}
+				saved={$pairStore.saved}
+				error={$pairStore.error}
+				ontoggle={(id) => smartPairService.toggleResult(id)}
+				onacceptall={() => smartPairService.acceptAll()}
+				onrejectall={() => smartPairService.rejectAll()}
+				onsave={() => smartPairService.save()}
+				onreset={() => smartPairService.reset()}
+			/>
+		{/if}
 
 		<div class="overflow-x-auto rounded-lg border border-base-300">
 			<table class="table table-zebra table-sm">

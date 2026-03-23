@@ -31,6 +31,7 @@ src/
 │   ├── queue.rs           # Queue task management (CRUD + SSE subscribe)
 │   ├── roster.rs           # Roster contacts CRUD (GET/POST/DELETE /api/roster)
 │   ├── signaling.rs
+│   ├── smart_pair.rs      # Smart pairing: TMDB matching + pinned items
 │   ├── tmdb.rs
 │   ├── torrent.rs        # cfg(not(target_os = "android"))
 │   ├── youtube.rs
