@@ -1,8 +1,18 @@
 import type * as Party from 'partykit/server';
-import { recoverMessageAddress } from 'viem';
+import { recoverMessageAddress, getAddress, isAddress } from 'viem';
 import type { ClientMessage, ServerMessage, PeerConnectionState, IceServerConfig } from './types.js';
 
 const AUTH_TIMESTAMP_MAX_AGE_MS = 30_000;
+const HANDSHAKES_ROOM = 'handshakes';
+
+function isEip55Room(roomId: string): boolean {
+	if (!isAddress(roomId)) return false;
+	try {
+		return getAddress(roomId) === roomId;
+	} catch {
+		return false;
+	}
+}
 const ICE_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 export default class SignalingRoom implements Party.Server {
@@ -70,6 +80,39 @@ export default class SignalingRoom implements Party.Server {
 				const payload = JSON.parse(passportRaw);
 				name = payload.name ?? '';
 				instanceType = payload.instanceType ?? '';
+			}
+
+			// Room ACL enforcement
+			if (roomId === HANDSHAKES_ROOM) {
+				// Open room — any authenticated user can join
+			} else if (isEip55Room(roomId)) {
+				const peerChecksummed = getAddress(address as `0x${string}`);
+				const isOwner = peerChecksummed === roomId;
+
+				if (isOwner) {
+					// Only server-type passports can own rooms
+					if (instanceType !== 'server') {
+						return new Response('Only server instances can create rooms', { status: 403 });
+					}
+				} else {
+					// Non-owner must present a valid endorsement from the room owner
+					const endorserSignature = url.searchParams.get('endorser_signature');
+					if (!endorserSignature || !passportRaw) {
+						return new Response('Endorsement required for this room', { status: 403 });
+					}
+
+					// Verify the endorser signed the connecting client's passport
+					const endorserRecovered = await recoverMessageAddress({
+						message: passportRaw,
+						signature: endorserSignature as `0x${string}`
+					});
+
+					if (getAddress(endorserRecovered) !== roomId) {
+						return new Response('Invalid endorsement for this room', { status: 403 });
+					}
+				}
+			} else {
+				return new Response('Invalid room name', { status: 403 });
 			}
 
 			req.headers.set('X-Peer-Name', name);
