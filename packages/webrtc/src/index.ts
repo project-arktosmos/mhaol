@@ -3,6 +3,7 @@ export { verifyPassport } from 'webrtc/verify';
 export type {
 	PassportData,
 	PassportPayload,
+	Endorsement,
 	ContactRequestMessage,
 	ContactAcceptMessage,
 	ContactHandshakeMessage,

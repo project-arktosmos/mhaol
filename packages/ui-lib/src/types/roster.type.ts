@@ -8,6 +8,7 @@ export interface RosterEntry {
 	status: RosterPeerStatus;
 	passport?: string;
 	instanceType?: string;
+	endorsement?: string;
 }
 
 export interface RosterState {

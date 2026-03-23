@@ -15,6 +15,15 @@ export interface PassportPayload {
 	signalingUrl: string;
 }
 
+// ===== Endorsement =====
+
+export interface Endorsement {
+	passportRaw: string;
+	endorserSignature: string;
+	endorserAddress: string;
+	endorsedAt: string;
+}
+
 // ===== Data Channel Protocol =====
 
 export interface ContactRequestMessage {
@@ -25,6 +34,7 @@ export interface ContactRequestMessage {
 export interface ContactAcceptMessage {
 	type: 'contact-accept';
 	passport: PassportData;
+	endorsement?: Endorsement;
 }
 
 export type ContactHandshakeMessage = ContactRequestMessage | ContactAcceptMessage;
@@ -57,6 +67,7 @@ export interface AcceptedContact {
 	address: string;
 	passport: PassportData;
 	acceptedAt: string;
+	endorsement?: Endorsement;
 }
 
 export interface ContactHandshakeState {
