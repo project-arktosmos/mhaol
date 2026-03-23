@@ -48,7 +48,7 @@
 	}
 
 	function findPeerIdForAddress(address: string): string | null {
-		const peers = $chatStore.roomPeers ?? [];
+		const peers = Object.values($chatStore.rooms).flatMap((r) => r.roomPeers);
 		const match = peers.find(
 			(p) => p.peer_id.toLowerCase() === address.toLowerCase()
 		);
