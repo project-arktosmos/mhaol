@@ -1,33 +1,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { torrentService } from 'ui-lib/services/torrent.service';
-	import { libraryService } from 'ui-lib/services/library.service';
 	import TorrentAddInput from 'ui-lib/components/torrent/TorrentAddInput.svelte';
-	import TorrentSettings from 'ui-lib/components/torrent/TorrentSettings.svelte';
 	import TorrentSearch from 'ui-lib/components/torrent/TorrentSearch.svelte';
 
 	const state = torrentService.state;
 
 	onMount(() => {
 		torrentService.initialize();
-		libraryService.initialize();
 	});
 </script>
 
-<!-- Header -->
-<div class="flex items-center justify-between pr-8">
-	<div>
-		<h3 class="text-lg font-bold">Torrent Manager</h3>
-		<p class="text-sm text-base-content/60">Download and manage torrents via magnet links</p>
-	</div>
-	{#if !$state.initialized && $state.loading}
-		<span class="loading loading-md loading-spinner"></span>
-	{/if}
-</div>
-
 <!-- Error display -->
 {#if $state.error}
-	<div class="mt-4 alert alert-error">
+	<div class="alert alert-error">
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			class="h-6 w-6 shrink-0 stroke-current"
@@ -51,12 +37,8 @@
 	</div>
 {/if}
 
-<!-- Torrent search -->
+<TorrentAddInput />
+
 <div class="mt-4">
 	<TorrentSearch />
-</div>
-
-<div class="mt-6 flex flex-col gap-4">
-	<TorrentAddInput />
-	<TorrentSettings />
 </div>

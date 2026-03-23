@@ -9,6 +9,14 @@ export type SignalingConnectionPhase =
 
 export type PeerConnectionStatus = 'idle' | 'offering' | 'answering' | 'connected' | 'failed';
 
+// ===== Peer Info =====
+
+export interface SignalingPeerInfo {
+	peer_id: string;
+	name: string;
+	instance_type: string;
+}
+
 // ===== Client → Server Messages =====
 
 export interface SignalingOfferMessage {
@@ -38,15 +46,26 @@ export type SignalingClientMessage =
 
 // ===== Server → Client Messages =====
 
+export interface SignalingIceServerConfig {
+	urls: string | string[];
+	username?: string;
+	credential?: string;
+}
+
 export interface SignalingConnectedMessage {
 	type: 'connected';
 	peer_id: string;
+	name: string;
+	instance_type: string;
+	ice_servers?: SignalingIceServerConfig[];
 }
 
 export interface SignalingPeerJoinedMessage {
 	type: 'peer-joined';
 	room_id: string;
 	peer_id: string;
+	name: string;
+	instance_type: string;
 }
 
 export interface SignalingPeerLeftMessage {
@@ -58,7 +77,7 @@ export interface SignalingPeerLeftMessage {
 export interface SignalingRoomPeersMessage {
 	type: 'room-peers';
 	room_id: string;
-	peers: string[];
+	peers: SignalingPeerInfo[];
 }
 
 export interface SignalingRelayedOfferMessage {
@@ -116,7 +135,7 @@ export interface SignalingChatState {
 	roomId: string;
 	localPeerId: string | null;
 	peerIds: string[];
-	roomPeerIds: string[];
+	roomPeers: SignalingPeerInfo[];
 	activePeerId: string | null;
 	peerConnectionStates: Record<string, PeerConnectionStatus>;
 	messages: SignalingChatMessage[];

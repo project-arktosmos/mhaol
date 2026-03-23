@@ -69,6 +69,40 @@ pub enum VideoFormat {
     Webm,
 }
 
+// ===== Subtitle Types =====
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum SubtitleMode {
+    None,
+    All,
+    Selected,
+}
+
+impl Default for SubtitleMode {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleTrack {
+    pub language_code: String,
+    pub language_name: String,
+    pub is_auto_generated: bool,
+    pub is_translatable: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadedSubtitle {
+    pub language_code: String,
+    pub language_name: String,
+    pub is_auto_generated: bool,
+    pub file_path: String,
+}
+
 // ===== API Request Types =====
 
 #[derive(Debug, Clone, Deserialize)]
@@ -92,6 +126,10 @@ pub struct QueueDownloadRequest {
     pub duration_seconds: Option<f64>,
     #[serde(default)]
     pub channel_name: Option<String>,
+    #[serde(default)]
+    pub subtitle_mode: Option<SubtitleMode>,
+    #[serde(default)]
+    pub subtitle_langs: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -107,6 +145,10 @@ pub struct QueuePlaylistRequest {
     pub video_output_dir: Option<String>,
     #[serde(default)]
     pub audio_output_dir: Option<String>,
+    #[serde(default)]
+    pub subtitle_mode: Option<SubtitleMode>,
+    #[serde(default)]
+    pub subtitle_langs: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -142,6 +184,7 @@ pub struct DownloadProgress {
     pub thumbnail_url: Option<String>,
     pub duration_seconds: Option<f64>,
     pub channel_name: Option<String>,
+    pub subtitle_paths: Vec<DownloadedSubtitle>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -152,6 +195,7 @@ pub struct VideoInfo {
     pub thumbnail_url: Option<String>,
     pub uploader: Option<String>,
     pub video_id: String,
+    pub subtitle_tracks: Vec<SubtitleTrack>,
 }
 
 #[derive(Debug, Clone, Serialize)]

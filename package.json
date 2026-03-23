@@ -4,9 +4,9 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm --filter server dev",
+		"dev": "pnpm -r --parallel --filter client --filter server --filter website dev",
 		"start": "pnpm --filter server start",
-		"dev:backend": "set -a; . ./.env.app 2>/dev/null; set +a; PORT=1530 cargo run -p mhaol-server --bin mhaol-server",
+		"dev:backend": "set -a; . ./.env 2>/dev/null; set +a; PORT=1530 cargo run -p mhaol-server --bin mhaol-server",
 		"dev:frontend": "pnpm --filter mhaol-video dev",
 		"build": "pnpm --filter server build",
 		"build:backend": "cargo build --release --bin mhaol-server",
@@ -17,8 +17,8 @@
 		"format": "pnpm -r run format",
 		"check": "pnpm -r run check && cargo check -p mhaol-server",
 		"clean": "pnpm -r run clean && cargo clean",
-		"signaling:dev": "pnpm --filter signaling dev",
-		"signaling:deploy": "pnpm --filter signaling run deploy",
+		"signaling:dev": "dotenv -- pnpm --filter signaling dev",
+		"signaling:deploy": "dotenv -- pnpm --filter signaling run deploy",
 		"app:server": "pnpm --filter server headless",
 		"app:video": "pnpm --filter video dev",
 		"app:website": "pnpm --filter website dev",
@@ -32,7 +32,6 @@
 		"app:client:desktop": "pnpm --filter client tauri:dev",
 		"app:client:android": "pnpm --filter client tauri:android:build",
 		"app:client:android:signed": "pnpm --filter client tauri:android:build:signed",
-		"app:storybook": "pnpm --filter storybook headless",
 		"install:deps": "sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev libonig-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav"
 	},
 	"engines": {
@@ -40,6 +39,12 @@
 		"pnpm": ">=9"
 	},
 	"pnpm": {
-		"onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+		"onlyBuiltDependencies": [
+			"better-sqlite3",
+			"esbuild"
+		]
+	},
+	"devDependencies": {
+		"dotenv-cli": "^11.0.0"
 	}
 }

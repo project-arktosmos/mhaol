@@ -1,5 +1,9 @@
 pub mod api;
 pub mod db;
+#[cfg(not(target_os = "android"))]
+pub mod http_stream;
+#[cfg(not(target_os = "android"))]
+pub mod llm_worker;
 pub mod modules;
 pub mod signaling_rooms;
 pub mod worker_bridge;
@@ -7,6 +11,7 @@ pub mod worker_bridge;
 use db::repo::*;
 use db::DbPool;
 use mhaol_identity::IdentityManager;
+use mhaol_queue::QueueManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_llm::LlmEngine;
 #[cfg(not(target_os = "android"))]
@@ -37,16 +42,16 @@ pub fn default_data_dir() -> PathBuf {
     data_dir
 }
 
-/// Load .env.app from the workspace root into process environment variables.
+/// Load .env from the workspace root into process environment variables.
 /// Only sets variables that are not already present in the environment.
-pub fn load_env_app() {
+pub fn load_env() {
     let mut dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let env_path = loop {
         if dir.join("pnpm-workspace.yaml").exists() {
-            break dir.join(".env.app");
+            break dir.join(".env");
         }
         if !dir.pop() {
-            break PathBuf::from(".env.app");
+            break PathBuf::from(".env");
         }
     };
 
@@ -102,10 +107,16 @@ pub struct AppState {
     pub data_dir: PathBuf,
     pub llm_conversations: LlmConversationRepo,
     pub torrent_fetch_cache: TorrentFetchCacheRepo,
+    pub tv_torrent_fetch_cache: TvTorrentFetchCacheRepo,
     pub tmdb_api_cache: TmdbApiCacheRepo,
+    pub tmdb_image_overrides: TmdbImageOverrideRepo,
+    pub roster_contacts: RosterContactRepo,
+    pub openlibrary_api_cache: OpenLibraryApiCacheRepo,
+    pub book_torrent_fetch_cache: BookTorrentFetchCacheRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
     pub worker_bridge: Arc<WorkerBridge>,
     pub hub: Arc<api::hub::HubManager>,
+    pub queue: Arc<QueueManager>,
 }
 
 impl AppState {
@@ -116,20 +127,9 @@ impl AppState {
             .ok()
             .map(|d| PathBuf::from(d).join("identities"))
             .unwrap_or_else(mhaol_identity::default_identities_dir);
-        let identity_manager = IdentityManager::new(identities_dir, "server".to_string());
-
-        // One-time migration from old .env.identities format
-        let old_env_path = find_env_identities_path();
-        if old_env_path.exists() {
-            let count = mhaol_identity::migrate_from_env_file(&old_env_path, &identity_manager);
-            if count > 0 {
-                tracing::info!(
-                    "Migrated {} identities from {} to ~/.mhaol-identities/",
-                    count,
-                    old_env_path.display()
-                );
-            }
-        }
+        let signaling_url = std::env::var("SIGNALING_URL")
+            .unwrap_or_else(|_| "https://mhaol-signaling.project-arktosmos.partykit.dev".to_string());
+        let identity_manager = IdentityManager::new(identities_dir, "server".to_string(), signaling_url);
 
         let data_dir = default_data_dir();
 
@@ -167,10 +167,16 @@ impl AppState {
             image_tagger_manager: Arc::new(modules::image_tagger::ImageTaggerManager::new()),
             llm_conversations: LlmConversationRepo::new(Arc::clone(&db)),
             torrent_fetch_cache: TorrentFetchCacheRepo::new(Arc::clone(&db)),
+            tv_torrent_fetch_cache: TvTorrentFetchCacheRepo::new(Arc::clone(&db)),
             tmdb_api_cache: TmdbApiCacheRepo::new(Arc::clone(&db)),
+            tmdb_image_overrides: TmdbImageOverrideRepo::new(Arc::clone(&db)),
+            roster_contacts: RosterContactRepo::new(Arc::clone(&db)),
+            openlibrary_api_cache: OpenLibraryApiCacheRepo::new(Arc::clone(&db)),
+            book_torrent_fetch_cache: BookTorrentFetchCacheRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
             worker_bridge: Arc::new(WorkerBridge::new()),
             hub: Arc::new(api::hub::HubManager::new()),
+            queue: Arc::new(QueueManager::new(Arc::clone(&db))),
             data_dir,
             db,
         })
@@ -182,9 +188,9 @@ impl AppState {
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {
         use modules::{
-            jackett::JackettModule, lyrics::LyricsModule,
-            musicbrainz::MusicbrainzModule, signaling::SignalingModule,
-            tmdb::TmdbModule,
+            lyrics::LyricsModule,
+            musicbrainz::MusicbrainzModule, retroachievements::RetroachievementsModule,
+            signaling::SignalingModule, tmdb::TmdbModule,
             torrent_search::TorrentSearchModule,
             youtube_meta::YoutubeMetaModule,
         };
@@ -199,27 +205,27 @@ impl AppState {
         let mut registry = self.module_registry.write();
         let is_server = std::env::var("APP_ID").ok().as_deref() == Some("server");
 
+        // Addons (packages/addons/*)
+        registry.register(Box::new(LyricsModule));
+        registry.register(Box::new(MusicbrainzModule));
+        registry.register(Box::new(RetroachievementsModule));
+        registry.register(Box::new(TmdbModule));
+        registry.register(Box::new(TorrentSearchModule));
+        registry.register(Box::new(YoutubeMetaModule));
+
+        // Non-server modules
         if !is_server {
-            // YouTube
-            registry.register(Box::new(YoutubeMetaModule));
             #[cfg(not(target_os = "android"))]
             registry.register(Box::new(YtdlModule {
                 manager: Arc::clone(&self.ytdl_manager),
             }));
-
-            // Music & Images
-            registry.register(Box::new(LyricsModule));
-            registry.register(Box::new(MusicbrainzModule));
             #[cfg(not(target_os = "android"))]
             registry.register(Box::new(ImageTaggerModule {
                 manager: Arc::clone(&self.image_tagger_manager),
             }));
         }
 
-        // Addons
-        registry.register(Box::new(TmdbModule));
-        registry.register(Box::new(TorrentSearchModule));
-        registry.register(Box::new(JackettModule));
+
 
         // Signaling modules
         registry.register(Box::new(SignalingModule {
@@ -239,21 +245,39 @@ impl AppState {
         registry.initialize(self);
     }
 
-    /// Seed a default "Downloads" library if no libraries exist.
-    pub fn seed_default_library(&self) {
-        if self.libraries.get_all().is_empty() {
-            let downloads_path = self.data_dir.join("downloads").to_string_lossy().to_string();
+    /// Seed default libraries (one per media category) if no libraries exist.
+    pub fn seed_default_libraries(&self) {
+        if !self.libraries.get_all().is_empty() {
+            return;
+        }
+
+        let downloads_dir = self.data_dir.join("downloads");
+        let defaults = [
+            ("Movies", "movies"),
+            ("TV", "tv"),
+            ("Music", "music"),
+            ("Games", "games"),
+            ("YouTube", "youtube"),
+        ];
+        let now = chrono::Utc::now().timestamp_millis();
+
+        for (name, kind) in &defaults {
+            let path = downloads_dir.join(kind);
+            std::fs::create_dir_all(&path).ok();
             let library_id = uuid::Uuid::new_v4().to_string();
+            let media_types = format!("[\"{}\"]", kind);
             self.libraries.insert(
                 &library_id,
-                "Downloads",
-                &downloads_path,
-                "[\"movies\"]",
-                chrono::Utc::now().timestamp_millis(),
+                name,
+                &path.to_string_lossy(),
+                &media_types,
+                now,
             );
-            // Point the torrent module at this library so downloads land where scans look
-            self.metadata.set_string("torrent.libraryId", &library_id);
-            tracing::info!("Created default library at {}", downloads_path);
+            // Point the torrent module at the Movies library by default
+            if *kind == "movies" {
+                self.metadata.set_string("torrent.libraryId", &library_id);
+            }
+            tracing::info!("Created default {} library at {}", name, path.display());
         }
     }
 }
@@ -279,9 +303,4 @@ pub fn find_workspace_root() -> PathBuf {
         }
     }
     PathBuf::from(".")
-}
-
-/// Find the legacy .env.identities file by searching up for the repo root.
-fn find_env_identities_path() -> PathBuf {
-    find_workspace_root().join(".env.identities")
 }

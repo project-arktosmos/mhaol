@@ -59,12 +59,8 @@
 		onload(Number(id), type as 'movie' | 'tv', 1);
 	}
 
-	let recMovies = $derived(
-		recommendations.filter((r): r is DisplayTMDBMovie => 'title' in r)
-	);
-	let recTvShows = $derived(
-		recommendations.filter((r): r is DisplayTMDBTvShow => !('title' in r))
-	);
+	let recMovies = $derived(recommendations.filter((r): r is DisplayTMDBMovie => 'title' in r));
+	let recTvShows = $derived(recommendations.filter((r): r is DisplayTMDBTvShow => !('title' in r)));
 </script>
 
 {#if linkedItems.length === 0}

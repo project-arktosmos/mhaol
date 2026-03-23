@@ -28,12 +28,15 @@ src/
 │   ├── player.rs
 │   ├── plugins.rs
 │   ├── retroachievements.rs  # RetroAchievements game metadata proxy
+│   ├── queue.rs           # Queue task management (CRUD + SSE subscribe)
+│   ├── roster.rs           # Roster contacts CRUD (GET/POST/DELETE /api/roster)
 │   ├── signaling.rs
 │   ├── tmdb.rs
 │   ├── torrent.rs        # cfg(not(target_os = "android"))
 │   ├── youtube.rs
 │   └── ytdl.rs           # cfg(not(target_os = "android"))
 ├── db/                   # Database layer (rusqlite repos)
+├── llm_worker.rs         # Background LLM queue worker (processes llm:* tasks)
 ├── modules/              # Plugin modules (image tagger, etc.)
 ├── signaling_rooms.rs    # WebSocket signaling room management
 └── worker_bridge.rs      # Background worker bridge
@@ -50,6 +53,7 @@ All API handlers receive `AppState` which contains:
 - `TorrentManager` (desktop only)
 - `ImageTaggerManager` (ONNX/ML, desktop only)
 - `HubManager` for app process management (start/stop headless apps)
+- `QueueManager` for task queue management (from `mhaol-queue` crate)
 - `SignalingRoomManager` and `WorkerBridge` (auto-started on server boot)
 
 ## Adding a New API Module
@@ -64,6 +68,7 @@ All API handlers receive `AppState` which contains:
 Always included:
 
 - `mhaol-identity` — Ethereum identity/wallet management (`packages/identity/`)
+- `mhaol-queue` — Task queue management with SQLite + broadcast (`packages/queue/`)
 
 Conditionally compiled with `#[cfg(not(target_os = "android"))]`:
 

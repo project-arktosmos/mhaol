@@ -2,15 +2,8 @@
 	import { onMount } from 'svelte';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { p2pStreamService } from 'ui-lib/services/p2p-stream.service';
-	import {
-		P2P_VIDEO_CODEC_OPTIONS,
-		P2P_VIDEO_QUALITY_OPTIONS
-	} from 'ui-lib/types/p2p-stream.type';
-	import type {
-		P2pVideoCodec,
-		P2pVideoQuality,
-		P2pStreamMode
-	} from 'ui-lib/types/p2p-stream.type';
+	import { P2P_VIDEO_CODEC_OPTIONS, P2P_VIDEO_QUALITY_OPTIONS } from 'ui-lib/types/p2p-stream.type';
+	import type { P2pVideoCodec, P2pVideoQuality, P2pStreamMode } from 'ui-lib/types/p2p-stream.type';
 	import classNames from 'classnames';
 
 	const settings = p2pStreamService.store;

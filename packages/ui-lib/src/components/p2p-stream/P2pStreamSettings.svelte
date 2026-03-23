@@ -1,21 +1,16 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { p2pStreamService } from 'ui-lib/services/p2p-stream.service';
-	import {
-		P2P_VIDEO_CODEC_OPTIONS,
-		P2P_VIDEO_QUALITY_OPTIONS
-	} from 'ui-lib/types/p2p-stream.type';
-	import type {
-		P2pVideoCodec,
-		P2pVideoQuality,
-		P2pStreamMode
-	} from 'ui-lib/types/p2p-stream.type';
+	import { P2P_VIDEO_CODEC_OPTIONS, P2P_VIDEO_QUALITY_OPTIONS } from 'ui-lib/types/p2p-stream.type';
+	import type { P2pVideoCodec, P2pVideoQuality, P2pStreamMode } from 'ui-lib/types/p2p-stream.type';
 
 	const settings = p2pStreamService.store;
 	const state = p2pStreamService.state;
 
 	// TURN server input
-	let newTurnServer = '';
+	let newTurnUrl = '';
+	let newTurnUsername = '';
+	let newTurnCredential = '';
 	let showAdvanced = false;
 
 	// Debounced STUN server save
@@ -44,10 +39,16 @@
 	}
 
 	function handleAddTurnServer() {
-		const url = newTurnServer.trim();
+		const url = newTurnUrl.trim();
 		if (!url) return;
-		p2pStreamService.addTurnServer(url);
-		newTurnServer = '';
+		p2pStreamService.addTurnServer({
+			url,
+			username: newTurnUsername.trim(),
+			credential: newTurnCredential.trim()
+		});
+		newTurnUrl = '';
+		newTurnUsername = '';
+		newTurnCredential = '';
 	}
 
 	function handleRemoveTurnServer(url: string) {
@@ -63,6 +64,11 @@
 			event.preventDefault();
 			handleAddTurnServer();
 		}
+	}
+
+	function maskCredential(cred: string): string {
+		if (cred.length <= 4) return '****';
+		return cred.slice(0, 2) + '****' + cred.slice(-2);
 	}
 </script>
 
@@ -282,10 +288,17 @@
 					<div class="flex flex-col gap-2">
 						{#each $settings.turnServers as server}
 							<div class="flex items-center justify-between rounded-lg bg-base-200 px-3 py-2">
-								<span class="font-mono text-sm">{server}</span>
+								<div class="min-w-0 flex-1">
+									<span class="block truncate font-mono text-sm">{server.url}</span>
+									{#if server.username}
+										<span class="text-xs text-base-content/50">
+											{server.username} / {maskCredential(server.credential)}
+										</span>
+									{/if}
+								</div>
 								<button
 									class="btn text-error btn-ghost btn-xs"
-									on:click={() => handleRemoveTurnServer(server)}
+									on:click={() => handleRemoveTurnServer(server.url)}
 									title="Remove server"
 								>
 									<svg
@@ -307,20 +320,34 @@
 				{/if}
 
 				<!-- Add TURN server -->
-				<div class="flex items-center gap-2">
+				<div class="flex flex-col gap-2">
 					<input
 						type="text"
-						class="input-bordered input input-sm flex-1 font-mono text-xs"
+						class="input-bordered input input-sm w-full font-mono text-xs"
 						placeholder="turn:example.com:3478"
-						bind:value={newTurnServer}
+						bind:value={newTurnUrl}
 						on:keydown={handleTurnKeydown}
 					/>
+					<div class="flex gap-2">
+						<input
+							type="text"
+							class="input-bordered input input-sm flex-1 font-mono text-xs"
+							placeholder="username"
+							bind:value={newTurnUsername}
+						/>
+						<input
+							type="password"
+							class="input-bordered input input-sm flex-1 font-mono text-xs"
+							placeholder="credential"
+							bind:value={newTurnCredential}
+						/>
+					</div>
 					<button
 						class="btn btn-sm btn-primary"
 						on:click={handleAddTurnServer}
-						disabled={!newTurnServer.trim()}
+						disabled={!newTurnUrl.trim()}
 					>
-						Add
+						Add TURN Server
 					</button>
 				</div>
 			</div>

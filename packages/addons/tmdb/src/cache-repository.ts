@@ -1,4 +1,8 @@
-import type { Database as DatabaseType, Statement } from 'better-sqlite3';
+import type { Database as DatabaseType } from 'better-sqlite3';
+import { AddonCacheRepository } from '../../common/src/addon-cache.js';
+import type { CacheRow } from '../../common/src/addon-cache.js';
+
+const SERVICE = 'tmdb';
 
 export interface TmdbCacheRow {
 	tmdb_id: number;
@@ -13,91 +17,74 @@ export interface TmdbSeasonCacheRow {
 	fetched_at: string;
 }
 
-const STALE_DAYS = 7;
+function toTmdbRow(row: CacheRow): TmdbCacheRow {
+	return {
+		tmdb_id: Number(row.cache_key),
+		data: row.data,
+		fetched_at: row.fetched_at
+	};
+}
+
+function toSeasonRow(row: CacheRow, seasonNumber: number): TmdbSeasonCacheRow {
+	return {
+		tmdb_id: Number(row.cache_key.split(':')[0]),
+		season_number: seasonNumber,
+		data: row.data,
+		fetched_at: row.fetched_at
+	};
+}
 
 export class TmdbCacheRepository {
-	private stmts: {
-		getMovie: Statement<[number], TmdbCacheRow>;
-		upsertMovie: Statement<[number, string]>;
-		deleteMovie: Statement<[number]>;
-		getTvShow: Statement<[number], TmdbCacheRow>;
-		upsertTvShow: Statement<[number, string]>;
-		deleteTvShow: Statement<[number]>;
-		getSeason: Statement<[number, number], TmdbSeasonCacheRow>;
-		upsertSeason: Statement<[number, number, string]>;
-		deleteSeason: Statement<[number, number]>;
-		deleteSeasonsByShow: Statement<[number]>;
-	};
+	private cache: AddonCacheRepository;
 
-	constructor(private db: DatabaseType) {
-		this.stmts = {
-			getMovie: db.prepare('SELECT * FROM tmdb_movies WHERE tmdb_id = ?'),
-			upsertMovie: db.prepare(`
-				INSERT INTO tmdb_movies (tmdb_id, data) VALUES (?, ?)
-				ON CONFLICT(tmdb_id) DO UPDATE SET data = excluded.data, fetched_at = datetime('now')
-			`),
-			deleteMovie: db.prepare('DELETE FROM tmdb_movies WHERE tmdb_id = ?'),
-			getTvShow: db.prepare('SELECT * FROM tmdb_tv_shows WHERE tmdb_id = ?'),
-			upsertTvShow: db.prepare(`
-				INSERT INTO tmdb_tv_shows (tmdb_id, data) VALUES (?, ?)
-				ON CONFLICT(tmdb_id) DO UPDATE SET data = excluded.data, fetched_at = datetime('now')
-			`),
-			deleteTvShow: db.prepare('DELETE FROM tmdb_tv_shows WHERE tmdb_id = ?'),
-			getSeason: db.prepare('SELECT * FROM tmdb_seasons WHERE tmdb_id = ? AND season_number = ?'),
-			upsertSeason: db.prepare(`
-				INSERT INTO tmdb_seasons (tmdb_id, season_number, data) VALUES (?, ?, ?)
-				ON CONFLICT(tmdb_id, season_number) DO UPDATE SET data = excluded.data, fetched_at = datetime('now')
-			`),
-			deleteSeason: db.prepare('DELETE FROM tmdb_seasons WHERE tmdb_id = ? AND season_number = ?'),
-			deleteSeasonsByShow: db.prepare('DELETE FROM tmdb_seasons WHERE tmdb_id = ?')
-		};
+	constructor(db: DatabaseType) {
+		this.cache = new AddonCacheRepository(db);
 	}
 
 	getMovie(tmdbId: number): TmdbCacheRow | null {
-		return this.stmts.getMovie.get(tmdbId) ?? null;
+		const row = this.cache.get(SERVICE, 'movie', String(tmdbId));
+		return row ? toTmdbRow(row) : null;
 	}
 
 	upsertMovie(tmdbId: number, data: string): void {
-		this.stmts.upsertMovie.run(tmdbId, data);
+		this.cache.upsert(SERVICE, 'movie', String(tmdbId), data);
 	}
 
 	deleteMovie(tmdbId: number): boolean {
-		return this.stmts.deleteMovie.run(tmdbId).changes > 0;
+		return this.cache.delete(SERVICE, 'movie', String(tmdbId));
 	}
 
 	getTvShow(tmdbId: number): TmdbCacheRow | null {
-		return this.stmts.getTvShow.get(tmdbId) ?? null;
+		const row = this.cache.get(SERVICE, 'tv', String(tmdbId));
+		return row ? toTmdbRow(row) : null;
 	}
 
 	upsertTvShow(tmdbId: number, data: string): void {
-		this.stmts.upsertTvShow.run(tmdbId, data);
+		this.cache.upsert(SERVICE, 'tv', String(tmdbId), data);
 	}
 
 	deleteTvShow(tmdbId: number): boolean {
-		return this.stmts.deleteTvShow.run(tmdbId).changes > 0;
+		return this.cache.delete(SERVICE, 'tv', String(tmdbId));
 	}
 
 	getSeason(tmdbId: number, seasonNumber: number): TmdbSeasonCacheRow | null {
-		return this.stmts.getSeason.get(tmdbId, seasonNumber) ?? null;
+		const row = this.cache.get(SERVICE, 'season', `${tmdbId}:${seasonNumber}`);
+		return row ? toSeasonRow(row, seasonNumber) : null;
 	}
 
 	upsertSeason(tmdbId: number, seasonNumber: number, data: string): void {
-		this.stmts.upsertSeason.run(tmdbId, seasonNumber, data);
+		this.cache.upsert(SERVICE, 'season', `${tmdbId}:${seasonNumber}`, data);
 	}
 
 	deleteSeason(tmdbId: number, seasonNumber: number): boolean {
-		return this.stmts.deleteSeason.run(tmdbId, seasonNumber).changes > 0;
+		return this.cache.delete(SERVICE, 'season', `${tmdbId}:${seasonNumber}`);
 	}
 
 	deleteSeasonsByShow(tmdbId: number): number {
-		return this.stmts.deleteSeasonsByShow.run(tmdbId).changes;
+		return this.cache.deleteByServiceType(SERVICE, 'season');
 	}
 
 	isFresh(fetchedAt: string): boolean {
-		const fetched = new Date(fetchedAt + 'Z');
-		const now = new Date();
-		const diffMs = now.getTime() - fetched.getTime();
-		const diffDays = diffMs / (1000 * 60 * 60 * 24);
-		return diffDays < STALE_DAYS;
+		return this.cache.isFresh(fetchedAt);
 	}
 }

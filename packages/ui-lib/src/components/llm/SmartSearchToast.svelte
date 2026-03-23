@@ -1,14 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { get } from 'svelte/store';
-	import { llmService } from 'ui-lib/services/llm.service';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import SmartSearchSection from './SmartSearchSection.svelte';
+	import TvSmartSearchSection from './TvSmartSearchSection.svelte';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
 	import { apiUrl } from 'ui-lib/lib/api-base';
-
-	const DEFAULT_MODEL = 'qwen2.5-1.5b-instruct-q4_k_m.gguf';
 
 	let {
 		onlibrarychange,
@@ -18,7 +14,6 @@
 		onstream?: (candidate: SmartSearchTorrentResult) => void;
 	} = $props();
 
-	const llmStore = llmService.store;
 	const searchStore = smartSearchService.store;
 
 	let visible = $derived($searchStore.visible);
@@ -30,24 +25,58 @@
 	let analyzing = $derived($searchStore.analyzing);
 	let isMusic = $derived(selection?.type === 'music');
 
+	const configStore = smartSearchService.configStore;
+
+	let mediaConfig = $derived.by(() => {
+		if (!selection) return null;
+		const key =
+			selection.type === 'movie'
+				? 'movies'
+				: selection.type === 'tv'
+					? 'tv'
+					: selection.type === 'music'
+						? 'music'
+						: 'games';
+		return $configStore[key];
+	});
+
+	let isTv = $derived(selection?.type === 'tv');
+
 	let bestCandidate = $derived.by(() => {
 		if (analyzing || searching) return null;
-		const results = [...$searchStore.searchResults].sort((a, b) => {
-			if (b.seeders !== a.seeders) return b.seeders - a.seeders;
-			if (b.leechers !== a.leechers) return b.leechers - a.leechers;
-			const relA = a.analysis?.relevance ?? -1;
-			const relB = b.analysis?.relevance ?? -1;
-			return relB - relA;
-		});
-		const prefLang = 'english';
-		const prefQuality = isMusic ? 'flac' : '1080p';
-		for (const r of results) {
+
+		// For TV, use the TV-specific best candidate logic
+		if (isTv) {
+			return smartSearchService.getBestTvCandidate();
+		}
+
+		const raw = $searchStore.searchResults;
+		const maxSE = Math.max(1, ...raw.map((r) => r.seeders));
+		const maxLE = Math.max(1, ...raw.map((r) => r.leechers));
+		const prefLang = (mediaConfig?.preferredLanguage ?? '').toLowerCase();
+		const prefQuality = (mediaConfig?.preferredQuality ?? '').toLowerCase();
+		const prefConsole = (mediaConfig?.preferredConsole ?? '').toLowerCase();
+		const scored = raw
+			.map((r) => {
+				const sePct = Math.round((r.seeders / maxSE) * 100);
+				const lePct = Math.round((r.leechers / maxLE) * 100);
+				const relPct = r.analysis?.relevance ?? 0;
+				const langBonus =
+					prefLang && r.analysis && r.analysis.languages.toLowerCase().includes(prefLang) ? 100 : 0;
+				const qualityBonus =
+					prefQuality && r.analysis && r.analysis.quality.toLowerCase().includes(prefQuality)
+						? 100
+						: 0;
+				const consoleBonus =
+					prefConsole && r.analysis && r.analysis.reason.toLowerCase().includes('console matches')
+						? 100
+						: 0;
+				return { r, score: sePct + lePct + relPct + langBonus + qualityBonus + consoleBonus };
+			})
+			.sort((a, b) => b.score - a.score);
+		for (const { r } of scored) {
 			if (!r.analysis) continue;
 			if (r.analysis.relevance < 75) continue;
-			if (!isMusic) {
-				if (!r.analysis.languages.toLowerCase().includes(prefLang)) continue;
-				if (!r.analysis.quality.toLowerCase().includes(prefQuality)) continue;
-			}
 			return r;
 		}
 		return null;
@@ -79,8 +108,21 @@
 			const basePath: string = config.downloadPath ?? '';
 			if (!basePath) return;
 
-			const subdir =
-				selection.type === 'music' ? 'music' : selection.type === 'movie' ? 'movies' : 'tv';
+			let subdir: string;
+			switch (selection.type) {
+				case 'music':
+					subdir = 'music';
+					break;
+				case 'movie':
+					subdir = 'movies';
+					break;
+				case 'game':
+					subdir = 'games';
+					break;
+				default:
+					subdir = 'tv';
+					break;
+			}
 			const downloadPath = `${basePath}/${subdir}`;
 
 			const res = await fetch(apiUrl('/api/torrent/torrents'), {
@@ -119,29 +161,15 @@
 			}
 		}
 	});
-
-	onMount(async () => {
-		await llmService.initialize();
-		const state = get(llmStore);
-		if (state.status?.modelLoaded) return;
-		const model = state.models.find((m) => m.fileName === DEFAULT_MODEL);
-		if (model && !model.isLoaded) {
-			await llmService.loadModel(DEFAULT_MODEL);
-		}
-	});
 </script>
 
-<Modal open={visible} maxWidth="max-w-3xl" onclose={() => smartSearchService.hide()}>
+<Modal open={visible} maxWidth="max-w-[90vw]" onclose={() => smartSearchService.hide()}>
 	<h2 class="mb-3 text-sm font-semibold tracking-wide text-base-content/50 uppercase">
 		Smart Search
 	</h2>
-	<SmartSearchSection
-		status={$llmStore.status}
-		models={$llmStore.models}
-		downloadProgress={$llmStore.downloadProgress}
-		loading={$llmStore.loading}
-		onLoadModel={(fileName) => llmService.loadModel(fileName)}
-		onUnloadModel={() => llmService.unloadModel()}
-		onDownloadModel={(repoId, fileName) => llmService.downloadModel(repoId, fileName)}
-	/>
+	{#if isTv}
+		<TvSmartSearchSection />
+	{:else}
+		<SmartSearchSection />
+	{/if}
 </Modal>

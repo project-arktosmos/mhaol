@@ -34,13 +34,9 @@
 	>
 		<div class="modal-box flex h-[90vh] max-w-6xl flex-col overflow-hidden p-0">
 			{#if title}
-				<div
-					class="flex shrink-0 items-center justify-between border-b border-base-300 px-6 py-4"
-				>
+				<div class="flex shrink-0 items-center justify-between border-b border-base-300 px-6 py-4">
 					<h3 class="text-lg font-semibold">{title}</h3>
-					<button class="btn btn-circle btn-ghost btn-sm" onclick={handleClose}>
-						&times;
-					</button>
+					<button class="btn btn-circle btn-ghost btn-sm" onclick={handleClose}> &times; </button>
 				</div>
 			{:else}
 				<button
@@ -86,7 +82,7 @@
 
 				<!-- Content area -->
 				<div class="min-w-0 flex-1 overflow-y-auto p-6 pt-12 lg:pt-6">
-					<activeSection.component {...(activeSection.props ?? {})} />
+					<activeSection.component {...activeSection.props ?? {}} />
 				</div>
 			</div>
 		</div>

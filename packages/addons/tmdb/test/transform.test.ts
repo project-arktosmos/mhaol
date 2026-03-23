@@ -11,6 +11,8 @@ import {
 	moviesToDisplay,
 	castMemberToDisplay,
 	movieDetailsToDisplay,
+	imageToDisplay,
+	imagesToDisplay,
 	tvShowToDisplay,
 	tvShowsToDisplay,
 	seasonToDisplay,
@@ -22,6 +24,7 @@ import type {
 	TMDBMovie,
 	TMDBMovieDetails,
 	TMDBCastMember,
+	TMDBImage,
 	TMDBTvShow,
 	TMDBTvShowDetails,
 	TMDBSeason,
@@ -340,6 +343,63 @@ describe('movieDetailsToDisplay', () => {
 		});
 		const display = movieDetailsToDisplay(details);
 		expect(display.cast).toHaveLength(10);
+	});
+});
+
+// Image transforms
+
+describe('imageToDisplay', () => {
+	const makeImage = (overrides: Partial<TMDBImage> = {}): TMDBImage => ({
+		file_path: '/img.jpg',
+		width: 1920,
+		height: 1080,
+		aspect_ratio: 1.778,
+		vote_average: 5.0,
+		vote_count: 10,
+		...overrides
+	});
+
+	it('maps backdrop image with correct fields', () => {
+		const image = makeImage({ file_path: '/back.jpg' });
+		const display = imageToDisplay(image, 'backdrop');
+		expect(display.thumbnailUrl).toBe('https://image.tmdb.org/t/p/w780/back.jpg');
+		expect(display.fullUrl).toBe('https://image.tmdb.org/t/p/original/back.jpg');
+		expect(display.width).toBe(1920);
+		expect(display.height).toBe(1080);
+		expect(display.filePath).toBe('/back.jpg');
+		expect(display.imageType).toBe('backdrop');
+	});
+
+	it('maps poster image with correct fields', () => {
+		const image = makeImage({ file_path: '/post.jpg', width: 500, height: 750 });
+		const display = imageToDisplay(image, 'poster');
+		expect(display.thumbnailUrl).toBe('https://image.tmdb.org/t/p/w342/post.jpg');
+		expect(display.fullUrl).toBe('https://image.tmdb.org/t/p/original/post.jpg');
+		expect(display.filePath).toBe('/post.jpg');
+		expect(display.imageType).toBe('poster');
+	});
+});
+
+describe('imagesToDisplay', () => {
+	it('merges backdrops and posters with correct types', () => {
+		const images = {
+			backdrops: [
+				{ file_path: '/b1.jpg', width: 1920, height: 1080, aspect_ratio: 1.778, vote_average: 5, vote_count: 1 }
+			],
+			posters: [
+				{ file_path: '/p1.jpg', width: 500, height: 750, aspect_ratio: 0.667, vote_average: 5, vote_count: 1 }
+			]
+		};
+		const display = imagesToDisplay(images);
+		expect(display).toHaveLength(2);
+		expect(display[0].imageType).toBe('backdrop');
+		expect(display[0].filePath).toBe('/b1.jpg');
+		expect(display[1].imageType).toBe('poster');
+		expect(display[1].filePath).toBe('/p1.jpg');
+	});
+
+	it('returns empty array for undefined', () => {
+		expect(imagesToDisplay(undefined)).toEqual([]);
 	});
 });
 

@@ -24,6 +24,11 @@ const config = {
       "addons/tmdb": "../../packages/addons/tmdb/src",
       "addons/torrent-search-thepiratebay":
         "../../packages/addons/torrent-search-thepiratebay/src",
+      "addons/musicbrainz": "../../packages/addons/musicbrainz/src",
+      "addons/retroachievements": "../../packages/addons/retroachievements/src",
+      "addons/youtube": "../../packages/addons/youtube/src",
+      "addons/lrclib": "../../packages/addons/lrclib/src",
+      "assets/game-consoles": "../../packages/assets/game-consoles",
       "torrent-search-thepiratebay":
         "../../packages/addons/torrent-search-thepiratebay/src/index.ts",
     },

@@ -17,6 +17,7 @@ pub fn router() -> Router<AppState> {
         .route("/release-group/{id}", get(get_release_group))
         .route("/release/{id}", get(get_release))
         .route("/popular", get(get_popular))
+        .route("/popular-artists", get(get_popular_artists))
 }
 
 #[derive(Deserialize)]
@@ -357,6 +358,88 @@ async fn get_popular(
             let conn = state.db.lock();
             if let Ok(data) = conn.query_row(
                 "SELECT data FROM musicbrainz_popular_cache WHERE genre = ?1",
+                rusqlite::params![genre_lower],
+                |row| row.get::<_, String>(0),
+            ) {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                    return Json(parsed).into_response();
+                }
+            }
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "MusicBrainz API unavailable" })),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn get_popular_artists(
+    State(state): State<AppState>,
+    Query(query): Query<PopularQuery>,
+) -> impl IntoResponse {
+    let genre = query.genre.as_deref().unwrap_or("rock");
+
+    let genre_lower = genre.to_lowercase();
+    if !POPULAR_GENRES.contains(&genre_lower.as_str()) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Invalid genre", "allowed": POPULAR_GENRES })),
+        )
+            .into_response();
+    }
+
+    // Check cache (valid for 24 hours)
+    {
+        let conn = state.db.lock();
+        if let Ok(data) = conn.query_row(
+            "SELECT data FROM musicbrainz_popular_artists_cache WHERE genre = ?1 AND fetched_at > datetime('now', '-24 hours')",
+            rusqlite::params![genre_lower],
+            |row| row.get::<_, String>(0),
+        ) {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                return Json(parsed).into_response();
+            }
+        }
+    }
+
+    let search_query = format!("tag:{}", genre_lower);
+    let url = format!(
+        "{}/artist?query={}&fmt=json&limit=30",
+        MB_BASE,
+        urlencoding::encode(&search_query)
+    );
+
+    let client = reqwest::Client::new();
+    match client
+        .get(&url)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            match resp.json::<serde_json::Value>().await {
+                Ok(data) => {
+                    let data_str = serde_json::to_string(&data).unwrap_or_default();
+                    let conn = state.db.lock();
+                    let _ = conn.execute(
+                        "INSERT INTO musicbrainz_popular_artists_cache (genre, data) VALUES (?1, ?2)
+                         ON CONFLICT(genre) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
+                        rusqlite::params![genre_lower, data_str],
+                    );
+                    Json(data).into_response()
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response(),
+            }
+        }
+        _ => {
+            let conn = state.db.lock();
+            if let Ok(data) = conn.query_row(
+                "SELECT data FROM musicbrainz_popular_artists_cache WHERE genre = ?1",
                 rusqlite::params![genre_lower],
                 |row| row.get::<_, String>(0),
             ) {

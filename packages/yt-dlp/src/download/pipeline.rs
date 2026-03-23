@@ -12,9 +12,9 @@ use crate::download::muxer::FfmpegMuxer;
 use crate::error::YtDlpError;
 use crate::extractor::clients::{InnertubeClient, CLIENT_PRIORITY, WEB};
 use crate::extractor::innertube::InnertubeApi;
-use crate::extractor::player::{PlayerResponse, ResolvedFormat, StreamFormat, extract_player_js_url};
+use crate::extractor::player::{CaptionTrack, PlayerResponse, ResolvedFormat, StreamFormat, extract_player_js_url};
 use crate::extractor::signatures::{self, SignatureResolver};
-use crate::types::{AudioFormat, AudioQuality, DownloadMode, VideoFormat, VideoQuality, VideoInfo};
+use crate::types::{AudioFormat, AudioQuality, DownloadMode, DownloadedSubtitle, SubtitleMode, SubtitleTrack, VideoFormat, VideoQuality, VideoInfo};
 
 /// Configuration for a single download task.
 #[derive(Debug, Clone)]
@@ -33,6 +33,8 @@ pub struct DownloadTaskConfig {
     pub audio_output_dir: Option<String>,
     pub po_token: Option<String>,
     pub visitor_data: Option<String>,
+    pub subtitle_mode: SubtitleMode,
+    pub subtitle_langs: Vec<String>,
 }
 
 /// Result of a completed download pipeline.
@@ -44,6 +46,8 @@ pub struct PipelineOutput {
     pub video_output_path: Option<String>,
     /// Path to the downloaded audio file (set in Both/Audio mode).
     pub audio_output_path: Option<String>,
+    /// Downloaded subtitle sidecar files.
+    pub subtitle_paths: Vec<DownloadedSubtitle>,
 }
 
 /// Describes the progress of the pipeline stages.
@@ -100,12 +104,24 @@ impl DownloadPipeline {
 
         let duration: f64 = details.length_seconds.parse().unwrap_or(0.0);
 
+        let subtitle_tracks = player_response
+            .caption_tracks()
+            .iter()
+            .map(|t| SubtitleTrack {
+                language_code: t.language_code.clone(),
+                language_name: t.name.clone(),
+                is_auto_generated: t.is_auto_generated(),
+                is_translatable: t.is_translatable.unwrap_or(false),
+            })
+            .collect();
+
         Ok(VideoInfo {
             title: details.title.clone(),
             duration,
             thumbnail_url: player_response.thumbnail_url(),
             uploader: details.author.clone(),
             video_id: details.video_id.clone(),
+            subtitle_tracks,
         })
     }
 
@@ -264,25 +280,32 @@ impl DownloadPipeline {
         let video_output_dir = Path::new(video_dir);
         let audio_output_dir = Path::new(audio_dir);
 
+        // Extract caption tracks before consuming player_response
+        let caption_tracks: Vec<CaptionTrack> = player_response
+            .caption_tracks()
+            .into_iter()
+            .cloned()
+            .collect();
+
         // Check cancellation
         if *cancel_rx.borrow() {
             return Err(YtDlpError::Cancelled.into());
         }
 
-        match config.mode {
+        let mut output = match config.mode {
             DownloadMode::Both => {
                 self.execute_both(
                     config, &selected, audio_selected.as_ref(),
                     output_dir, video_output_dir, audio_output_dir,
                     file_stem, &state_tx, cancel_rx, http_client, &download_headers,
-                ).await
+                ).await?
             }
             DownloadMode::Video => {
                 let final_output = video_output_dir.join(format!("{}.{}", file_stem, selected.output_extension));
                 self.execute_single_mode(
                     config, &selected, output_dir, &final_output, None,
                     file_stem, &state_tx, cancel_rx, http_client, &download_headers,
-                ).await
+                ).await?
             }
             DownloadMode::Audio => {
                 let final_output = audio_output_dir.join(format!("{}.{}", file_stem, selected.output_extension));
@@ -291,7 +314,7 @@ impl DownloadPipeline {
                     self.execute_single_mode(
                         config, &selected, output_dir, &final_output, None,
                         file_stem, &state_tx, cancel_rx, http_client, &download_headers,
-                    ).await
+                    ).await?
                 } else {
                     // Audio-only adaptive stream — with WEB client fallback on CDN 403
                     let download_result = self.download_audio_with_client_fallback(
@@ -382,16 +405,40 @@ impl DownloadPipeline {
                     };
 
                     let output_str = final_path.to_string_lossy().to_string();
-                    let output = PipelineOutput {
+                    let o = PipelineOutput {
                         output_path: output_str.clone(),
                         video_output_path: None,
                         audio_output_path: Some(output_str),
+                        subtitle_paths: vec![],
                     };
-                    let _ = state_tx.send(PipelineState::Completed { output: output.clone() });
-                    Ok(output)
+                    let _ = state_tx.send(PipelineState::Completed { output: o.clone() });
+                    o
                 }
             }
+        };
+
+        // Step 5: Download subtitles (if requested)
+        if config.subtitle_mode != SubtitleMode::None && !caption_tracks.is_empty() {
+            let subtitle_dir = match config.mode {
+                DownloadMode::Audio => audio_output_dir,
+                _ => video_output_dir,
+            };
+            let subtitle_paths = self
+                .download_subtitles(
+                    &caption_tracks,
+                    &config.subtitle_mode,
+                    &config.subtitle_langs,
+                    subtitle_dir,
+                    file_stem,
+                )
+                .await;
+            if !subtitle_paths.is_empty() {
+                output.subtitle_paths = subtitle_paths;
+                let _ = state_tx.send(PipelineState::Completed { output: output.clone() });
+            }
         }
+
+        Ok(output)
     }
 
     /// Execute download in Both mode: produce both a video and audio file.
@@ -498,6 +545,7 @@ impl DownloadPipeline {
             output_path: video_path_str.clone(),
             video_output_path: Some(video_path_str),
             audio_output_path: if audio_path_str.is_empty() { None } else { Some(audio_path_str) },
+            subtitle_paths: vec![],
         };
 
         let _ = state_tx.send(PipelineState::Completed { output: output.clone() });
@@ -582,6 +630,7 @@ impl DownloadPipeline {
             output_path: output_str.clone(),
             video_output_path: if is_audio { None } else { Some(output_str.clone()) },
             audio_output_path: if is_audio { Some(output_str) } else { None },
+            subtitle_paths: vec![],
         };
 
         let _ = state_tx.send(PipelineState::Completed { output: output.clone() });
@@ -1014,5 +1063,124 @@ impl DownloadPipeline {
         let _ = tokio::fs::remove_file(&audio_tmp).await;
 
         Ok(())
+    }
+
+    /// Fetch and download subtitles on-demand for a video (without downloading the video itself).
+    pub async fn fetch_and_download_subtitles(
+        &self,
+        video_id: &str,
+        langs: &[String],
+        output_dir: &Path,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+    ) -> Result<Vec<DownloadedSubtitle>> {
+        let (player_response, _client, _token_used) =
+            self.fetch_player_response(video_id, po_token, visitor_data).await?;
+
+        let caption_tracks: Vec<CaptionTrack> = player_response
+            .caption_tracks()
+            .into_iter()
+            .cloned()
+            .collect();
+
+        if caption_tracks.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mode = if langs.is_empty() {
+            SubtitleMode::All
+        } else {
+            SubtitleMode::Selected
+        };
+
+        Ok(self
+            .download_subtitles(&caption_tracks, &mode, langs, output_dir, video_id)
+            .await)
+    }
+
+    /// Download subtitle VTT files for the given caption tracks.
+    /// Non-fatal: logs errors and continues, returns successfully downloaded tracks.
+    async fn download_subtitles(
+        &self,
+        caption_tracks: &[CaptionTrack],
+        mode: &SubtitleMode,
+        selected_langs: &[String],
+        output_dir: &Path,
+        file_stem: &str,
+    ) -> Vec<DownloadedSubtitle> {
+        let tracks: Vec<&CaptionTrack> = match mode {
+            SubtitleMode::None => return vec![],
+            SubtitleMode::All => caption_tracks.iter().collect(),
+            SubtitleMode::Selected => caption_tracks
+                .iter()
+                .filter(|t| selected_langs.iter().any(|l| l == &t.language_code))
+                .collect(),
+        };
+
+        if tracks.is_empty() {
+            return vec![];
+        }
+
+        log::info!("Downloading {} subtitle track(s)", tracks.len());
+        let http_client = self.innertube.http_client();
+        let mut results = Vec::new();
+
+        for track in tracks {
+            let suffix = if track.is_auto_generated() {
+                format!("auto.{}", track.language_code)
+            } else {
+                track.language_code.clone()
+            };
+            let file_name = format!("{}.{}.vtt", file_stem, suffix);
+            let file_path = output_dir.join(&file_name);
+
+            match http_client.get(&track.vtt_url()).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    match resp.text().await {
+                        Ok(vtt_content) => {
+                            if let Err(e) = tokio::fs::write(&file_path, &vtt_content).await {
+                                log::warn!(
+                                    "Failed to write subtitle file {:?}: {}",
+                                    file_path, e
+                                );
+                                continue;
+                            }
+                            log::info!(
+                                "Downloaded subtitle: {} ({})",
+                                track.name,
+                                track.language_code
+                            );
+                            results.push(DownloadedSubtitle {
+                                language_code: track.language_code.clone(),
+                                language_name: track.name.clone(),
+                                is_auto_generated: track.is_auto_generated(),
+                                file_path: file_path.to_string_lossy().to_string(),
+                            });
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to read subtitle response for {}: {}",
+                                track.language_code, e
+                            );
+                        }
+                    }
+                }
+                Ok(resp) => {
+                    log::warn!(
+                        "Subtitle download failed for {} (HTTP {})",
+                        track.language_code,
+                        resp.status()
+                    );
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Subtitle download request failed for {}: {}",
+                        track.language_code, e
+                    );
+                }
+            }
+        }
+
+        results
     }
 }

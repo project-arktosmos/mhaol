@@ -1,13 +1,17 @@
 import type * as Party from 'partykit/server';
 import { recoverMessageAddress } from 'viem';
-import type { ClientMessage, ServerMessage, PeerConnectionState } from './types.js';
+import type { ClientMessage, ServerMessage, PeerConnectionState, IceServerConfig } from './types.js';
 
 const AUTH_TIMESTAMP_MAX_AGE_MS = 30_000;
+const ICE_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 export default class SignalingRoom implements Party.Server {
 	readonly options: Party.ServerOptions = {
 		hibernate: true
 	};
+
+	private cachedIceServers: IceServerConfig[] | null = null;
+	private iceCacheExpiry = 0;
 
 	constructor(readonly room: Party.Room) {}
 
@@ -21,6 +25,8 @@ export default class SignalingRoom implements Party.Server {
 		const address = url.searchParams.get('address');
 		const signature = url.searchParams.get('signature');
 		const timestamp = url.searchParams.get('timestamp');
+		const passportRaw = url.searchParams.get('passport_raw');
+		const passportSignature = url.searchParams.get('passport_signature');
 
 		if (!address || !signature || !timestamp) {
 			return new Response('Missing auth parameters', { status: 401 });
@@ -35,6 +41,7 @@ export default class SignalingRoom implements Party.Server {
 		const message = `partykit-auth:${roomId}:${timestamp}`;
 
 		try {
+			// Verify the auth challenge signature
 			const recovered = await recoverMessageAddress({
 				message,
 				signature: signature as `0x${string}`
@@ -45,6 +52,28 @@ export default class SignalingRoom implements Party.Server {
 			}
 
 			req.headers.set('X-Peer-Id', recovered.toLowerCase());
+
+			// Verify passport if provided
+			let name = '';
+			let instanceType = '';
+
+			if (passportRaw && passportSignature) {
+				const passportRecovered = await recoverMessageAddress({
+					message: passportRaw,
+					signature: passportSignature as `0x${string}`
+				});
+
+				if (passportRecovered.toLowerCase() !== address.toLowerCase()) {
+					return new Response('Passport signature mismatch', { status: 401 });
+				}
+
+				const payload = JSON.parse(passportRaw);
+				name = payload.name ?? '';
+				instanceType = payload.instanceType ?? '';
+			}
+
+			req.headers.set('X-Peer-Name', name);
+			req.headers.set('X-Peer-Instance-Type', instanceType);
 			return req;
 		} catch {
 			return new Response('Signature verification failed', { status: 401 });
@@ -63,6 +92,9 @@ export default class SignalingRoom implements Party.Server {
 			return;
 		}
 
+		const name = ctx.request.headers.get('X-Peer-Name') ?? '';
+		const instanceType = ctx.request.headers.get('X-Peer-Instance-Type') ?? '';
+
 		// Evict existing connections for this peer
 		for (const conn of this.room.getConnections()) {
 			const state = conn.state as PeerConnectionState | null;
@@ -71,23 +103,36 @@ export default class SignalingRoom implements Party.Server {
 			}
 		}
 
-		connection.setState({ peerId } satisfies PeerConnectionState);
+		connection.setState({ peerId, name, instanceType } satisfies PeerConnectionState);
 
-		// Notify existing peers and collect their IDs
-		const existingPeers: string[] = [];
+		// Notify existing peers and collect their info
+		const existingPeers: { peer_id: string; name: string; instance_type: string }[] = [];
 		for (const conn of this.room.getConnections()) {
 			const state = conn.state as PeerConnectionState | null;
 			if (state?.peerId && conn.id !== connection.id) {
-				existingPeers.push(state.peerId);
+				existingPeers.push({
+					peer_id: state.peerId,
+					name: state.name,
+					instance_type: state.instanceType
+				});
 				this.send(conn, {
 					type: 'peer-joined',
 					room_id: this.room.id,
-					peer_id: peerId
+					peer_id: peerId,
+					name,
+					instance_type: instanceType
 				});
 			}
 		}
 
-		this.send(connection, { type: 'connected', peer_id: peerId });
+		const iceServers = await this.getIceServers();
+		this.send(connection, {
+			type: 'connected',
+			peer_id: peerId,
+			name,
+			instance_type: instanceType,
+			ice_servers: iceServers
+		});
 		this.send(connection, {
 			type: 'room-peers',
 			room_id: this.room.id,
@@ -126,11 +171,44 @@ export default class SignalingRoom implements Party.Server {
 	// ===== HTTP endpoints =====
 
 	async onRequest(req: Party.Request): Promise<Response> {
+		const corsHeaders: Record<string, string> = {
+			'Access-Control-Allow-Origin': '*',
+			'Access-Control-Allow-Methods': 'GET, OPTIONS',
+			'Access-Control-Allow-Headers': 'Content-Type'
+		};
+
+		if (req.method === 'OPTIONS') {
+			return new Response(null, { status: 204, headers: corsHeaders });
+		}
+
 		if (req.method === 'GET') {
-			const peers: string[] = [];
+			const url = new URL(req.url);
+
+			// Temporary debug endpoint to verify env vars reach the deployed worker
+			if (url.pathname.endsWith('/debug-env')) {
+				const domain = this.room.env.METERED_DOMAIN as string | undefined;
+				const hasKey = !!(this.room.env.METERED_SECRET_KEY as string | undefined);
+				return new Response(
+					JSON.stringify({
+						metered_domain: domain ?? null,
+						has_secret_key: hasKey,
+						cached_ice_servers: this.cachedIceServers?.length ?? null,
+						cache_expires_in_ms: this.iceCacheExpiry > 0 ? this.iceCacheExpiry - Date.now() : null
+					}),
+					{ headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+				);
+			}
+
+			const peers: { peer_id: string; name: string; instance_type: string }[] = [];
 			for (const conn of this.room.getConnections()) {
 				const state = conn.state as PeerConnectionState | null;
-				if (state?.peerId) peers.push(state.peerId);
+				if (state?.peerId) {
+					peers.push({
+						peer_id: state.peerId,
+						name: state.name,
+						instance_type: state.instanceType
+					});
+				}
 			}
 
 			return new Response(
@@ -139,11 +217,11 @@ export default class SignalingRoom implements Party.Server {
 					peers,
 					peerCount: peers.length
 				}),
-				{ headers: { 'Content-Type': 'application/json' } }
+				{ headers: { 'Content-Type': 'application/json', ...corsHeaders } }
 			);
 		}
 
-		return new Response('Not found', { status: 404 });
+		return new Response('Not found', { status: 404, headers: corsHeaders });
 	}
 
 	// ===== Internal helpers =====
@@ -191,6 +269,44 @@ export default class SignalingRoom implements Party.Server {
 
 	private send(conn: Party.Connection, msg: ServerMessage): void {
 		conn.send(JSON.stringify(msg));
+	}
+
+	// ===== TURN credential distribution =====
+
+	private async getIceServers(): Promise<IceServerConfig[]> {
+		if (this.cachedIceServers && Date.now() < this.iceCacheExpiry) {
+			return this.cachedIceServers;
+		}
+
+		const domain = this.room.env.METERED_DOMAIN as string | undefined;
+		const secretKey = this.room.env.METERED_SECRET_KEY as string | undefined;
+		if (!domain || !secretKey) {
+			console.warn('[signaling] METERED_DOMAIN or METERED_SECRET_KEY not set, no TURN servers available');
+			return [];
+		}
+
+		try {
+			const res = await fetch(
+				`https://${domain}/api/v1/turn/credentials?apiKey=${secretKey}`
+			);
+			if (!res.ok) {
+				console.warn(`[signaling] Metered API returned ${res.status}, using cached ICE servers`);
+				return this.cachedIceServers ?? [];
+			}
+
+			const servers: IceServerConfig[] = await res.json();
+			const turnCount = servers.filter(s => {
+				const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+				return urls.some(u => u.startsWith('turn:') || u.startsWith('turns:'));
+			}).length;
+			console.log(`[signaling] Fetched ${servers.length} ICE servers (${turnCount} TURN)`);
+			this.cachedIceServers = servers;
+			this.iceCacheExpiry = Date.now() + ICE_CACHE_TTL_MS;
+			return servers;
+		} catch (err) {
+			console.error('[signaling] Metered API fetch error:', err);
+			return this.cachedIceServers ?? [];
+		}
 	}
 }
 

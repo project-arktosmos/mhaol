@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { playerService } from 'ui-lib/services/player.service';
 	import { playerAdapter } from 'ui-lib/adapters/classes/player.adapter';
@@ -39,6 +40,7 @@
 	import classNames from 'classnames';
 	import TmdbBrowseGrid from 'ui-lib/components/tmdb-browse/TmdbBrowseGrid.svelte';
 	import TmdbPagination from 'ui-lib/components/tmdb-browse/TmdbPagination.svelte';
+	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
 
 	interface Props {
 		data: {
@@ -62,7 +64,8 @@
 
 	// Browse detail selection state
 	let selectedBrowseMovie: DisplayTMDBMovie | null = $state(null);
-	let selectedBrowseTvShow: DisplayTMDBTvShow | null = $state(null);
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	let selectedBrowseTvShow: DisplayTMDBTvShow | null = $state<DisplayTMDBTvShow | null>(null);
 	let browseMovieDetails: DisplayTMDBMovieDetails | null = $state(null);
 	let browseTvShowDetails: DisplayTMDBTvShowDetails | null = $state(null);
 	let browseDetailLoading = $state(false);
@@ -81,19 +84,7 @@
 	}
 
 	async function handleBrowseSelectMovie(movie: DisplayTMDBMovie) {
-		selectedBrowseTvShow = null;
-		browseTvShowDetails = null;
-		selectedLibraryItem = null;
-		relatedData = null;
-		if (selectedBrowseMovie?.id === movie.id) {
-			selectedBrowseMovie = null;
-			browseMovieDetails = null;
-			return;
-		}
-		selectedBrowseMovie = movie;
-		browseMovieDetails = null;
-		fetchBrowseMovieDetails(movie.id);
-		checkFetchCacheForTmdbId(movie.id);
+		goto(`/movies/${movie.id}`);
 	}
 
 	async function checkFetchCacheForTmdbId(tmdbId: number, displayId?: number) {
@@ -116,14 +107,6 @@
 				mode: 'fetch',
 				existingItemId: selectedLibraryItem?.id,
 				existingLibraryId: selectedLibraryItem?.libraryId
-			});
-		} else if (selectedBrowseTvShow) {
-			smartSearchService.setSelection({
-				title: selectedBrowseTvShow.name,
-				year: selectedBrowseTvShow.firstAirYear,
-				type: 'tv',
-				tmdbId: selectedBrowseTvShow.id,
-				mode: 'fetch'
 			});
 		}
 	}
@@ -173,7 +156,10 @@
 	const searchStore = smartSearchService.store;
 
 	let fetchingTmdbId = $state<number | null>(null);
-	let currentDetailTmdbId = $derived(selectedBrowseMovie?.id ?? selectedBrowseTvShow?.id ?? null);
+	function getDetailTmdbId(): number | null {
+		return selectedBrowseMovie?.id ?? null;
+	}
+	let currentDetailTmdbId = $derived(getDetailTmdbId());
 	let isFetching = $derived(
 		fetchingTmdbId !== null &&
 			fetchingTmdbId === currentDetailTmdbId &&
@@ -450,31 +436,9 @@
 	function handleLibrarySelectMovie(movie: DisplayTMDBMovie) {
 		const item = libraryItemsByMovieId.get(movie.id);
 		if (!item) return;
-		selectedBrowseTvShow = null;
-		browseTvShowDetails = null;
-		if (selectedBrowseMovie?.id === movie.id) {
-			selectedBrowseMovie = null;
-			browseMovieDetails = null;
-			selectedLibraryItem = null;
-			fetchingTmdbId = null;
-			smartSearchService.clear();
-			return;
-		}
-		fetchingTmdbId = null;
-		smartSearchService.clear();
-
-		selectedBrowseMovie = movie;
-		selectedLibraryItem = item;
-		relatedData = null;
-		fetchRelatedData(item.id);
-		const meta = tmdbMetadata[item.id] ?? null;
-		browseMovieDetails = meta;
-		if (!meta && item.links.tmdb) {
-			fetchBrowseMovieDetails(Number(item.links.tmdb.serviceId));
-		}
-		const realTmdbId = item.links.tmdb ? Number(item.links.tmdb.serviceId) : null;
-		if (realTmdbId) {
-			checkFetchCacheForTmdbId(realTmdbId, movie.id);
+		const tmdbLink = getItemLinks(item).tmdb;
+		if (tmdbLink) {
+			goto(`/movies/${tmdbLink.serviceId}`);
 		}
 	}
 
@@ -867,7 +831,10 @@
 	</div>
 </div>
 {:else}
-<div class="min-w-0 flex-1 overflow-y-auto p-4">
+<div class="relative min-w-0 flex-1 overflow-y-auto p-4">
+		<div class="absolute right-3 top-3 z-10">
+			<BrowseViewToggle />
+		</div>
 		<div class="container mx-auto">
 			<section class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold">Search Movies</h2>
@@ -998,7 +965,6 @@
 					connectionState={$playerState.connectionState}
 					positionSecs={$playerState.positionSecs}
 					durationSecs={$playerState.durationSecs}
-					streamUrl={$playerState.streamUrl}
 					buffering={$playerState.buffering}
 				/>
 			</div>

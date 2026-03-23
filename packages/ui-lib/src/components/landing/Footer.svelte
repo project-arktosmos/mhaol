@@ -5,7 +5,7 @@
 <footer class="border-t border-base-300 bg-base-100 py-10">
 	<div class="mx-auto max-w-6xl px-6">
 		<div class="flex flex-col items-center gap-4 text-center">
-			<span class="text-xl font-bold">Mhaoltube</span>
+			<span class="text-xl font-bold">Mhaol Media</span>
 			<p class="text-sm text-base-content/50">{$_('footer.tagline')}</p>
 			<div class="flex gap-4">
 				<a

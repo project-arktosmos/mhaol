@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-	searchRecordings,
-	searchArtists,
-	searchReleaseGroups
-} from '../src/client';
+import { searchRecordings, searchArtists, searchReleaseGroups } from '../src/client';
 
 describe('MusicBrainz client', () => {
 	const mockFetch = vi.fn();

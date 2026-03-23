@@ -19,11 +19,18 @@ struct SessionEntry {
     created_at: Instant,
 }
 
+/// Passport data for signaling authentication.
+pub struct PassportAuth {
+    pub raw: String,
+    pub signature: String,
+    pub private_key_hex: String,
+}
+
 /// Connects to a PartyKit signaling room as a WebSocket client.
 ///
 /// Handles the full lifecycle:
-/// - Generates an ephemeral secp256k1 keypair for auth
-/// - Connects to the PartyKit room with Ethereum-signed credentials
+/// - Authenticates with Ethereum-signed credentials (real identity or ephemeral)
+/// - Connects to the PartyKit room
 /// - When a browser peer joins, creates a PeerSession in the SessionManager
 /// - Relays SDP/ICE between p2p-stream and PartyKit
 /// - When a browser peer leaves, removes the PeerSession
@@ -38,16 +45,30 @@ impl SignalingClient {
     ///
     /// `signaling_url` is the base URL like `http://localhost:1999` or
     /// `https://myapp.partykit.dev`. The room ID is the session_id.
+    /// `passport` provides the real identity for authentication. If None,
+    /// an ephemeral keypair is generated.
     pub async fn connect(
         session_id: String,
         manager: SessionManager,
         signaling_url: &str,
+        passport: Option<&PassportAuth>,
     ) -> Result<Self, String> {
-        let signing_key = SigningKey::random(&mut k256::elliptic_curve::rand_core::OsRng);
-        let address = eth_address_from_key(&signing_key);
+        let (signing_key_owned, address, passport_params);
+        if let Some(p) = passport {
+            let hex_str = p.private_key_hex.strip_prefix("0x").unwrap_or(&p.private_key_hex);
+            let key_bytes = hex::decode(hex_str).map_err(|e| format!("Invalid key hex: {e}"))?;
+            signing_key_owned = SigningKey::from_bytes((&key_bytes[..]).into())
+                .map_err(|e| format!("Invalid signing key: {e}"))?;
+            address = eth_address_from_key(&signing_key_owned);
+            passport_params = Some((p.raw.clone(), p.signature.clone()));
+        } else {
+            signing_key_owned = SigningKey::random(&mut k256::elliptic_curve::rand_core::OsRng);
+            address = eth_address_from_key(&signing_key_owned);
+            passport_params = None;
+        }
         let room_id = &session_id;
 
-        let ws_url = build_ws_url(signaling_url, room_id, &signing_key, &address)?;
+        let ws_url = build_ws_url(signaling_url, room_id, &signing_key_owned, &address, passport_params.as_ref())?;
 
         info!(
             session_id = %session_id,
@@ -447,6 +468,7 @@ fn build_ws_url(
     room_id: &str,
     signing_key: &SigningKey,
     address: &str,
+    passport: Option<&(String, String)>,
 ) -> Result<String, String> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -481,12 +503,38 @@ fn build_ws_url(
         .replace("https://", "wss://")
         .replace("http://", "ws://");
 
-    Ok(format!(
+    let mut url = format!(
         "{ws_base}/party/{room_id}?address={address}&signature={sig_hex}&timestamp={timestamp}"
-    ))
+    );
+
+    if let Some((raw, sig)) = passport {
+        url.push_str(&format!(
+            "&passport_raw={}&passport_signature={}",
+            percent_encode(raw),
+            percent_encode(sig),
+        ));
+    }
+
+    Ok(url)
 }
 
 /// Hex encode a byte slice.
 fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Percent-encode a string for use in URL query parameters.
+fn percent_encode(input: &str) -> String {
+    let mut result = String::with_capacity(input.len() * 3);
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(byte as char);
+            }
+            _ => {
+                result.push_str(&format!("%{byte:02X}"));
+            }
+        }
+    }
+    result
 }

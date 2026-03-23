@@ -1,28 +1,37 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
-	import PeerChatLayout from 'ui-lib/components/signaling/PeerChatLayout.svelte';
+	import { onDestroy } from 'svelte';
+	import ConnectionDashboard from 'ui-lib/components/signaling/ConnectionDashboard.svelte';
 	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
-	import { rosterService } from 'ui-lib/services/roster.service';
-	import { get } from 'svelte/store';
 
-	onMount(() => {
-		const { signalingServerUrl, signalingRoomId } = get(rosterService.state);
-		signalingChatService.connect(signalingServerUrl, signalingRoomId);
-	});
+	const chatStore = signalingChatService.state;
 
 	onDestroy(() => {
 		signalingChatService.destroy();
 	});
+
+	function handlePeerClick(peerId: string) {
+		const states = $chatStore.peerConnectionStates;
+		if (states[peerId] === 'connected') {
+			signalingChatService.setActivePeer(peerId);
+		} else {
+			signalingChatService.connectToPeer(peerId);
+		}
+	}
+
+	function handlePeerDisconnect(peerId: string) {
+		signalingChatService.disconnectPeer(peerId);
+	}
 </script>
 
-<div class="flex h-[calc(100vh-5rem)] flex-col">
-	<div class="mb-2">
-		<h1 class="text-2xl font-bold">Peer Chat</h1>
-		<p class="text-sm text-base-content/60">
-			Select a peer to connect via WebRTC and chat directly
-		</p>
+<div class="mx-auto max-w-5xl">
+	<div class="mb-4">
+		<h1 class="text-2xl font-bold">Connection</h1>
+		<p class="text-sm text-base-content/60">Connect to a server peer to browse its media catalog</p>
 	</div>
-	<div class="min-h-0 flex-1">
-		<PeerChatLayout />
-	</div>
+	<ConnectionDashboard
+		roomPeers={$chatStore.roomPeers}
+		peerConnectionStates={$chatStore.peerConnectionStates}
+		onPeerClick={handlePeerClick}
+		onPeerDisconnect={handlePeerDisconnect}
+	/>
 </div>

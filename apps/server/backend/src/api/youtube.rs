@@ -25,6 +25,14 @@ pub fn router() -> Router<AppState> {
         .route("/content/{youtube_id}/favorite", put(toggle_favorite))
         .route("/content/{youtube_id}/video", delete(delete_video))
         .route("/content/{youtube_id}/audio", delete(delete_audio))
+        .route(
+            "/content/{youtube_id}/subtitles",
+            get(list_content_subtitles).post(fetch_content_subtitles),
+        )
+        .route(
+            "/content/{youtube_id}/subtitles/{lang}",
+            get(stream_content_subtitle),
+        )
 }
 
 #[derive(Deserialize)]
@@ -1094,4 +1102,144 @@ async fn fill_durations(State(state): State<AppState>) -> impl IntoResponse {
     }
 
     Json(filled)
+}
+
+/// Collect all directories where subtitle VTT files might exist for a video.
+#[cfg(not(target_os = "android"))]
+fn subtitle_search_dirs(state: &AppState, youtube_id: &str) -> Vec<std::path::PathBuf> {
+    let mut dirs = Vec::new();
+
+    // 1. From content's video/audio paths
+    if let Some(row) = state.youtube_content.get(youtube_id) {
+        if let Some(dir) = row
+            .video_path
+            .as_deref()
+            .or(row.audio_path.as_deref())
+            .and_then(|p| std::path::Path::new(p).parent())
+        {
+            dirs.push(dir.to_path_buf());
+        }
+    }
+
+    // 2. ytdl manager config output path
+    let ytdl_dir = state.ytdl_manager.get_config().output_path;
+    let ytdl_path = std::path::PathBuf::from(&ytdl_dir);
+    if !dirs.iter().any(|d| d == &ytdl_path) {
+        dirs.push(ytdl_path);
+    }
+
+    // 3. Library video cache dir
+    let (video_dir, _) = crate::api::ytdl::resolve_output_dirs(state);
+    if let Some(vd) = video_dir {
+        let vd_path = std::path::PathBuf::from(&vd);
+        if !dirs.iter().any(|d| d == &vd_path) {
+            dirs.push(vd_path);
+        }
+    }
+
+    dirs
+}
+
+async fn list_content_subtitles(
+    State(state): State<AppState>,
+    Path(youtube_id): Path<String>,
+) -> impl IntoResponse {
+    let dirs = subtitle_search_dirs(&state, &youtube_id);
+    let mut subtitles = Vec::new();
+    for dir in &dirs {
+        subtitles.extend(crate::api::ytdl::find_subtitle_files(&youtube_id, dir));
+    }
+    // Deduplicate by languageCode
+    subtitles.dedup_by(|a, b| a.get("languageCode") == b.get("languageCode"));
+    Json(serde_json::json!(subtitles)).into_response()
+}
+
+async fn stream_content_subtitle(
+    State(state): State<AppState>,
+    Path((youtube_id, lang)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let dirs = subtitle_search_dirs(&state, &youtube_id);
+
+    // Search all directories for the VTT file
+    let mut path = None;
+    for dir in &dirs {
+        let vtt = dir.join(format!("{}.{}.vtt", youtube_id, lang));
+        if vtt.exists() {
+            path = Some(vtt);
+            break;
+        }
+        let auto_vtt = dir.join(format!("{}.auto.{}.vtt", youtube_id, lang));
+        if auto_vtt.exists() {
+            path = Some(auto_vtt);
+            break;
+        }
+    }
+
+    let path = match path {
+        Some(p) => p,
+        None => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => (
+            [(header::CONTENT_TYPE, "text/vtt; charset=utf-8")],
+            content,
+        )
+            .into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FetchSubtitlesBody {
+    #[serde(default)]
+    langs: Vec<String>,
+}
+
+#[cfg(not(target_os = "android"))]
+async fn fetch_content_subtitles(
+    State(state): State<AppState>,
+    Path(youtube_id): Path<String>,
+    Json(body): Json<FetchSubtitlesBody>,
+) -> impl IntoResponse {
+    // Use content path if available, otherwise ytdl config output path
+    let dir_from_content = state
+        .youtube_content
+        .get(&youtube_id)
+        .and_then(|row| {
+            row.video_path
+                .as_deref()
+                .or(row.audio_path.as_deref())
+                .and_then(|p| std::path::Path::new(p).parent())
+                .map(|p| p.to_string_lossy().to_string())
+        });
+
+    let dir = dir_from_content.unwrap_or_else(|| {
+        state.ytdl_manager.get_config().output_path
+    });
+
+    match state
+        .ytdl_manager
+        .fetch_subtitles(&youtube_id, &body.langs, &dir)
+        .await
+    {
+        Ok(subs) => Json(serde_json::to_value(subs).unwrap()).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+#[cfg(target_os = "android")]
+async fn fetch_content_subtitles(
+    Path(_youtube_id): Path<String>,
+    Json(_body): Json<FetchSubtitlesBody>,
+) -> impl IntoResponse {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({ "error": "Not available on Android" })),
+    )
 }

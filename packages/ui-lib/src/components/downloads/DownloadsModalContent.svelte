@@ -2,41 +2,10 @@
 	import { onMount, onDestroy } from 'svelte';
 	import classNames from 'classnames';
 	import { downloadsService } from 'ui-lib/services/downloads.service';
-	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import type { UnifiedDownload } from 'ui-lib/types/download.type';
 	import { formatBytes } from 'ui-lib/types/torrent.type';
 
-	interface FileEntry {
-		name: string;
-		size: number;
-		isDirectory: boolean;
-	}
-
-	interface TorrentFilesResponse {
-		type: 'torrent';
-		name: string;
-		directory: string | null;
-		files: FileEntry[];
-	}
-
-	interface YoutubeFilesResponse {
-		type: 'youtube-video' | 'youtube-audio';
-		thumbnailUrl: string | null;
-		title: string;
-		url: string;
-		videoId: string;
-		durationSeconds: number | null;
-		outputPath: string | null;
-	}
-
-	type FilesResponse = TorrentFilesResponse | YoutubeFilesResponse;
-
 	const downloadState = downloadsService.state;
-
-	let filesModalOpen = $state(false);
-	let filesModalLoading = $state(false);
-	let filesModalData = $state<FilesResponse | null>(null);
-	let filesModalDownload = $state<UnifiedDownload | null>(null);
 
 	onMount(() => {
 		downloadsService.startPolling();
@@ -45,29 +14,6 @@
 	onDestroy(() => {
 		downloadsService.stopPolling();
 	});
-
-	async function openFiles(dl: UnifiedDownload) {
-		filesModalDownload = dl;
-		filesModalData = null;
-		filesModalOpen = true;
-		filesModalLoading = true;
-
-		try {
-			const res = await fetch(`/api/downloads/${encodeURIComponent(dl.id)}/files?type=${dl.type}`);
-			if (!res.ok) throw new Error('Failed to load files');
-			filesModalData = await res.json();
-		} catch {
-			filesModalData = null;
-		} finally {
-			filesModalLoading = false;
-		}
-	}
-
-	function closeFilesModal() {
-		filesModalOpen = false;
-		filesModalData = null;
-		filesModalDownload = null;
-	}
 
 	function stateColor(s: string): string {
 		switch (s) {
@@ -106,11 +52,33 @@
 		});
 	}
 
-	function formatDuration(seconds: number | null): string {
-		if (!seconds) return '--';
-		const m = Math.floor(seconds / 60);
-		const s = Math.floor(seconds % 60);
-		return `${m}:${s.toString().padStart(2, '0')}`;
+	const PAUSABLE_STATES = new Set(['downloading', 'checking', 'initializing']);
+
+	function canPause(dl: UnifiedDownload): boolean {
+		return dl.type === 'torrent' && PAUSABLE_STATES.has(dl.state);
+	}
+
+	function canResume(dl: UnifiedDownload): boolean {
+		return dl.type === 'torrent' && dl.state === 'paused';
+	}
+
+	async function pauseDownload(dl: UnifiedDownload) {
+		await downloadsService.pauseDownload(dl);
+	}
+
+	async function resumeDownload(dl: UnifiedDownload) {
+		await downloadsService.resumeDownload(dl);
+	}
+
+	async function removeDownload(dl: UnifiedDownload) {
+		await downloadsService.removeDownload(dl, false);
+	}
+
+	let confirmDeleteId = $state<string | null>(null);
+
+	async function removeWithFiles(dl: UnifiedDownload) {
+		confirmDeleteId = null;
+		await downloadsService.removeDownload(dl, true);
 	}
 </script>
 
@@ -143,7 +111,7 @@
 					<th>Size</th>
 					<th>Directory</th>
 					<th>Date</th>
-					<th></th>
+					<th>Actions</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -199,7 +167,95 @@
 							{formatDate(dl.updatedAt)}
 						</td>
 						<td>
-							<button class="btn btn-ghost btn-xs" onclick={() => openFiles(dl)}> Files </button>
+							<div class="flex gap-1">
+								{#if canPause(dl)}
+									<button
+										class="btn btn-ghost btn-xs"
+										title="Pause"
+										onclick={() => pauseDownload(dl)}
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											class="h-3.5 w-3.5"
+											viewBox="0 0 20 20"
+											fill="currentColor"
+										>
+											<path
+												fill-rule="evenodd"
+												d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+												clip-rule="evenodd"
+											/>
+										</svg>
+									</button>
+								{:else if canResume(dl)}
+									<button
+										class="btn btn-ghost btn-xs"
+										title="Resume"
+										onclick={() => resumeDownload(dl)}
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											class="h-3.5 w-3.5"
+											viewBox="0 0 20 20"
+											fill="currentColor"
+										>
+											<path
+												fill-rule="evenodd"
+												d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+												clip-rule="evenodd"
+											/>
+										</svg>
+									</button>
+								{/if}
+								<button
+									class="btn btn-ghost btn-xs"
+									title="Remove"
+									onclick={() => removeDownload(dl)}
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										class="h-3.5 w-3.5"
+										viewBox="0 0 20 20"
+										fill="currentColor"
+									>
+										<path
+											fill-rule="evenodd"
+											d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+											clip-rule="evenodd"
+										/>
+									</svg>
+								</button>
+								{#if dl.type === 'torrent'}
+									{#if confirmDeleteId === dl.id}
+										<span class="text-xs text-error">Delete files?</span>
+										<button class="btn btn-xs btn-error" onclick={() => removeWithFiles(dl)}>
+											Yes
+										</button>
+										<button class="btn btn-ghost btn-xs" onclick={() => (confirmDeleteId = null)}>
+											No
+										</button>
+									{:else}
+										<button
+											class="btn text-error btn-ghost btn-xs"
+											title="Remove and delete files"
+											onclick={() => (confirmDeleteId = dl.id)}
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												class="h-3.5 w-3.5"
+												viewBox="0 0 20 20"
+												fill="currentColor"
+											>
+												<path
+													fill-rule="evenodd"
+													d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+													clip-rule="evenodd"
+												/>
+											</svg>
+										</button>
+									{/if}
+								{/if}
+							</div>
 						</td>
 					</tr>
 				{/each}
@@ -211,73 +267,3 @@
 		{$downloadState.downloads.length} download{$downloadState.downloads.length !== 1 ? 's' : ''}
 	</div>
 {/if}
-
-<Modal open={filesModalOpen} maxWidth="max-w-lg" zIndex={60} onclose={closeFilesModal}>
-	<h3 class="text-lg font-bold">{filesModalDownload?.name ?? 'Files'}</h3>
-
-	{#if filesModalLoading}
-		<div class="flex justify-center py-8">
-			<span class="loading loading-md loading-spinner"></span>
-		</div>
-	{:else if filesModalData?.type === 'torrent'}
-		{#if filesModalData.directory}
-			<p class="mt-1 mb-3 truncate text-xs opacity-50" title={filesModalData.directory}>
-				{filesModalData.directory}
-			</p>
-		{/if}
-		{#if filesModalData.files.length === 0}
-			<p class="py-4 opacity-50">No files found in this directory.</p>
-		{:else}
-			<div class="max-h-72 overflow-y-auto">
-				<table class="table table-xs">
-					<thead>
-						<tr>
-							<th>Name</th>
-							<th class="text-right">Size</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each filesModalData.files as file (file.name)}
-							<tr class="hover:bg-base-200/50">
-								<td class="max-w-xs truncate" title={file.name}>
-									{file.name}
-								</td>
-								<td class="text-right text-xs whitespace-nowrap opacity-70">
-									{#if file.isDirectory}
-										--
-									{:else}
-										{formatBytes(file.size)}
-									{/if}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-	{:else if filesModalData?.type === 'youtube-video' || filesModalData?.type === 'youtube-audio'}
-		<div class="mt-3 flex flex-col gap-3">
-			{#if filesModalData.thumbnailUrl}
-				<img
-					src={filesModalData.thumbnailUrl}
-					alt={filesModalData.title}
-					class="w-full rounded-lg"
-				/>
-			{/if}
-			<div class="grid grid-cols-2 gap-2 text-sm">
-				<span class="opacity-50">Type</span>
-				<span>{filesModalData.type}</span>
-				<span class="opacity-50">Duration</span>
-				<span>{formatDuration(filesModalData.durationSeconds)}</span>
-				{#if filesModalData.outputPath}
-					<span class="opacity-50">File</span>
-					<span class="truncate" title={filesModalData.outputPath}>
-						{filesModalData.outputPath}
-					</span>
-				{/if}
-			</div>
-		</div>
-	{:else}
-		<p class="py-4 opacity-50">Could not load details.</p>
-	{/if}
-</Modal>

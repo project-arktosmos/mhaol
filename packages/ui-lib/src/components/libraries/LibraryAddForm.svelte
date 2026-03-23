@@ -1,25 +1,21 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { libraryService } from 'ui-lib/services/library.service';
-	import { MEDIA_TYPE_OPTIONS, type MediaType } from 'ui-lib/types/library.type';
+	import { LIBRARY_TYPE_OPTIONS, type LibraryType } from 'ui-lib/types/library.type';
 	import DirectoryBrowser from './DirectoryBrowser.svelte';
 
 	let {
-		fixedMediaTypes = null
+		fixedCategory = null
 	}: {
-		fixedMediaTypes?: MediaType[] | null;
+		fixedCategory?: LibraryType | null;
 	} = $props();
 
 	const state = libraryService.state;
 
-	// When fixedMediaTypes is set, auto-apply them on mount
+	// When fixedCategory is set, auto-apply on mount
 	$effect(() => {
-		if (fixedMediaTypes) {
-			for (const mt of fixedMediaTypes) {
-				if (!$state.selectedMediaTypes.includes(mt)) {
-					libraryService.toggleMediaType(mt);
-				}
-			}
+		if (fixedCategory && $state.selectedLibraryType !== fixedCategory) {
+			libraryService.setLibraryType(fixedCategory);
 		}
 	});
 
@@ -32,8 +28,9 @@
 		libraryService.setSelectedName(target.value);
 	}
 
-	function handleToggleMediaType(mediaType: MediaType) {
-		libraryService.toggleMediaType(mediaType);
+	function handleCategorySelect(event: Event) {
+		const target = event.target as HTMLSelectElement;
+		libraryService.setLibraryType(target.value as LibraryType);
 	}
 
 	function handleAdd() {
@@ -41,7 +38,7 @@
 			libraryService.addLibrary(
 				$state.selectedName.trim(),
 				$state.selectedPath,
-				$state.selectedMediaTypes
+				$state.selectedLibraryType!
 			);
 		}
 	}
@@ -53,86 +50,80 @@
 	let canAdd = $derived(
 		$state.selectedPath.length > 0 &&
 			$state.selectedName.trim().length > 0 &&
-			$state.selectedMediaTypes.length > 0
+			$state.selectedLibraryType !== null
 	);
 </script>
 
-<div class="card bg-base-200">
-	<div class="card-body gap-4">
-		<h2 class="card-title text-lg">Add Library</h2>
-
-		<!-- Directory Browser -->
-		<div>
-			<div class="label">
-				<span class="label-text font-medium">Browse Directories</span>
-			</div>
-			<DirectoryBrowser onselect={handleDirectorySelect} />
+<div class="flex flex-col gap-4">
+	<!-- Directory Browser -->
+	<div>
+		<div class="label">
+			<span class="label-text font-medium">Browse Directories</span>
 		</div>
+		<DirectoryBrowser onselect={handleDirectorySelect} />
+	</div>
 
-		<!-- Selected path display -->
-		{#if $state.selectedPath}
-			<div class="flex items-center gap-2 rounded-lg bg-success/10 px-3 py-2 text-sm">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					class="h-4 w-4 text-success"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-				>
-					<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-				</svg>
-				<span class="truncate font-mono">{$state.selectedPath}</span>
-			</div>
-		{/if}
-
-		<!-- Library name -->
-		<div class="form-control">
-			<label class="label" for="library-name">
-				<span class="label-text font-medium">Library Name</span>
-			</label>
-			<input
-				id="library-name"
-				type="text"
-				placeholder="Enter a name for this library"
-				class="input-bordered input"
-				value={$state.selectedName}
-				oninput={handleNameInput}
-			/>
-		</div>
-
-		<!-- Media types -->
-		{#if !fixedMediaTypes}
-			<div class="form-control">
-				<div class="label">
-					<span class="label-text font-medium">Media Types</span>
-				</div>
-				<div class="flex flex-wrap gap-3">
-					{#each MEDIA_TYPE_OPTIONS as option (option.value)}
-						<label class="label cursor-pointer gap-2">
-							<input
-								type="checkbox"
-								class="checkbox checkbox-sm checkbox-primary"
-								checked={$state.selectedMediaTypes.includes(option.value)}
-								onchange={() => handleToggleMediaType(option.value)}
-							/>
-							<span class="label-text">{option.label}</span>
-						</label>
-					{/each}
-				</div>
-			</div>
-		{/if}
-
-		<!-- Actions -->
-		<div class="flex justify-end gap-2">
-			<button class="btn btn-ghost" onclick={handleCancel}> Cancel </button>
-			<button
-				class={classNames('btn btn-primary', { 'btn-disabled': !canAdd })}
-				disabled={!canAdd}
-				onclick={handleAdd}
+	<!-- Selected path display -->
+	{#if $state.selectedPath}
+		<div class="flex items-center gap-2 rounded-lg bg-success/10 px-3 py-2 text-sm">
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				class="h-4 w-4 text-success"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke="currentColor"
+				stroke-width="2"
 			>
-				Add Library
-			</button>
+				<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+			</svg>
+			<span class="truncate font-mono">{$state.selectedPath}</span>
 		</div>
+	{/if}
+
+	<!-- Library name -->
+	<div class="form-control">
+		<label class="label" for="library-name">
+			<span class="label-text font-medium">Library Name</span>
+		</label>
+		<input
+			id="library-name"
+			type="text"
+			placeholder="Enter a name for this library"
+			class="input-bordered input"
+			value={$state.selectedName}
+			oninput={handleNameInput}
+		/>
+	</div>
+
+	<!-- Category -->
+	{#if !fixedCategory}
+		<div class="form-control">
+			<label class="label" for="library-category">
+				<span class="label-text font-medium">Category</span>
+			</label>
+			<select
+				id="library-category"
+				class="select-bordered select"
+				value={$state.selectedLibraryType ?? ''}
+				onchange={handleCategorySelect}
+			>
+				<option value="" disabled>Select a category...</option>
+				{#each LIBRARY_TYPE_OPTIONS as option (option.value)}
+					<option value={option.value}>{option.label}</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
+
+	<!-- Actions -->
+	<div class="flex justify-end gap-2">
+		<button class="btn btn-ghost" onclick={handleCancel}> Cancel </button>
+		<button
+			class={classNames('btn btn-primary', { 'btn-disabled': !canAdd })}
+			disabled={!canAdd}
+			onclick={handleAdd}
+		>
+			Add Library
+		</button>
 	</div>
 </div>

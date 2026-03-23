@@ -3,23 +3,35 @@ import type { ID } from 'ui-lib/types/core.type';
 export enum MediaType {
 	Video = 'video',
 	Image = 'image',
-	Audio = 'audio'
+	Audio = 'audio',
+	Document = 'document'
 }
 
 export enum LibraryType {
 	Movies = 'movies',
-	TV = 'tv'
+	TV = 'tv',
+	Music = 'music',
+	Games = 'games',
+	YouTube = 'youtube',
+	Photos = 'photos',
+	Books = 'books'
 }
 
 export const MEDIA_TYPE_OPTIONS: { value: MediaType; label: string }[] = [
 	{ value: MediaType.Video, label: 'Video' },
 	{ value: MediaType.Image, label: 'Image' },
-	{ value: MediaType.Audio, label: 'Audio' }
+	{ value: MediaType.Audio, label: 'Audio' },
+	{ value: MediaType.Document, label: 'Document' }
 ];
 
 export const LIBRARY_TYPE_OPTIONS: { value: LibraryType; label: string }[] = [
 	{ value: LibraryType.Movies, label: 'Movies' },
-	{ value: LibraryType.TV, label: 'TV Shows' }
+	{ value: LibraryType.TV, label: 'TV' },
+	{ value: LibraryType.Music, label: 'Music' },
+	{ value: LibraryType.Games, label: 'Games' },
+	{ value: LibraryType.YouTube, label: 'YouTube' },
+	{ value: LibraryType.Photos, label: 'Photos' },
+	{ value: LibraryType.Books, label: 'Books' }
 ];
 
 export interface MediaTypeOption {

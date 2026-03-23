@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { DisplayMusicBrainzReleaseGroup } from 'ui-lib/types/musicbrainz.type';
+	import type { DisplayMusicBrainzReleaseGroup } from 'addons/musicbrainz/types';
 	import type { TorrentState } from 'ui-lib/types/torrent.type';
 	import { formatSpeed, formatEta } from 'ui-lib/types/torrent.type';
 

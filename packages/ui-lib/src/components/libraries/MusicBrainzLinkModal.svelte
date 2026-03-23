@@ -5,13 +5,13 @@
 		DisplayMusicBrainzRecording,
 		DisplayMusicBrainzArtist,
 		DisplayMusicBrainzReleaseGroup
-	} from 'ui-lib/types/musicbrainz.type';
-	import { searchRecordings, searchArtists, searchReleaseGroups } from 'ui-lib/utils/musicbrainz/client';
+	} from 'addons/musicbrainz/types';
+	import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/musicbrainz/client';
 	import {
 		recordingsToDisplay,
 		artistsToDisplay,
 		releaseGroupsToDisplay
-	} from 'ui-lib/utils/musicbrainz/transform';
+	} from 'addons/musicbrainz/transform';
 
 	interface Props {
 		file: LibraryFile;

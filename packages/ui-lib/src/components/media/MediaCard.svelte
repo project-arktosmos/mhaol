@@ -3,8 +3,8 @@
 	import type { ImageTag } from 'ui-lib/types/image-tagger.type';
 	import type { TorrentState } from 'ui-lib/types/torrent.type';
 	import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
-	import type { YouTubeOEmbedResponse } from 'ui-lib/types/youtube-oembed.type';
-	import type { DisplayMusicBrainzRecording } from 'ui-lib/types/musicbrainz.type';
+	import type { YouTubeOEmbedResponse } from 'addons/youtube/types';
+	import type { DisplayMusicBrainzRecording } from 'addons/musicbrainz/types';
 	import MovieCard from './MovieCard.svelte';
 	import TvShowCard from './TvShowCard.svelte';
 	import YouTubeCard from './YouTubeCard.svelte';

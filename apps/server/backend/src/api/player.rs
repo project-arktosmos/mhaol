@@ -1,4 +1,5 @@
 use crate::AppState;
+use crate::worker_bridge::IceServerEntry;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -7,8 +8,71 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
 
 const DEFAULT_SIGNALING_URL: &str = "https://mhaol-signaling.project-arktosmos.partykit.dev";
+const ICE_CACHE_TTL_MS: u128 = 12 * 60 * 60 * 1000;
+
+struct IceCache {
+    servers: Vec<IceServerEntry>,
+    expires_at: u128,
+}
+
+static ICE_CACHE: OnceLock<Mutex<Option<IceCache>>> = OnceLock::new();
+
+async fn fetch_ice_servers() -> Option<Vec<IceServerEntry>> {
+    let cache_mutex = ICE_CACHE.get_or_init(|| Mutex::new(None));
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
+    {
+        let cache = cache_mutex.lock().await;
+        if let Some(ref cached) = *cache {
+            if now < cached.expires_at {
+                return Some(cached.servers.clone());
+            }
+        }
+    }
+
+    let domain = std::env::var("METERED_DOMAIN").ok()?;
+    let secret_key = std::env::var("METERED_SECRET_KEY").ok()?;
+    if domain.is_empty() || secret_key.is_empty() {
+        tracing::warn!("[player] METERED_DOMAIN or METERED_SECRET_KEY not set");
+        return None;
+    }
+
+    let url = format!("https://{domain}/api/v1/turn/credentials?apiKey={secret_key}");
+    match reqwest::get(&url).await {
+        Ok(resp) if resp.status().is_success() => {
+            match resp.json::<Vec<IceServerEntry>>().await {
+                Ok(servers) => {
+                    tracing::info!("[player] Fetched {} ICE servers from Metered", servers.len());
+                    let mut cache = cache_mutex.lock().await;
+                    *cache = Some(IceCache {
+                        servers: servers.clone(),
+                        expires_at: now + ICE_CACHE_TTL_MS,
+                    });
+                    Some(servers)
+                }
+                Err(e) => {
+                    tracing::warn!("[player] Failed to parse Metered response: {e}");
+                    None
+                }
+            }
+        }
+        Ok(resp) => {
+            tracing::warn!("[player] Metered API returned {}", resp.status());
+            None
+        }
+        Err(e) => {
+            tracing::warn!("[player] Metered API fetch error: {e}");
+            None
+        }
+    }
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -124,7 +188,9 @@ async fn stream_status(State(_state): State<AppState>) -> impl IntoResponse {
 
 #[derive(Deserialize)]
 struct CreateSessionBody {
-    file_path: String,
+    file_path: Option<String>,
+    torrent_info_hash: Option<String>,
+    torrent_file_idx: Option<usize>,
     mode: Option<String>,
     video_codec: Option<String>,
     video_quality: Option<String>,
@@ -134,15 +200,6 @@ async fn create_session(
     State(state): State<AppState>,
     Json(body): Json<CreateSessionBody>,
 ) -> impl IntoResponse {
-    let file_path = resolve_media_path(&body.file_path);
-    if !std::path::Path::new(&file_path).exists() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": format!("File not found: {}", file_path) })),
-        )
-            .into_response();
-    }
-
     let signaling_url = DEFAULT_SIGNALING_URL.to_string();
 
     if !state.worker_bridge.is_ready() {
@@ -153,17 +210,87 @@ async fn create_session(
             .into_response();
     }
 
+    // Resolve the media source: either a local file path or a torrent stream URL
+    let (file_path, stream_url) = match (&body.file_path, &body.torrent_info_hash) {
+        (Some(fp), None) => {
+            let resolved = resolve_media_path(fp);
+            if !std::path::Path::new(&resolved).exists() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": format!("File not found: {}", resolved) })),
+                )
+                    .into_response();
+            }
+            (Some(resolved), None)
+        }
+        (None, Some(info_hash)) => {
+            // Resolve the internal librqbit streaming URL from the torrent info_hash
+            let torrent_id = match crate::api::torrent::find_torrent_id_pub(&state, info_hash).await {
+                Some(id) => id,
+                None => {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        Json(serde_json::json!({ "error": "Torrent not found" })),
+                    )
+                        .into_response();
+                }
+            };
+
+            let http_api_addr = match state.torrent_manager.get_http_api_addr() {
+                Some(addr) => addr,
+                None => {
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(serde_json::json!({ "error": "Torrent HTTP API not available" })),
+                    )
+                        .into_response();
+                }
+            };
+
+            // Determine file index: use provided or find the largest file
+            let file_idx = match body.torrent_file_idx {
+                Some(idx) => idx,
+                None => {
+                    match state.torrent_manager.list_files(torrent_id).await {
+                        Ok(files) if !files.is_empty() => {
+                            files.iter().max_by_key(|f| f.size).map(|f| f.id).unwrap_or(0)
+                        }
+                        _ => 0,
+                    }
+                }
+            };
+
+            // Pause other torrents to maximise bandwidth for the streaming one
+            if let Err(e) = state.torrent_manager.pause_all_except(info_hash).await {
+                tracing::warn!("Failed to pause other torrents: {}", e);
+            }
+
+            let url = crate::http_stream::build_stream_url(&http_api_addr, torrent_id, file_idx);
+            (None, Some(url))
+        }
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "Exactly one of file_path or torrent_info_hash must be provided" })),
+            )
+                .into_response();
+        }
+    };
+
     let session_id = uuid::Uuid::new_v4().to_string();
+    let ice_servers = fetch_ice_servers().await;
 
     match state
         .worker_bridge
         .create_session(
             &session_id,
-            &file_path,
+            file_path.as_deref(),
+            stream_url.as_deref(),
             &signaling_url,
             body.mode,
             body.video_codec,
             body.video_quality,
+            ice_servers,
         )
         .await
     {

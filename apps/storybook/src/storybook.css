@@ -1,5 +1,0 @@
-@import 'tailwindcss';
-@plugin 'daisyui';
-@source '../../../packages/ui-lib/src';
-@source '../src';
-@import 'ui-lib/css/themes.css';

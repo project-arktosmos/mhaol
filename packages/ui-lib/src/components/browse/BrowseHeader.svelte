@@ -11,20 +11,10 @@
 		tabs?: Snippet;
 	}
 
-	let {
-		title,
-		count = null,
-		countLabel = 'items',
-		classes = '',
-		controls,
-		tabs
-	}: Props = $props();
+	let { title, count = null, countLabel = 'items', classes = '', controls, tabs }: Props = $props();
 
 	let headerClasses = $derived(
-		classNames(
-			'flex flex-wrap items-center gap-3 border-b border-base-300 px-4 py-3',
-			classes
-		)
+		classNames('flex flex-wrap items-center gap-3 border-b border-base-300 px-4 py-3', classes)
 	);
 </script>
 

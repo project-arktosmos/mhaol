@@ -44,12 +44,20 @@ export const P2P_VIDEO_QUALITY_OPTIONS: {
 
 export type P2pStreamMode = 'audio' | 'video';
 
+// ===== TURN Server =====
+
+export interface TurnServerConfig {
+	url: string;
+	username: string;
+	credential: string;
+}
+
 // ===== Settings (database-backed via settingsRepo) =====
 
 export interface P2pStreamSettings {
 	id: ID;
 	stunServer: string;
-	turnServers: string[];
+	turnServers: TurnServerConfig[];
 	videoCodec: P2pVideoCodec;
 	audioCodec: P2pAudioCodec;
 	defaultStreamMode: P2pStreamMode;

@@ -49,6 +49,18 @@ export enum TorrentCategory {
 	Other = '600'
 }
 
+/** Metadata extracted from a torrent name by parseTorrentName */
+export interface TorrentAnalysis {
+	quality: string;
+	languages: string;
+	subs: string;
+	relevance: number;
+	reason: string;
+	seasonNumber: number | null;
+	episodeNumber: number | null;
+	isCompleteSeries: boolean;
+}
+
 export const TORRENT_CATEGORY_LABELS: Record<TorrentCategory, string> = {
 	[TorrentCategory.All]: 'All',
 	[TorrentCategory.Audio]: 'Audio',

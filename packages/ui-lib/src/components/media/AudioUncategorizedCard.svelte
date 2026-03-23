@@ -1,7 +1,7 @@
 <script lang="ts">
 	import MediaCardBase from './MediaCardBase.svelte';
 	import type { MediaItem } from 'ui-lib/types/media-card.type';
-	import type { DisplayMusicBrainzRecording } from 'ui-lib/types/musicbrainz.type';
+	import type { DisplayMusicBrainzRecording } from 'addons/musicbrainz/types';
 
 	interface Props {
 		item: MediaItem;

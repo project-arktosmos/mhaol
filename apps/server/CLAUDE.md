@@ -29,7 +29,9 @@ src/
 │   ├── +layout.ts       # SSR disabled
 │   ├── +page.svelte     # Movies library grid with sub-tabs (Library, Search, Popular, Discover, Recommendations)
 │   ├── +page.ts         # Page load (fetches /api/media)
-│   ├── music/           # Music album browsing (MusicBrainz, genre tabs)
+│   ├── music/           # Music summary + sub-routes (album, artist)
+│   │   ├── album/       # Album browsing (MusicBrainz, genre tabs)
+│   │   └── artist/      # Artist browsing (MusicBrainz, genre tabs)
 │   ├── tv/              # TV show browsing (TMDB browse)
 │   ├── videogames/      # Videogame browsing (RetroAchievements, console tabs)
 │   └── database/        # Database browser utility page

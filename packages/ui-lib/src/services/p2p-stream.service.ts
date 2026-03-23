@@ -6,7 +6,8 @@ import type {
 	P2pStreamServiceState,
 	P2pVideoCodec,
 	P2pVideoQuality,
-	P2pStreamMode
+	P2pStreamMode,
+	TurnServerConfig
 } from 'ui-lib/types/p2p-stream.type';
 
 const initialSettings: P2pStreamSettings = {
@@ -31,6 +32,9 @@ class P2pStreamService {
 	public state: Writable<P2pStreamServiceState> = writable(initialState);
 
 	private _initialized = false;
+	private _mode: 'api' | 'local' = 'api';
+
+	private static LOCAL_STORAGE_KEY = 'p2p-stream-settings';
 
 	get(): P2pStreamSettings {
 		return get(this.store);
@@ -38,6 +42,7 @@ class P2pStreamService {
 
 	async initialize(): Promise<void> {
 		if (!browser || this._initialized) return;
+		this._mode = 'api';
 		this.state.update((s) => ({ ...s, loading: true }));
 
 		try {
@@ -65,11 +70,40 @@ class P2pStreamService {
 		}
 	}
 
+	initializeLocal(): void {
+		if (!browser || this._initialized) return;
+		this._mode = 'local';
+		this._initialized = true;
+
+		try {
+			const raw = localStorage.getItem(P2pStreamService.LOCAL_STORAGE_KEY);
+			if (raw) {
+				const stored = JSON.parse(raw) as Partial<P2pStreamSettings>;
+				this.store.set({ ...initialSettings, ...stored, id: 'p2p-stream-settings' });
+			}
+		} catch {
+			// ignore
+		}
+
+		this.state.update((s) => ({ ...s, initialized: true }));
+	}
+
+	private saveLocal(): void {
+		if (this._mode !== 'local' || !browser) return;
+		const { id: _, ...settings } = this.get();
+		localStorage.setItem(P2pStreamService.LOCAL_STORAGE_KEY, JSON.stringify(settings));
+	}
+
 	async updateSettings(updates: Partial<P2pStreamSettings>): Promise<void> {
 		if (!browser) return;
 		const current = this.get();
 		const merged = { ...current, ...updates };
 		this.store.set(merged);
+
+		if (this._mode === 'local') {
+			this.saveLocal();
+			return;
+		}
 
 		const { id: _id, ...payload } = updates as Partial<P2pStreamSettings> & { id?: unknown };
 
@@ -89,16 +123,16 @@ class P2pStreamService {
 		this.updateSettings({ stunServer });
 	}
 
-	addTurnServer(url: string): void {
+	addTurnServer(config: TurnServerConfig): void {
 		const current = this.get();
-		if (!current.turnServers.includes(url)) {
-			this.updateSettings({ turnServers: [...current.turnServers, url] });
+		if (!current.turnServers.some((t) => t.url === config.url)) {
+			this.updateSettings({ turnServers: [...current.turnServers, config] });
 		}
 	}
 
 	removeTurnServer(url: string): void {
 		const current = this.get();
-		this.updateSettings({ turnServers: current.turnServers.filter((t) => t !== url) });
+		this.updateSettings({ turnServers: current.turnServers.filter((t) => t.url !== url) });
 	}
 
 	setVideoCodec(codec: P2pVideoCodec): void {
@@ -139,7 +173,10 @@ class P2pStreamService {
 			servers.push({ urls: settings.stunServer });
 		}
 		for (const turn of settings.turnServers) {
-			servers.push({ urls: turn });
+			const entry: RTCIceServer = { urls: turn.url };
+			if (turn.username) entry.username = turn.username;
+			if (turn.credential) entry.credential = turn.credential;
+			servers.push(entry);
 		}
 		if (servers.length === 0) {
 			servers.push({

@@ -1,4 +1,4 @@
-use mhaol_server::{api, load_env_app, AppState};
+use mhaol_server::{api, load_env, AppState};
 use std::path::PathBuf;
 use tokio::net::TcpListener;
 
@@ -19,12 +19,12 @@ async fn main() {
         return;
     }
 
-    load_env_app();
+    load_env();
 
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,mhaol_server=debug,mhaol_torrent=debug,mhaol_http_stream=debug,mhaol_p2p_stream=debug,librqbit=info".into()),
+                .unwrap_or_else(|_| "info,mhaol_server=debug,mhaol_torrent=debug,mhaol_p2p_stream=debug,librqbit=info".into()),
         )
         .init();
 
@@ -62,7 +62,7 @@ async fn main() {
     let state = AppState::new(Some(db_path.as_path()))
         .expect("Failed to initialize database");
 
-    state.seed_default_library();
+    state.seed_default_libraries();
     state.initialize_modules();
 
     // Start p2p-stream worker in the background
@@ -70,6 +70,15 @@ async fn main() {
     tokio::spawn(async move {
         worker_bridge.start().await;
     });
+
+    // Start LLM queue worker in the background
+    #[cfg(not(target_os = "android"))]
+    {
+        let llm_state = state.clone();
+        tokio::spawn(async move {
+            mhaol_server::llm_worker::run_llm_worker(llm_state).await;
+        });
+    }
 
     let app = api::build_router(state);
 

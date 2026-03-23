@@ -94,13 +94,13 @@ class LibraryService {
 		}
 	}
 
-	async addLibrary(name: string, path: string, mediaTypes: MediaType[]): Promise<void> {
+	async addLibrary(name: string, path: string, libraryType: LibraryType): Promise<void> {
 		if (!browser) return;
 
 		try {
 			const library = await this.fetchJson<Library>('/api/libraries', {
 				method: 'POST',
-				body: JSON.stringify({ name, path, libraryType: mediaTypes[0] || 'movies' })
+				body: JSON.stringify({ name, path, libraryType })
 			});
 
 			this.store.update((items) => [...items, library]);

@@ -16,11 +16,15 @@ src/
 └── service.ts   # ContactHandshakeService (state machine + Svelte store)
 ```
 
+## Passport Payload
+
+Each passport signs a JSON payload with fields: `name`, `address`, `instanceType` (`"server"` or `"client"`), and `signalingUrl` (the signaling server URL the peer connects from).
+
 ## Protocol Flow
 
 1. Initiator connects to peer via signaling → sends passport via `{ channel: 'contact' }` data channel
 2. Receiver verifies passport signature, closes connection, shows accept/reject prompt
-3. If accepted: receiver connects back, sends their passport
+3. If accepted: receiver connects back, sends their passport; both sides register each other on their local roster
 4. Both peers are now contacts and can freely connect
 
 ## Import Conventions

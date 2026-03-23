@@ -6,9 +6,6 @@
 	"addons": {
 		"tmdb": {
 			"source": "addon",
-			"schema": {
-				"sql": "CREATE TABLE IF NOT EXISTS tmdb_movies (\n    tmdb_id INTEGER PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS tmdb_tv_shows (\n    tmdb_id INTEGER PRIMARY KEY,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\n\nCREATE TABLE IF NOT EXISTS tmdb_seasons (\n    tmdb_id INTEGER NOT NULL,\n    season_number INTEGER NOT NULL,\n    data TEXT NOT NULL,\n    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),\n    PRIMARY KEY (tmdb_id, season_number)\n);"
-			},
 			"settings": [
 				{
 					"key": "tmdb.apiKey",
@@ -19,6 +16,21 @@
 		},
 		"torrent-search-thepiratebay": {
 			"source": "addon"
+		},
+		"musicbrainz": {
+			"source": "addon"
+		},
+		"retroachievements": {
+			"source": "addon"
+		},
+		"youtube": {
+			"source": "addon"
+		},
+		"lrclib": {
+			"source": "addon"
+		},
+		"openlibrary": {
+			"source": "addon"
 		}
 	},
 	"exports": {
@@ -28,8 +40,26 @@
 		"./tmdb/cache-repository": "./tmdb/src/cache-repository.ts",
 		"./torrent-search-thepiratebay": "./torrent-search-thepiratebay/src/index.ts",
 		"./torrent-search-thepiratebay/types": "./torrent-search-thepiratebay/src/types.ts",
+		"./torrent-search-thepiratebay/format": "./torrent-search-thepiratebay/src/format.ts",
+		"./torrent-search-thepiratebay/parse-torrent-name": "./torrent-search-thepiratebay/src/parse-torrent-name.ts",
+		"./musicbrainz": "./musicbrainz/src/index.ts",
+		"./musicbrainz/types": "./musicbrainz/src/types.ts",
+		"./musicbrainz/transform": "./musicbrainz/src/transform.ts",
+		"./musicbrainz/client": "./musicbrainz/src/client.ts",
+		"./retroachievements": "./retroachievements/src/index.ts",
+		"./retroachievements/types": "./retroachievements/src/types.ts",
+		"./retroachievements/transform": "./retroachievements/src/transform.ts",
+		"./youtube": "./youtube/src/index.ts",
+		"./youtube/types": "./youtube/src/types.ts",
+		"./youtube/helpers": "./youtube/src/helpers.ts",
+		"./lrclib": "./lrclib/src/index.ts",
+		"./lrclib/types": "./lrclib/src/types.ts",
+		"./openlibrary": "./openlibrary/src/index.ts",
+		"./openlibrary/types": "./openlibrary/src/types.ts",
+		"./openlibrary/transform": "./openlibrary/src/transform.ts",
 		"./common/rate-limiter": "./common/src/rate-limiter.ts",
-		"./common/utils": "./common/src/utils.ts"
+		"./common/utils": "./common/src/utils.ts",
+		"./common/addon-cache": "./common/src/addon-cache.ts"
 	},
 	"scripts": {
 		"lint": "prettier --check . && eslint .",

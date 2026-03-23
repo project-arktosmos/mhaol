@@ -1,21 +1,42 @@
 <script lang="ts">
 	import classNames from 'classnames';
+	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import type {
 		DisplayTMDBMovie,
 		DisplayTMDBTvShow,
 		DisplayTMDBMovieDetails,
 		DisplayTMDBTvShowDetails,
+		DisplayTMDBSeasonDetails,
 		DisplayTMDBImage
 	} from 'addons/tmdb/types';
 	import type { MediaItem } from 'ui-lib/types/media-card.type';
 	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
 	import type { PlayableFile, PlayerConnectionState } from 'ui-lib/types/player.type';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
+	let expandedSeason = $state<number | null>(null);
+	const smartSearchStore = smartSearchService.store;
+	let tvMatchedSeasons = $derived.by(() => {
+		const tvResults = $smartSearchStore.tvResults;
+		if (!tvResults) return { hasComplete: false, seasons: new Map<number, Set<number>>() };
+		const hasComplete = tvResults.complete.length > 0;
+		const seasons = new Map<number, Set<number>>();
+		for (const [snStr, data] of Object.entries(tvResults.seasons)) {
+			const sn = Number(snStr);
+			const eps = new Set<number>();
+			if (data.seasonPacks.length > 0) eps.add(-1);
+			for (const en of Object.keys(data.episodes).map(Number)) {
+				if (data.episodes[en].length > 0) eps.add(en);
+			}
+			if (eps.size > 0) seasons.set(sn, eps);
+		}
+		return { hasComplete, seasons };
+	});
 	let {
 		movie = null,
 		tvShow = null,
 		movieDetails = null,
 		tvShowDetails = null,
+		tvSeasonDetails = [],
 		libraryItem = null,
 		relatedData = null,
 		loading = false,
@@ -26,7 +47,6 @@
 		playerConnectionState = 'idle',
 		playerPositionSecs = 0,
 		playerDurationSecs = 0,
-		playerStreamUrl = null,
 		playerBuffering = false,
 		playerFullscreen = false,
 		downloadStatus = null,
@@ -44,17 +64,23 @@
 		tvShow?: DisplayTMDBTvShow | null;
 		movieDetails?: DisplayTMDBMovieDetails | null;
 		tvShowDetails?: DisplayTMDBTvShowDetails | null;
+		tvSeasonDetails?: DisplayTMDBSeasonDetails[];
 		libraryItem?: MediaItem | null;
 		relatedData?: LibraryItemRelated | null;
 		loading?: boolean;
 		fetching?: boolean;
 		fetched?: boolean;
-		fetchSteps?: { terms: boolean; search: boolean; searching: boolean; eval: boolean; done: boolean } | null;
+		fetchSteps?: {
+			terms: boolean;
+			search: boolean;
+			searching: boolean;
+			eval: boolean;
+			done: boolean;
+		} | null;
 		playerFile?: PlayableFile | null;
 		playerConnectionState?: PlayerConnectionState;
 		playerPositionSecs?: number;
 		playerDurationSecs?: number | null;
-		playerStreamUrl?: string | null;
 		playerBuffering?: boolean;
 		playerFullscreen?: boolean;
 		downloadStatus?: { state: string; progress: number } | null;
@@ -106,7 +132,10 @@
 
 	let dlState = $derived(downloadStatus?.state ?? null);
 	let isDownloading = $derived(
-		dlState === 'downloading' || dlState === 'initializing' || dlState === 'paused' || dlState === 'checking'
+		dlState === 'downloading' ||
+			dlState === 'initializing' ||
+			dlState === 'paused' ||
+			dlState === 'checking'
 	);
 	let isDownloaded = $derived(dlState === 'completed' || dlState === 'seeding');
 	let downloadButtonDisabled = $derived(!fetched || isDownloading || isDownloaded);
@@ -128,7 +157,11 @@
 				'fixed inset-0 z-50 flex flex-col': playerFullscreen
 			})}
 		>
-			<div class={classNames('flex items-center justify-between px-2 py-1', { 'p-3': playerFullscreen })}>
+			<div
+				class={classNames('flex items-center justify-between px-2 py-1', {
+					'p-3': playerFullscreen
+				})}
+			>
 				<p
 					class={classNames('min-w-0 truncate font-semibold text-white', {
 						'text-xs': !playerFullscreen,
@@ -146,7 +179,14 @@
 							aria-label="Move to sidebar"
 							title="Move to sidebar"
 						>
-							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								class="h-4 w-4"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+								stroke-width="2"
+							>
 								<path stroke-linecap="round" stroke-linejoin="round" d="M18 8L14 12L18 16" />
 								<rect x="3" y="3" width="18" height="18" rx="2" />
 								<line x1="14" y1="3" x2="14" y2="21" />
@@ -195,7 +235,6 @@
 					connectionState={playerConnectionState}
 					positionSecs={playerPositionSecs}
 					durationSecs={playerDurationSecs}
-					streamUrl={playerStreamUrl}
 					buffering={playerBuffering}
 					fullscreen={playerFullscreen}
 				/>
@@ -267,7 +306,11 @@
 
 		<div class="grid grid-cols-2 gap-2">
 			{#if onfetch}
-				<button class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}" onclick={onfetch} disabled={fetching}>
+				<button
+					class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
+					onclick={onfetch}
+					disabled={fetching}
+				>
 					{#if fetching}
 						<span class="loading loading-xs loading-spinner"></span>
 					{:else}
@@ -319,8 +362,19 @@
 						<span class="loading loading-xs loading-spinner"></span>
 						Downloading
 					{:else if isDownloaded}
-						<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							class="h-4 w-4"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M5 13l4 4L19 7"
+							/>
 						</svg>
 						Downloaded
 					{:else}
@@ -452,20 +506,118 @@
 			</div>
 		{/if}
 
+		{#if tvSeasonDetails.length > 0}
+			<div>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">
+					Seasons &amp; Episodes
+					{#if tvMatchedSeasons.hasComplete}
+						<span class="ml-1 badge badge-xs badge-success">Complete</span>
+					{/if}
+				</h3>
+				<div class="flex flex-col gap-1">
+					{#each tvSeasonDetails as season (season.seasonNumber)}
+						{@const isExpanded = expandedSeason === season.seasonNumber}
+						{@const seasonMatch = tvMatchedSeasons.seasons.get(season.seasonNumber)}
+						{@const hasSeasonPack = seasonMatch?.has(-1) ?? false}
+						<div
+							class={classNames('rounded', {
+								'bg-success/10 ring-1 ring-success/30': hasSeasonPack,
+								'bg-base-200': !hasSeasonPack
+							})}
+						>
+							<button
+								class={classNames(
+									'flex w-full items-center justify-between px-2 py-1.5 text-left text-sm',
+									{
+										'hover:bg-success/20': hasSeasonPack,
+										'hover:bg-base-300': !hasSeasonPack
+									}
+								)}
+								onclick={() => {
+									expandedSeason = isExpanded ? null : season.seasonNumber;
+								}}
+							>
+								<span class="flex min-w-0 items-center gap-1.5">
+									{#if hasSeasonPack}
+										<span class="text-xs text-success" title="Season pack found">●</span>
+									{:else if seasonMatch}
+										<span class="text-xs text-warning" title="Some episodes found">◐</span>
+									{/if}
+									<span class="truncate font-medium">{season.name}</span>
+								</span>
+								<span class="flex shrink-0 items-center gap-1">
+									{#if seasonMatch}
+										{@const epCount = [...seasonMatch].filter((e) => e !== -1).length}
+										{#if epCount > 0}
+											<span class="text-xs text-success">{epCount}/{season.episodes.length}</span>
+										{:else}
+											<span class="text-xs opacity-50">{season.episodes.length} ep</span>
+										{/if}
+									{:else}
+										<span class="text-xs opacity-50">{season.episodes.length} ep</span>
+									{/if}
+									<span class="text-xs opacity-40">{isExpanded ? '▲' : '▼'}</span>
+								</span>
+							</button>
+							{#if isExpanded}
+								<div class="border-t border-base-300 px-2 py-1">
+									{#each season.episodes as ep (ep.episodeNumber)}
+										{@const epMatched = seasonMatch?.has(ep.episodeNumber) ?? false}
+										<div
+											class={classNames('flex items-baseline gap-2 py-0.5', {
+												'text-success': epMatched
+											})}
+										>
+											<span
+												class={classNames('shrink-0 font-mono text-xs', {
+													'opacity-40': !epMatched
+												})}
+											>
+												{#if epMatched}●{/if}
+												E{String(ep.episodeNumber).padStart(2, '0')}
+											</span>
+											<span class="min-w-0 truncate text-xs">{ep.name}</span>
+											{#if ep.runtime}
+												<span class="ml-auto shrink-0 text-xs opacity-40">
+													{ep.runtime}m
+												</span>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
 		{#if backdropUrl || posterUrl}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Primary Images</h3>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">
+					Primary Images
+				</h3>
 				<div class="flex flex-col gap-2">
 					{#if backdropUrl}
 						<div>
-							<p class="mb-0.5 text-xs font-mono opacity-40">backdrop_path</p>
-							<img src={backdropUrl} alt="{title} backdrop" class="w-full rounded object-cover aspect-video" loading="lazy" />
+							<p class="mb-0.5 font-mono text-xs opacity-40">backdrop_path</p>
+							<img
+								src={backdropUrl}
+								alt="{title} backdrop"
+								class="aspect-video w-full rounded object-cover"
+								loading="lazy"
+							/>
 						</div>
 					{/if}
 					{#if posterUrl}
 						<div>
-							<p class="mb-0.5 text-xs font-mono opacity-40">poster_path</p>
-							<img src={posterUrl} alt="{title} poster" class="w-32 rounded object-cover aspect-[2/3]" loading="lazy" />
+							<p class="mb-0.5 font-mono text-xs opacity-40">poster_path</p>
+							<img
+								src={posterUrl}
+								alt="{title} poster"
+								class="aspect-[2/3] w-32 rounded object-cover"
+								loading="lazy"
+							/>
 						</div>
 					{/if}
 				</div>
@@ -481,10 +633,13 @@
 							<img
 								src={image.thumbnailUrl}
 								alt="{title} image"
-								class={classNames('w-full rounded object-cover transition-opacity hover:opacity-80', {
-									'aspect-video': image.width > image.height,
-									'aspect-[2/3]': image.width <= image.height
-								})}
+								class={classNames(
+									'w-full rounded object-cover transition-opacity hover:opacity-80',
+									{
+										'aspect-video': image.width > image.height,
+										'aspect-[2/3]': image.width <= image.height
+									}
+								)}
 								loading="lazy"
 							/>
 						</a>
@@ -498,15 +653,39 @@
 				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Library Item</h3>
 				<table class="table table-xs">
 					<tbody>
-						<tr><td class="font-medium opacity-60">ID</td><td class="break-all">{libraryItem.id}</td></tr>
-						<tr><td class="font-medium opacity-60">Name</td><td class="break-all">{libraryItem.name}</td></tr>
-						<tr><td class="font-medium opacity-60">Path</td><td class="break-all">{libraryItem.path}</td></tr>
-						<tr><td class="font-medium opacity-60">Extension</td><td>{libraryItem.extension}</td></tr>
-						<tr><td class="font-medium opacity-60">Media Type</td><td>{libraryItem.mediaTypeId}</td></tr>
-						<tr><td class="font-medium opacity-60">Category</td><td>{libraryItem.categoryId ?? '—'}</td></tr>
+						<tr
+							><td class="font-medium opacity-60">ID</td><td class="break-all">{libraryItem.id}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Name</td><td class="break-all"
+								>{libraryItem.name}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Path</td><td class="break-all"
+								>{libraryItem.path}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Extension</td><td>{libraryItem.extension}</td></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Media Type</td><td>{libraryItem.mediaTypeId}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Category</td><td
+								>{libraryItem.categoryId ?? '—'}</td
+							></tr
+						>
 						<tr><td class="font-medium opacity-60">Created</td><td>{libraryItem.createdAt}</td></tr>
 						{#each Object.entries(libraryItem.links) as [service, link]}
-							<tr><td class="font-medium opacity-60">Link: {service}</td><td class="break-all">{link.serviceId}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Link: {service}</td><td class="break-all"
+									>{link.serviceId}</td
+								></tr
+							>
 						{/each}
 					</tbody>
 				</table>
@@ -518,10 +697,26 @@
 				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Library</h3>
 				<table class="table table-xs">
 					<tbody>
-						<tr><td class="font-medium opacity-60">Name</td><td class="break-all">{relatedData.library.name}</td></tr>
-						<tr><td class="font-medium opacity-60">Path</td><td class="break-all">{relatedData.library.path}</td></tr>
-						<tr><td class="font-medium opacity-60">Media Types</td><td>{relatedData.library.mediaTypes}</td></tr>
-						<tr><td class="font-medium opacity-60">Created</td><td>{relatedData.library.createdAt}</td></tr>
+						<tr
+							><td class="font-medium opacity-60">Name</td><td class="break-all"
+								>{relatedData.library.name}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Path</td><td class="break-all"
+								>{relatedData.library.path}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Media Types</td><td
+								>{relatedData.library.mediaTypes}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Created</td><td
+								>{relatedData.library.createdAt}</td
+							></tr
+						>
 					</tbody>
 				</table>
 			</div>
@@ -533,12 +728,22 @@
 				<table class="table table-xs">
 					<tbody>
 						{#each relatedData.links as link}
-							<tr><td class="font-medium opacity-60">{link.service}</td><td class="break-all">{link.serviceId}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">{link.service}</td><td class="break-all"
+									>{link.serviceId}</td
+								></tr
+							>
 							{#if link.seasonNumber != null}
-								<tr><td class="pl-4 font-medium opacity-60">Season</td><td>{link.seasonNumber}</td></tr>
+								<tr
+									><td class="pl-4 font-medium opacity-60">Season</td><td>{link.seasonNumber}</td
+									></tr
+								>
 							{/if}
 							{#if link.episodeNumber != null}
-								<tr><td class="pl-4 font-medium opacity-60">Episode</td><td>{link.episodeNumber}</td></tr>
+								<tr
+									><td class="pl-4 font-medium opacity-60">Episode</td><td>{link.episodeNumber}</td
+									></tr
+								>
 							{/if}
 							<tr><td class="pl-4 font-medium opacity-60">Linked</td><td>{link.createdAt}</td></tr>
 						{/each}
@@ -552,26 +757,64 @@
 				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Fetch Cache</h3>
 				<table class="table table-xs">
 					<tbody>
-						<tr><td class="font-medium opacity-60">TMDB ID</td><td>{relatedData.fetchCache.tmdbId}</td></tr>
-						<tr><td class="font-medium opacity-60">Media Type</td><td>{relatedData.fetchCache.mediaType}</td></tr>
-						<tr><td class="font-medium opacity-60">Created</td><td>{relatedData.fetchCache.createdAt}</td></tr>
+						<tr
+							><td class="font-medium opacity-60">TMDB ID</td><td
+								>{relatedData.fetchCache.tmdbId}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Media Type</td><td
+								>{relatedData.fetchCache.mediaType}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Created</td><td
+								>{relatedData.fetchCache.createdAt}</td
+							></tr
+						>
 						{#if relatedData.fetchCache.candidate.name}
-							<tr><td class="font-medium opacity-60">Torrent</td><td class="break-all">{relatedData.fetchCache.candidate.name}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Torrent</td><td class="break-all"
+									>{relatedData.fetchCache.candidate.name}</td
+								></tr
+							>
 						{/if}
 						{#if relatedData.fetchCache.candidate.infoHash}
-							<tr><td class="font-medium opacity-60">Info Hash</td><td class="break-all font-mono text-[10px]">{relatedData.fetchCache.candidate.infoHash}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Info Hash</td><td
+									class="font-mono text-[10px] break-all"
+									>{relatedData.fetchCache.candidate.infoHash}</td
+								></tr
+							>
 						{/if}
 						{#if relatedData.fetchCache.candidate.size}
-							<tr><td class="font-medium opacity-60">Size</td><td>{formatBytes(Number(relatedData.fetchCache.candidate.size))}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Size</td><td
+									>{formatBytes(Number(relatedData.fetchCache.candidate.size))}</td
+								></tr
+							>
 						{/if}
 						{#if relatedData.fetchCache.candidate.seeds != null}
-							<tr><td class="font-medium opacity-60">Seeds</td><td>{relatedData.fetchCache.candidate.seeds}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Seeds</td><td
+									>{relatedData.fetchCache.candidate.seeds}</td
+								></tr
+							>
 						{/if}
 						{#if relatedData.fetchCache.candidate.peers != null}
-							<tr><td class="font-medium opacity-60">Peers</td><td>{relatedData.fetchCache.candidate.peers}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Peers</td><td
+									>{relatedData.fetchCache.candidate.peers}</td
+								></tr
+							>
 						{/if}
 						{#if relatedData.fetchCache.candidate.magnetUrl}
-							<tr><td class="font-medium opacity-60">Magnet</td><td class="break-all font-mono text-[10px]">{relatedData.fetchCache.candidate.magnetUrl}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Magnet</td><td
+									class="font-mono text-[10px] break-all"
+									>{relatedData.fetchCache.candidate.magnetUrl}</td
+								></tr
+							>
 						{/if}
 					</tbody>
 				</table>
@@ -580,25 +823,83 @@
 
 		{#if relatedData?.torrentDownload}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Torrent Download</h3>
+				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">
+					Torrent Download
+				</h3>
 				<table class="table table-xs">
 					<tbody>
-						<tr><td class="font-medium opacity-60">Name</td><td class="break-all">{relatedData.torrentDownload.name}</td></tr>
-						<tr><td class="font-medium opacity-60">Info Hash</td><td class="break-all font-mono text-[10px]">{relatedData.torrentDownload.infoHash}</td></tr>
-						<tr><td class="font-medium opacity-60">State</td><td>{relatedData.torrentDownload.state}</td></tr>
-						<tr><td class="font-medium opacity-60">Progress</td><td>{formatProgress(relatedData.torrentDownload.progress)}</td></tr>
-						<tr><td class="font-medium opacity-60">Size</td><td>{formatBytes(relatedData.torrentDownload.size)}</td></tr>
-						<tr><td class="font-medium opacity-60">DL Speed</td><td>{formatBytes(relatedData.torrentDownload.downloadSpeed)}/s</td></tr>
-						<tr><td class="font-medium opacity-60">UL Speed</td><td>{formatBytes(relatedData.torrentDownload.uploadSpeed)}/s</td></tr>
-						<tr><td class="font-medium opacity-60">Peers</td><td>{relatedData.torrentDownload.peers}</td></tr>
-						<tr><td class="font-medium opacity-60">Seeds</td><td>{relatedData.torrentDownload.seeds}</td></tr>
-						<tr><td class="font-medium opacity-60">Source</td><td>{relatedData.torrentDownload.source}</td></tr>
+						<tr
+							><td class="font-medium opacity-60">Name</td><td class="break-all"
+								>{relatedData.torrentDownload.name}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Info Hash</td><td
+								class="font-mono text-[10px] break-all">{relatedData.torrentDownload.infoHash}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">State</td><td
+								>{relatedData.torrentDownload.state}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Progress</td><td
+								>{formatProgress(relatedData.torrentDownload.progress)}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Size</td><td
+								>{formatBytes(relatedData.torrentDownload.size)}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">DL Speed</td><td
+								>{formatBytes(relatedData.torrentDownload.downloadSpeed)}/s</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">UL Speed</td><td
+								>{formatBytes(relatedData.torrentDownload.uploadSpeed)}/s</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Peers</td><td
+								>{relatedData.torrentDownload.peers}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Seeds</td><td
+								>{relatedData.torrentDownload.seeds}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Source</td><td
+								>{relatedData.torrentDownload.source}</td
+							></tr
+						>
 						{#if relatedData.torrentDownload.outputPath}
-							<tr><td class="font-medium opacity-60">Output</td><td class="break-all">{relatedData.torrentDownload.outputPath}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Output</td><td class="break-all"
+									>{relatedData.torrentDownload.outputPath}</td
+								></tr
+							>
 						{/if}
-						<tr><td class="font-medium opacity-60">Added</td><td>{new Date(relatedData.torrentDownload.addedAt * 1000).toLocaleString()}</td></tr>
-						<tr><td class="font-medium opacity-60">Created</td><td>{relatedData.torrentDownload.createdAt}</td></tr>
-						<tr><td class="font-medium opacity-60">Updated</td><td>{relatedData.torrentDownload.updatedAt}</td></tr>
+						<tr
+							><td class="font-medium opacity-60">Added</td><td
+								>{new Date(relatedData.torrentDownload.addedAt * 1000).toLocaleString()}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Created</td><td
+								>{relatedData.torrentDownload.createdAt}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Updated</td><td
+								>{relatedData.torrentDownload.updatedAt}</td
+							></tr
+						>
 					</tbody>
 				</table>
 			</div>
@@ -609,23 +910,54 @@
 				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">TMDB Cache</h3>
 				<table class="table table-xs">
 					<tbody>
-						<tr><td class="font-medium opacity-60">TMDB ID</td><td>{relatedData.tmdbCache.tmdbId}</td></tr>
-						<tr><td class="font-medium opacity-60">Fetched</td><td>{relatedData.tmdbCache.fetchedAt}</td></tr>
-						<tr><td class="font-medium opacity-60">Title</td><td class="break-all">{relatedData.tmdbCache.data.title ?? relatedData.tmdbCache.data.name ?? '—'}</td></tr>
+						<tr
+							><td class="font-medium opacity-60">TMDB ID</td><td>{relatedData.tmdbCache.tmdbId}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Fetched</td><td
+								>{relatedData.tmdbCache.fetchedAt}</td
+							></tr
+						>
+						<tr
+							><td class="font-medium opacity-60">Title</td><td class="break-all"
+								>{relatedData.tmdbCache.data.title ?? relatedData.tmdbCache.data.name ?? '—'}</td
+							></tr
+						>
 						{#if relatedData.tmdbCache.data.release_date}
-							<tr><td class="font-medium opacity-60">Release</td><td>{relatedData.tmdbCache.data.release_date}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Release</td><td
+									>{relatedData.tmdbCache.data.release_date}</td
+								></tr
+							>
 						{/if}
 						{#if relatedData.tmdbCache.data.runtime}
-							<tr><td class="font-medium opacity-60">Runtime</td><td>{relatedData.tmdbCache.data.runtime} min</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Runtime</td><td
+									>{relatedData.tmdbCache.data.runtime} min</td
+								></tr
+							>
 						{/if}
 						{#if relatedData.tmdbCache.data.status}
-							<tr><td class="font-medium opacity-60">Status</td><td>{relatedData.tmdbCache.data.status}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Status</td><td
+									>{relatedData.tmdbCache.data.status}</td
+								></tr
+							>
 						{/if}
 						{#if relatedData.tmdbCache.data.original_language}
-							<tr><td class="font-medium opacity-60">Language</td><td>{relatedData.tmdbCache.data.original_language}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">Language</td><td
+									>{relatedData.tmdbCache.data.original_language}</td
+								></tr
+							>
 						{/if}
 						{#if relatedData.tmdbCache.data.imdb_id}
-							<tr><td class="font-medium opacity-60">IMDB ID</td><td>{relatedData.tmdbCache.data.imdb_id}</td></tr>
+							<tr
+								><td class="font-medium opacity-60">IMDB ID</td><td
+									>{relatedData.tmdbCache.data.imdb_id}</td
+								></tr
+							>
 						{/if}
 					</tbody>
 				</table>

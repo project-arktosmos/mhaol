@@ -4021,18 +4021,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mhaol-http-stream"
-version = "0.1.0"
-dependencies = [
- "axum",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "mhaol-identity"
 version = "0.1.0"
 dependencies = [
@@ -4070,6 +4058,7 @@ dependencies = [
  "gstreamer-sdp",
  "gstreamer-video",
  "gstreamer-webrtc",
+ "hex",
  "http",
  "k256",
  "parking_lot",
@@ -4081,6 +4070,20 @@ dependencies = [
  "tokio-tungstenite 0.26.2",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "mhaol-queue"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "parking_lot",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 
@@ -4098,10 +4101,10 @@ dependencies = [
  "http-body-util",
  "image",
  "libc",
- "mhaol-http-stream",
  "mhaol-identity",
  "mhaol-llm",
  "mhaol-p2p-stream",
+ "mhaol-queue",
  "mhaol-torrent",
  "mhaol-yt-dlp",
  "mime_guess",

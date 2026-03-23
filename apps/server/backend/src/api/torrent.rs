@@ -42,6 +42,8 @@ pub fn router() -> Router<AppState> {
         .route("/fetch-cache/hashes", get(list_fetch_cache_hashes))
         .route("/fetch-cache/{tmdb_id}", get(get_fetch_cache).delete(delete_fetch_cache))
         .route("/fetch-cache", get(list_fetch_cache_ids).post(save_fetch_cache))
+        .route("/tv-fetch-cache/{tmdb_id}", get(get_tv_fetch_cache).delete(delete_tv_fetch_cache))
+        .route("/tv-fetch-cache", post(save_tv_fetch_cache))
 }
 
 async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
@@ -205,10 +207,26 @@ async fn add_torrent(
     }
 }
 
+#[derive(Deserialize)]
+struct RemoveQuery {
+    #[serde(default)]
+    delete_files: bool,
+}
+
 async fn remove_torrent(
     State(state): State<AppState>,
     Path(info_hash): Path<String>,
+    Query(query): Query<RemoveQuery>,
 ) -> impl IntoResponse {
+    // Grab output_path before removing, so we can delete files if requested
+    let output_path = state.downloads.get(&info_hash).and_then(|row| {
+        match (&row.output_path, &row.name) {
+            (Some(p), name) if !name.is_empty() => Some(format!("{}/{}", p, name)),
+            (Some(p), _) => Some(p.clone()),
+            _ => None,
+        }
+    });
+
     match state.torrent_manager.list().await {
         Ok(torrents) => {
             if let Some(torrent) = torrents.iter().find(|t| t.info_hash == info_hash) {
@@ -221,6 +239,18 @@ async fn remove_torrent(
                 }
             }
             state.downloads.delete(&info_hash);
+
+            if query.delete_files {
+                if let Some(path) = output_path {
+                    let p = std::path::Path::new(&path);
+                    if p.is_dir() {
+                        let _ = std::fs::remove_dir_all(p);
+                    } else if p.is_file() {
+                        let _ = std::fs::remove_file(p);
+                    }
+                }
+            }
+
             Json(serde_json::json!({ "ok": true })).into_response()
         }
         Err(e) => (
@@ -562,7 +592,7 @@ async fn resolve_stream_url(
             .into_response()
     })?;
 
-    Ok(mhaol_http_stream::build_stream_url(
+    Ok(crate::http_stream::build_stream_url(
         &http_api_addr,
         torrent_id,
         file_idx,
@@ -578,7 +608,7 @@ async fn stream_torrent_file(
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok());
     match resolve_stream_url(&state, &info_hash, file_idx).await {
-        Ok(url) => mhaol_http_stream::proxy_stream(&url, range).await,
+        Ok(url) => crate::http_stream::proxy_stream(&url, range).await,
         Err(resp) => resp,
     }
 }
@@ -621,7 +651,7 @@ async fn stream_torrent_largest(
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok());
     match resolve_stream_url(&state, &info_hash, file_idx).await {
-        Ok(url) => mhaol_http_stream::proxy_stream(&url, range).await,
+        Ok(url) => crate::http_stream::proxy_stream(&url, range).await,
         Err(resp) => resp,
     }
 }
@@ -705,6 +735,68 @@ async fn delete_fetch_cache(
 ) -> impl IntoResponse {
     state.torrent_fetch_cache.delete(tmdb_id);
     StatusCode::NO_CONTENT
+}
+
+// --- TV Fetch cache endpoints ---
+
+async fn get_tv_fetch_cache(
+    State(state): State<AppState>,
+    Path(tmdb_id): Path<i64>,
+) -> impl IntoResponse {
+    let rows = state.tv_torrent_fetch_cache.get_for_show(tmdb_id);
+    let entries: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|row| {
+            serde_json::json!({
+                "id": row.id,
+                "tmdbId": row.tmdb_id,
+                "scope": row.scope,
+                "seasonNumber": row.season_number,
+                "episodeNumber": row.episode_number,
+                "candidate": serde_json::from_str::<serde_json::Value>(&row.candidate_json).unwrap_or_default(),
+                "createdAt": row.created_at,
+            })
+        })
+        .collect();
+    Json(entries)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveTvFetchCacheBody {
+    tmdb_id: i64,
+    scope: String,
+    season_number: Option<i64>,
+    episode_number: Option<i64>,
+    candidate: serde_json::Value,
+}
+
+async fn save_tv_fetch_cache(
+    State(state): State<AppState>,
+    Json(body): Json<SaveTvFetchCacheBody>,
+) -> impl IntoResponse {
+    let candidate_json = serde_json::to_string(&body.candidate).unwrap_or_default();
+    state.tv_torrent_fetch_cache.upsert(
+        body.tmdb_id,
+        &body.scope,
+        body.season_number,
+        body.episode_number,
+        &candidate_json,
+    );
+    StatusCode::CREATED
+}
+
+async fn delete_tv_fetch_cache(
+    State(state): State<AppState>,
+    Path(tmdb_id): Path<i64>,
+) -> impl IntoResponse {
+    state.tv_torrent_fetch_cache.delete_for_show(tmdb_id);
+    StatusCode::NO_CONTENT
+}
+
+/// Find a torrent's internal ID by its info_hash. Used by player API for torrent streaming.
+pub async fn find_torrent_id_pub(state: &AppState, info_hash: &str) -> Option<usize> {
+    find_torrent_id(state, info_hash).await
 }
 
 async fn find_torrent_id(state: &AppState, info_hash: &str) -> Option<usize> {

@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { apiUrl } from 'ui-lib/lib/api-base';
-	import { retroAchievementsAdapter } from 'ui-lib/adapters/classes/retroachievements.adapter';
-	import type { RaGameMetadata } from 'ui-lib/types/retroachievements.type';
-	import { RA_CONSOLES } from 'ui-lib/types/retroachievements.type';
-	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
+	import { gameListItemToDisplay, gameExtendedToDisplay } from 'addons/retroachievements';
+	import type { RaGameMetadata, RaGameListItem, RaGameExtended } from 'addons/retroachievements/types';
+	import { RA_CONSOLES } from 'addons/retroachievements/types';
+	import { CONSOLE_IMAGES } from 'assets/game-consoles';
 	import GameCard from 'ui-lib/components/videogames/GameCard.svelte';
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
@@ -16,10 +17,7 @@
 	let games = $state<RaGameMetadata[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
-	let selectedGame = $state<RaGameMetadata | null>(null);
 	let page = $state(0);
-	let gameDetails = $state<RaGameMetadata | null>(null);
-	let detailsLoading = $state(false);
 	let searchQuery = $state('');
 	let selectedCategory = $state('Originals');
 
@@ -71,7 +69,7 @@
 			const data = await res.json();
 			if (!Array.isArray(data)) throw new Error('Unexpected response format');
 			const display = data.map((g: unknown) =>
-				retroAchievementsAdapter.fromGameListItem(g as Parameters<typeof retroAchievementsAdapter.fromGameListItem>[0])
+				gameListItemToDisplay(g as RaGameListItem)
 			);
 			consoleCache[consoleId] = display;
 			games = display;
@@ -101,8 +99,8 @@
 						const res = await fetch(apiUrl(`/api/retroachievements/games/${game.id}`));
 						if (!res.ok) return;
 						const data = await res.json();
-						const detail = retroAchievementsAdapter.fromGameExtended(
-							data as Parameters<typeof retroAchievementsAdapter.fromGameExtended>[0]
+						const detail = gameExtendedToDisplay(
+							data as RaGameExtended
 						);
 						detailsCache[game.id] = detail;
 						game.imageBoxArtUrl = detail.imageBoxArtUrl;
@@ -120,78 +118,25 @@
 		if (pagedGames.length > 0 && !loading) backfillPageImages();
 	});
 
-	async function fetchGameDetails(gameId: number) {
-		if (detailsCache[gameId]) {
-			gameDetails = detailsCache[gameId];
-			syncToService();
-			return;
-		}
-		detailsLoading = true;
-		gameDetails = null;
-		syncToService();
-		try {
-			const res = await fetch(apiUrl(`/api/retroachievements/games/${gameId}`));
-			if (!res.ok) throw new Error('Failed to fetch game details');
-			const data = await res.json();
-			const detail = retroAchievementsAdapter.fromGameExtended(
-				data as Parameters<typeof retroAchievementsAdapter.fromGameExtended>[0]
-			);
-			detailsCache[gameId] = detail;
-			gameDetails = detail;
-		} catch { gameDetails = null; }
-		detailsLoading = false;
-		syncToService();
-	}
-
 	function handleConsoleChange(consoleId: number) {
 		selectedConsoleId = consoleId;
-		selectedGame = null;
-		gameDetails = null;
 		searchQuery = '';
 		selectedCategory = 'Originals';
 		page = 0;
-		browseDetailService.close();
 		fetchGameList(consoleId);
 	}
 
 	function handleSelectGame(game: RaGameMetadata) {
-		if (selectedGame?.id === game.id) {
-			selectedGame = null;
-			gameDetails = null;
-			browseDetailService.close();
-		} else {
-			selectedGame = game;
-			gameDetails = null;
-			detailsLoading = true;
-			syncToService();
-			fetchGameDetails(game.id);
-		}
+		goto(`/videogames/${game.id}`);
 	}
 
 	function handlePageChange(newPage: number) {
 		page = newPage;
-		selectedGame = null;
-		gameDetails = null;
-		browseDetailService.close();
-	}
-
-	function syncToService() {
-		if (!selectedGame) return;
-		browseDetailService.set({
-			domain: 'videogame',
-			videogame: selectedGame,
-			videogameDetails: gameDetails,
-			videogameDetailsLoading: detailsLoading
-		});
-		browseDetailService.registerCallbacks({
-			onclose: () => { selectedGame = null; gameDetails = null; browseDetailService.close(); }
-		});
 	}
 
 	$effect(() => { searchQuery; page = 0; });
 
 	onMount(() => { fetchGameList(selectedConsoleId); });
-	onDestroy(() => { browseDetailService.close(); });
 </script>
 
 <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -205,6 +150,9 @@
 					})}
 					onclick={() => handleConsoleChange(console.id)}
 				>
+					{#if CONSOLE_IMAGES[console.id]}
+						<img src={CONSOLE_IMAGES[console.id]} alt="" class="h-4 w-4" />
+					{/if}
 					{console.name}
 				</button>
 			{/each}
@@ -246,7 +194,6 @@
 			{@const game = item as RaGameMetadata}
 			<GameCard
 				{game}
-				selected={selectedGame?.id === game.id}
 				onselect={handleSelectGame}
 			/>
 		{/snippet}

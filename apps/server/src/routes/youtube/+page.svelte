@@ -3,7 +3,7 @@
 	import classNames from 'classnames';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
-	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
+	import { goto } from '$app/navigation';
 	import { youtubeService } from 'ui-lib/services/youtube.service';
 	import { youtubeSearchService } from 'ui-lib/services/youtube-search.service';
 	import type {
@@ -138,14 +138,7 @@
 	}
 
 	function handleFeedVideoClick(video: LibraryCardItem) {
-		browseDetailService.set({
-			domain: 'youtube',
-			youtubeVideo: {
-				videoId: video.videoId,
-				title: video.title,
-				thumbnail: video.thumbnailUrl ?? ''
-			}
-		});
+		goto(`/youtube/${video.videoId}`);
 	}
 
 	$effect(() => {
@@ -209,17 +202,7 @@
 	});
 
 	function handleItemClick(item: LibraryCardItem) {
-		browseDetailService.set({
-			domain: 'youtube',
-			youtubeVideo: {
-				videoId: item.videoId,
-				title: item.title,
-				thumbnail: item.thumbnailUrl ?? '',
-				uploaderName: item.channelName ?? undefined,
-				hasVideo: item.hasVideo,
-				hasAudio: item.hasAudio
-			}
-		});
+		goto(`/youtube/${item.videoId}`);
 	}
 
 	function handleSearch(query: string) {
@@ -227,24 +210,7 @@
 	}
 
 	function handleSearchItemClick(cardItem: LibraryCardItem) {
-		const item = searchItemMap.get(cardItem.videoId);
-		if (item) {
-			browseDetailService.set({
-				domain: 'youtube',
-				youtubeVideo: {
-					videoId: item.videoId,
-					title: item.title,
-					thumbnail: item.thumbnail,
-					views: item.views,
-					viewsText: item.viewsText,
-					publishedText: item.uploadedDate || undefined,
-					uploaderName: item.uploaderName || undefined,
-					uploaderAvatar: item.uploaderAvatar || undefined,
-					uploaderUrl: item.uploaderUrl || undefined,
-					uploaderVerified: item.uploaderVerified
-				}
-			});
-		}
+		goto(`/youtube/${cardItem.videoId}`);
 	}
 
 	function handleLoadMore() {

@@ -39,43 +39,33 @@
 	}
 </script>
 
-<div class="card bg-base-200">
-	<div class="card-body gap-4">
-		<h2 class="card-title text-lg">Add Torrent</h2>
-
-		<div class="form-control">
-			<div class="join w-full">
-				<input
-					type="text"
-					bind:value={magnetInput}
-					on:keydown={handleKeydown}
-					on:paste={handlePaste}
-					placeholder="magnet:?xt=urn:btih:... or torrent URL"
-					class={classNames('input-bordered input join-item flex-1', {
-						'input-error': magnetInput && !isValidSource,
-						'input-success': isValidSource && magnetInput
-					})}
-					disabled={!$state.initialized}
-				/>
-				<button class="btn join-item btn-primary" on:click={handleAdd} disabled={!canAdd}>
-					{#if adding}
-						<span class="loading loading-sm loading-spinner"></span>
-					{:else}
-						Add
-					{/if}
-				</button>
-			</div>
-			{#if magnetInput && !isValidSource}
-				<span class="label">
-					<span class="label-text-alt text-error"
-						>Enter a magnet link, torrent URL, or .torrent file path</span
-					>
-				</span>
+<div class="form-control">
+	<div class="join w-full">
+		<input
+			type="text"
+			bind:value={magnetInput}
+			on:keydown={handleKeydown}
+			on:paste={handlePaste}
+			placeholder="magnet:?xt=urn:btih:... or torrent URL"
+			class={classNames('input-bordered input join-item flex-1', {
+				'input-error': magnetInput && !isValidSource,
+				'input-success': isValidSource && magnetInput
+			})}
+			disabled={!$state.initialized}
+		/>
+		<button class="btn join-item btn-primary" on:click={handleAdd} disabled={!canAdd}>
+			{#if adding}
+				<span class="loading loading-sm loading-spinner"></span>
+			{:else}
+				Add
 			{/if}
-		</div>
-
-		<p class="text-xs text-base-content/50">
-			Paste a magnet link or torrent URL to start downloading.
-		</p>
+		</button>
 	</div>
+	{#if magnetInput && !isValidSource}
+		<span class="label">
+			<span class="label-text-alt text-error"
+				>Enter a magnet link, torrent URL, or .torrent file path</span
+			>
+		</span>
+	{/if}
 </div>

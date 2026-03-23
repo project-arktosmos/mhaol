@@ -20,6 +20,14 @@ const config = {
 			$adapters: '../../packages/ui-lib/src/adapters',
 			$services: '../../packages/ui-lib/src/services',
 			'ui-lib': '../../packages/ui-lib/src',
+			'addons/tmdb': '../../packages/addons/tmdb/src',
+			'addons/torrent-search-thepiratebay': '../../packages/addons/torrent-search-thepiratebay/src',
+			'addons/musicbrainz': '../../packages/addons/musicbrainz/src',
+			'addons/retroachievements': '../../packages/addons/retroachievements/src',
+			'addons/youtube': '../../packages/addons/youtube/src',
+			'addons/lrclib': '../../packages/addons/lrclib/src',
+			'torrent-search-thepiratebay':
+				'../../packages/addons/torrent-search-thepiratebay/src/index.ts',
 			webrtc: '../../packages/webrtc/src'
 		}
 	}

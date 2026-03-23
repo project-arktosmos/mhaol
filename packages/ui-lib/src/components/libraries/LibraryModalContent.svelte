@@ -2,14 +2,14 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { libraryService } from 'ui-lib/services/library.service';
-	import type { MediaType } from 'ui-lib/types/library.type';
+	import type { LibraryType } from 'ui-lib/types/library.type';
 	import LibraryAddForm from './LibraryAddForm.svelte';
 	import LibraryList from './LibraryList.svelte';
 
 	let {
-		fixedMediaTypes = null
+		fixedCategory = null
 	}: {
-		fixedMediaTypes?: MediaType[] | null;
+		fixedCategory?: LibraryType | null;
 	} = $props();
 
 	let activeTab: 'add' | 'libraries' = $state('libraries');
@@ -26,14 +26,7 @@
 	}
 </script>
 
-<div class="flex items-center justify-between pr-8">
-	<div>
-		<h3 class="text-lg font-bold">Libraries</h3>
-		<p class="text-sm text-base-content/60">Manage media library locations on your server</p>
-	</div>
-</div>
-
-<div class="mt-4 flex gap-2">
+<div class="flex gap-2">
 	<div class="join">
 		<button
 			class={classNames('btn join-item btn-sm', {
@@ -56,7 +49,7 @@
 
 <div class="mt-4">
 	{#if activeTab === 'add'}
-		<LibraryAddForm {fixedMediaTypes} />
+		<LibraryAddForm {fixedCategory} />
 	{:else}
 		<LibraryList />
 	{/if}

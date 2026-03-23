@@ -42,6 +42,17 @@
 						<span class="badge badge-ghost">
 							{formatDuration($state.currentVideoInfo.duration)}
 						</span>
+						{#if $state.currentVideoInfo.subtitleTracks?.length > 0}
+							<span
+								class="badge badge-ghost"
+								title={$state.currentVideoInfo.subtitleTracks.map((t) => t.languageName).join(', ')}
+							>
+								CC: {$state.currentVideoInfo.subtitleTracks.length} track{$state.currentVideoInfo
+									.subtitleTracks.length === 1
+									? ''
+									: 's'}
+							</span>
+						{/if}
 					</div>
 
 					<div class="mt-2 flex items-center gap-2">

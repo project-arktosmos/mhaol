@@ -2,19 +2,22 @@
 	import '../css/app.css';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
-	import classNames from 'classnames';
 	import Navbar from 'ui-lib/components/core/Navbar.svelte';
 	import ModalOutlet from 'ui-lib/components/core/ModalOutlet.svelte';
 	import ToastOutlet from 'ui-lib/components/core/ToastOutlet.svelte';
 	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
+	import SignalingStatusBadge from 'ui-lib/components/signaling/SignalingStatusBadge.svelte';
 	import RosterModalContent from 'ui-lib/components/roster/RosterModalContent.svelte';
 	import { themeService } from 'ui-lib/services/theme.service';
 	import { rosterService } from 'ui-lib/services/roster.service';
 	import { clientIdentityService } from 'ui-lib/services/client-identity.service';
 	import { toastService } from 'ui-lib/services/toast.service';
 	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
+	import { DEFAULT_SIGNALING_URL } from 'ui-lib/lib/api-base';
 	import { signalingAdapter } from 'ui-lib/adapters/classes/signaling.adapter';
 	import { contactHandshakeService } from 'webrtc/service';
+	import { serverCatalogService } from 'ui-lib/services/server-catalog.service';
+	import { p2pStreamService } from 'ui-lib/services/p2p-stream.service';
 	import type { ContactHandshakeMessage } from 'webrtc/types';
 
 	let { children } = $props();
@@ -32,10 +35,12 @@
 
 	onMount(() => {
 		themeService.initialize();
-		rosterService.initialize();
+		rosterService.initialize('local');
+		serverCatalogService.initialize();
+		p2pStreamService.initializeLocal();
 
 		// Initialize client-side identity and contact handshake
-		clientIdentityService.initialize().then(() => {
+		clientIdentityService.initialize(DEFAULT_SIGNALING_URL).then(() => {
 			const { identity } = get(clientIdentityService.state);
 			if (identity) {
 				contactHandshakeService.initialize({
@@ -49,12 +54,21 @@
 					},
 					callbacks: {
 						onRequestReceived: (request) => {
+							const requestPayload = JSON.parse(request.passport.raw);
 							toastService.addWithActions(
 								`Contact request from ${request.name} (${signalingAdapter.shortAddress(request.address)})`,
 								[
 									{
 										label: 'Accept',
-										onclick: () => contactHandshakeService.acceptRequest(request.address)
+										onclick: () => {
+											contactHandshakeService.acceptRequest(request.address);
+											rosterService.addEntry({
+												name: request.name,
+												address: request.address,
+												passport: JSON.stringify(request.passport),
+												instanceType: requestPayload.instanceType
+											});
+										}
 									},
 									{
 										label: 'Reject',
@@ -65,7 +79,16 @@
 							);
 						},
 						onRequestAccepted: (contact) => {
-							toastService.success(`${contact.name} accepted your contact request`);
+							const acceptPayload = JSON.parse(contact.passport.raw);
+							rosterService.addEntry({
+								name: contact.name,
+								address: contact.address,
+								passport: JSON.stringify(contact.passport),
+								instanceType: acceptPayload.instanceType
+							});
+						},
+						onConnectionReady: () => {
+							// Server will send catalog; client receives via serverCatalogService
 						},
 						onError: (message) => {
 							toastService.error(message);
@@ -78,6 +101,12 @@
 				);
 				signalingChatService.onContactMessage = (peerId, msg) =>
 					contactHandshakeService.handleMessage(peerId, msg as ContactHandshakeMessage);
+
+				// Connect to signaling with real passport
+				const { signalingServerUrl, signalingRoomId } = get(rosterService.state);
+				signalingChatService.connect(signalingServerUrl, signalingRoomId, identity.passport, (m) =>
+					clientIdentityService.signMessage(m)
+				);
 			}
 		});
 
@@ -109,27 +138,16 @@
 
 		return () => {
 			unsubChat();
+			rosterService.destroy();
 			contactHandshakeService.destroy();
+			serverCatalogService.destroy();
 		};
 	});
 </script>
 
 <Navbar brand={{ label: 'Mhaol Client' }} items={navItems}>
 	{#snippet end()}
-		<div
-			class="flex items-center gap-2"
-			title={$rosterStore.signalingServerUrl || 'Signaling server not available'}
-		>
-			<span
-				class={classNames('h-2.5 w-2.5 rounded-full', {
-					'bg-success': $rosterStore.signalingServerUrl,
-					'bg-error': !$rosterStore.signalingServerUrl
-				})}
-			></span>
-			<span class="hidden text-xs text-base-content/60 sm:inline">
-				{$rosterStore.signalingServerUrl ? 'Signaling' : 'Offline'}
-			</span>
-		</div>
+		<SignalingStatusBadge />
 		<ThemeToggle />
 	{/snippet}
 </Navbar>

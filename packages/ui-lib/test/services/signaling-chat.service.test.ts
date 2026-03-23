@@ -7,7 +7,7 @@ const initialState = {
 	roomId: '',
 	localPeerId: null,
 	peerIds: [],
-	roomPeerIds: [],
+	roomPeers: [],
 	activePeerId: null,
 	peerConnectionStates: {},
 	messages: [],
@@ -197,7 +197,7 @@ describe('SignalingChatService', () => {
 			roomId: 'test-room',
 			localPeerId: 'peer-1',
 			peerIds: ['peer-2'],
-			roomPeerIds: ['peer-2'],
+			roomPeers: [{ peer_id: 'peer-2', name: 'test', instance_type: 'client' }],
 			activePeerId: 'peer-2',
 			peerConnectionStates: { 'peer-2': 'connected' },
 			messages: [{ id: '1', address: 'addr', content: 'hi', timestamp: '2024-01-01' }],
@@ -308,7 +308,7 @@ describe('SignalingChatService', () => {
 		expect(state.error).toBe('Auth failed');
 	});
 
-	it('handles WebSocket room-peers message by populating roomPeerIds', async () => {
+	it('handles WebSocket room-peers message by populating roomPeers', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
 		lastWsInstance!.onmessage!({
@@ -316,8 +316,8 @@ describe('SignalingChatService', () => {
 		});
 
 		const state = get(signalingChatService.state);
-		expect(state.roomPeerIds).toContain('p1');
-		expect(state.roomPeerIds).toContain('p2');
+		expect(state.roomPeers).toContain('p1');
+		expect(state.roomPeers).toContain('p2');
 		expect(state.peerIds).toEqual([]);
 	});
 
@@ -352,7 +352,7 @@ describe('SignalingChatService', () => {
 
 	// ===== Peer-joined (creates RTCPeerConnection + offer) =====
 
-	it('handles peer-joined message by adding to roomPeerIds', async () => {
+	it('handles peer-joined message by adding to roomPeers', async () => {
 		await signalingChatService.connect('http://localhost:1999', 'test-room');
 
 		lastWsInstance!.onmessage!({
@@ -362,7 +362,7 @@ describe('SignalingChatService', () => {
 		await new Promise((r) => setTimeout(r, 10));
 
 		const state = get(signalingChatService.state);
-		expect(state.roomPeerIds).toContain('remote-peer');
+		expect(state.roomPeers).toContain('remote-peer');
 		expect(state.peerIds).not.toContain('remote-peer');
 		expect(state.messages.some((m) => m.system && m.content.includes('joined'))).toBe(true);
 	});
@@ -501,7 +501,7 @@ describe('SignalingChatService', () => {
 
 		const state = get(signalingChatService.state);
 		expect(state.peerIds).not.toContain('remote-peer');
-		expect(state.roomPeerIds).not.toContain('remote-peer');
+		expect(state.roomPeers).not.toContain('remote-peer');
 	});
 
 	it('handles peer-left message and calls onPeerDisconnected callback', async () => {

@@ -17,6 +17,7 @@ import {
 	type MediaMode,
 	type VideoQuality,
 	type VideoFormat,
+	type SubtitleMode,
 	type YouTubeStreamUrlResult,
 	type YouTubeStreamFormat
 } from 'ui-lib/types/youtube.type';
@@ -31,6 +32,8 @@ const initialSettings: YouTubeSettings = {
 	defaultFormat: 'aac',
 	defaultVideoQuality: 'best',
 	defaultVideoFormat: 'mp4',
+	subtitleMode: 'none',
+	subtitleLangs: [],
 	libraryId: '',
 	poToken: '',
 	cookies: ''
@@ -244,6 +247,11 @@ class YouTubeService {
 				body.videoFormat = settings.defaultVideoFormat;
 			}
 
+			if (settings.subtitleMode !== 'none') {
+				body.subtitleMode = settings.subtitleMode;
+				body.subtitleLangs = settings.subtitleLangs;
+			}
+
 			const result = await this.fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
 				method: 'POST',
 				body: JSON.stringify(body)
@@ -319,6 +327,11 @@ class YouTubeService {
 			body.videoFormat = settings.defaultVideoFormat;
 		}
 
+		if (settings.subtitleMode !== 'none') {
+			body.subtitleMode = settings.subtitleMode;
+			body.subtitleLangs = settings.subtitleLangs;
+		}
+
 		try {
 			const result = await this.fetchJson<{ downloadIds: string[] }>(
 				'/api/ytdl/downloads/playlist',
@@ -357,6 +370,11 @@ class YouTubeService {
 		if (settings.downloadMode === 'video') {
 			body.videoQuality = settings.defaultVideoQuality;
 			body.videoFormat = settings.defaultVideoFormat;
+		}
+
+		if (settings.subtitleMode !== 'none') {
+			body.subtitleMode = settings.subtitleMode;
+			body.subtitleLangs = settings.subtitleLangs;
 		}
 
 		try {
@@ -412,6 +430,11 @@ class YouTubeService {
 		if (mode === 'video' || mode === 'both') {
 			body.videoQuality = settings.defaultVideoQuality;
 			body.videoFormat = settings.defaultVideoFormat;
+		}
+
+		if (settings.subtitleMode !== 'none') {
+			body.subtitleMode = settings.subtitleMode;
+			body.subtitleLangs = settings.subtitleLangs;
 		}
 
 		try {
@@ -525,6 +548,14 @@ class YouTubeService {
 
 	setDefaultVideoFormat(format: VideoFormat): void {
 		this.updateSettings({ defaultVideoFormat: format });
+	}
+
+	setSubtitleMode(mode: SubtitleMode): void {
+		this.updateSettings({ subtitleMode: mode });
+	}
+
+	setSubtitleLangs(langs: string[]): void {
+		this.updateSettings({ subtitleLangs: langs });
 	}
 
 	setLibrary(libraryId: string): void {

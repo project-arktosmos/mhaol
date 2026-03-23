@@ -6,7 +6,7 @@ use k256::ecdsa::SigningKey;
 use rand::rngs::OsRng;
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Manages Ethereum-like secp256k1 identities stored as individual files in a directory.
 /// Each file is named after the identity (e.g. `SIGNALING_WALLET`) and contains the private key hex.
@@ -14,12 +14,13 @@ use std::path::{Path, PathBuf};
 pub struct IdentityManager {
     dir_path: PathBuf,
     instance_type: String,
+    signaling_url: String,
 }
 
 impl IdentityManager {
-    pub fn new(dir_path: PathBuf, instance_type: String) -> Self {
+    pub fn new(dir_path: PathBuf, instance_type: String, signaling_url: String) -> Self {
         let _ = fs::create_dir_all(&dir_path);
-        Self { dir_path, instance_type }
+        Self { dir_path, instance_type, signaling_url }
     }
 
     /// Validate that a name is safe for use as a filename.
@@ -145,7 +146,7 @@ impl IdentityManager {
     pub fn get_passport(&self, name: &str) -> Option<passport::Passport> {
         let private_key_hex = self.load_one(name)?;
         let address = Self::private_key_to_address(&private_key_hex);
-        Some(passport::sign_passport(name, &address, &self.instance_type, &private_key_hex))
+        Some(passport::sign_passport(name, &address, &self.instance_type, &self.signaling_url, &private_key_hex))
     }
 
     /// Ensure an identity exists; create one if missing.
@@ -173,32 +174,6 @@ pub fn default_identities_dir() -> PathBuf {
     home.join(".mhaol-identities")
 }
 
-/// Migrate identities from a legacy `.env.identities` file into the directory-based store.
-/// Only imports identities that don't already exist in the directory.
-/// Returns the number of identities migrated.
-pub fn migrate_from_env_file(env_file: &Path, manager: &IdentityManager) -> usize {
-    let content = match fs::read_to_string(env_file) {
-        Ok(c) => c,
-        Err(_) => return 0,
-    };
-    let mut count = 0;
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        if let Some(eq_idx) = trimmed.find('=') {
-            let key = trimmed[..eq_idx].trim();
-            let value = trimmed[eq_idx + 1..].trim();
-            if !key.is_empty() && !value.is_empty() && manager.load_one(key).is_none() {
-                manager.write_one(key, value);
-                count += 1;
-            }
-        }
-    }
-    count
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,7 +181,7 @@ mod tests {
     #[test]
     fn test_identity_lifecycle() {
         let tmp_dir = std::env::temp_dir().join(format!("test_identities_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
 
         // Start empty
         assert!(mgr.get_all().is_empty());
@@ -242,32 +217,9 @@ mod tests {
     }
 
     #[test]
-    fn test_migration_from_env_file() {
-        let tmp_dir = std::env::temp_dir().join(format!("test_migrate_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
-
-        // Create a legacy .env.identities file
-        let env_file = std::env::temp_dir().join(format!("test_env_{}", uuid::Uuid::new_v4()));
-        let pk = IdentityManager::generate_private_key();
-        fs::write(&env_file, format!("WALLET_A={}\nWALLET_B={}\n", pk, pk)).unwrap();
-
-        let count = migrate_from_env_file(&env_file, &mgr);
-        assert_eq!(count, 2);
-        assert!(mgr.get_address("WALLET_A").is_some());
-        assert!(mgr.get_address("WALLET_B").is_some());
-
-        // Second run should migrate 0 (already exist)
-        let count2 = migrate_from_env_file(&env_file, &mgr);
-        assert_eq!(count2, 0);
-
-        let _ = fs::remove_dir_all(&tmp_dir);
-        let _ = fs::remove_file(&env_file);
-    }
-
-    #[test]
     fn test_name_validation() {
         let tmp_dir = std::env::temp_dir().join(format!("test_validate_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
 
         // Valid names work
         let addr = mgr.regenerate("GOOD_NAME");

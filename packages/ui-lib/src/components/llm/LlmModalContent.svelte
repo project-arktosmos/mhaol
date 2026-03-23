@@ -1,53 +1,83 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { llmService } from 'ui-lib/services/llm.service';
-	import ConversationList from 'ui-lib/components/llm/ConversationList.svelte';
-	import ChatView from 'ui-lib/components/llm/ChatView.svelte';
+	import { smartSearchService } from 'ui-lib/services/smart-search.service';
+	import { RA_CONSOLES } from 'addons/retroachievements/types';
 	import ModelManager from 'ui-lib/components/llm/ModelManager.svelte';
+	import type { SmartSearchMediaType } from 'ui-lib/types/smart-search.type';
 
-	let activeTab: 'chat' | 'models' = $state('chat');
+	type Tab = 'models' | SmartSearchMediaType;
+
+	let activeTab: Tab = $state('models');
 
 	const store = llmService.store;
+	const configStore = smartSearchService.configStore;
 
 	let status = $derived($store.status);
 	let models = $derived($store.models);
-	let conversations = $derived($store.conversations);
-	let activeConversationId = $derived($store.activeConversationId);
-	let messages = $derived($store.messages);
-	let streamingContent = $derived($store.streamingContent);
-	let isGenerating = $derived($store.isGenerating);
 	let downloadProgress = $derived($store.downloadProgress);
 	let loading = $derived($store.loading);
+
+	let currentConfig = $derived(
+		activeTab !== 'models' ? $configStore[activeTab as SmartSearchMediaType] : null
+	);
+
+	const tabs: { id: Tab; label: string }[] = [
+		{ id: 'models', label: 'Models' },
+		{ id: 'movies', label: 'Movies' },
+		{ id: 'tv', label: 'TV' },
+		{ id: 'music', label: 'Music' },
+		{ id: 'games', label: 'Games' }
+	];
+
+	const languages = [
+		'English',
+		'Spanish',
+		'French',
+		'German',
+		'Italian',
+		'Portuguese',
+		'Russian',
+		'Japanese',
+		'Korean',
+		'Chinese',
+		'Hindi',
+		'Arabic',
+		'Dutch',
+		'Swedish',
+		'Norwegian',
+		'Danish',
+		'Finnish',
+		'Polish',
+		'Turkish',
+		'Thai'
+	];
+	const videoQualities = ['4K', '2160p', '1080p', '720p', '480p'];
+	const audioQualities = ['FLAC', 'ALAC', 'Lossless', '320kbps', 'MP3', 'AAC', 'WAV', 'OGG'];
 
 	$effect(() => {
 		llmService.initialize();
 	});
 
-	function handleCreateConversation() {
-		const title = `Chat ${conversations.length + 1}`;
-		llmService.createConversation(title);
-	}
+	onMount(() => {
+		smartSearchService.initializeConfig();
+	});
 </script>
 
 <div class="flex h-[70vh] flex-col">
 	<div class="flex items-center justify-between border-b border-base-300 px-4 py-2">
-		<h2 class="text-lg font-bold">Local LLM</h2>
+		<h2 class="text-lg font-bold">Smart Search</h2>
 		<div role="tablist" class="tabs-boxed tabs tabs-sm">
-			<button
-				role="tab"
-				class="tab"
-				class:tab-active={activeTab === 'chat'}
-				onclick={() => (activeTab = 'chat')}
-			>
-				Chat
-			</button>
-			<button
-				role="tab"
-				class="tab"
-				class:tab-active={activeTab === 'models'}
-				onclick={() => (activeTab = 'models')}
-			>
-				Models
-			</button>
+			{#each tabs as tab}
+				<button
+					role="tab"
+					class="tab"
+					class:tab-active={activeTab === tab.id}
+					onclick={() => (activeTab = tab.id)}
+				>
+					{tab.label}
+				</button>
+			{/each}
 		</div>
 	</div>
 
@@ -63,32 +93,106 @@
 				onDownloadModel={(repoId, fileName) => llmService.downloadModel(repoId, fileName)}
 			/>
 		</div>
-	{:else}
-		<div class="flex flex-1 overflow-hidden">
-			<div class="w-56 shrink-0 border-r border-base-300">
-				<ConversationList
-					{conversations}
-					activeId={activeConversationId}
-					onSelect={(id) => llmService.selectConversation(id)}
-					onDelete={(id) => llmService.deleteConversation(id)}
-					onCreate={handleCreateConversation}
-				/>
-			</div>
-
-			<div class="flex-1">
-				{#if activeConversationId}
-					<ChatView
-						{messages}
-						{streamingContent}
-						{isGenerating}
-						onSendMessage={(content) => llmService.sendMessage(content)}
-						onCancelGeneration={() => llmService.cancelGeneration()}
-					/>
-				{:else}
-					<div class="flex h-full items-center justify-center text-base-content/40">
-						<p>Select or create a conversation to begin</p>
+	{:else if currentConfig}
+		<div class="flex-1 overflow-y-auto p-4">
+			<div class="flex flex-col gap-6">
+				<div class="space-y-4">
+					<h3 class="text-sm font-semibold">Preferences</h3>
+					<div class="flex flex-wrap items-center gap-4">
+						{#if activeTab === 'movies' || activeTab === 'tv'}
+							<label class="flex items-center gap-2 text-sm">
+								<span class="text-base-content/60">Language</span>
+								<select
+									class="select-bordered select select-sm"
+									value={currentConfig.preferredLanguage ?? 'English'}
+									onchange={(e) =>
+										smartSearchService.updateConfig(
+											activeTab as SmartSearchMediaType,
+											'preferredLanguage',
+											e.currentTarget.value
+										)}
+								>
+									{#each languages as lang}
+										<option value={lang}>{lang}</option>
+									{/each}
+								</select>
+							</label>
+							<label class="flex items-center gap-2 text-sm">
+								<span class="text-base-content/60">Quality</span>
+								<select
+									class="select-bordered select select-sm"
+									value={currentConfig.preferredQuality ?? '1080p'}
+									onchange={(e) =>
+										smartSearchService.updateConfig(
+											activeTab as SmartSearchMediaType,
+											'preferredQuality',
+											e.currentTarget.value
+										)}
+								>
+									{#each videoQualities as q}
+										<option value={q}>{q}</option>
+									{/each}
+								</select>
+							</label>
+						{:else if activeTab === 'music'}
+							<label class="flex items-center gap-2 text-sm">
+								<span class="text-base-content/60">Quality</span>
+								<select
+									class="select-bordered select select-sm"
+									value={currentConfig.preferredQuality ?? 'FLAC'}
+									onchange={(e) =>
+										smartSearchService.updateConfig(
+											activeTab as SmartSearchMediaType,
+											'preferredQuality',
+											e.currentTarget.value
+										)}
+								>
+									{#each audioQualities as q}
+										<option value={q}>{q}</option>
+									{/each}
+								</select>
+							</label>
+						{:else if activeTab === 'games'}
+							<label class="flex items-center gap-2 text-sm">
+								<span class="text-base-content/60">Console</span>
+								<select
+									class="select-bordered select select-sm"
+									value={currentConfig.preferredConsole ?? ''}
+									onchange={(e) =>
+										smartSearchService.updateConfig(
+											activeTab as SmartSearchMediaType,
+											'preferredConsole',
+											e.currentTarget.value
+										)}
+								>
+									<option value="">Any</option>
+									{#each RA_CONSOLES as console}
+										<option value={console.name}>{console.name}</option>
+									{/each}
+								</select>
+							</label>
+						{/if}
 					</div>
-				{/if}
+				</div>
+
+				<div class="space-y-2">
+					<h3 class="text-sm font-semibold">LLM Prompt</h3>
+					<p class="text-xs text-base-content/50">
+						Template used when the LLM analyzes torrent results for
+						<span class="font-medium">{tabs.find((t) => t.id === activeTab)?.label}</span>.
+					</p>
+					<textarea
+						class="textarea-bordered textarea w-full font-mono text-xs leading-relaxed"
+						rows="8"
+						value={currentConfig.smartSearchPrompt}
+						onchange={(e) =>
+							smartSearchService.updateConfig(
+								activeTab as SmartSearchMediaType,
+								'smartSearchPrompt',
+								e.currentTarget.value
+							)}
+					></textarea>
+				</div>
 			</div>
 		</div>
 	{/if}

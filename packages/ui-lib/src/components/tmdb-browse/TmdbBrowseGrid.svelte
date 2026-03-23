@@ -30,11 +30,20 @@
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 	} = $props();
 
-	const browseViewMode = getContext<{ readonly value: 'poster' | 'backdrop' } | undefined>('browseViewMode');
+	const browseViewMode = getContext<{ readonly value: 'poster' | 'backdrop' } | undefined>(
+		'browseViewMode'
+	);
 	let useBackdrop = $derived(browseViewMode?.value === 'backdrop');
 </script>
 
-<div class={classNames('grid gap-4', useBackdrop ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6')}>
+<div
+	class={classNames(
+		'grid gap-4',
+		useBackdrop
+			? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+			: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'
+	)}
+>
 	{#each movies as movie (movie.id)}
 		{@const dl = downloadStatuses?.get(movie.id)}
 		<TmdbBrowseCard

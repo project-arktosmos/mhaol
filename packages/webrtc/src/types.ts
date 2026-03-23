@@ -78,6 +78,7 @@ export interface WebRTCAdapter {
 export interface ContactHandshakeCallbacks {
 	onRequestReceived(request: PendingContactRequest): void;
 	onRequestAccepted(contact: AcceptedContact): void;
+	onConnectionReady(peerId: string, contact: AcceptedContact): void;
 	onError(message: string): void;
 }
 

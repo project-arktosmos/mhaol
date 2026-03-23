@@ -1,24 +1,9 @@
 <script lang="ts">
   import { page } from "$app/stores";
   import classNames from "classnames";
+  import { sections } from "./sections";
 
   let { children } = $props();
-
-  const sections = [
-    { id: "libraries", label: "Libraries" },
-    { id: "torrent", label: "Torrent" },
-    { id: "downloads", label: "Downloads" },
-    { id: "identity", label: "Identity" },
-    { id: "addons", label: "Addons" },
-    { id: "llm", label: "LLM" },
-    { id: "share", label: "Share" },
-    { id: "signaling", label: "Signaling" },
-    { id: "smart-search", label: "Smart Search" },
-    { id: "settings", label: "Settings" },
-    { id: "database", label: "Database" },
-    { id: "yt-settings", label: "YT Settings" },
-    { id: "yt-disk", label: "Disk" },
-  ];
 
   let activeId = $derived($page.params.section || sections[0].id);
 </script>

@@ -26,12 +26,15 @@
 
 			<div class="flex flex-col gap-2">
 				<div>
-					<span class="text-xs font-semibold tracking-wide text-base-content/50 uppercase">Server URL</span>
-					<div class="flex items-center gap-2 mt-1">
+					<span class="text-xs font-semibold tracking-wide text-base-content/50 uppercase"
+						>Server URL</span
+					>
+					<div class="mt-1 flex items-center gap-2">
 						<span
 							class={classNames('h-2 w-2 rounded-full', {
 								'bg-success': $chatStore.phase === 'connected',
-								'bg-warning': $chatStore.phase === 'connecting' || $chatStore.phase === 'authenticated',
+								'bg-warning':
+									$chatStore.phase === 'connecting' || $chatStore.phase === 'authenticated',
 								'bg-error': $chatStore.phase === 'disconnected' || $chatStore.phase === 'error'
 							})}
 						></span>
@@ -42,13 +45,19 @@
 				</div>
 
 				<div>
-					<span class="text-xs font-semibold tracking-wide text-base-content/50 uppercase">Room</span>
-					<p class="mt-1 font-mono text-xs text-base-content/60">{$chatStore.roomId || 'default'}</p>
+					<span class="text-xs font-semibold tracking-wide text-base-content/50 uppercase"
+						>Room</span
+					>
+					<p class="mt-1 font-mono text-xs text-base-content/60">
+						{$chatStore.roomId || 'default'}
+					</p>
 				</div>
 
 				{#if $chatStore.localPeerId}
 					<div>
-						<span class="text-xs font-semibold tracking-wide text-base-content/50 uppercase">Your Address</span>
+						<span class="text-xs font-semibold tracking-wide text-base-content/50 uppercase"
+							>Your Address</span
+						>
 						<p class="mt-1 font-mono text-sm">{$chatStore.localPeerId}</p>
 					</div>
 				{/if}

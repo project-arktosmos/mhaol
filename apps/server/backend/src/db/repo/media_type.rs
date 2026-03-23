@@ -61,7 +61,7 @@ mod tests {
         let repo = MediaTypeRepo::new(db);
 
         let all = repo.get_all();
-        assert_eq!(all.len(), 3);
+        assert_eq!(all.len(), 4);
 
         let video = repo.get("video").unwrap();
         assert_eq!(video.label, "Video");
@@ -69,5 +69,7 @@ mod tests {
         assert_eq!(audio.label, "Audio");
         let image = repo.get("image").unwrap();
         assert_eq!(image.label, "Image");
+        let document = repo.get("document").unwrap();
+        assert_eq!(document.label, "Document");
     }
 }

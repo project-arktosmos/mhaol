@@ -66,7 +66,7 @@ describe('P2pStreamService', () => {
 						ok: true,
 						json: async () => ({
 							stunServer: 'stun:custom.server:3478',
-							turnServers: ['turn:example.com'],
+							turnServers: [{ url: 'turn:example.com', username: 'user', credential: 'pass' }],
 							videoCodec: 'vp9',
 							audioCodec: 'opus',
 							defaultStreamMode: 'audio',
@@ -88,7 +88,9 @@ describe('P2pStreamService', () => {
 
 		const settings = p2pStreamService.get();
 		expect(settings.stunServer).toBe('stun:custom.server:3478');
-		expect(settings.turnServers).toEqual(['turn:example.com']);
+		expect(settings.turnServers).toEqual([
+			{ url: 'turn:example.com', username: 'user', credential: 'pass' }
+		]);
 		expect(settings.videoCodec).toBe('vp9');
 		expect(settings.videoQuality).toBe('720p');
 		expect(settings.defaultStreamMode).toBe('audio');
@@ -260,10 +262,16 @@ describe('P2pStreamService', () => {
 		);
 		vi.stubGlobal('fetch', mockFn);
 
-		p2pStreamService.addTurnServer('turn:new-server.com');
+		p2pStreamService.addTurnServer({
+			url: 'turn:new-server.com',
+			username: 'user',
+			credential: 'pass'
+		});
 
 		await vi.waitFor(() => {
-			expect(p2pStreamService.get().turnServers).toContain('turn:new-server.com');
+			expect(p2pStreamService.get().turnServers).toEqual([
+				{ url: 'turn:new-server.com', username: 'user', credential: 'pass' }
+			]);
 		});
 	});
 
@@ -271,7 +279,7 @@ describe('P2pStreamService', () => {
 		p2pStreamService.store.set({
 			id: 'p2p-stream-settings',
 			stunServer: 'stun:stun.l.google.com:19302',
-			turnServers: ['turn:existing.com'],
+			turnServers: [{ url: 'turn:existing.com', username: '', credential: '' }],
 			videoCodec: 'vp8',
 			audioCodec: 'opus',
 			defaultStreamMode: 'video',
@@ -287,11 +295,13 @@ describe('P2pStreamService', () => {
 		);
 		vi.stubGlobal('fetch', mockFn);
 
-		p2pStreamService.addTurnServer('turn:existing.com');
+		p2pStreamService.addTurnServer({ url: 'turn:existing.com', username: '', credential: '' });
 
 		// fetch should not be called since it's a duplicate
 		expect(mockFn).not.toHaveBeenCalled();
-		expect(p2pStreamService.get().turnServers).toEqual(['turn:existing.com']);
+		expect(p2pStreamService.get().turnServers).toEqual([
+			{ url: 'turn:existing.com', username: '', credential: '' }
+		]);
 	});
 
 	// ===== removeTurnServer =====
@@ -300,7 +310,10 @@ describe('P2pStreamService', () => {
 		p2pStreamService.store.set({
 			id: 'p2p-stream-settings',
 			stunServer: 'stun:stun.l.google.com:19302',
-			turnServers: ['turn:a.com', 'turn:b.com'],
+			turnServers: [
+				{ url: 'turn:a.com', username: '', credential: '' },
+				{ url: 'turn:b.com', username: '', credential: '' }
+			],
 			videoCodec: 'vp8',
 			audioCodec: 'opus',
 			defaultStreamMode: 'video',
@@ -319,7 +332,9 @@ describe('P2pStreamService', () => {
 		p2pStreamService.removeTurnServer('turn:a.com');
 
 		await vi.waitFor(() => {
-			expect(p2pStreamService.get().turnServers).toEqual(['turn:b.com']);
+			expect(p2pStreamService.get().turnServers).toEqual([
+				{ url: 'turn:b.com', username: '', credential: '' }
+			]);
 		});
 	});
 
@@ -451,7 +466,10 @@ describe('P2pStreamService', () => {
 		p2pStreamService.store.set({
 			id: 'p2p-stream-settings',
 			stunServer: 'stun:example.com:3478',
-			turnServers: ['turn:turn1.com', 'turn:turn2.com'],
+			turnServers: [
+				{ url: 'turn:turn1.com', username: 'u1', credential: 'c1' },
+				{ url: 'turn:turn2.com', username: '', credential: '' }
+			],
 			videoCodec: 'vp8',
 			audioCodec: 'opus',
 			defaultStreamMode: 'video',
@@ -461,8 +479,8 @@ describe('P2pStreamService', () => {
 		const iceServers = p2pStreamService.getIceServers();
 		expect(iceServers).toHaveLength(3);
 		expect(iceServers[0].urls).toBe('stun:example.com:3478');
-		expect(iceServers[1].urls).toBe('turn:turn1.com');
-		expect(iceServers[2].urls).toBe('turn:turn2.com');
+		expect(iceServers[1]).toEqual({ urls: 'turn:turn1.com', username: 'u1', credential: 'c1' });
+		expect(iceServers[2]).toEqual({ urls: 'turn:turn2.com' });
 	});
 
 	it('should return default STUN when no servers configured', () => {
@@ -478,7 +496,11 @@ describe('P2pStreamService', () => {
 
 		const iceServers = p2pStreamService.getIceServers();
 		expect(iceServers).toHaveLength(1);
-		expect(iceServers[0].urls).toBe('stun:stun.l.google.com:19302');
+		expect(iceServers[0].urls).toEqual([
+			'stun:stun.l.google.com:19302',
+			'stun:stun1.l.google.com:19302',
+			'stun:stun2.l.google.com:19302'
+		]);
 	});
 
 	it('should return only STUN server when no TURN servers', () => {
@@ -501,7 +523,7 @@ describe('P2pStreamService', () => {
 		p2pStreamService.store.set({
 			id: 'p2p-stream-settings',
 			stunServer: '',
-			turnServers: ['turn:a.com'],
+			turnServers: [{ url: 'turn:a.com', username: '', credential: '' }],
 			videoCodec: 'vp8',
 			audioCodec: 'opus',
 			defaultStreamMode: 'video',

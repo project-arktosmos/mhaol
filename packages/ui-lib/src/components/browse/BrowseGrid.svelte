@@ -54,7 +54,7 @@
 			<p class="text-lg">Failed to load</p>
 			<p class="mt-1 text-sm">{error}</p>
 			{#if onretry}
-				<button class="btn btn-primary btn-sm mt-4" onclick={onretry}>Retry</button>
+				<button class="btn mt-4 btn-sm btn-primary" onclick={onretry}>Retry</button>
 			{/if}
 		</div>
 	{:else if items.length === 0}

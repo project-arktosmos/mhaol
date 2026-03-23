@@ -21,7 +21,7 @@
 
 <div class="flex h-full flex-col overflow-hidden rounded-xl border border-base-300 md:flex-row">
 	<PeerSidebar
-		roomPeerIds={$chatStore.roomPeerIds}
+		roomPeers={$chatStore.roomPeers}
 		peerConnectionStates={$chatStore.peerConnectionStates}
 		activePeerId={$chatStore.activePeerId}
 		localPeerId={$chatStore.localPeerId}

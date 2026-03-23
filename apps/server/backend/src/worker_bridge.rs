@@ -7,6 +7,16 @@ use tokio::sync::oneshot;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// An ICE server entry passed to the p2p-stream worker.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IceServerEntry {
+    pub urls: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential: Option<String>,
+}
+
 /// Commands sent to the p2p-stream-worker via stdin.
 #[derive(Debug, Serialize)]
 #[serde(tag = "command")]
@@ -14,11 +24,16 @@ enum WorkerCommand {
     #[serde(rename = "create_session")]
     CreateSession {
         session_id: String,
-        file_path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        file_path: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stream_url: Option<String>,
         mode: Option<String>,
         video_codec: Option<String>,
         video_quality: Option<String>,
         signaling_url: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        ice_servers: Option<Vec<IceServerEntry>>,
     },
     #[serde(rename = "delete_session")]
     DeleteSession {
@@ -174,14 +189,18 @@ impl WorkerBridge {
     }
 
     /// Send a create_session command to the worker and wait for the response.
+    ///
+    /// Exactly one of `file_path` or `stream_url` must be `Some`.
     pub async fn create_session(
         &self,
         session_id: &str,
-        file_path: &str,
+        file_path: Option<&str>,
+        stream_url: Option<&str>,
         signaling_url: &str,
         mode: Option<String>,
         video_codec: Option<String>,
         video_quality: Option<String>,
+        ice_servers: Option<Vec<IceServerEntry>>,
     ) -> Result<WorkerEvent, String> {
         if !self.is_ready() {
             return Err("Worker is not running".to_string());
@@ -189,11 +208,13 @@ impl WorkerBridge {
 
         let cmd = WorkerCommand::CreateSession {
             session_id: session_id.to_string(),
-            file_path: file_path.to_string(),
+            file_path: file_path.map(|s| s.to_string()),
+            stream_url: stream_url.map(|s| s.to_string()),
             mode,
             video_codec,
             video_quality,
             signaling_url: signaling_url.to_string(),
+            ice_servers,
         };
 
         self.send_command(session_id, &cmd).await

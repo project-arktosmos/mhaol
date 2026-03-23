@@ -1,10 +1,10 @@
 use mhaol_llm::{
-    build_chat_prompt, list_models, load_model_blocking, run_inference_blocking, ChatMessage,
+    list_models, load_model_blocking,
     LlmConfigUpdate, LlmDownloadProgress, LlmStatus,
 };
 use crate::AppState;
 use axum::{
-    extract::{Path, State},
+    extract::State,
     http::StatusCode,
     response::{
         sse::{Event, KeepAlive},
@@ -25,14 +25,7 @@ pub fn router() -> Router<AppState> {
         .route("/models/load", post(load_model))
         .route("/models/unload", post(unload_model))
         .route("/models/download", post(download_model))
-        .route("/chat/stream", post(chat_stream))
-        .route("/chat/cancel", post(cancel_generation))
         .route("/config", put(update_config))
-        .route("/conversations", get(list_conversations).post(create_conversation))
-        .route(
-            "/conversations/{id}",
-            get(get_conversation).put(update_conversation).delete(delete_conversation),
-        )
 }
 
 async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
@@ -264,126 +257,10 @@ async fn download_model(
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
-#[derive(Deserialize)]
-struct ChatStreamRequest {
-    messages: Vec<ChatMessage>,
-}
-
-async fn chat_stream(
-    State(state): State<AppState>,
-    Json(body): Json<ChatStreamRequest>,
-) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, (StatusCode, Json<serde_json::Value>)>
-{
-    let model = state.llm_engine.get_model().map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": e })),
-        )
-    })?;
-
-    let config = state.llm_engine.get_config();
-    state.llm_engine.reset_cancel_flag();
-    let cancel_flag = state.llm_engine.cancel_flag();
-
-    let prompt = build_chat_prompt(&body.messages, &config.system_prompt);
-    let max_tokens = config.max_tokens;
-
-    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-
-    tokio::task::spawn_blocking(move || {
-        run_inference_blocking(model, prompt, max_tokens, cancel_flag, tx);
-    });
-
-    let stream = async_stream::stream! {
-        while let Some(event) = rx.recv().await {
-            if let Ok(json) = serde_json::to_string(&event) {
-                yield Ok(Event::default().data(json));
-            }
-            if event.done {
-                break;
-            }
-        }
-    };
-
-    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
-}
-
-async fn cancel_generation(State(state): State<AppState>) -> impl IntoResponse {
-    state.llm_engine.cancel_generation();
-    Json(serde_json::json!({ "ok": true }))
-}
-
 async fn update_config(
     State(state): State<AppState>,
     Json(body): Json<LlmConfigUpdate>,
 ) -> impl IntoResponse {
     state.llm_engine.update_config(body);
     Json(serde_json::json!({ "ok": true }))
-}
-
-// -- Conversation CRUD --
-
-async fn list_conversations(State(state): State<AppState>) -> impl IntoResponse {
-    Json(state.llm_conversations.get_all())
-}
-
-async fn get_conversation(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
-    match state.llm_conversations.get_by_id(&id) {
-        Some(row) => Json(serde_json::to_value(row).unwrap()).into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CreateConversationRequest {
-    title: String,
-    system_prompt: Option<String>,
-}
-
-async fn create_conversation(
-    State(state): State<AppState>,
-    Json(body): Json<CreateConversationRequest>,
-) -> impl IntoResponse {
-    let id = uuid::Uuid::new_v4().to_string();
-    state
-        .llm_conversations
-        .insert(&id, &body.title, body.system_prompt.as_deref(), "[]");
-    match state.llm_conversations.get_by_id(&id) {
-        Some(row) => (StatusCode::CREATED, Json(serde_json::to_value(row).unwrap())).into_response(),
-        None => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdateConversationRequest {
-    title: String,
-    messages: String,
-}
-
-async fn update_conversation(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(body): Json<UpdateConversationRequest>,
-) -> impl IntoResponse {
-    if state.llm_conversations.get_by_id(&id).is_none() {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-    state.llm_conversations.update(&id, &body.title, &body.messages);
-    match state.llm_conversations.get_by_id(&id) {
-        Some(row) => Json(serde_json::to_value(row).unwrap()).into_response(),
-        None => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
-async fn delete_conversation(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
-    state.llm_conversations.delete(&id);
-    StatusCode::NO_CONTENT
 }

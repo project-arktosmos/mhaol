@@ -9,11 +9,20 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::info;
 
+/// A TURN server with optional credentials.
+#[derive(Debug, Clone)]
+pub struct TurnServer {
+    /// TURN URIs, e.g. `["turn:relay.example.com:80", "turns:relay.example.com:443"]`
+    pub urls: Vec<String>,
+    pub username: Option<String>,
+    pub credential: Option<String>,
+}
+
 /// STUN/TURN server configuration for ICE.
 #[derive(Debug, Clone)]
 pub struct IceServerConfig {
     pub stun_server: Option<String>,
-    pub turn_servers: Vec<String>,
+    pub turn_servers: Vec<TurnServer>,
 }
 
 impl Default for IceServerConfig {
@@ -23,6 +32,49 @@ impl Default for IceServerConfig {
             turn_servers: Vec::new(),
         }
     }
+}
+
+/// Convert a Metered-style TURN URL + credentials into a GStreamer-compatible URI.
+///
+/// GStreamer webrtcbin expects: `turn://user:pass@host:port` or
+/// `turns://user:pass@host:port?transport=tcp`.
+/// Metered returns URLs like `turn:host:port` or `turn:host:port?transport=tcp`.
+fn to_gstreamer_turn_uri(url: &str, username: Option<&str>, credential: Option<&str>) -> Option<String> {
+    // Metered format: "turn:host:port" or "turns:host:port?transport=tcp"
+    // GStreamer format: "turn://user:pass@host:port"
+    let (scheme, rest) = if let Some(rest) = url.strip_prefix("turns:") {
+        ("turns", rest)
+    } else if let Some(rest) = url.strip_prefix("turn:") {
+        ("turn", rest)
+    } else {
+        return None;
+    };
+
+    let host_and_params = rest.trim_start_matches("//");
+
+    match (username, credential) {
+        (Some(user), Some(pass)) => {
+            let encoded_user = percent_encode_credential(user);
+            let encoded_pass = percent_encode_credential(pass);
+            Some(format!("{scheme}://{encoded_user}:{encoded_pass}@{host_and_params}"))
+        }
+        _ => Some(format!("{scheme}://{host_and_params}"))
+    }
+}
+
+fn percent_encode_credential(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(byte as char);
+            }
+            _ => {
+                result.push_str(&format!("%{byte:02X}"));
+            }
+        }
+    }
+    result
 }
 
 /// A built GStreamer pipeline ready for WebRTC streaming.
@@ -171,8 +223,8 @@ impl PipelineBuilder {
         self
     }
 
-    pub fn add_turn_server(mut self, url: impl Into<String>) -> Self {
-        self.ice_config.turn_servers.push(url.into());
+    pub fn add_turn_server(mut self, server: TurnServer) -> Self {
+        self.ice_config.turn_servers.push(server);
         self
     }
 
@@ -195,6 +247,19 @@ impl PipelineBuilder {
         let webrtcbin = make_element("webrtcbin", Some("webrtcbin"))?;
         if let Some(ref stun) = self.ice_config.stun_server {
             webrtcbin.set_property_from_str("stun-server", stun);
+        }
+        for turn in &self.ice_config.turn_servers {
+            let username = turn.username.as_deref();
+            let credential = turn.credential.as_deref();
+            for url in &turn.urls {
+                if let Some(uri) = to_gstreamer_turn_uri(url, username, credential) {
+                    info!("Adding TURN server: {}", url);
+                    let added: bool = webrtcbin.emit_by_name("add-turn-server", &[&uri]);
+                    if !added {
+                        tracing::warn!("Failed to add TURN server: {uri}");
+                    }
+                }
+            }
         }
         webrtcbin.set_property_from_str("bundle-policy", "max-bundle");
 

@@ -50,6 +50,38 @@ class DownloadsService {
 		this.pollTimer = null;
 	}
 
+	async pauseDownload(dl: UnifiedDownload): Promise<void> {
+		if (dl.type === 'torrent') {
+			await fetch(apiUrl(`/api/torrent/torrents/${encodeURIComponent(dl.id)}/pause`), {
+				method: 'POST'
+			});
+		}
+		await this.fetchDownloads(false);
+	}
+
+	async resumeDownload(dl: UnifiedDownload): Promise<void> {
+		if (dl.type === 'torrent') {
+			await fetch(apiUrl(`/api/torrent/torrents/${encodeURIComponent(dl.id)}/resume`), {
+				method: 'POST'
+			});
+		}
+		await this.fetchDownloads(false);
+	}
+
+	async removeDownload(dl: UnifiedDownload, deleteFiles = false): Promise<void> {
+		if (dl.type === 'torrent') {
+			const qs = deleteFiles ? '?delete_files=true' : '';
+			await fetch(apiUrl(`/api/torrent/torrents/${encodeURIComponent(dl.id)}${qs}`), {
+				method: 'DELETE'
+			});
+		} else {
+			await fetch(apiUrl(`/api/ytdl/downloads/${encodeURIComponent(dl.id)}`), {
+				method: 'DELETE'
+			});
+		}
+		await this.fetchDownloads(false);
+	}
+
 	private async fetchDownloads(showLoading: boolean): Promise<void> {
 		if (showLoading) {
 			this.state.update((s) => ({ ...s, loading: true, error: null }));

@@ -124,7 +124,9 @@ export function imageToDisplay(image: TMDBImage, type: 'backdrop' | 'poster'): D
 		thumbnailUrl,
 		fullUrl,
 		width: image.width,
-		height: image.height
+		height: image.height,
+		filePath: image.file_path,
+		imageType: type
 	};
 }
 

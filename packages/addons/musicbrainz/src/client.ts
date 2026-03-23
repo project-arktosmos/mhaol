@@ -1,8 +1,4 @@
-import type {
-	MusicBrainzRecording,
-	MusicBrainzArtist,
-	MusicBrainzReleaseGroup
-} from './types.js';
+import type { MusicBrainzRecording, MusicBrainzArtist, MusicBrainzReleaseGroup } from './types.js';
 
 const BASE_URL = 'https://musicbrainz.org/ws/2';
 const HEADERS = {

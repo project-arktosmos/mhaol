@@ -172,6 +172,5 @@
 				</span>
 			{/if}
 		</div>
-
 	</div>
 </div>

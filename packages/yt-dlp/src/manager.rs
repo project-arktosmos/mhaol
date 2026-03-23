@@ -95,6 +95,7 @@ impl DownloadManager {
             thumbnail_url: request.thumbnail_url.clone(),
             duration_seconds: request.duration_seconds,
             channel_name: request.channel_name.clone(),
+            subtitle_paths: vec![],
         };
 
         {
@@ -120,6 +121,8 @@ impl DownloadManager {
             audio_output_dir: request.audio_output_dir,
             po_token: config.po_token.clone(),
             visitor_data: config.visitor_data.clone(),
+            subtitle_mode: request.subtitle_mode.unwrap_or_default(),
+            subtitle_langs: request.subtitle_langs.unwrap_or_default(),
         };
 
         self.spawn_download(download_id.clone(), task_config);
@@ -163,6 +166,7 @@ impl DownloadManager {
                 thumbnail_url: None,
                 duration_seconds: None,
                 channel_name: None,
+                subtitle_paths: vec![],
             };
 
             {
@@ -187,6 +191,8 @@ impl DownloadManager {
                 audio_output_dir: request.audio_output_dir.clone(),
                 po_token: po_token.clone(),
                 visitor_data: visitor_data.clone(),
+                subtitle_mode: request.subtitle_mode.clone().unwrap_or_default(),
+                subtitle_langs: request.subtitle_langs.clone().unwrap_or_default(),
             };
 
             self.spawn_download(download_id.clone(), task_config);
@@ -332,6 +338,28 @@ impl DownloadManager {
             .await
     }
 
+    /// Fetch and download subtitles on-demand for a video.
+    pub async fn fetch_subtitles(
+        &self,
+        video_id: &str,
+        langs: &[String],
+        output_dir: &str,
+    ) -> anyhow::Result<Vec<DownloadedSubtitle>> {
+        let (po_token, visitor_data) = {
+            let config = self.config.read();
+            (config.po_token.clone(), config.visitor_data.clone())
+        };
+        self.pipeline
+            .fetch_and_download_subtitles(
+                video_id,
+                langs,
+                std::path::Path::new(output_dir),
+                po_token.as_deref(),
+                visitor_data.as_deref(),
+            )
+            .await
+    }
+
     /// Fetch playlist info.
     pub async fn fetch_playlist_info(&self, url: &str) -> anyhow::Result<PlaylistInfo> {
         let playlist_id = crate::util::extract_playlist_id(url)?;
@@ -392,6 +420,7 @@ impl DownloadManager {
                             progress.output_path = Some(output.output_path.clone());
                             progress.video_output_path = output.video_output_path.clone();
                             progress.audio_output_path = output.audio_output_path.clone();
+                            progress.subtitle_paths = output.subtitle_paths.clone();
                         }
                         PipelineState::Failed { error } => {
                             progress.state = DownloadState::Failed;
@@ -425,6 +454,7 @@ impl DownloadManager {
                         progress.output_path = Some(output.output_path);
                         progress.video_output_path = output.video_output_path;
                         progress.audio_output_path = output.audio_output_path;
+                        progress.subtitle_paths = output.subtitle_paths;
                     }
                     Err(e) => {
                         if progress.state != DownloadState::Cancelled {

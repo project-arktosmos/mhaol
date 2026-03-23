@@ -189,3 +189,40 @@ impl InnertubeApi {
         Ok(data)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::extractor::clients::*;
+    use crate::extractor::player::PlayerResponse;
+
+    /// Verify that PlayerResponse deserialization works for all InnerTube clients.
+    /// Run with: cargo test -p mhaol-yt-dlp -- --ignored test_live_deserialization --nocapture
+    #[tokio::test]
+    #[ignore] // requires network
+    async fn test_live_deserialization() {
+        let api = InnertubeApi::new();
+        let video_id = "dQw4w9WgXcQ"; // stable, well-known video
+
+        for client in [&*ANDROID, &*IOS, &*WEB, &*TV] {
+            let result = api.player(video_id, client, None, None, None).await;
+            match result {
+                Ok(resp) => {
+                    eprintln!("{}: playable={}", client.name, resp.is_playable());
+                    // ANDROID and IOS should always deserialize successfully
+                    if client.name == "android" || client.name == "ios" {
+                        assert!(
+                            resp.streaming_data.is_some(),
+                            "{} should return streaming data",
+                            client.name
+                        );
+                    }
+                }
+                Err(e) => {
+                    // WEB without STS may fail, TV may get bot-blocked — that's OK
+                    eprintln!("{}: {} (acceptable for this client)", client.name, e);
+                }
+            }
+        }
+    }
+}

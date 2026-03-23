@@ -1,17 +1,7 @@
-export interface SyncedLine {
-	time: number;
-	text: string;
-}
+// Re-export API types from the lrclib addon
+export type { SyncedLine, Lyrics } from 'addons/lrclib/types';
 
-export interface Lyrics {
-	id: string;
-	artist: string;
-	title: string;
-	lines: string[];
-	plainLyrics?: string;
-	syncedLyrics?: SyncedLine[];
-	instrumental?: boolean;
-}
+import type { Lyrics } from 'addons/lrclib/types';
 
 export interface LyricsState {
 	status: 'idle' | 'loading' | 'success' | 'not_found' | 'error' | 'done';

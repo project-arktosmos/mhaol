@@ -12,7 +12,7 @@
 		formatSeeders,
 		getSeedersColor,
 		formatUploadDate
-	} from 'ui-lib/utils/torrent-search/format';
+	} from 'addons/torrent-search-thepiratebay/format';
 
 	export let results: TorrentSearchResult[] = [];
 	export let sort: TorrentSearchSort;

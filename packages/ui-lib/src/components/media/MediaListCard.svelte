@@ -4,7 +4,7 @@
 	import { libraryFileAdapter } from 'ui-lib/adapters/classes/library-file.adapter';
 	import type { MediaType } from 'ui-lib/types/library.type';
 	import type { DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
-	import type { DisplayMusicBrainzReleaseGroup } from 'ui-lib/types/musicbrainz.type';
+	import type { DisplayMusicBrainzReleaseGroup } from 'addons/musicbrainz/types';
 
 	interface Props {
 		list: MediaList;

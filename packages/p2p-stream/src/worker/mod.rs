@@ -75,19 +75,23 @@ pub async fn run() {
             Command::CreateSession {
                 session_id,
                 file_path,
+                stream_url,
                 mode,
                 video_codec,
                 video_quality,
                 signaling_url,
+                ice_servers,
             } => {
                 let event = handle_create_session(
                     &mut sessions,
                     session_id,
                     file_path,
+                    stream_url,
                     mode,
                     video_codec,
                     video_quality,
                     signaling_url,
+                    ice_servers,
                 )
                 .await;
                 let _ = stdout.write_all(event.to_json_line().as_bytes()).await;
@@ -114,21 +118,47 @@ pub async fn run() {
 async fn handle_create_session(
     sessions: &mut HashMap<String, SignalingClient>,
     session_id: String,
-    file_path: String,
+    file_path: Option<String>,
+    stream_url: Option<String>,
     mode: Option<String>,
     video_codec: Option<String>,
     video_quality: Option<String>,
     signaling_url: String,
+    ice_servers: Option<Vec<protocol::IceServerEntry>>,
 ) -> Event {
-    let path = PathBuf::from(&file_path);
-    if !path.exists() {
-        return Event::Error {
-            session_id: Some(session_id),
-            error: format!("File not found: {file_path}"),
-        };
-    }
-
     let is_audio_only = mode.as_deref() == Some("audio");
+
+    let media_source: Box<dyn MediaSource> = match (file_path, stream_url) {
+        (Some(fp), None) => {
+            let path = PathBuf::from(&fp);
+            if !path.exists() {
+                return Event::Error {
+                    session_id: Some(session_id),
+                    error: format!("File not found: {fp}"),
+                };
+            }
+            let source = if is_audio_only {
+                FileSource::new(&path).audio_only()
+            } else {
+                FileSource::new(&path)
+            };
+            Box::new(source)
+        }
+        (None, Some(url)) => {
+            let source = if is_audio_only {
+                HttpSource::new(&url).audio_only()
+            } else {
+                HttpSource::new(&url)
+            };
+            Box::new(source)
+        }
+        _ => {
+            return Event::Error {
+                session_id: Some(session_id),
+                error: "Exactly one of file_path or stream_url must be provided".to_string(),
+            };
+        }
+    };
 
     let codec = video_codec
         .as_deref()
@@ -140,29 +170,26 @@ async fn handle_create_session(
         .and_then(parse_video_quality)
         .unwrap_or(VideoQuality::Native);
 
-    let file_source = if is_audio_only {
-        FileSource::new(&path).audio_only()
-    } else {
-        FileSource::new(&path)
-    };
+    let ice_config = build_ice_config(ice_servers);
 
     let manager = SessionManager::new(
         move || {
             let builder = PipelineBuilder::new()
                 .video_codec(codec)
-                .video_quality(quality);
+                .video_quality(quality)
+                .ice_config(ice_config.clone());
             if is_audio_only {
                 builder.no_video()
             } else {
                 builder
             }
         },
-        file_source,
+        media_source,
     );
 
     let room_id = session_id.clone();
 
-    match SignalingClient::connect(session_id.clone(), manager, &signaling_url).await {
+    match SignalingClient::connect(session_id.clone(), manager, &signaling_url, None).await {
         Ok(client) => {
             info!(session_id = %session_id, "Session created, connected to signaling");
             sessions.insert(session_id.clone(), client);
@@ -216,5 +243,40 @@ fn parse_video_quality(s: &str) -> Option<VideoQuality> {
         "480p" => Some(VideoQuality::Q480p),
         "360p" => Some(VideoQuality::Q360p),
         _ => None,
+    }
+}
+
+fn build_ice_config(entries: Option<Vec<protocol::IceServerEntry>>) -> IceServerConfig {
+    let Some(entries) = entries else {
+        return IceServerConfig::default();
+    };
+
+    let mut stun_server = None;
+    let mut turn_servers = Vec::new();
+
+    for entry in entries {
+        let urls = entry.urls.to_vec();
+        let has_turn = urls.iter().any(|u| u.starts_with("turn:") || u.starts_with("turns:"));
+        let has_stun = urls.iter().any(|u| u.starts_with("stun:"));
+
+        if has_stun && stun_server.is_none() {
+            if let Some(stun_url) = urls.iter().find(|u| u.starts_with("stun:")) {
+                // GStreamer expects stun:// prefix
+                stun_server = Some(stun_url.replacen("stun:", "stun://", 1));
+            }
+        }
+
+        if has_turn {
+            turn_servers.push(TurnServer {
+                urls: urls.into_iter().filter(|u| u.starts_with("turn:") || u.starts_with("turns:")).collect(),
+                username: entry.username,
+                credential: entry.credential,
+            });
+        }
+    }
+
+    IceServerConfig {
+        stun_server: stun_server.or_else(|| Some("stun://stun.l.google.com:19302".into())),
+        turn_servers,
     }
 }

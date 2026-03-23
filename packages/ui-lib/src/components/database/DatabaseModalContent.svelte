@@ -51,7 +51,7 @@
 {#if !selectedTableName}
 	<!-- Table list -->
 	<div class="mt-4 overflow-x-auto">
-		<table class="table-zebra table table-sm w-full">
+		<table class="table w-full table-zebra table-sm">
 			<thead>
 				<tr>
 					<th>Table</th>
@@ -61,10 +61,7 @@
 			</thead>
 			<tbody>
 				{#each $dbState.tables as table}
-					<tr
-						class="cursor-pointer hover:bg-base-200"
-						onclick={() => selectTable(table.name)}
-					>
+					<tr class="cursor-pointer hover:bg-base-200" onclick={() => selectTable(table.name)}>
 						<td class="font-mono text-sm">{table.name}</td>
 						<td class="text-right">{table.rowCount}</td>
 						<td class="text-right">{table.columns.length}</td>
@@ -76,7 +73,7 @@
 
 	{#if $dbState.loading}
 		<div class="mt-4 flex justify-center">
-			<span class="loading loading-spinner loading-md"></span>
+			<span class="loading loading-md loading-spinner"></span>
 		</div>
 	{/if}
 {:else if $dbState.selectedTable}
@@ -100,13 +97,13 @@
 				</svg>
 			</button>
 			<h4 class="font-mono text-base font-semibold">{$dbState.selectedTable.table}</h4>
-			<span class="badge badge-sm badge-ghost">
+			<span class="badge badge-ghost badge-sm">
 				{$dbState.selectedTable.pagination.total} rows
 			</span>
 		</div>
 
 		<div class="mt-3 overflow-x-auto rounded-lg border border-base-300">
-			<table class="table table-xs w-full">
+			<table class="table w-full table-xs">
 				<thead>
 					<tr>
 						{#each $dbState.selectedTable.columns as col}
@@ -122,7 +119,7 @@
 						<tr class="hover:bg-base-200">
 							{#each $dbState.selectedTable.columns as col}
 								<td
-									class={classNames('max-w-xs truncate whitespace-nowrap font-mono text-xs', {
+									class={classNames('max-w-xs truncate font-mono text-xs whitespace-nowrap', {
 										'text-base-content/30': row[col.name] === null
 									})}
 									title={String(row[col.name] ?? 'NULL')}
@@ -157,7 +154,8 @@
 					Prev
 				</button>
 				<span class="text-sm">
-					Page {$dbState.selectedTable.pagination.page} of {$dbState.selectedTable.pagination.totalPages}
+					Page {$dbState.selectedTable.pagination.page} of {$dbState.selectedTable.pagination
+						.totalPages}
 				</span>
 				<button
 					class="btn btn-ghost btn-sm"
@@ -173,7 +171,7 @@
 
 	{#if $dbState.loading}
 		<div class="mt-4 flex justify-center">
-			<span class="loading loading-spinner loading-md"></span>
+			<span class="loading loading-md loading-spinner"></span>
 		</div>
 	{/if}
 {/if}

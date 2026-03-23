@@ -12,22 +12,29 @@
   import ThemeToggle from "ui-lib/components/core/ThemeToggle.svelte";
   import ToastOutlet from "ui-lib/components/core/ToastOutlet.svelte";
   import Navbar from "ui-lib/components/core/Navbar.svelte";
+  import SignalingStatusBadge from "ui-lib/components/signaling/SignalingStatusBadge.svelte";
   import { invalidateAll } from "$app/navigation";
+
   import { youtubeService } from "ui-lib/services/youtube.service";
   import { youtubeLibraryService } from "ui-lib/services/youtube-library.service";
   import SmartSearchToast from "ui-lib/components/llm/SmartSearchToast.svelte";
   import { smartSearchService } from "ui-lib/services/smart-search.service";
   import { apiUrl } from "ui-lib/lib/api-base";
   import { setImageBaseUrl } from "addons/tmdb/transform";
-  import { browseDetailService } from "ui-lib/services/browse-detail.service";
+  // browseDetailService still used by movies page library tab (will be removed in cleanup)
+  import { rosterService } from "ui-lib/services/roster.service";
   import { signalingAdapter } from "ui-lib/adapters/classes/signaling.adapter";
   import { contactHandshakeService } from "webrtc/service";
   import type { PassportData, ContactHandshakeMessage } from "webrtc/types";
   import { get } from "svelte/store";
+  import { serverCatalogService } from "ui-lib/services/server-catalog.service";
+  import { p2pStreamService } from "ui-lib/services/p2p-stream.service";
+  import { movieDetailsToDisplay } from "addons/tmdb/transform";
+  import type { MediaItem } from "ui-lib/types/media-card.type";
+  import type { CatalogMovie } from "ui-lib/types/server-catalog.type";
 
   setImageBaseUrl(apiUrl("/api/tmdb/image"));
-  import BrowseDetailPanel from "ui-lib/components/browse/BrowseDetailPanel.svelte";
-  import Modal from "ui-lib/components/core/Modal.svelte";
+  import PlayerOverlay from "ui-lib/components/player/PlayerOverlay.svelte";
   import type { SmartSearchTorrentResult } from "ui-lib/types/smart-search.type";
   import type { PlayableFile } from "ui-lib/types/player.type";
 
@@ -42,23 +49,12 @@
     get value() {
       return browseViewModeValue;
     },
+    toggle() {
+      browseViewModeValue = browseViewModeValue === "poster" ? "backdrop" : "poster";
+    },
   });
 
   const playerState = playerService.state;
-  const browseDetail = browseDetailService.state;
-
-  let isLargeScreen = $state(false);
-
-  $effect(() => {
-    const mql = window.matchMedia("(min-width: 1024px)");
-    isLargeScreen = mql.matches;
-    const handler = (e: MediaQueryListEvent) => {
-      isLargeScreen = e.matches;
-    };
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  });
-
 
   const ytState = youtubeService.state;
   const YT_ACTIVE_STATES = ["pending", "fetching", "downloading", "muxing"];
@@ -67,14 +63,6 @@
       YT_ACTIVE_STATES.includes(d.state),
     ).length,
   );
-
-  let hasBrowseSelection = $derived($browseDetail.domain !== null);
-
-  function handleSidebarAction(action: string) {
-    const cbs = browseDetailService.getCallbacks();
-    const cb = cbs[action as keyof typeof cbs];
-    if (typeof cb === 'function') (cb as () => void)();
-  }
 
   async function handleSmartSearchStream(candidate: SmartSearchTorrentResult) {
     smartSearchService.hide();
@@ -121,6 +109,7 @@
     themeService.initialize("flix");
     await playerService.initialize();
     await identityService.initialize();
+    rosterService.initialize("api");
 
     // Initialize contact handshake with local passport
     const identities = get(identityService.state).identities;
@@ -129,8 +118,10 @@
       contactHandshakeService.initialize({
         passport,
         adapter: {
-          sendToPeer: (peerId, envelope) => signalingChatService.sendToPeer(peerId, envelope),
-          disconnectPeer: (peerId) => signalingChatService.disconnectPeer(peerId),
+          sendToPeer: (peerId, envelope) =>
+            signalingChatService.sendToPeer(peerId, envelope),
+          disconnectPeer: (peerId) =>
+            signalingChatService.disconnectPeer(peerId),
           connectToPeer: (peerId) => signalingChatService.connectToPeer(peerId),
           getPeerConnectionStatus: (peerId) =>
             signalingChatService.getPeerConnectionStatus(peerId),
@@ -142,18 +133,90 @@
               [
                 {
                   label: "Accept",
-                  onclick: () => contactHandshakeService.acceptRequest(request.address),
+                  onclick: () => {
+                    contactHandshakeService.acceptRequest(request.address);
+                    rosterService.addEntry({
+                      name: request.name,
+                      address: request.address,
+                      passport: JSON.stringify(request.passport),
+                    });
+                  },
                 },
                 {
                   label: "Reject",
-                  onclick: () => contactHandshakeService.rejectRequest(request.address),
+                  onclick: () =>
+                    contactHandshakeService.rejectRequest(request.address),
                 },
               ],
               "info",
             );
           },
           onRequestAccepted: (contact) => {
-            toastService.success(`${contact.name} accepted your contact request`);
+            rosterService.addEntry({
+              name: contact.name,
+              address: contact.address,
+              passport: JSON.stringify(contact.passport),
+            });
+          },
+          onConnectionReady: async (peerId) => {
+            try {
+              const res = await fetch(apiUrl("/api/media"));
+              if (!res.ok) return;
+              const data = (await res.json()) as {
+                libraries: Record<string, { name: string; type: string }>;
+                itemsByType: Record<string, MediaItem[]>;
+              };
+              const movieLibIds = new Set(
+                Object.entries(data.libraries)
+                  .filter(([, lib]) => lib.type === "movies")
+                  .map(([id]) => id),
+              );
+              const movieItems = (data.itemsByType?.video ?? []).filter(
+                (item) => movieLibIds.has(item.libraryId),
+              );
+
+              // Fetch TMDB metadata for each item that has a tmdb link
+              const origin = window.location.origin;
+              const abs = (url: string | null) =>
+                url && url.startsWith("/") ? `${origin}${url}` : url;
+
+              const catalog: CatalogMovie[] = await Promise.all(
+                movieItems.map(async (item) => {
+                  const tmdbLink = item.links?.tmdb;
+                  let tmdb = null;
+                  if (tmdbLink) {
+                    try {
+                      const r = await fetch(
+                        apiUrl(`/api/tmdb/movies/${tmdbLink.serviceId}`),
+                      );
+                      if (r.ok) {
+                        const details = movieDetailsToDisplay(await r.json());
+                        tmdb = {
+                          ...details,
+                          posterUrl: abs(details.posterUrl),
+                          backdropUrl: abs(details.backdropUrl),
+                          images: details.images.map((img) => ({
+                            ...img,
+                            thumbnailUrl: abs(img.thumbnailUrl) ?? "",
+                            fullUrl: abs(img.fullUrl) ?? "",
+                          })),
+                          cast: details.cast.map((c) => ({
+                            ...c,
+                            profileUrl: abs(c.profileUrl),
+                          })),
+                        };
+                      }
+                    } catch {
+                      // best-effort
+                    }
+                  }
+                  return { item, tmdb };
+                }),
+              );
+              serverCatalogService.sendMovieCatalog(peerId, catalog);
+            } catch {
+              // Silently fail — catalog is best-effort
+            }
           },
           onError: (message) => {
             toastService.error(message);
@@ -165,13 +228,84 @@
         contactHandshakeService.handleChannelOpen(peerId),
       );
       signalingChatService.onContactMessage = (peerId, msg) =>
-        contactHandshakeService.handleMessage(peerId, msg as ContactHandshakeMessage);
+        contactHandshakeService.handleMessage(
+          peerId,
+          msg as ContactHandshakeMessage,
+        );
     }
+
+    serverCatalogService.initialize();
+    serverCatalogService.onStreamRequest = async (peerId, itemPath) => {
+      console.log("[ServerCatalog] Stream request received:", {
+        peerId,
+        itemPath,
+      });
+      try {
+        const streamConfig = p2pStreamService.getSessionConfig();
+        const res = await fetch(apiUrl("/api/player/sessions"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            file_path: itemPath,
+            mode: "video",
+            video_codec: streamConfig.video_codec,
+            video_quality: streamConfig.video_quality,
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          serverCatalogService.sendStreamError(
+            peerId,
+            (body as { error?: string }).error ?? `HTTP ${res.status}`,
+          );
+          return;
+        }
+        const session = (await res.json()) as {
+          session_id: string;
+          room_id: string;
+          signaling_url: string;
+        };
+        serverCatalogService.sendStreamSession(
+          peerId,
+          session.session_id,
+          session.room_id,
+          session.signaling_url,
+        );
+      } catch (err) {
+        serverCatalogService.sendStreamError(
+          peerId,
+          err instanceof Error ? err.message : "Failed to create session",
+        );
+      }
+    };
 
     youtubeService.initialize();
     youtubeLibraryService.initialize();
     torrentService.initialize("server");
-    signalingChatService.connect(DEFAULT_SIGNALING_URL, "default");
+    // Connect to signaling with real identity via backend signing
+    const identities2 = get(identityService.state).identities;
+    if (identities2.length > 0 && identities2[0].passport) {
+      const sigPassport: PassportData = JSON.parse(identities2[0].passport);
+      signalingChatService.connect(
+        DEFAULT_SIGNALING_URL,
+        "default",
+        sigPassport,
+        async (msg: string) => {
+          // Parse room_id and timestamp from the auth message format
+          const parts = msg.match(/^partykit-auth:(.+):(\d+)$/);
+          if (!parts) throw new Error("Invalid auth message format");
+          const res = await fetch(
+            apiUrl(
+              `/api/signaling/auth?room_id=${encodeURIComponent(parts[1])}&timestamp=${parts[2]}`,
+            ),
+          );
+          if (!res.ok)
+            throw new Error(`Auth signing failed: HTTP ${res.status}`);
+          const data = await res.json();
+          return data.signature;
+        },
+      );
+    }
 
     unsubChat = chatStore.subscribe((s) => {
       if (prevPhase === null) {
@@ -205,6 +339,8 @@
     torrentService.destroy();
     signalingChatService.destroy();
     contactHandshakeService.destroy();
+    rosterService.destroy();
+    serverCatalogService.destroy();
     unsubChat?.();
   });
 </script>
@@ -219,104 +355,28 @@
       <a href="/tv" class="btn btn-ghost btn-sm">TV</a>
       <a href="/music" class="btn btn-ghost btn-sm">Music</a>
       <a href="/videogames" class="btn btn-ghost btn-sm">Games</a>
+      <a href="/books" class="btn btn-ghost btn-sm">Books</a>
       <a href="/photos" class="btn btn-ghost btn-sm">Photos</a>
       <a href="/youtube" class="btn btn-ghost btn-sm">
         YouTube
         {#if ytActiveCount > 0}
-          <span class="badge badge-xs badge-primary ml-1"
-            >{ytActiveCount}</span
-          >
+          <span class="badge badge-xs badge-primary ml-1">{ytActiveCount}</span>
         {/if}
       </a>
-      <button
-        class="btn btn-circle btn-ghost btn-sm"
-        onclick={() =>
-          (browseViewModeValue =
-            browseViewModeValue === "poster" ? "backdrop" : "poster")}
-        aria-label="Toggle view mode"
-        title={browseViewModeValue === "poster"
-          ? "Switch to backdrop view"
-          : "Switch to poster view"}
-      >
-        {#if browseViewModeValue === "poster"}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z"
-            />
-          </svg>
-        {:else}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"
-            />
-          </svg>
-        {/if}
-      </button>
-      <a
-        href="/options"
-        class="btn btn-circle btn-ghost btn-sm"
-        aria-label="Options"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke-width="1.5"
-          stroke="currentColor"
-          class="h-5 w-5"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
-          />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-          />
-        </svg>
-      </a>
+      <a href="/roster" class="btn btn-ghost btn-sm">Roster</a>
+      <a href="/options" class="btn btn-ghost btn-sm">Options</a>
+      <SignalingStatusBadge />
       <ThemeToggle />
     {/snippet}
   </Navbar>
   <main class="flex min-w-0 flex-1 overflow-hidden">
-    {@render children?.()}
-    <div
-      class="hidden w-85 shrink-0 overflow-y-auto border-l border-base-300 bg-base-200 lg:block"
-    >
-      <BrowseDetailPanel />
+    <div class="relative flex min-w-0 flex-1 flex-col">
+      {@render children?.()}
     </div>
   </main>
 </div>
 
-{#if !isLargeScreen}
-  <Modal
-    open={hasBrowseSelection || !!$playerState.currentFile}
-    maxWidth="max-w-lg"
-    onclose={() => handleSidebarAction("onclose")}
-  >
-    <BrowseDetailPanel />
-  </Modal>
-{/if}
+<PlayerOverlay />
 <SmartSearchToast
   onlibrarychange={() => invalidateAll()}
   onstream={handleSmartSearchStream}

@@ -2,6 +2,16 @@
 
 export interface PeerConnectionState {
 	peerId: string;
+	name: string;
+	instanceType: string;
+}
+
+// ===== Peer Info (shared in messages) =====
+
+export interface PeerInfo {
+	peer_id: string;
+	name: string;
+	instance_type: string;
 }
 
 // ===== Client → Server Messages =====
@@ -30,15 +40,26 @@ export type ClientMessage = OfferMessage | AnswerMessage | IceCandidateMessage;
 
 // ===== Server → Client Messages =====
 
+export interface IceServerConfig {
+	urls: string | string[];
+	username?: string;
+	credential?: string;
+}
+
 export interface ConnectedMessage {
 	type: 'connected';
 	peer_id: string;
+	name: string;
+	instance_type: string;
+	ice_servers?: IceServerConfig[];
 }
 
 export interface PeerJoinedMessage {
 	type: 'peer-joined';
 	room_id: string;
 	peer_id: string;
+	name: string;
+	instance_type: string;
 }
 
 export interface PeerLeftMessage {
@@ -50,7 +71,7 @@ export interface PeerLeftMessage {
 export interface RoomPeersMessage {
 	type: 'room-peers';
 	room_id: string;
-	peers: string[];
+	peers: PeerInfo[];
 }
 
 export interface RelayedOfferMessage {
@@ -95,6 +116,6 @@ export type ServerMessage =
 
 export interface RoomStatus {
 	room_id: string;
-	peers: string[];
+	peers: PeerInfo[];
 	peerCount: number;
 }

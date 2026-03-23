@@ -8,7 +8,7 @@ use tower::ServiceExt;
 fn test_app() -> axum::Router {
     let state = AppState::new(None).expect("Failed to create in-memory AppState");
     state.initialize_modules();
-    state.seed_default_library();
+    state.seed_default_libraries();
     build_router(state)
 }
 
@@ -161,7 +161,7 @@ async fn test_list_libraries() {
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
     let libs = json.as_array().expect("libraries should be an array");
-    // seed_default_library creates one
+    // seed_default_libraries creates one
     assert!(!libs.is_empty(), "should have at least the default library");
 }
 

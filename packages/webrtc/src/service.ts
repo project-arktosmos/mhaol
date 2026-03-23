@@ -67,10 +67,19 @@ class ContactHandshakeService {
 			return;
 		}
 
+		// Already waiting for acceptance — don't re-send
+		if (phase === 'request-sent') {
+			return;
+		}
+
 		// Check if this peer is already a known contact (by ephemeral peer ID mapping)
 		const knownAddress = this.peerIdToAddress.get(peerId);
 		if (knownAddress && this.isKnownContact(knownAddress)) {
-			// Already a contact — skip handshake
+			// Already a contact — skip handshake, fire connection ready
+			const contact = get(this.state).contacts.find(
+				(c) => c.address.toLowerCase() === knownAddress.toLowerCase()
+			);
+			if (contact) this.callbacks?.onConnectionReady(peerId, contact);
 			return;
 		}
 
@@ -197,9 +206,10 @@ class ContactHandshakeService {
 		try {
 			const payload = await verifyPassport(passport);
 
-			// If already a contact, skip handshake
+			// If already a contact, send acceptance back and fire connection ready
 			if (this.isKnownContact(payload.address)) {
 				this.peerIdToAddress.set(peerId, payload.address);
+				this.sendAcceptance(peerId);
 				return;
 			}
 
@@ -246,10 +256,12 @@ class ContactHandshakeService {
 				acceptedAt: new Date().toISOString()
 			};
 
+			const alreadyKnown = this.isKnownContact(payload.address);
+
 			this.state.update((s) => {
 				const updated = {
 					...s,
-					contacts: [...s.contacts, contact],
+					contacts: alreadyKnown ? s.contacts : [...s.contacts, contact],
 					outgoingRequestAddresses: s.outgoingRequestAddresses.filter(
 						(a) => a.toLowerCase() !== payload.address.toLowerCase()
 					),
@@ -259,7 +271,10 @@ class ContactHandshakeService {
 				return updated;
 			});
 
-			this.callbacks?.onRequestAccepted(contact);
+			if (!alreadyKnown) {
+				this.callbacks?.onRequestAccepted(contact);
+			}
+			this.callbacks?.onConnectionReady(peerId, contact);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Invalid passport';
 			this.callbacks?.onError(`Invalid contact acceptance: ${message}`);
@@ -275,6 +290,15 @@ class ContactHandshakeService {
 		};
 		this.adapter.sendToPeer(peerId, envelope);
 		this.setPeerPhase(peerId, 'accepted');
+
+		// Fire connection ready — the channel is open and contact is accepted
+		const address = this.peerIdToAddress.get(peerId);
+		if (address) {
+			const contact = get(this.state).contacts.find(
+				(c) => c.address.toLowerCase() === address.toLowerCase()
+			);
+			if (contact) this.callbacks?.onConnectionReady(peerId, contact);
+		}
 	}
 
 	private getPeerPhase(peerId: string): string | undefined {

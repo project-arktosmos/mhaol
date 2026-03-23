@@ -2,11 +2,7 @@ import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { apiUrl } from 'ui-lib/lib/api-base';
 import { ObjectServiceClass } from 'ui-lib/services/classes/object-service.class';
-import type {
-	TorrentSettings,
-	TorrentServiceState,
-	TorrentInfo
-} from 'ui-lib/types/torrent.type';
+import type { TorrentSettings, TorrentServiceState, TorrentInfo } from 'ui-lib/types/torrent.type';
 
 const initialSettings: TorrentSettings = {
 	id: 'torrent-settings',

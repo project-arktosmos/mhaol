@@ -12,6 +12,7 @@ const initialState: BrowseDetailState = {
 	tvShow: null,
 	movieDetails: null,
 	tvShowDetails: null,
+	tvSeasonDetails: [],
 	libraryItem: null,
 	relatedData: null,
 	loading: false,
@@ -36,7 +37,11 @@ const initialState: BrowseDetailState = {
 	videogameDetailsLoading: false,
 
 	// YouTube
-	youtubeVideo: null
+	youtubeVideo: null,
+
+	// Book
+	book: null,
+	bookDetails: null
 };
 
 function createBrowseDetailService() {

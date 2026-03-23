@@ -31,33 +31,78 @@
 		"serverError": "Server error"
 	},
 	"hero": {
-		"title": "Mhaol Ecosystem",
-		"subtitle": "Your media, your files, your rules. The Mhaol Ecosystem is a suite of open-source apps that give you full ownership and control over your movies, music, photos, and more — no subscriptions, no surveillance, no lock-in.",
+		"title": "Mhaol Media",
+		"subtitle": "Your media, your files, your rules. Mhaol Media is an open-source media server that gives you full ownership and control over your movies, TV shows, music, games, photos, YouTube downloads, and books — no subscriptions, no surveillance, no lock-in.",
 		"cta": "Download",
 		"source": "Source Code"
 	},
-	"apps": {
-		"heading": "The Apps",
-		"subheading": "Each app in the ecosystem has its own identity, purpose, and personality.",
-		"server": {
-			"title": "Server",
-			"description": "Your movie library. AI-powered torrent search, TMDB metadata, and instant streaming."
-		},
-		"tube": {
-			"title": "Tube",
-			"description": "Alternative YouTube client. Download, stream, and organize videos without ads or tracking."
+	"features": {
+		"heading": "Everything in One Place",
+		"subheading": "Browse, organize, and stream all your media from a single self-hosted server.",
+		"movies": {
+			"title": "Movies",
+			"description": "Browse your movie library with rich TMDB metadata, posters, and AI-powered torrent search to find and stream any film."
 		},
 		"tv": {
-			"title": "TV",
-			"description": "TV show tracker and streamer. Browse series, manage episodes, and stream with torrent integration."
+			"title": "TV Shows",
+			"description": "Track series, manage episodes and seasons, and stream TV shows with automatic metadata and torrent integration."
+		},
+		"music": {
+			"title": "Music",
+			"description": "Manage your music collection with MusicBrainz metadata, album art, artist info, and synchronized lyrics."
+		},
+		"games": {
+			"title": "Games",
+			"description": "Browse your game library with RetroAchievements integration, track progress, and discover new titles across consoles."
+		},
+		"photos": {
+			"title": "Photos",
+			"description": "Organize and browse your photo collection with tagging, albums, and a beautiful gallery view."
+		},
+		"youtube": {
+			"title": "YouTube",
+			"description": "Download and organize YouTube videos locally. Search, preview, and queue downloads with full format control."
 		},
 		"books": {
 			"title": "Books",
-			"description": "Ebook reader and library. Read EPUBs and PDFs, track progress, and organize your collection offline."
+			"description": "Read EPUBs and PDFs, track your reading progress, and organize your book collection offline."
+		}
+	},
+	"smartSearch": {
+		"badge": "AI-Powered",
+		"heading": "Smart Search",
+		"description": "Select any movie, show, album, or game from your library and Smart Search does the rest. It reads the metadata — title, year, artist, console — searches for torrents, and uses an LLM to analyze each result for relevance, quality, and language, automatically picking the best match.",
+		"step1": "Pick a title from your library — the metadata (title, year, artist, console) is read automatically",
+		"step2": "Torrents are searched using the parsed metadata as the query",
+		"step3": "Each result is analyzed by the LLM for relevance to the exact title and your preferences",
+		"step4": "Results are scored and ranked — the best candidate is auto-selected for you"
+	},
+	"addons": {
+		"heading": "Powered by Addons",
+		"subheading": "Modular integrations that bring rich metadata, lyrics, search, and more to your media server.",
+		"tmdb": {
+			"title": "TMDB",
+			"description": "Movie and TV metadata from The Movie Database — posters, backdrops, cast, ratings, and recommendations."
 		},
-		"shepperd": {
-			"title": "Shepperd",
-			"description": "Browser extension that collects your watch and listen history from Netflix, HBO Max, Amazon Prime, Disney+, Spotify, and more."
+		"musicbrainz": {
+			"title": "MusicBrainz",
+			"description": "Comprehensive music metadata — artists, albums, tracks, release dates, and cover art from the open music encyclopedia."
+		},
+		"retroachievements": {
+			"title": "RetroAchievements",
+			"description": "Retro gaming metadata and achievement tracking — game info, box art, and achievement progress across classic consoles."
+		},
+		"youtube": {
+			"title": "YouTube",
+			"description": "YouTube video extraction and downloading — search, preview, and download videos in any format and quality."
+		},
+		"lrclib": {
+			"title": "LRCLIB",
+			"description": "Synchronized lyrics — fetch time-stamped lyrics for your music library and display them in the player."
+		},
+		"torrentSearch": {
+			"title": "Torrent Search",
+			"description": "Torrent search across public indexes — find, compare, and add torrents with size, seeder, and trust indicators."
 		}
 	},
 	"platforms": {
@@ -74,7 +119,7 @@
 		"android_install": "Download and install the APK."
 	},
 	"footer": {
-		"tagline": "Free, open-source media ecosystem for everyone.",
+		"tagline": "Free, open-source media server for everyone.",
 		"built_with": "Built with Svelte, Tauri, and Rust."
 	}
 }

@@ -20,14 +20,14 @@ describe('formatArtistCredits', () => {
 	});
 
 	it('formats single artist', () => {
-		expect(formatArtistCredits([{ name: 'Artist', joinphrase: '' }])).toBe('Artist');
+		expect(formatArtistCredits([{ name: 'Artist', joinphrase: '' }] as any)).toBe('Artist');
 	});
 
 	it('formats multiple artists with join phrases', () => {
 		const credits = [
 			{ name: 'Artist1', joinphrase: ' feat. ' },
 			{ name: 'Artist2', joinphrase: '' }
-		];
+		] as any;
 		expect(formatArtistCredits(credits)).toBe('Artist1 feat. Artist2');
 	});
 

@@ -55,7 +55,6 @@ describe('SignalingAdapter', () => {
 		it('maps states to labels', () => {
 			expect(signalingAdapter.playerConnectionLabel('idle')).toBe('Idle');
 			expect(signalingAdapter.playerConnectionLabel('streaming')).toBe('Streaming');
-			expect(signalingAdapter.playerConnectionLabel('http-streaming')).toBe('Streaming');
 			expect(signalingAdapter.playerConnectionLabel('error')).toBe('Error');
 		});
 	});

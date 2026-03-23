@@ -1,37 +1,11 @@
-export interface YouTubeSearchItem {
-	videoId: string;
-	type: string;
-	url: string;
-	title: string;
-	thumbnail: string;
-	duration: number;
-	durationText: string;
-	views: number;
-	viewsText: string;
-	uploadedDate: string;
-	uploaderName: string;
-	uploaderUrl: string;
-	uploaderAvatar: string;
-	uploaderVerified: boolean;
-}
+import type { YouTubeSearchItem, YouTubeSearchChannelItem } from 'addons/youtube/types';
 
-export interface YouTubeSearchChannelItem {
-	type: string;
-	channelId: string;
-	name: string;
-	thumbnail: string;
-	url: string;
-	subscriberText: string;
-	videoCountText: string;
-	description: string;
-	verified: boolean;
-}
-
-export interface YouTubeSearchResponse {
-	items: YouTubeSearchItem[];
-	channels: YouTubeSearchChannelItem[];
-	continuation: string | null;
-}
+// Re-export API types from the youtube addon
+export type {
+	YouTubeSearchItem,
+	YouTubeSearchChannelItem,
+	YouTubeSearchResponse
+} from 'addons/youtube/types';
 
 export interface YouTubeSearchState {
 	query: string;

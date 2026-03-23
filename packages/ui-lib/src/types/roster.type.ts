@@ -1,9 +1,13 @@
 export type RosterPeerStatus = 'online' | 'checking' | 'offline';
 
+export type RosterStorageMode = 'local' | 'api';
+
 export interface RosterEntry {
 	name: string;
 	address: string;
 	status: RosterPeerStatus;
+	passport?: string;
+	instanceType?: string;
 }
 
 export interface RosterState {

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { libraryFileAdapter } from 'ui-lib/adapters/classes/library-file.adapter';
-	import { getThumbnailUrl } from 'ui-lib/utils/youtube/embed';
+	import { getThumbnailUrl } from 'addons/youtube/helpers';
 	import TagPill from 'ui-lib/components/images/TagPill.svelte';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 	import { apiUrl } from 'ui-lib/lib/api-base';
@@ -101,7 +101,6 @@
 				connectionState={$playerState.connectionState}
 				positionSecs={$playerState.positionSecs}
 				durationSecs={$playerState.durationSecs}
-				streamUrl={$playerState.streamUrl}
 				buffering={$playerState.buffering}
 			/>
 		{:else if imageUrl}

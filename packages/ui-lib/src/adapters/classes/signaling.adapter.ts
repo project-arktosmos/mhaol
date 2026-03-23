@@ -12,6 +12,7 @@ export class SignalingAdapter extends AdapterClass {
 	}
 
 	shortAddress(address: string): string {
+		if (!address) return '';
 		if (!address.startsWith('0x') || address.length < 10) return address;
 		return `${address.slice(0, 6)}...${address.slice(-4)}`;
 	}
@@ -64,7 +65,6 @@ export class SignalingAdapter extends AdapterClass {
 			connecting: 'Connecting...',
 			signaling: 'Signaling...',
 			streaming: 'Streaming',
-			'http-streaming': 'Streaming',
 			error: 'Error',
 			closed: 'Closed'
 		};
@@ -78,7 +78,6 @@ export class SignalingAdapter extends AdapterClass {
 			connecting: 'badge-info',
 			signaling: 'badge-info',
 			streaming: 'badge-success',
-			'http-streaming': 'badge-success',
 			error: 'badge-error',
 			closed: 'badge-ghost'
 		};

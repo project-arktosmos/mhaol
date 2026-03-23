@@ -6,7 +6,6 @@ pub mod downloads;
 pub mod health;
 pub mod hub;
 pub mod images;
-pub mod jackett;
 pub mod identities;
 pub mod libraries;
 pub mod lyrics;
@@ -19,8 +18,12 @@ pub mod p2p_stream;
 pub mod retroachievements;
 pub mod player;
 pub mod plugins;
+pub mod queue;
+pub mod roster;
 pub mod signaling;
 pub mod signaling_ws;
+pub mod openlibrary;
+pub mod smart_search;
 pub mod tmdb;
 pub mod youtube;
 pub mod youtube_search;
@@ -57,8 +60,8 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/player", player::router())
         .nest("/api/tmdb", tmdb::router())
         .nest("/api/addons", addons::router())
-        .nest("/api/jackett", jackett::router())
         .nest("/api/network", network::router())
+        .nest("/api/roster", roster::router())
         .nest("/api/signaling", signaling::router())
         .nest("/api/images", images::router())
         .nest("/api/lyrics", lyrics::router())
@@ -66,6 +69,9 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/retroachievements", retroachievements::router())
         .nest("/api/youtube", youtube::router())
         .nest("/api/youtube-search", youtube_search::router())
+        .nest("/api/openlibrary", openlibrary::router())
+        .nest("/api/queue", queue::router())
+        .nest("/api/smart-search", smart_search::router())
         .merge(signaling_ws::signaling_routes());
 
     #[cfg(not(target_os = "android"))]

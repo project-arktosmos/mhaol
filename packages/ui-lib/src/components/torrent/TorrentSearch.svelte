@@ -37,43 +37,40 @@
 	}
 </script>
 
-<div class="card bg-base-200">
-	<div class="card-body gap-4">
-		<div class="flex items-center justify-between">
-			<h2 class="card-title text-lg">Search Torrents</h2>
-			{#if hasResults}
-				<button class="btn btn-ghost btn-sm" on:click={() => torrentSearchService.clearResults()}>
-					Clear
-				</button>
-			{/if}
+<div class="flex flex-col gap-4">
+	{#if hasResults}
+		<div class="flex justify-end">
+			<button class="btn btn-ghost btn-sm" on:click={() => torrentSearchService.clearResults()}>
+				Clear
+			</button>
 		</div>
+	{/if}
 
-		<TorrentSearchInput
-			bind:query={$searchState.query}
-			bind:category={$searchState.category}
-			searching={$searchState.searching}
-			on:search={handleSearch}
+	<TorrentSearchInput
+		bind:query={$searchState.query}
+		bind:category={$searchState.category}
+		searching={$searchState.searching}
+		on:search={handleSearch}
+	/>
+
+	{#if $searchState.error}
+		<div class="alert-sm alert alert-error">
+			<span>{$searchState.error}</span>
+		</div>
+	{/if}
+
+	{#if $searchState.searching}
+		<div class="flex justify-center py-8">
+			<span class="loading loading-lg loading-spinner"></span>
+		</div>
+	{:else if showResults}
+		<TorrentSearchResults
+			results={$searchState.results}
+			sort={$searchState.sort}
+			addingTorrents={$searchState.addingTorrents}
+			disableAdd={!canAddTorrents}
+			on:add={handleAdd}
+			on:sort={handleSort}
 		/>
-
-		{#if $searchState.error}
-			<div class="alert-sm alert alert-error">
-				<span>{$searchState.error}</span>
-			</div>
-		{/if}
-
-		{#if $searchState.searching}
-			<div class="flex justify-center py-8">
-				<span class="loading loading-lg loading-spinner"></span>
-			</div>
-		{:else if showResults}
-			<TorrentSearchResults
-				results={$searchState.results}
-				sort={$searchState.sort}
-				addingTorrents={$searchState.addingTorrents}
-				disableAdd={!canAddTorrents}
-				on:add={handleAdd}
-				on:sort={handleSort}
-			/>
-		{/if}
-	</div>
+	{/if}
 </div>

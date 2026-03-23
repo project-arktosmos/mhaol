@@ -1,77 +1,20 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { apiUrl } from "ui-lib/lib/api-base";
+  import { goto } from "$app/navigation";
   import { tmdbBrowseService } from "ui-lib/services/tmdb-browse.service";
-  import { browseDetailService } from "ui-lib/services/browse-detail.service";
-  import { tvShowDetailsToDisplay } from "addons/tmdb/transform";
-  import type {
-    DisplayTMDBTvShow,
-    DisplayTMDBTvShowDetails,
-  } from "addons/tmdb/types";
+  import type { DisplayTMDBTvShow } from "addons/tmdb/types";
   import SearchTab from "ui-lib/components/tmdb-browse/SearchTab.svelte";
   import PopularTab from "ui-lib/components/tmdb-browse/PopularTab.svelte";
   import TmdbBrowseGrid from "ui-lib/components/tmdb-browse/TmdbBrowseGrid.svelte";
   import TmdbPagination from "ui-lib/components/tmdb-browse/TmdbPagination.svelte";
+  import BrowseViewToggle from "ui-lib/components/browse/BrowseViewToggle.svelte";
   import classNames from "classnames";
 
   const browseState = tmdbBrowseService.state;
 
-  let selectedBrowseTvShow: DisplayTMDBTvShow | null = $state(null);
-  let browseTvShowDetails: DisplayTMDBTvShowDetails | null = $state(null);
-  let browseDetailLoading = $state(false);
-
-  async function handleSelectTvShow(tvShow: DisplayTMDBTvShow) {
-    if (selectedBrowseTvShow?.id === tvShow.id) {
-      selectedBrowseTvShow = null;
-      browseTvShowDetails = null;
-      browseDetailService.close();
-      return;
-    }
-    selectedBrowseTvShow = tvShow;
-    browseTvShowDetails = null;
-    fetchTvShowDetails(tvShow.id);
+  function handleSelectTvShow(tvShow: DisplayTMDBTvShow) {
+    goto(`/tv/${tvShow.id}`);
   }
-
-  async function fetchTvShowDetails(tmdbId: number) {
-    browseDetailLoading = true;
-    try {
-      const res = await fetch(apiUrl(`/api/tmdb/tv/${tmdbId}`));
-      if (res.ok) {
-        const raw = await res.json();
-        browseTvShowDetails = tvShowDetailsToDisplay(raw);
-      }
-    } catch (e) {
-      console.error("Failed to load TV show details:", e);
-    } finally {
-      browseDetailLoading = false;
-    }
-  }
-
-  $effect(() => {
-    browseDetailService.set({
-      domain: selectedBrowseTvShow ? 'tv' : null,
-      movie: null,
-      tvShow: selectedBrowseTvShow,
-      movieDetails: null,
-      tvShowDetails: browseTvShowDetails,
-      libraryItem: null,
-      relatedData: null,
-      loading: browseDetailLoading,
-      fetching: false,
-      fetched: false,
-      downloadStatus: null,
-      fetchSteps: null,
-    });
-  });
-
-  $effect(() => {
-    browseDetailService.registerCallbacks({
-      onclose: () => {
-        selectedBrowseTvShow = null;
-        browseTvShowDetails = null;
-      },
-    });
-  });
 
   onMount(() => {
     tmdbBrowseService.loadPopularTv();
@@ -80,7 +23,10 @@
   });
 </script>
 
-<div class="min-w-0 flex-1 overflow-y-auto p-4">
+<div class="relative min-w-0 flex-1 overflow-y-auto p-4">
+  <div class="absolute right-3 top-3 z-10">
+    <BrowseViewToggle />
+  </div>
   <div class="container mx-auto">
     <section class="mb-8">
       <h2 class="mb-3 text-lg font-semibold">Search TV Shows</h2>
@@ -95,7 +41,7 @@
         loadingTv={$browseState.loading["searchTv"] ?? false}
         error={$browseState.error}
         mediaType="tv"
-        selectedTvShowId={selectedBrowseTvShow?.id ?? null}
+        selectedTvShowId={null}
         onselectTvShow={handleSelectTvShow}
         onsearchMovies={() => {}}
         onsearchTv={(q, p) => tmdbBrowseService.searchTv(q, p)}
@@ -114,7 +60,7 @@
         loadingTv={$browseState.loading["popularTv"] ?? false}
         error={$browseState.error}
         mediaType="tv"
-        selectedTvShowId={selectedBrowseTvShow?.id ?? null}
+        selectedTvShowId={null}
         onselectTvShow={handleSelectTvShow}
         onloadMovies={() => {}}
         onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
@@ -153,7 +99,7 @@
         <div class="mt-4">
           <TmdbBrowseGrid
             tvShows={$browseState.discoverTv}
-            selectedTvShowId={selectedBrowseTvShow?.id ?? null}
+            selectedTvShowId={null}
             onselectTvShow={handleSelectTvShow}
           />
           <TmdbPagination

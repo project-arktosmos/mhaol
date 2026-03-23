@@ -4,9 +4,9 @@ members = [
     "apps/server/backend",
     "packages/identity",
     "packages/llm",
+    "packages/queue",
     "packages/yt-dlp",
     "packages/torrent",
     "packages/p2p-stream",
-    "packages/http-stream",
     "apps/client/src-tauri",
 ]

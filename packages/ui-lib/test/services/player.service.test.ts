@@ -151,7 +151,6 @@ const initialPlayerState = {
 	durationSecs: null,
 	isSeeking: false,
 	isPaused: true,
-	streamUrl: null,
 	buffering: false
 };
 
@@ -197,7 +196,6 @@ describe('PlayerService', () => {
 		expect(state.durationSecs).toBeNull();
 		expect(state.isSeeking).toBe(false);
 		expect(state.isPaused).toBe(true);
-		expect(state.streamUrl).toBeNull();
 		expect(state.buffering).toBe(false);
 	});
 
@@ -334,7 +332,6 @@ describe('PlayerService', () => {
 		expect(state.currentFile!.outputPath).toBe('');
 		expect(state.currentFile!.mode).toBe('video');
 		expect(state.isPaused).toBe(true);
-		expect(state.streamUrl).toBeNull();
 		expect(state.buffering).toBe(false);
 		expect(state.positionSecs).toBe(0);
 		expect(state.durationSecs).toBeNull();
@@ -343,7 +340,7 @@ describe('PlayerService', () => {
 
 	// ===== playStream =====
 
-	it('playStream sets http-streaming state', async () => {
+	it('playStream creates WebRTC session for torrent streams', async () => {
 		const file = {
 			id: 'torrent:abc123',
 			type: 'torrent',
@@ -359,15 +356,32 @@ describe('PlayerService', () => {
 			streamUrl: '/api/torrent/torrents/abc123/stream'
 		};
 
-		vi.stubGlobal('fetch', mockFetch({}));
-		playerService.state.update((s) => ({ ...s, connectionState: 'waiting-for-stream' }));
+		const mock = vi.fn().mockImplementation((url: string) => {
+			if (url.includes('/api/player/sessions')) {
+				return Promise.resolve({
+					ok: true,
+					json: () =>
+						Promise.resolve({
+							session_id: 'sess-torrent',
+							room_id: 'room-torrent',
+							signaling_url: 'http://localhost:1420'
+						})
+				});
+			}
+			return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+		});
+		vi.stubGlobal('fetch', mock);
+		playerService.state.update((s) => ({
+			...s,
+			connectionState: 'waiting-for-stream',
+			streamServerAvailable: true
+		}));
 
 		await playerService.playStream(file as never);
 
 		const state = get(playerService.state);
-		expect(state.connectionState).toBe('http-streaming');
-		expect(state.streamUrl).toContain('/api/torrent/torrents/abc123/stream');
-		expect(state.isPaused).toBe(false);
+		expect(state.connectionState).toBe('signaling');
+		expect(state.sessionId).toBe('sess-torrent');
 	});
 
 	it('playStream calls stop when not in waiting-for-stream state', async () => {
@@ -380,14 +394,30 @@ describe('PlayerService', () => {
 			streamUrl: '/api/torrent/torrents/def456/stream'
 		};
 
-		vi.stubGlobal('fetch', mockFetch({}));
+		const mock = vi.fn().mockImplementation((url: string) => {
+			if (url.includes('/api/player/sessions')) {
+				return Promise.resolve({
+					ok: true,
+					json: () =>
+						Promise.resolve({
+							session_id: 'sess-2',
+							room_id: 'room-2',
+							signaling_url: 'http://localhost:1420'
+						})
+				});
+			}
+			return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+		});
+		vi.stubGlobal('fetch', mock);
+		playerService.state.update((s) => ({ ...s, streamServerAvailable: true }));
+
 		await playerService.playStream(file as never);
 
 		const state = get(playerService.state);
-		expect(state.connectionState).toBe('http-streaming');
+		expect(state.connectionState).toBe('signaling');
 	});
 
-	it('playStream handles stream/start error gracefully', async () => {
+	it('playStream handles session creation error gracefully', async () => {
 		const file = {
 			id: 'torrent:abc123',
 			type: 'torrent',
@@ -397,13 +427,41 @@ describe('PlayerService', () => {
 			streamUrl: '/api/torrent/torrents/abc123/stream'
 		};
 
-		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('start failed')));
-		playerService.state.update((s) => ({ ...s, connectionState: 'waiting-for-stream' }));
+		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('session failed')));
+		playerService.state.update((s) => ({
+			...s,
+			connectionState: 'waiting-for-stream',
+			streamServerAvailable: true
+		}));
 
 		await playerService.playStream(file as never);
 
 		const state = get(playerService.state);
-		expect(state.connectionState).toBe('http-streaming');
+		expect(state.connectionState).toBe('error');
+		expect(state.error).toContain('Failed to start torrent stream');
+	});
+
+	it('playStream sets error when stream server not available', async () => {
+		const file = {
+			id: 'torrent:abc123',
+			type: 'torrent',
+			name: 'Movie.mp4',
+			outputPath: '/path',
+			mode: 'video',
+			streamUrl: '/api/torrent/torrents/abc123/stream'
+		};
+
+		playerService.state.update((s) => ({
+			...s,
+			connectionState: 'waiting-for-stream',
+			streamServerAvailable: false
+		}));
+
+		await playerService.playStream(file as never);
+
+		const state = get(playerService.state);
+		expect(state.connectionState).toBe('error');
+		expect(state.error).toContain('Streaming server is not available');
 	});
 
 	// ===== play =====
@@ -418,13 +476,31 @@ describe('PlayerService', () => {
 			streamUrl: '/api/torrent/torrents/abc/stream'
 		};
 
-		vi.stubGlobal('fetch', mockFetch({}));
-		playerService.state.update((s) => ({ ...s, connectionState: 'waiting-for-stream' }));
+		const mock = vi.fn().mockImplementation((url: string) => {
+			if (url.includes('/api/player/sessions')) {
+				return Promise.resolve({
+					ok: true,
+					json: () =>
+						Promise.resolve({
+							session_id: 'sess-route',
+							room_id: 'room-route',
+							signaling_url: 'http://localhost:1420'
+						})
+				});
+			}
+			return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+		});
+		vi.stubGlobal('fetch', mock);
+		playerService.state.update((s) => ({
+			...s,
+			connectionState: 'waiting-for-stream',
+			streamServerAvailable: true
+		}));
 
 		await playerService.play(file as never);
 
 		const state = get(playerService.state);
-		expect(state.connectionState).toBe('http-streaming');
+		expect(state.connectionState).toBe('signaling');
 	});
 
 	it('play sets error when stream server not available', async () => {
@@ -898,7 +974,6 @@ describe('PlayerService', () => {
 		expect(state.sessionId).toBeNull();
 		expect(state.positionSecs).toBe(0);
 		expect(state.isPaused).toBe(true);
-		expect(state.streamUrl).toBeNull();
 		expect(get(playerService.displayMode)).toBe('fullscreen');
 	});
 
@@ -920,10 +995,10 @@ describe('PlayerService', () => {
 		);
 	});
 
-	it('stop sends stream/stop POST for http-streaming torrent', async () => {
+	it('stop sends stream/stop POST for torrent file', async () => {
 		playerService.state.update((s) => ({
 			...s,
-			connectionState: 'http-streaming' as const,
+			connectionState: 'streaming' as const,
 			currentFile: { id: 'torrent:abc123', name: 'test' } as never
 		}));
 
@@ -941,7 +1016,7 @@ describe('PlayerService', () => {
 	it('stop handles fetch errors during cleanup gracefully', async () => {
 		playerService.state.update((s) => ({
 			...s,
-			connectionState: 'http-streaming' as const,
+			connectionState: 'streaming' as const,
 			currentFile: { id: 'torrent:abc123', name: 'test' } as never,
 			sessionId: 'session-1'
 		}));

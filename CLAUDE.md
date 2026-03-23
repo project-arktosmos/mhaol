@@ -13,7 +13,6 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 ```
 mhaol.git/
 ├── apps/                             # Thin SvelteKit wrappers (routes + assembly only)
-│   ├── storybook/                    # Storybook component gallery (headless, port 1550)
 │   ├── website/                      # Marketing landing page (base: /mhaol)
 │   ├── client/                       # Minimal P2P contact management app
 │   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
@@ -21,9 +20,10 @@ mhaol.git/
 │       └── backend/                  # Rust Axum server (integrated, port 1530)
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: UI components, services, types, adapters, utils, CSS/themes
-│   ├── addons/                       # Addon modules (TMDB metadata, torrent search, shared utils)
+│   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, torrent search)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── signaling/                    # PartyKit signaling service
+│   ├── queue/                        # Rust task queue (SQLite + broadcast, used by server for LLM job coordination)
 │   ├── p2p-stream/                   # Rust P2P streaming library
 │   ├── torrent/                      # Rust torrent implementation
 │   └── webrtc/                       # WebRTC contact handshake layer (TypeScript)
@@ -117,7 +117,7 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Build + start Rust backend, then frontend dev server
+pnpm dev              # All apps in parallel (client :1570, server :1530, website :1600)
 pnpm dev:backend      # Rust backend only (PORT=1530)
 pnpm dev:frontend     # SvelteKit dev server only (port 1531)
 
@@ -132,7 +132,6 @@ pnpm test             # vitest + cargo test
 pnpm format           # Prettier write
 
 # Headless apps (browser + backend, no native window)
-pnpm app:storybook        # Storybook headless (port 1550)
 pnpm app:server           # Server headless (port 1530)
 
 # Browser extension
@@ -192,7 +191,6 @@ When adding a new feature that spans the full stack:
 - [ ] No `<style>` tags or inline styles
 - [ ] Components use callback props, contain no business logic
 - [ ] Write tests in `test/`
-- [ ] Add a `.stories.svelte` file in `apps/storybook/src/stories/{feature}/` for each new component
 
 **Apps (if the feature needs UI wiring)**
 - [ ] Import components from `ui-lib/components/...`

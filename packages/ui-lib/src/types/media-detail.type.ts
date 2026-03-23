@@ -1,8 +1,8 @@
 import type { MediaItem } from 'ui-lib/types/media-card.type';
 import type { ImageTag } from 'ui-lib/types/image-tagger.type';
 import type { DisplayTMDBMovieDetails, DisplayTMDBTvShowDetails } from 'addons/tmdb/types';
-import type { YouTubeOEmbedResponse } from 'ui-lib/types/youtube-oembed.type';
-import type { DisplayMusicBrainzRecording } from 'ui-lib/types/musicbrainz.type';
+import type { YouTubeOEmbedResponse } from 'addons/youtube/types';
+import type { DisplayMusicBrainzRecording } from 'addons/musicbrainz/types';
 
 export type MediaDetailCardType = 'movie' | 'tv' | 'youtube' | 'audio' | 'image' | 'video';
 

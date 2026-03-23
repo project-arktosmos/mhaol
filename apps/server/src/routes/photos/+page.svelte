@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
 	import classNames from 'classnames';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { imageTaggerService } from 'ui-lib/services/image-tagger.service';
-	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
 	import type { PhotoImageData } from 'ui-lib/types/browse-detail.type';
 	import ImageUncategorizedCard from 'ui-lib/components/media/ImageUncategorizedCard.svelte';
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
+	import Modal from 'ui-lib/components/core/Modal.svelte';
+	import TagPill from 'ui-lib/components/images/TagPill.svelte';
 	import type { MediaItem, MediaCategory, MediaLinkSource } from 'ui-lib/types/media-card.type';
 	import type { ImageTag } from 'ui-lib/types/image-tagger.type';
 
@@ -49,6 +49,8 @@
 
 	let selectedImage = $state<PhotoImageData | null>(null);
 	let taggingItems = $state<Set<string>>(new Set());
+	let photoTagging = $state(false);
+	let newPhotoTag = $state('');
 
 	async function handleAutoTagAll() {
 		const untagged = imageItems.filter((img) => img.tags.length === 0);
@@ -64,44 +66,30 @@
 
 	async function handleTagSingle() {
 		if (!selectedImage) return;
-		browseDetailService.update(() => ({ photoTagging: true }));
+		photoTagging = true;
 		try { await imageTaggerService.tagImage(selectedImage.id); } catch { /* ignore */ }
-		browseDetailService.update(() => ({ photoTagging: false }));
+		photoTagging = false;
 	}
 
-	async function handleAddTag(tag: string) {
-		if (!selectedImage || !tag.trim()) return;
-		await imageTaggerService.addTag(selectedImage.id, tag.trim());
-		selectedImage.tags = [...selectedImage.tags, { tag: tag.trim(), confidence: 1.0, score: 1.0 }];
-		syncToService();
+	async function handleAddTag() {
+		if (!selectedImage || !newPhotoTag.trim()) return;
+		const tag = newPhotoTag.trim();
+		await imageTaggerService.addTag(selectedImage.id, tag);
+		selectedImage.tags = [...selectedImage.tags, { tag, confidence: 1.0, score: 1.0 }];
+		selectedImage = selectedImage;
+		newPhotoTag = '';
 	}
 
 	async function handleRemoveTag(tag: string) {
 		if (!selectedImage) return;
 		await imageTaggerService.removeTag(selectedImage.id, tag);
 		selectedImage.tags = selectedImage.tags.filter((t) => t.tag !== tag);
-		syncToService();
+		selectedImage = selectedImage;
 	}
 
 	function handleSelectImage(img: PhotoImageData) {
 		selectedImage = img;
-		syncToService();
-	}
-
-	function syncToService() {
-		if (!selectedImage) return;
-		browseDetailService.set({
-			domain: 'photo',
-			photoImage: selectedImage,
-			photoTags: allTags,
-			photoTagging: false
-		});
-		browseDetailService.registerCallbacks({
-			onclose: () => { selectedImage = null; browseDetailService.close(); },
-			onaddtag: handleAddTag,
-			onremovetag: handleRemoveTag,
-			onautotag: handleTagSingle
-		});
+		newPhotoTag = '';
 	}
 
 	function toMediaItem(img: PhotoImageData): MediaItem {
@@ -118,7 +106,7 @@
 		};
 	}
 
-	onDestroy(() => { browseDetailService.close(); });
+
 </script>
 
 <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -167,3 +155,50 @@
 		{/snippet}
 	</BrowseGrid>
 </div>
+
+<Modal open={!!selectedImage} maxWidth="max-w-lg" onclose={() => (selectedImage = null)}>
+	{#if selectedImage}
+		<div class="flex flex-col gap-3 p-4">
+			<h2 class="truncate text-sm font-semibold">{selectedImage.name}</h2>
+
+			<img
+				src={apiUrl(`/api/images/serve?path=${encodeURIComponent(selectedImage.path)}`)}
+				alt={selectedImage.name}
+				class="w-full rounded-lg object-cover"
+			/>
+
+			<div class="flex flex-wrap gap-1">
+				{#each selectedImage.tags as tag (tag.tag)}
+					<TagPill
+						tag={tag.tag}
+						score={tag.score}
+						onremove={() => handleRemoveTag(tag.tag)}
+					/>
+				{/each}
+			</div>
+
+			<div class="flex gap-1">
+				<input
+					type="text"
+					placeholder="Add tag..."
+					class="input-bordered input input-sm flex-1"
+					bind:value={newPhotoTag}
+					onkeydown={(e) => e.key === 'Enter' && handleAddTag()}
+				/>
+				<button class="btn btn-ghost btn-sm" onclick={handleAddTag}>+</button>
+			</div>
+
+			<button
+				class="btn btn-outline btn-sm"
+				disabled={photoTagging}
+				onclick={handleTagSingle}
+			>
+				{#if photoTagging}
+					<span class="loading loading-xs loading-spinner"></span> Tagging...
+				{:else}
+					Auto-tag
+				{/if}
+			</button>
+		</div>
+	{/if}
+</Modal>

@@ -1,168 +1,119 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import type { LlmStatus, LocalModel, LlmDownloadProgress } from 'ui-lib/types/llm.type';
-	import { llmAdapter } from 'ui-lib/adapters/classes/llm.adapter';
-	import { recommendedModels } from 'ui-lib/data/recommended-models';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
-	import {
-		formatSearchSize,
-		formatSeeders,
-		getSeedersColor,
-		formatUploadDate
-	} from 'ui-lib/utils/torrent-search/format';
-	let {
-		status,
-		models,
-		downloadProgress,
-		loading,
-		onLoadModel,
-		onUnloadModel,
-		onDownloadModel
-	}: {
-		status: LlmStatus | null;
-		models: LocalModel[];
-		downloadProgress: LlmDownloadProgress | null;
-		loading: boolean;
-		onLoadModel: (fileName: string) => void;
-		onUnloadModel: () => void;
-		onDownloadModel: (repoId: string, fileName: string) => void;
-	} = $props();
-
-	let downloadedFileNames = $derived(new Set(models.map((m) => m.fileName)));
-	let showRecommended = $state(false);
-
-	let preferredLanguage = $state('English');
-	let preferredQuality = $state('1080p');
-
-	const languages = [
-		'English',
-		'Spanish',
-		'French',
-		'German',
-		'Italian',
-		'Portuguese',
-		'Russian',
-		'Japanese',
-		'Korean',
-		'Chinese',
-		'Hindi',
-		'Arabic',
-		'Dutch',
-		'Swedish',
-		'Norwegian',
-		'Danish',
-		'Finnish',
-		'Polish',
-		'Turkish',
-		'Thai'
-	];
-	const videoQualities = ['4K', '2160p', '1080p', '720p', '480p'];
-	const audioQualities = ['FLAC', 'ALAC', 'Lossless', '320kbps', 'MP3', 'AAC', 'WAV', 'OGG'];
+	import { formatSearchSize, formatSeeders } from 'addons/torrent-search-thepiratebay/format';
 
 	const searchStore = smartSearchService.store;
+	const configStore = smartSearchService.configStore;
+
 	let selection = $derived($searchStore.selection);
 	let isMusic = $derived(selection?.type === 'music');
-	let qualities = $derived(isMusic ? audioQualities : videoQualities);
+	let isGame = $derived(selection?.type === 'game');
 
-	$effect(() => {
-		if (isMusic && preferredQuality === '1080p') {
-			preferredQuality = 'FLAC';
-		} else if (!isMusic && preferredQuality === 'FLAC') {
-			preferredQuality = '1080p';
-		}
+	let mediaConfig = $derived.by(() => {
+		if (!selection) return null;
+		const key =
+			selection.type === 'movie'
+				? 'movies'
+				: selection.type === 'tv'
+					? 'tv'
+					: selection.type === 'music'
+						? 'music'
+						: 'games';
+		return $configStore[key];
 	});
-	let mode = $derived(selection?.mode ?? null);
+	let preferredLanguage = $derived(mediaConfig?.preferredLanguage ?? '');
+	let preferredQuality = $derived(mediaConfig?.preferredQuality ?? '');
+	let preferredConsole = $derived(mediaConfig?.preferredConsole ?? '');
+
 	let searching = $derived($searchStore.searching);
 	let analyzing = $derived($searchStore.analyzing);
-	let searchResults = $derived(
-		[...$searchStore.searchResults].sort((a, b) => {
-			if (!isMusic) {
-				const matchA = a.analysis
-					? (a.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0) +
-						(a.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
-					: -1;
-				const matchB = b.analysis
-					? (b.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase()) ? 1 : 0) +
-						(b.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase()) ? 1 : 0)
-					: -1;
-				if (matchB !== matchA) return matchB - matchA;
-			}
-			if (b.seeders !== a.seeders) return b.seeders - a.seeders;
-			if (b.leechers !== a.leechers) return b.leechers - a.leechers;
-			const relA = a.analysis?.relevance ?? -1;
-			const relB = b.analysis?.relevance ?? -1;
-			return relB - relA;
-		})
+
+	let maxSeeders = $derived(Math.max(1, ...$searchStore.searchResults.map((r) => r.seeders)));
+	let maxLeechers = $derived(Math.max(1, ...$searchStore.searchResults.map((r) => r.leechers)));
+
+	interface ScoredResult {
+		result: (typeof $searchStore.searchResults)[number];
+		seedersPct: number;
+		leechersPct: number;
+		relPct: number;
+		langBonus: number;
+		qualityBonus: number;
+		consoleBonus: number;
+		score: number;
+	}
+
+	let scoredResults = $derived<ScoredResult[]>(
+		[...$searchStore.searchResults]
+			.map((result) => {
+				const seedersPct = Math.round((result.seeders / maxSeeders) * 100);
+				const leechersPct = Math.round((result.leechers / maxLeechers) * 100);
+				const relPct = result.analysis?.relevance ?? 0;
+				const langBonus =
+					preferredLanguage &&
+					result.analysis &&
+					result.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase())
+						? 100
+						: 0;
+				const qualityBonus =
+					preferredQuality &&
+					result.analysis &&
+					result.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase())
+						? 100
+						: 0;
+				const consoleBonus =
+					preferredConsole &&
+					result.analysis &&
+					result.analysis.reason.toLowerCase().includes('console matches')
+						? 100
+						: 0;
+				const score = seedersPct + leechersPct + relPct + langBonus + qualityBonus + consoleBonus;
+				return {
+					result,
+					seedersPct,
+					leechersPct,
+					relPct,
+					langBonus,
+					qualityBonus,
+					consoleBonus,
+					score
+				};
+			})
+			.sort((a, b) => b.score - a.score)
 	);
 	let searchError = $derived($searchStore.searchError);
 
 	let bestCandidate = $derived.by(() => {
 		if (analyzing || searching) return null;
-		for (const r of searchResults) {
-			if (!r.analysis) continue;
-			if (r.analysis.relevance < 75) continue;
-			if (!isMusic) {
-				if (!r.analysis.languages.toLowerCase().includes(preferredLanguage.toLowerCase())) continue;
-				if (!r.analysis.quality.toLowerCase().includes(preferredQuality.toLowerCase())) continue;
-			}
-			return r;
+		for (const { result } of scoredResults) {
+			if (!result.analysis) continue;
+			if (result.analysis.relevance < 75) continue;
+			return result;
 		}
 		return null;
 	});
 
-	let candidateAdded = $derived(
-		$searchStore.fetchedCandidate !== null || $searchStore.downloadedHash !== null
+	const PAGE_SIZE = 10;
+	let currentPage = $state(0);
+	let totalPages = $derived(Math.max(1, Math.ceil(scoredResults.length / PAGE_SIZE)));
+	let pagedResults = $derived(
+		scoredResults.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
 	);
 
-	let streamingHash = $derived($searchStore.streamingHash);
-	let streamingProgress = $derived(Math.round($searchStore.streamingProgress * 100));
-
-	let searchTerms = $derived.by(() => {
-		if (!selection) return [];
-		if (selection.type === 'music') {
-			return [
-				{ term: `${selection.artist} ${selection.title}`, components: ['artist', 'album'] },
-				{ term: selection.artist, components: ['artist'] }
-			];
-		}
-		const { title, year } = selection;
-		return [
-			{ term: title, components: ['title'] },
-			{ term: `${title} ${year}`, components: ['title', 'year'] }
-		];
+	$effect(() => {
+		// Reset page when results change
+		if (scoredResults.length) currentPage = 0;
 	});
 
-	let stepTerms = $derived(selection !== null);
-	let stepSearch = $derived(stepTerms && !searching && searchResults.length > 0);
-	let stepEval = $derived(stepSearch && searchResults.some((r) => r.analysis !== null));
-	let stepDone = $derived(stepEval && candidateAdded);
+	let bonusCols = $derived(isGame ? 1 : isMusic ? 1 : 2);
+
+	let searchTerm = $derived.by(() => {
+		if (!selection) return null;
+		if (selection.type === 'music') return `${selection.artist} ${selection.title}`;
+		if (selection.type === 'game') return `${selection.title} ${selection.consoleName}`;
+		return `${selection.title} ${selection.year}`;
+	});
 </script>
-
-<ul class="steps steps-horizontal mb-4 w-full text-xs">
-	<li class={classNames('step', { 'step-success': stepTerms })}>Terms</li>
-	<li class={classNames('step', { 'step-success': stepSearch })}>
-		{searching ? 'Searching...' : 'Search'}
-	</li>
-	<li class={classNames('step', { 'step-success': stepEval })}>Analysis</li>
-	<li class={classNames('step', { 'step-success': stepDone })}>
-		{bestCandidate && !candidateAdded ? 'Ready' : candidateAdded ? 'Done' : 'Candidate'}
-	</li>
-</ul>
-
-{#if !isMusic}
-	<div class="mb-3 flex items-center gap-2">
-		<select class="select-bordered select select-xs" bind:value={preferredLanguage}>
-			{#each languages as lang}
-				<option value={lang}>{lang}</option>
-			{/each}
-		</select>
-		<select class="select-bordered select select-xs" bind:value={preferredQuality}>
-			{#each qualities as q}
-				<option value={q}>{q}</option>
-			{/each}
-		</select>
-	</div>
-{/if}
 
 {#if selection}
 	<div class="mb-3 rounded bg-base-100 p-2">
@@ -175,14 +126,23 @@
 						class={classNames('badge badge-xs', {
 							'badge-primary': selection.type === 'movie',
 							'badge-info': selection.type === 'tv',
-							'badge-secondary': selection.type === 'music'
+							'badge-secondary': selection.type === 'music',
+							'badge-accent': selection.type === 'game'
 						})}
 					>
-						{selection.type === 'music' ? 'Music' : selection.type === 'movie' ? 'Movie' : 'TV'}
+						{selection.type === 'music'
+							? 'Music'
+							: selection.type === 'movie'
+								? 'Movie'
+								: selection.type === 'game'
+									? 'Game'
+									: 'TV'}
 					</span>
 				</div>
 				{#if selection.type === 'music'}
 					<div class="truncate text-xs text-base-content/40">{selection.artist}</div>
+				{:else if selection.type === 'game'}
+					<div class="truncate text-xs text-base-content/40">{selection.consoleName}</div>
 				{/if}
 			</div>
 			<button class="btn btn-ghost btn-xs" onclick={() => smartSearchService.clear()}>
@@ -191,29 +151,10 @@
 		</div>
 	</div>
 
-	{#if searchTerms.length > 0}
-		<table class="table w-full table-xs">
-			<thead>
-				<tr>
-					<th class="text-base-content/50">Search Term</th>
-					<th class="text-base-content/50">Uses</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each searchTerms as { term, components }}
-					<tr>
-						<td class="font-mono text-xs">{term}</td>
-						<td>
-							<div class="flex gap-1">
-								{#each components as comp}
-									<span class="badge badge-outline badge-xs">{comp}</span>
-								{/each}
-							</div>
-						</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
+	{#if searchTerm}
+		<div class="mb-2 text-xs text-base-content/50">
+			Search: <span class="font-mono">{searchTerm}</span>
+		</div>
 	{/if}
 
 	{#if searching}
@@ -223,11 +164,11 @@
 		</div>
 	{:else if searchError}
 		<div class="mt-3 rounded bg-error/10 p-2 text-xs text-error">{searchError}</div>
-	{:else if searchResults.length > 0}
+	{:else if scoredResults.length > 0}
 		<div class="mt-3">
 			<div class="mb-1 flex items-center justify-between">
 				<span class="text-xs font-semibold text-base-content/50">
-					{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
+					{scoredResults.length} result{scoredResults.length !== 1 ? 's' : ''}
 					{#if analyzing}
 						<span class="loading ml-1 loading-xs loading-spinner"></span>
 					{/if}
@@ -238,21 +179,36 @@
 					<thead>
 						<tr>
 							<th>Name</th>
-							<th>Query</th>
 							<th class="text-right">Size</th>
-							<th class="text-right">SE</th>
-							<th class="text-right">LE</th>
-							<th class="text-right">Uploaded</th>
-							<th>Quality</th>
-							<th>Lang</th>
-							{#if !isMusic}<th>Subs</th>{/if}
-							<th class="text-right">Rel%</th>
-							<th>Reason</th>
+							<th class="text-right" title="Seeders normalized to %">SE%</th>
+							<th class="text-right" title="Leechers normalized to %">LE%</th>
+							<th class="text-right" title="LLM relevance %">Rel%</th>
+							{#if isGame}
+								<th class="text-right" title="+100 if console matches {preferredConsole}"
+									>Console</th
+								>
+							{:else}
+								{#if !isMusic}
+									<th class="text-right" title="+100 if language matches {preferredLanguage}"
+										>Lang</th
+									>
+								{/if}
+								<th class="text-right" title="+100 if quality matches {preferredQuality}"
+									>Quality</th
+								>
+							{/if}
+							<th class="text-right font-semibold">Score</th>
 						</tr>
 					</thead>
 					<tbody>
-						{#each searchResults as result (result.infoHash)}
-							<tr class="hover">
+						{#each pagedResults as { result, seedersPct, leechersPct, relPct, langBonus, qualityBonus, consoleBonus, score } (result.infoHash)}
+							{@const isBest = bestCandidate?.infoHash === result.infoHash}
+							<tr
+								class={classNames({
+									'border-l-2 border-l-primary bg-primary/15': isBest,
+									hover: !isBest
+								})}
+							>
 								<td class="max-w-xs">
 									<div class="flex items-center gap-1">
 										{#if result.isVip}
@@ -263,179 +219,113 @@
 										<span class="truncate" title={result.name}>{result.name}</span>
 									</div>
 								</td>
-								<td>
-									<div class="flex flex-col gap-0.5">
-										{#each result.searchQueries as q}
-											<span class="truncate text-xs text-base-content/40" title={q}>{q}</span>
-										{/each}
-									</div>
-								</td>
 								<td class="text-right text-nowrap">{formatSearchSize(result.size)}</td>
-								<td class={classNames('text-right font-medium', getSeedersColor(result.seeders))}>
-									{formatSeeders(result.seeders)}
+								<td class="text-right" title="{formatSeeders(result.seeders)} seeders">
+									{seedersPct}%
 								</td>
-								<td class="text-right text-base-content/60">{formatSeeders(result.leechers)}</td>
-								<td class="text-right text-nowrap text-base-content/60">
-									{formatUploadDate(result.uploadedAt)}
+								<td
+									class="text-right text-base-content/60"
+									title="{formatSeeders(result.leechers)} leechers"
+								>
+									{leechersPct}%
 								</td>
 								{#if result.analyzing}
-									<td colspan={isMusic ? 4 : 5} class="text-center">
+									<td colspan={bonusCols + 2} class="text-center">
 										<span class="loading loading-xs loading-spinner"></span>
 									</td>
 								{:else if result.analysis}
-									<td class="text-xs text-nowrap">{result.analysis.quality}</td>
-									<td class="text-xs text-nowrap">{result.analysis.languages}</td>
-									{#if !isMusic}<td class="text-xs text-nowrap">{result.analysis.subs}</td>{/if}
 									<td
 										class={classNames('text-right text-xs font-medium', {
-											'text-success': result.analysis.relevance >= 80,
-											'text-warning':
-												result.analysis.relevance >= 50 && result.analysis.relevance < 80,
-											'text-error': result.analysis.relevance < 50
+											'text-success': relPct >= 80,
+											'text-warning': relPct >= 50 && relPct < 80,
+											'text-error': relPct < 50
+										})}
+										title={result.analysis.reason}
+									>
+										{relPct}%
+									</td>
+									{#if isGame}
+										<td
+											class={classNames('text-right text-xs', {
+												'text-success': consoleBonus > 0,
+												'text-base-content/30': consoleBonus === 0
+											})}
+											title={result.analysis.quality}
+										>
+											{consoleBonus > 0 ? '+100' : '0'}
+										</td>
+									{:else}
+										{#if !isMusic}
+											<td
+												class={classNames('text-right text-xs', {
+													'text-success': langBonus > 0,
+													'text-base-content/30': langBonus === 0
+												})}
+												title={result.analysis.languages}
+											>
+												{langBonus > 0 ? '+100' : '0'}
+											</td>
+										{/if}
+										<td
+											class={classNames('text-right text-xs', {
+												'text-success': qualityBonus > 0,
+												'text-base-content/30': qualityBonus === 0
+											})}
+											title={result.analysis.quality}
+										>
+											{qualityBonus > 0 ? '+100' : '0'}
+										</td>
+									{/if}
+									<td
+										class={classNames('text-right text-xs font-bold', {
+											'text-success': score >= 350,
+											'text-warning': score >= 200 && score < 350,
+											'text-error': score < 200
 										})}
 									>
-										{result.analysis.relevance}%
-									</td>
-									<td class="max-w-xs text-xs text-base-content/60" title={result.analysis.reason}>
-										<span class="line-clamp-2">{result.analysis.reason}</span>
+										{score}
 									</td>
 								{:else}
-									<td colspan={isMusic ? 4 : 5}></td>
+									<td colspan={bonusCols + 2}></td>
 								{/if}
 							</tr>
 						{/each}
 					</tbody>
 				</table>
 			</div>
-		</div>
-	{/if}
-
-	{#if bestCandidate}
-		<div class="mt-3 rounded-lg border border-success/50 bg-success/10 p-3">
-			<div class="mb-2 flex items-center gap-2">
-				<span class="badge badge-sm badge-success">Best Match</span>
-				<span class="text-xs font-semibold">{bestCandidate.analysis?.relevance}% relevance</span>
-			</div>
-			<div class="mb-2 text-xs font-medium" title={bestCandidate.name}>
-				{bestCandidate.name}
-			</div>
-			<div class="mb-2 flex flex-wrap gap-2 text-xs text-base-content/60">
-				<span>{bestCandidate.analysis?.quality}</span>
-				<span>{bestCandidate.analysis?.languages}</span>
-				{#if bestCandidate.analysis?.subs && bestCandidate.analysis.subs !== 'none'}
-					<span>Subs: {bestCandidate.analysis.subs}</span>
-				{/if}
-				<span>{formatSearchSize(bestCandidate.size)}</span>
-				<span class={getSeedersColor(bestCandidate.seeders)}
-					>{formatSeeders(bestCandidate.seeders)} SE</span
-				>
-			</div>
-			<div class="mb-2 text-xs text-base-content/50">{bestCandidate.analysis?.reason}</div>
-			{#if candidateAdded && mode === 'fetch'}
-				<span class="badge badge-sm badge-success">Torrent located</span>
-			{:else if candidateAdded}
-				<span class="badge badge-sm badge-success">Added to downloads</span>
-			{:else if streamingHash}
-				<div class="flex items-center gap-2">
-					<span class="loading loading-xs loading-spinner"></span>
-					<span class="text-xs">Buffering... {streamingProgress}%</span>
+			{#if totalPages > 1}
+				<div class="mt-2 flex items-center justify-between">
+					<span class="text-xs text-base-content/50">
+						Page {currentPage + 1} of {totalPages}
+					</span>
+					<div class="join">
+						<button
+							class="btn join-item btn-xs"
+							disabled={currentPage === 0}
+							onclick={() => (currentPage = currentPage - 1)}
+						>
+							«
+						</button>
+						{#each Array(totalPages) as _, i}
+							<button
+								class={classNames('btn join-item btn-xs', {
+									'btn-active': i === currentPage
+								})}
+								onclick={() => (currentPage = i)}
+							>
+								{i + 1}
+							</button>
+						{/each}
+						<button
+							class="btn join-item btn-xs"
+							disabled={currentPage === totalPages - 1}
+							onclick={() => (currentPage = currentPage + 1)}
+						>
+							»
+						</button>
+					</div>
 				</div>
-			{:else if mode === 'download'}
-				<span class="badge badge-sm badge-info">Downloading...</span>
-			{:else if mode === 'stream'}
-				<span class="badge badge-sm badge-info">Preparing stream...</span>
 			{/if}
 		</div>
 	{/if}
 {/if}
-
-{#if status}
-	<div class="mb-2 flex items-center gap-2 text-xs">
-		<span
-			class={classNames('h-1.5 w-1.5 rounded-full', {
-				'bg-success': status.modelLoaded,
-				'bg-base-300': !status.modelLoaded
-			})}
-		></span>
-		<span class="truncate text-base-content/60">
-			{status.modelLoaded ? status.currentModel : 'No model loaded'}
-		</span>
-	</div>
-{/if}
-
-{#if models.length > 0}
-	<div class="flex flex-col gap-1">
-		{#each models as model}
-			<div class="flex items-center justify-between rounded bg-base-100 p-2">
-				<div class="min-w-0 flex-1">
-					<div class="truncate text-xs font-medium">{model.name}</div>
-					<div class="text-xs text-base-content/40">
-						{llmAdapter.formatModelSize(model.sizeBytes)}
-					</div>
-				</div>
-				{#if model.isLoaded}
-					<button class="btn btn-xs btn-warning" onclick={onUnloadModel}>Unload</button>
-				{:else}
-					<button
-						class="btn btn-xs btn-primary"
-						onclick={() => onLoadModel(model.fileName)}
-						disabled={loading}
-					>
-						{#if loading}
-							<span class="loading loading-xs loading-spinner"></span>
-						{:else}
-							Load
-						{/if}
-					</button>
-				{/if}
-			</div>
-		{/each}
-	</div>
-{:else}
-	<p class="text-xs text-base-content/40">No models downloaded</p>
-{/if}
-
-{#if downloadProgress}
-	<div class="mt-2 rounded bg-base-100 p-2">
-		<div class="mb-1 truncate text-xs font-medium">{downloadProgress.modelName}</div>
-		<progress
-			class="progress-sm progress w-full progress-primary"
-			value={downloadProgress.percent}
-			max="100"
-		></progress>
-		<p class="mt-0.5 text-xs text-base-content/40">
-			{downloadProgress.percent.toFixed(1)}%
-		</p>
-	</div>
-{/if}
-
-<div class="mt-2">
-	<button class="btn w-full btn-ghost btn-xs" onclick={() => (showRecommended = !showRecommended)}>
-		{showRecommended ? 'Hide' : 'Download models'}
-	</button>
-
-	{#if showRecommended}
-		<div class="mt-1 flex flex-col gap-1">
-			{#each recommendedModels as model}
-				{@const isDownloaded = downloadedFileNames.has(model.fileName)}
-				<div class="flex items-center justify-between rounded bg-base-100 p-2">
-					<div class="min-w-0 flex-1">
-						<div class="truncate text-xs font-medium">{model.name}</div>
-						<div class="text-xs text-base-content/40">{model.description}</div>
-					</div>
-					{#if isDownloaded}
-						<span class="badge badge-xs badge-success">Downloaded</span>
-					{:else}
-						<button
-							class="btn btn-xs btn-secondary"
-							onclick={() => onDownloadModel(model.repoId, model.fileName)}
-							disabled={downloadProgress !== null}
-						>
-							Download
-						</button>
-					{/if}
-				</div>
-			{/each}
-		</div>
-	{/if}
-</div>

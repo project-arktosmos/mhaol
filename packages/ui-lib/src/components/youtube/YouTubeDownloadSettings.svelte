@@ -8,14 +8,16 @@
 		AUDIO_QUALITY_OPTIONS,
 		AUDIO_FORMAT_OPTIONS,
 		VIDEO_QUALITY_OPTIONS,
-		VIDEO_FORMAT_OPTIONS
+		VIDEO_FORMAT_OPTIONS,
+		SUBTITLE_MODE_OPTIONS
 	} from 'ui-lib/types/youtube.type';
 	import type {
 		AudioQuality,
 		AudioFormat,
 		DownloadMode,
 		VideoQuality,
-		VideoFormat
+		VideoFormat,
+		SubtitleMode
 	} from 'ui-lib/types/youtube.type';
 
 	const state = youtubeService.state;
@@ -88,6 +90,19 @@
 	function handleVideoFormatChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
 		youtubeService.setDefaultVideoFormat(target.value as VideoFormat);
+	}
+
+	function handleSubtitleModeChange(mode: SubtitleMode) {
+		youtubeService.setSubtitleMode(mode);
+	}
+
+	function handleSubtitleLangsChange(event: Event) {
+		const target = event.target as HTMLInputElement;
+		const langs = target.value
+			.split(',')
+			.map((l) => l.trim())
+			.filter(Boolean);
+		youtubeService.setSubtitleLangs(langs);
 	}
 
 	async function handleLibrarySelect(event: Event) {
@@ -291,6 +306,43 @@
 						</option>
 					{/each}
 				</select>
+			</div>
+		{/if}
+
+		<!-- Subtitles -->
+		<div class="form-control">
+			<span class="label">
+				<span class="label-text">Subtitles</span>
+			</span>
+			<div class="join w-full">
+				{#each SUBTITLE_MODE_OPTIONS as option}
+					<button
+						class={classNames('btn join-item flex-1 btn-sm', {
+							'btn-primary': $settings.subtitleMode === option.value,
+							'btn-ghost': $settings.subtitleMode !== option.value
+						})}
+						on:click={() => handleSubtitleModeChange(option.value)}
+						title={option.description}
+					>
+						{option.label}
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		{#if $settings.subtitleMode === 'selected'}
+			<div class="form-control">
+				<label class="label" for="subtitle-langs">
+					<span class="label-text text-sm">Languages (comma-separated)</span>
+				</label>
+				<input
+					id="subtitle-langs"
+					type="text"
+					class="input-bordered input input-sm w-full"
+					placeholder="en, es, fr"
+					value={$settings.subtitleLangs?.join(', ') ?? ''}
+					on:change={handleSubtitleLangsChange}
+				/>
 			</div>
 		{/if}
 

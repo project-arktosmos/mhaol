@@ -1,8 +1,4 @@
-export {
-	searchRecordings,
-	searchArtists,
-	searchReleaseGroups
-} from './client.js';
+export { searchRecordings, searchArtists, searchReleaseGroups } from './client.js';
 
 export {
 	formatArtistCredits,

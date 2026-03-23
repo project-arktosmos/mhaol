@@ -1,6 +1,5 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { p2pStreamService } from 'ui-lib/services/p2p-stream.service';
 import { signalingAdapter } from 'ui-lib/adapters/classes/signaling.adapter';
 import type {
@@ -8,10 +7,13 @@ import type {
 	SignalingChatState,
 	SignalingServerMessage,
 	SignalingClientMessage,
-	SignalingChatMessage
+	SignalingChatMessage,
+	SignalingPeerInfo
 } from 'ui-lib/types/signaling.type';
 import type { DataChannelEnvelope, PeerLibraryMessage } from 'ui-lib/types/peer-library.type';
 import type { CloudPeerMessage } from 'ui-lib/types/cloud-peer.type';
+import type { ServerCatalogMessage } from 'ui-lib/types/server-catalog.type';
+import type { PassportData } from 'webrtc/types';
 
 const DATA_CHANNEL_LABEL = 'signaling-chat';
 
@@ -20,7 +22,7 @@ const initialState: SignalingChatState = {
 	roomId: '',
 	localPeerId: null,
 	peerIds: [],
-	roomPeerIds: [],
+	roomPeers: [],
 	activePeerId: null,
 	peerConnectionStates: {},
 	messages: [],
@@ -38,6 +40,8 @@ class SignalingChatService {
 	public onPeerLibraryMessage: ((peerId: string, msg: PeerLibraryMessage) => void) | null = null;
 	public onCloudMessage: ((peerId: string, msg: CloudPeerMessage) => void) | null = null;
 	public onContactMessage: ((peerId: string, msg: unknown) => void) | null = null;
+	public onServerCatalogMessage: ((peerId: string, msg: ServerCatalogMessage) => void) | null =
+		null;
 
 	addPeerChannelOpenListener(fn: (peerId: string) => void): () => void {
 		this.peerChannelOpenListeners.push(fn);
@@ -58,11 +62,17 @@ class SignalingChatService {
 	private dataChannels: Map<string, RTCDataChannel> = new Map();
 	private remoteDescriptionSet: Map<string, boolean> = new Map();
 	private pendingCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
-	private ephemeralAccount = browser ? privateKeyToAccount(generatePrivateKey()) : null;
+	private localAddress: string | null = null;
+	private serverIceServers: RTCIceServer[] | null = null;
 
 	// ===== Connection =====
 
-	async connect(serverUrl: string, roomId: string): Promise<void> {
+	async connect(
+		serverUrl: string,
+		roomId: string,
+		passport: PassportData,
+		signMessage: (message: string) => Promise<string>
+	): Promise<void> {
 		if (!browser) return;
 		this.disconnect();
 
@@ -74,15 +84,22 @@ class SignalingChatService {
 		}));
 
 		try {
-			if (!this.ephemeralAccount) throw new Error('No ephemeral account available');
-			const address = this.ephemeralAccount.address.toLowerCase();
+			const payload = JSON.parse(passport.raw);
+			const address = payload.address.toLowerCase();
+			this.localAddress = address;
 
 			const timestamp = String(Date.now());
 			const message = `partykit-auth:${roomId}:${timestamp}`;
-			const signature = await this.ephemeralAccount.signMessage({ message });
+			const signature = await signMessage(message);
 
 			const wsUrl = signalingAdapter.buildWsUrl(serverUrl, roomId);
-			const params = new URLSearchParams({ address, signature, timestamp });
+			const params = new URLSearchParams({
+				address,
+				signature,
+				timestamp,
+				passport_raw: passport.raw,
+				passport_signature: passport.signature
+			});
 			const fullUrl = `${wsUrl}?${params.toString()}`;
 
 			console.log(`[SignalingChat] Connecting to ${wsUrl}`);
@@ -125,6 +142,7 @@ class SignalingChatService {
 			this.ws.close();
 			this.ws = null;
 		}
+		this.serverIceServers = null;
 		this.state.update((s) => ({
 			...initialState,
 			roomId: s.roomId
@@ -134,8 +152,7 @@ class SignalingChatService {
 	// ===== Chat =====
 
 	sendMessage(content: string): void {
-		const address = this.ephemeralAccount?.address.toLowerCase();
-		if (!address) return;
+		if (!this.localAddress) return;
 
 		let activePeerId: string | null = null;
 		this.state.subscribe((s) => {
@@ -147,7 +164,7 @@ class SignalingChatService {
 		const channel = this.dataChannels.get(activePeerId);
 		if (!channel || channel.readyState !== 'open') return;
 
-		const message = signalingAdapter.createMessage(address, content);
+		const message = signalingAdapter.createMessage(this.localAddress, content);
 		const envelope: DataChannelEnvelope = { channel: 'chat', payload: message };
 		channel.send(JSON.stringify(envelope));
 
@@ -206,6 +223,23 @@ class SignalingChatService {
 	private handleServerMessage(msg: SignalingServerMessage): void {
 		switch (msg.type) {
 			case 'connected':
+				if (msg.ice_servers && msg.ice_servers.length > 0) {
+					this.serverIceServers = msg.ice_servers.map((s) => {
+						const entry: RTCIceServer = { urls: s.urls };
+						if (s.username) entry.username = s.username;
+						if (s.credential) entry.credential = s.credential;
+						return entry;
+					});
+					const turnCount = msg.ice_servers.filter((s) => {
+						const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+						return urls.some((u) => u.startsWith('turn:') || u.startsWith('turns:'));
+					}).length;
+					console.log(
+						`[SignalingChat] Received ${msg.ice_servers.length} ICE servers (${turnCount} TURN)`
+					);
+				} else {
+					console.warn('[SignalingChat] No ICE servers received from signaling — TURN unavailable');
+				}
 				this.state.update((s) => ({
 					...s,
 					phase: 'connected',
@@ -215,16 +249,23 @@ class SignalingChatService {
 			case 'room-peers':
 				this.state.update((s) => ({
 					...s,
-					roomPeerIds: msg.peers.filter((p) => p !== s.localPeerId)
+					roomPeers: msg.peers.filter((p) => p.peer_id !== s.localPeerId)
 				}));
 				break;
 			case 'peer-joined':
-				this.state.update((s) => ({
-					...s,
-					roomPeerIds: s.roomPeerIds.includes(msg.peer_id)
-						? s.roomPeerIds
-						: [...s.roomPeerIds, msg.peer_id]
-				}));
+				this.state.update((s) => {
+					const peerInfo: SignalingPeerInfo = {
+						peer_id: msg.peer_id,
+						name: msg.name,
+						instance_type: msg.instance_type
+					};
+					return {
+						...s,
+						roomPeers: s.roomPeers.some((p) => p.peer_id === msg.peer_id)
+							? s.roomPeers
+							: [...s.roomPeers, peerInfo]
+					};
+				});
 				this.addSystemMessage(`Peer ${signalingAdapter.shortAddress(msg.peer_id)} joined the room`);
 				break;
 			case 'peer-left':
@@ -232,7 +273,7 @@ class SignalingChatService {
 					const { [msg.peer_id]: _, ...rest } = s.peerConnectionStates;
 					return {
 						...s,
-						roomPeerIds: s.roomPeerIds.filter((id) => id !== msg.peer_id),
+						roomPeers: s.roomPeers.filter((p) => p.peer_id !== msg.peer_id),
 						activePeerId: s.activePeerId === msg.peer_id ? null : s.activePeerId,
 						peerConnectionStates: rest
 					};
@@ -287,7 +328,7 @@ class SignalingChatService {
 		this.remoteDescriptionSet.set(peerId, false);
 		this.pendingCandidates.set(peerId, []);
 
-		const iceServers = p2pStreamService.getIceServers();
+		const iceServers = this.serverIceServers ?? p2pStreamService.getIceServers();
 		console.log('[SignalingChat] ICE servers:', JSON.stringify(iceServers));
 		const pc = new RTCPeerConnection({ iceServers });
 		this.peerConnections.set(peerId, pc);
@@ -323,6 +364,14 @@ class SignalingChatService {
 				this.addSystemMessage(`WebRTC connected to ${signalingAdapter.shortAddress(peerId)}`);
 			} else if (pc.iceConnectionState === 'failed') {
 				this.updatePeerConnectionStatus(peerId, 'failed');
+				const hasTurn = iceServers.some((s) => {
+					const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+					return urls.some((u) => u.startsWith('turn:') || u.startsWith('turns:'));
+				});
+				console.error(
+					`[SignalingChat] ICE failed for ${peerId}, TURN available: ${hasTurn}, servers:`,
+					JSON.stringify(iceServers)
+				);
 				this.addSystemMessage(`Connection to ${signalingAdapter.shortAddress(peerId)} failed`);
 				this.removePeer(peerId);
 			} else if (pc.iceConnectionState === 'disconnected') {
@@ -479,6 +528,8 @@ class SignalingChatService {
 					this.onCloudMessage?.(peerId, parsed.payload as CloudPeerMessage);
 				} else if (parsed.channel === 'contact') {
 					this.onContactMessage?.(peerId, parsed.payload);
+				} else if (parsed.channel === 'server-catalog') {
+					this.onServerCatalogMessage?.(peerId, parsed.payload as ServerCatalogMessage);
 				} else if (parsed.id && parsed.address && parsed.content) {
 					// Legacy format: raw SignalingChatMessage (backward compat)
 					const msg = parsed as SignalingChatMessage;
@@ -533,15 +584,10 @@ class SignalingChatService {
 		}
 	}
 
-	// ===== Ephemeral Identity =====
+	// ===== Identity =====
 
 	getAddress(): string | null {
-		return this.ephemeralAccount?.address.toLowerCase() ?? null;
-	}
-
-	regenerateIdentity(): void {
-		if (!browser) return;
-		this.ephemeralAccount = privateKeyToAccount(generatePrivateKey());
+		return this.localAddress;
 	}
 
 	// ===== System Messages =====

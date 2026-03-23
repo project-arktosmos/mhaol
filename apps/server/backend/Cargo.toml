@@ -31,6 +31,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 async-stream = "0.3"
 tracing = "0.1"
 mhaol-identity = { path = "../../../packages/identity" }
+mhaol-queue = { path = "../../../packages/queue" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2.0"
 parking_lot = "0.12"
@@ -47,7 +48,6 @@ mime_guess = { version = "2", optional = true }
 mhaol-yt-dlp = { path = "../../../packages/yt-dlp" }
 mhaol-p2p-stream = { path = "../../../packages/p2p-stream" }
 mhaol-torrent = { path = "../../../packages/torrent" }
-mhaol-http-stream = { path = "../../../packages/http-stream" }
 mhaol-llm = { path = "../../../packages/llm" }
 ort = { version = "2.0.0-rc.11", features = ["ndarray"] }
 ndarray = "0.17"

@@ -32,6 +32,7 @@
     "html5-qrcode": "^2.3.8",
     "qrcode": "^1.5.4",
     "addons": "workspace:*",
+    "assets": "workspace:*",
     "ui-lib": "workspace:*",
     "webrtc": "workspace:*",
     "viem": "^2.46.3"

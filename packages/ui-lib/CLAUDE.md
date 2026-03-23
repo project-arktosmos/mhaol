@@ -18,12 +18,12 @@ src/
 │   ├── hub/                  # Hub dashboard (app management)
 │   ├── identity/             # Identity/wallet
 │   ├── images/               # Image tagging
-│   ├── jackett/              # Jackett search
 │   ├── landing/              # Marketing/landing page (Hero, Features, Platforms, Footer, LandingNavbar)
 │   ├── libraries/            # Media libraries (list, files, link modals, content grid/card)
-│   ├── llm/                  # LLM chat
+│   ├── llm/                  # LLM model management + smart search config
+│   ├── queue/                # Queue task monitor (real-time visualization)
 │   ├── media/                # Media cards (Movie, TV, Audio, Image, YouTube, uncategorized)
-│   ├── music/                # Music components (AlbumCard)
+│   ├── music/                # Music components (AlbumCard, ArtistCard)
 │   ├── p2p-stream/           # P2P streaming
 │   ├── peer-libraries/       # Peer library browsing
 │   ├── player/               # Video/audio player (PlayerVideo, PlayerControls, MediaPlayer, LyricsPanel)
@@ -46,10 +46,7 @@ src/
 ├── types/                    # TypeScript type definitions (one file per domain)
 ├── utils/                    # Pure utility functions
 │   ├── localStorageWritableStore.ts
-│   ├── string/               # capitalize, normalize
-│   ├── musicbrainz/          # MusicBrainz API client + transforms
-│   ├── torrent-search/       # Torrent result formatting + name parsing
-│   └── youtube/              # YouTube embed/thumbnail helpers
+│   └── string/               # capitalize, normalize
 ├── lib/                      # Platform detection + API base URL
 │   ├── platform.ts           # isTauri, isMobile detection
 │   └── api-base.ts           # apiUrl() helper with Tauri fallback
@@ -82,7 +79,7 @@ import { playerAdapter } from 'ui-lib/adapters/classes/player.adapter';
 6. Use callback props for parent communication (e.g. `onClose`, `onSave`)
 7. Keep components small — split when they grow
 8. Use Svelte 5 runes (`$state`, `$derived`, `$effect`, `$props`)
-9. Every new component must have a `.stories.svelte` file in `apps/storybook/src/stories/{category}/`
+9. Every new component should have tests in `test/`
 
 ## Service Classes
 
@@ -120,5 +117,5 @@ pnpm test:coverage    # coverage report
 - `viem` — Ethereum signing (signaling, player services)
 - `fflate` — compression
 - `html5-qrcode`, `qrcode` — QR code generation/scanning
-- `addons` (workspace) — TMDB and torrent search (use `addons/tmdb/...` paths)
+- `addons` (workspace) — TMDB, torrent search, MusicBrainz, RetroAchievements, YouTube, LRCLIB (use `addons/{addon}/...` paths)
 - `webrtc` (workspace) — WebRTC contact handshake layer

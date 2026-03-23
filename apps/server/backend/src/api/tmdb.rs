@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{header, StatusCode},
     response::IntoResponse,
-    routing::get,
+    routing::{delete, get, put},
     Json, Router,
 };
 use serde::Deserialize;
@@ -28,6 +28,12 @@ pub fn router() -> Router<AppState> {
         .route("/movies/{id}/recommendations", get(movie_recommendations))
         .route("/tv/{id}/recommendations", get(tv_recommendations))
         .route("/image/{*path}", get(serve_tmdb_image))
+        .route("/image-overrides/{media_type}", get(get_all_image_overrides))
+        .route("/image-overrides/{media_type}/{id}", get(get_image_overrides))
+        .route(
+            "/image-overrides/{media_type}/{id}/{role}",
+            put(set_image_override).delete(delete_image_override),
+        )
 }
 
 async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
@@ -625,6 +631,48 @@ async fn serve_tmdb_image(
         )
             .into_response(),
     }
+}
+
+// Image override handlers
+
+async fn get_all_image_overrides(
+    State(state): State<AppState>,
+    Path(media_type): Path<String>,
+) -> impl IntoResponse {
+    let overrides = state.tmdb_image_overrides.get_all_for_media_type(&media_type);
+    Json(overrides)
+}
+
+async fn get_image_overrides(
+    State(state): State<AppState>,
+    Path((media_type, id)): Path<(String, i64)>,
+) -> impl IntoResponse {
+    let overrides = state.tmdb_image_overrides.get_for_item(id, &media_type);
+    Json(overrides)
+}
+
+#[derive(Deserialize)]
+struct ImageOverrideBody {
+    file_path: String,
+}
+
+async fn set_image_override(
+    State(state): State<AppState>,
+    Path((media_type, id, role)): Path<(String, i64, String)>,
+    Json(body): Json<ImageOverrideBody>,
+) -> impl IntoResponse {
+    state
+        .tmdb_image_overrides
+        .upsert(id, &media_type, &role, &body.file_path);
+    StatusCode::NO_CONTENT
+}
+
+async fn delete_image_override(
+    State(state): State<AppState>,
+    Path((media_type, id, role)): Path<(String, i64, String)>,
+) -> impl IntoResponse {
+    state.tmdb_image_overrides.delete(id, &media_type, &role);
+    StatusCode::NO_CONTENT
 }
 
 fn mime_from_ext(path: &str) -> &'static str {

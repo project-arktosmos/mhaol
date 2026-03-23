@@ -35,7 +35,6 @@ const initialState: PlayerState = {
 	durationSecs: null,
 	isSeeking: false,
 	isPaused: true,
-	streamUrl: null,
 	buffering: false
 };
 
@@ -55,6 +54,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	private pendingCandidates: RTCIceCandidateInit[] = [];
 	private seekTimeout: ReturnType<typeof setTimeout> | null = null;
 	private localPeerId: string | null = null;
+	private serverIceServers: RTCIceServer[] | null = null;
 	private ephemeralAccount = browser ? privateKeyToAccount(generatePrivateKey()) : null;
 
 	constructor() {
@@ -213,13 +213,12 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			error: null,
 			positionSecs: 0,
 			durationSecs: null,
-			streamUrl: null,
 			buffering: false,
 			isPaused: true
 		}));
 	}
 
-	// ===== HTTP streaming (for in-progress torrent downloads) =====
+	// ===== Torrent streaming (via WebRTC using p2p-stream with souphttpsrc) =====
 
 	async playStream(file: PlayableFile): Promise<void> {
 		if (!browser) return;
@@ -229,30 +228,114 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			await this.stop();
 		}
 
-		const infoHash = file.id.replace('torrent:', '');
-
-		try {
-			// Pause all other torrents to maximise bandwidth
-			await this.fetchJson('/api/torrent/torrents/' + infoHash + '/stream/start', {
-				method: 'POST'
-			});
-		} catch {
-			// Non-fatal — streaming still works, just slower
+		const { streamServerAvailable } = get(this.state);
+		if (!streamServerAvailable) {
+			this.state.update((s) => ({
+				...s,
+				currentFile: file,
+				connectionState: 'error',
+				error: 'Streaming server is not available'
+			}));
+			return;
 		}
 
-		const streamUrl = apiUrl(file.streamUrl ?? `/api/torrent/torrents/${infoHash}/stream`);
+		const infoHash = file.id.replace('torrent:', '');
 
 		this.state.update((s) => ({
 			...s,
 			currentFile: file,
-			connectionState: 'http-streaming',
+			connectionState: 'connecting',
 			error: null,
 			positionSecs: 0,
 			durationSecs: null,
-			streamUrl,
-			buffering: false,
-			isPaused: false
+			buffering: false
 		}));
+
+		try {
+			const streamConfig = p2pStreamService.getSessionConfig();
+
+			const session = await this.fetchJson<{
+				session_id: string;
+				room_id: string;
+				signaling_url: string;
+			}>('/api/player/sessions', {
+				method: 'POST',
+				body: JSON.stringify({
+					torrent_info_hash: infoHash,
+					mode: file.mode,
+					video_codec: streamConfig.video_codec,
+					video_quality: streamConfig.video_quality
+				})
+			});
+
+			this.state.update((s) => ({
+				...s,
+				sessionId: session.session_id,
+				connectionState: 'signaling'
+			}));
+
+			await this.connectToSignalingRoom(
+				signalingAdapter.resolveLocalUrl(session.signaling_url),
+				session.room_id
+			);
+		} catch (error) {
+			console.error('[Player] Torrent stream error:', error);
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				connectionState: 'error',
+				error: `Failed to start torrent stream: ${errorMsg}`
+			}));
+		}
+	}
+
+	// ===== Remote playback (session created by remote server, info received via data channel) =====
+
+	async playRemote(
+		name: string,
+		sessionId: string,
+		roomId: string,
+		signalingUrl: string
+	): Promise<void> {
+		if (!browser) return;
+
+		await this.stop();
+
+		const file: PlayableFile = {
+			id: `remote:${sessionId}`,
+			type: 'library',
+			name,
+			outputPath: '',
+			mode: 'video',
+			format: null,
+			videoFormat: null,
+			thumbnailUrl: null,
+			durationSeconds: null,
+			size: 0,
+			completedAt: ''
+		};
+
+		this.state.update((s) => ({
+			...s,
+			currentFile: file,
+			sessionId,
+			connectionState: 'signaling',
+			error: null,
+			positionSecs: 0,
+			durationSecs: null,
+			buffering: false
+		}));
+
+		try {
+			await this.connectToSignalingRoom(signalingAdapter.resolveLocalUrl(signalingUrl), roomId);
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.state.update((s) => ({
+				...s,
+				connectionState: 'error',
+				error: `Failed to connect to stream: ${errorMsg}`
+			}));
+		}
 	}
 
 	setBuffering(buffering: boolean): void {
@@ -315,10 +398,23 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		console.log('[Player] Signaling message:', type);
 
 		switch (type) {
-			case 'connected':
+			case 'connected': {
 				this.localPeerId = msg.peer_id as string;
+				const iceServers = msg.ice_servers as
+					| { urls: string | string[]; username?: string; credential?: string }[]
+					| undefined;
+				if (iceServers && Array.isArray(iceServers) && iceServers.length > 0) {
+					this.serverIceServers = iceServers.map((s) => {
+						const entry: RTCIceServer = { urls: s.urls };
+						if (s.username) entry.username = s.username;
+						if (s.credential) entry.credential = s.credential;
+						return entry;
+					});
+					console.log('[Player] Received', this.serverIceServers.length, 'ICE servers from signaling');
+				}
 				this.state.update((s) => ({ ...s, localPeerId: this.localPeerId }));
 				break;
+			}
 
 			case 'room-peers':
 			case 'peer-joined':
@@ -421,9 +517,9 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	}
 
 	private setupPeerConnection(remotePeerId: string): void {
-		this.pc = new RTCPeerConnection({
-			iceServers: p2pStreamService.getIceServers()
-		});
+		const iceServers = this.serverIceServers ?? p2pStreamService.getIceServers();
+		console.log('[Player] ICE servers:', JSON.stringify(iceServers));
+		this.pc = new RTCPeerConnection({ iceServers });
 
 		this.pc.ontrack = () => {
 			console.log('[Player] Track received, streaming');
@@ -612,10 +708,12 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		}
 
 		this.localPeerId = null;
+		this.serverIceServers = null;
 
 		const currentState = get(this.state);
 
-		if (currentState.connectionState === 'http-streaming' && currentState.currentFile) {
+		// Resume auto-paused torrents if we were streaming a torrent
+		if (currentState.currentFile?.id.startsWith('torrent:')) {
 			const infoHash = currentState.currentFile.id.replace('torrent:', '');
 			try {
 				await fetch(apiUrl(`/api/torrent/torrents/${infoHash}/stream/stop`), {
@@ -648,7 +746,6 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			durationSecs: null,
 			isSeeking: false,
 			isPaused: true,
-			streamUrl: null,
 			buffering: false
 		}));
 		this.displayMode.set('fullscreen');

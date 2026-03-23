@@ -8,7 +8,7 @@ pub mod signaling;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
-pub mod jackett;
+pub mod retroachievements;
 pub mod torrent_search;
 pub mod youtube_meta;
 #[cfg(not(target_os = "android"))]

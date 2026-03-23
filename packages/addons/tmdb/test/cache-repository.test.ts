@@ -1,28 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { TmdbCacheRepository } from '../src/cache-repository.js';
-
-const TMDB_SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS tmdb_movies (
-    tmdb_id INTEGER PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS tmdb_tv_shows (
-    tmdb_id INTEGER PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS tmdb_seasons (
-    tmdb_id INTEGER NOT NULL,
-    season_number INTEGER NOT NULL,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (tmdb_id, season_number)
-);
-`;
+import { ADDON_CACHE_SCHEMA } from '../../common/src/addon-cache.js';
 
 describe('TmdbCacheRepository', () => {
 	let db: InstanceType<typeof Database>;
@@ -30,7 +9,7 @@ describe('TmdbCacheRepository', () => {
 
 	beforeEach(() => {
 		db = new Database(':memory:');
-		db.exec(TMDB_SCHEMA_SQL);
+		db.exec(ADDON_CACHE_SCHEMA);
 		repo = new TmdbCacheRepository(db);
 	});
 
@@ -148,17 +127,6 @@ describe('TmdbCacheRepository', () => {
 			expect(repo.deleteSeason(1396, 1)).toBe(true);
 			expect(repo.getSeason(1396, 1)).toBeNull();
 			expect(repo.getSeason(1396, 2)).not.toBeNull();
-		});
-
-		it('should delete all seasons for a show', () => {
-			repo.upsertSeason(1396, 1, seasonData);
-			repo.upsertSeason(1396, 2, seasonData);
-			repo.upsertSeason(1396, 3, seasonData);
-			const deleted = repo.deleteSeasonsByShow(1396);
-			expect(deleted).toBe(3);
-			expect(repo.getSeason(1396, 1)).toBeNull();
-			expect(repo.getSeason(1396, 2)).toBeNull();
-			expect(repo.getSeason(1396, 3)).toBeNull();
 		});
 	});
 

@@ -18,7 +18,8 @@ export class LibraryFileAdapter extends AdapterClass {
 		const map: Record<MediaType, string> = {
 			[MediaType.Video]: 'badge-primary',
 			[MediaType.Image]: 'badge-secondary',
-			[MediaType.Audio]: 'badge-accent'
+			[MediaType.Audio]: 'badge-accent',
+			[MediaType.Document]: 'badge-info'
 		};
 		return map[mediaType];
 	}
@@ -27,7 +28,8 @@ export class LibraryFileAdapter extends AdapterClass {
 		const map: Record<MediaType, string> = {
 			[MediaType.Video]: 'Video',
 			[MediaType.Image]: 'Image',
-			[MediaType.Audio]: 'Audio'
+			[MediaType.Audio]: 'Audio',
+			[MediaType.Document]: 'Document'
 		};
 		return map[mediaType];
 	}

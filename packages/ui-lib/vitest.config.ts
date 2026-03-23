@@ -30,9 +30,44 @@ export default defineConfig({
 			'addons/tmdb/types': resolve(__dirname, '../addons/tmdb/src/types.ts'),
 			'addons/tmdb/transform': resolve(__dirname, '../addons/tmdb/src/transform.ts'),
 			'addons/tmdb': resolve(__dirname, '../addons/tmdb/src/index.ts'),
-			'addons/torrent-search-thepiratebay/types': resolve(__dirname, '../addons/torrent-search-thepiratebay/src/types.ts'),
-			'addons/torrent-search-thepiratebay': resolve(__dirname, '../addons/torrent-search-thepiratebay/src/index.ts'),
-			'torrent-search-thepiratebay': resolve(__dirname, '../addons/torrent-search-thepiratebay/src/index.ts'),
+			'addons/torrent-search-thepiratebay/types': resolve(
+				__dirname,
+				'../addons/torrent-search-thepiratebay/src/types.ts'
+			),
+			'addons/torrent-search-thepiratebay/format': resolve(
+				__dirname,
+				'../addons/torrent-search-thepiratebay/src/format.ts'
+			),
+			'addons/torrent-search-thepiratebay/parse-torrent-name': resolve(
+				__dirname,
+				'../addons/torrent-search-thepiratebay/src/parse-torrent-name.ts'
+			),
+			'addons/torrent-search-thepiratebay': resolve(
+				__dirname,
+				'../addons/torrent-search-thepiratebay/src/index.ts'
+			),
+			'addons/musicbrainz/types': resolve(__dirname, '../addons/musicbrainz/src/types.ts'),
+			'addons/musicbrainz/transform': resolve(__dirname, '../addons/musicbrainz/src/transform.ts'),
+			'addons/musicbrainz/client': resolve(__dirname, '../addons/musicbrainz/src/client.ts'),
+			'addons/musicbrainz': resolve(__dirname, '../addons/musicbrainz/src/index.ts'),
+			'addons/retroachievements/types': resolve(
+				__dirname,
+				'../addons/retroachievements/src/types.ts'
+			),
+			'addons/retroachievements/transform': resolve(
+				__dirname,
+				'../addons/retroachievements/src/transform.ts'
+			),
+			'addons/retroachievements': resolve(__dirname, '../addons/retroachievements/src/index.ts'),
+			'addons/youtube/types': resolve(__dirname, '../addons/youtube/src/types.ts'),
+			'addons/youtube/helpers': resolve(__dirname, '../addons/youtube/src/helpers.ts'),
+			'addons/youtube': resolve(__dirname, '../addons/youtube/src/index.ts'),
+			'addons/lrclib/types': resolve(__dirname, '../addons/lrclib/src/types.ts'),
+			'addons/lrclib': resolve(__dirname, '../addons/lrclib/src/index.ts'),
+			'torrent-search-thepiratebay': resolve(
+				__dirname,
+				'../addons/torrent-search-thepiratebay/src/index.ts'
+			),
 			webrtc: resolve(__dirname, '../webrtc/src')
 		}
 	}

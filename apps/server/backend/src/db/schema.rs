@@ -264,19 +264,31 @@ CREATE INDEX IF NOT EXISTS idx_image_tags_library_item_id ON image_tags(library_
 CREATE INDEX IF NOT EXISTS idx_image_tags_tag ON image_tags(tag);
 ";
 
+const ROSTER_CONTACTS_SQL: &str = "
+CREATE TABLE IF NOT EXISTS roster_contacts (
+    address TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    passport TEXT,
+    instance_type TEXT,
+    added_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+";
+
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '23', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '28', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('audio', 'Audio');
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('image', 'Image');
+INSERT OR IGNORE INTO media_types (id, label) VALUES ('document', 'Document');
 
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('tv', 'video', 'TV');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('movies', 'video', 'Movies');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('video-uncategorized', 'video', 'Uncategorized');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('audio-uncategorized', 'audio', 'Uncategorized');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('image-uncategorized', 'image', 'Uncategorized');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('books', 'document', 'Books');
 ";
 
 /// YouTube video metadata cache (module schema).
@@ -314,6 +326,12 @@ CREATE TABLE IF NOT EXISTS musicbrainz_recordings (
 );
 
 CREATE TABLE IF NOT EXISTS musicbrainz_popular_cache (
+    genre TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS musicbrainz_popular_artists_cache (
     genre TEXT PRIMARY KEY,
     data TEXT NOT NULL,
     fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -368,8 +386,25 @@ CREATE TABLE IF NOT EXISTS tmdb_api_cache (
     data TEXT NOT NULL,
     fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS tmdb_image_overrides (
+    tmdb_id INTEGER NOT NULL,
+    media_type TEXT NOT NULL CHECK (media_type IN ('movie', 'tv')),
+    role TEXT NOT NULL CHECK (role IN ('poster', 'backdrop')),
+    file_path TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (tmdb_id, media_type, role)
+);
 ";
 
+
+pub const OPENLIBRARY_SCHEMA_SQL: &str = "
+CREATE TABLE IF NOT EXISTS openlibrary_api_cache (
+    cache_key TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+";
 
 fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
     let sql = format!("PRAGMA table_info({})", table);
@@ -695,6 +730,74 @@ fn run_migrations(conn: &Connection) {
             );",
         );
     }
+
+    // Migration: add roster_contacts table (db_version 24)
+    if !has_table(conn, "roster_contacts") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE roster_contacts (
+                address TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                passport TEXT,
+                instance_type TEXT,
+                added_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        );
+    }
+
+    // Migration: add tv_torrent_fetch_cache table (db_version 25)
+    if !has_table(conn, "tv_torrent_fetch_cache") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE tv_torrent_fetch_cache (
+                id TEXT PRIMARY KEY,
+                tmdb_id INTEGER NOT NULL,
+                scope TEXT NOT NULL CHECK (scope IN ('complete', 'season', 'episode')),
+                season_number INTEGER,
+                episode_number INTEGER,
+                candidate_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE UNIQUE INDEX idx_tv_fetch_cache_unique
+                ON tv_torrent_fetch_cache(tmdb_id, scope, COALESCE(season_number, -1), COALESCE(episode_number, -1));",
+        );
+    }
+
+    // Migration: add document media type + books category (db_version 26)
+    {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO media_types (id, label) VALUES ('document', 'Document');
+             INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('books', 'document', 'Books');",
+        );
+    }
+
+    // Migration: add book_torrent_fetch_cache table (db_version 26)
+    if !has_table(conn, "book_torrent_fetch_cache") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE book_torrent_fetch_cache (
+                openlibrary_key TEXT PRIMARY KEY,
+                candidate_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        );
+    }
+
+    // Migration: add queue_tasks table (db_version 27)
+    if !has_table(conn, "queue_tasks") {
+        let _ = conn.execute_batch(mhaol_queue::QUEUE_SCHEMA_SQL);
+    }
+
+    // Migration: add tmdb_image_overrides table (db_version 28)
+    if !has_table(conn, "tmdb_image_overrides") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE tmdb_image_overrides (
+                tmdb_id INTEGER NOT NULL,
+                media_type TEXT NOT NULL CHECK (media_type IN ('movie', 'tv')),
+                role TEXT NOT NULL CHECK (role IN ('poster', 'backdrop')),
+                file_path TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (tmdb_id, media_type, role)
+            );",
+        );
+    }
 }
 
 /// App identifiers used to select which schema features to include.
@@ -711,6 +814,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     let is_server = app.as_deref() == Some("server");
 
     conn.execute_batch(YOUTUBE_TABLES_SQL)?;
+    conn.execute_batch(ROSTER_CONTACTS_SQL)?;
     if !is_server {
         conn.execute_batch(MEDIA_LISTS_SQL)?;
         conn.execute_batch(IMAGE_TAGS_SQL)?;
@@ -731,6 +835,7 @@ pub fn initialize_module_schemas(conn: &Connection) -> Result<(), rusqlite::Erro
     conn.execute_batch(TMDB_SCHEMA_SQL)?;
 
     conn.execute_batch(YOUTUBE_SCHEMA_SQL)?;
+    conn.execute_batch(OPENLIBRARY_SCHEMA_SQL)?;
     if !is_server {
         conn.execute_batch(MUSICBRAINZ_SCHEMA_SQL)?;
         conn.execute_batch(LYRICS_SCHEMA_SQL)?;
@@ -768,17 +873,21 @@ mod tests {
         assert!(has_table(&conn, "signaling_servers"));
         assert!(has_table(&conn, "llm_conversations"));
         assert!(has_table(&conn, "torrent_fetch_cache"));
+        assert!(has_table(&conn, "roster_contacts"));
+        assert!(has_table(&conn, "tv_torrent_fetch_cache"));
+        assert!(has_table(&conn, "book_torrent_fetch_cache"));
+        assert!(has_table(&conn, "queue_tasks"));
 
         // Verify seed data
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM media_types", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 3);
+        assert_eq!(count, 4);
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 5);
+        assert_eq!(count, 6);
     }
 
     #[test]
@@ -791,5 +900,7 @@ mod tests {
         assert!(has_table(&conn, "tmdb_movies"));
         assert!(has_table(&conn, "tmdb_tv_shows"));
         assert!(has_table(&conn, "tmdb_seasons"));
+        assert!(has_table(&conn, "tmdb_image_overrides"));
+        assert!(has_table(&conn, "openlibrary_api_cache"));
     }
 }

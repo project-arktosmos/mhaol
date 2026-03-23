@@ -2,7 +2,8 @@ import type {
 	DisplayTMDBMovie,
 	DisplayTMDBTvShow,
 	DisplayTMDBMovieDetails,
-	DisplayTMDBTvShowDetails
+	DisplayTMDBTvShowDetails,
+	DisplayTMDBSeasonDetails
 } from 'addons/tmdb/types';
 import type { MediaItem } from 'ui-lib/types/media-card.type';
 import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
@@ -10,12 +11,21 @@ import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 import type {
 	DisplayMusicBrainzReleaseGroup,
 	DisplayMusicBrainzRelease
-} from 'ui-lib/types/musicbrainz.type';
+} from 'addons/musicbrainz/types';
 import type { ImageTag } from 'ui-lib/types/image-tagger.type';
-import type { RaGameMetadata } from 'ui-lib/types/retroachievements.type';
+import type { RaGameMetadata } from 'addons/retroachievements/types';
 import type { RightPanelVideo } from 'ui-lib/types/youtube.type';
+import type { DisplayBook, DisplayBookDetails } from 'addons/openlibrary/types';
 
-export type BrowseDetailDomain = 'movie' | 'tv' | 'music' | 'photo' | 'videogame' | 'youtube' | null;
+export type BrowseDetailDomain =
+	| 'movie'
+	| 'tv'
+	| 'music'
+	| 'photo'
+	| 'videogame'
+	| 'youtube'
+	| 'book'
+	| null;
 
 export interface PhotoImageData {
 	id: string;
@@ -34,6 +44,7 @@ export interface BrowseDetailState {
 	tvShow: DisplayTMDBTvShow | null;
 	movieDetails: DisplayTMDBMovieDetails | null;
 	tvShowDetails: DisplayTMDBTvShowDetails | null;
+	tvSeasonDetails: DisplayTMDBSeasonDetails[];
 	libraryItem: MediaItem | null;
 	relatedData: LibraryItemRelated | null;
 	loading: boolean;
@@ -65,6 +76,10 @@ export interface BrowseDetailState {
 
 	// YouTube
 	youtubeVideo: RightPanelVideo | null;
+
+	// Book
+	book: DisplayBook | null;
+	bookDetails: DisplayBookDetails | null;
 }
 
 export interface BrowseDetailCallbacks {

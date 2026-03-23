@@ -6,12 +6,18 @@
 
 	const chatStore = signalingChatService.state;
 
+	let {
+		onConnect
+	}: {
+		onConnect?: () => void;
+	} = $props();
+
 	let serverUrl = $state(DEFAULT_SIGNALING_URL);
 	let serverAvailable = $state(true);
 
 	function handleConnect() {
 		if (!serverUrl) return;
-		signalingChatService.connect(serverUrl, 'default');
+		onConnect?.();
 	}
 
 	function handleDisconnect() {
@@ -47,7 +53,7 @@
 		{#if $chatStore.phase === 'disconnected' || $chatStore.phase === 'error'}
 			<button
 				class="btn btn-sm btn-primary"
-				disabled={!serverUrl || !serverAvailable}
+				disabled={!serverUrl || !serverAvailable || !onConnect}
 				onclick={handleConnect}
 			>
 				Connect

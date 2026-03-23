@@ -20,20 +20,6 @@ export interface LocalModel {
 	isLoaded: boolean;
 }
 
-export interface ChatMessage {
-	role: 'system' | 'user' | 'assistant';
-	content: string;
-}
-
-export interface LlmConversation {
-	id: string;
-	title: string;
-	systemPrompt: string | null;
-	messages: string;
-	createdAt: string;
-	updatedAt: string;
-}
-
 export interface RecommendedModel {
 	repoId: string;
 	fileName: string;
@@ -59,19 +45,9 @@ export interface LlmDownloadProgress {
 	status: string;
 }
 
-export interface LlmTokenEvent {
-	content: string;
-	done: boolean;
-}
-
 export interface LlmState {
 	status: LlmStatus | null;
 	models: LocalModel[];
-	conversations: LlmConversation[];
-	activeConversationId: string | null;
-	messages: ChatMessage[];
-	streamingContent: string;
-	isGenerating: boolean;
 	downloadProgress: LlmDownloadProgress | null;
 	loading: boolean;
 }

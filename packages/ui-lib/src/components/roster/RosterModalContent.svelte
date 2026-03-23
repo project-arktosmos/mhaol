@@ -1,19 +1,10 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
 	import classNames from 'classnames';
 	import { rosterService } from 'ui-lib/services/roster.service';
 	import { identityAdapter } from 'ui-lib/adapters/classes/identity.adapter';
 	import type { RosterPeerStatus } from 'ui-lib/types/roster.type';
 
 	const rosterStore = rosterService.state;
-
-	onMount(() => {
-		rosterService.initialize();
-	});
-
-	onDestroy(() => {
-		rosterService.destroy();
-	});
 
 	function handleRefresh() {
 		rosterService.refresh();
@@ -76,7 +67,10 @@
 	</div>
 {:else if $rosterStore.entries.length === 0}
 	<div class="mt-4 rounded-lg bg-base-200 p-8 text-center">
-		<p class="opacity-50">No identities in roster. Create identities first.</p>
+		<p class="opacity-50">No contacts in roster yet.</p>
+		<p class="mt-1 text-sm opacity-40">
+			Contacts are added when peers exchange passports via signaling.
+		</p>
 	</div>
 {:else}
 	<div class="mt-4 flex flex-col gap-2">
@@ -86,8 +80,13 @@
 					<span class={classNames('h-3 w-3 shrink-0 rounded-full', statusDotClass(entry.status))}
 					></span>
 					<div class="min-w-0 flex-1">
-						<div class="font-mono text-sm font-semibold">{entry.name}</div>
-						<code class="text-xs break-all opacity-50">
+						<div class="flex items-center gap-2">
+							<span class="font-mono text-sm font-semibold">{entry.name}</span>
+							{#if entry.instanceType}
+								<span class="badge badge-outline badge-xs">{entry.instanceType}</span>
+							{/if}
+						</div>
+						<code class="block text-xs break-all opacity-50">
 							{identityAdapter.shortAddress(entry.address)}
 						</code>
 					</div>

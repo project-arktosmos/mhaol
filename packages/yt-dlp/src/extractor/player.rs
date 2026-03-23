@@ -9,6 +9,7 @@ pub struct PlayerResponse {
     pub streaming_data: Option<StreamingData>,
     pub video_details: Option<VideoDetails>,
     pub playability_status: Option<PlayabilityStatus>,
+    pub captions: Option<CaptionsData>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,6 +77,87 @@ pub struct PlayabilityStatus {
     pub playable_in_embed: Option<bool>,
 }
 
+// ===== Captions =====
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptionsData {
+    pub player_captions_tracklist_renderer: Option<CaptionTracklistRenderer>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptionTracklistRenderer {
+    pub caption_tracks: Option<Vec<CaptionTrack>>,
+    pub translation_languages: Option<Vec<TranslationLanguage>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptionTrack {
+    pub base_url: String,
+    #[serde(default, deserialize_with = "deserialize_text_field")]
+    pub name: String,
+    pub vss_id: String,
+    pub language_code: String,
+    pub kind: Option<String>,
+    pub is_translatable: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationLanguage {
+    pub language_code: String,
+    #[serde(default, deserialize_with = "deserialize_text_field")]
+    pub language_name: String,
+}
+
+/// Deserialize YouTube text fields that can be either:
+/// `{"simpleText": "English"}` or `{"runs": [{"text": "English"}]}`
+fn deserialize_text_field<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+
+    #[derive(Deserialize)]
+    struct Run {
+        text: String,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct TextField {
+        simple_text: Option<String>,
+        runs: Option<Vec<Run>>,
+    }
+
+    let field = TextField::deserialize(deserializer)?;
+    if let Some(text) = field.simple_text {
+        Ok(text)
+    } else if let Some(runs) = field.runs {
+        Ok(runs.into_iter().map(|r| r.text).collect::<Vec<_>>().join(""))
+    } else {
+        Err(de::Error::custom("expected simpleText or runs"))
+    }
+}
+
+impl CaptionTrack {
+    /// Whether this is an auto-generated caption track.
+    pub fn is_auto_generated(&self) -> bool {
+        self.kind.as_deref() == Some("asr")
+    }
+
+    /// Build URL for VTT format download.
+    pub fn vtt_url(&self) -> String {
+        if self.base_url.contains('?') {
+            format!("{}&fmt=vtt", self.base_url)
+        } else {
+            format!("{}?fmt=vtt", self.base_url)
+        }
+    }
+}
+
 /// A fully resolved format with a usable download URL.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -124,6 +206,16 @@ impl PlayerResponse {
                     .max_by_key(|t| t.width.unwrap_or(0) * t.height.unwrap_or(0))
                     .map(|t| t.url.clone())
             })
+    }
+
+    /// Get available caption tracks.
+    pub fn caption_tracks(&self) -> Vec<&CaptionTrack> {
+        self.captions
+            .as_ref()
+            .and_then(|c| c.player_captions_tracklist_renderer.as_ref())
+            .and_then(|r| r.caption_tracks.as_ref())
+            .map(|tracks| tracks.iter().collect())
+            .unwrap_or_default()
     }
 
     /// Get all raw formats (both muxed and adaptive).
@@ -313,6 +405,81 @@ mod tests {
         assert_eq!(fmt.container(), "mp4");
         assert!(fmt.is_video_only());
         assert!(!fmt.is_audio_only());
+    }
+
+    #[test]
+    fn test_caption_track_helpers() {
+        let manual = CaptionTrack {
+            base_url: "https://www.youtube.com/api/timedtext?v=abc&lang=en".to_string(),
+            name: "English".to_string(),
+            vss_id: ".en".to_string(),
+            language_code: "en".to_string(),
+            kind: None,
+            is_translatable: Some(true),
+        };
+        assert!(!manual.is_auto_generated());
+        assert_eq!(
+            manual.vtt_url(),
+            "https://www.youtube.com/api/timedtext?v=abc&lang=en&fmt=vtt"
+        );
+
+        let auto = CaptionTrack {
+            base_url: "https://www.youtube.com/api/timedtext?v=abc&lang=en".to_string(),
+            name: "English (auto-generated)".to_string(),
+            vss_id: "a.en".to_string(),
+            language_code: "en".to_string(),
+            kind: Some("asr".to_string()),
+            is_translatable: Some(true),
+        };
+        assert!(auto.is_auto_generated());
+    }
+
+    #[test]
+    fn test_player_response_caption_tracks() {
+        let response: PlayerResponse = serde_json::from_str(r#"{
+            "streamingData": {},
+            "videoDetails": {
+                "videoId": "test123",
+                "title": "Test",
+                "lengthSeconds": "60"
+            },
+            "playabilityStatus": { "status": "OK" },
+            "captions": {
+                "playerCaptionsTracklistRenderer": {
+                    "captionTracks": [
+                        {
+                            "baseUrl": "https://example.com/sub?lang=en",
+                            "name": { "simpleText": "English" },
+                            "vssId": ".en",
+                            "languageCode": "en",
+                            "isTranslatable": true
+                        },
+                        {
+                            "baseUrl": "https://example.com/sub?lang=en&kind=asr",
+                            "name": { "simpleText": "English (auto)" },
+                            "vssId": "a.en",
+                            "languageCode": "en",
+                            "kind": "asr",
+                            "isTranslatable": true
+                        }
+                    ]
+                }
+            }
+        }"#).unwrap();
+
+        let tracks = response.caption_tracks();
+        assert_eq!(tracks.len(), 2);
+        assert_eq!(tracks[0].language_code, "en");
+        assert!(!tracks[0].is_auto_generated());
+        assert!(tracks[1].is_auto_generated());
+    }
+
+    #[test]
+    fn test_player_response_no_captions() {
+        let response: PlayerResponse = serde_json::from_str(r#"{
+            "playabilityStatus": { "status": "OK" }
+        }"#).unwrap();
+        assert!(response.caption_tracks().is_empty());
     }
 
     #[test]

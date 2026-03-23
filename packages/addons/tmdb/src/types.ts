@@ -112,6 +112,8 @@ export interface DisplayTMDBImage {
 	fullUrl: string;
 	width: number;
 	height: number;
+	filePath: string;
+	imageType: 'poster' | 'backdrop';
 }
 
 // TMDB TV Show types

@@ -1,197 +1,96 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import { apiUrl } from 'ui-lib/lib/api-base';
-	import { releaseGroupsToDisplay, releaseToDisplay } from 'ui-lib/utils/musicbrainz/transform';
+	import { releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
+	import { artistsToDisplay } from 'addons/musicbrainz/transform';
 	import type {
 		DisplayMusicBrainzReleaseGroup,
-		DisplayMusicBrainzRelease,
+		DisplayMusicBrainzArtist,
 		MusicBrainzReleaseGroup,
-		MusicBrainzRelease
-	} from 'ui-lib/types/musicbrainz.type';
-	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
+		MusicBrainzArtist
+	} from 'addons/musicbrainz/types';
 	import AlbumCard from 'ui-lib/components/music/AlbumCard.svelte';
-	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
-	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
-	import { smartSearchService } from 'ui-lib/services/smart-search.service';
-	import { torrentService } from 'ui-lib/services/torrent.service';
-	import { browseDetailService } from 'ui-lib/services/browse-detail.service';
-	import classNames from 'classnames';
+	import ArtistCard from 'ui-lib/components/music/ArtistCard.svelte';
 
-	const GENRES = [
-		'rock', 'pop', 'electronic', 'hip hop', 'jazz', 'classical', 'r&b', 'metal',
-		'folk', 'soul', 'punk', 'blues', 'country', 'ambient', 'indie', 'alternative'
-	];
-
-	let selectedGenre = $state('rock');
 	let albums = $state<DisplayMusicBrainzReleaseGroup[]>([]);
-	let loading = $state(false);
-	let error = $state<string | null>(null);
-	let selectedAlbum = $state<DisplayMusicBrainzReleaseGroup | null>(null);
-	let selectedRelease = $state<DisplayMusicBrainzRelease | null>(null);
-	let tracksLoading = $state(false);
+	let artists = $state<DisplayMusicBrainzArtist[]>([]);
+	let albumsLoading = $state(false);
+	let artistsLoading = $state(false);
 
-	let albumTorrentMap = $state<Record<string, string>>({});
-	const torrentState = torrentService.state;
-	const searchStore = smartSearchService.store;
-
-	$effect(() => {
-		const s = $searchStore;
-		if (s.selection?.type === 'music' && s.downloadedHash) {
-			albumTorrentMap[s.selection.musicbrainzId] = s.downloadedHash;
-		}
-	});
-
-	let albumTorrents = $derived.by(() => {
-		const torrents = $torrentState.torrents;
-		const result: Record<string, TorrentInfo> = {};
-		for (const [albumId, infoHash] of Object.entries(albumTorrentMap)) {
-			const torrent = torrents.find((t) => t.infoHash === infoHash);
-			if (torrent) result[albumId] = torrent;
-		}
-		return result;
-	});
-
-	let genreCache: Record<string, DisplayMusicBrainzReleaseGroup[]> = {};
-	let releaseCache: Record<string, DisplayMusicBrainzRelease> = {};
-
-	async function fetchPopularAlbums(genre: string) {
-		if (genreCache[genre]) { albums = genreCache[genre]; return; }
-		loading = true;
-		error = null;
+	async function fetchAlbums() {
+		albumsLoading = true;
 		try {
-			const res = await fetch(apiUrl(`/api/musicbrainz/popular?genre=${encodeURIComponent(genre)}`));
-			if (!res.ok) throw new Error('Failed to fetch popular albums');
+			const res = await fetch(apiUrl('/api/musicbrainz/popular?genre=rock'));
+			if (!res.ok) throw new Error('Failed to fetch albums');
 			const data = await res.json();
 			const releaseGroups: MusicBrainzReleaseGroup[] = data['release-groups'] ?? [];
-			const display = releaseGroupsToDisplay(releaseGroups);
-			genreCache[genre] = display;
-			albums = display;
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Unknown error';
+			albums = releaseGroupsToDisplay(releaseGroups).slice(0, 6);
+		} catch {
 			albums = [];
 		}
-		loading = false;
+		albumsLoading = false;
 	}
 
-	async function fetchAlbumTracks(albumId: string) {
-		if (releaseCache[albumId]) { selectedRelease = releaseCache[albumId]; syncToService(); return; }
-		tracksLoading = true;
-		selectedRelease = null;
+	async function fetchArtists() {
+		artistsLoading = true;
 		try {
-			const rgRes = await fetch(apiUrl(`/api/musicbrainz/release-group/${albumId}`));
-			if (!rgRes.ok) throw new Error('Failed to fetch release group');
-			const rgData = await rgRes.json();
-			const releases: MusicBrainzRelease[] = rgData.releases ?? [];
-			if (releases.length === 0) { tracksLoading = false; syncToService(); return; }
-			const official = releases.find((r) => r.status === 'Official') ?? releases[0];
-			const relRes = await fetch(apiUrl(`/api/musicbrainz/release/${official.id}`));
-			if (!relRes.ok) throw new Error('Failed to fetch release');
-			const relData: MusicBrainzRelease = await relRes.json();
-			const display = releaseToDisplay(relData);
-			releaseCache[albumId] = display;
-			selectedRelease = display;
-		} catch { selectedRelease = null; }
-		tracksLoading = false;
-		syncToService();
-	}
-
-	function handleGenreChange(genre: string) {
-		selectedGenre = genre;
-		selectedAlbum = null;
-		selectedRelease = null;
-		browseDetailService.close();
-		fetchPopularAlbums(genre);
-	}
-
-	function handleSelectAlbum(album: DisplayMusicBrainzReleaseGroup) {
-		if (selectedAlbum?.id === album.id) {
-			selectedAlbum = null;
-			selectedRelease = null;
-			browseDetailService.close();
-		} else {
-			selectedAlbum = album;
-			selectedRelease = null;
-			syncToService();
-			fetchAlbumTracks(album.id);
+			const res = await fetch(apiUrl('/api/musicbrainz/popular-artists?genre=rock'));
+			if (!res.ok) throw new Error('Failed to fetch artists');
+			const data = await res.json();
+			const rawArtists: MusicBrainzArtist[] = data.artists ?? [];
+			artists = artistsToDisplay(rawArtists).slice(0, 6);
+		} catch {
+			artists = [];
 		}
+		artistsLoading = false;
 	}
 
-	function handleDownloadAlbum() {
-		if (!selectedAlbum) return;
-		smartSearchService.select({
-			title: selectedAlbum.title,
-			year: selectedAlbum.firstReleaseYear,
-			type: 'music',
-			musicbrainzId: selectedAlbum.id,
-			artist: selectedAlbum.artistCredits,
-			mode: 'download'
-		});
-	}
-
-	function syncToService() {
-		if (!selectedAlbum) return;
-		const torrent = albumTorrents[selectedAlbum.id] ?? null;
-		browseDetailService.set({
-			domain: 'music',
-			musicAlbum: selectedAlbum,
-			musicRelease: selectedRelease,
-			musicTorrent: torrent,
-			loading: tracksLoading
-		});
-		browseDetailService.registerCallbacks({
-			onclose: () => { selectedAlbum = null; selectedRelease = null; browseDetailService.close(); },
-			ondownloadalbum: handleDownloadAlbum
-		});
-	}
-
-	// Keep torrent state in sync with the service
-	$effect(() => {
-		if (selectedAlbum) {
-			const torrent = albumTorrents[selectedAlbum.id] ?? null;
-			browseDetailService.update(() => ({ musicTorrent: torrent }));
-		}
+	onMount(() => {
+		fetchAlbums();
+		fetchArtists();
 	});
-
-	onMount(() => { fetchPopularAlbums(selectedGenre); });
-	onDestroy(() => { browseDetailService.close(); });
 </script>
 
-<div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-	<BrowseHeader title="Popular Albums" count={albums.length} countLabel="albums">
-		{#snippet tabs()}
-			{#each GENRES as genre}
-				<button
-					class={classNames('btn btn-xs', {
-						'btn-primary': selectedGenre === genre,
-						'btn-ghost': selectedGenre !== genre
-					})}
-					onclick={() => handleGenreChange(genre)}
-				>
-					{genre}
-				</button>
-			{/each}
-		{/snippet}
-	</BrowseHeader>
+<div class="flex min-w-0 flex-1 flex-col overflow-y-auto p-4">
+	<h1 class="mb-6 text-2xl font-bold">Music</h1>
 
-	<BrowseGrid
-		items={albums}
-		{loading}
-		{error}
-		emptyTitle="No albums found"
-		onretry={() => fetchPopularAlbums(selectedGenre)}
-	>
-		{#snippet card(item)}
-			{@const album = item as DisplayMusicBrainzReleaseGroup}
-			{@const torrent = albumTorrents[album.id]}
-			<AlbumCard
-				{album}
-				selected={selectedAlbum?.id === album.id}
-				torrentProgress={torrent?.progress ?? null}
-				torrentState={torrent?.state ?? null}
-				torrentSpeed={torrent?.downloadSpeed ?? null}
-				torrentEta={torrent?.eta ?? null}
-				onselect={handleSelectAlbum}
-			/>
-		{/snippet}
-	</BrowseGrid>
+	<section class="mb-8">
+		<div class="mb-3 flex items-center justify-between">
+			<h2 class="text-lg font-semibold">Albums</h2>
+			<a href="/music/album" class="btn btn-ghost btn-sm">View all</a>
+		</div>
+		{#if albumsLoading}
+			<div class="flex items-center justify-center py-12">
+				<span class="loading loading-spinner loading-md"></span>
+			</div>
+		{:else if albums.length === 0}
+			<p class="py-8 text-center text-sm opacity-50">No albums available</p>
+		{:else}
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+				{#each albums as album (album.id)}
+					<AlbumCard {album} />
+				{/each}
+			</div>
+		{/if}
+	</section>
+
+	<section>
+		<div class="mb-3 flex items-center justify-between">
+			<h2 class="text-lg font-semibold">Artists</h2>
+			<a href="/music/artist" class="btn btn-ghost btn-sm">View all</a>
+		</div>
+		{#if artistsLoading}
+			<div class="flex items-center justify-center py-12">
+				<span class="loading loading-spinner loading-md"></span>
+			</div>
+		{:else if artists.length === 0}
+			<p class="py-8 text-center text-sm opacity-50">No artists available</p>
+		{:else}
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+				{#each artists as artist (artist.id)}
+					<ArtistCard {artist} />
+				{/each}
+			</div>
+		{/if}
+	</section>
 </div>

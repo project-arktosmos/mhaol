@@ -27,10 +27,12 @@ class ClientIdentityService {
 	public state: Writable<ClientIdentityState> = writable(initialState);
 
 	private _initialized = false;
+	private _signalingUrl = '';
 
-	async initialize(): Promise<void> {
+	async initialize(signalingUrl: string): Promise<void> {
 		if (!browser || this._initialized) return;
 		this._initialized = true;
+		this._signalingUrl = signalingUrl;
 
 		try {
 			const stored = localStorage.getItem(STORAGE_KEY);
@@ -55,6 +57,15 @@ class ClientIdentityService {
 		}
 	}
 
+	async signMessage(message: string): Promise<string> {
+		if (!browser) throw new Error('Not in browser');
+		const stored = localStorage.getItem(STORAGE_KEY);
+		if (!stored) throw new Error('No identity initialized');
+		const { privateKey }: StoredIdentity = JSON.parse(stored);
+		const account = privateKeyToAccount(privateKey);
+		return account.signMessage({ message });
+	}
+
 	async regenerate(): Promise<void> {
 		if (!browser) return;
 		const name = 'default';
@@ -69,7 +80,12 @@ class ClientIdentityService {
 		privateKey: `0x${string}`
 	): Promise<{ name: string; address: string; passport: PassportData }> {
 		const account = privateKeyToAccount(privateKey);
-		const raw = JSON.stringify({ name, address: account.address, instanceType: 'client' });
+		const raw = JSON.stringify({
+			name,
+			address: account.address,
+			instanceType: 'client',
+			signalingUrl: this._signalingUrl
+		});
 		const signature = await account.signMessage({ message: raw });
 		const hash = hashMessage(raw);
 		return {

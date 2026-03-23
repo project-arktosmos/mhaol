@@ -12,11 +12,11 @@ try {
   // No process to kill
 }
 
-// Load env vars from .env.app if it exists
+// Load env vars from .env if it exists
 try {
-  execSync("set -a; . ../../.env.app 2>/dev/null; set +a", { stdio: "ignore" });
+  execSync("set -a; . ../../.env 2>/dev/null; set +a", { stdio: "ignore" });
 } catch {
-  // No .env.app
+  // No .env
 }
 
 // Build the backend first

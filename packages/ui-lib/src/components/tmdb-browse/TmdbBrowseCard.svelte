@@ -22,7 +22,9 @@
 		onclick?: () => void;
 	} = $props();
 
-	const browseViewMode = getContext<{ readonly value: 'poster' | 'backdrop' } | undefined>('browseViewMode');
+	const browseViewMode = getContext<{ readonly value: 'poster' | 'backdrop' } | undefined>(
+		'browseViewMode'
+	);
 	let useBackdrop = $derived(browseViewMode?.value === 'backdrop');
 
 	let title = $derived(movie?.title ?? tvShow?.name ?? '');
@@ -88,14 +90,23 @@
 		{#if fetched || downloadState}
 			<div class="absolute top-1.5 right-1.5 z-10 flex gap-1">
 				{#if downloadState}
-					<span class={classNames('badge badge-xs gap-0.5', downloadBadgeClass)}>
+					<span class={classNames('badge gap-0.5 badge-xs', downloadBadgeClass)}>
 						{downloadLabel}
 					</span>
 				{/if}
 				{#if fetched}
-					<span class="badge badge-success badge-xs gap-0.5">
-						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-2.5 w-2.5">
-							<path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
+					<span class="badge gap-0.5 badge-xs badge-success">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 20 20"
+							fill="currentColor"
+							class="h-2.5 w-2.5"
+						>
+							<path
+								fill-rule="evenodd"
+								d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+								clip-rule="evenodd"
+							/>
 						</svg>
 						downloaded
 					</span>
@@ -105,16 +116,26 @@
 		{#if downloadState === 'downloading' && downloadProgress !== null}
 			<div class="absolute bottom-0 left-0 z-10 w-full">
 				<progress
-					class="progress progress-primary h-1 w-full"
+					class="progress h-1 w-full progress-primary"
 					value={downloadProgress * 100}
 					max="100"
 				></progress>
 			</div>
 		{/if}
 		{#if imageUrl}
-			<img src={imageUrl} alt={title} class={classNames('block w-full', { 'aspect-video object-cover': useBackdrop })} loading="lazy" />
+			<img
+				src={imageUrl}
+				alt={title}
+				class={classNames('block w-full', { 'aspect-video object-cover': useBackdrop })}
+				loading="lazy"
+			/>
 		{:else}
-			<div class={classNames('flex w-full items-center justify-center text-base-content/20', useBackdrop ? 'aspect-video' : 'aspect-2/3')}>
+			<div
+				class={classNames(
+					'flex w-full items-center justify-center text-base-content/20',
+					useBackdrop ? 'aspect-video' : 'aspect-2/3'
+				)}
+			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-12 w-12"
@@ -132,7 +153,9 @@
 			</div>
 		{/if}
 		{#if useBackdrop}
-			<div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pt-6 pb-2">
+			<div
+				class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pt-6 pb-2"
+			>
 				<p class="truncate text-sm font-semibold text-white drop-shadow">{title}</p>
 			</div>
 		{/if}
