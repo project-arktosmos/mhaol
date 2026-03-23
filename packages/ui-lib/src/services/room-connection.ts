@@ -119,9 +119,7 @@ export class RoomConnection {
 	}
 
 	disconnectPeer(peerId: string): void {
-		this.callbacks.onSystemMessage(
-			`Disconnected from ${signalingAdapter.shortAddress(peerId)}`
-		);
+		this.callbacks.onSystemMessage(`Disconnected from ${signalingAdapter.shortAddress(peerId)}`);
 		this.removePeer(peerId);
 		this.updatePeerConnectionStatus(peerId, undefined);
 	}
@@ -148,7 +146,9 @@ export class RoomConnection {
 	}
 
 	hasRoomPeer(peerId: string): boolean {
-		return this.peerConnections.has(peerId) || this.getRoomPeers().some((p) => p.peer_id === peerId);
+		return (
+			this.peerConnections.has(peerId) || this.getRoomPeers().some((p) => p.peer_id === peerId)
+		);
 	}
 
 	getConnectedPeerIds(): string[] {
@@ -241,12 +241,7 @@ export class RoomConnection {
 				this.handleAnswer(msg.from_peer_id, msg.sdp);
 				break;
 			case 'ice-candidate':
-				this.handleIceCandidate(
-					msg.from_peer_id,
-					msg.candidate,
-					msg.sdp_m_line_index,
-					msg.sdp_mid
-				);
+				this.handleIceCandidate(msg.from_peer_id, msg.candidate, msg.sdp_m_line_index, msg.sdp_mid);
 				break;
 			case 'error':
 				this.callbacks.onError(msg.message);
@@ -470,7 +465,10 @@ export class RoomConnection {
 		}
 	}
 
-	private updatePeerConnectionStatus(peerId: string, status: PeerConnectionStatus | undefined): void {
+	private updatePeerConnectionStatus(
+		peerId: string,
+		status: PeerConnectionStatus | undefined
+	): void {
 		if (status === undefined) {
 			delete this._peerConnectionStates[peerId];
 		} else {

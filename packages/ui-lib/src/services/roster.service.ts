@@ -135,8 +135,13 @@ class RosterService {
 	private async loadFromApi(): Promise<RosterEntry[]> {
 		const res = await fetch(apiUrl('/api/roster'));
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		const contacts: { name: string; address: string; passport?: string; instance_type?: string; endorsement?: string }[] =
-			await res.json();
+		const contacts: {
+			name: string;
+			address: string;
+			passport?: string;
+			instance_type?: string;
+			endorsement?: string;
+		}[] = await res.json();
 		return contacts.map((c) => ({
 			name: c.name,
 			address: c.address,

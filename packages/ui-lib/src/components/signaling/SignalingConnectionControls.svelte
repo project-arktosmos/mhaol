@@ -40,9 +40,7 @@
 	<div class="card-body gap-4 p-4">
 		<div class="flex items-center justify-between">
 			<h2 class="card-title text-base">Connection</h2>
-			<span
-				class={classNames('badge badge-sm', signalingAdapter.phaseBadgeClass(aggregatePhase))}
-			>
+			<span class={classNames('badge badge-sm', signalingAdapter.phaseBadgeClass(aggregatePhase))}>
 				{signalingAdapter.phaseLabel(aggregatePhase)}
 			</span>
 		</div>

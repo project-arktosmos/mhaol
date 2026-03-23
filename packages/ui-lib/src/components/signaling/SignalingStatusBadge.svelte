@@ -17,8 +17,7 @@
 	});
 
 	let peerCount = $derived(
-		new Set(Object.values($chatStore.rooms).flatMap((r) => r.roomPeers.map((p) => p.peer_id)))
-			.size
+		new Set(Object.values($chatStore.rooms).flatMap((r) => r.roomPeers.map((p) => p.peer_id))).size
 	);
 
 	let roomCount = $derived(

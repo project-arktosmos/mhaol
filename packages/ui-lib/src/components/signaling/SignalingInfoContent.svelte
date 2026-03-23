@@ -46,8 +46,7 @@
 						<span
 							class={classNames('h-2 w-2 rounded-full', {
 								'bg-success': aggregatePhase === 'connected',
-								'bg-warning':
-									aggregatePhase === 'connecting' || aggregatePhase === 'authenticated',
+								'bg-warning': aggregatePhase === 'connecting' || aggregatePhase === 'authenticated',
 								'bg-error': aggregatePhase === 'disconnected' || aggregatePhase === 'error'
 							})}
 						></span>
@@ -65,7 +64,10 @@
 						{#each roomNames as roomName (roomName)}
 							{@const room = $chatStore.rooms[roomName]}
 							<span
-								class={classNames('badge badge-sm font-mono', signalingAdapter.phaseBadgeClass(room.phase))}
+								class={classNames(
+									'badge font-mono badge-sm',
+									signalingAdapter.phaseBadgeClass(room.phase)
+								)}
 							>
 								{roomName.length > 12 ? signalingAdapter.shortAddress(roomName) : roomName}
 							</span>

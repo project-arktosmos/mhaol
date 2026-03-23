@@ -8,9 +8,7 @@
 	let messageInput = $state('');
 	let chatContainer: HTMLDivElement | undefined = $state();
 
-	let isConnected = $derived(
-		Object.values($chatStore.rooms).some((r) => r.phase === 'connected')
-	);
+	let isConnected = $derived(Object.values($chatStore.rooms).some((r) => r.phase === 'connected'));
 	let hasActivePeer = $derived($chatStore.activePeerId !== null);
 	let activeChannelOpen = $derived(
 		$chatStore.activePeerId !== null && $chatStore.peerIds.includes($chatStore.activePeerId)
