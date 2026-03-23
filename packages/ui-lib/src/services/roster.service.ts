@@ -1,6 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl, DEFAULT_SIGNALING_URL } from 'ui-lib/lib/api-base';
+import { apiUrl, getSignalingUrl } from 'ui-lib/lib/api-base';
 import type { RosterEntry, RosterState, RosterStorageMode } from 'ui-lib/types/roster.type';
 
 const LOCAL_STORAGE_KEY = 'roster-entries';
@@ -8,8 +8,8 @@ const LOCAL_STORAGE_KEY = 'roster-entries';
 const initialState: RosterState = {
 	loading: false,
 	entries: [],
-	signalingServerUrl: DEFAULT_SIGNALING_URL,
-	signalingRoomId: 'default',
+	signalingServerUrl: getSignalingUrl(),
+	signalingRoomId: 'handshakes',
 	error: null
 };
 
@@ -18,6 +18,7 @@ interface StoredEntry {
 	address: string;
 	passport?: string;
 	instanceType?: string;
+	endorsement?: string;
 }
 
 class RosterService {
@@ -56,6 +57,7 @@ class RosterService {
 		address: string;
 		passport?: string;
 		instanceType?: string;
+		endorsement?: string;
 	}): Promise<void> {
 		if (this._mode === 'api') {
 			await fetch(apiUrl('/api/roster'), {
@@ -133,14 +135,15 @@ class RosterService {
 	private async loadFromApi(): Promise<RosterEntry[]> {
 		const res = await fetch(apiUrl('/api/roster'));
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		const contacts: { name: string; address: string; passport?: string; instance_type?: string }[] =
+		const contacts: { name: string; address: string; passport?: string; instance_type?: string; endorsement?: string }[] =
 			await res.json();
 		return contacts.map((c) => ({
 			name: c.name,
 			address: c.address,
 			status: 'offline',
 			passport: c.passport ?? undefined,
-			instanceType: c.instance_type ?? undefined
+			instanceType: c.instance_type ?? undefined,
+			endorsement: c.endorsement ?? undefined
 		}));
 	}
 
@@ -151,7 +154,8 @@ class RosterService {
 			address: e.address,
 			status: 'offline',
 			passport: e.passport,
-			instanceType: e.instanceType
+			instanceType: e.instanceType,
+			endorsement: e.endorsement
 		}));
 	}
 

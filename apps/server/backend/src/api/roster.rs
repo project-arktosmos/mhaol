@@ -26,6 +26,7 @@ struct AddContactBody {
     address: String,
     passport: Option<String>,
     instance_type: Option<String>,
+    endorsement: Option<String>,
 }
 
 async fn add_contact(
@@ -37,6 +38,7 @@ async fn add_contact(
         &body.name,
         body.passport.as_deref(),
         body.instance_type.as_deref(),
+        body.endorsement.as_deref(),
     );
     StatusCode::CREATED
 }

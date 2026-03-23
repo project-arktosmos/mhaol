@@ -270,12 +270,13 @@ CREATE TABLE IF NOT EXISTS roster_contacts (
     name TEXT NOT NULL,
     passport TEXT,
     instance_type TEXT,
+    endorsement TEXT,
     added_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '28', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '29', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -783,6 +784,18 @@ fn run_migrations(conn: &Connection) {
     // Migration: add queue_tasks table (db_version 27)
     if !has_table(conn, "queue_tasks") {
         let _ = conn.execute_batch(mhaol_queue::QUEUE_SCHEMA_SQL);
+    }
+
+    // Migration: add endorsement column to roster_contacts (db_version 29)
+    {
+        let has_col = conn
+            .prepare("SELECT endorsement FROM roster_contacts LIMIT 0")
+            .is_ok();
+        if !has_col {
+            let _ = conn.execute_batch(
+                "ALTER TABLE roster_contacts ADD COLUMN endorsement TEXT;",
+            );
+        }
     }
 
     // Migration: add tmdb_image_overrides table (db_version 28)
