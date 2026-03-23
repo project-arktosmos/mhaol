@@ -50,12 +50,7 @@
 </script>
 
 <div class="flex flex-col gap-4">
-	{#if pairing}
-		<div class="flex items-center gap-3 py-8">
-			<span class="loading loading-md loading-spinner text-primary"></span>
-			<span>Pairing items against TMDB...</span>
-		</div>
-	{:else if error}
+	{#if error}
 		<div class="alert alert-error">
 			<span>{error}</span>
 			<button class="btn btn-ghost btn-sm" onclick={onreset}>Dismiss</button>
@@ -65,8 +60,16 @@
 			<span>Pinned items saved to library.</span>
 			<button class="btn btn-ghost btn-sm" onclick={onreset}>Done</button>
 		</div>
+	{:else if pairing && results.length === 0}
+		<div class="flex items-center gap-3 py-8">
+			<span class="loading loading-md loading-spinner text-primary"></span>
+			<span>Pairing items against TMDB...</span>
+		</div>
 	{:else if results.length > 0}
 		<div class="flex flex-wrap items-center gap-2">
+			{#if pairing}
+				<span class="loading loading-sm loading-spinner text-primary"></span>
+			{/if}
 			<span class="badge badge-primary">{matchedCount} of {results.length} matched</span>
 			<span class="badge badge-secondary">{acceptedCount} accepted</span>
 			<div class="flex-1"></div>
@@ -147,7 +150,7 @@
 		<div class="flex justify-end">
 			<button
 				class="btn btn-sm btn-primary"
-				disabled={acceptedCount === 0 || saving}
+				disabled={acceptedCount === 0 || saving || pairing}
 				onclick={onsave}
 			>
 				{#if saving}

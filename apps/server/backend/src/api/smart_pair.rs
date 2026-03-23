@@ -1,9 +1,10 @@
 use crate::db::repo::library_item::InsertLibraryItem;
 use crate::AppState;
 use axum::{
+    body::Body,
     extract::State,
-    http::StatusCode,
-    response::IntoResponse,
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -34,11 +35,6 @@ struct PairRequestItem {
     title: String,
     id: String,
     source: String,
-}
-
-#[derive(Serialize)]
-struct PairResponse {
-    results: Vec<PairResult>,
 }
 
 #[derive(Serialize)]
@@ -128,10 +124,11 @@ fn parse_tv_candidate(result: &serde_json::Value) -> Option<TmdbCandidate> {
     })
 }
 
+/// Streams results as newline-delimited JSON so the UI updates per item.
 async fn pair_items(
     State(state): State<AppState>,
     Json(body): Json<PairRequest>,
-) -> impl IntoResponse {
+) -> Response {
     // Fail fast if TMDB API key is not configured
     let has_key = state
         .settings
@@ -146,120 +143,109 @@ async fn pair_items(
             .into_response();
     }
 
+    let total = body.items.len();
     info!(
         "[smart-pair] Pairing {} items from {}",
-        body.items.len(),
+        total,
         body.items.first().map(|i| i.source.as_str()).unwrap_or("?")
     );
 
-    let mut results = Vec::with_capacity(body.items.len());
+    let stream = async_stream::stream! {
+        for (idx, item) in body.items.iter().enumerate() {
+            let query = &item.title;
 
-    for (idx, item) in body.items.iter().enumerate() {
-        let query = &item.title;
+            let movie_params: Vec<(&str, &str)> = vec![("query", query), ("page", "1")];
+            let tv_params: Vec<(&str, &str)> = vec![("query", query), ("page", "1")];
 
-        let movie_params: Vec<(&str, &str)> = vec![("query", query), ("page", "1")];
-        let tv_params: Vec<(&str, &str)> = vec![("query", query), ("page", "1")];
+            let (movie_res, tv_res) = tokio::join!(
+                tmdb_fetch_json(&state, "/search/movie", &movie_params),
+                tmdb_fetch_json(&state, "/search/tv", &tv_params),
+            );
 
-        let (movie_res, tv_res) = tokio::join!(
-            tmdb_fetch_json(&state, "/search/movie", &movie_params),
-            tmdb_fetch_json(&state, "/search/tv", &tv_params),
-        );
+            let mut best: Option<TmdbCandidate> = None;
+            let mut best_score: f64 = 0.0;
 
-        let mut best: Option<TmdbCandidate> = None;
-        let mut best_score: f64 = 0.0;
-
-        if let Ok(data) = &movie_res {
-            if let Some(results_arr) = data.get("results").and_then(|r| r.as_array()) {
-                for r in results_arr.iter().take(3) {
-                    if let Some(candidate) = parse_movie_candidate(r) {
-                        let s = score_match(query, &candidate.title, candidate.popularity, candidate.vote_count);
-                        if s > best_score {
-                            best_score = s;
-                            best = Some(candidate);
+            if let Ok(data) = &movie_res {
+                if let Some(results_arr) = data.get("results").and_then(|r| r.as_array()) {
+                    for r in results_arr.iter().take(3) {
+                        if let Some(candidate) = parse_movie_candidate(r) {
+                            let s = score_match(query, &candidate.title, candidate.popularity, candidate.vote_count);
+                            if s > best_score {
+                                best_score = s;
+                                best = Some(candidate);
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if let Ok(data) = &tv_res {
-            if let Some(results_arr) = data.get("results").and_then(|r| r.as_array()) {
-                for r in results_arr.iter().take(3) {
-                    if let Some(candidate) = parse_tv_candidate(r) {
-                        let s = score_match(query, &candidate.title, candidate.popularity, candidate.vote_count);
-                        if s > best_score {
-                            best_score = s;
-                            best = Some(candidate);
+            if let Ok(data) = &tv_res {
+                if let Some(results_arr) = data.get("results").and_then(|r| r.as_array()) {
+                    for r in results_arr.iter().take(3) {
+                        if let Some(candidate) = parse_tv_candidate(r) {
+                            let s = score_match(query, &candidate.title, candidate.popularity, candidate.vote_count);
+                            if s > best_score {
+                                best_score = s;
+                                best = Some(candidate);
+                            }
                         }
                     }
                 }
             }
+
+            let result = match &best {
+                Some(c) => {
+                    info!(
+                        "[smart-pair] ({}/{}) \"{}\" -> {} {} (id={})",
+                        idx + 1, total, query, c.media_type, c.title, c.id
+                    );
+                    PairResult {
+                        source_id: item.id.clone(),
+                        source_title: item.title.clone(),
+                        source: item.source.clone(),
+                        matched: true,
+                        tmdb_id: Some(c.id),
+                        tmdb_title: Some(c.title.clone()),
+                        tmdb_type: Some(c.media_type.clone()),
+                        tmdb_year: Some(c.year.clone()),
+                        tmdb_poster_path: c.poster_path.clone(),
+                        confidence: determine_confidence(query, &c.title, c.vote_count),
+                    }
+                }
+                None => {
+                    info!("[smart-pair] ({}/{}) \"{}\" -> no match", idx + 1, total, query);
+                    PairResult {
+                        source_id: item.id.clone(),
+                        source_title: item.title.clone(),
+                        source: item.source.clone(),
+                        matched: false,
+                        tmdb_id: None,
+                        tmdb_title: None,
+                        tmdb_type: None,
+                        tmdb_year: None,
+                        tmdb_poster_path: None,
+                        confidence: "none".to_string(),
+                    }
+                }
+            };
+
+            let mut line = serde_json::to_string(&result).unwrap_or_default();
+            line.push('\n');
+            yield Ok::<_, std::convert::Infallible>(line);
+
+            // Rate-limit every 15 items (30 TMDB requests) to stay under 40 req/10s
+            if (idx + 1) % 15 == 0 {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
         }
 
-        let result = match &best {
-            Some(c) => {
-                info!(
-                    "[smart-pair] ({}/{}) \"{}\" -> {} {} (id={}, confidence={})",
-                    idx + 1,
-                    body.items.len(),
-                    query,
-                    c.media_type,
-                    c.title,
-                    c.id,
-                    determine_confidence(query, &c.title, c.vote_count)
-                );
-                let confidence = determine_confidence(query, &c.title, c.vote_count);
-                PairResult {
-                    source_id: item.id.clone(),
-                    source_title: item.title.clone(),
-                    source: item.source.clone(),
-                    matched: true,
-                    tmdb_id: Some(c.id),
-                    tmdb_title: Some(c.title.clone()),
-                    tmdb_type: Some(c.media_type.clone()),
-                    tmdb_year: Some(c.year.clone()),
-                    tmdb_poster_path: c.poster_path.clone(),
-                    confidence,
-                }
-            }
-            None => {
-                info!(
-                    "[smart-pair] ({}/{}) \"{}\" -> no match",
-                    idx + 1,
-                    body.items.len(),
-                    query
-                );
-                PairResult {
-                    source_id: item.id.clone(),
-                    source_title: item.title.clone(),
-                    source: item.source.clone(),
-                    matched: false,
-                    tmdb_id: None,
-                    tmdb_title: None,
-                    tmdb_type: None,
-                    tmdb_year: None,
-                    tmdb_poster_path: None,
-                    confidence: "none".to_string(),
-                }
-            }
-        };
+        info!("[smart-pair] Done pairing {} items", total);
+    };
 
-        results.push(result);
-
-        // Rate-limit: TMDB allows ~40 requests per 10s. Each item makes 2 requests.
-        // With cache hits this is often faster, but pace uncached requests.
-        if (idx + 1) % 15 == 0 {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        }
-    }
-
-    info!(
-        "[smart-pair] Done: {}/{} matched",
-        results.iter().filter(|r| r.matched).count(),
-        results.len()
-    );
-
-    Json(PairResponse { results }).into_response()
+    Response::builder()
+        .header(header::CONTENT_TYPE, "application/x-ndjson")
+        .body(Body::from_stream(stream))
+        .unwrap()
 }
 
 // --- Save endpoint ---

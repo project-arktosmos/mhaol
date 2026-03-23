@@ -34,13 +34,43 @@ class SmartPairService {
 				return;
 			}
 
-			const data: { results: Omit<SmartPairResult, 'accepted'>[] } = await res.json();
-			const results: SmartPairResult[] = data.results.map((r) => ({
-				...r,
-				accepted: r.confidence === 'high' || r.confidence === 'medium'
-			}));
+			// Stream NDJSON — each line is one PairResult, update UI per item
+			const reader = res.body?.getReader();
+			if (!reader) {
+				this.store.update((s) => ({ ...s, pairing: false, error: 'No response stream' }));
+				return;
+			}
 
-			this.store.update((s) => ({ ...s, pairing: false, results }));
+			const decoder = new TextDecoder();
+			let buffer = '';
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n');
+				buffer = lines.pop() ?? '';
+
+				for (const line of lines) {
+					if (!line.trim()) continue;
+					try {
+						const raw: Omit<SmartPairResult, 'accepted'> = JSON.parse(line);
+						const result: SmartPairResult = {
+							...raw,
+							accepted: raw.confidence === 'high' || raw.confidence === 'medium'
+						};
+						this.store.update((s) => ({
+							...s,
+							results: [...s.results, result]
+						}));
+					} catch {
+						// skip malformed lines
+					}
+				}
+			}
+
+			this.store.update((s) => ({ ...s, pairing: false }));
 		} catch (e) {
 			this.store.update((s) => ({
 				...s,
