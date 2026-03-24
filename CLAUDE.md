@@ -3,26 +3,25 @@
 This document guides Claude (and developers) on implementing features in this monorepo. Follow these conventions strictly to maintain consistency across all packages.
 
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
-- `packages/ui-lib/CLAUDE.md` — UI components, services, types, adapters, utils, CSS/themes
+- `packages/ui-lib/CLAUDE.md` — UI components, services, types, adapters, utils, CSS/themes, transport layer
 - `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
-- `apps/server/backend/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
+- `apps/backend/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
 ---
 
 ## Monorepo Overview
 
 ```
 mhaol.git/
-├── apps/                             # Thin SvelteKit wrappers (routes + assembly only)
-│   ├── client/                       # P2P client app (landing page + /connect)
-│   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
-│   └── server/                       # Media app (headless, port 1530)
-│       └── backend/                  # Rust Axum server (integrated, port 1530)
+├── apps/
+│   ├── frontend/                     # Unified SPA (landing + connect + media, port 1570)
+│   ├── backend/                      # Rust Axum server (standalone, port 1530)
+│   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
-│   ├── ui-lib/                       # Shared frontend: UI components, services, types, adapters, utils, CSS/themes
+│   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, torrent search)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── signaling/                    # PartyKit signaling service
-│   ├── queue/                        # Rust task queue (SQLite + broadcast, used by server for LLM job coordination)
+│   ├── queue/                        # Rust task queue (SQLite + broadcast)
 │   ├── p2p-stream/                   # Rust P2P streaming library
 │   ├── torrent/                      # Rust torrent implementation
 │   └── webrtc/                       # WebRTC contact handshake layer (TypeScript)
@@ -45,13 +44,24 @@ Apps under `apps/` are **thin wrappers** that import everything from `packages/u
 
 Apps **never** implement their own components, services, adapters, types, or utils. Everything lives in `packages/ui-lib`.
 
-### Server Backend
+### Backend
 
-The server app integrates the Rust backend directly at `apps/server/backend/`. This is a standalone Cargo crate (`mhaol-server`) that produces the `mhaol-server` binary. No other app embeds or depends on this crate — they connect to a running server instance.
+The backend is a standalone Rust Axum server at `apps/backend/`. Crate name `mhaol-backend`, binary `mhaol-backend`. Runs headless on port 1530 and exposes its API via HTTP and WebRTC RPC.
 
-- `apps/server/backend/Cargo.toml` — Crate manifest
-- `apps/server/backend/src/lib.rs` — AppState, modules, database layer
-- `apps/server/backend/src/server.rs` — Binary entry point (HTTP server)
+- `apps/backend/Cargo.toml` — Crate manifest
+- `apps/backend/src/lib.rs` — AppState, modules, database layer
+- `apps/backend/src/server.rs` — Binary entry point (HTTP server)
+- `apps/backend/src/peer_service/rpc_handler.rs` — WebRTC RPC handler (routes data channel messages through Axum router)
+
+### Transport Layer
+
+All frontend-to-backend communication goes through `packages/ui-lib/src/transport/`:
+- `transport.type.ts` — `Transport` interface (fetch, subscribe, resolveUrl)
+- `http-transport.ts` — HTTP implementation (wraps browser fetch)
+- `webrtc-transport.ts` — WebRTC RPC implementation (sends requests over data channels)
+- `fetch-helpers.ts` — `fetchJson()`, `fetchRaw()`, `subscribeSSE()` used by all services
+- `transport-context.ts` — Module-level singleton (`setTransport`/`getTransport`)
+- `rpc.type.ts` — RPC message protocol types
 
 ### How apps wire up
 
@@ -116,9 +126,9 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # All apps in parallel (client :1570, server :1530)
+pnpm dev              # Frontend dev server (port 1570)
 pnpm dev:backend      # Rust backend only (PORT=1530)
-pnpm dev:frontend     # SvelteKit dev server only (port 1531)
+pnpm dev:frontend     # Frontend dev server (port 1570)
 
 # Building
 pnpm build            # Frontend build
@@ -129,9 +139,6 @@ pnpm lint             # Lint all packages
 pnpm check            # svelte-check + cargo check
 pnpm test             # vitest + cargo test
 pnpm format           # Prettier write
-
-# Headless apps (browser + backend, no native window)
-pnpm app:server           # Server headless (port 1530)
 
 # Browser extension
 pnpm app:shepperd         # Shepperd dev (watch mode)
@@ -174,7 +181,7 @@ git commit -m "add thumbnail fallback to MediaCard"
 
 When adding a new feature that spans the full stack:
 
-**Backend (`apps/server/backend`)**
+**Backend (`apps/backend`)**
 - [ ] Create API module in `src/api/{feature}.rs`
 - [ ] Add `pub mod {feature};` to `src/api/mod.rs`
 - [ ] Register route in `build_router()`: `.nest("/api/{feature}", {feature}::router())`
@@ -210,4 +217,4 @@ When making significant structural changes (new packages, new component director
 - **Root CLAUDE.md** — Monorepo structure, app architecture, workspace scripts
 - **packages/ui-lib/CLAUDE.md** — Components, services, adapters, types, utils, CSS/themes
 - **App CLAUDE.md files** — Which features the app uses, how it assembles them
-- **apps/server/backend/CLAUDE.md** — API modules, routes
+- **apps/backend/CLAUDE.md** — API modules, routes

@@ -1,7 +1,0 @@
-# Build output
-.svelte-kit/
-dist-static/
-dist/
-
-# Tauri generated files
-src-tauri/gen/

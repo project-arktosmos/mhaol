@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "apps/backend",
-    "apps/server/backend",
     "apps/signaling",
     "packages/identity",
     "packages/llm",
@@ -10,5 +9,4 @@ members = [
     "packages/yt-dlp",
     "packages/torrent",
     "packages/p2p-stream",
-    "apps/client/src-tauri",
 ]
