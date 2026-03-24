@@ -271,7 +271,10 @@ async fn get_trending(
     }
 }
 
-async fn proxy_cover(Path((id, size)): Path<(String, String)>) -> impl IntoResponse {
+async fn proxy_cover(
+    State(state): State<AppState>,
+    Path((id, size)): Path<(String, String)>,
+) -> impl IntoResponse {
     let valid_sizes = ["S", "M", "L"];
     let size = if valid_sizes.contains(&size.as_str()) {
         size
@@ -279,33 +282,16 @@ async fn proxy_cover(Path((id, size)): Path<(String, String)>) -> impl IntoRespo
         "M".to_string()
     };
 
-    let url = format!("{}/b/id/{}-{}.jpg", COVERS_BASE, id, size);
-    let client = reqwest::Client::new();
-    match client
-        .get(&url)
-        .header("User-Agent", USER_AGENT)
-        .send()
-        .await
-    {
-        Ok(resp) if resp.status().is_success() => {
-            let content_type = resp
-                .headers()
-                .get("content-type")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("image/jpeg")
-                .to_string();
-            match resp.bytes().await {
-                Ok(bytes) => (
-                    StatusCode::OK,
-                    [(axum::http::header::CONTENT_TYPE, content_type)],
-                    bytes,
-                )
-                    .into_response(),
-                Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            }
-        }
-        _ => StatusCode::NOT_FOUND.into_response(),
-    }
+    let cache_key = format!("{}-{}.jpg", id, size);
+    let upstream_url = format!("{}/b/id/{}-{}.jpg", COVERS_BASE, id, size);
+    super::image_cache::serve_cached_image(
+        &state.data_dir,
+        "openlibrary-covers",
+        &cache_key,
+        &upstream_url,
+        604800,
+    )
+    .await
 }
 
 #[derive(Deserialize)]
