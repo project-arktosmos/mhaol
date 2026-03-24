@@ -3,13 +3,8 @@
 	import { playerService } from 'ui-lib/services/player.service';
 	import { identityService } from 'ui-lib/services/identity.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
-	import { themeService } from 'ui-lib/services/theme.service';
 	import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
 	import { DEFAULT_SIGNALING_URL } from 'ui-lib/lib/api-base';
-	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
-	import ToastOutlet from 'ui-lib/components/core/ToastOutlet.svelte';
-	import Navbar from 'ui-lib/components/core/Navbar.svelte';
-	import SignalingStatusBadge from 'ui-lib/components/signaling/SignalingStatusBadge.svelte';
 	import { invalidateAll } from '$app/navigation';
 
 	import { youtubeService } from 'ui-lib/services/youtube.service';
@@ -42,12 +37,6 @@
 			browseViewModeValue = mode;
 		}
 	});
-
-	const ytState = youtubeService.state;
-	const YT_ACTIVE_STATES = ['pending', 'fetching', 'downloading', 'muxing'];
-	let ytActiveCount = $derived(
-		$ytState.downloads.filter((d: { state: string }) => YT_ACTIVE_STATES.includes(d.state)).length
-	);
 
 	async function handleSmartSearchStream(candidate: SmartSearchTorrentResult) {
 		smartSearchService.hide();
@@ -109,7 +98,6 @@
 	}
 
 	onMount(() => {
-		themeService.initialize('flix');
 		rosterService.initialize('api');
 		youtubeService.initialize();
 		youtubeLibraryService.initialize();
@@ -128,35 +116,7 @@
 	});
 </script>
 
-<div class="flex h-screen flex-col">
-	<Navbar brand={{ label: 'Mhaol', highlight: 'Server' }} classes="!bg-base-300">
-		{#snippet end()}
-			<a href="/movies" class="btn btn-ghost btn-sm">Movies</a>
-			<a href="/tv" class="btn btn-ghost btn-sm">TV</a>
-			<a href="/music" class="btn btn-ghost btn-sm">Music</a>
-			<a href="/videogames" class="btn btn-ghost btn-sm">Games</a>
-			<a href="/books" class="btn btn-ghost btn-sm">Books</a>
-			<a href="/photos" class="btn btn-ghost btn-sm">Photos</a>
-			<a href="/youtube" class="btn btn-ghost btn-sm">
-				YouTube
-				{#if ytActiveCount > 0}
-					<span class="badge badge-xs badge-primary ml-1">{ytActiveCount}</span>
-				{/if}
-			</a>
-			<a href="/roster" class="btn btn-ghost btn-sm">Roster</a>
-			<a href="/import" class="btn btn-ghost btn-sm">Import</a>
-			<a href="/options" class="btn btn-ghost btn-sm">Options</a>
-			<SignalingStatusBadge />
-			<ThemeToggle />
-		{/snippet}
-	</Navbar>
-	<main class="flex min-w-0 flex-1 overflow-hidden">
-		<div class="relative flex min-w-0 flex-1 flex-col">
-			{@render children?.()}
-		</div>
-	</main>
-</div>
+{@render children?.()}
 
 <PlayerOverlay />
 <SmartSearchToast onlibrarychange={() => invalidateAll()} onstream={handleSmartSearchStream} />
-<ToastOutlet />

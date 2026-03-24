@@ -1,13 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
-	import Navbar from 'ui-lib/components/core/Navbar.svelte';
 	import ModalOutlet from 'ui-lib/components/core/ModalOutlet.svelte';
-	import ToastOutlet from 'ui-lib/components/core/ToastOutlet.svelte';
-	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
-	import SignalingStatusBadge from 'ui-lib/components/signaling/SignalingStatusBadge.svelte';
 	import RosterModalContent from 'ui-lib/components/roster/RosterModalContent.svelte';
-	import { themeService } from 'ui-lib/services/theme.service';
 	import { rosterService } from 'ui-lib/services/roster.service';
 	import { clientIdentityService } from 'ui-lib/services/client-identity.service';
 	import { toastService } from 'ui-lib/services/toast.service';
@@ -25,8 +20,6 @@
 	const rosterStore = rosterService.state;
 	const chatStore = signalingChatService.state;
 
-	const navItems = [{ id: 'roster', label: 'Roster', classes: 'btn-primary' }];
-
 	const modals: Record<string, { component: typeof RosterModalContent; maxWidth?: string }> = {
 		roster: { component: RosterModalContent, maxWidth: 'max-w-2xl' }
 	};
@@ -34,7 +27,6 @@
 	let prevPhase: string | null = null;
 
 	onMount(() => {
-		themeService.initialize();
 		rosterService.initialize('local');
 		serverCatalogService.initialize();
 		p2pStreamService.initializeLocal();
@@ -185,14 +177,5 @@
 	});
 </script>
 
-<Navbar brand={{ label: 'Mhaol Client' }} items={navItems}>
-	{#snippet end()}
-		<SignalingStatusBadge />
-		<ThemeToggle />
-	{/snippet}
-</Navbar>
-<main class="p-4">
-	{@render children()}
-</main>
+{@render children()}
 <ModalOutlet {modals} />
-<ToastOutlet />
