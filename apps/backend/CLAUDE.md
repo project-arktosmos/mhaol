@@ -1,9 +1,9 @@
-# Server Backend
+# Backend
 
-**Location:** `apps/server/backend/`
+**Location:** `apps/backend/`
 **Framework:** Rust — Axum 0.8 + Tokio + rusqlite (SQLite)
-**Crate:** `mhaol-server`
-**Binary:** `mhaol-server` (default port 1530)
+**Crate:** `mhaol-backend`
+**Binary:** `mhaol-backend` (default port 1530)
 
 ## Source Structure
 
