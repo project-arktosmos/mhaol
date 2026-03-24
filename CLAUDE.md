@@ -126,9 +126,9 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Frontend dev server (port 1570)
-pnpm dev:node         # Rust node server (PORT=1530)
-pnpm dev:frontend     # Frontend dev server (port 1570)
+pnpm dev              # Frontend (port 1570) + Rust node (port 1530) in parallel
+pnpm dev:node         # Rust node server only (PORT=1530)
+pnpm dev:frontend     # Frontend dev server only (port 1570)
 
 # Building
 pnpm build            # Frontend build

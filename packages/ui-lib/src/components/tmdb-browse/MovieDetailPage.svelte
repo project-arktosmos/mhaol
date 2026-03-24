@@ -10,6 +10,14 @@
 	} from 'addons/tmdb/types';
 	import type { MediaItem } from 'ui-lib/types/media-card.type';
 	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
+	import {
+		formatBytes,
+		formatSpeed,
+		formatEta,
+		getStateLabel,
+		getStateColor
+	} from 'ui-lib/types/torrent.type';
+	import type { TorrentState } from 'ui-lib/types/torrent.type';
 
 	interface Props {
 		movie: DisplayTMDBMovie;
@@ -26,7 +34,16 @@
 			eval: boolean;
 			done: boolean;
 		} | null;
-		downloadStatus: { state: string; progress: number } | null;
+		torrentStatus: {
+			state: TorrentState;
+			progress: number;
+			size: number;
+			downloadSpeed: number;
+			uploadSpeed: number;
+			peers: number;
+			seeds: number;
+			eta: number | null;
+		} | null;
 		fetchedTorrent: { name: string; quality: string; languages: string } | null;
 		imagesVisible: boolean;
 		imageOverrides: Record<string, string> | null;
@@ -49,7 +66,7 @@
 		fetching,
 		fetched,
 		fetchSteps,
-		downloadStatus,
+		torrentStatus,
 		fetchedTorrent,
 		imagesVisible,
 		imageOverrides,
@@ -77,16 +94,16 @@
 	let cast = $derived(movieDetails?.cast ?? []);
 	let images: DisplayTMDBImage[] = $derived(movieDetails?.images ?? []);
 
-	let dlState = $derived(downloadStatus?.state ?? null);
+	let dlState = $derived(torrentStatus?.state ?? null);
 	let isDownloading = $derived(
 		dlState === 'downloading' ||
 			dlState === 'initializing' ||
 			dlState === 'paused' ||
 			dlState === 'checking'
 	);
-	let isDownloaded = $derived(dlState === 'completed' || dlState === 'seeding');
+	let isDownloaded = $derived(dlState === 'seeding');
 	let downloadButtonDisabled = $derived(!fetched || isDownloading || isDownloaded);
-	let dlProgress = $derived(downloadStatus?.progress ?? 0);
+	let dlProgress = $derived(torrentStatus?.progress ?? 0);
 	let dlPercent = $derived(Math.round(dlProgress * 100));
 	let streamingTorrent = $state(false);
 	let streamingP2p = $state(false);
@@ -357,62 +374,142 @@
 			</div>
 		{/if}
 
-		<div class="grid grid-cols-2 gap-2">
-			<button
-				class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
-				onclick={onfetch}
-				disabled={fetching}
-			>
-				{#if fetching}
-					<span class="loading loading-xs loading-spinner"></span>
-				{:else}
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-4 w-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-						/>
-					</svg>
-				{/if}
-				Smart Search
-			</button>
-			{#if fetchSteps}
-				<button
-					class="col-span-2 cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
-					onclick={onshowsearch}
+		<button
+			class="btn w-full btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
+			onclick={onfetch}
+			disabled={fetching}
+		>
+			{#if fetching}
+				<span class="loading loading-xs loading-spinner"></span>
+			{:else}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
 				>
-					<ul class="steps steps-horizontal w-full text-xs">
-						<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
-						<li class={classNames('step', { 'step-success': fetchSteps.search })}>
-							{fetchSteps.searching ? 'Searching...' : 'Search'}
-						</li>
-						<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
-						<li class={classNames('step', { 'step-success': fetchSteps.done })}>
-							{fetchSteps.done ? 'Done' : 'Candidate'}
-						</li>
-					</ul>
-				</button>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+					/>
+				</svg>
 			{/if}
-			{#if fetchedTorrent}
-				<div class="col-span-2 flex items-center gap-2">
-					<p class="min-w-0 flex-1 truncate text-xs opacity-60" title={fetchedTorrent.name}>
-						{fetchedTorrent.name}
-					</p>
-					{#if fetchedTorrent.quality}
-						<span class="badge badge-xs badge-info">{fetchedTorrent.quality}</span>
+			Smart Search
+		</button>
+
+		{#if fetchSteps}
+			<button
+				class="w-full cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
+				onclick={onshowsearch}
+			>
+				<ul class="steps steps-horizontal w-full text-xs">
+					<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.search })}>
+						{fetchSteps.searching ? 'Searching...' : 'Search'}
+					</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.done })}>
+						{fetchSteps.done ? 'Done' : 'Candidate'}
+					</li>
+				</ul>
+			</button>
+		{/if}
+
+		{#if fetchedTorrent || torrentStatus}
+			<table class="table table-xs">
+				<tbody>
+					{#if fetchedTorrent}
+						<tr>
+							<td class="font-medium opacity-60">File</td>
+							<td class="break-all">{fetchedTorrent.name}</td>
+						</tr>
+						{#if fetchedTorrent.quality}
+							<tr>
+								<td class="font-medium opacity-60">Quality</td>
+								<td><span class="badge badge-xs badge-info">{fetchedTorrent.quality}</span></td>
+							</tr>
+						{/if}
+						{#if fetchedTorrent.languages}
+							<tr>
+								<td class="font-medium opacity-60">Languages</td>
+								<td><span class="badge badge-ghost badge-xs">{fetchedTorrent.languages}</span></td>
+							</tr>
+						{/if}
 					{/if}
-					{#if fetchedTorrent.languages}
-						<span class="badge badge-ghost badge-xs">{fetchedTorrent.languages}</span>
+					{#if torrentStatus}
+						<tr>
+							<td class="font-medium opacity-60">Status</td>
+							<td>
+								<span class="badge badge-xs badge-{getStateColor(torrentStatus.state)}">
+									{getStateLabel(torrentStatus.state)}
+								</span>
+							</td>
+						</tr>
+						<tr>
+							<td class="font-medium opacity-60">Size</td>
+							<td>{formatBytes(torrentStatus.size)}</td>
+						</tr>
+						{#if isDownloading}
+							<tr>
+								<td class="font-medium opacity-60">Progress</td>
+								<td>
+									<div class="flex items-center gap-2">
+										<progress
+											class="progress progress-info flex-1"
+											value={dlPercent}
+											max="100"
+										></progress>
+										<span class="text-xs font-medium">{dlPercent}%</span>
+									</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="font-medium opacity-60">Speed</td>
+								<td>
+									{formatSpeed(torrentStatus.downloadSpeed)} &darr;
+									{formatSpeed(torrentStatus.uploadSpeed)} &uarr;
+								</td>
+							</tr>
+							<tr>
+								<td class="font-medium opacity-60">Peers</td>
+								<td>{torrentStatus.seeds} seeds &middot; {torrentStatus.peers} peers</td>
+							</tr>
+							{#if torrentStatus.eta !== null}
+								<tr>
+									<td class="font-medium opacity-60">ETA</td>
+									<td>{formatEta(torrentStatus.eta)}</td>
+								</tr>
+							{/if}
+						{/if}
+						{#if isDownloaded}
+							<tr>
+								<td class="font-medium opacity-60">Progress</td>
+								<td>
+									<div class="flex items-center gap-2">
+										<progress
+											class="progress progress-success flex-1"
+											value="100"
+											max="100"
+										></progress>
+										<span class="text-xs font-medium">100%</span>
+									</div>
+								</td>
+							</tr>
+						{/if}
+					{:else if fetchedTorrent}
+						<tr>
+							<td class="font-medium opacity-60">Status</td>
+							<td><span class="badge badge-ghost badge-xs">Not started</span></td>
+						</tr>
 					{/if}
-				</div>
-			{/if}
+				</tbody>
+			</table>
+		{/if}
+
+		<div class="grid grid-cols-2 gap-2">
 			<button
 				class={classNames('btn btn-sm', {
 					'btn-ghost': isDownloaded,
@@ -443,7 +540,7 @@
 				Stream Torrent
 			</button>
 			<button
-				class="btn btn-sm btn-secondary"
+				class="btn col-span-2 btn-sm btn-secondary"
 				onclick={() => {
 					streamingP2p = true;
 					onp2pstream();
@@ -455,19 +552,6 @@
 				{/if}
 				P2P Stream
 			</button>
-			{#if isDownloading || isDownloaded}
-				<div class="col-span-2 flex items-center gap-2">
-					<progress
-						class={classNames('progress flex-1', {
-							'progress-info': isDownloading,
-							'progress-success': isDownloaded
-						})}
-						value={dlPercent}
-						max="100"
-					></progress>
-					<span class="text-xs font-medium opacity-60">{dlPercent}%</span>
-				</div>
-			{/if}
 		</div>
 	{/snippet}
 </DetailPageLayout>

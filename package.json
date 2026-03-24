@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm -r --parallel --filter frontend dev",
+		"dev": "pnpm run app:node & pnpm run app:frontend & wait",
 		"dev:node": "set -a; . ./.env 2>/dev/null; set +a; PORT=1530 cargo run -p mhaol-node --bin mhaol-node",
 		"dev:frontend": "pnpm --filter frontend dev",
 		"build": "pnpm --filter frontend build",
@@ -24,6 +24,9 @@
 		"app:frontend": "pnpm --filter frontend dev",
 		"app:shepperd": "pnpm --filter shepperd dev",
 		"app:shepperd:build": "pnpm --filter shepperd build",
+		"android:dev": "cd apps/frontend && cargo tauri android dev",
+		"android:build": "cd apps/frontend && cargo tauri android build",
+		"android:build:apk": "cd apps/frontend && cargo tauri android build --apk",
 		"install:deps": "sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev libonig-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav"
 	},
 	"engines": {

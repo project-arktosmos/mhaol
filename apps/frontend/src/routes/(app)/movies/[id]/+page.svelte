@@ -79,13 +79,7 @@
 		return null;
 	});
 
-	let currentDownloadStatus = $derived.by((): { state: string; progress: number } | null => {
-		if (matchedTorrent) return { state: matchedTorrent.state, progress: matchedTorrent.progress };
-		if (relatedData?.torrentDownload) {
-			return { state: relatedData.torrentDownload.state, progress: relatedData.torrentDownload.progress };
-		}
-		return null;
-	});
+	let currentTorrentStatus = $derived(matchedTorrent);
 
 	$effect(() => {
 		const candidate = $searchStore.fetchedCandidate;
@@ -269,7 +263,7 @@
 				size: torrent.size,
 				completedAt: ''
 			};
-			playerService.play(file).then(() => playerService.setDisplayMode('inline'));
+			playerService.play(file, 'inline');
 		}
 	}
 
@@ -288,7 +282,7 @@
 		fetching={isFetching}
 		fetched={isFetchedForCurrent}
 		fetchSteps={currentFetchSteps}
-		downloadStatus={currentDownloadStatus}
+		torrentStatus={currentTorrentStatus}
 		fetchedTorrent={$searchStore.fetchedCandidate
 			? {
 					name: $searchStore.fetchedCandidate.name,

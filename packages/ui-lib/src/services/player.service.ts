@@ -108,12 +108,15 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	// ===== Playback =====
 
-	async play(file: PlayableFile): Promise<void> {
+	async play(file: PlayableFile, displayMode?: PlayerDisplayMode): Promise<void> {
 		if (!browser) return;
 
 		const { streamServerAvailable } = get(this.state);
 
 		await this.stop();
+		if (displayMode) {
+			this.displayMode.set(displayMode);
+		}
 
 		if (!streamServerAvailable) {
 			console.error('[Player] Stream server not available');
