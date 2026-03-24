@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, afterEach } from 'vitest';
-import { raImageUrl, setRaImageBaseUrl, gameListItemToDisplay, gameExtendedToDisplay } from '../src/transform';
+import {
+	raImageUrl,
+	setRaImageBaseUrl,
+	gameListItemToDisplay,
+	gameExtendedToDisplay
+} from '../src/transform';
 
 describe('raImageUrl', () => {
 	it('returns full URL for a valid path', () => {
