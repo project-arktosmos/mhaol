@@ -14,6 +14,7 @@ export interface MediaList {
 	mediaType: string;
 	libraryType: string;
 	source: 'auto' | 'user';
+	parentListId: string | null;
 	itemCount: number;
 	createdAt: string;
 	links: Record<string, MediaListLink>;

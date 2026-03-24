@@ -25,7 +25,16 @@
 </script>
 
 {#if movies.length > 0}
-	<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {fetchCacheSummaries} {smartSearchingId} {onselectMovie} {onsmartSearch} />
+	<TmdbBrowseGrid
+		{movies}
+		{selectedMovieId}
+		{fetchedIds}
+		{downloadStatuses}
+		{fetchCacheSummaries}
+		{smartSearchingId}
+		{onselectMovie}
+		{onsmartSearch}
+	/>
 {:else}
 	<div class="rounded-lg bg-base-200 p-8 text-center">
 		<p class="opacity-50">No movies yet. Add a Movies library and scan it.</p>

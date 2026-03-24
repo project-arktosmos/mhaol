@@ -11,6 +11,6 @@
 </script>
 
 <div class="min-h-screen bg-base-100">
-	<LandingNavbar />
+	<LandingNavbar navItems={[{ href: '/connect', label: 'Connect', classes: 'btn-primary' }]} />
 	{@render children?.()}
 </div>

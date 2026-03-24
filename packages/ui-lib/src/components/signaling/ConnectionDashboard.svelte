@@ -272,95 +272,97 @@
 
 	<!-- Signaling Rooms (hidden once catalog is loaded) -->
 	{#if displayMovies.length === 0}
-	{#each roomEntries as [roomId, room] (roomId)}
-		<div class="card bg-base-200">
-			<div class="card-body gap-3 p-4">
-				<div class="flex items-center justify-between">
-					<h2 class="card-title text-base">
-						{roomId.length > 12 ? signalingAdapter.shortAddress(roomId) : roomId}
-					</h2>
-					<span class={classNames('badge badge-sm', signalingAdapter.phaseBadgeClass(room.phase))}>
-						{signalingAdapter.phaseLabel(room.phase)}
-					</span>
-				</div>
-				{#if room.roomPeers.length > 0}
-					<div class="flex flex-col gap-1">
-						{#each room.roomPeers as peer (peer.peer_id)}
-							{@const status = room.peerConnectionStates[peer.peer_id] ?? 'idle'}
-							{@const handshakePhase = $handshakeStore.peerPhases[peer.peer_id]}
-							{@const isActive = peer.peer_id === activePeerId}
-							<div
-								class={classNames(
-									'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 transition-colors',
-									{
-										'bg-primary/10': isActive,
-										'hover:bg-base-300': !isActive
-									}
-								)}
-								role="button"
-								tabindex="0"
-								onclick={() => onPeerClick(peer.peer_id)}
-								onkeydown={(e: KeyboardEvent) => {
-									if (e.key === 'Enter' || e.key === ' ') onPeerClick(peer.peer_id);
-								}}
-							>
-								<span
-									class={classNames('h-2.5 w-2.5 shrink-0 rounded-full', {
-										'bg-base-content/30': status === 'idle',
-										'animate-pulse bg-warning': status === 'offering' || status === 'answering',
-										'bg-success': status === 'connected',
-										'bg-error': status === 'failed'
-									})}
-								></span>
-								<div class="min-w-0 flex-1">
-									{#if peer.name}
+		{#each roomEntries as [roomId, room] (roomId)}
+			<div class="card bg-base-200">
+				<div class="card-body gap-3 p-4">
+					<div class="flex items-center justify-between">
+						<h2 class="card-title text-base">
+							{roomId.length > 12 ? signalingAdapter.shortAddress(roomId) : roomId}
+						</h2>
+						<span
+							class={classNames('badge badge-sm', signalingAdapter.phaseBadgeClass(room.phase))}
+						>
+							{signalingAdapter.phaseLabel(room.phase)}
+						</span>
+					</div>
+					{#if room.roomPeers.length > 0}
+						<div class="flex flex-col gap-1">
+							{#each room.roomPeers as peer (peer.peer_id)}
+								{@const status = room.peerConnectionStates[peer.peer_id] ?? 'idle'}
+								{@const handshakePhase = $handshakeStore.peerPhases[peer.peer_id]}
+								{@const isActive = peer.peer_id === activePeerId}
+								<div
+									class={classNames(
+										'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 transition-colors',
+										{
+											'bg-primary/10': isActive,
+											'hover:bg-base-300': !isActive
+										}
+									)}
+									role="button"
+									tabindex="0"
+									onclick={() => onPeerClick(peer.peer_id)}
+									onkeydown={(e: KeyboardEvent) => {
+										if (e.key === 'Enter' || e.key === ' ') onPeerClick(peer.peer_id);
+									}}
+								>
+									<span
+										class={classNames('h-2.5 w-2.5 shrink-0 rounded-full', {
+											'bg-base-content/30': status === 'idle',
+											'animate-pulse bg-warning': status === 'offering' || status === 'answering',
+											'bg-success': status === 'connected',
+											'bg-error': status === 'failed'
+										})}
+									></span>
+									<div class="min-w-0 flex-1">
+										{#if peer.name}
+											<div class="flex items-center gap-1.5">
+												<span class="block truncate text-sm font-medium">{peer.name}</span>
+												{#if peer.instance_type}
+													<span class="badge badge-outline badge-xs">{peer.instance_type}</span>
+												{/if}
+											</div>
+										{/if}
+										<span class="block truncate font-mono text-xs">
+											{signalingAdapter.shortAddress(peer.peer_id)}
+										</span>
 										<div class="flex items-center gap-1.5">
-											<span class="block truncate text-sm font-medium">{peer.name}</span>
-											{#if peer.instance_type}
-												<span class="badge badge-outline badge-xs">{peer.instance_type}</span>
+											<span
+												class={classNames(
+													'badge badge-xs',
+													signalingAdapter.peerConnectionStatusBadgeClass(status)
+												)}
+											>
+												{signalingAdapter.peerConnectionStatusLabel(status)}
+											</span>
+											{#if handshakePhase && handshakePhase !== 'idle'}
+												<span class="text-[10px] text-base-content/50">
+													{handshakePhase}
+												</span>
 											{/if}
 										</div>
-									{/if}
-									<span class="block truncate font-mono text-xs">
-										{signalingAdapter.shortAddress(peer.peer_id)}
-									</span>
-									<div class="flex items-center gap-1.5">
-										<span
-											class={classNames(
-												'badge badge-xs',
-												signalingAdapter.peerConnectionStatusBadgeClass(status)
-											)}
-										>
-											{signalingAdapter.peerConnectionStatusLabel(status)}
-										</span>
-										{#if handshakePhase && handshakePhase !== 'idle'}
-											<span class="text-[10px] text-base-content/50">
-												{handshakePhase}
-											</span>
-										{/if}
 									</div>
+									{#if status === 'connected'}
+										<button
+											class="btn text-error btn-ghost btn-xs"
+											onclick={(e: MouseEvent) => {
+												e.stopPropagation();
+												onPeerDisconnect(peer.peer_id);
+											}}
+											title="Disconnect"
+										>
+											x
+										</button>
+									{/if}
 								</div>
-								{#if status === 'connected'}
-									<button
-										class="btn text-error btn-ghost btn-xs"
-										onclick={(e: MouseEvent) => {
-											e.stopPropagation();
-											onPeerDisconnect(peer.peer_id);
-										}}
-										title="Disconnect"
-									>
-										x
-									</button>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<span class="text-xs text-base-content/40">No peers in this room</span>
-				{/if}
+							{/each}
+						</div>
+					{:else}
+						<span class="text-xs text-base-content/40">No peers in this room</span>
+					{/if}
+				</div>
 			</div>
-		</div>
-	{/each}
+		{/each}
 	{/if}
 
 	<!-- Movie Catalog Grid -->

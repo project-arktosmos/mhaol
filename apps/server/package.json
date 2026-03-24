@@ -27,15 +27,15 @@
   },
   "dependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
+    "addons": "workspace:*",
+    "assets": "workspace:*",
     "classnames": "^2.5.1",
     "fflate": "^0.8.2",
     "html5-qrcode": "^2.3.8",
     "qrcode": "^1.5.4",
-    "addons": "workspace:*",
-    "assets": "workspace:*",
     "ui-lib": "workspace:*",
-    "webrtc": "workspace:*",
-    "viem": "^2.46.3"
+    "viem": "^2.46.3",
+    "webrtc": "workspace:*"
   },
   "devDependencies": {
     "@eslint/compat": "^2.0.2",

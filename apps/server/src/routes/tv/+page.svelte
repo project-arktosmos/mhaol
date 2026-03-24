@@ -1,19 +1,21 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { apiUrl } from "ui-lib/lib/api-base";
   import { tmdbBrowseService } from "ui-lib/services/tmdb-browse.service";
   import { smartPairService } from "ui-lib/services/smart-pair.service";
   import type { DisplayTMDBTvShow } from "addons/tmdb/types";
   import type {
-    MediaItem,
     MediaCategory,
     MediaLinkSource,
   } from "ui-lib/types/media-card.type";
+  import type { MediaList } from "ui-lib/types/media-list.type";
   import SearchTab from "ui-lib/components/tmdb-browse/SearchTab.svelte";
   import PopularTab from "ui-lib/components/tmdb-browse/PopularTab.svelte";
   import TmdbBrowseGrid from "ui-lib/components/tmdb-browse/TmdbBrowseGrid.svelte";
   import TmdbPagination from "ui-lib/components/tmdb-browse/TmdbPagination.svelte";
   import BrowseViewToggle from "ui-lib/components/browse/BrowseViewToggle.svelte";
+  import TvShowMatchModal from "ui-lib/components/libraries/TvShowMatchModal.svelte";
   import classNames from "classnames";
 
   interface Props {
@@ -21,8 +23,7 @@
       mediaTypes: Array<{ id: string; label: string }>;
       categories: MediaCategory[];
       linkSources: MediaLinkSource[];
-      itemsByCategory: Record<string, MediaItem[]>;
-      itemsByType: Record<string, MediaItem[]>;
+      lists: MediaList[];
       libraries: Record<string, { name: string; type: string }>;
       error?: string;
     };
@@ -33,32 +34,96 @@
   const browseState = tmdbBrowseService.state;
 
   let pinnedTvShows = $state<DisplayTMDBTvShow[]>([]);
+  let matchModalList: MediaList | null = $state(null);
 
+  // Navigate to TMDB detail page (for browse results and pinned)
   function handleSelectTvShow(tvShow: DisplayTMDBTvShow) {
     goto(`/tv/${tvShow.id}`);
   }
 
-  // Filter items to only those from TV libraries
-  let tvItems = $derived(
-    Object.values(data.itemsByType)
-      .flat()
-      .filter((i) => (data.libraries[i.libraryId]?.type ?? "movies") === "tv"),
-  );
+  // Handle library show click: navigate if TMDB-linked, otherwise open match modal
+  function handleSelectLibraryShow(tvShow: DisplayTMDBTvShow) {
+    const list = listByDisplayId.get(tvShow.id);
+    if (!list) return;
 
-  // Stable unique numeric id per item (hash from item.id string)
-  function stableNumericId(str: string): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    const tmdbLink = list.links?.tmdb;
+    if (tmdbLink) {
+      goto(`/tv/${tmdbLink.serviceId}`);
+    } else {
+      matchModalList = list;
     }
-    return Math.abs(hash);
   }
 
-  function itemToDisplayTvShow(item: MediaItem): DisplayTMDBTvShow {
+  async function handleMatch(tmdbId: number) {
+    if (!matchModalList) return;
+    const listId = matchModalList.id;
+
+    const res = await fetch(apiUrl(`/api/media-lists/${listId}/tmdb`), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tmdbId }),
+    });
+
+    if (res.ok) {
+      matchModalList = null;
+      goto(`/tv/${tmdbId}`);
+    }
+  }
+
+  // Filter to show-level TV lists (no parent)
+  let tvShowLists = $derived(
+    (data.lists ?? []).filter(
+      (list) => list.parentListId === null && list.libraryType === "tv",
+    ),
+  );
+
+  // Assign unique numeric IDs to each list (DisplayTMDBTvShow requires numeric id)
+  // Use negative IDs to avoid collisions with real TMDB IDs
+  let listIdMap = $derived(
+    new Map(tvShowLists.map((list, i) => [list.id, -(i + 1)])),
+  );
+
+  // Map display numeric ID back to MediaList
+  let listByDisplayId = $derived(
+    new Map(tvShowLists.map((list) => [listIdMap.get(list.id)!, list])),
+  );
+
+  // Count child lists (seasons) per show
+  let seasonCountByShowId = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const list of data.lists ?? []) {
+      if (list.parentListId && list.libraryType === "tv") {
+        counts.set(
+          list.parentListId,
+          (counts.get(list.parentListId) ?? 0) + 1,
+        );
+      }
+    }
+    return counts;
+  });
+
+  // Count total episodes across all child lists per show
+  let episodeCountByShowId = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const list of data.lists ?? []) {
+      if (list.parentListId && list.libraryType === "tv") {
+        counts.set(
+          list.parentListId,
+          (counts.get(list.parentListId) ?? 0) + list.itemCount,
+        );
+      }
+    }
+    return counts;
+  });
+
+  function listToDisplayTvShow(list: MediaList): DisplayTMDBTvShow {
+    const seasonCount = seasonCountByShowId.get(list.id) ?? null;
+    const episodeCount =
+      episodeCountByShowId.get(list.id) ?? list.itemCount ?? null;
     return {
-      id: stableNumericId(item.id),
-      name: item.name,
-      originalName: item.name,
+      id: listIdMap.get(list.id)!,
+      name: list.title,
+      originalName: list.title,
       firstAirYear: "",
       lastAirYear: null,
       overview: "",
@@ -67,27 +132,27 @@
       voteAverage: 0,
       voteCount: 0,
       genres: [],
-      numberOfSeasons: null,
-      numberOfEpisodes: null,
+      numberOfSeasons: seasonCount,
+      numberOfEpisodes: episodeCount,
     };
   }
 
-  // Group items by library for per-library grids
+  // Group show lists by library for per-library grids
   let libraryGroups = $derived.by(() => {
-    const grouped = new Map<string, MediaItem[]>();
-    for (const item of tvItems) {
-      const list = grouped.get(item.libraryId);
-      if (list) {
-        list.push(item);
+    const grouped = new Map<string, MediaList[]>();
+    for (const list of tvShowLists) {
+      const existing = grouped.get(list.libraryId);
+      if (existing) {
+        existing.push(list);
       } else {
-        grouped.set(item.libraryId, [item]);
+        grouped.set(list.libraryId, [list]);
       }
     }
     return Array.from(grouped.entries())
-      .map(([libraryId, items]) => ({
+      .map(([libraryId, lists]) => ({
         libraryId,
         name: data.libraries[libraryId]?.name ?? libraryId,
-        tvShows: items.map(itemToDisplayTvShow),
+        tvShows: lists.map(listToDisplayTvShow),
       }))
       .filter((g) => g.tvShows.length > 0);
   });
@@ -122,7 +187,7 @@
         <h2 class="mb-3 text-lg font-semibold">{group.name}</h2>
         <TmdbBrowseGrid
           tvShows={group.tvShows}
-          onselectTvShow={handleSelectTvShow}
+          onselectTvShow={handleSelectLibraryShow}
         />
       </section>
     {/each}
@@ -213,3 +278,11 @@
     </section>
   </div>
 </div>
+
+{#if matchModalList}
+  <TvShowMatchModal
+    showName={matchModalList.title}
+    onmatch={handleMatch}
+    onclose={() => (matchModalList = null)}
+  />
+{/if}

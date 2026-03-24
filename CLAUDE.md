@@ -13,8 +13,7 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 ```
 mhaol.git/
 ├── apps/                             # Thin SvelteKit wrappers (routes + assembly only)
-│   ├── website/                      # Marketing landing page (base: /mhaol)
-│   ├── client/                       # Minimal P2P contact management app
+│   ├── client/                       # P2P client app (landing page + /connect)
 │   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 │   └── server/                       # Media app (headless, port 1530)
 │       └── backend/                  # Rust Axum server (integrated, port 1530)
@@ -117,7 +116,7 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # All apps in parallel (client :1570, server :1530, website :1600)
+pnpm dev              # All apps in parallel (client :1570, server :1530)
 pnpm dev:backend      # Rust backend only (PORT=1530)
 pnpm dev:frontend     # SvelteKit dev server only (port 1531)
 

@@ -94,7 +94,16 @@
 	</div>
 {:else if results.length > 0}
 	{#if isMovies}
-		<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {fetchCacheSummaries} {smartSearchingId} {onselectMovie} {onsmartSearch} />
+		<TmdbBrowseGrid
+			{movies}
+			{selectedMovieId}
+			{fetchedIds}
+			{downloadStatuses}
+			{fetchCacheSummaries}
+			{smartSearchingId}
+			{onselectMovie}
+			{onsmartSearch}
+		/>
 	{:else}
 		<TmdbBrowseGrid {tvShows} {selectedTvShowId} {onselectTvShow} />
 	{/if}

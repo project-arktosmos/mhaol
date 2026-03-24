@@ -81,6 +81,8 @@ struct MappedMediaList {
     #[serde(rename = "libraryType")]
     library_type: String,
     source: String,
+    #[serde(rename = "parentListId")]
+    parent_list_id: Option<String>,
     #[serde(rename = "itemCount")]
     item_count: usize,
     #[serde(rename = "createdAt")]
@@ -289,6 +291,7 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
                 media_type: list.media_type,
                 library_type,
                 source: list.source,
+                parent_list_id: list.parent_list_id,
                 item_count,
                 created_at: list.created_at,
                 links: list_links,

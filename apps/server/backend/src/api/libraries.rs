@@ -625,7 +625,11 @@ fn generate_auto_lists(state: &AppState, library_id: &str, library_path: &str, l
             });
 
             if has_season_subdirs {
-                // Show with season subdirectories
+                // Show with season subdirectories — create show-level list, then season children
+                let show_source_key = format!("{}:show", show_path);
+                active_source_paths.insert(show_source_key.clone());
+                let show_list_id = upsert_auto_list_titled(state, library_id, &show_name, "video", &show_source_key, &mut [], None);
+
                 for (season_name, season_path) in &season_dirs {
                     let season_files = video_files_in_dir(season_path, &ext_map);
                     if season_files.is_empty() { continue }
@@ -633,7 +637,6 @@ fn generate_auto_lists(state: &AppState, library_id: &str, library_path: &str, l
                     let source_key = format!("{}:video", season_path);
                     active_source_paths.insert(source_key.clone());
 
-                    let list_title = format!("{} - {}", show_name, season_name);
                     let mut season_items: Vec<&crate::db::repo::library_item::LibraryItemRow> = items
                         .iter()
                         .filter(|i| {
@@ -645,7 +648,7 @@ fn generate_auto_lists(state: &AppState, library_id: &str, library_path: &str, l
                         .collect();
 
                     if !season_items.is_empty() {
-                        upsert_auto_list_titled(state, library_id, &list_title, "video", &source_key, &mut season_items);
+                        upsert_auto_list_titled(state, library_id, season_name, "video", &source_key, &mut season_items, Some(&show_list_id));
                     }
                 }
             } else {
@@ -653,7 +656,7 @@ fn generate_auto_lists(state: &AppState, library_id: &str, library_path: &str, l
                 let flat_files = video_files_in_dir(&show_path, &ext_map);
                 if flat_files.is_empty() { continue }
 
-                let source_key = format!("{}:video", show_path);
+                let source_key = format!("{}:show", show_path);
                 active_source_paths.insert(source_key.clone());
 
                 let mut show_items: Vec<&crate::db::repo::library_item::LibraryItemRow> = items
@@ -667,7 +670,7 @@ fn generate_auto_lists(state: &AppState, library_id: &str, library_path: &str, l
                     .collect();
 
                 if !show_items.is_empty() {
-                    upsert_auto_list_titled(state, library_id, &show_name, "video", &source_key, &mut show_items);
+                    upsert_auto_list_titled(state, library_id, &show_name, "video", &source_key, &mut show_items, None);
                 }
             }
         }
@@ -697,7 +700,7 @@ fn generate_auto_lists(state: &AppState, library_id: &str, library_path: &str, l
                     .and_then(|n| n.to_str())
                     .unwrap_or("Untitled")
                     .to_string();
-                upsert_auto_list_titled(state, library_id, &title, "video", &source_key, &mut video_items);
+                upsert_auto_list_titled(state, library_id, &title, "video", &source_key, &mut video_items, None);
             }
         }
     }
@@ -721,7 +724,8 @@ fn upsert_auto_list_titled(
     media_type: &str,
     source_path: &str,
     items: &mut [&crate::db::repo::library_item::LibraryItemRow],
-) {
+    parent_list_id: Option<&str>,
+) -> String {
     let list_id = match state.media_lists.get_by_source_path(source_path) {
         Some(existing) => existing.id,
         None => {
@@ -735,24 +739,29 @@ fn upsert_auto_list_titled(
                 media_type,
                 "auto",
                 Some(source_path),
+                parent_list_id,
             );
             id
         }
     };
 
-    items.sort_by(|a, b| a.path.cmp(&b.path));
-    let list_items: Vec<(String, String, i64)> = items
-        .iter()
-        .enumerate()
-        .map(|(i, item)| {
-            (
-                uuid::Uuid::new_v4().to_string(),
-                item.id.clone(),
-                i as i64,
-            )
-        })
-        .collect();
-    state.media_list_items.sync_list(&list_id, &list_items);
+    if !items.is_empty() {
+        items.sort_by(|a, b| a.path.cmp(&b.path));
+        let list_items: Vec<(String, String, i64)> = items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                (
+                    uuid::Uuid::new_v4().to_string(),
+                    item.id.clone(),
+                    i as i64,
+                )
+            })
+            .collect();
+        state.media_list_items.sync_list(&list_id, &list_items);
+    }
+
+    list_id
 }
 
 pub(crate) async fn stream_file(path_str: &str, range_header: Option<&str>) -> axum::response::Response {

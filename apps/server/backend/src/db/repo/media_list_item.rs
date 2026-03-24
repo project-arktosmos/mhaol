@@ -100,7 +100,7 @@ mod tests {
             media_type: "video".into(),
             category_id: None,
         });
-        list_repo.insert("list1", "lib1", "Test Show", None, None, "video", "auto", Some("/tmp:video"));
+        list_repo.insert("list1", "lib1", "Test Show", None, None, "video", "auto", Some("/tmp:video"), None);
 
         (list_repo, list_item_repo)
     }

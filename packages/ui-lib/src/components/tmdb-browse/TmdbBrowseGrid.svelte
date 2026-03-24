@@ -38,6 +38,14 @@
 		onsmartSearch?: (movie: DisplayTMDBMovie) => void;
 	} = $props();
 
+	// Deduplicate by id to avoid Svelte each_key_duplicate errors (TMDB API can return duplicates)
+	let uniqueMovies = $derived(
+		movies.filter((m, i, arr) => arr.findIndex((x) => x.id === m.id) === i)
+	);
+	let uniqueTvShows = $derived(
+		tvShows.filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
+	);
+
 	const browseViewMode = getContext<
 		{ readonly value: 'poster' | 'backdrop' | 'table' } | undefined
 	>('browseViewMode');
@@ -60,7 +68,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each movies as movie (movie.id)}
+				{#each uniqueMovies as movie (movie.id)}
 					{@const dl = downloadStatuses?.get(movie.id)}
 					{@const fetched = fetchedIds?.has(movie.id) ?? false}
 					<tr
@@ -182,7 +190,7 @@
 						</td>
 					</tr>
 				{/each}
-				{#each tvShows as tvShow (tvShow.id)}
+				{#each uniqueTvShows as tvShow (tvShow.id)}
 					<tr
 						class={classNames('hover:bg-base-200', {
 							'cursor-pointer': !!onselectTvShow,
@@ -267,7 +275,7 @@
 				: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'
 		)}
 	>
-		{#each movies as movie (movie.id)}
+		{#each uniqueMovies as movie (movie.id)}
 			{@const dl = downloadStatuses?.get(movie.id)}
 			<TmdbBrowseCard
 				{movie}
@@ -279,7 +287,7 @@
 				onclick={onselectMovie ? () => onselectMovie(movie) : undefined}
 			/>
 		{/each}
-		{#each tvShows as tvShow (tvShow.id)}
+		{#each uniqueTvShows as tvShow (tvShow.id)}
 			<TmdbBrowseCard
 				{tvShow}
 				selected={selectedTvShowId === tvShow.id}

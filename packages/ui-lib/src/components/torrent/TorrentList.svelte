@@ -36,7 +36,7 @@
 			thumbnailUrl: null,
 			durationSeconds: null,
 			size: torrent.size,
-			completedAt: '',
+			completedAt: ''
 		});
 	}
 </script>

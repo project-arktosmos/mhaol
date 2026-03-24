@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm -r --parallel --filter client --filter server --filter website dev",
+		"dev": "pnpm -r --parallel --filter client --filter server dev",
 		"start": "pnpm --filter server start",
 		"dev:backend": "set -a; . ./.env 2>/dev/null; set +a; PORT=1530 cargo run -p mhaol-server --bin mhaol-server",
 		"dev:frontend": "pnpm --filter mhaol-video dev",
@@ -24,7 +24,6 @@
 		"build:signaling": "cargo build --release --bin mhaol-signaling",
 		"app:server": "pnpm --filter server headless",
 		"app:video": "pnpm --filter video dev",
-		"app:website": "pnpm --filter website dev",
 		"build:app:server": "pnpm --filter server build",
 		"app:server:android:dev": "pnpm --filter server tauri:android:dev",
 		"app:server:android:build": "pnpm --filter server tauri:android:build",

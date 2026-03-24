@@ -20,6 +20,9 @@ importers:
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
+      svelte-i18n:
+        specifier: ^4.0.1
+        version: 4.0.1(svelte@5.53.7)
       ui-lib:
         specifier: workspace:*
         version: link:../../packages/ui-lib
@@ -282,100 +285,6 @@ importers:
         specifier: ^4.0.6
         version: 4.0.18(@types/node@25.3.3)(@vitest/ui@4.0.18)(happy-dom@20.8.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(tsx@4.21.0)
 
-  apps/website:
-    dependencies:
-      '@sveltejs/adapter-static':
-        specifier: ^3.0.9
-        version: 3.0.10(@sveltejs/kit@2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))
-      svelte-i18n:
-        specifier: ^4.0.1
-        version: 4.0.1(svelte@5.53.7)
-      ui-lib:
-        specifier: workspace:*
-        version: link:../../packages/ui-lib
-      viem:
-        specifier: ^2.46.3
-        version: 2.46.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)
-      webrtc:
-        specifier: workspace:*
-        version: link:../../packages/webrtc
-    devDependencies:
-      '@eslint/compat':
-        specifier: ^2.0.2
-        version: 2.0.2(eslint@9.39.3(jiti@2.6.1))
-      '@eslint/js':
-        specifier: ^9.39.3
-        version: 9.39.3
-      '@sveltejs/kit':
-        specifier: ^2.22.0
-        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
-      '@sveltejs/vite-plugin-svelte':
-        specifier: ^6.0.0
-        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
-      '@tailwindcss/vite':
-        specifier: ^4.0.0
-        version: 4.2.1(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
-      '@testing-library/jest-dom':
-        specifier: ^6.9.1
-        version: 6.9.1
-      '@testing-library/svelte':
-        specifier: ^5.2.8
-        version: 5.3.1(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))(vitest@4.0.18)
-      '@vitest/coverage-v8':
-        specifier: ^4.0.6
-        version: 4.0.18(vitest@4.0.18)
-      '@vitest/ui':
-        specifier: ^4.0.6
-        version: 4.0.18(vitest@4.0.18)
-      daisyui:
-        specifier: ^5.0.50
-        version: 5.5.19
-      eslint:
-        specifier: ^9.18.0
-        version: 9.39.3(jiti@2.6.1)
-      eslint-config-prettier:
-        specifier: ^10.1.8
-        version: 10.1.8(eslint@9.39.3(jiti@2.6.1))
-      eslint-plugin-svelte:
-        specifier: ^3.15.0
-        version: 3.15.0(eslint@9.39.3(jiti@2.6.1))(svelte@5.53.7)
-      globals:
-        specifier: ^17.4.0
-        version: 17.4.0
-      happy-dom:
-        specifier: ^20.0.10
-        version: 20.8.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      prettier:
-        specifier: ^3.4.2
-        version: 3.8.1
-      prettier-plugin-svelte:
-        specifier: ^3.5.1
-        version: 3.5.1(prettier@3.8.1)(svelte@5.53.7)
-      prettier-plugin-tailwindcss:
-        specifier: ^0.7.2
-        version: 0.7.2(prettier-plugin-svelte@3.5.1(prettier@3.8.1)(svelte@5.53.7))(prettier@3.8.1)
-      svelte:
-        specifier: ^5.0.0
-        version: 5.53.7
-      svelte-check:
-        specifier: ^4.0.0
-        version: 4.4.4(picomatch@4.0.3)(svelte@5.53.7)(typescript@5.9.3)
-      tailwindcss:
-        specifier: ^4.0.0
-        version: 4.2.1
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      typescript-eslint:
-        specifier: ^8.56.1
-        version: 8.56.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)
-      vite:
-        specifier: ^7.0.4
-        version: 7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)
-      vitest:
-        specifier: ^4.0.6
-        version: 4.0.18(@types/node@25.3.3)(@vitest/ui@4.0.18)(happy-dom@20.8.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(lightningcss@1.31.1)(tsx@4.21.0)
-
   packages/addons:
     devDependencies:
       '@eslint/js':
@@ -487,6 +396,9 @@ importers:
       daisyui:
         specifier: ^5.0.50
         version: 5.5.19
+      dompurify:
+        specifier: ^3.3.3
+        version: 3.3.3
       eslint:
         specifier: ^9.18.0
         version: 9.39.3(jiti@2.6.1)
@@ -502,6 +414,9 @@ importers:
       happy-dom:
         specifier: ^20.0.10
         version: 20.8.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      marked:
+        specifier: ^17.0.5
+        version: 17.0.5
       prettier:
         specifier: ^3.4.2
         version: 3.8.1
@@ -1974,6 +1889,9 @@ packages:
   dom-accessibility-api@0.6.3:
     resolution: {integrity: sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==}
 
+  dompurify@3.3.3:
+    resolution: {integrity: sha512-Oj6pzI2+RqBfFG+qOaOLbFXLQ90ARpcGG6UePL82bJLtdsa6CYJD7nmiU8MW9nQNOtCHV3lZ/Bzq1X0QYbBZCA==}
+
   dotenv-cli@11.0.0:
     resolution: {integrity: sha512-r5pA8idbk7GFWuHEU7trSTflWcdBpQEK+Aw17UrSHjS6CReuhrrPcyC3zcQBPQvhArRHnBo/h6eLH1fkCvNlww==}
     hasBin: true
@@ -2530,6 +2448,11 @@ packages:
   make-dir@4.0.0:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
+
+  marked@17.0.5:
+    resolution: {integrity: sha512-6hLvc0/JEbRjRgzI6wnT2P1XuM1/RrrDEX0kPt0N7jGm1133g6X7DlxFasUIx+72aKAr904GTxhSLDrd5DIlZg==}
+    engines: {node: '>= 20'}
+    hasBin: true
 
   memoizee@0.4.17:
     resolution: {integrity: sha512-DGqD7Hjpi/1or4F/aYAspXKNm5Yili0QDAFAY4QYvpqpgiY6+1jOfqpmByzjxbWd/T9mChbCArXAbDAsTm5oXA==}
@@ -4475,6 +4398,10 @@ snapshots:
 
   dom-accessibility-api@0.6.3: {}
 
+  dompurify@3.3.3:
+    optionalDependencies:
+      '@types/trusted-types': 2.0.7
+
   dotenv-cli@11.0.0:
     dependencies:
       cross-spawn: 7.0.6
@@ -5099,6 +5026,8 @@ snapshots:
   make-dir@4.0.0:
     dependencies:
       semver: 7.7.4
+
+  marked@17.0.5: {}
 
   memoizee@0.4.17:
     dependencies:
