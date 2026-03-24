@@ -63,3 +63,5 @@ keystore.properties
 
 # Claude Code
 .claude/
+apps/frontend/src-tauri/gen/android/.gradle/
+apps/frontend/src-tauri/gen/android/app/build/
