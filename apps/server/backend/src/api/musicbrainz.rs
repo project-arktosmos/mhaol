@@ -16,6 +16,7 @@ pub fn router() -> Router<AppState> {
         .route("/recording/{id}", get(get_recording))
         .route("/release-group/{id}", get(get_release_group))
         .route("/release/{id}", get(get_release))
+        .route("/artist/{id}", get(get_artist))
         .route("/popular", get(get_popular))
         .route("/popular-artists", get(get_popular_artists))
 }
@@ -268,6 +269,90 @@ async fn get_release(
             let conn = state.db.lock();
             if let Ok(data) = conn.query_row(
                 "SELECT data FROM musicbrainz_releases WHERE mbid = ?1",
+                rusqlite::params![id],
+                |row| row.get::<_, String>(0),
+            ) {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                    return Json(parsed).into_response();
+                }
+            }
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "MusicBrainz API unavailable" })),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn get_artist(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<MbQuery>,
+) -> impl IntoResponse {
+    if id.len() != 36 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Invalid artist ID" })),
+        )
+            .into_response();
+    }
+
+    let refresh = query.refresh.as_deref() == Some("true");
+
+    if !refresh {
+        let conn = state.db.lock();
+        if let Ok(data) = conn.query_row(
+            "SELECT data FROM musicbrainz_artists WHERE mbid = ?1",
+            rusqlite::params![id],
+            |row| row.get::<_, String>(0),
+        ) {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                return Json(parsed).into_response();
+            }
+        }
+    }
+
+    let url = format!(
+        "{}/artist/{}?inc=release-groups+tags&fmt=json",
+        MB_BASE, id
+    );
+
+    let client = reqwest::Client::new();
+    match client
+        .get(&url)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            match resp.json::<serde_json::Value>().await {
+                Ok(data) => {
+                    let data_str = serde_json::to_string(&data).unwrap_or_default();
+                    let conn = state.db.lock();
+                    let _ = conn.execute(
+                        "INSERT INTO musicbrainz_artists (mbid, data) VALUES (?1, ?2)
+                         ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
+                        rusqlite::params![id, data_str],
+                    );
+                    Json(data).into_response()
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response(),
+            }
+        }
+        Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Artist not found" })),
+        )
+            .into_response(),
+        _ => {
+            let conn = state.db.lock();
+            if let Ok(data) = conn.query_row(
+                "SELECT data FROM musicbrainz_artists WHERE mbid = ?1",
                 rusqlite::params![id],
                 |row| row.get::<_, String>(0),
             ) {

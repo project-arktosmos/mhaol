@@ -830,6 +830,17 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: add musicbrainz_artists cache table
+    if !has_table(conn, "musicbrainz_artists") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE musicbrainz_artists (
+                mbid TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        );
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(
