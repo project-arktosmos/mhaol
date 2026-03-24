@@ -21,10 +21,12 @@
   import { smartSearchService } from "ui-lib/services/smart-search.service";
   import { apiUrl } from "ui-lib/lib/api-base";
   import { setImageBaseUrl } from "addons/tmdb/transform";
+  import { setCoverArtBaseUrl } from "addons/musicbrainz/transform";
   import { rosterService } from "ui-lib/services/roster.service";
   import type { PassportData } from "webrtc/types";
 
   setImageBaseUrl(apiUrl("/api/tmdb/image"));
+  setCoverArtBaseUrl(apiUrl("/api/musicbrainz/cover"));
   import PlayerOverlay from "ui-lib/components/player/PlayerOverlay.svelte";
   import type { SmartSearchTorrentResult } from "ui-lib/types/smart-search.type";
   import type { PlayableFile } from "ui-lib/types/player.type";
@@ -90,48 +92,48 @@
     ready = true;
   }
 
-  onMount(async () => {
+  async function connectSignaling(): Promise<void> {
+    const res = await fetch(apiUrl("/api/signaling/client-identity"));
+    if (!res.ok) return;
+    const data = await res.json();
+    const passport: PassportData = data.passport;
+    const serverRoom: string = data.serverRoom;
+
+    const signFn = async (msg: string) => {
+      const parts = msg.match(/^partykit-auth:(.+):(\d+)$/);
+      if (!parts) throw new Error("Invalid auth message format");
+      const authRes = await fetch(
+        apiUrl(
+          `/api/signaling/auth?room_id=${encodeURIComponent(parts[1])}&timestamp=${parts[2]}`,
+        ),
+      );
+      if (!authRes.ok)
+        throw new Error(`Auth signing failed: HTTP ${authRes.status}`);
+      const authData = await authRes.json();
+      return authData.signature;
+    };
+
+    await signalingChatService.connectToRoom(
+      DEFAULT_SIGNALING_URL,
+      serverRoom,
+      passport,
+      signFn,
+    );
+  }
+
+  onMount(() => {
     themeService.initialize("flix");
-    await playerService.initialize();
-    await identityService.initialize();
     rosterService.initialize("api");
     youtubeService.initialize();
     youtubeLibraryService.initialize();
     torrentService.initialize("server");
 
-    // Connect to signaling as a client using CLIENT_WALLET identity
-    try {
-      const res = await fetch(apiUrl("/api/signaling/client-identity"));
-      if (res.ok) {
-        const data = await res.json();
-        const passport: PassportData = data.passport;
-        const serverRoom: string = data.serverRoom;
-
-        const signFn = async (msg: string) => {
-          const parts = msg.match(/^partykit-auth:(.+):(\d+)$/);
-          if (!parts) throw new Error("Invalid auth message format");
-          const authRes = await fetch(
-            apiUrl(
-              `/api/signaling/auth?room_id=${encodeURIComponent(parts[1])}&timestamp=${parts[2]}`,
-            ),
-          );
-          if (!authRes.ok)
-            throw new Error(`Auth signing failed: HTTP ${authRes.status}`);
-          const authData = await authRes.json();
-          return authData.signature;
-        };
-
-        // Connect to the server's personal room as a client
-        signalingChatService.connectToRoom(
-          DEFAULT_SIGNALING_URL,
-          serverRoom,
-          passport,
-          signFn,
-        );
-      }
-    } catch {
+    // Run independent async initializations in parallel, none blocking the others
+    playerService.initialize();
+    identityService.initialize();
+    connectSignaling().catch(() => {
       // Signaling is optional for the admin frontend
-    }
+    });
   });
 
   onDestroy(() => {

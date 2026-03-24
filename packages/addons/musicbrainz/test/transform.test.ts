@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
 	formatArtistCredits,
+	setCoverArtBaseUrl,
 	getCoverArtUrl,
 	formatDuration,
 	recordingToDisplay,
@@ -38,6 +39,16 @@ describe('formatArtistCredits', () => {
 });
 
 describe('getCoverArtUrl', () => {
+	afterEach(() => {
+		// Reset to default (direct URL) by setting a known-invalid value won't work;
+		// instead we rely on the null check — set to any string to enable proxy mode.
+		// We need to test both modes, so we reset by re-importing or using a workaround.
+		// Since setCoverArtBaseUrl sets a module-level variable, we simulate reset
+		// by setting it to null-ish. The implementation uses `if (coverArtBaseUrl)`,
+		// so setting to empty string effectively resets.
+		setCoverArtBaseUrl('');
+	});
+
 	it('returns URL with default size', () => {
 		expect(getCoverArtUrl('abc-123')).toBe(
 			'https://coverartarchive.org/release-group/abc-123/front-250'
@@ -47,6 +58,20 @@ describe('getCoverArtUrl', () => {
 	it('returns URL with custom size', () => {
 		expect(getCoverArtUrl('abc-123', 500)).toBe(
 			'https://coverartarchive.org/release-group/abc-123/front-500'
+		);
+	});
+
+	it('uses custom base URL when set', () => {
+		setCoverArtBaseUrl('http://localhost:1530/api/musicbrainz/cover');
+		expect(getCoverArtUrl('abc-123')).toBe(
+			'http://localhost:1530/api/musicbrainz/cover/abc-123/250'
+		);
+	});
+
+	it('uses custom base URL with custom size', () => {
+		setCoverArtBaseUrl('http://localhost:1530/api/musicbrainz/cover');
+		expect(getCoverArtUrl('abc-123', 500)).toBe(
+			'http://localhost:1530/api/musicbrainz/cover/abc-123/500'
 		);
 	});
 });

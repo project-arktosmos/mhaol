@@ -19,6 +19,7 @@ pub fn router() -> Router<AppState> {
         .route("/artist/{id}", get(get_artist))
         .route("/popular", get(get_popular))
         .route("/popular-artists", get(get_popular_artists))
+        .route("/cover/{id}/{size}", get(serve_cover_art))
 }
 
 #[derive(Deserialize)]
@@ -539,4 +540,37 @@ async fn get_popular_artists(
                 .into_response()
         }
     }
+}
+
+/// GET /api/musicbrainz/cover/{id}/{size} — serve MusicBrainz cover art from disk cache.
+async fn serve_cover_art(
+    State(state): State<AppState>,
+    Path((id, size)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if id.len() != 36 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Invalid release group ID" })),
+        )
+            .into_response();
+    }
+
+    let size = match size.as_str() {
+        "250" | "500" => &size,
+        _ => "250",
+    };
+
+    let cache_key = format!("{}/front-{}", id, size);
+    let upstream_url = format!(
+        "https://coverartarchive.org/release-group/{}/front-{}",
+        id, size
+    );
+    super::image_cache::serve_cached_image(
+        &state.data_dir,
+        "musicbrainz-covers",
+        &cache_key,
+        &upstream_url,
+        604800,
+    )
+    .await
 }

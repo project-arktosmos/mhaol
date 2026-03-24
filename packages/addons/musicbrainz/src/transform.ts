@@ -17,7 +17,17 @@ export function formatArtistCredits(credits: MusicBrainzArtistCredit[] | undefin
 	return credits.map((c) => c.name + (c.joinphrase || '')).join('');
 }
 
+let coverArtBaseUrl: string | null = null;
+
+/** Set the base URL for MusicBrainz cover art (e.g. to route through local backend cache). */
+export function setCoverArtBaseUrl(url: string) {
+	coverArtBaseUrl = url;
+}
+
 export function getCoverArtUrl(releaseGroupId: string, size: 250 | 500 = 250): string {
+	if (coverArtBaseUrl) {
+		return `${coverArtBaseUrl}/${releaseGroupId}/${size}`;
+	}
 	return `https://coverartarchive.org/release-group/${releaseGroupId}/front-${size}`;
 }
 
