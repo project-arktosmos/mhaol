@@ -29,7 +29,7 @@
 		};
 		onfetch: () => void;
 		ondownload: () => void;
-		onstream: () => void;
+		onstream?: () => void;
 		onp2pstream: () => void;
 		onshowsearch: () => void;
 		onback: () => void;

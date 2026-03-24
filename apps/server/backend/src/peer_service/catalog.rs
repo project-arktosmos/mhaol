@@ -42,52 +42,63 @@ fn is_real_path(path: &str) -> bool {
 }
 
 /// Check whether a library item is actually available for streaming.
-/// Items with a torrent link must have a completed download.
-/// Items without a torrent link must exist on disk (manually placed files).
+/// Checks in order:
+/// 1. Direct torrent link → download record must be complete
+/// 2. TMDB ID cross-reference → any completed download linked to the same TMDB ID
+/// 3. File exists on disk at the stored path
 fn is_available(
     state: &AppState,
     path: &str,
     links: &[crate::db::repo::library_item_link::LibraryItemLinkRow],
 ) -> bool {
+    // 1. Direct torrent link check
     let torrent_link = links
         .iter()
         .find(|l| l.service == "torrent-download" || l.service == "torrent-stream");
 
-    match torrent_link {
-        None => std::path::Path::new(path).exists(),
-        Some(link) => {
-            match state.downloads.get(&link.service_id) {
-                Some(row) => row.state == "seeding" || row.progress >= 1.0,
-                None => false,
+    if let Some(link) = torrent_link {
+        if let Some(row) = state.downloads.get(&link.service_id) {
+            if row.state == "seeding" || row.progress >= 1.0 {
+                return true;
             }
         }
     }
+
+    // 2. Cross-reference: find any completed download linked to the same TMDB ID
+    //    (handles items where the torrent link wasn't saved on the library item itself)
+    let tmdb_link = links.iter().find(|l| l.service == "tmdb");
+    if let Some(tmdb) = tmdb_link {
+        let all_items_with_tmdb = state
+            .library_item_links
+            .get_by_service_id("tmdb", &tmdb.service_id);
+        for sibling in &all_items_with_tmdb {
+            let sibling_links = state.library_item_links.get_by_item(&sibling.library_item_id);
+            for sl in &sibling_links {
+                if sl.service == "torrent-download" || sl.service == "torrent-stream" {
+                    if let Some(row) = state.downloads.get(&sl.service_id) {
+                        if row.state == "seeding" || row.progress >= 1.0 {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Fallback: file exists on disk
+    std::path::Path::new(path).exists()
 }
 
 /// Build the movie catalog from the database, including pinned movies.
 /// Deduplicates by TMDB ID, preferring items with real file paths.
 async fn build_catalog(state: &AppState) -> Vec<CatalogMovie> {
-    let libraries = state.libraries.get_all();
+    // Gather movie items by category: library movies + pinned movies.
+    // This avoids depending on inconsistent library type naming ("movies" vs "video")
+    // and excludes pinned-tv episodes from the movie catalog.
+    let mut all_items = state.library_items.get_by_category("movies");
+    all_items.extend(state.library_items.get_by_category("pinned-movies"));
 
-    // Collect items from movie libraries
-    let movie_lib_ids: Vec<String> = libraries
-        .iter()
-        .filter(|lib| lib.media_types.contains("movies"))
-        .map(|lib| lib.id.clone())
-        .collect();
-
-    // Gather all candidate items: library items first, then pinned
-    let mut all_items = Vec::new();
-
-    for lib_id in &movie_lib_ids {
-        let items = state.library_items.get_by_library(lib_id);
-        all_items.extend(items);
-    }
-
-    let pinned_items = state.library_items.get_by_category("pinned-movies");
-    all_items.extend(pinned_items);
-
-    // Deduplicate by TMDB ID, preferring items with real file paths.
+    // Deduplicate by TMDB ID, preferring streamable items with real file paths.
     // Items without a TMDB link are kept as-is.
     let mut seen_tmdb: HashMap<String, usize> = HashMap::new();
     let mut catalog: Vec<CatalogMovie> = Vec::new();
@@ -99,7 +110,6 @@ async fn build_catalog(state: &AppState) -> Vec<CatalogMovie> {
         if let Some(link) = tmdb_link {
             let tmdb_id = &link.service_id;
             if let Some(&existing_idx) = seen_tmdb.get(tmdb_id) {
-                // If existing entry is not streamable but this one is, replace it
                 if !catalog[existing_idx].streamable && is_real_path(&item.path) {
                     let entry = build_catalog_entry(state, item, &links).await;
                     catalog[existing_idx] = entry;
@@ -110,6 +120,65 @@ async fn build_catalog(state: &AppState) -> Vec<CatalogMovie> {
         }
 
         let entry = build_catalog_entry(state, item, &links).await;
+        catalog.push(entry);
+    }
+
+    // Include completed torrent downloads that aren't already in the catalog.
+    // This catches downloads that were never linked to library items.
+    let torrent_downloads = state.downloads.get_by_type("torrent");
+    for dl in torrent_downloads {
+        if dl.state != "seeding" && dl.progress < 1.0 {
+            continue;
+        }
+        let output_path = match &dl.output_path {
+            Some(p) => p.clone(),
+            None => continue,
+        };
+        let file_path = if !dl.name.is_empty() {
+            format!("{}/{}", output_path, dl.name)
+        } else {
+            output_path
+        };
+
+        // Skip if already in catalog via a torrent link
+        if seen_tmdb.values().any(|&idx| {
+            catalog[idx].item.links.get("torrent-download")
+                .or(catalog[idx].item.links.get("torrent-stream"))
+                .map_or(false, |l| l.service_id == dl.id)
+        }) {
+            continue;
+        }
+
+        let name = std::path::Path::new(&file_path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&dl.name)
+            .to_string();
+
+        let mut link_map = HashMap::new();
+        link_map.insert(
+            "torrent-download".to_string(),
+            CatalogMediaItemLink {
+                service_id: dl.id.clone(),
+                service_url: None,
+            },
+        );
+
+        let entry = CatalogMovie {
+            item: CatalogMediaItem {
+                id: format!("dl:{}", dl.id),
+                library_id: String::new(),
+                name,
+                extension: String::new(),
+                path: file_path,
+                category_id: Some("movies".to_string()),
+                media_type_id: "video".to_string(),
+                created_at: dl.created_at.clone(),
+                links: link_map,
+            },
+            tmdb: None,
+            streamable: true,
+        };
         catalog.push(entry);
     }
 
@@ -222,10 +291,19 @@ pub fn resolve_file_path_for_tmdb(state: &AppState, tmdb_id: i64) -> Option<Stri
     None
 }
 
-/// Build a catalog-movies envelope for sending over a data channel.
-pub fn build_catalog_envelope(catalog: &[CatalogMovie]) -> DataChannelEnvelope {
+/// Build a catalog-start envelope that tells the client to clear its state.
+pub fn build_catalog_start_envelope(count: usize) -> DataChannelEnvelope {
+    let msg = ServerCatalogMessage::CatalogStart { count };
+    DataChannelEnvelope {
+        channel: "server-catalog".to_string(),
+        payload: serde_json::to_value(msg).unwrap(),
+    }
+}
+
+/// Build a catalog-movies envelope for a single movie.
+pub fn build_single_movie_envelope(movie: &CatalogMovie) -> DataChannelEnvelope {
     let msg = ServerCatalogMessage::CatalogMovies {
-        movies: catalog.to_vec(),
+        movies: vec![movie.clone()],
     };
     DataChannelEnvelope {
         channel: "server-catalog".to_string(),

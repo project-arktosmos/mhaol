@@ -103,35 +103,21 @@ struct PlayableFile {
     media_type: String,
     #[serde(rename = "completedAt", skip_serializing_if = "Option::is_none")]
     completed_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    progress: Option<f64>,
-    #[serde(rename = "streamUrl", skip_serializing_if = "Option::is_none")]
-    stream_url: Option<String>,
 }
 
 async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
     let mut files: Vec<PlayableFile> = Vec::new();
 
-    // Torrent downloads (completed + in-progress with enough data to stream)
+    // Completed torrent downloads only
     let torrent_downloads = state.downloads.get_by_type("torrent");
     for dl in torrent_downloads {
         let is_complete = dl.state == "seeding" || dl.progress >= 1.0;
-        let is_streamable = dl.state == "downloading" && dl.progress >= 0.02;
 
-        if (is_complete || is_streamable) && dl.output_path.is_some() {
+        if is_complete && dl.output_path.is_some() {
             let path = match (&dl.output_path, &dl.name) {
                 (Some(p), name) if !name.is_empty() => format!("{}/{}", p, name),
                 (Some(p), _) => p.clone(),
                 _ => continue,
-            };
-
-            let (progress, stream_url) = if is_streamable && !is_complete {
-                (
-                    Some(dl.progress),
-                    Some(format!("/api/torrent/torrents/{}/stream", dl.id)),
-                )
-            } else {
-                (None, None)
             };
 
             files.push(PlayableFile {
@@ -141,8 +127,6 @@ async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
                 source: "torrent".to_string(),
                 media_type: "video".to_string(),
                 completed_at: Some(dl.updated_at.clone()),
-                progress,
-                stream_url,
             });
         }
     }
@@ -165,8 +149,6 @@ async fn list_playable(State(state): State<AppState>) -> impl IntoResponse {
             source: "library".to_string(),
             media_type: item.media_type.clone(),
             completed_at: Some(item.created_at.clone()),
-            progress: None,
-            stream_url: None,
         });
     }
 
@@ -199,9 +181,7 @@ async fn stream_status(State(_state): State<AppState>) -> impl IntoResponse {
 
 #[derive(Deserialize)]
 struct CreateSessionBody {
-    file_path: Option<String>,
-    torrent_info_hash: Option<String>,
-    torrent_file_idx: Option<usize>,
+    file_path: String,
     mode: Option<String>,
     video_codec: Option<String>,
     video_quality: Option<String>,
@@ -221,72 +201,14 @@ async fn create_session(
             .into_response();
     }
 
-    // Resolve the media source: either a local file path or a torrent stream URL
-    let (file_path, stream_url) = match (&body.file_path, &body.torrent_info_hash) {
-        (Some(fp), None) => {
-            let resolved = resolve_media_path(fp);
-            if !std::path::Path::new(&resolved).exists() {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(serde_json::json!({ "error": format!("File not found: {}", resolved) })),
-                )
-                    .into_response();
-            }
-            (Some(resolved), None)
-        }
-        (None, Some(info_hash)) => {
-            // Resolve the internal librqbit streaming URL from the torrent info_hash
-            let torrent_id = match crate::api::torrent::find_torrent_id_pub(&state, info_hash).await {
-                Some(id) => id,
-                None => {
-                    return (
-                        StatusCode::NOT_FOUND,
-                        Json(serde_json::json!({ "error": "Torrent not found" })),
-                    )
-                        .into_response();
-                }
-            };
-
-            let http_api_addr = match state.torrent_manager.get_http_api_addr() {
-                Some(addr) => addr,
-                None => {
-                    return (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        Json(serde_json::json!({ "error": "Torrent HTTP API not available" })),
-                    )
-                        .into_response();
-                }
-            };
-
-            // Determine file index: use provided or find the largest file
-            let file_idx = match body.torrent_file_idx {
-                Some(idx) => idx,
-                None => {
-                    match state.torrent_manager.list_files(torrent_id).await {
-                        Ok(files) if !files.is_empty() => {
-                            files.iter().max_by_key(|f| f.size).map(|f| f.id).unwrap_or(0)
-                        }
-                        _ => 0,
-                    }
-                }
-            };
-
-            // Pause other torrents to maximise bandwidth for the streaming one
-            if let Err(e) = state.torrent_manager.pause_all_except(info_hash).await {
-                tracing::warn!("Failed to pause other torrents: {}", e);
-            }
-
-            let url = crate::http_stream::build_stream_url(&http_api_addr, torrent_id, file_idx);
-            (None, Some(url))
-        }
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "error": "Exactly one of file_path or torrent_info_hash must be provided" })),
-            )
-                .into_response();
-        }
-    };
+    let resolved = resolve_media_path(&body.file_path);
+    if !std::path::Path::new(&resolved).exists() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": format!("File not found: {}", resolved) })),
+        )
+            .into_response();
+    }
 
     let session_id = uuid::Uuid::new_v4().to_string();
     let ice_servers = fetch_ice_servers().await;
@@ -295,8 +217,7 @@ async fn create_session(
         .worker_bridge
         .create_session(
             &session_id,
-            file_path.as_deref(),
-            stream_url.as_deref(),
+            &resolved,
             &signaling_url,
             body.mode,
             body.video_codec,

@@ -118,8 +118,6 @@
 		switch (state) {
 			case 'idle':
 				return '';
-			case 'waiting-for-stream':
-				return 'Finding stream...';
 			case 'connecting':
 				return 'Connecting to stream server...';
 			case 'signaling':
@@ -183,7 +181,7 @@
 
 		{#if !isStreaming && connectionState !== 'idle'}
 			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-base-300/80">
-				{#if connectionState === 'waiting-for-stream' || connectionState === 'connecting' || connectionState === 'signaling'}
+				{#if connectionState === 'connecting' || connectionState === 'signaling'}
 					<div class="text-center">
 						<span class="loading loading-sm loading-spinner"></span>
 						<p class="mt-1 text-xs">{statusLabel}</p>

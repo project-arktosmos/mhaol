@@ -75,7 +75,6 @@ pub async fn run() {
             Command::CreateSession {
                 session_id,
                 file_path,
-                stream_url,
                 mode,
                 video_codec,
                 video_quality,
@@ -86,7 +85,6 @@ pub async fn run() {
                     &mut sessions,
                     session_id,
                     file_path,
-                    stream_url,
                     mode,
                     video_codec,
                     video_quality,
@@ -118,8 +116,7 @@ pub async fn run() {
 async fn handle_create_session(
     sessions: &mut HashMap<String, SignalingClient>,
     session_id: String,
-    file_path: Option<String>,
-    stream_url: Option<String>,
+    file_path: String,
     mode: Option<String>,
     video_codec: Option<String>,
     video_quality: Option<String>,
@@ -128,36 +125,20 @@ async fn handle_create_session(
 ) -> Event {
     let is_audio_only = mode.as_deref() == Some("audio");
 
-    let media_source: Box<dyn MediaSource> = match (file_path, stream_url) {
-        (Some(fp), None) => {
-            let path = PathBuf::from(&fp);
-            if !path.exists() {
-                return Event::Error {
-                    session_id: Some(session_id),
-                    error: format!("File not found: {fp}"),
-                };
-            }
-            let source = if is_audio_only {
-                FileSource::new(&path).audio_only()
-            } else {
-                FileSource::new(&path)
-            };
-            Box::new(source)
-        }
-        (None, Some(url)) => {
-            let source = if is_audio_only {
-                AppSrcSource::new(&url).audio_only()
-            } else {
-                AppSrcSource::new(&url)
-            };
-            Box::new(source)
-        }
-        _ => {
-            return Event::Error {
-                session_id: Some(session_id),
-                error: "Exactly one of file_path or stream_url must be provided".to_string(),
-            };
-        }
+    let path = PathBuf::from(&file_path);
+    if !path.exists() {
+        return Event::Error {
+            session_id: Some(session_id),
+            error: format!("File not found: {file_path}"),
+        };
+    }
+    let media_source: Box<dyn MediaSource> = {
+        let source = if is_audio_only {
+            FileSource::new(&path).audio_only()
+        } else {
+            FileSource::new(&path)
+        };
+        Box::new(source)
     };
 
     let codec = video_codec

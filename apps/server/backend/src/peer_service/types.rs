@@ -55,6 +55,9 @@ pub enum ContactMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum ServerCatalogMessage {
+    CatalogStart {
+        count: usize,
+    },
     CatalogMovies {
         movies: Vec<CatalogMovie>,
     },

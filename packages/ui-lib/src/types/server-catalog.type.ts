@@ -9,6 +9,11 @@ export interface CatalogMovie {
 	streamable: boolean;
 }
 
+export interface ServerCatalogStartMessage {
+	type: 'catalog-start';
+	count: number;
+}
+
 export interface ServerCatalogMoviesMessage {
 	type: 'catalog-movies';
 	movies: CatalogMovie[];
@@ -36,6 +41,7 @@ export interface ServerCatalogRequestMessage {
 }
 
 export type ServerCatalogMessage =
+	| ServerCatalogStartMessage
 	| ServerCatalogMoviesMessage
 	| ServerCatalogStreamRequestMessage
 	| ServerCatalogStreamSessionMessage

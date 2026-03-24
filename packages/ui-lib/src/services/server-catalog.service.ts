@@ -78,10 +78,20 @@ class ServerCatalogService {
 
 	private handleMessage(peerId: string, msg: ServerCatalogMessage): void {
 		switch (msg.type) {
+			case 'catalog-start':
+				this.state.update((s) => ({
+					...s,
+					movies: { ...s.movies, [peerId]: [] }
+				}));
+				break;
+
 			case 'catalog-movies':
 				this.state.update((s) => ({
 					...s,
-					movies: { ...s.movies, [peerId]: msg.movies }
+					movies: {
+						...s.movies,
+						[peerId]: [...(s.movies[peerId] ?? []), ...msg.movies]
+					}
 				}));
 				break;
 

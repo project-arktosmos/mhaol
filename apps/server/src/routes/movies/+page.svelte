@@ -285,7 +285,6 @@
 		browseDetailService.registerCallbacks({
 			onfetch: handleBrowseDetailFetch,
 			ondownload: handleBrowseDetailDownload,
-			onstream: handleBrowseDetailStream,
 			onp2pstream: handleBrowseDetailP2pStream,
 			onshowsearch: () => smartSearchService.show(),
 			onclose: closeBrowseDetail
@@ -346,52 +345,6 @@
 		smartSearchService.startDownload(candidate);
 	}
 
-	function handleBrowseDetailStream() {
-		const candidate = smartSearchService.getFetchedCandidate();
-		if (!candidate) return;
-		const title = selectedBrowseMovie?.title ?? selectedBrowseTvShow?.name ?? '';
-		playerService.prepareStream(title);
-		playerService.setDisplayMode('sidebar');
-		handleStreamCandidate(candidate);
-	}
-
-	async function handleStreamCandidate(candidate: SmartSearchTorrentResult) {
-		smartSearchService.hide();
-		const infoHash = await smartSearchService.startStream(candidate);
-		if (!infoHash) return;
-
-		let ready = false;
-		const unsubscribe = torrentService.state.subscribe(() => {
-			if (!ready) return;
-			const torrent = torrentService.findByHash(infoHash);
-			if (!torrent) return;
-
-			smartSearchService.updateStreamingProgress(torrent.progress);
-
-			if (torrent.progress >= 0.02 || torrent.state === 'seeding') {
-				unsubscribe();
-				smartSearchService.clearStreaming();
-
-				const file: PlayableFile = {
-					id: `torrent:${infoHash}`,
-					type: 'torrent',
-					name: torrent.name,
-					outputPath: torrent.outputPath ?? '',
-					mode: 'video',
-					format: null,
-					videoFormat: null,
-					thumbnailUrl: null,
-					durationSeconds: null,
-					size: torrent.size,
-					completedAt: '',
-					streamUrl: `/api/torrent/torrents/${infoHash}/stream`
-				};
-				playerService.playStream(file);
-			}
-		});
-		ready = true;
-	}
-
 	function handleBrowseDetailP2pStream() {
 		const candidate = smartSearchService.getFetchedCandidate();
 		if (!candidate) return;
@@ -422,8 +375,7 @@
 			return;
 		}
 
-		// Not yet downloaded — start torrent download and wait for completion
-		playerService.prepareStream(title);
+		// Not yet downloaded — start torrent download and wait for full download
 		playerService.setDisplayMode('sidebar');
 		handleP2pStreamCandidate(candidate);
 	}

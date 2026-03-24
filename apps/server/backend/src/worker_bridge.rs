@@ -24,10 +24,7 @@ enum WorkerCommand {
     #[serde(rename = "create_session")]
     CreateSession {
         session_id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        file_path: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        stream_url: Option<String>,
+        file_path: String,
         mode: Option<String>,
         video_codec: Option<String>,
         video_quality: Option<String>,
@@ -185,13 +182,10 @@ impl WorkerBridge {
     }
 
     /// Send a create_session command to the worker and wait for the response.
-    ///
-    /// Exactly one of `file_path` or `stream_url` must be `Some`.
     pub async fn create_session(
         &self,
         session_id: &str,
-        file_path: Option<&str>,
-        stream_url: Option<&str>,
+        file_path: &str,
         signaling_url: &str,
         mode: Option<String>,
         video_codec: Option<String>,
@@ -204,8 +198,7 @@ impl WorkerBridge {
 
         let cmd = WorkerCommand::CreateSession {
             session_id: session_id.to_string(),
-            file_path: file_path.map(|s| s.to_string()),
-            stream_url: stream_url.map(|s| s.to_string()),
+            file_path: file_path.to_string(),
             mode,
             video_codec,
             video_quality,

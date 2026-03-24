@@ -67,7 +67,7 @@
 
       smartSearchService.updateStreamingProgress(torrent.progress);
 
-      if (torrent.progress >= 0.02 || torrent.state === "seeding") {
+      if (torrent.progress >= 1.0 || torrent.state === "seeding") {
         unsubscribe();
         smartSearchService.clearStreaming();
 
@@ -83,9 +83,8 @@
           durationSeconds: null,
           size: torrent.size,
           completedAt: "",
-          streamUrl: `/api/torrent/torrents/${infoHash}/stream`,
         };
-        playerService.playStream(file);
+        playerService.play(file);
       }
     });
     ready = true;

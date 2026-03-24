@@ -111,11 +111,6 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	async play(file: PlayableFile): Promise<void> {
 		if (!browser) return;
 
-		// Route to HTTP streaming for in-progress torrent downloads
-		if (file.streamUrl) {
-			return this.playStream(file);
-		}
-
 		const { streamServerAvailable } = get(this.state);
 
 		await this.stop();
@@ -183,108 +178,6 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				...s,
 				connectionState: 'error',
 				error: `Failed to start playback: ${errorMsg}`
-			}));
-		}
-	}
-
-	// ===== Prepare stream (show player immediately in waiting state) =====
-
-	prepareStream(name: string): void {
-		if (!browser) return;
-
-		const placeholder: PlayableFile = {
-			id: 'stream:pending',
-			type: 'torrent',
-			name,
-			outputPath: '',
-			mode: 'video',
-			format: null,
-			videoFormat: null,
-			thumbnailUrl: null,
-			durationSeconds: null,
-			size: 0,
-			completedAt: ''
-		};
-
-		this.state.update((s) => ({
-			...s,
-			currentFile: placeholder,
-			connectionState: 'waiting-for-stream',
-			error: null,
-			positionSecs: 0,
-			durationSecs: null,
-			buffering: false,
-			isPaused: true
-		}));
-	}
-
-	// ===== Torrent streaming (via WebRTC using p2p-stream with souphttpsrc) =====
-
-	async playStream(file: PlayableFile): Promise<void> {
-		if (!browser) return;
-
-		const current = get(this.state);
-		if (current.connectionState !== 'waiting-for-stream') {
-			await this.stop();
-		}
-
-		const { streamServerAvailable } = get(this.state);
-		if (!streamServerAvailable) {
-			this.state.update((s) => ({
-				...s,
-				currentFile: file,
-				connectionState: 'error',
-				error: 'Streaming server is not available'
-			}));
-			return;
-		}
-
-		const infoHash = file.id.replace('torrent:', '');
-
-		this.state.update((s) => ({
-			...s,
-			currentFile: file,
-			connectionState: 'connecting',
-			error: null,
-			positionSecs: 0,
-			durationSecs: null,
-			buffering: false
-		}));
-
-		try {
-			const streamConfig = p2pStreamService.getSessionConfig();
-
-			const session = await this.fetchJson<{
-				session_id: string;
-				room_id: string;
-				signaling_url: string;
-			}>('/api/player/sessions', {
-				method: 'POST',
-				body: JSON.stringify({
-					torrent_info_hash: infoHash,
-					mode: file.mode,
-					video_codec: streamConfig.video_codec,
-					video_quality: streamConfig.video_quality
-				})
-			});
-
-			this.state.update((s) => ({
-				...s,
-				sessionId: session.session_id,
-				connectionState: 'signaling'
-			}));
-
-			await this.connectToSignalingRoom(
-				signalingAdapter.resolveLocalUrl(session.signaling_url),
-				session.room_id
-			);
-		} catch (error) {
-			console.error('[Player] Torrent stream error:', error);
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			this.state.update((s) => ({
-				...s,
-				connectionState: 'error',
-				error: `Failed to start torrent stream: ${errorMsg}`
 			}));
 		}
 	}

@@ -34,8 +34,7 @@ pub enum Command {
     #[serde(rename = "create_session")]
     CreateSession {
         session_id: String,
-        file_path: Option<String>,
-        stream_url: Option<String>,
+        file_path: String,
         mode: Option<String>,
         video_codec: Option<String>,
         video_quality: Option<String>,

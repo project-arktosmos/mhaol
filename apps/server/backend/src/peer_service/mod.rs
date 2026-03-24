@@ -378,16 +378,28 @@ impl PeerServiceManager {
         }
     }
 
-    /// Send the movie catalog to a peer.
+    /// Send the movie catalog to a peer, one movie at a time to avoid
+    /// overflowing WebRTC data channel message size limits.
     async fn send_catalog_to_peer(&self, peer_id: &str, peer_manager: &mut PeerManager) {
         let movies = catalog::get_or_build_catalog(&self.state, &self.catalog_cache).await;
-        let envelope = catalog::build_catalog_envelope(&movies);
 
-        if let Err(e) = peer_manager.send_to_peer(peer_id, &envelope).await {
-            error!(peer_id = %peer_id, "Failed to send catalog: {e}");
-        } else {
-            info!(peer_id = %peer_id, count = movies.len(), "Sent movie catalog");
+        // Send catalog-start so the client clears its state for this peer
+        let start = catalog::build_catalog_start_envelope(movies.len());
+        if let Err(e) = peer_manager.send_to_peer(peer_id, &start).await {
+            error!(peer_id = %peer_id, "Failed to send catalog-start: {e}");
+            return;
         }
+
+        // Send each movie individually
+        for movie in &movies {
+            let envelope = catalog::build_single_movie_envelope(movie);
+            if let Err(e) = peer_manager.send_to_peer(peer_id, &envelope).await {
+                error!(peer_id = %peer_id, "Failed to send catalog movie: {e}");
+                return;
+            }
+        }
+
+        info!(peer_id = %peer_id, count = movies.len(), "Sent movie catalog");
     }
 
     /// Handle a stream request from a client peer.
@@ -451,8 +463,7 @@ impl PeerServiceManager {
             .worker_bridge
             .create_session(
                 &session_id,
-                Some(&resolved_path),
-                None,
+                &resolved_path,
                 &self.signaling_url,
                 Some("video".to_string()),
                 None,

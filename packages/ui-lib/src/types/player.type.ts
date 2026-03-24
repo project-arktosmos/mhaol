@@ -21,8 +21,6 @@ export interface PlayableFile {
 	durationSeconds: number | null;
 	size: number;
 	completedAt: string;
-	progress?: number;
-	streamUrl?: string;
 	subtitles?: PlayableFileSubtitle[];
 }
 
@@ -34,7 +32,6 @@ export type PlayerDisplayMode = 'fullscreen' | 'sidebar';
 
 export type PlayerConnectionState =
 	| 'idle'
-	| 'waiting-for-stream'
 	| 'connecting'
 	| 'signaling'
 	| 'streaming'

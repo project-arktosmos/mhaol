@@ -30,7 +30,7 @@
 		imageOverrides: Record<string, string> | null;
 		onfetch: () => void;
 		ondownload: () => void;
-		onstream: () => void;
+		onstream?: () => void;
 		onp2pstream: () => void;
 		onshowsearch: () => void;
 		onback: () => void;
@@ -234,7 +234,7 @@
 			class="btn btn-sm btn-primary"
 			onclick={() => {
 				streamingTorrent = true;
-				onstream();
+				onstream?.();
 			}}
 			disabled={downloadButtonDisabled || streamingTorrent}
 		>

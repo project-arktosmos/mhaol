@@ -47,7 +47,7 @@ pub fn check_required_elements() -> Vec<&'static str> {
 
 pub mod prelude {
     pub use crate::error::Error;
-    pub use crate::media::{AppSrcSource, AudioCodec, CodecConfig, FileSource, MediaSource, VideoCodec, VideoQuality};
+    pub use crate::media::{AudioCodec, CodecConfig, FileSource, MediaSource, VideoCodec, VideoQuality};
     pub use crate::pipeline::{BusEvent, IceServerConfig, PipelineBuilder, StreamPipeline, TurnServer};
     pub use crate::session::{PeerSession, SessionManager, SessionState};
     pub use crate::signaling::{IceCandidate, SessionDescription, SignalingMessage};

@@ -37,8 +37,6 @@
 			durationSeconds: null,
 			size: torrent.size,
 			completedAt: '',
-			progress: torrent.progress,
-			streamUrl: `/api/torrent/torrents/${torrent.infoHash}/stream`
 		});
 	}
 </script>

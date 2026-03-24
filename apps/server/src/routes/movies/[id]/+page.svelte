@@ -251,48 +251,6 @@
 		smartSearchService.startDownload(candidate);
 	}
 
-	function handleStream() {
-		const candidate = smartSearchService.getFetchedCandidate();
-		if (!candidate) return;
-		playerService.prepareStream(movie?.title ?? '');
-		playerService.setDisplayMode('sidebar');
-		handleStreamCandidate(candidate);
-	}
-
-	async function handleStreamCandidate(candidate: SmartSearchTorrentResult) {
-		smartSearchService.hide();
-		const infoHash = await smartSearchService.startStream(candidate);
-		if (!infoHash) return;
-
-		let ready = false;
-		const unsubscribe = torrentService.state.subscribe(() => {
-			if (!ready) return;
-			const torrent = torrentService.findByHash(infoHash);
-			if (!torrent) return;
-			smartSearchService.updateStreamingProgress(torrent.progress);
-			if (torrent.progress >= 0.02 || torrent.state === 'seeding') {
-				unsubscribe();
-				smartSearchService.clearStreaming();
-				const file: PlayableFile = {
-					id: `torrent:${infoHash}`,
-					type: 'torrent',
-					name: torrent.name,
-					outputPath: torrent.outputPath ?? '',
-					mode: 'video',
-					format: null,
-					videoFormat: null,
-					thumbnailUrl: null,
-					durationSeconds: null,
-					size: torrent.size,
-					completedAt: '',
-					streamUrl: `/api/torrent/torrents/${infoHash}/stream`
-				};
-				playerService.playStream(file);
-			}
-		});
-		ready = true;
-	}
-
 	function handleP2pStream() {
 		const candidate = smartSearchService.getFetchedCandidate();
 		if (!candidate) return;
@@ -312,11 +270,7 @@
 				completedAt: ''
 			};
 			playerService.play(file).then(() => playerService.setDisplayMode('sidebar'));
-			return;
 		}
-		playerService.prepareStream(movie?.title ?? '');
-		playerService.setDisplayMode('sidebar');
-		handleStreamCandidate(candidate);
 	}
 
 	onMount(() => {
@@ -346,7 +300,6 @@
 		{imageOverrides}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
-		onstream={handleStream}
 		onp2pstream={handleP2pStream}
 		onshowsearch={() => smartSearchService.show()}
 		onback={() => goto('/movies')}
