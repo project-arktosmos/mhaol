@@ -22,11 +22,13 @@
   import { apiUrl } from "ui-lib/lib/api-base";
   import { setImageBaseUrl } from "addons/tmdb/transform";
   import { setCoverArtBaseUrl } from "addons/musicbrainz/transform";
+  import { setRaImageBaseUrl } from "addons/retroachievements/transform";
   import { rosterService } from "ui-lib/services/roster.service";
   import type { PassportData } from "webrtc/types";
 
   setImageBaseUrl(apiUrl("/api/tmdb/image"));
   setCoverArtBaseUrl(apiUrl("/api/musicbrainz/cover"));
+  setRaImageBaseUrl(apiUrl("/api/retroachievements/image"));
   import PlayerOverlay from "ui-lib/components/player/PlayerOverlay.svelte";
   import type { SmartSearchTorrentResult } from "ui-lib/types/smart-search.type";
   import type { PlayableFile } from "ui-lib/types/player.type";

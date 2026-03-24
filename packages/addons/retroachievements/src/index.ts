@@ -1,1 +1,1 @@
-export { raImageUrl, gameListItemToDisplay, gameExtendedToDisplay } from './transform.js';
+export { raImageUrl, setRaImageBaseUrl, gameListItemToDisplay, gameExtendedToDisplay } from './transform.js';

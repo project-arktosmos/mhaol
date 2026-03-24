@@ -1,10 +1,15 @@
 import type { RaGameMetadata, RaAchievement, RaGameListItem, RaGameExtended } from './types.js';
 
-const RA_MEDIA_URL = 'https://media.retroachievements.org';
+let raMediaBaseUrl = 'https://media.retroachievements.org';
+
+/** Set the base URL for RetroAchievements images (e.g. to route through local backend cache). */
+export function setRaImageBaseUrl(url: string) {
+	raMediaBaseUrl = url;
+}
 
 export function raImageUrl(path: string | null | undefined): string {
 	if (!path) return '';
-	return `${RA_MEDIA_URL}${path}`;
+	return `${raMediaBaseUrl}${path}`;
 }
 
 export function gameListItemToDisplay(item: RaGameListItem): RaGameMetadata {
@@ -33,8 +38,8 @@ export function gameExtendedToDisplay(detail: RaGameExtended): RaGameMetadata {
 				description: ach.Description ?? '',
 				points: ach.Points ?? 0,
 				trueRatio: ach.TrueRatio ?? 0,
-				badgeUrl: ach.BadgeName ? `${RA_MEDIA_URL}/Badge/${ach.BadgeName}.png` : '',
-				badgeLockedUrl: ach.BadgeName ? `${RA_MEDIA_URL}/Badge/${ach.BadgeName}_lock.png` : '',
+				badgeUrl: ach.BadgeName ? `${raMediaBaseUrl}/Badge/${ach.BadgeName}.png` : '',
+				badgeLockedUrl: ach.BadgeName ? `${raMediaBaseUrl}/Badge/${ach.BadgeName}_lock.png` : '',
 				displayOrder: ach.DisplayOrder ?? 0,
 				numAwarded: ach.NumAwarded ?? 0,
 				numAwardedHardcore: ach.NumAwardedHardcore ?? 0,

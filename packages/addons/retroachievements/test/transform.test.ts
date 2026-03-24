@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect } from 'vitest';
-import { raImageUrl, gameListItemToDisplay, gameExtendedToDisplay } from '../src/transform';
+import { describe, it, expect, afterEach } from 'vitest';
+import { raImageUrl, setRaImageBaseUrl, gameListItemToDisplay, gameExtendedToDisplay } from '../src/transform';
 
 describe('raImageUrl', () => {
 	it('returns full URL for a valid path', () => {
@@ -24,6 +24,67 @@ describe('raImageUrl', () => {
 	it('prepends base URL to any non-empty path', () => {
 		expect(raImageUrl('/Badge/12345.png')).toBe(
 			'https://media.retroachievements.org/Badge/12345.png'
+		);
+	});
+});
+
+describe('setRaImageBaseUrl', () => {
+	afterEach(() => {
+		setRaImageBaseUrl('https://media.retroachievements.org');
+	});
+
+	it('redirects raImageUrl through custom base URL', () => {
+		setRaImageBaseUrl('http://localhost:1530/api/retroachievements/image');
+		expect(raImageUrl('/Images/000001.png')).toBe(
+			'http://localhost:1530/api/retroachievements/image/Images/000001.png'
+		);
+	});
+
+	it('redirects badge URLs through custom base URL', () => {
+		setRaImageBaseUrl('http://localhost:1530/api/retroachievements/image');
+		const detail = {
+			ID: 1,
+			Title: 'Test',
+			ConsoleID: 1,
+			ConsoleName: 'Console',
+			ImageIcon: '/Images/icon.png',
+			ImageTitle: null,
+			ImageIngame: null,
+			ImageBoxArt: null,
+			NumAchievements: 1,
+			Points: 10,
+			DateModified: '',
+			Developer: null,
+			Publisher: null,
+			Genre: null,
+			Released: null,
+			NumDistinctPlayers: 0,
+			Achievements: {
+				'1': {
+					ID: 1,
+					Title: 'Badge Test',
+					Description: 'Test',
+					Points: 10,
+					TrueRatio: 20,
+					BadgeName: 'badge_abc',
+					DisplayOrder: 0,
+					NumAwarded: 100,
+					NumAwardedHardcore: 50,
+					Author: 'Tester',
+					DateCreated: '2024-01-01',
+					DateModified: '2024-01-01',
+					type: 'progression'
+				}
+			}
+		};
+
+		const result = gameExtendedToDisplay(detail);
+		const ach = result.achievements![0];
+		expect(ach.badgeUrl).toBe(
+			'http://localhost:1530/api/retroachievements/image/Badge/badge_abc.png'
+		);
+		expect(ach.badgeLockedUrl).toBe(
+			'http://localhost:1530/api/retroachievements/image/Badge/badge_abc_lock.png'
 		);
 	});
 });

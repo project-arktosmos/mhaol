@@ -15,6 +15,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/games", get(get_game_list))
         .route("/games/{id}", get(get_game_details))
+        .route("/image/{*path}", get(serve_ra_image))
 }
 
 #[derive(Deserialize)]
@@ -197,4 +198,28 @@ async fn get_game_details(
                 .into_response()
         }
     }
+}
+
+/// GET /api/retroachievements/image/{*path} — serve RA images from disk cache.
+async fn serve_ra_image(
+    State(state): State<AppState>,
+    Path(path): Path<String>,
+) -> impl IntoResponse {
+    if path.contains("..") || !(path.starts_with("Images/") || path.starts_with("Badge/")) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Invalid image path" })),
+        )
+            .into_response();
+    }
+
+    let upstream_url = format!("https://media.retroachievements.org/{}", path);
+    super::image_cache::serve_cached_image(
+        &state.data_dir,
+        "ra-images",
+        &path,
+        &upstream_url,
+        604800,
+    )
+    .await
 }
