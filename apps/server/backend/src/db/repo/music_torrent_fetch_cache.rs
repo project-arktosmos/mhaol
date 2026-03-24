@@ -49,6 +49,26 @@ impl MusicTorrentFetchCacheRepo {
         .unwrap();
     }
 
+    pub fn get_all_info_hashes(&self) -> Vec<(String, String)> {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare("SELECT musicbrainz_id, candidate_json FROM music_torrent_fetch_cache")
+            .unwrap();
+        stmt.query_map([], |row| {
+            let musicbrainz_id: String = row.get(0)?;
+            let json: String = row.get(1)?;
+            Ok((musicbrainz_id, json))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .filter_map(|(musicbrainz_id, json)| {
+            let v: serde_json::Value = serde_json::from_str(&json).ok()?;
+            let hash = v.get("infoHash")?.as_str()?.to_lowercase();
+            Some((musicbrainz_id, hash))
+        })
+        .collect()
+    }
+
     pub fn delete_for_id(&self, musicbrainz_id: &str) {
         let conn = self.db.lock();
         conn.execute(
