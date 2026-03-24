@@ -1,6 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type { YouTubeSearchState, YouTubeSearchResponse } from 'ui-lib/types/youtube-search.type';
 
 const initialState: YouTubeSearchState = {
@@ -30,7 +30,7 @@ class YouTubeSearchService {
 
 		try {
 			const params = new URLSearchParams({ q: query.trim() });
-			const response = await fetch(apiUrl(`/api/youtube-search/search?${params}`));
+			const response = await fetchRaw(`/api/youtube-search/search?${params}`);
 
 			if (!response.ok) {
 				const body = await response.json().catch(() => ({}));
@@ -69,7 +69,7 @@ class YouTubeSearchService {
 				q: current.query,
 				continuation: current.continuation!
 			});
-			const response = await fetch(apiUrl(`/api/youtube-search/search?${params}`));
+			const response = await fetchRaw(`/api/youtube-search/search?${params}`);
 
 			if (!response.ok) {
 				const body = await response.json().catch(() => ({}));

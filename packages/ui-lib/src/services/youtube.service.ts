@@ -1,6 +1,7 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchJson, subscribeSSE } from 'ui-lib/transport/fetch-helpers';
+import type { TransportEventSource } from 'ui-lib/transport/transport.type';
 import {
 	extractVideoId,
 	type YouTubeSettings,
@@ -60,7 +61,7 @@ class YouTubeService {
 	public store: Writable<YouTubeSettings> = writable(initialSettings);
 	public state: Writable<YouTubeServiceState> = writable(initialState);
 
-	private eventSource: EventSource | null = null;
+	private eventSource: TransportEventSource | null = null;
 	private _initialized = false;
 
 	// ===== Settings Access =====
@@ -81,9 +82,9 @@ class YouTubeService {
 
 		try {
 			const [stats, downloaderStatus, settings] = await Promise.all([
-				this.fetchJson<YouTubeManagerStats>('/api/ytdl/status'),
-				this.fetchJson<DownloaderStatus>('/api/ytdl/ytdlp/status'),
-				this.fetchJson<Omit<YouTubeSettings, 'id'>>('/api/ytdl/settings')
+				fetchJson<YouTubeManagerStats>('/api/ytdl/status'),
+				fetchJson<DownloaderStatus>('/api/ytdl/ytdlp/status'),
+				fetchJson<Omit<YouTubeSettings, 'id'>>('/api/ytdl/settings')
 			]);
 
 			// Populate the settings store from database
@@ -129,7 +130,7 @@ class YouTubeService {
 		}));
 
 		try {
-			const info = await this.fetchJson<YouTubeVideoInfo>(
+			const info = await fetchJson<YouTubeVideoInfo>(
 				`/api/ytdl/info/video?url=${encodeURIComponent(url)}`
 			);
 
@@ -169,7 +170,7 @@ class YouTubeService {
 		}));
 
 		try {
-			const info = await this.fetchJson<YouTubePlaylistInfo>(
+			const info = await fetchJson<YouTubePlaylistInfo>(
 				`/api/ytdl/info/playlist?url=${encodeURIComponent(url)}`
 			);
 
@@ -252,7 +253,7 @@ class YouTubeService {
 				body.subtitleLangs = settings.subtitleLangs;
 			}
 
-			const result = await this.fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
+			const result = await fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
 				method: 'POST',
 				body: JSON.stringify(body)
 			});
@@ -273,7 +274,7 @@ class YouTubeService {
 		if (!browser) return;
 
 		try {
-			await this.fetchJson(`/api/ytdl/downloads/${downloadId}`, { method: 'DELETE' });
+			await fetchJson(`/api/ytdl/downloads/${downloadId}`, { method: 'DELETE' });
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
@@ -287,9 +288,9 @@ class YouTubeService {
 		if (!browser) return;
 
 		try {
-			await this.fetchJson('/api/ytdl/downloads/completed', { method: 'DELETE' });
+			await fetchJson('/api/ytdl/downloads/completed', { method: 'DELETE' });
 			// Refresh downloads list since SSE might not trigger for removed items
-			const downloads = await this.fetchJson<YouTubeDownloadProgress[]>('/api/ytdl/downloads');
+			const downloads = await fetchJson<YouTubeDownloadProgress[]>('/api/ytdl/downloads');
 			this.state.update((s) => ({ ...s, downloads }));
 		} catch (error) {
 			console.error('[YouTube] Failed to clear completed:', error);
@@ -333,7 +334,7 @@ class YouTubeService {
 		}
 
 		try {
-			const result = await this.fetchJson<{ downloadIds: string[] }>(
+			const result = await fetchJson<{ downloadIds: string[] }>(
 				'/api/ytdl/downloads/playlist',
 				{
 					method: 'POST',
@@ -378,7 +379,7 @@ class YouTubeService {
 		}
 
 		try {
-			const result = await this.fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
+			const result = await fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
 				method: 'POST',
 				body: JSON.stringify(body)
 			});
@@ -398,7 +399,7 @@ class YouTubeService {
 		if (!browser) return;
 
 		try {
-			await this.fetchJson('/api/ytdl/downloads/queue', { method: 'DELETE' });
+			await fetchJson('/api/ytdl/downloads/queue', { method: 'DELETE' });
 		} catch (error) {
 			console.error('[YouTube] Failed to clear queue:', error);
 		}
@@ -438,7 +439,7 @@ class YouTubeService {
 		}
 
 		try {
-			const result = await this.fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
+			const result = await fetchJson<{ downloadId: string }>('/api/ytdl/downloads', {
 				method: 'POST',
 				body: JSON.stringify(body)
 			});
@@ -469,7 +470,7 @@ class YouTubeService {
 
 		try {
 			const url = `https://www.youtube.com/watch?v=${videoId}`;
-			const result = await this.fetchJson<YouTubeStreamUrlResult>(
+			const result = await fetchJson<YouTubeStreamUrlResult>(
 				`/api/ytdl/info/stream-urls?url=${encodeURIComponent(url)}`
 			);
 			this.streamUrlCache.set(videoId, { result, fetchedAt: now });
@@ -507,7 +508,7 @@ class YouTubeService {
 		const { id, ...payload } = updates as Partial<YouTubeSettings> & { id?: unknown };
 
 		try {
-			await this.fetchJson('/api/ytdl/settings', {
+			await fetchJson('/api/ytdl/settings', {
 				method: 'PUT',
 				body: JSON.stringify(payload)
 			});
@@ -584,7 +585,7 @@ class YouTubeService {
 		if (!browser) return;
 
 		try {
-			await this.fetchJson('/api/ytdl/settings', {
+			await fetchJson('/api/ytdl/settings', {
 				method: 'PUT',
 				body: JSON.stringify({
 					poToken: config.poToken ?? '',
@@ -614,7 +615,7 @@ class YouTubeService {
 		if (!browser) return;
 
 		try {
-			const status = await this.fetchJson<DownloaderStatus>('/api/ytdl/ytdlp/status');
+			const status = await fetchJson<DownloaderStatus>('/api/ytdl/ytdlp/status');
 			this.state.update((s) => ({ ...s, downloaderStatus: status }));
 		} catch {
 			// ignore
@@ -626,11 +627,11 @@ class YouTubeService {
 	private connectSSE(): void {
 		if (!browser) return;
 
-		this.eventSource = new EventSource(apiUrl(`${API_PREFIX}/downloads/events`));
+		this.eventSource = subscribeSSE(`${API_PREFIX}/downloads/events`);
 
-		this.eventSource.addEventListener('progress', (e: MessageEvent) => {
+		this.eventSource.addEventListener('progress', (data: string) => {
 			try {
-				const progress = JSON.parse(e.data) as YouTubeDownloadProgress;
+				const progress = JSON.parse(data) as YouTubeDownloadProgress;
 				this.state.update((s) => {
 					const idx = s.downloads.findIndex((d) => d.downloadId === progress.downloadId);
 					const downloads = [...s.downloads];
@@ -646,38 +647,14 @@ class YouTubeService {
 			}
 		});
 
-		this.eventSource.addEventListener('stats', (e: MessageEvent) => {
+		this.eventSource.addEventListener('stats', (data: string) => {
 			try {
-				const stats = JSON.parse(e.data) as YouTubeManagerStats;
+				const stats = JSON.parse(data) as YouTubeManagerStats;
 				this.state.update((s) => ({ ...s, stats }));
 			} catch {
 				// ignore parse errors
 			}
 		});
-
-		this.eventSource.onerror = () => {
-			// EventSource auto-reconnects, but we could update state
-			console.warn('[YouTube] SSE connection error, reconnecting...');
-		};
-	}
-
-	// ===== HTTP Helper =====
-
-	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(apiUrl(path), {
-			...init,
-			headers: {
-				'Content-Type': 'application/json',
-				...init?.headers
-			}
-		});
-
-		if (!response.ok) {
-			const body = await response.json().catch(() => ({}));
-			throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
-		}
-
-		return response.json() as Promise<T>;
 	}
 
 	// ===== Lifecycle =====

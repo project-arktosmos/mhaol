@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type { SmartPairItem, SmartPairResult, SmartPairState } from 'ui-lib/types/smart-pair.type';
 import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 
@@ -16,7 +16,7 @@ class SmartPairService {
 		this.store.set({ ...initialState, pairing: true });
 
 		try {
-			const res = await fetch(apiUrl('/api/smart-pair/pair'), {
+			const res = await fetchRaw('/api/smart-pair/pair', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ items })
@@ -75,7 +75,7 @@ class SmartPairService {
 
 	async loadPinned(): Promise<{ movies: DisplayTMDBMovie[]; tv: DisplayTMDBTvShow[] }> {
 		try {
-			const res = await fetch(apiUrl('/api/smart-pair/pinned'));
+			const res = await fetchRaw('/api/smart-pair/pinned');
 			if (res.ok) {
 				return await res.json();
 			}

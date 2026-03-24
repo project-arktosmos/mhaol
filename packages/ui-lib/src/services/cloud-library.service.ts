@@ -1,6 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import type {
 	CloudLibrary,
 	CloudItem,
@@ -45,7 +45,7 @@ class CloudLibraryService {
 		if (!browser || this.initialized) return;
 
 		try {
-			const libraries = await this.fetchJson<CloudLibrary[]>('/api/cloud/libraries');
+			const libraries = await fetchJson<CloudLibrary[]>('/api/cloud/libraries');
 			this.store.set(libraries);
 			this.initialized = true;
 
@@ -61,7 +61,7 @@ class CloudLibraryService {
 		if (!browser) return;
 
 		try {
-			const library = await this.fetchJson<CloudLibrary>('/api/cloud/libraries', {
+			const library = await fetchJson<CloudLibrary>('/api/cloud/libraries', {
 				method: 'POST',
 				body: JSON.stringify({ name, path, kind: 'filesystem' })
 			});
@@ -76,7 +76,7 @@ class CloudLibraryService {
 		if (!browser) return;
 
 		try {
-			await this.fetchJson(`/api/cloud/libraries/${id}`, { method: 'DELETE' });
+			await fetchJson(`/api/cloud/libraries/${id}`, { method: 'DELETE' });
 			this.store.update((libs) => libs.filter((l) => l.id !== id));
 			this.state.update((s) => {
 				const { [id]: _, ...rest } = s.items;
@@ -96,7 +96,7 @@ class CloudLibraryService {
 		}));
 
 		try {
-			const response = await this.fetchJson<CloudScanResponse>(`/api/cloud/libraries/${id}/scan`, {
+			const response = await fetchJson<CloudScanResponse>(`/api/cloud/libraries/${id}/scan`, {
 				method: 'POST'
 			});
 			this.state.update((s) => ({
@@ -127,7 +127,7 @@ class CloudLibraryService {
 		}));
 
 		try {
-			const items = await this.fetchJson<CloudItem[]>(`/api/cloud/libraries/${libraryId}/items`);
+			const items = await fetchJson<CloudItem[]>(`/api/cloud/libraries/${libraryId}/items`);
 			this.state.update((s) => ({
 				...s,
 				items: { ...s.items, [libraryId]: items },
@@ -149,7 +149,7 @@ class CloudLibraryService {
 
 		try {
 			const params = path ? `?path=${encodeURIComponent(path)}` : '';
-			const response = await this.fetchJson<BrowseDirectoryResponse>(
+			const response = await fetchJson<BrowseDirectoryResponse>(
 				`/api/cloud/libraries/browse${params}`
 			);
 			this.state.update((s) => ({
@@ -205,22 +205,6 @@ class CloudLibraryService {
 		this.state.update((s) => ({ ...s, selectedName: name }));
 	}
 
-	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(apiUrl(path), {
-			...init,
-			headers: {
-				'Content-Type': 'application/json',
-				...init?.headers
-			}
-		});
-
-		if (!response.ok) {
-			const body = await response.json().catch(() => ({}));
-			throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
-		}
-
-		return response.json() as Promise<T>;
-	}
 }
 
 export const cloudLibraryService = new CloudLibraryService();

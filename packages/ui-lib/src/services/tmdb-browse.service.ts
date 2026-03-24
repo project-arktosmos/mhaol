@@ -1,6 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import { moviesToDisplay, tvShowsToDisplay } from 'addons/tmdb/transform';
 import type { TmdbBrowseState, TmdbGenre } from 'ui-lib/types/tmdb-browse.type';
 import type { DisplayTMDBMovie, DisplayTMDBTvShow, TMDBMovie, TMDBTvShow } from 'addons/tmdb/types';
@@ -60,19 +60,13 @@ class TmdbBrowseService {
 		}));
 	}
 
-	private async fetchJson<T>(path: string): Promise<T> {
-		const response = await fetch(apiUrl(path));
-		if (!response.ok) throw new Error(`HTTP ${response.status}`);
-		return response.json();
-	}
-
 	async loadGenres(): Promise<void> {
 		if (!browser || this.genresLoaded) return;
 		this.genresLoaded = true;
 		try {
 			const [movieRes, tvRes] = await Promise.all([
-				this.fetchJson<{ genres: TmdbGenre[] }>('/api/tmdb/genres/movie'),
-				this.fetchJson<{ genres: TmdbGenre[] }>('/api/tmdb/genres/tv')
+				fetchJson<{ genres: TmdbGenre[] }>('/api/tmdb/genres/movie'),
+				fetchJson<{ genres: TmdbGenre[] }>('/api/tmdb/genres/tv')
 			]);
 			this.state.update((s) => ({
 				...s,
@@ -88,7 +82,7 @@ class TmdbBrowseService {
 		if (!browser) return;
 		this.setLoading('popularMovies', true);
 		try {
-			const data = await this.fetchJson<TmdbPagedResponse<TMDBMovie>>(
+			const data = await fetchJson<TmdbPagedResponse<TMDBMovie>>(
 				`/api/tmdb/popular/movies?page=${page}`
 			);
 			this.state.update((s) => ({
@@ -111,7 +105,7 @@ class TmdbBrowseService {
 		if (!browser) return;
 		this.setLoading('popularTv', true);
 		try {
-			const data = await this.fetchJson<TmdbPagedResponse<TMDBTvShow>>(
+			const data = await fetchJson<TmdbPagedResponse<TMDBTvShow>>(
 				`/api/tmdb/popular/tv?page=${page}`
 			);
 			this.state.update((s) => ({
@@ -136,7 +130,7 @@ class TmdbBrowseService {
 		try {
 			let url = `/api/tmdb/discover/movies?page=${page}`;
 			if (genreId) url += `&with_genres=${genreId}`;
-			const data = await this.fetchJson<TmdbPagedResponse<TMDBMovie>>(url);
+			const data = await fetchJson<TmdbPagedResponse<TMDBMovie>>(url);
 			this.state.update((s) => ({
 				...s,
 				discoverMovies: moviesToDisplay(data.results),
@@ -160,7 +154,7 @@ class TmdbBrowseService {
 		try {
 			let url = `/api/tmdb/discover/tv?page=${page}`;
 			if (genreId) url += `&with_genres=${genreId}`;
-			const data = await this.fetchJson<TmdbPagedResponse<TMDBTvShow>>(url);
+			const data = await fetchJson<TmdbPagedResponse<TMDBTvShow>>(url);
 			this.state.update((s) => ({
 				...s,
 				discoverTv: tvShowsToDisplay(data.results),
@@ -182,7 +176,7 @@ class TmdbBrowseService {
 		if (!browser || !query.trim()) return;
 		this.setLoading('searchMovies', true);
 		try {
-			const data = await this.fetchJson<TmdbPagedResponse<TMDBMovie>>(
+			const data = await fetchJson<TmdbPagedResponse<TMDBMovie>>(
 				`/api/tmdb/search/movies?q=${encodeURIComponent(query)}&page=${page}`
 			);
 			this.state.update((s) => ({
@@ -206,7 +200,7 @@ class TmdbBrowseService {
 		if (!browser || !query.trim()) return;
 		this.setLoading('searchTv', true);
 		try {
-			const data = await this.fetchJson<TmdbPagedResponse<TMDBTvShow>>(
+			const data = await fetchJson<TmdbPagedResponse<TMDBTvShow>>(
 				`/api/tmdb/search/tv?q=${encodeURIComponent(query)}&page=${page}`
 			);
 			this.state.update((s) => ({
@@ -238,12 +232,12 @@ class TmdbBrowseService {
 			let pageNum: number;
 			let totalPagesNum: number;
 			if (type === 'movie') {
-				const data = await this.fetchJson<TmdbPagedResponse<TMDBMovie>>(endpoint);
+				const data = await fetchJson<TmdbPagedResponse<TMDBMovie>>(endpoint);
 				items = moviesToDisplay(data.results);
 				pageNum = data.page;
 				totalPagesNum = data.total_pages;
 			} else {
-				const data = await this.fetchJson<TmdbPagedResponse<TMDBTvShow>>(endpoint);
+				const data = await fetchJson<TmdbPagedResponse<TMDBTvShow>>(endpoint);
 				items = tvShowsToDisplay(data.results);
 				pageNum = data.page;
 				totalPagesNum = data.total_pages;

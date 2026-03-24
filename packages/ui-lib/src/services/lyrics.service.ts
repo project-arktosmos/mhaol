@@ -1,6 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type { Lyrics, LyricsState } from 'ui-lib/types/lyrics.type';
 import type { PlayableFile } from 'ui-lib/types/player.type';
 
@@ -53,7 +53,7 @@ class LyricsService {
 		}));
 
 		try {
-			const response = await fetch(apiUrl(`/api/lyrics/${cacheKey}`));
+			const response = await fetchRaw(`/api/lyrics/${cacheKey}`);
 
 			if (!response.ok) {
 				const status = response.status === 404 ? 'not_found' : 'error';

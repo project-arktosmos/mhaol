@@ -1,6 +1,7 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl, getSignalingUrl } from 'ui-lib/lib/api-base';
+import { getSignalingUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type { RosterEntry, RosterState, RosterStorageMode } from 'ui-lib/types/roster.type';
 
 const LOCAL_STORAGE_KEY = 'roster-entries';
@@ -60,7 +61,7 @@ class RosterService {
 		endorsement?: string;
 	}): Promise<void> {
 		if (this._mode === 'api') {
-			await fetch(apiUrl('/api/roster'), {
+			await fetchRaw('/api/roster', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(entry)
@@ -80,7 +81,7 @@ class RosterService {
 
 	async removeEntry(address: string): Promise<void> {
 		if (this._mode === 'api') {
-			await fetch(apiUrl(`/api/roster/${encodeURIComponent(address)}`), { method: 'DELETE' });
+			await fetchRaw(`/api/roster/${encodeURIComponent(address)}`, { method: 'DELETE' });
 		} else {
 			const stored = this.readLocal().filter(
 				(e) => e.address.toLowerCase() !== address.toLowerCase()
@@ -133,7 +134,7 @@ class RosterService {
 	}
 
 	private async loadFromApi(): Promise<RosterEntry[]> {
-		const res = await fetch(apiUrl('/api/roster'));
+		const res = await fetchRaw('/api/roster');
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const contacts: {
 			name: string;
@@ -180,7 +181,7 @@ class RosterService {
 
 	private async fetchSignalingUrl(): Promise<void> {
 		try {
-			const res = await fetch(apiUrl('/api/signaling/status'));
+			const res = await fetchRaw('/api/signaling/status');
 			if (!res.ok) return;
 			const status = await res.json();
 			if (status.devAvailable && status.devUrl) {
