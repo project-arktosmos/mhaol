@@ -9,7 +9,7 @@
 	let minimized = $state(false);
 </script>
 
-{#if $playerState.currentFile}
+{#if $playerState.currentFile && $playerDisplayMode !== 'inline'}
 	<div
 		class={classNames({
 			'fixed inset-0 z-50 flex flex-col bg-black': $playerDisplayMode === 'fullscreen',

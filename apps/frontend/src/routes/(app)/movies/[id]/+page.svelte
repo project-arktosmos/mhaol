@@ -269,7 +269,7 @@
 				size: torrent.size,
 				completedAt: ''
 			};
-			playerService.play(file).then(() => playerService.setDisplayMode('sidebar'));
+			playerService.play(file).then(() => playerService.setDisplayMode('inline'));
 		}
 	}
 
