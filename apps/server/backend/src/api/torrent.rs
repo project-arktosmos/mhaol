@@ -45,6 +45,8 @@ pub fn router() -> Router<AppState> {
         .route("/fetch-cache", get(list_fetch_cache_ids).post(save_fetch_cache))
         .route("/tv-fetch-cache/{tmdb_id}", get(get_tv_fetch_cache).delete(delete_tv_fetch_cache))
         .route("/tv-fetch-cache", post(save_tv_fetch_cache))
+        .route("/music-fetch-cache/{musicbrainz_id}", get(get_music_fetch_cache).delete(delete_music_fetch_cache))
+        .route("/music-fetch-cache", post(save_music_fetch_cache))
 }
 
 async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
@@ -820,6 +822,57 @@ async fn delete_tv_fetch_cache(
     Path(tmdb_id): Path<i64>,
 ) -> impl IntoResponse {
     state.tv_torrent_fetch_cache.delete_for_show(tmdb_id);
+    StatusCode::NO_CONTENT
+}
+
+// --- Music Fetch cache endpoints ---
+
+async fn get_music_fetch_cache(
+    State(state): State<AppState>,
+    Path(musicbrainz_id): Path<String>,
+) -> impl IntoResponse {
+    let rows = state.music_torrent_fetch_cache.get_for_id(&musicbrainz_id);
+    let entries: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|row| {
+            serde_json::json!({
+                "id": row.id,
+                "musicbrainzId": row.musicbrainz_id,
+                "scope": row.scope,
+                "candidate": serde_json::from_str::<serde_json::Value>(&row.candidate_json).unwrap_or_default(),
+                "createdAt": row.created_at,
+            })
+        })
+        .collect();
+    Json(entries)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveMusicFetchCacheBody {
+    musicbrainz_id: String,
+    scope: String,
+    candidate: serde_json::Value,
+}
+
+async fn save_music_fetch_cache(
+    State(state): State<AppState>,
+    Json(body): Json<SaveMusicFetchCacheBody>,
+) -> impl IntoResponse {
+    let candidate_json = serde_json::to_string(&body.candidate).unwrap_or_default();
+    state.music_torrent_fetch_cache.upsert(
+        &body.musicbrainz_id,
+        &body.scope,
+        &candidate_json,
+    );
+    StatusCode::CREATED
+}
+
+async fn delete_music_fetch_cache(
+    State(state): State<AppState>,
+    Path(musicbrainz_id): Path<String>,
+) -> impl IntoResponse {
+    state.music_torrent_fetch_cache.delete_for_id(&musicbrainz_id);
     StatusCode::NO_CONTENT
 }
 

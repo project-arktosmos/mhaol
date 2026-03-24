@@ -21,6 +21,7 @@ pub mod tmdb_image_override;
 pub mod roster_contact;
 pub mod openlibrary_api_cache;
 pub mod book_torrent_fetch_cache;
+pub mod music_torrent_fetch_cache;
 
 pub use settings::SettingsRepo;
 pub use metadata::MetadataRepo;
@@ -45,3 +46,4 @@ pub use tmdb_image_override::TmdbImageOverrideRepo;
 pub use roster_contact::RosterContactRepo;
 pub use openlibrary_api_cache::OpenLibraryApiCacheRepo;
 pub use book_torrent_fetch_cache::BookTorrentFetchCacheRepo;
+pub use music_torrent_fetch_cache::MusicTorrentFetchCacheRepo;

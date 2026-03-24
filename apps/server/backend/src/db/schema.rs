@@ -157,6 +157,7 @@ CREATE TABLE IF NOT EXISTS media_lists (
     media_type TEXT NOT NULL REFERENCES media_types(id),
     source TEXT NOT NULL DEFAULT 'auto' CHECK (source IN ('auto', 'user')),
     source_path TEXT,
+    parent_list_id TEXT REFERENCES media_lists(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -276,7 +277,7 @@ CREATE TABLE IF NOT EXISTS roster_contacts (
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '30', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '31', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -819,6 +820,28 @@ fn run_migrations(conn: &Connection) {
         let _ = conn.execute_batch(
             "INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-movies', 'video', 'Pinned Movies');
              INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-tv', 'video', 'Pinned TV');",
+        );
+    }
+
+    // Migration: add parent_list_id to media_lists (db_version 31)
+    if has_table(conn, "media_lists") && !has_column(conn, "media_lists", "parent_list_id") {
+        let _ = conn.execute_batch(
+            "ALTER TABLE media_lists ADD COLUMN parent_list_id TEXT REFERENCES media_lists(id) ON DELETE CASCADE",
+        );
+    }
+
+    // Migration: add music_torrent_fetch_cache table
+    if !has_table(conn, "music_torrent_fetch_cache") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE music_torrent_fetch_cache (
+                id TEXT PRIMARY KEY,
+                musicbrainz_id TEXT NOT NULL,
+                scope TEXT NOT NULL CHECK (scope IN ('album', 'discography')),
+                candidate_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE UNIQUE INDEX idx_music_fetch_cache_unique
+                ON music_torrent_fetch_cache(musicbrainz_id, scope);",
         );
     }
 }
