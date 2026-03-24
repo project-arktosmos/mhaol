@@ -3472,7 +3472,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "mhaol-backend"
+name = "mhaol-identity"
+version = "0.1.0"
+dependencies = [
+ "dirs 5.0.1",
+ "hex",
+ "k256",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha3",
+ "uuid",
+]
+
+[[package]]
+name = "mhaol-llm"
+version = "0.1.0"
+dependencies = [
+ "llama_cpp",
+ "parking_lot",
+ "serde",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "mhaol-node"
 version = "0.1.0"
 dependencies = [
  "async-stream",
@@ -3517,31 +3542,6 @@ dependencies = [
  "urlencoding",
  "uuid",
  "webrtc",
-]
-
-[[package]]
-name = "mhaol-identity"
-version = "0.1.0"
-dependencies = [
- "dirs 5.0.1",
- "hex",
- "k256",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "sha3",
- "uuid",
-]
-
-[[package]]
-name = "mhaol-llm"
-version = "0.1.0"
-dependencies = [
- "llama_cpp",
- "parking_lot",
- "serde",
- "tokio",
- "tracing",
 ]
 
 [[package]]

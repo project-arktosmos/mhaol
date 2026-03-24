@@ -5,7 +5,7 @@ This document guides Claude (and developers) on implementing features in this mo
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `packages/ui-lib/CLAUDE.md` — UI components, services, types, adapters, utils, CSS/themes, transport layer
 - `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
-- `apps/backend/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
+- `apps/node/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
 ---
 
 ## Monorepo Overview
@@ -14,7 +14,7 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 mhaol.git/
 ├── apps/
 │   ├── frontend/                     # Unified SPA (landing + connect + media, port 1570)
-│   ├── backend/                      # Rust Axum server (standalone, port 1530)
+│   ├── node/                         # Rust Axum server (standalone, port 1530)
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
@@ -44,14 +44,14 @@ Apps under `apps/` are **thin wrappers** that import everything from `packages/u
 
 Apps **never** implement their own components, services, adapters, types, or utils. Everything lives in `packages/ui-lib`.
 
-### Backend
+### Node
 
-The backend is a standalone Rust Axum server at `apps/backend/`. Crate name `mhaol-backend`, binary `mhaol-backend`. Runs headless on port 1530 and exposes its API via HTTP and WebRTC RPC.
+The node is a standalone Rust Axum server at `apps/node/`. Crate name `mhaol-node`, binary `mhaol-node`. Runs headless on port 1530 and exposes its API via HTTP and WebRTC RPC.
 
-- `apps/backend/Cargo.toml` — Crate manifest
-- `apps/backend/src/lib.rs` — AppState, modules, database layer
-- `apps/backend/src/server.rs` — Binary entry point (HTTP server)
-- `apps/backend/src/peer_service/rpc_handler.rs` — WebRTC RPC handler (routes data channel messages through Axum router)
+- `apps/node/Cargo.toml` — Crate manifest
+- `apps/node/src/lib.rs` — AppState, modules, database layer
+- `apps/node/src/server.rs` — Binary entry point (HTTP server)
+- `apps/node/src/peer_service/rpc_handler.rs` — WebRTC RPC handler (routes data channel messages through Axum router)
 
 ### Transport Layer
 
@@ -127,12 +127,12 @@ Run these from the **repo root**:
 ```bash
 # Development
 pnpm dev              # Frontend dev server (port 1570)
-pnpm dev:backend      # Rust backend only (PORT=1530)
+pnpm dev:node         # Rust node server (PORT=1530)
 pnpm dev:frontend     # Frontend dev server (port 1570)
 
 # Building
 pnpm build            # Frontend build
-pnpm build:backend    # Rust backend release build
+pnpm build:node       # Rust node release build
 
 # Quality
 pnpm lint             # Lint all packages
@@ -181,7 +181,7 @@ git commit -m "add thumbnail fallback to MediaCard"
 
 When adding a new feature that spans the full stack:
 
-**Backend (`apps/backend`)**
+**Node (`apps/node`)**
 - [ ] Create API module in `src/api/{feature}.rs`
 - [ ] Add `pub mod {feature};` to `src/api/mod.rs`
 - [ ] Register route in `build_router()`: `.nest("/api/{feature}", {feature}::router())`
@@ -217,4 +217,4 @@ When making significant structural changes (new packages, new component director
 - **Root CLAUDE.md** — Monorepo structure, app architecture, workspace scripts
 - **packages/ui-lib/CLAUDE.md** — Components, services, adapters, types, utils, CSS/themes
 - **App CLAUDE.md files** — Which features the app uses, how it assembles them
-- **apps/backend/CLAUDE.md** — API modules, routes
+- **apps/node/CLAUDE.md** — API modules, routes

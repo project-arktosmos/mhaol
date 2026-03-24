@@ -26,7 +26,7 @@ export interface PlayableFile {
 
 // ===== Player Display Mode =====
 
-export type PlayerDisplayMode = 'fullscreen' | 'sidebar';
+export type PlayerDisplayMode = 'fullscreen' | 'sidebar' | 'inline';
 
 // ===== Player State =====
 

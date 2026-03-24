@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "apps/backend",
+    "apps/node",
     "apps/signaling",
     "packages/identity",
     "packages/llm",
