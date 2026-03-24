@@ -1,6 +1,7 @@
 #[cfg(feature = "embed-frontend")]
 pub mod frontend;
 pub mod addons;
+pub mod image_cache;
 pub mod database;
 pub mod downloads;
 pub mod health;

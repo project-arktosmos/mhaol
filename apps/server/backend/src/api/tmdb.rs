@@ -1,7 +1,7 @@
 use crate::AppState;
 use axum::{
     extract::{Path, Query, State},
-    http::{header, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
     routing::{get, put},
     Json, Router,
@@ -582,62 +582,8 @@ async fn serve_tmdb_image(
     State(state): State<AppState>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
-    // Reject path traversal
-    if path.contains("..") {
-        return (StatusCode::BAD_REQUEST, "Invalid path").into_response();
-    }
-
-    let image_dir = state.data_dir.join("tmdb-images");
-    let local_path = image_dir.join(&path);
-
-    // Serve from disk cache if available
-    if local_path.exists() {
-        if let Ok(bytes) = tokio::fs::read(&local_path).await {
-            let content_type = mime_from_ext(&path);
-            return (
-                [
-                    (header::CONTENT_TYPE, content_type),
-                    (header::CACHE_CONTROL, "public, max-age=604800"),
-                ],
-                bytes,
-            )
-                .into_response();
-        }
-    }
-
-    // Download from TMDB CDN
-    let tmdb_url = format!("{}/{}", TMDB_IMAGE_BASE, path);
-    match reqwest::get(&tmdb_url).await {
-        Ok(resp) if resp.status().is_success() => match resp.bytes().await {
-            Ok(bytes) => {
-                // Save to disk
-                if let Some(parent) = local_path.parent() {
-                    let _ = tokio::fs::create_dir_all(parent).await;
-                }
-                let _ = tokio::fs::write(&local_path, &bytes).await;
-
-                let content_type = mime_from_ext(&path);
-                (
-                    [
-                        (header::CONTENT_TYPE, content_type),
-                        (header::CACHE_CONTROL, "public, max-age=604800"),
-                    ],
-                    bytes.to_vec(),
-                )
-                    .into_response()
-            }
-            Err(e) => (
-                StatusCode::BAD_GATEWAY,
-                Json(serde_json::json!({ "error": e.to_string() })),
-            )
-                .into_response(),
-        },
-        _ => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Image not found" })),
-        )
-            .into_response(),
-    }
+    let upstream_url = format!("{}/{}", TMDB_IMAGE_BASE, path);
+    super::image_cache::serve_cached_image(&state.data_dir, "tmdb-images", &path, &upstream_url, 604800).await
 }
 
 // Image override handlers
@@ -682,16 +628,3 @@ async fn delete_image_override(
     StatusCode::NO_CONTENT
 }
 
-fn mime_from_ext(path: &str) -> &'static str {
-    if path.ends_with(".png") {
-        "image/png"
-    } else if path.ends_with(".webp") {
-        "image/webp"
-    } else if path.ends_with(".gif") {
-        "image/gif"
-    } else if path.ends_with(".svg") {
-        "image/svg+xml"
-    } else {
-        "image/jpeg"
-    }
-}
