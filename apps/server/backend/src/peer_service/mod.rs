@@ -1,6 +1,8 @@
 pub mod catalog;
 pub mod handshake;
 pub mod partykit_client;
+pub mod rpc_handler;
+pub mod rpc_types;
 pub mod types;
 pub mod webrtc_peer;
 
@@ -8,6 +10,7 @@ use crate::worker_bridge::WorkerEvent;
 use crate::AppState;
 use catalog::CatalogCache;
 use partykit_client::PartyKitClient;
+use rpc_handler::RpcHandler;
 use types::{DataChannelEnvelope, ServerCatalogMessage, SignalingServerMessage};
 use webrtc_peer::{PeerEvent, PeerManager};
 
@@ -25,6 +28,7 @@ pub struct PeerServiceManager {
     passport_signature: String,
     server_passport: mhaol_identity::Passport,
     catalog_cache: CatalogCache,
+    rpc_handler: RpcHandler,
 }
 
 impl PeerServiceManager {
@@ -52,6 +56,8 @@ impl PeerServiceManager {
             "https://mhaol-signaling.project-arktosmos.partykit.dev".to_string()
         });
 
+        let rpc_handler = RpcHandler::new(state.clone());
+
         Ok(Self {
             state,
             signaling_url,
@@ -60,6 +66,7 @@ impl PeerServiceManager {
             passport_raw: passport.raw.clone(),
             passport_signature: passport.signature.clone(),
             server_passport: passport,
+            rpc_handler,
             catalog_cache: catalog::new_cache(),
         })
     }
@@ -369,6 +376,20 @@ impl PeerServiceManager {
                             debug!(peer_id = %peer_id, "Unexpected server-catalog message type");
                         }
                     }
+                }
+            }
+
+            "rpc" => {
+                if let Ok(incoming) = serde_json::from_value::<rpc_types::RpcIncoming>(envelope.payload.clone()) {
+                    let responses = self.rpc_handler.handle_message(incoming).await;
+                    for resp in responses {
+                        if let Err(e) = peer_manager.send_to_peer(peer_id, &resp).await {
+                            error!(peer_id = %peer_id, "Failed to send RPC response: {e}");
+                            break;
+                        }
+                    }
+                } else {
+                    debug!(peer_id = %peer_id, "Failed to parse RPC message");
                 }
             }
 
