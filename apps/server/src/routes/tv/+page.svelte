@@ -4,12 +4,31 @@
   import { tmdbBrowseService } from "ui-lib/services/tmdb-browse.service";
   import { smartPairService } from "ui-lib/services/smart-pair.service";
   import type { DisplayTMDBTvShow } from "addons/tmdb/types";
+  import type {
+    MediaItem,
+    MediaCategory,
+    MediaLinkSource,
+  } from "ui-lib/types/media-card.type";
   import SearchTab from "ui-lib/components/tmdb-browse/SearchTab.svelte";
   import PopularTab from "ui-lib/components/tmdb-browse/PopularTab.svelte";
   import TmdbBrowseGrid from "ui-lib/components/tmdb-browse/TmdbBrowseGrid.svelte";
   import TmdbPagination from "ui-lib/components/tmdb-browse/TmdbPagination.svelte";
   import BrowseViewToggle from "ui-lib/components/browse/BrowseViewToggle.svelte";
   import classNames from "classnames";
+
+  interface Props {
+    data: {
+      mediaTypes: Array<{ id: string; label: string }>;
+      categories: MediaCategory[];
+      linkSources: MediaLinkSource[];
+      itemsByCategory: Record<string, MediaItem[]>;
+      itemsByType: Record<string, MediaItem[]>;
+      libraries: Record<string, { name: string; type: string }>;
+      error?: string;
+    };
+  }
+
+  let { data }: Props = $props();
 
   const browseState = tmdbBrowseService.state;
 
@@ -18,6 +37,60 @@
   function handleSelectTvShow(tvShow: DisplayTMDBTvShow) {
     goto(`/tv/${tvShow.id}`);
   }
+
+  // Filter items to only those from TV libraries
+  let tvItems = $derived(
+    Object.values(data.itemsByType)
+      .flat()
+      .filter((i) => (data.libraries[i.libraryId]?.type ?? "movies") === "tv"),
+  );
+
+  // Stable unique numeric id per item (hash from item.id string)
+  function stableNumericId(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash);
+  }
+
+  function itemToDisplayTvShow(item: MediaItem): DisplayTMDBTvShow {
+    return {
+      id: stableNumericId(item.id),
+      name: item.name,
+      originalName: item.name,
+      firstAirYear: "",
+      lastAirYear: null,
+      overview: "",
+      posterUrl: null,
+      backdropUrl: null,
+      voteAverage: 0,
+      voteCount: 0,
+      genres: [],
+      numberOfSeasons: null,
+      numberOfEpisodes: null,
+    };
+  }
+
+  // Group items by library for per-library grids
+  let libraryGroups = $derived.by(() => {
+    const grouped = new Map<string, MediaItem[]>();
+    for (const item of tvItems) {
+      const list = grouped.get(item.libraryId);
+      if (list) {
+        list.push(item);
+      } else {
+        grouped.set(item.libraryId, [item]);
+      }
+    }
+    return Array.from(grouped.entries())
+      .map(([libraryId, items]) => ({
+        libraryId,
+        name: data.libraries[libraryId]?.name ?? libraryId,
+        tvShows: items.map(itemToDisplayTvShow),
+      }))
+      .filter((g) => g.tvShows.length > 0);
+  });
 
   onMount(() => {
     tmdbBrowseService.loadPopularTv();
@@ -43,6 +116,16 @@
         />
       </section>
     {/if}
+
+    {#each libraryGroups as group (group.libraryId)}
+      <section class="mb-8">
+        <h2 class="mb-3 text-lg font-semibold">{group.name}</h2>
+        <TmdbBrowseGrid
+          tvShows={group.tvShows}
+          onselectTvShow={handleSelectTvShow}
+        />
+      </section>
+    {/each}
 
     <section class="mb-8">
       <h2 class="mb-3 text-lg font-semibold">Search TV Shows</h2>
