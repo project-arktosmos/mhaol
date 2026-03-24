@@ -10,7 +10,7 @@
 		MusicBrainzReleaseGroup,
 		MusicBrainzRelease
 	} from 'addons/musicbrainz/types';
-	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
+	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import AlbumDetailPage from 'ui-lib/components/music/AlbumDetailPage.svelte';
@@ -19,40 +19,77 @@
 	let release = $state<DisplayMusicBrainzRelease | null>(null);
 	let loading = $state(true);
 	let tracksLoading = $state(false);
-	let torrentHash = $state<string | null>(null);
+	let fetchingId = $state<string | null>(null);
 
-	const torrentState = torrentService.state;
 	const searchStore = smartSearchService.store;
-
-	let torrent = $derived.by(() => {
-		if (!torrentHash) return null;
-		return $torrentState.torrents.find((t) => t.infoHash === torrentHash) ?? null;
-	});
-
-	$effect(() => {
-		const s = $searchStore;
-		if (s.selection?.type === 'music' && s.downloadedHash) {
-			torrentHash = s.downloadedHash;
-		}
-	});
+	const torrentState = torrentService.state;
 
 	let id = $derived($page.params.id ?? '');
 
+	let isFetching = $derived(
+		fetchingId !== null &&
+			fetchingId === id &&
+			$searchStore.fetchedCandidate === null &&
+			$searchStore.selection?.mode === 'fetch'
+	);
+	let isFetchedForCurrent = $derived(
+		$searchStore.fetchedCandidate !== null && fetchingId === id
+	);
+
+	let currentFetchSteps = $derived.by(() => {
+		if (!isFetching && !isFetchedForCurrent) return null;
+		if (isFetchedForCurrent) {
+			return { terms: true, search: true, searching: false, eval: true, done: true };
+		}
+		const s = $searchStore;
+		const hasResults = s.searchResults.length > 0;
+		const hasAnalysis = s.searchResults.some((r) => r.analysis !== null);
+		return {
+			terms: s.selection !== null,
+			search: !s.searching && hasResults,
+			searching: s.searching,
+			eval: hasAnalysis,
+			done: s.fetchedCandidate !== null
+		};
+	});
+
+	let matchedTorrent = $derived.by(() => {
+		const candidate = $searchStore.fetchedCandidate;
+		if (candidate?.infoHash) {
+			const t = torrentService.findByHash(candidate.infoHash);
+			if (t) return t;
+		}
+		return null;
+	});
+
+	let currentDownloadStatus = $derived.by((): { state: string; progress: number } | null => {
+		if (matchedTorrent) return { state: matchedTorrent.state, progress: matchedTorrent.progress };
+		return null;
+	});
+
+	$effect(() => {
+		const candidate = $searchStore.fetchedCandidate;
+		const key = fetchingId;
+		if (candidate && key) {
+			const scope = candidate.analysis?.isDiscography ? 'discography' : 'album';
+			smartSearchService.saveMusicFetchCache(key, scope, candidate);
+		}
+	});
+
 	async function fetchAlbum(albumId: string) {
 		loading = true;
+		smartSearchService.clear();
 		try {
 			const rgRes = await fetch(apiUrl(`/api/musicbrainz/release-group/${albumId}`));
 			if (!rgRes.ok) throw new Error('Failed to fetch release group');
 			const rgData = await rgRes.json();
 
-			// Build display album from the release-group data
 			const releaseGroups: MusicBrainzReleaseGroup[] = [rgData];
 			const display = releaseGroupsToDisplay(releaseGroups);
 			if (display.length > 0) {
 				album = display[0];
 			}
 
-			// Fetch tracks from first official release
 			const releases: MusicBrainzRelease[] = rgData.releases ?? [];
 			if (releases.length > 0) {
 				tracksLoading = true;
@@ -64,25 +101,71 @@
 				}
 				tracksLoading = false;
 			}
+
+			// Check fetch cache
+			const cached = await smartSearchService.checkMusicFetchCache(albumId);
+			if (cached && cached.length > 0) {
+				fetchingId = albumId;
+				const albumEntry = cached.find((e) => e.scope === 'album');
+				const bestEntry = albumEntry ?? cached[0];
+				smartSearchService.setSelection({
+					title: album?.title ?? '',
+					year: album?.firstReleaseYear ?? '',
+					type: 'music',
+					musicbrainzId: albumId,
+					artist: album?.artistCredits ?? '',
+					mode: 'fetch',
+					musicSearchMode: 'album'
+				});
+				smartSearchService.setFetchedCandidate(bestEntry.candidate);
+			}
 		} catch {
 			album = null;
 		}
 		loading = false;
 	}
 
-	function handleDownload() {
+	async function handleFetch() {
 		if (!album) return;
+		const isRefetch = isFetchedForCurrent;
+		fetchingId = album.id;
+		if (!isRefetch) {
+			const cached = await smartSearchService.checkMusicFetchCache(album.id);
+			if (cached && cached.length > 0) {
+				const albumEntry = cached.find((e) => e.scope === 'album');
+				const bestEntry = albumEntry ?? cached[0];
+				smartSearchService.setSelection({
+					title: album.title,
+					year: album.firstReleaseYear,
+					type: 'music',
+					musicbrainzId: album.id,
+					artist: album.artistCredits,
+					mode: 'fetch',
+					musicSearchMode: 'album'
+				});
+				smartSearchService.setFetchedCandidate(bestEntry.candidate);
+				return;
+			}
+		}
 		smartSearchService.select({
 			title: album.title,
 			year: album.firstReleaseYear,
 			type: 'music',
 			musicbrainzId: album.id,
 			artist: album.artistCredits,
-			mode: 'download'
+			mode: 'fetch',
+			musicSearchMode: 'album'
 		});
 	}
 
+	function handleDownload() {
+		const candidate = smartSearchService.getFetchedCandidate();
+		if (!candidate) return;
+		smartSearchService.startDownload(candidate);
+	}
+
 	onMount(() => {
+		smartSearchService.initializeConfig();
 		fetchAlbum(id);
 	});
 </script>
@@ -91,9 +174,20 @@
 	<AlbumDetailPage
 		{album}
 		{release}
-		{torrent}
 		loading={tracksLoading}
-		ondownloadalbum={handleDownload}
+		fetching={isFetching}
+		fetched={isFetchedForCurrent}
+		fetchSteps={currentFetchSteps}
+		downloadStatus={currentDownloadStatus}
+		fetchedTorrent={$searchStore.fetchedCandidate
+			? {
+					name: $searchStore.fetchedCandidate.name,
+					quality: $searchStore.fetchedCandidate.analysis?.quality ?? ''
+				}
+			: null}
+		onfetch={handleFetch}
+		ondownload={handleDownload}
+		onshowsearch={() => smartSearchService.show()}
 		onback={() => goto('/music/album')}
 	/>
 {:else if loading}

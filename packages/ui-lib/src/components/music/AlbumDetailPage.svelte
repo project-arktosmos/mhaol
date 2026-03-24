@@ -1,21 +1,58 @@
 <script lang="ts">
+	import classNames from 'classnames';
 	import DetailPageLayout from 'ui-lib/components/core/DetailPageLayout.svelte';
 	import type {
 		DisplayMusicBrainzReleaseGroup,
 		DisplayMusicBrainzRelease
 	} from 'addons/musicbrainz/types';
-	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 
 	interface Props {
 		album: DisplayMusicBrainzReleaseGroup;
 		release: DisplayMusicBrainzRelease | null;
-		torrent: TorrentInfo | null;
 		loading: boolean;
-		ondownloadalbum: () => void;
+		fetching: boolean;
+		fetched: boolean;
+		fetchSteps: {
+			terms: boolean;
+			search: boolean;
+			searching: boolean;
+			eval: boolean;
+			done: boolean;
+		} | null;
+		downloadStatus: { state: string; progress: number } | null;
+		fetchedTorrent: { name: string; quality: string } | null;
+		onfetch: () => void;
+		ondownload: () => void;
+		onshowsearch: () => void;
 		onback: () => void;
 	}
 
-	let { album, release, torrent, loading, ondownloadalbum, onback }: Props = $props();
+	let {
+		album,
+		release,
+		loading,
+		fetching,
+		fetched,
+		fetchSteps,
+		downloadStatus,
+		fetchedTorrent,
+		onfetch,
+		ondownload,
+		onshowsearch,
+		onback
+	}: Props = $props();
+
+	let dlState = $derived(downloadStatus?.state ?? null);
+	let isDownloading = $derived(
+		dlState === 'downloading' ||
+			dlState === 'initializing' ||
+			dlState === 'paused' ||
+			dlState === 'checking'
+	);
+	let isDownloaded = $derived(dlState === 'completed' || dlState === 'seeding');
+	let downloadButtonDisabled = $derived(!fetched || isDownloading || isDownloaded);
+	let dlProgress = $derived(downloadStatus?.progress ?? 0);
+	let dlPercent = $derived(Math.round(dlProgress * 100));
 </script>
 
 <DetailPageLayout>
@@ -76,33 +113,89 @@
 		{/each}
 	</div>
 
-	{#if torrent}
-		<div class="rounded-lg bg-base-200 p-2">
-			<div class="flex items-center justify-between text-xs">
-				<span class="font-medium">
-					{torrent.state === 'seeding' ? 'Complete' : `${Math.round(torrent.progress * 100)}%`}
-				</span>
-				<span class="badge badge-xs {torrent.state === 'seeding' ? 'badge-success' : 'badge-info'}">
-					{torrent.state}
-				</span>
+	<div class="grid grid-cols-2 gap-2">
+		<button
+			class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
+			onclick={onfetch}
+			disabled={fetching}
+		>
+			{#if fetching}
+				<span class="loading loading-xs loading-spinner"></span>
+			{:else}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+					/>
+				</svg>
+			{/if}
+			Smart Search
+		</button>
+		{#if fetchSteps}
+			<button
+				class="col-span-2 cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
+				onclick={onshowsearch}
+			>
+				<ul class="steps steps-horizontal w-full text-xs">
+					<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.search })}>
+						{fetchSteps.searching ? 'Searching...' : 'Search'}
+					</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.done })}>
+						{fetchSteps.done ? 'Done' : 'Candidate'}
+					</li>
+				</ul>
+			</button>
+		{/if}
+		{#if fetchedTorrent}
+			<div class="col-span-2 flex items-center gap-2">
+				<p class="min-w-0 flex-1 truncate text-xs opacity-60" title={fetchedTorrent.name}>
+					{fetchedTorrent.name}
+				</p>
+				{#if fetchedTorrent.quality}
+					<span class="badge badge-xs badge-info">{fetchedTorrent.quality}</span>
+				{/if}
 			</div>
-			{#if torrent.state !== 'seeding'}
+		{/if}
+		<button
+			class={classNames('btn col-span-2 btn-sm', {
+				'btn-ghost': isDownloaded,
+				'btn-success': !isDownloaded
+			})}
+			onclick={ondownload}
+			disabled={downloadButtonDisabled}
+		>
+			{#if isDownloading}
+				<span class="loading loading-xs loading-spinner"></span> Downloading
+			{:else if isDownloaded}
+				Downloaded
+			{:else}
+				Download
+			{/if}
+		</button>
+		{#if isDownloading || isDownloaded}
+			<div class="col-span-2 flex items-center gap-2">
 				<progress
-					class="progress mt-1 w-full progress-primary"
-					value={Math.round(torrent.progress * 100)}
+					class={classNames('progress flex-1', {
+						'progress-info': isDownloading,
+						'progress-success': isDownloaded
+					})}
+					value={dlPercent}
 					max="100"
 				></progress>
-			{/if}
-		</div>
-	{/if}
-
-	<button
-		class="btn btn-sm btn-primary"
-		onclick={ondownloadalbum}
-		disabled={torrent?.state === 'downloading' || torrent?.state === 'seeding'}
-	>
-		{torrent?.state === 'seeding' ? 'Downloaded' : torrent ? 'Downloading...' : 'Download'}
-	</button>
+				<span class="text-xs font-medium opacity-60">{dlPercent}%</span>
+			</div>
+		{/if}
+	</div>
 
 	{#if loading}
 		<div class="flex items-center justify-center py-4">
