@@ -1,14 +1,33 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import type { DisplayMusicBrainzArtist } from 'addons/musicbrainz/types';
+	import type { TorrentState } from 'ui-lib/types/torrent.type';
+	import TorrentProgressOverlay from 'ui-lib/components/torrent/TorrentProgressOverlay.svelte';
 
 	interface Props {
 		artist: DisplayMusicBrainzArtist;
 		selected?: boolean;
+		torrentProgress?: number | null;
+		torrentState?: TorrentState | null;
+		torrentSpeed?: number | null;
+		torrentEta?: number | null;
 		onselect?: (artist: DisplayMusicBrainzArtist) => void;
 	}
 
-	let { artist, selected = false, onselect }: Props = $props();
+	let {
+		artist,
+		selected = false,
+		torrentProgress = null,
+		torrentState = null,
+		torrentSpeed = null,
+		torrentEta = null,
+		onselect
+	}: Props = $props();
+
+	let isDownloading = $derived(
+		torrentProgress !== null && torrentState !== null && torrentState !== 'seeding'
+	);
+	let isCompleted = $derived(torrentState === 'seeding');
 
 	let lifeSpan = $derived.by(() => {
 		if (!artist.beginYear) return null;
@@ -52,6 +71,13 @@
 				/>
 			</svg>
 		</div>
+		{#if isCompleted}
+			<div class="absolute top-1 right-1">
+				<span class="badge badge-xs badge-success">Done</span>
+			</div>
+		{:else if isDownloading}
+			<TorrentProgressOverlay {torrentProgress} {torrentState} {torrentSpeed} {torrentEta} />
+		{/if}
 	</figure>
 	<div class="card-body gap-0.5">
 		<h3 class="card-title truncate text-sm" title={artist.name}>{artist.name}</h3>
