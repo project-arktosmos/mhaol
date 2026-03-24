@@ -1,7 +1,6 @@
 use crate::db::DbPool;
 use crate::AppState;
 use axum::{
-    body::Body,
     extract::{Path, Query, State},
     http::{header, StatusCode},
     response::IntoResponse,
@@ -769,7 +768,10 @@ struct ImageProxyQuery {
     url: String,
 }
 
-async fn image_proxy(Query(query): Query<ImageProxyQuery>) -> impl IntoResponse {
+async fn image_proxy(
+    State(state): State<AppState>,
+    Query(query): Query<ImageProxyQuery>,
+) -> impl IntoResponse {
     // Only allow proxying YouTube image URLs
     let allowed = query.url.starts_with("https://yt3.ggpht.com/")
         || query.url.starts_with("https://yt3.googleusercontent.com/")
@@ -782,39 +784,21 @@ async fn image_proxy(Query(query): Query<ImageProxyQuery>) -> impl IntoResponse 
             .into_response();
     }
 
-    let resp = match reqwest::get(&query.url).await {
-        Ok(r) => r,
-        Err(e) => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(serde_json::json!({ "error": e.to_string() })),
-            )
-                .into_response()
-        }
-    };
+    // Derive a cache key from the URL: strip scheme, replace non-alnum with underscore
+    let cache_key = query
+        .url
+        .strip_prefix("https://")
+        .unwrap_or(&query.url)
+        .replace(|c: char| !c.is_alphanumeric() && c != '.', "_");
 
-    if !resp.status().is_success() {
-        return StatusCode::BAD_GATEWAY.into_response();
-    }
-
-    let content_type = resp
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("image/jpeg")
-        .to_string();
-
-    let bytes = match resp.bytes().await {
-        Ok(b) => b,
-        Err(_) => return StatusCode::BAD_GATEWAY.into_response(),
-    };
-
-    (
-        [(header::CONTENT_TYPE, content_type),
-         (header::CACHE_CONTROL, "public, max-age=86400".to_string())],
-        Body::from(bytes),
+    super::image_cache::serve_cached_image(
+        &state.data_dir,
+        "youtube-images",
+        &cache_key,
+        &query.url,
+        86400,
     )
-        .into_response()
+    .await
 }
 
 fn parse_rss_feed(xml: &str) -> (String, Vec<RssVideo>) {
