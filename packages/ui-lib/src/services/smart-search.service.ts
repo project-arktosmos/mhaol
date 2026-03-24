@@ -11,7 +11,8 @@ import type {
 	SmartSearchMediaConfig,
 	SmartSearchAllConfigs,
 	TvSmartSearchResults,
-	TvSeasonMeta
+	TvSeasonMeta,
+	MusicSmartSearchResults
 } from 'ui-lib/types/smart-search.type';
 import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/types';
 import { parseTorrentName } from 'addons/torrent-search-thepiratebay/parse-torrent-name';
@@ -57,7 +58,9 @@ const initialState: SmartSearchState = {
 	fetchedCandidate: null,
 	tvResults: null,
 	tvSeasonsMeta: null,
-	activeTvTab: 'complete'
+	activeTvTab: 'complete',
+	musicResults: null,
+	activeMusicTab: 'album'
 };
 
 function selectionToMediaType(type: SmartSearchSelection['type']): SmartSearchMediaType {

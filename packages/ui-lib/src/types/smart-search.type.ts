@@ -57,6 +57,7 @@ export interface SmartSearchMusicSelection extends SmartSearchBaseSelection {
 	type: 'music';
 	musicbrainzId: string;
 	artist: string;
+	musicSearchMode?: 'album' | 'artist';
 }
 
 export interface SmartSearchGameSelection extends SmartSearchBaseSelection {
@@ -86,6 +87,19 @@ export interface SmartSearchTorrentResult extends TorrentSearchResult {
 
 export type TvTorrentScope = 'complete' | 'season' | 'episode';
 
+export type MusicTorrentScope = 'album' | 'discography';
+
+export interface MusicAlbumMeta {
+	id: string;
+	title: string;
+	year: string;
+}
+
+export interface MusicSmartSearchResults {
+	album: SmartSearchTorrentResult[];
+	discography: SmartSearchTorrentResult[];
+}
+
 export interface TvSeasonResults {
 	seasonPacks: SmartSearchTorrentResult[];
 	episodes: Record<number, SmartSearchTorrentResult[]>;
@@ -112,4 +126,6 @@ export interface SmartSearchState {
 	tvResults: TvSmartSearchResults | null;
 	tvSeasonsMeta: TvSeasonMeta[] | null;
 	activeTvTab: 'complete' | number;
+	musicResults: MusicSmartSearchResults | null;
+	activeMusicTab: 'album' | 'discography';
 }
