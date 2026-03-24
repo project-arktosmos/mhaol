@@ -1,6 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchJson, fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import { ObjectServiceClass } from 'ui-lib/services/classes/object-service.class';
 import { p2pStreamService } from 'ui-lib/services/p2p-stream.service';
 import { signalingAdapter } from 'ui-lib/adapters/classes/signaling.adapter';
@@ -69,9 +69,9 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		this.state.update((s) => ({ ...s, loading: true }));
 
 		try {
-			const status = await this.fetchJson<{ available: boolean }>('/api/player/stream-status');
+			const status = await fetchJson<{ available: boolean }>('/api/player/stream-status');
 
-			const files = await this.fetchJson<PlayableFile[]>('/api/player/playable');
+			const files = await fetchJson<PlayableFile[]>('/api/player/playable');
 
 			this.state.update((s) => ({
 				...s,
@@ -99,7 +99,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		if (!browser) return;
 
 		try {
-			const files = await this.fetchJson<PlayableFile[]>('/api/player/playable');
+			const files = await fetchJson<PlayableFile[]>('/api/player/playable');
 			this.state.update((s) => ({ ...s, files }));
 		} catch (error) {
 			console.error('[Player] Failed to refresh files:', error);
@@ -138,7 +138,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		try {
 			const streamConfig = p2pStreamService.getSessionConfig();
 
-			const session = await this.fetchJson<{
+			const session = await fetchJson<{
 				session_id: string;
 				room_id: string;
 				signaling_url: string;
@@ -613,7 +613,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		if (currentState.currentFile?.id.startsWith('torrent:')) {
 			const infoHash = currentState.currentFile.id.replace('torrent:', '');
 			try {
-				await fetch(apiUrl(`/api/torrent/torrents/${infoHash}/stream/stop`), {
+				await fetchRaw(`/api/torrent/torrents/${infoHash}/stream/stop`, {
 					method: 'POST'
 				});
 			} catch {
@@ -623,7 +623,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 		if (currentState.sessionId) {
 			try {
-				await fetch(apiUrl(`/api/player/sessions/${currentState.sessionId}`), {
+				await fetchRaw(`/api/player/sessions/${currentState.sessionId}`, {
 					method: 'DELETE'
 				});
 			} catch {
@@ -653,22 +653,6 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	updateSettings(updates: Partial<PlayerSettings>): void {
 		const current = this.get();
 		this.set({ ...current, ...updates });
-	}
-
-	// ===== HTTP Helper =====
-
-	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(apiUrl(path), {
-			...init,
-			headers: { 'Content-Type': 'application/json', ...init?.headers }
-		});
-
-		if (!response.ok) {
-			const body = await response.json().catch(() => ({}));
-			throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
-		}
-
-		return response.json() as Promise<T>;
 	}
 
 	// ===== Lifecycle =====

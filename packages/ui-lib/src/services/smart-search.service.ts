@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type {
 	SmartSearchState,
 	SmartSearchSelection,
@@ -107,7 +107,7 @@ class SmartSearchService {
 		this.migrateOldConfig();
 
 		try {
-			const res = await fetch(apiUrl('/api/smart-search/settings'));
+			const res = await fetchRaw('/api/smart-search/settings');
 			if (!res.ok) return;
 			const data: SmartSearchAllConfigs = await res.json();
 			this.configStore.set(data);
@@ -136,7 +136,7 @@ class SmartSearchService {
 				updates['movies.smartSearchPrompt'] = parsed.smartSearchPrompt;
 			}
 			if (Object.keys(updates).length > 0) {
-				fetch(apiUrl('/api/smart-search/settings'), {
+				fetchRaw('/api/smart-search/settings', {
 					method: 'PUT',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify(updates)
@@ -156,7 +156,7 @@ class SmartSearchService {
 		}));
 
 		try {
-			await fetch(apiUrl('/api/smart-search/settings'), {
+			await fetchRaw('/api/smart-search/settings', {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ [`${mediaType}.${field}`]: value })
@@ -267,8 +267,7 @@ class SmartSearchService {
 				if (signal.aborted) return;
 
 				try {
-					const url = apiUrl(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`);
-					const res = await fetch(url, { signal });
+					const res = await fetchRaw(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`, { signal });
 					if (!res.ok) continue;
 					const data: TorrentSearchResult[] = await res.json();
 
@@ -440,8 +439,7 @@ class SmartSearchService {
 				if (signal.aborted) return;
 
 				try {
-					const url = apiUrl(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`);
-					const res = await fetch(url, { signal });
+					const res = await fetchRaw(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`, { signal });
 					if (!res.ok) continue;
 					const data: TorrentSearchResult[] = await res.json();
 
@@ -610,8 +608,7 @@ class SmartSearchService {
 				if (signal.aborted) return;
 
 				try {
-					const url = apiUrl(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`);
-					const res = await fetch(url, { signal });
+					const res = await fetchRaw(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`, { signal });
 					if (!res.ok) continue;
 					const data: TorrentSearchResult[] = await res.json();
 
@@ -724,7 +721,7 @@ class SmartSearchService {
 		musicbrainzId: string
 	): Promise<Array<{ scope: string; candidate: SmartSearchTorrentResult }> | null> {
 		try {
-			const res = await fetch(apiUrl(`/api/torrent/music-fetch-cache/${musicbrainzId}`));
+			const res = await fetchRaw(`/api/torrent/music-fetch-cache/${musicbrainzId}`);
 			if (!res.ok) return null;
 			const data: Array<{ scope: string; candidate: SmartSearchTorrentResult }> = await res.json();
 			if (data.length === 0) return null;
@@ -743,7 +740,7 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetch(apiUrl('/api/torrent/music-fetch-cache'), {
+			await fetchRaw('/api/torrent/music-fetch-cache', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ musicbrainzId, scope, candidate })
@@ -760,7 +757,7 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult;
 	}> | null> {
 		try {
-			const res = await fetch(apiUrl(`/api/torrent/tv-fetch-cache/${tmdbId}`));
+			const res = await fetchRaw(`/api/torrent/tv-fetch-cache/${tmdbId}`);
 			if (!res.ok) return null;
 			const data: Array<{
 				scope: string;
@@ -786,7 +783,7 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetch(apiUrl('/api/torrent/tv-fetch-cache'), {
+			await fetchRaw('/api/torrent/tv-fetch-cache', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ tmdbId, scope, seasonNumber, episodeNumber, candidate })
@@ -849,7 +846,7 @@ class SmartSearchService {
 
 	async checkFetchCache(tmdbId: number): Promise<SmartSearchTorrentResult | null> {
 		try {
-			const res = await fetch(apiUrl(`/api/torrent/fetch-cache/${tmdbId}`));
+			const res = await fetchRaw(`/api/torrent/fetch-cache/${tmdbId}`);
 			if (!res.ok) return null;
 			const data = await res.json();
 			const candidate = data.candidate as SmartSearchTorrentResult;
@@ -866,7 +863,7 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetch(apiUrl('/api/torrent/fetch-cache'), {
+			await fetchRaw('/api/torrent/fetch-cache', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ tmdbId, mediaType, candidate })
@@ -878,9 +875,7 @@ class SmartSearchService {
 
 	async checkBookFetchCache(openlibraryKey: string): Promise<SmartSearchTorrentResult | null> {
 		try {
-			const res = await fetch(
-				apiUrl(`/api/openlibrary/fetch-cache?key=${encodeURIComponent(openlibraryKey)}`)
-			);
+			const res = await fetchRaw(`/api/openlibrary/fetch-cache?key=${encodeURIComponent(openlibraryKey)}`);
 			if (!res.ok) return null;
 			const candidate = (await res.json()) as SmartSearchTorrentResult;
 			candidate.uploadedAt = new Date(candidate.uploadedAt);
@@ -895,7 +890,7 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetch(apiUrl('/api/openlibrary/fetch-cache'), {
+			await fetchRaw('/api/openlibrary/fetch-cache', {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ key: openlibraryKey, candidate })
@@ -910,7 +905,7 @@ class SmartSearchService {
 		if (!selection) return null;
 
 		try {
-			const configRes = await fetch(apiUrl('/api/torrent/config'));
+			const configRes = await fetchRaw('/api/torrent/config');
 			if (!configRes.ok) return null;
 			const config = await configRes.json();
 			const basePath: string = config.downloadPath ?? '';
@@ -919,7 +914,7 @@ class SmartSearchService {
 			const subdir = getSubdir(selection);
 			const downloadPath = `${basePath}/${subdir}`;
 
-			const res = await fetch(apiUrl('/api/torrent/torrents'), {
+			const res = await fetchRaw('/api/torrent/torrents', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -947,7 +942,7 @@ class SmartSearchService {
 		if (!selection) return null;
 
 		try {
-			const configRes = await fetch(apiUrl('/api/torrent/config'));
+			const configRes = await fetchRaw('/api/torrent/config');
 			if (!configRes.ok) return null;
 			const config = await configRes.json();
 			const basePath: string = config.downloadPath ?? '';
@@ -956,7 +951,7 @@ class SmartSearchService {
 			const subdir = getSubdir(selection);
 			const downloadPath = `${basePath}/${subdir}`;
 
-			const res = await fetch(apiUrl('/api/torrent/torrents'), {
+			const res = await fetchRaw('/api/torrent/torrents', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -990,14 +985,11 @@ class SmartSearchService {
 		this.store.update((s) => ({ ...s, downloadedHash: infoHash }));
 
 		try {
-			await fetch(
-				apiUrl(`/api/libraries/${state.pendingLibraryId}/items/${state.pendingItemId}/torrent`),
-				{
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ infoHash, outputPath, mode })
-				}
-			);
+			await fetchRaw(`/api/libraries/${state.pendingLibraryId}/items/${state.pendingItemId}/torrent`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ infoHash, outputPath, mode })
+			});
 		} catch {
 			// best-effort
 		}
@@ -1045,7 +1037,7 @@ class SmartSearchService {
 		}
 
 		try {
-			const configRes = await fetch(apiUrl('/api/torrent/config'));
+			const configRes = await fetchRaw('/api/torrent/config');
 			if (!configRes.ok) return;
 			const config = await configRes.json();
 			const basePath: string = config.downloadPath ?? '';
@@ -1054,7 +1046,7 @@ class SmartSearchService {
 			const subdir = getSubdir(selection);
 			const targetPath = `${basePath}/${subdir}`;
 
-			const libRes = await fetch(apiUrl('/api/libraries'));
+			const libRes = await fetchRaw('/api/libraries');
 			if (!libRes.ok) return;
 			const libraries: Array<{ id: string; path: string }> = await libRes.json();
 			let library = libraries.find((l) => l.path === targetPath);
@@ -1078,7 +1070,7 @@ class SmartSearchService {
 						libName = 'Books';
 						break;
 				}
-				const createRes = await fetch(apiUrl('/api/libraries'), {
+				const createRes = await fetchRaw('/api/libraries', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
@@ -1131,7 +1123,7 @@ class SmartSearchService {
 				itemBody.tmdbId = selection.tmdbId;
 			}
 
-			const itemRes = await fetch(apiUrl(`/api/libraries/${library.id}/items`), {
+			const itemRes = await fetchRaw(`/api/libraries/${library.id}/items`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(itemBody)
@@ -1146,7 +1138,7 @@ class SmartSearchService {
 
 				if (selection.type === 'music') {
 					try {
-						await fetch(apiUrl(`/api/libraries/${library!.id}/items/${item.id}/musicbrainz`), {
+						await fetchRaw(`/api/libraries/${library!.id}/items/${item.id}/musicbrainz`, {
 							method: 'PUT',
 							headers: { 'Content-Type': 'application/json' },
 							body: JSON.stringify({ musicbrainzId: selection.musicbrainzId })

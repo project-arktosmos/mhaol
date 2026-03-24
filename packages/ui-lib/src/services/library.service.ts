@@ -1,6 +1,6 @@
 import { get, writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import type {
 	Library,
 	DirectoryEntry,
@@ -54,7 +54,7 @@ class LibraryService {
 		if (!browser || this.initialized) return;
 
 		try {
-			const libraries = await this.fetchJson<Library[]>('/api/libraries');
+			const libraries = await fetchJson<Library[]>('/api/libraries');
 			this.store.set(libraries);
 			this.initialized = true;
 
@@ -73,7 +73,7 @@ class LibraryService {
 
 		try {
 			const params = path ? `?path=${encodeURIComponent(path)}` : '';
-			const response = await this.fetchJson<BrowseDirectoryResponse>(
+			const response = await fetchJson<BrowseDirectoryResponse>(
 				`/api/libraries/browse${params}`
 			);
 
@@ -98,7 +98,7 @@ class LibraryService {
 		if (!browser) return;
 
 		try {
-			const library = await this.fetchJson<Library>('/api/libraries', {
+			const library = await fetchJson<Library>('/api/libraries', {
 				method: 'POST',
 				body: JSON.stringify({ name, path, libraryType })
 			});
@@ -114,7 +114,7 @@ class LibraryService {
 		if (!browser) return;
 
 		try {
-			await this.fetchJson(`/api/libraries/${library.id}`, { method: 'DELETE' });
+			await fetchJson(`/api/libraries/${library.id}`, { method: 'DELETE' });
 			this.store.update((items) => items.filter((i) => i.id !== library.id));
 		} catch (error) {
 			console.error('[library] Failed to remove library:', error);
@@ -184,7 +184,7 @@ class LibraryService {
 		}));
 
 		try {
-			const response = await this.fetchJson<LibraryFilesResponse>(
+			const response = await fetchJson<LibraryFilesResponse>(
 				`/api/libraries/${libraryId}/files`
 			);
 			this.state.update((s) => ({
@@ -212,7 +212,7 @@ class LibraryService {
 		}));
 
 		try {
-			const response = await this.fetchJson<LibraryFilesResponse>(
+			const response = await fetchJson<LibraryFilesResponse>(
 				`/api/libraries/${libraryId}/scan`,
 				{ method: 'POST' }
 			);
@@ -246,7 +246,7 @@ class LibraryService {
 	): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/tmdb`, {
+		await fetchJson(`/api/libraries/${libraryId}/items/${itemId}/tmdb`, {
 			method: 'PUT',
 			body: JSON.stringify({ tmdbId, seasonNumber, episodeNumber })
 		});
@@ -277,7 +277,7 @@ class LibraryService {
 	async unlinkTmdb(libraryId: string, itemId: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/tmdb`, {
+		await fetchJson(`/api/libraries/${libraryId}/items/${itemId}/tmdb`, {
 			method: 'DELETE'
 		});
 
@@ -301,7 +301,7 @@ class LibraryService {
 	async linkYoutube(libraryId: string, itemId: string, youtubeId: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/youtube`, {
+		await fetchJson(`/api/libraries/${libraryId}/items/${itemId}/youtube`, {
 			method: 'PUT',
 			body: JSON.stringify({ youtubeId })
 		});
@@ -332,7 +332,7 @@ class LibraryService {
 	async unlinkYoutube(libraryId: string, itemId: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/youtube`, {
+		await fetchJson(`/api/libraries/${libraryId}/items/${itemId}/youtube`, {
 			method: 'DELETE'
 		});
 
@@ -356,7 +356,7 @@ class LibraryService {
 	async linkMusicBrainz(libraryId: string, itemId: string, musicbrainzId: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/musicbrainz`, {
+		await fetchJson(`/api/libraries/${libraryId}/items/${itemId}/musicbrainz`, {
 			method: 'PUT',
 			body: JSON.stringify({ musicbrainzId })
 		});
@@ -391,7 +391,7 @@ class LibraryService {
 	async unlinkMusicBrainz(libraryId: string, itemId: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/musicbrainz`, {
+		await fetchJson(`/api/libraries/${libraryId}/items/${itemId}/musicbrainz`, {
 			method: 'DELETE'
 		});
 
@@ -415,7 +415,7 @@ class LibraryService {
 	async updateCategory(libraryId: string, itemId: string, categoryId: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/category`, {
+		await fetchJson(`/api/libraries/${libraryId}/items/${itemId}/category`, {
 			method: 'PUT',
 			body: JSON.stringify({ categoryId })
 		});
@@ -436,7 +436,7 @@ class LibraryService {
 	async clearCategory(libraryId: string, itemId: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/category`, {
+		await fetchJson(`/api/libraries/${libraryId}/items/${itemId}/category`, {
 			method: 'DELETE'
 		});
 
@@ -456,7 +456,7 @@ class LibraryService {
 	async updateMediaType(libraryId: string, itemId: string, mediaTypeId: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson(`/api/libraries/${libraryId}/items/${itemId}/media-type`, {
+		await fetchJson(`/api/libraries/${libraryId}/items/${itemId}/media-type`, {
 			method: 'PUT',
 			body: JSON.stringify({ mediaTypeId })
 		});
@@ -477,12 +477,12 @@ class LibraryService {
 	}
 
 	async fetchMediaTypes(): Promise<MediaTypeOption[]> {
-		return this.fetchJson<MediaTypeOption[]>('/api/libraries/media-types');
+		return fetchJson<MediaTypeOption[]>('/api/libraries/media-types');
 	}
 
 	async fetchCategories(mediaType?: string): Promise<CategoryOption[]> {
 		const params = mediaType ? `?mediaType=${encodeURIComponent(mediaType)}` : '';
-		return this.fetchJson<CategoryOption[]>(`/api/libraries/categories${params}`);
+		return fetchJson<CategoryOption[]>(`/api/libraries/categories${params}`);
 	}
 
 	private resetForm(): void {
@@ -500,22 +500,6 @@ class LibraryService {
 		}));
 	}
 
-	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(apiUrl(path), {
-			...init,
-			headers: {
-				'Content-Type': 'application/json',
-				...init?.headers
-			}
-		});
-
-		if (!response.ok) {
-			const body = await response.json().catch(() => ({}));
-			throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
-		}
-
-		return response.json() as Promise<T>;
-	}
 }
 
 export const libraryService = new LibraryService();

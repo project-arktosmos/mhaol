@@ -1,6 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type { UnifiedDownload } from 'ui-lib/types/download.type';
 
 export interface DownloadsState {
@@ -52,7 +52,7 @@ class DownloadsService {
 
 	async pauseDownload(dl: UnifiedDownload): Promise<void> {
 		if (dl.type === 'torrent') {
-			await fetch(apiUrl(`/api/torrent/torrents/${encodeURIComponent(dl.id)}/pause`), {
+			await fetchRaw(`/api/torrent/torrents/${encodeURIComponent(dl.id)}/pause`, {
 				method: 'POST'
 			});
 		}
@@ -61,7 +61,7 @@ class DownloadsService {
 
 	async resumeDownload(dl: UnifiedDownload): Promise<void> {
 		if (dl.type === 'torrent') {
-			await fetch(apiUrl(`/api/torrent/torrents/${encodeURIComponent(dl.id)}/resume`), {
+			await fetchRaw(`/api/torrent/torrents/${encodeURIComponent(dl.id)}/resume`, {
 				method: 'POST'
 			});
 		}
@@ -71,11 +71,11 @@ class DownloadsService {
 	async removeDownload(dl: UnifiedDownload, deleteFiles = false): Promise<void> {
 		if (dl.type === 'torrent') {
 			const qs = deleteFiles ? '?delete_files=true' : '';
-			await fetch(apiUrl(`/api/torrent/torrents/${encodeURIComponent(dl.id)}${qs}`), {
+			await fetchRaw(`/api/torrent/torrents/${encodeURIComponent(dl.id)}${qs}`, {
 				method: 'DELETE'
 			});
 		} else {
-			await fetch(apiUrl(`/api/ytdl/downloads/${encodeURIComponent(dl.id)}`), {
+			await fetchRaw(`/api/ytdl/downloads/${encodeURIComponent(dl.id)}`, {
 				method: 'DELETE'
 			});
 		}
@@ -88,7 +88,7 @@ class DownloadsService {
 		}
 
 		try {
-			const res = await fetch(apiUrl('/api/downloads'));
+			const res = await fetchRaw('/api/downloads');
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const downloads: UnifiedDownload[] = await res.json();
 			this.state.update((s) => ({ ...s, downloads, loading: false, error: null }));

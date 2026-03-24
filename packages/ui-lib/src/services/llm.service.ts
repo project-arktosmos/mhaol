@@ -1,6 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type {
 	LlmState,
 	LlmStatus,
@@ -71,7 +71,7 @@ class LlmService {
 
 	async downloadModel(repoId: string, fileName: string): Promise<void> {
 		try {
-			const response = await fetch(apiUrl('/api/llm/models/download'), {
+			const response = await fetchRaw('/api/llm/models/download', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ repoId, fileName })
@@ -128,17 +128,19 @@ class LlmService {
 	}
 
 	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(apiUrl(path), {
+		const response = await fetchRaw(path, {
 			...init,
 			headers: {
 				'Content-Type': 'application/json',
-				...init?.headers
+				...(init?.headers as Record<string, string>)
 			}
 		});
 
 		if (!response.ok) {
 			const body = await response.json().catch(() => ({}));
-			throw new Error(body.error || `Request failed: ${response.status}`);
+			throw new Error(
+				(body as { error?: string }).error || `Request failed: ${response.status}`
+			);
 		}
 
 		const text = await response.text();

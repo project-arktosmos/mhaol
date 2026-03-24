@@ -1,6 +1,7 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw, subscribeSSE } from 'ui-lib/transport/fetch-helpers';
+import type { TransportEventSource } from 'ui-lib/transport/transport.type';
 import { ObjectServiceClass } from 'ui-lib/services/classes/object-service.class';
 import type { TorrentSettings, TorrentServiceState, TorrentInfo } from 'ui-lib/types/torrent.type';
 
@@ -28,7 +29,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	private _initialized = false;
 	private appName = '';
 	private appDownloadPath = '';
-	private eventSource: EventSource | null = null;
+	private eventSource: TransportEventSource | null = null;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private reconnectDelay = 1000;
 	private allTorrents: TorrentInfo[] = [];
@@ -47,8 +48,8 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 
 		try {
 			const [statusRes, configRes] = await Promise.all([
-				fetch(apiUrl('/api/torrent/status')),
-				fetch(apiUrl('/api/torrent/config'))
+				fetchRaw('/api/torrent/status'),
+				fetchRaw('/api/torrent/config')
 			]);
 
 			if (!statusRes.ok || !configRes.ok) {
@@ -91,12 +92,11 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 			this.eventSource.close();
 		}
 
-		const url = apiUrl('/api/torrent/torrents/events');
-		this.eventSource = new EventSource(url);
+		this.eventSource = subscribeSSE('/api/torrent/torrents/events');
 
-		this.eventSource.addEventListener('torrents', (event) => {
+		this.eventSource.addEventListener('torrents', (data: string) => {
 			try {
-				const allTorrents: TorrentInfo[] = JSON.parse(event.data);
+				const allTorrents: TorrentInfo[] = JSON.parse(data);
 				this.allTorrents = allTorrents;
 				const torrents = this.appName
 					? allTorrents.filter((t) => t.outputPath && t.outputPath.startsWith(this.appDownloadPath))
@@ -106,12 +106,6 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 				// ignore parse errors
 			}
 		});
-
-		this.eventSource.onerror = () => {
-			this.eventSource?.close();
-			this.eventSource = null;
-			this.scheduleReconnect();
-		};
 
 		this.reconnectDelay = 1000;
 	}
@@ -161,7 +155,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 			const effectivePath = downloadPath || this.appDownloadPath;
 			if (effectivePath) body.downloadPath = effectivePath;
 
-			const res = await fetch(apiUrl('/api/torrent/torrents'), {
+			const res = await fetchRaw('/api/torrent/torrents', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(body)
@@ -192,7 +186,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async pauseTorrent(infoHash: string): Promise<void> {
 		if (!browser) return;
 		try {
-			const res = await fetch(apiUrl(`/api/torrent/torrents/${infoHash}/pause`), {
+			const res = await fetchRaw(`/api/torrent/torrents/${infoHash}/pause`, {
 				method: 'POST'
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -207,7 +201,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async resumeTorrent(infoHash: string): Promise<void> {
 		if (!browser) return;
 		try {
-			const res = await fetch(apiUrl(`/api/torrent/torrents/${infoHash}/resume`), {
+			const res = await fetchRaw(`/api/torrent/torrents/${infoHash}/resume`, {
 				method: 'POST'
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -222,7 +216,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async removeTorrent(infoHash: string): Promise<void> {
 		if (!browser) return;
 		try {
-			const res = await fetch(apiUrl(`/api/torrent/torrents/${infoHash}`), {
+			const res = await fetchRaw(`/api/torrent/torrents/${infoHash}`, {
 				method: 'DELETE'
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -243,7 +237,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 				this.state.subscribe((s) => (currentTorrents = s.torrents))();
 				await Promise.all(currentTorrents.map((t) => this.removeTorrent(t.infoHash)));
 			} else {
-				const res = await fetch(apiUrl('/api/torrent/torrents/remove-all'), {
+				const res = await fetchRaw('/api/torrent/torrents/remove-all', {
 					method: 'POST'
 				});
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -265,7 +259,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async setDownloadPath(downloadPath: string): Promise<void> {
 		if (!browser) return;
 		try {
-			const res = await fetch(apiUrl('/api/torrent/config'), {
+			const res = await fetchRaw('/api/torrent/config', {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ downloadPath })
@@ -288,7 +282,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	): Promise<{ results: Array<Record<string, unknown>> }> {
 		const params = new URLSearchParams({ q: query });
 		if (category) params.set('cat', category);
-		const res = await fetch(apiUrl(`/api/torrent/search?${params}`));
+		const res = await fetchRaw(`/api/torrent/search?${params}`);
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const results = await res.json();
 		return { results };
@@ -299,7 +293,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async getDebugInfo(): Promise<string[]> {
 		if (!browser) return [];
 		try {
-			const res = await fetch(apiUrl('/api/torrent/debug'));
+			const res = await fetchRaw('/api/torrent/debug');
 			if (!res.ok) return [];
 			const data = await res.json();
 			return data.debug ?? [];
@@ -311,7 +305,7 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 	async clearStorage(): Promise<void> {
 		if (!browser) return;
 		try {
-			const res = await fetch(apiUrl('/api/torrent/storage/clear'), {
+			const res = await fetchRaw('/api/torrent/storage/clear', {
 				method: 'POST'
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);

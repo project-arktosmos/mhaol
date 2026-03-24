@@ -1,6 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import type {
 	P2pStreamSettings,
 	P2pStreamServiceState,
@@ -47,8 +47,8 @@ class P2pStreamService {
 
 		try {
 			const [settings, status] = await Promise.all([
-				this.fetchJson<Omit<P2pStreamSettings, 'id'>>('/api/p2p-stream/settings'),
-				this.fetchJson<{ available: boolean }>('/api/player/stream-status')
+				fetchJson<Omit<P2pStreamSettings, 'id'>>('/api/p2p-stream/settings'),
+				fetchJson<{ available: boolean }>('/api/player/stream-status')
 			]);
 
 			this.store.set({ ...settings, id: 'p2p-stream-settings' });
@@ -108,7 +108,7 @@ class P2pStreamService {
 		const { id: _id, ...payload } = updates as Partial<P2pStreamSettings> & { id?: unknown };
 
 		try {
-			await this.fetchJson('/api/p2p-stream/settings', {
+			await fetchJson('/api/p2p-stream/settings', {
 				method: 'PUT',
 				body: JSON.stringify(payload)
 			});
@@ -157,7 +157,7 @@ class P2pStreamService {
 
 	async checkHealth(): Promise<boolean> {
 		try {
-			const status = await this.fetchJson<{ available: boolean }>('/api/player/stream-status');
+			const status = await fetchJson<{ available: boolean }>('/api/player/stream-status');
 			this.state.update((s) => ({ ...s, serverAvailable: status.available }));
 			return status.available;
 		} catch {
@@ -190,19 +190,6 @@ class P2pStreamService {
 		return servers;
 	}
 
-	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(apiUrl(path), {
-			...init,
-			headers: { 'Content-Type': 'application/json', ...init?.headers }
-		});
-
-		if (!response.ok) {
-			const body = await response.json().catch(() => ({}));
-			throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
-		}
-
-		return response.json() as Promise<T>;
-	}
 }
 
 export const p2pStreamService = new P2pStreamService();

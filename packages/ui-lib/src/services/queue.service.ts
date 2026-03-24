@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type { QueueTask, QueueEvent, QueueTaskStatus, QueueState } from 'ui-lib/types/queue.type';
 
 const initialState: QueueState = {
@@ -21,8 +21,7 @@ class QueueService {
 			if (status) params.set('status', status);
 			if (taskType) params.set('taskType', taskType);
 			const qs = params.toString();
-			const url = apiUrl(`/api/queue/tasks${qs ? `?${qs}` : ''}`);
-			const res = await fetch(url);
+			const res = await fetchRaw(`/api/queue/tasks${qs ? `?${qs}` : ''}`);
 			if (!res.ok) return;
 			const tasks: QueueTask[] = await res.json();
 			this.store.update((s) => ({ ...s, tasks }));
@@ -33,7 +32,7 @@ class QueueService {
 
 	async createTask(taskType: string, payload: Record<string, unknown>): Promise<QueueTask | null> {
 		try {
-			const res = await fetch(apiUrl('/api/queue/tasks'), {
+			const res = await fetchRaw('/api/queue/tasks', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ taskType, payload })
@@ -52,7 +51,7 @@ class QueueService {
 
 	async cancelTask(id: string): Promise<boolean> {
 		try {
-			const res = await fetch(apiUrl(`/api/queue/tasks/${id}`), { method: 'DELETE' });
+			const res = await fetchRaw(`/api/queue/tasks/${id}`, { method: 'DELETE' });
 			return res.ok || res.status === 204;
 		} catch {
 			return false;
@@ -100,7 +99,7 @@ class QueueService {
 			// Poll as fallback in case SSE events are missed
 			const pollInterval = setInterval(async () => {
 				try {
-					const res = await fetch(apiUrl(`/api/queue/tasks/${id}`));
+					const res = await fetchRaw(`/api/queue/tasks/${id}`);
 					if (!res.ok) return;
 					const task: QueueTask = await res.json();
 					if (task.status === 'completed' || task.status === 'failed') {
@@ -126,7 +125,7 @@ class QueueService {
 
 	private async connectSse(signal: AbortSignal): Promise<void> {
 		try {
-			const response = await fetch(apiUrl('/api/queue/subscribe'), { signal });
+			const response = await fetchRaw('/api/queue/subscribe', { signal });
 			if (!response.ok || !response.body) return;
 
 			const reader = response.body.getReader();

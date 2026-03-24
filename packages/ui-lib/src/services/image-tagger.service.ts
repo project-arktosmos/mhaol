@@ -1,6 +1,6 @@
 import { writable, get, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import type {
 	ImageItem,
 	ImageTag,
@@ -49,7 +49,7 @@ class ImageTaggerService {
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 
 		try {
-			const data = await this.fetchJson<ImagesResponse>('/api/images');
+			const data = await fetchJson<ImagesResponse>('/api/images');
 			this.store.set(data.images);
 			this.initialized = true;
 		} catch (error) {
@@ -64,7 +64,7 @@ class ImageTaggerService {
 		if (!browser) return;
 
 		try {
-			const data = await this.fetchJson<TaggerStatusResponse>('/api/images/tagger-status');
+			const data = await fetchJson<TaggerStatusResponse>('/api/images/tagger-status');
 			this.state.update((s) => ({
 				...s,
 				taggerReady: data.ready,
@@ -107,7 +107,7 @@ class ImageTaggerService {
 		this.startProgressPolling();
 
 		try {
-			const data = await this.fetchJson<TagResponse>('/api/images/tag', {
+			const data = await fetchJson<TagResponse>('/api/images/tag', {
 				method: 'POST',
 				body: JSON.stringify({ libraryItemId: itemId })
 			});
@@ -154,7 +154,7 @@ class ImageTaggerService {
 		try {
 			for (const itemId of itemIds) {
 				try {
-					const data = await this.fetchJson<TagResponse>('/api/images/tag', {
+					const data = await fetchJson<TagResponse>('/api/images/tag', {
 						method: 'POST',
 						body: JSON.stringify({ libraryItemId: itemId })
 					});
@@ -196,7 +196,7 @@ class ImageTaggerService {
 		this.startProgressPolling();
 
 		try {
-			const data = await this.fetchJson<BatchTagResponse>('/api/images/tag-batch', {
+			const data = await fetchJson<BatchTagResponse>('/api/images/tag-batch', {
 				method: 'POST',
 				body: JSON.stringify({ libraryItemIds: itemIds })
 			});
@@ -233,7 +233,7 @@ class ImageTaggerService {
 	async addTag(itemId: string, tag: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson('/api/images/tags', {
+		await fetchJson('/api/images/tags', {
 			method: 'POST',
 			body: JSON.stringify({ libraryItemId: itemId, tag })
 		});
@@ -250,7 +250,7 @@ class ImageTaggerService {
 	async removeTag(itemId: string, tag: string): Promise<void> {
 		if (!browser) return;
 
-		await this.fetchJson('/api/images/tags', {
+		await fetchJson('/api/images/tags', {
 			method: 'DELETE',
 			body: JSON.stringify({ libraryItemId: itemId, tag })
 		});
@@ -266,22 +266,6 @@ class ImageTaggerService {
 		this.state.update((s) => ({ ...s, filter: value }));
 	}
 
-	private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-		const response = await fetch(apiUrl(path), {
-			...init,
-			headers: {
-				'Content-Type': 'application/json',
-				...init?.headers
-			}
-		});
-
-		if (!response.ok) {
-			const body = await response.json().catch(() => ({}));
-			throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
-		}
-
-		return response.json() as Promise<T>;
-	}
 }
 
 export const imageTaggerService = new ImageTaggerService();

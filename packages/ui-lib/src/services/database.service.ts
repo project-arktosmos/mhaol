@@ -1,5 +1,5 @@
 import { writable, type Writable } from 'svelte/store';
-import { apiUrl } from 'ui-lib/lib/api-base';
+import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type { DatabaseTable, DatabaseTableDetail } from 'ui-lib/types/database.type';
 
 interface DatabaseState {
@@ -22,7 +22,7 @@ class DatabaseService {
 	async fetchTables(): Promise<void> {
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const res = await fetch(apiUrl('/api/database/tables'));
+			const res = await fetchRaw('/api/database/tables');
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const tables: DatabaseTable[] = await res.json();
 			this.state.update((s) => ({ ...s, loading: false, tables }));
@@ -35,7 +35,7 @@ class DatabaseService {
 	async fetchTableRows(name: string, page = 1, limit = 20): Promise<void> {
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const res = await fetch(apiUrl(`/api/database/tables/${name}?page=${page}&limit=${limit}`));
+			const res = await fetchRaw(`/api/database/tables/${name}?page=${page}&limit=${limit}`);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const detail: DatabaseTableDetail = await res.json();
 			this.state.update((s) => ({ ...s, loading: false, selectedTable: detail }));
