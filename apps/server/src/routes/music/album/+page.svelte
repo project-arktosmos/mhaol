@@ -26,21 +26,40 @@
 	let error = $state<string | null>(null);
 
 	let albumTorrentMap = $state<Record<string, string>>({});
+	let fetchCacheHashes: Map<string, string> = $state(new Map());
 	const torrentState = torrentService.state;
 	const searchStore = smartSearchService.store;
+
+	async function loadMusicFetchCacheHashes() {
+		try {
+			const res = await fetch(apiUrl('/api/torrent/music-fetch-cache/hashes'));
+			if (res.ok) {
+				const entries: Array<{ musicbrainzId: string; infoHash: string }> = await res.json();
+				fetchCacheHashes = new Map(entries.map((e) => [e.musicbrainzId, e.infoHash]));
+			}
+		} catch {
+			// best-effort
+		}
+	}
 
 	$effect(() => {
 		const s = $searchStore;
 		if (s.selection?.type === 'music' && s.downloadedHash) {
 			albumTorrentMap[s.selection.musicbrainzId] = s.downloadedHash;
+			loadMusicFetchCacheHashes();
 		}
 	});
 
 	let albumTorrents = $derived.by(() => {
-		const torrents = $torrentState.torrents;
+		const torrents = $torrentState.allTorrents;
+		const torrentsByHash = new Map(torrents.map((t) => [t.infoHash, t]));
 		const result: Record<string, TorrentInfo> = {};
+		for (const [mbId, infoHash] of fetchCacheHashes) {
+			const torrent = torrentsByHash.get(infoHash);
+			if (torrent) result[mbId] = torrent;
+		}
 		for (const [albumId, infoHash] of Object.entries(albumTorrentMap)) {
-			const torrent = torrents.find((t) => t.infoHash === infoHash);
+			const torrent = torrentsByHash.get(infoHash);
 			if (torrent) result[albumId] = torrent;
 		}
 		return result;
@@ -76,7 +95,10 @@
 		goto(`/music/album/${album.id}`);
 	}
 
-	onMount(() => { fetchPopularAlbums(selectedGenre); });
+	onMount(() => {
+		fetchPopularAlbums(selectedGenre);
+		loadMusicFetchCacheHashes();
+	});
 </script>
 
 <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
