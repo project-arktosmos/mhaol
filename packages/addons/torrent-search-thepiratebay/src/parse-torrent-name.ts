@@ -260,6 +260,23 @@ export function extractSeasonEpisode(name: string): {
 	return { season: null, episode: null, isCompleteSeries: false };
 }
 
+function extractMusicScope(name: string): boolean {
+	const discographyPatterns = [
+		/\bdiscograph(?:y|ies)\b/i,
+		/\bdiscografia\b/i,
+		/\bcomplete[\s.-]?collection\b/i,
+		/\bcomplete[\s.-]?works\b/i,
+		/\bcomplete[\s.-]?albums?\b/i,
+		/\bfull[\s.-]?discograph/i,
+		/\balbum[\s.-]?collection\b/i,
+		/\b\d{4}\s*-\s*\d{4}\b/
+	];
+	for (const re of discographyPatterns) {
+		if (re.test(name)) return true;
+	}
+	return false;
+}
+
 function computeRelevance(
 	name: string,
 	title: string,
@@ -391,6 +408,7 @@ export function parseTorrentName(
 		reason,
 		seasonNumber: se?.season ?? null,
 		episodeNumber: se?.episode ?? null,
-		isCompleteSeries: se?.isCompleteSeries ?? false
+		isCompleteSeries: se?.isCompleteSeries ?? false,
+		isDiscography: artist ? extractMusicScope(name) : false
 	};
 }

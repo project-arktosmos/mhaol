@@ -380,7 +380,8 @@ class SmartSearchService {
 									reason: '',
 									seasonNumber: null,
 									episodeNumber: null,
-									isCompleteSeries: false
+									isCompleteSeries: false,
+									isDiscography: false
 								};
 								return {
 									...r,
@@ -682,6 +683,35 @@ class SmartSearchService {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ tmdbId, mediaType, candidate })
+			});
+		} catch {
+			// best-effort
+		}
+	}
+
+	async checkBookFetchCache(openlibraryKey: string): Promise<SmartSearchTorrentResult | null> {
+		try {
+			const res = await fetch(
+				apiUrl(`/api/openlibrary/fetch-cache?key=${encodeURIComponent(openlibraryKey)}`)
+			);
+			if (!res.ok) return null;
+			const candidate = (await res.json()) as SmartSearchTorrentResult;
+			candidate.uploadedAt = new Date(candidate.uploadedAt);
+			return candidate;
+		} catch {
+			return null;
+		}
+	}
+
+	async saveBookFetchCache(
+		openlibraryKey: string,
+		candidate: SmartSearchTorrentResult
+	): Promise<void> {
+		try {
+			await fetch(apiUrl('/api/openlibrary/fetch-cache'), {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ key: openlibraryKey, candidate })
 			});
 		} catch {
 			// best-effort

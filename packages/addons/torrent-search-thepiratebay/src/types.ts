@@ -59,6 +59,7 @@ export interface TorrentAnalysis {
 	seasonNumber: number | null;
 	episodeNumber: number | null;
 	isCompleteSeries: boolean;
+	isDiscography: boolean;
 }
 
 export const TORRENT_CATEGORY_LABELS: Record<TorrentCategory, string> = {
