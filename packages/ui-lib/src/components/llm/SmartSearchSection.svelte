@@ -10,6 +10,7 @@
 	let selection = $derived($searchStore.selection);
 	let isMusic = $derived(selection?.type === 'music');
 	let isGame = $derived(selection?.type === 'game');
+	let isBook = $derived(selection?.type === 'book');
 
 	let mediaConfig = $derived.by(() => {
 		if (!selection) return null;
@@ -20,7 +21,9 @@
 					? 'tv'
 					: selection.type === 'music'
 						? 'music'
-						: 'games';
+						: selection.type === 'book'
+							? 'books'
+							: 'games';
 		return $configStore[key];
 	});
 	let preferredLanguage = $derived(mediaConfig?.preferredLanguage ?? '');
@@ -83,6 +86,7 @@
 		if (!selection) return null;
 		if (selection.type === 'music') return `${selection.artist} ${selection.title}`;
 		if (selection.type === 'game') return `${selection.title} ${selection.consoleName}`;
+		if (selection.type === 'book') return `${selection.author} ${selection.title}`;
 		return `${selection.title} ${selection.year}`;
 	});
 </script>
@@ -99,7 +103,8 @@
 							'badge-primary': selection.type === 'movie',
 							'badge-info': selection.type === 'tv',
 							'badge-secondary': selection.type === 'music',
-							'badge-accent': selection.type === 'game'
+							'badge-accent': selection.type === 'game',
+							'badge-warning': selection.type === 'book'
 						})}
 					>
 						{selection.type === 'music'
@@ -108,13 +113,17 @@
 								? 'Movie'
 								: selection.type === 'game'
 									? 'Game'
-									: 'TV'}
+									: selection.type === 'book'
+										? 'Book'
+										: 'TV'}
 					</span>
 				</div>
 				{#if selection.type === 'music'}
 					<div class="truncate text-xs text-base-content/40">{selection.artist}</div>
 				{:else if selection.type === 'game'}
 					<div class="truncate text-xs text-base-content/40">{selection.consoleName}</div>
+				{:else if selection.type === 'book'}
+					<div class="truncate text-xs text-base-content/40">{selection.author}</div>
 				{/if}
 			</div>
 			<button class="btn btn-ghost btn-xs" onclick={() => smartSearchService.clear()}>

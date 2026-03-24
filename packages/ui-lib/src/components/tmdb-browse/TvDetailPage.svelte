@@ -8,6 +8,13 @@
 		DisplayTMDBImage
 	} from 'addons/tmdb/types';
 
+	export interface LibraryEpisodeFile {
+		seasonNumber: number;
+		episodeNumber: number;
+		name: string;
+		path: string;
+	}
+
 	interface Props {
 		tvShow: DisplayTMDBTvShow;
 		tvShowDetails: DisplayTMDBTvShowDetails | null;
@@ -27,11 +34,13 @@
 			hasComplete: boolean;
 			seasons: Map<number, Set<number>>;
 		};
+		libraryFiles?: LibraryEpisodeFile[];
 		onfetch: () => void;
 		ondownload: () => void;
 		onstream?: () => void;
 		onp2pstream: () => void;
 		onshowsearch: () => void;
+		onplayfile?: (file: LibraryEpisodeFile) => void;
 		onback: () => void;
 	}
 
@@ -45,13 +54,22 @@
 		fetchSteps,
 		downloadStatus,
 		tvMatchedSeasons,
+		libraryFiles = [],
 		onfetch,
 		ondownload,
 		onstream,
 		onp2pstream,
 		onshowsearch,
+		onplayfile,
 		onback
 	}: Props = $props();
+
+	let hasLibrary = $derived(libraryFiles.length > 0);
+
+	// Index library files by "season-episode" for quick lookup
+	let libraryFileMap = $derived(
+		new Map(libraryFiles.map((f) => [`${f.seasonNumber}-${f.episodeNumber}`, f]))
+	);
 
 	let expandedSeason = $state<number | null>(null);
 
@@ -159,68 +177,75 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-2 gap-2">
-		<button
-			class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
-			onclick={onfetch}
-			disabled={fetching}
-		>
-			{#if fetching}
-				<span class="loading loading-xs loading-spinner"></span>
-			{:else}
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					class="h-4 w-4"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-					/>
-				</svg>
-			{/if}
-			Smart Search
-		</button>
-		{#if fetchSteps}
+	{#if hasLibrary}
+		<div class="rounded-lg bg-success/10 px-3 py-2 text-sm text-success">
+			{libraryFiles.length} file{libraryFiles.length !== 1 ? 's' : ''} in library
+		</div>
+	{:else}
+		<div class="grid grid-cols-2 gap-2">
 			<button
-				class="col-span-2 cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
-				onclick={onshowsearch}
+				class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
+				onclick={onfetch}
+				disabled={fetching}
 			>
-				<ul class="steps steps-horizontal w-full text-xs">
-					<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
-					<li class={classNames('step', { 'step-success': fetchSteps.search })}>
-						{fetchSteps.searching ? 'Searching...' : 'Search'}
-					</li>
-					<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
-					<li class={classNames('step', { 'step-success': fetchSteps.done })}>
-						{fetchSteps.done ? 'Done' : 'Candidate'}
-					</li>
-				</ul>
+				{#if fetching}
+					<span class="loading loading-xs loading-spinner"></span>
+				{:else}
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="h-4 w-4"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+						/>
+					</svg>
+				{/if}
+				Smart Search
 			</button>
-		{/if}
-		<button
-			class={classNames('btn btn-sm', {
-				'btn-ghost': isDownloaded,
-				'btn-success': !isDownloaded
-			})}
-			onclick={ondownload}
-			disabled={downloadButtonDisabled}
-		>
-			{#if isDownloading}
-				<span class="loading loading-xs loading-spinner"></span> Downloading
-			{:else if isDownloaded}
-				Downloaded
-			{:else}
-				Download
+			{#if fetchSteps}
+				<button
+					class="col-span-2 cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
+					onclick={onshowsearch}
+				>
+					<ul class="steps steps-horizontal w-full text-xs">
+						<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
+						<li class={classNames('step', { 'step-success': fetchSteps.search })}>
+							{fetchSteps.searching ? 'Searching...' : 'Search'}
+						</li>
+						<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
+						<li class={classNames('step', { 'step-success': fetchSteps.done })}>
+							{fetchSteps.done ? 'Done' : 'Candidate'}
+						</li>
+					</ul>
+				</button>
 			{/if}
-		</button>
-		<button class="btn btn-sm btn-primary" onclick={onstream} disabled={!fetched}>Torrent</button>
-		<button class="btn btn-sm btn-secondary" onclick={onp2pstream} disabled={!fetched}>P2P</button>
-	</div>
+			<button
+				class={classNames('btn btn-sm', {
+					'btn-ghost': isDownloaded,
+					'btn-success': !isDownloaded
+				})}
+				onclick={ondownload}
+				disabled={downloadButtonDisabled}
+			>
+				{#if isDownloading}
+					<span class="loading loading-xs loading-spinner"></span> Downloading
+				{:else if isDownloaded}
+					Downloaded
+				{:else}
+					Download
+				{/if}
+			</button>
+			<button class="btn btn-sm btn-primary" onclick={onstream} disabled={!fetched}>Torrent</button>
+			<button class="btn btn-sm btn-secondary" onclick={onp2pstream} disabled={!fetched}>P2P</button
+			>
+		</div>
+	{/if}
 
 	{#if overview}
 		<div>
@@ -333,9 +358,13 @@
 						{#if isExpanded}
 							<div class="border-t border-base-300 px-2 py-1">
 								{#each season.episodes as ep (ep.episodeNumber)}
-									{@const epMatched = seasonMatch?.has(ep.episodeNumber) ?? false}
+									{@const libFile = libraryFileMap.get(
+										`${season.seasonNumber}-${ep.episodeNumber}`
+									)}
+									{@const epMatched =
+										libFile != null || (seasonMatch?.has(ep.episodeNumber) ?? false)}
 									<div
-										class={classNames('flex items-baseline gap-2 py-0.5', {
+										class={classNames('flex items-center gap-2 py-0.5', {
 											'text-success': epMatched
 										})}
 									>
@@ -347,9 +376,21 @@
 											{#if epMatched}●{/if}
 											E{String(ep.episodeNumber).padStart(2, '0')}
 										</span>
-										<span class="min-w-0 truncate text-xs">{ep.name}</span>
-										{#if ep.runtime}
-											<span class="ml-auto shrink-0 text-xs opacity-40">{ep.runtime}m</span>
+										<span class="min-w-0 flex-1 truncate text-xs">
+											{#if libFile}
+												<span class="opacity-60" title={libFile.name}>{libFile.name}</span>
+											{:else}
+												{ep.name}
+											{/if}
+										</span>
+										{#if libFile && onplayfile}
+											<button
+												class="btn shrink-0 btn-ghost btn-xs"
+												onclick={() => onplayfile(libFile)}
+												title="Play">▶</button
+											>
+										{:else if ep.runtime}
+											<span class="shrink-0 text-xs opacity-40">{ep.runtime}m</span>
 										{/if}
 									</div>
 								{/each}

@@ -666,7 +666,12 @@ class SmartSearchService {
 		this.store.update((s) => {
 			const results = s.searchResults.map((r) => {
 				if (!analyzeHashes.has(r.infoHash)) return r;
-				const analysis = parseTorrentName(r.name, selection.title, selection.year, selection.artist);
+				const analysis = parseTorrentName(
+					r.name,
+					selection.title,
+					selection.year,
+					selection.artist
+				);
 				return { ...r, analysis };
 			});
 			return { ...s, searchResults: results, analyzing: false };
@@ -721,8 +726,7 @@ class SmartSearchService {
 		try {
 			const res = await fetch(apiUrl(`/api/torrent/music-fetch-cache/${musicbrainzId}`));
 			if (!res.ok) return null;
-			const data: Array<{ scope: string; candidate: SmartSearchTorrentResult }> =
-				await res.json();
+			const data: Array<{ scope: string; candidate: SmartSearchTorrentResult }> = await res.json();
 			if (data.length === 0) return null;
 			for (const entry of data) {
 				entry.candidate.uploadedAt = new Date(entry.candidate.uploadedAt);
@@ -831,6 +835,12 @@ class SmartSearchService {
 
 	setSelection(selection: SmartSearchSelection) {
 		this.store.update((s) => ({ ...s, selection }));
+	}
+
+	async ensurePendingItem(selection: SmartSearchSelection): Promise<void> {
+		const state = this.getState();
+		if (state.pendingItemId && state.pendingLibraryId) return;
+		await this.createPendingItem(selection);
 	}
 
 	getFetchedCandidate(): SmartSearchTorrentResult | null {

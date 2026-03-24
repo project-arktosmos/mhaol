@@ -106,6 +106,9 @@
 	// TMDB browse state
 	const browseState = tmdbBrowseService.state;
 
+	// Browse tab: 'popular' | 'discover'
+	let browseTab: 'popular' | 'discover' = $state('popular');
+
 	// Browse detail selection state
 	let selectedBrowseMovie: DisplayTMDBMovie | null = $state(null);
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -990,75 +993,89 @@
 			{/each}
 
 			<section class="mb-8">
-				<h2 class="mb-3 text-lg font-semibold">Popular Movies</h2>
-				<PopularTab
-					movies={applyOverridesToMovies($browseState.popularMovies)}
-					tvShows={$browseState.popularTv}
-					moviesPage={$browseState.popularMoviesPage}
-					tvPage={$browseState.popularTvPage}
-					moviesTotalPages={$browseState.popularMoviesTotalPages}
-					tvTotalPages={$browseState.popularTvTotalPages}
-					loadingMovies={$browseState.loading['popularMovies'] ?? false}
-					loadingTv={$browseState.loading['popularTv'] ?? false}
-					error={$browseState.error}
-					mediaType="movies"
-					selectedMovieId={selectedBrowseMovie?.id ?? null}
-					fetchedIds={fetchCachedTmdbIds}
-					downloadStatuses={browseDownloadStatuses}
-					{fetchCacheSummaries}
-					{smartSearchingId}
-					onselectMovie={handleBrowseSelectMovie}
-					onsmartSearch={handleSmartSearch}
-					onloadMovies={(p) => tmdbBrowseService.loadPopularMovies(p)}
-					onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
-				/>
+				<div class="tabs tabs-bordered mb-4">
+					<button
+						class={classNames('tab', { 'tab-active': browseTab === 'popular' })}
+						onclick={() => (browseTab = 'popular')}
+					>
+						Popular
+					</button>
+					<button
+						class={classNames('tab', { 'tab-active': browseTab === 'discover' })}
+						onclick={() => (browseTab = 'discover')}
+					>
+						Discover
+					</button>
+				</div>
+
+				{#if browseTab === 'popular'}
+					<PopularTab
+						movies={applyOverridesToMovies($browseState.popularMovies)}
+						tvShows={$browseState.popularTv}
+						moviesPage={$browseState.popularMoviesPage}
+						tvPage={$browseState.popularTvPage}
+						moviesTotalPages={$browseState.popularMoviesTotalPages}
+						tvTotalPages={$browseState.popularTvTotalPages}
+						loadingMovies={$browseState.loading['popularMovies'] ?? false}
+						loadingTv={$browseState.loading['popularTv'] ?? false}
+						error={$browseState.error}
+						mediaType="movies"
+						selectedMovieId={selectedBrowseMovie?.id ?? null}
+						fetchedIds={fetchCachedTmdbIds}
+						downloadStatuses={browseDownloadStatuses}
+						{fetchCacheSummaries}
+						{smartSearchingId}
+						onselectMovie={handleBrowseSelectMovie}
+						onsmartSearch={handleSmartSearch}
+						onloadMovies={(p) => tmdbBrowseService.loadPopularMovies(p)}
+						onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
+					/>
+				{:else}
+					{#if $browseState.movieGenres.length > 0}
+						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+							{#each $browseState.movieGenres as genre (genre.id)}
+								<button
+									class={classNames('btn btn-sm h-auto min-h-12 flex-col py-2', {
+										'btn-primary': $browseState.selectedGenreId === genre.id,
+										'btn-ghost bg-base-200': $browseState.selectedGenreId !== genre.id
+									})}
+									onclick={() => {
+										const genreId = $browseState.selectedGenreId === genre.id ? null : genre.id;
+										tmdbBrowseService.loadDiscoverMovies(1, genreId);
+									}}
+								>
+									{genre.name}
+								</button>
+							{/each}
+						</div>
+					{/if}
+					{#if $browseState.loading['discoverMovies']}
+						<div class="flex justify-center p-8">
+							<span class="loading loading-lg loading-spinner"></span>
+						</div>
+					{:else if $browseState.discoverMovies.length > 0}
+						<div class="mt-4">
+							<TmdbBrowseGrid
+								movies={applyOverridesToMovies($browseState.discoverMovies)}
+								selectedMovieId={selectedBrowseMovie?.id ?? null}
+								fetchedIds={fetchCachedTmdbIds}
+								downloadStatuses={browseDownloadStatuses}
+								{fetchCacheSummaries}
+								{smartSearchingId}
+								onselectMovie={handleBrowseSelectMovie}
+								onsmartSearch={handleSmartSearch}
+							/>
+							<TmdbPagination
+								page={$browseState.discoverMoviesPage}
+								totalPages={$browseState.discoverMoviesTotalPages}
+								loading={$browseState.loading['discoverMovies'] ?? false}
+								onpage={(p) => tmdbBrowseService.loadDiscoverMovies(p, $browseState.selectedGenreId)}
+							/>
+						</div>
+					{/if}
+				{/if}
 			</section>
 
-			<section class="mb-8">
-				<h2 class="mb-3 text-lg font-semibold">Discover Movies</h2>
-				{#if $browseState.movieGenres.length > 0}
-					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-						{#each $browseState.movieGenres as genre (genre.id)}
-							<button
-								class={classNames('btn btn-sm h-auto min-h-12 flex-col py-2', {
-									'btn-primary': $browseState.selectedGenreId === genre.id,
-									'btn-ghost bg-base-200': $browseState.selectedGenreId !== genre.id
-								})}
-								onclick={() => {
-									const genreId = $browseState.selectedGenreId === genre.id ? null : genre.id;
-									tmdbBrowseService.loadDiscoverMovies(1, genreId);
-								}}
-							>
-								{genre.name}
-							</button>
-						{/each}
-					</div>
-				{/if}
-				{#if $browseState.loading['discoverMovies']}
-					<div class="flex justify-center p-8">
-						<span class="loading loading-lg loading-spinner"></span>
-					</div>
-				{:else if $browseState.discoverMovies.length > 0}
-					<div class="mt-4">
-						<TmdbBrowseGrid
-							movies={applyOverridesToMovies($browseState.discoverMovies)}
-							selectedMovieId={selectedBrowseMovie?.id ?? null}
-							fetchedIds={fetchCachedTmdbIds}
-							downloadStatuses={browseDownloadStatuses}
-							{fetchCacheSummaries}
-							{smartSearchingId}
-							onselectMovie={handleBrowseSelectMovie}
-							onsmartSearch={handleSmartSearch}
-						/>
-						<TmdbPagination
-							page={$browseState.discoverMoviesPage}
-							totalPages={$browseState.discoverMoviesTotalPages}
-							loading={$browseState.loading['discoverMovies'] ?? false}
-							onpage={(p) => tmdbBrowseService.loadDiscoverMovies(p, $browseState.selectedGenreId)}
-						/>
-					</div>
-				{/if}
-			</section>
 
 			</div>
 </div>

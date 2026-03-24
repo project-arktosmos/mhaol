@@ -43,7 +43,9 @@
 
 	let isTv = $derived(selection?.type === 'tv');
 
-	let isMusicTabbed = $derived(isMusic && selection?.type === 'music' && selection?.musicSearchMode);
+	let isMusicTabbed = $derived(
+		isMusic && selection?.type === 'music' && selection?.musicSearchMode
+	);
 
 	let bestCandidate = $derived.by(() => {
 		if (analyzing || searching) return null;

@@ -251,7 +251,7 @@
 						<p class="text-xs opacity-40">
 							{albumItem.firstReleaseYear}
 							{#if albumItem.primaryType}
-								<span class="badge badge-ghost badge-xs ml-1">{albumItem.primaryType}</span>
+								<span class="ml-1 badge badge-ghost badge-xs">{albumItem.primaryType}</span>
 							{/if}
 						</p>
 					</div>

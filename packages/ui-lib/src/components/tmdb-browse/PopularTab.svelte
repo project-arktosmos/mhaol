@@ -84,7 +84,16 @@
 			<span class="loading loading-lg loading-spinner"></span>
 		</div>
 	{:else if movies.length > 0}
-		<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {fetchCacheSummaries} {smartSearchingId} {onselectMovie} {onsmartSearch} />
+		<TmdbBrowseGrid
+			{movies}
+			{selectedMovieId}
+			{fetchedIds}
+			{downloadStatuses}
+			{fetchCacheSummaries}
+			{smartSearchingId}
+			{onselectMovie}
+			{onsmartSearch}
+		/>
 		<TmdbPagination
 			page={moviesPage}
 			totalPages={moviesTotalPages}

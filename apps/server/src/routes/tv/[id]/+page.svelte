@@ -14,7 +14,9 @@
 	} from 'addons/tmdb/types';
 	import type { SmartSearchTorrentResult, TvSeasonMeta } from 'ui-lib/types/smart-search.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';
+	import type { MediaList } from 'ui-lib/types/media-list.type';
 	import TvDetailPage from 'ui-lib/components/tmdb-browse/TvDetailPage.svelte';
+	import type { LibraryEpisodeFile } from 'ui-lib/components/tmdb-browse/TvDetailPage.svelte';
 
 	let tvShow = $state<DisplayTMDBTvShow | null>(null);
 	let tvShowDetails = $state<DisplayTMDBTvShowDetails | null>(null);
@@ -22,8 +24,10 @@
 	let tvSeasonsMeta = $state<TvSeasonMeta[]>([]);
 	let loading = $state(true);
 	let fetchingTmdbId = $state<number | null>(null);
+	let libraryFiles = $state<LibraryEpisodeFile[]>([]);
 
 	const searchStore = smartSearchService.store;
+	const torrentState = torrentService.state;
 
 	let id = $derived($page.params.id ?? '');
 	let tmdbId = $derived(Number(id));
@@ -57,6 +61,7 @@
 
 	let currentDownloadStatus = $derived.by((): { state: string; progress: number } | null => {
 		const candidate = $searchStore.fetchedCandidate;
+		const _ = $torrentState;
 		if (candidate?.infoHash) {
 			const t = torrentService.findByHash(candidate.infoHash);
 			if (t) return { state: t.state, progress: t.progress };
@@ -104,6 +109,86 @@
 			smartSearchService.saveTvFetchCache(tid, scope, seasonNumber, episodeNumber, candidate);
 		}
 	});
+
+	function parseEpisodeFromFilename(name: string): { season: number; episode: number } | null {
+		const match = name.match(/[Ss](\d{1,2})[Ee](\d{1,2})/);
+		if (match) {
+			return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
+		}
+		return null;
+	}
+
+	async function fetchLibraryData(showId: number) {
+		try {
+			const res = await fetch(apiUrl('/api/media'));
+			if (!res.ok) return;
+			const data = await res.json();
+			const lists: MediaList[] = data.lists ?? [];
+
+			// Find the show-level list linked to this TMDB ID
+			const showList = lists.find(
+				(l) => l.parentListId === null && l.links?.tmdb?.serviceId === String(showId)
+			);
+			if (!showList) return;
+
+			// Collect all files: from the show list itself (flat shows) and from season children
+			const files: LibraryEpisodeFile[] = [];
+
+			// Flat show: episodes directly on the show list
+			for (const item of showList.items) {
+				const parsed = parseEpisodeFromFilename(item.name);
+				if (parsed) {
+					files.push({
+						seasonNumber: parsed.season,
+						episodeNumber: parsed.episode,
+						name: item.name,
+						path: item.path
+					});
+				}
+			}
+
+			// Season children
+			const seasonLists = lists.filter((l) => l.parentListId === showList.id);
+			for (const seasonList of seasonLists) {
+				// Try to determine season number from the list's TMDB link or folder name
+				const seasonNum = seasonList.links?.tmdb?.seasonNumber
+					?? parseSeasonFromTitle(seasonList.title);
+
+				for (const item of seasonList.items) {
+					const parsed = parseEpisodeFromFilename(item.name);
+					if (parsed) {
+						files.push({
+							seasonNumber: parsed.season,
+							episodeNumber: parsed.episode,
+							name: item.name,
+							path: item.path
+						});
+					} else if (seasonNum != null) {
+						// Can't parse episode from filename — assign position-based episode number
+						const idx = seasonList.items.indexOf(item);
+						files.push({
+							seasonNumber: seasonNum,
+							episodeNumber: idx + 1,
+							name: item.name,
+							path: item.path
+						});
+					}
+				}
+			}
+
+			libraryFiles = files;
+		} catch {
+			// best-effort
+		}
+	}
+
+	function parseSeasonFromTitle(title: string): number | null {
+		const match = title.match(/[Ss]eason\s*(\d+)/i);
+		if (match) return parseInt(match[1], 10);
+		const numMatch = title.match(/^(\d+)$/);
+		if (numMatch) return parseInt(numMatch[1], 10);
+		return null;
+	}
 
 	async function fetchTvShow(showId: number) {
 		loading = true;
@@ -162,21 +247,28 @@
 				}
 			}
 
-			// Check fetch cache
-			const cached = await smartSearchService.checkTvFetchCache(showId);
-			if (cached && cached.length > 0) {
-				fetchingTmdbId = showId;
-				const completeEntry = cached.find((e) => e.scope === 'complete');
-				const bestEntry = completeEntry ?? cached[0];
-				smartSearchService.setSelection({
-					title: tvShow?.name ?? '',
-					year: tvShow?.firstAirYear ?? '',
-					type: 'tv',
-					tmdbId: showId,
-					mode: 'fetch',
-					seasons: tvSeasonsMeta
-				});
-				smartSearchService.setFetchedCandidate(bestEntry.candidate);
+			// Fetch library data (show list + season children)
+			await fetchLibraryData(showId);
+
+			// Only check smart search cache if no library files
+			if (libraryFiles.length === 0) {
+				const cached = await smartSearchService.checkTvFetchCache(showId);
+				if (cached && cached.length > 0) {
+					fetchingTmdbId = showId;
+					const completeEntry = cached.find((e) => e.scope === 'complete');
+					const bestEntry = completeEntry ?? cached[0];
+					const sel = {
+						title: tvShow?.name ?? '',
+						year: tvShow?.firstAirYear ?? '',
+						type: 'tv' as const,
+						tmdbId: showId,
+						mode: 'fetch' as const,
+						seasons: tvSeasonsMeta
+					};
+					smartSearchService.setSelection(sel);
+					smartSearchService.setFetchedCandidate(bestEntry.candidate);
+					smartSearchService.ensurePendingItem(sel);
+				}
 			}
 		} catch (e) {
 			console.error('Failed to load TV show details:', e);
@@ -193,15 +285,17 @@
 			if (cached && cached.length > 0) {
 				const completeEntry = cached.find((e) => e.scope === 'complete');
 				const bestEntry = completeEntry ?? cached[0];
-				smartSearchService.setSelection({
+				const sel = {
 					title: tvShow.name,
 					year: tvShow.firstAirYear,
-					type: 'tv',
+					type: 'tv' as const,
 					tmdbId: tvShow.id,
-					mode: 'fetch',
+					mode: 'fetch' as const,
 					seasons: tvSeasonsMeta
-				});
+				};
+				smartSearchService.setSelection(sel);
 				smartSearchService.setFetchedCandidate(bestEntry.candidate);
+				smartSearchService.ensurePendingItem(sel);
 				return;
 			}
 		}
@@ -243,6 +337,23 @@
 		}
 	}
 
+	function handlePlayFile(libFile: LibraryEpisodeFile) {
+		const file: PlayableFile = {
+			id: `library:${libFile.path}`,
+			type: 'library',
+			name: libFile.name,
+			outputPath: libFile.path,
+			mode: 'video',
+			format: null,
+			videoFormat: null,
+			thumbnailUrl: null,
+			durationSeconds: null,
+			size: 0,
+			completedAt: ''
+		};
+		playerService.play(file).then(() => playerService.setDisplayMode('sidebar'));
+	}
+
 	onMount(() => {
 		fetchTvShow(tmdbId);
 	});
@@ -259,10 +370,12 @@
 		fetchSteps={currentFetchSteps}
 		downloadStatus={currentDownloadStatus}
 		{tvMatchedSeasons}
+		{libraryFiles}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onp2pstream={handleP2pStream}
 		onshowsearch={() => smartSearchService.show()}
+		onplayfile={handlePlayFile}
 		onback={() => goto('/tv')}
 	/>
 {:else if loading}
