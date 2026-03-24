@@ -45,6 +45,7 @@ pub fn router() -> Router<AppState> {
         .route("/fetch-cache", get(list_fetch_cache_ids).post(save_fetch_cache))
         .route("/tv-fetch-cache/{tmdb_id}", get(get_tv_fetch_cache).delete(delete_tv_fetch_cache))
         .route("/tv-fetch-cache", post(save_tv_fetch_cache))
+        .route("/music-fetch-cache/hashes", get(list_music_fetch_cache_hashes))
         .route("/music-fetch-cache/{musicbrainz_id}", get(get_music_fetch_cache).delete(delete_music_fetch_cache))
         .route("/music-fetch-cache", post(save_music_fetch_cache))
 }
@@ -826,6 +827,18 @@ async fn delete_tv_fetch_cache(
 }
 
 // --- Music Fetch cache endpoints ---
+
+async fn list_music_fetch_cache_hashes(State(state): State<AppState>) -> impl IntoResponse {
+    let entries: Vec<serde_json::Value> = state
+        .music_torrent_fetch_cache
+        .get_all_info_hashes()
+        .into_iter()
+        .map(|(musicbrainz_id, info_hash)| {
+            serde_json::json!({ "musicbrainzId": musicbrainz_id, "infoHash": info_hash })
+        })
+        .collect();
+    Json(entries)
+}
 
 async fn get_music_fetch_cache(
     State(state): State<AppState>,
