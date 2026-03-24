@@ -2,6 +2,7 @@
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import SmartSearchSection from './SmartSearchSection.svelte';
 	import TvSmartSearchSection from './TvSmartSearchSection.svelte';
+	import MusicSmartSearchSection from './MusicSmartSearchSection.svelte';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
 	import { apiUrl } from 'ui-lib/lib/api-base';
@@ -34,11 +35,15 @@
 					? 'tv'
 					: selection.type === 'music'
 						? 'music'
-						: 'games';
+						: selection.type === 'book'
+							? 'books'
+							: 'games';
 		return $configStore[key];
 	});
 
 	let isTv = $derived(selection?.type === 'tv');
+
+	let isMusicTabbed = $derived(isMusic && selection?.type === 'music' && selection?.musicSearchMode);
 
 	let bestCandidate = $derived.by(() => {
 		if (analyzing || searching) return null;
@@ -46,6 +51,11 @@
 		// For TV, use the TV-specific best candidate logic
 		if (isTv) {
 			return smartSearchService.getBestTvCandidate();
+		}
+
+		// For music with tabbed search mode, use music-specific logic
+		if (isMusicTabbed) {
+			return smartSearchService.getBestMusicCandidate();
 		}
 
 		const raw = $searchStore.searchResults;
@@ -117,6 +127,9 @@
 				case 'game':
 					subdir = 'games';
 					break;
+				case 'book':
+					subdir = 'books';
+					break;
 				default:
 					subdir = 'tv';
 					break;
@@ -171,6 +184,8 @@
 	</h2>
 	{#if isTv}
 		<TvSmartSearchSection />
+	{:else if isMusicTabbed}
+		<MusicSmartSearchSection />
 	{:else}
 		<SmartSearchSection />
 	{/if}
