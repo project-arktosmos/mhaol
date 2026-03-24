@@ -192,10 +192,14 @@ class SmartSearchService {
 			fetchedCandidate: null,
 			tvResults: null,
 			tvSeasonsMeta: selection.type === 'tv' ? (selection.seasons ?? null) : null,
-			activeTvTab: 'complete'
+			activeTvTab: 'complete',
+			musicResults: null,
+			activeMusicTab: 'album'
 		}));
 		if (selection.type === 'tv') {
 			this.runTvSearches(selection, this.abortController.signal);
+		} else if (selection.type === 'music' && selection.musicSearchMode) {
+			this.runMusicSearches(selection, this.abortController.signal);
 		} else {
 			this.runSearches(selection, this.abortController.signal);
 		}
@@ -218,7 +222,9 @@ class SmartSearchService {
 			fetchedCandidate: null,
 			tvResults: null,
 			tvSeasonsMeta: null,
-			activeTvTab: 'complete'
+			activeTvTab: 'complete',
+			musicResults: null,
+			activeMusicTab: 'album'
 		}));
 	}
 
@@ -573,6 +579,174 @@ class SmartSearchService {
 
 	setActiveTvTab(tab: 'complete' | number) {
 		this.store.update((s) => ({ ...s, activeTvTab: tab }));
+	}
+
+	// --- Music smart search ---
+
+	private async runMusicSearches(
+		selection: SmartSearchSelection & { type: 'music' },
+		signal: AbortSignal
+	) {
+		const { artist, title } = selection;
+		const mode = selection.musicSearchMode ?? 'album';
+		const cat = 100;
+
+		const queries: string[] = [];
+		if (mode === 'album') {
+			queries.push(`${artist} ${title}`);
+			queries.push(`${artist} discography`);
+		} else {
+			queries.push(`${artist} discography`);
+			queries.push(`${artist} complete discography`);
+		}
+
+		this.store.update((s) => ({ ...s, searching: true, searchError: null }));
+
+		try {
+			const seen = new Map<string, SmartSearchTorrentResult>();
+			const analyzeHashes = new Set<string>();
+
+			for (const query of queries) {
+				if (signal.aborted) return;
+
+				try {
+					const url = apiUrl(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`);
+					const res = await fetch(url, { signal });
+					if (!res.ok) continue;
+					const data: TorrentSearchResult[] = await res.json();
+
+					const sorted = [...data].sort((a, b) => {
+						if (b.seeders !== a.seeders) return b.seeders - a.seeders;
+						return b.leechers - a.leechers;
+					});
+					for (const r of sorted.slice(0, 5)) {
+						analyzeHashes.add(r.infoHash);
+					}
+
+					for (const r of data) {
+						const existing = seen.get(r.infoHash);
+						if (existing) {
+							existing.searchQueries.push(query);
+						} else {
+							seen.set(r.infoHash, {
+								...r,
+								uploadedAt: new Date(r.uploadedAt),
+								searchQueries: [query],
+								analysis: null,
+								analyzing: false
+							});
+						}
+					}
+				} catch {
+					if (signal.aborted) return;
+				}
+
+				const current = [...seen.values()];
+				this.store.update((s) => ({ ...s, searchResults: current }));
+			}
+
+			if (signal.aborted) return;
+			this.store.update((s) => ({ ...s, searching: false }));
+
+			this.analyzeMusicResults(selection, analyzeHashes);
+		} catch (error) {
+			if (signal.aborted) return;
+			this.store.update((s) => ({
+				...s,
+				searching: false,
+				searchError: error instanceof Error ? error.message : String(error)
+			}));
+		}
+	}
+
+	private async analyzeMusicResults(
+		selection: SmartSearchSelection & { type: 'music' },
+		analyzeHashes: Set<string>
+	) {
+		this.store.update((s) => {
+			const results = s.searchResults.map((r) => {
+				if (!analyzeHashes.has(r.infoHash)) return r;
+				const analysis = parseTorrentName(r.name, selection.title, selection.year, selection.artist);
+				return { ...r, analysis };
+			});
+			return { ...s, searchResults: results, analyzing: false };
+		});
+
+		this.rebuildMusicResults();
+
+		this.enhanceWithLlm(selection, analyzeHashes, selection.artist, undefined);
+	}
+
+	private rebuildMusicResults() {
+		this.store.update((s) => {
+			const musicResults: MusicSmartSearchResults = { album: [], discography: [] };
+			for (const r of s.searchResults) {
+				if (!r.analysis) continue;
+				if (r.analysis.isDiscography) {
+					musicResults.discography.push(r);
+				} else {
+					musicResults.album.push(r);
+				}
+			}
+			return { ...s, musicResults };
+		});
+	}
+
+	setActiveMusicTab(tab: 'album' | 'discography') {
+		this.store.update((s) => ({ ...s, activeMusicTab: tab }));
+	}
+
+	getBestMusicCandidate(): SmartSearchTorrentResult | null {
+		const state = this.getState();
+		if (!state.musicResults) return null;
+
+		const bestAlbum = this.pickBestFromList(state.musicResults.album);
+		if (bestAlbum && (bestAlbum.analysis?.relevance ?? 0) >= 75) {
+			return bestAlbum;
+		}
+
+		const bestDiscography = this.pickBestFromList(state.musicResults.discography);
+		if (bestDiscography && (bestDiscography.analysis?.relevance ?? 0) >= 75) {
+			return bestDiscography;
+		}
+
+		if (bestAlbum) return bestAlbum;
+
+		return bestDiscography ?? null;
+	}
+
+	async checkMusicFetchCache(
+		musicbrainzId: string
+	): Promise<Array<{ scope: string; candidate: SmartSearchTorrentResult }> | null> {
+		try {
+			const res = await fetch(apiUrl(`/api/torrent/music-fetch-cache/${musicbrainzId}`));
+			if (!res.ok) return null;
+			const data: Array<{ scope: string; candidate: SmartSearchTorrentResult }> =
+				await res.json();
+			if (data.length === 0) return null;
+			for (const entry of data) {
+				entry.candidate.uploadedAt = new Date(entry.candidate.uploadedAt);
+			}
+			return data;
+		} catch {
+			return null;
+		}
+	}
+
+	async saveMusicFetchCache(
+		musicbrainzId: string,
+		scope: string,
+		candidate: SmartSearchTorrentResult
+	): Promise<void> {
+		try {
+			await fetch(apiUrl('/api/torrent/music-fetch-cache'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ musicbrainzId, scope, candidate })
+			});
+		} catch {
+			// best-effort
+		}
 	}
 
 	async checkTvFetchCache(tmdbId: number): Promise<Array<{
