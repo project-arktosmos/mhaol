@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use mhaol_server::{api::build_router, AppState};
+use mhaol_backend::{api::build_router, AppState};
 use tower::ServiceExt;
 
 /// Build a test app with an in-memory database and initialized modules.
