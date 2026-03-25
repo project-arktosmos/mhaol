@@ -16,6 +16,8 @@
 		selectedMovieId = null,
 		selectedTvShowId = null,
 		fetchedIds,
+		favoritedIds,
+		pinnedIds,
 		downloadStatuses,
 		fetchCacheSummaries,
 		dimmedIds,
@@ -30,6 +32,8 @@
 		selectedMovieId?: number | null;
 		selectedTvShowId?: number | null;
 		fetchedIds?: Set<number>;
+		favoritedIds?: Set<number>;
+		pinnedIds?: Set<number>;
 		downloadStatuses?: Map<number, DownloadStatus>;
 		fetchCacheSummaries?: Map<number, string>;
 		dimmedIds?: Set<number>;
@@ -65,6 +69,7 @@
 					<th>Year</th>
 					<th>Rating</th>
 					<th>Genres</th>
+					<th></th>
 					<th>Status</th>
 					<th>Smart Search</th>
 				</tr>
@@ -139,6 +144,36 @@
 									{/each}
 								</div>
 							{/if}
+						</td>
+						<td>
+							<div class="flex gap-1">
+								{#if favoritedIds?.has(movie.id)}
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+										class="h-3.5 w-3.5 text-red-500"
+									>
+										<path
+											d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z"
+										/>
+									</svg>
+								{/if}
+								{#if pinnedIds?.has(movie.id)}
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+										class="h-3.5 w-3.5 text-blue-400"
+									>
+										<path
+											fill-rule="evenodd"
+											d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z"
+											clip-rule="evenodd"
+										/>
+									</svg>
+								{/if}
+							</div>
 						</td>
 						<td>
 							{#if dl}
@@ -260,6 +295,36 @@
 							{/if}
 						</td>
 						<td>
+							<div class="flex gap-1">
+								{#if favoritedIds?.has(tvShow.id)}
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+										class="h-3.5 w-3.5 text-red-500"
+									>
+										<path
+											d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z"
+										/>
+									</svg>
+								{/if}
+								{#if pinnedIds?.has(tvShow.id)}
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+										class="h-3.5 w-3.5 text-blue-400"
+									>
+										<path
+											fill-rule="evenodd"
+											d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z"
+											clip-rule="evenodd"
+										/>
+									</svg>
+								{/if}
+							</div>
+						</td>
+						<td>
 							<span class="badge badge-xs badge-info">TV</span>
 						</td>
 						<td></td>
@@ -284,6 +349,8 @@
 				selected={selectedMovieId === movie.id}
 				fetched={fetchedIds?.has(movie.id) ?? false}
 				dimmed={dimmedIds?.has(movie.id) ?? false}
+				favorited={favoritedIds?.has(movie.id) ?? false}
+				pinned={pinnedIds?.has(movie.id) ?? false}
 				downloadState={dl?.state ?? null}
 				downloadProgress={dl?.progress ?? null}
 				onclick={onselectMovie ? () => onselectMovie(movie) : undefined}
@@ -294,6 +361,8 @@
 				{tvShow}
 				selected={selectedTvShowId === tvShow.id}
 				matching={matchingTvShowId === tvShow.id}
+				favorited={favoritedIds?.has(tvShow.id) ?? false}
+				pinned={pinnedIds?.has(tvShow.id) ?? false}
 				onclick={onselectTvShow ? () => onselectTvShow(tvShow) : undefined}
 			/>
 		{/each}

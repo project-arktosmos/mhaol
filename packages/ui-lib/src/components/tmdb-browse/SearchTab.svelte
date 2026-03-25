@@ -19,6 +19,8 @@
 		selectedMovieId = null,
 		selectedTvShowId = null,
 		fetchedIds,
+		favoritedIds,
+		pinnedIds,
 		downloadStatuses,
 		fetchCacheSummaries,
 		smartSearchingId = null,
@@ -42,6 +44,8 @@
 		selectedMovieId?: number | null;
 		selectedTvShowId?: number | null;
 		fetchedIds?: Set<number>;
+		favoritedIds?: Set<number>;
+		pinnedIds?: Set<number>;
 		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
 		fetchCacheSummaries?: Map<number, string>;
 		smartSearchingId?: number | null;
@@ -98,6 +102,8 @@
 			{movies}
 			{selectedMovieId}
 			{fetchedIds}
+			{favoritedIds}
+			{pinnedIds}
 			{downloadStatuses}
 			{fetchCacheSummaries}
 			{smartSearchingId}
@@ -105,7 +111,7 @@
 			{onsmartSearch}
 		/>
 	{:else}
-		<TmdbBrowseGrid {tvShows} {selectedTvShowId} {onselectTvShow} />
+		<TmdbBrowseGrid {tvShows} {selectedTvShowId} {favoritedIds} {pinnedIds} {onselectTvShow} />
 	{/if}
 	<TmdbPagination
 		{page}

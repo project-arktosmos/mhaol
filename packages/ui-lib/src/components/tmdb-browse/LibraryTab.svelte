@@ -7,6 +7,8 @@
 		movies,
 		selectedMovieId = null,
 		fetchedIds = new Set<number>(),
+		favoritedIds,
+		pinnedIds,
 		downloadStatuses,
 		fetchCacheSummaries,
 		smartSearchingId = null,
@@ -16,6 +18,8 @@
 		movies: DisplayTMDBMovie[];
 		selectedMovieId?: number | null;
 		fetchedIds?: Set<number>;
+		favoritedIds?: Set<number>;
+		pinnedIds?: Set<number>;
 		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
 		fetchCacheSummaries?: Map<number, string>;
 		smartSearchingId?: number | null;
@@ -29,6 +33,8 @@
 		{movies}
 		{selectedMovieId}
 		{fetchedIds}
+		{favoritedIds}
+		{pinnedIds}
 		{downloadStatuses}
 		{fetchCacheSummaries}
 		{smartSearchingId}

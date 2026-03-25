@@ -22,6 +22,8 @@
 		selectedMovieId = null,
 		selectedTvShowId = null,
 		fetchedIds,
+		favoritedIds,
+		pinnedIds,
 		downloadStatuses,
 		onselectMovie,
 		onselectTvShow,
@@ -38,6 +40,8 @@
 		selectedMovieId?: number | null;
 		selectedTvShowId?: number | null;
 		fetchedIds?: Set<number>;
+		favoritedIds?: Set<number>;
+		pinnedIds?: Set<number>;
 		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
@@ -98,6 +102,8 @@
 			{selectedMovieId}
 			{selectedTvShowId}
 			{fetchedIds}
+			{favoritedIds}
+			{pinnedIds}
 			{downloadStatuses}
 			{onselectMovie}
 			{onselectTvShow}

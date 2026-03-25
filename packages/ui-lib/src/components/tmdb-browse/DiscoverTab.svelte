@@ -23,6 +23,8 @@
 		selectedMovieId = null,
 		selectedTvShowId = null,
 		fetchedIds,
+		favoritedIds,
+		pinnedIds,
 		downloadStatuses,
 		onselectMovie,
 		onselectTvShow,
@@ -45,6 +47,8 @@
 		selectedMovieId?: number | null;
 		selectedTvShowId?: number | null;
 		fetchedIds?: Set<number>;
+		favoritedIds?: Set<number>;
+		pinnedIds?: Set<number>;
 		downloadStatuses?: Map<number, { state: TorrentState; progress: number }>;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
@@ -108,7 +112,15 @@
 			<span class="loading loading-lg loading-spinner"></span>
 		</div>
 	{:else if movies.length > 0}
-		<TmdbBrowseGrid {movies} {selectedMovieId} {fetchedIds} {downloadStatuses} {onselectMovie} />
+		<TmdbBrowseGrid
+			{movies}
+			{selectedMovieId}
+			{fetchedIds}
+			{favoritedIds}
+			{pinnedIds}
+			{downloadStatuses}
+			{onselectMovie}
+		/>
 		<TmdbPagination
 			page={moviesPage}
 			totalPages={moviesTotalPages}
@@ -129,7 +141,7 @@
 		<span class="loading loading-lg loading-spinner"></span>
 	</div>
 {:else if tvShows.length > 0}
-	<TmdbBrowseGrid {tvShows} {selectedTvShowId} {onselectTvShow} />
+	<TmdbBrowseGrid {tvShows} {selectedTvShowId} {favoritedIds} {pinnedIds} {onselectTvShow} />
 	<TmdbPagination
 		page={tvPage}
 		totalPages={tvTotalPages}
