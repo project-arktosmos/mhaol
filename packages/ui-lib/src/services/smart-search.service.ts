@@ -244,7 +244,9 @@ class SmartSearchService {
 				const shortName = searchNames[0] ?? selection.consoleName;
 				searches = [
 					{ query: `${cleanTitle} ${shortName}`, cat: 0 },
-					{ query: cleanTitle, cat: 0 }
+					{ query: cleanTitle, cat: 0 },
+					{ query: `${shortName} ROMs`, cat: 0 },
+					{ query: `${shortName} ROM collection`, cat: 0 }
 				];
 				break;
 			}
