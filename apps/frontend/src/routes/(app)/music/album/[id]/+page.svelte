@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { releaseGroupsToDisplay, releaseToDisplay } from 'addons/musicbrainz/transform';
 	import type {
 		DisplayMusicBrainzReleaseGroup,
@@ -78,7 +78,7 @@
 		loading = true;
 		smartSearchService.clear();
 		try {
-			const rgRes = await fetch(apiUrl(`/api/musicbrainz/release-group/${albumId}`));
+			const rgRes = await fetchRaw(`/api/musicbrainz/release-group/${albumId}`);
 			if (!rgRes.ok) throw new Error('Failed to fetch release group');
 			const rgData = await rgRes.json();
 
@@ -92,7 +92,7 @@
 			if (releases.length > 0) {
 				tracksLoading = true;
 				const official = releases.find((r) => r.status === 'Official') ?? releases[0];
-				const relRes = await fetch(apiUrl(`/api/musicbrainz/release/${official.id}`));
+				const relRes = await fetchRaw(`/api/musicbrainz/release/${official.id}`);
 				if (relRes.ok) {
 					const relData: MusicBrainzRelease = await relRes.json();
 					release = releaseToDisplay(relData);

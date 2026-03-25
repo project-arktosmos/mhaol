@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { playerService } from 'ui-lib/services/player.service';
@@ -105,7 +105,7 @@
 		smartSearchService.clear();
 		try {
 			// Fetch details
-			const res = await fetch(apiUrl(`/api/tmdb/movies/${showId}`));
+			const res = await fetchRaw(`/api/tmdb/movies/${showId}`);
 			if (res.ok) {
 				const raw = await res.json();
 				movieDetails = movieDetailsToDisplay(raw);
@@ -162,7 +162,7 @@
 
 	async function fetchLibraryItem(showId: number) {
 		try {
-			const res = await fetch(apiUrl('/api/media'));
+			const res = await fetchRaw('/api/media');
 			if (!res.ok) return;
 			const data = await res.json();
 			const allItems: MediaItem[] = Object.values(data.itemsByType ?? {}).flat() as MediaItem[];
@@ -172,7 +172,7 @@
 			if (match) {
 				libraryItem = match;
 				// Fetch related data for library item
-				const relRes = await fetch(apiUrl(`/api/media/library-items/${match.id}/related`));
+				const relRes = await fetchRaw(`/api/media/library-items/${match.id}/related`);
 				if (relRes.ok) {
 					relatedData = await relRes.json();
 				}
@@ -184,7 +184,7 @@
 
 	async function fetchImageOverrides(showId: number) {
 		try {
-			const res = await fetch(apiUrl(`/api/tmdb/image-overrides/movie/${showId}`));
+			const res = await fetchRaw(`/api/tmdb/image-overrides/movie/${showId}`);
 			if (res.ok) {
 				const overrides: Array<{ role: string; file_path: string }> = await res.json();
 				const map: Record<string, string> = {};
@@ -201,7 +201,7 @@
 	async function handleSetImageOverride(filePath: string, role: 'poster' | 'backdrop') {
 		if (!movie) return;
 		try {
-			const res = await fetch(apiUrl(`/api/tmdb/image-overrides/movie/${movie.id}/${role}`), {
+			const res = await fetchRaw(`/api/tmdb/image-overrides/movie/${movie.id}/${role}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ file_path: filePath })

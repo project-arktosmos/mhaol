@@ -43,9 +43,7 @@ class FavoritesService {
 		if (!this._wallet) return;
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const res = await fetchRaw(
-				`/api/favorites?wallet=${encodeURIComponent(this._wallet)}`
-			);
+			const res = await fetchRaw(`/api/favorites?wallet=${encodeURIComponent(this._wallet)}`);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const raw: Record<string, unknown>[] = await res.json();
 			const items = raw.map(mapFromApi);
@@ -82,9 +80,7 @@ class FavoritesService {
 
 	async remove(service: string, serviceId: string): Promise<void> {
 		this.state.update((s) => {
-			const items = s.items.filter(
-				(f) => !(f.service === service && f.serviceId === serviceId)
-			);
+			const items = s.items.filter((f) => !(f.service === service && f.serviceId === serviceId));
 			this.writeLocal(items);
 			return { ...s, items };
 		});

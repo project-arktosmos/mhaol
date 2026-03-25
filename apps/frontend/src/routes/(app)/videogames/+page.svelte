@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { gameListItemToDisplay, gameExtendedToDisplay } from 'addons/retroachievements';
 	import type { RaGameMetadata, RaGameListItem, RaGameExtended } from 'addons/retroachievements/types';
 	import { RA_CONSOLES } from 'addons/retroachievements/types';
@@ -65,7 +65,7 @@
 		loading = true;
 		error = null;
 		try {
-			const res = await fetch(apiUrl(`/api/retroachievements/games?console=${consoleId}`));
+			const res = await fetchRaw(`/api/retroachievements/games?console=${consoleId}`);
 			if (!res.ok) throw new Error('Failed to fetch game list');
 			const data = await res.json();
 			if (!Array.isArray(data)) throw new Error('Unexpected response format');
@@ -97,7 +97,7 @@
 						return;
 					}
 					try {
-						const res = await fetch(apiUrl(`/api/retroachievements/games/${game.id}`));
+						const res = await fetchRaw(`/api/retroachievements/games/${game.id}`);
 						if (!res.ok) return;
 						const data = await res.json();
 						const detail = gameExtendedToDisplay(

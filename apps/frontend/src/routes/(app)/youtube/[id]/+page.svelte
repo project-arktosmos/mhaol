@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { youtubeService } from 'ui-lib/services/youtube.service';
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
 	import { mediaModeService } from 'ui-lib/services/media-mode.service';
@@ -117,10 +117,8 @@
 
 		if (!v) return;
 
-		fetch(
-			apiUrl(
-				`/api/ytdl/info/video?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${v.videoId}`)}`
-			)
+		fetchRaw(
+			`/api/ytdl/info/video?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${v.videoId}`)}`
 		)
 			.then((res) => (res.ok ? res.json() : null))
 			.then((info: { subtitleTracks?: SubtitleTrack[] } | null) => {
@@ -176,7 +174,7 @@
 		if (!url) return;
 		const handle = url.split('/').pop();
 		if (!handle) return;
-		fetch(apiUrl(`/api/youtube/channel-meta?handle=${handle}`))
+		fetchRaw(`/api/youtube/channel-meta?handle=${handle}`)
 			.then((res) => (res.ok ? res.json() : null))
 			.then((data: YouTubeChannelMeta | null) => {
 				ytChannelMeta = data;
@@ -255,10 +253,8 @@
 				thumbnail: ''
 			};
 			// Fetch info to get title
-			fetch(
-				apiUrl(
-					`/api/ytdl/info/video?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}`
-				)
+			fetchRaw(
+				`/api/ytdl/info/video?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}`
 			)
 				.then((res) => (res.ok ? res.json() : null))
 				.then(

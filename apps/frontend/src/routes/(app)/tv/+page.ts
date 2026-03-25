@@ -1,17 +1,12 @@
-import { apiUrl } from "ui-lib/lib/api-base";
+import { fetchJson } from "ui-lib/transport/fetch-helpers";
 import type { PageLoad } from "./$types";
 
-export const load: PageLoad = async ({ fetch }) => {
+export const load: PageLoad = async () => {
   try {
-    const res = await fetch(apiUrl("/api/media"));
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      return { error: `Backend ${res.status}: ${text || res.statusText}` };
-    }
-    return await res.json();
+    return await fetchJson("/api/media");
   } catch (err) {
     return {
-      error: `Backend unreachable: ${err instanceof Error ? err.message : String(err)}`,
+      error: err instanceof Error ? err.message : String(err),
     };
   }
 };

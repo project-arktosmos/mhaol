@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
 	import { artistsToDisplay } from 'addons/musicbrainz/transform';
 	import type {
@@ -26,7 +26,7 @@
 
 	async function loadMusicFetchCacheHashes() {
 		try {
-			const res = await fetch(apiUrl('/api/torrent/music-fetch-cache/hashes'));
+			const res = await fetchRaw('/api/torrent/music-fetch-cache/hashes');
 			if (res.ok) {
 				const entries: Array<{ musicbrainzId: string; infoHash: string }> = await res.json();
 				fetchCacheHashes = new Map(entries.map((e) => [e.musicbrainzId, e.infoHash]));
@@ -51,7 +51,7 @@
 	async function fetchAlbums() {
 		albumsLoading = true;
 		try {
-			const res = await fetch(apiUrl('/api/musicbrainz/popular?genre=rock'));
+			const res = await fetchRaw('/api/musicbrainz/popular?genre=rock');
 			if (!res.ok) throw new Error('Failed to fetch albums');
 			const data = await res.json();
 			const releaseGroups: MusicBrainzReleaseGroup[] = data['release-groups'] ?? [];
@@ -65,7 +65,7 @@
 	async function fetchArtists() {
 		artistsLoading = true;
 		try {
-			const res = await fetch(apiUrl('/api/musicbrainz/popular-artists?genre=rock'));
+			const res = await fetchRaw('/api/musicbrainz/popular-artists?genre=rock');
 			if (!res.ok) throw new Error('Failed to fetch artists');
 			const data = await res.json();
 			const rawArtists: MusicBrainzArtist[] = data.artists ?? [];

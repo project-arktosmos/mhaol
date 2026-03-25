@@ -24,7 +24,7 @@
 >
 	<figure class="relative flex h-32 items-center justify-center overflow-hidden bg-base-300">
 		{#if channel.hasEpg}
-			<span class="badge badge-xs badge-info absolute right-1 top-1">EPG</span>
+			<span class="absolute top-1 right-1 badge badge-xs badge-info">EPG</span>
 		{/if}
 		{#if channel.logo}
 			<img

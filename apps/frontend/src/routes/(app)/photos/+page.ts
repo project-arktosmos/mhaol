@@ -1,12 +1,16 @@
-import { apiUrl } from "ui-lib/lib/api-base";
+import { fetchJson } from "ui-lib/transport/fetch-helpers";
 import type { PageLoad } from "./$types";
 
-export const load: PageLoad = async ({ fetch }) => {
-  const [mediaRes, imagesRes] = await Promise.all([
-    fetch(apiUrl("/api/media")),
-    fetch(apiUrl("/api/images")),
-  ]);
-  const media = await mediaRes.json();
-  const images = await imagesRes.json();
-  return { ...media, images: images.images ?? [] };
+export const load: PageLoad = async () => {
+  try {
+    const [media, images] = await Promise.all([
+      fetchJson<Record<string, unknown>>("/api/media"),
+      fetchJson<{ images: unknown[] }>("/api/images"),
+    ]);
+    return { ...media, images: images.images ?? [] };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 };

@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { playerService } from 'ui-lib/services/player.service';
@@ -122,7 +122,7 @@
 
 	async function fetchLibraryData(showId: number) {
 		try {
-			const res = await fetch(apiUrl('/api/media'));
+			const res = await fetchRaw('/api/media');
 			if (!res.ok) return;
 			const data = await res.json();
 			const lists: MediaList[] = data.lists ?? [];
@@ -198,7 +198,7 @@
 		smartSearchService.clear();
 		try {
 			// Fetch full details
-			const res = await fetch(apiUrl(`/api/tmdb/tv/${showId}`));
+			const res = await fetchRaw(`/api/tmdb/tv/${showId}`);
 			if (res.ok) {
 				const raw = await res.json();
 				tvShowDetails = tvShowDetailsToDisplay(raw);
@@ -224,7 +224,7 @@
 						.filter((s) => s.seasonNumber > 0)
 						.map(async (s) => {
 							try {
-								const sRes = await fetch(apiUrl(`/api/tmdb/tv/${showId}/season/${s.seasonNumber}`));
+								const sRes = await fetchRaw(`/api/tmdb/tv/${showId}/season/${s.seasonNumber}`);
 								if (sRes.ok) {
 									const sRaw = await sRes.json();
 									return seasonDetailsToDisplay(sRaw);
@@ -360,7 +360,7 @@
 	async function handleResync() {
 		resyncing = true;
 		try {
-			const mediaRes = await fetch(apiUrl('/api/media'));
+			const mediaRes = await fetchRaw('/api/media');
 			if (!mediaRes.ok) return;
 			const mediaData = await mediaRes.json();
 			const lists: MediaList[] = mediaData.lists ?? [];
@@ -373,7 +373,7 @@
 
 			await Promise.all(
 				libraryIds.map((id: string) =>
-					fetch(apiUrl(`/api/libraries/${id}/scan`), { method: 'POST' })
+					fetchRaw(`/api/libraries/${id}/scan`, { method: 'POST' })
 				)
 			);
 

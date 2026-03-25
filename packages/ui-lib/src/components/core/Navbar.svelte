@@ -25,7 +25,9 @@
 		children?: Snippet;
 	} = $props();
 
-	let wrapperClasses = $derived(classNames('navbar justify-between bg-base-100 shadow-sm', classes));
+	let wrapperClasses = $derived(
+		classNames('navbar justify-between bg-base-100 shadow-sm', classes)
+	);
 </script>
 
 <nav class={wrapperClasses}>
