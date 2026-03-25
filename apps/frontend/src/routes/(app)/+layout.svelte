@@ -18,6 +18,7 @@
 	import { rosterService } from 'ui-lib/services/roster.service';
 	import { profileService } from 'ui-lib/services/profile.service';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import type { PassportData } from 'webrtc/types';
 
@@ -112,6 +113,7 @@
 		if (wallet && !favoritesInitialized) {
 			favoritesInitialized = true;
 			favoritesService.initialize(wallet);
+			pinsService.initialize(wallet);
 		}
 	});
 

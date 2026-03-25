@@ -47,6 +47,8 @@
 	import TmdbBrowseGrid from 'ui-lib/components/tmdb-browse/TmdbBrowseGrid.svelte';
 	import TmdbPagination from 'ui-lib/components/tmdb-browse/TmdbPagination.svelte';
 	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 
 	interface Props {
 		data: {
@@ -494,6 +496,26 @@
 			// best-effort
 		}
 	}
+
+	// Favorited / pinned TMDB IDs for grid indicators
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+
+	let favoritedTmdbIds = $derived(
+		new Set(
+			$favState.items
+				.filter((f) => f.service === 'tmdb')
+				.map((f) => Number(f.serviceId))
+		)
+	);
+
+	let pinnedTmdbIds = $derived(
+		new Set(
+			$pinState.items
+				.filter((p) => p.service === 'tmdb')
+				.map((p) => Number(p.serviceId))
+		)
+	);
 
 	// Smart search — individual + batch
 	let smartSearchingId: number | null = $state(null);
@@ -951,6 +973,8 @@
 						movies={pinnedMovies}
 						selectedMovieId={selectedBrowseMovie?.id ?? null}
 						fetchedIds={fetchCachedTmdbIds}
+						favoritedIds={favoritedTmdbIds}
+						pinnedIds={pinnedTmdbIds}
 						downloadStatuses={browseDownloadStatuses}
 						{fetchCacheSummaries}
 						{smartSearchingId}
@@ -974,6 +998,8 @@
 						movies={applyOverridesToMovies($browseState.searchMovies)}
 						selectedMovieId={selectedBrowseMovie?.id ?? null}
 						fetchedIds={fetchCachedTmdbIds}
+						favoritedIds={favoritedTmdbIds}
+						pinnedIds={pinnedTmdbIds}
 						downloadStatuses={browseDownloadStatuses}
 						{fetchCacheSummaries}
 						{smartSearchingId}
@@ -996,6 +1022,8 @@
 						movies={group.movies}
 						selectedMovieId={selectedBrowseMovie?.id ?? null}
 						fetchedIds={fetchedDisplayIds}
+						favoritedIds={favoritedTmdbIds}
+						pinnedIds={pinnedTmdbIds}
 						downloadStatuses={downloadStatuses}
 						{fetchCacheSummaries}
 						{smartSearchingId}
@@ -1035,6 +1063,8 @@
 						mediaType="movies"
 						selectedMovieId={selectedBrowseMovie?.id ?? null}
 						fetchedIds={fetchCachedTmdbIds}
+						favoritedIds={favoritedTmdbIds}
+						pinnedIds={pinnedTmdbIds}
 						downloadStatuses={browseDownloadStatuses}
 						{fetchCacheSummaries}
 						{smartSearchingId}
@@ -1072,6 +1102,8 @@
 								movies={applyOverridesToMovies($browseState.discoverMovies)}
 								selectedMovieId={selectedBrowseMovie?.id ?? null}
 								fetchedIds={fetchCachedTmdbIds}
+								favoritedIds={favoritedTmdbIds}
+								pinnedIds={pinnedTmdbIds}
 								downloadStatuses={browseDownloadStatuses}
 								{fetchCacheSummaries}
 								{smartSearchingId}
