@@ -7,6 +7,9 @@ const config = {
 
 	kit: {
 		appDir: 'app',
+		paths: {
+			base: process.env.BASE_PATH || ''
+		},
 		adapter: adapterStatic({
 			fallback: 'index.html',
 			pages: 'dist-static',
