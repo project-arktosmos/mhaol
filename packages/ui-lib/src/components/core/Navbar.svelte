@@ -25,23 +25,23 @@
 		children?: Snippet;
 	} = $props();
 
-	let wrapperClasses = $derived(classNames('navbar bg-base-100 shadow-sm', classes));
+	let wrapperClasses = $derived(classNames('navbar justify-between bg-base-100 shadow-sm', classes));
 </script>
 
 <nav class={wrapperClasses}>
-	<div class="navbar-start">
+	<div>
 		<a href={brand.href ?? '/'} class="btn text-xl btn-ghost">
 			{brand.label}{#if brand.highlight}<span class="text-primary">{brand.highlight}</span>{/if}
 		</a>
 	</div>
 
 	{#if center}
-		<div class="navbar-center">
+		<div class="flex h-full items-center">
 			{@render center()}
 		</div>
 	{/if}
 
-	<div class="navbar-end">
+	<div class="flex h-full items-center">
 		{#if children}
 			{@render children()}
 		{:else if items.length > 0}
