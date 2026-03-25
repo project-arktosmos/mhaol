@@ -92,6 +92,7 @@ export interface DisplayMusicBrainzArtist {
 	ended: boolean;
 	tags: string[];
 	score: number;
+	imageUrl: string | null;
 }
 
 export interface DisplayMusicBrainzArtistDetails extends DisplayMusicBrainzArtist {

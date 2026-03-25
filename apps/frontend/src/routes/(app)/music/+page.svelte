@@ -82,8 +82,11 @@
 	});
 </script>
 
-<div class="flex min-w-0 flex-1 flex-col overflow-y-auto p-4">
-	<h1 class="mb-6 text-2xl font-bold">Music</h1>
+<div class="flex min-w-0 flex-1 flex-col overflow-y-auto">
+	<div class="flex items-center justify-between gap-4 border-b border-base-300 px-4 py-3">
+		<h1 class="text-lg font-bold">Music</h1>
+	</div>
+	<div class="p-4">
 
 	<section class="mb-8">
 		<div class="mb-3 flex items-center justify-between">
@@ -140,4 +143,5 @@
 			</div>
 		{/if}
 	</section>
+	</div>
 </div>

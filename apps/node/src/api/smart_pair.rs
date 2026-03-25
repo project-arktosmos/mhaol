@@ -57,17 +57,17 @@ struct PairResult {
     confidence: String,
 }
 
-struct TmdbCandidate {
-    id: i64,
-    title: String,
-    year: String,
-    poster_path: Option<String>,
-    media_type: String, // "movie" or "tv"
-    popularity: f64,
-    vote_count: i64,
+pub(crate) struct TmdbCandidate {
+    pub(crate) id: i64,
+    pub(crate) title: String,
+    pub(crate) year: String,
+    pub(crate) poster_path: Option<String>,
+    pub(crate) media_type: String, // "movie" or "tv"
+    pub(crate) popularity: f64,
+    pub(crate) vote_count: i64,
 }
 
-fn score_match(query_title: &str, candidate_title: &str, popularity: f64, vote_count: i64) -> f64 {
+pub(crate) fn score_match(query_title: &str, candidate_title: &str, popularity: f64, vote_count: i64) -> f64 {
     let q = query_title.to_lowercase();
     let r = candidate_title.to_lowercase();
 
@@ -83,7 +83,7 @@ fn score_match(query_title: &str, candidate_title: &str, popularity: f64, vote_c
     title_score * (1.0 + (popularity + 1.0).log10()) * (1.0 + (vote_count as f64 + 1.0).log10())
 }
 
-fn determine_confidence(query_title: &str, candidate_title: &str, vote_count: i64) -> String {
+pub(crate) fn determine_confidence(query_title: &str, candidate_title: &str, vote_count: i64) -> String {
     let q = query_title.to_lowercase();
     let r = candidate_title.to_lowercase();
     if q == r && vote_count > 100 {
@@ -95,7 +95,7 @@ fn determine_confidence(query_title: &str, candidate_title: &str, vote_count: i6
     }
 }
 
-fn extract_year(date_str: &str) -> String {
+pub(crate) fn extract_year(date_str: &str) -> String {
     date_str.split('-').next().unwrap_or("").to_string()
 }
 
@@ -111,7 +111,7 @@ fn parse_movie_candidate(result: &serde_json::Value) -> Option<TmdbCandidate> {
     })
 }
 
-fn parse_tv_candidate(result: &serde_json::Value) -> Option<TmdbCandidate> {
+pub(crate) fn parse_tv_candidate(result: &serde_json::Value) -> Option<TmdbCandidate> {
     Some(TmdbCandidate {
         id: result.get("id")?.as_i64()?,
         title: result.get("name")?.as_str()?.to_string(),

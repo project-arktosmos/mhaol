@@ -24,6 +24,8 @@
 		onselect
 	}: Props = $props();
 
+	let imgError = $state(false);
+
 	let isDownloading = $derived(
 		torrentProgress !== null && torrentState !== null && torrentState !== 'seeding'
 	);
@@ -55,22 +57,32 @@
 		: undefined}
 >
 	<figure class="relative aspect-square overflow-hidden bg-base-300">
-		<div class="flex h-full w-full items-center justify-center text-base-content/20">
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				class="h-12 w-12"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="1.5"
-					d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
-				/>
-			</svg>
-		</div>
+		{#if artist.imageUrl && !imgError}
+			<img
+				src={artist.imageUrl}
+				alt={artist.name}
+				class="h-full w-full object-cover"
+				loading="lazy"
+				onerror={() => (imgError = true)}
+			/>
+		{:else}
+			<div class="flex h-full w-full items-center justify-center text-base-content/20">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-12 w-12"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="1.5"
+						d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
+					/>
+				</svg>
+			</div>
+		{/if}
 		{#if isCompleted}
 			<div class="absolute top-1 right-1">
 				<span class="badge badge-xs badge-success">Done</span>

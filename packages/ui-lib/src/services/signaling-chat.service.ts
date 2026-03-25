@@ -36,6 +36,7 @@ class SignalingChatService {
 	public onContactMessage: ((peerId: string, msg: unknown) => void) | null = null;
 	public onServerCatalogMessage: ((peerId: string, msg: ServerCatalogMessage) => void) | null =
 		null;
+	public onRpcMessage: ((peerId: string, msg: unknown) => void) | null = null;
 
 	addPeerChannelOpenListener(fn: (peerId: string) => void): () => void {
 		this.peerChannelOpenListeners.push(fn);
@@ -252,6 +253,8 @@ class SignalingChatService {
 			this.onContactMessage?.(peerId, data.payload);
 		} else if (data.channel === 'server-catalog') {
 			this.onServerCatalogMessage?.(peerId, data.payload as ServerCatalogMessage);
+		} else if (data.channel === 'rpc') {
+			this.onRpcMessage?.(peerId, data.payload);
 		} else if (
 			(data as Record<string, unknown>).id &&
 			(data as Record<string, unknown>).address &&

@@ -20,6 +20,7 @@
 		fetchCacheSummaries,
 		dimmedIds,
 		smartSearchingId = null,
+		matchingTvShowId = null,
 		onselectMovie,
 		onselectTvShow,
 		onsmartSearch
@@ -33,6 +34,7 @@
 		fetchCacheSummaries?: Map<number, string>;
 		dimmedIds?: Set<number>;
 		smartSearchingId?: number | null;
+		matchingTvShowId?: number | null;
 		onselectMovie?: (movie: DisplayTMDBMovie) => void;
 		onselectTvShow?: (tvShow: DisplayTMDBTvShow) => void;
 		onsmartSearch?: (movie: DisplayTMDBMovie) => void;
@@ -291,6 +293,7 @@
 			<TmdbBrowseCard
 				{tvShow}
 				selected={selectedTvShowId === tvShow.id}
+				matching={matchingTvShowId === tvShow.id}
 				onclick={onselectTvShow ? () => onselectTvShow(tvShow) : undefined}
 			/>
 		{/each}

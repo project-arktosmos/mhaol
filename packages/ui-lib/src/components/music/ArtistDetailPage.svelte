@@ -5,6 +5,14 @@
 		DisplayMusicBrainzArtist,
 		DisplayMusicBrainzReleaseGroup
 	} from 'addons/musicbrainz/types';
+	import {
+		formatBytes,
+		formatSpeed,
+		formatEta,
+		getStateLabel,
+		getStateColor
+	} from 'ui-lib/types/torrent.type';
+	import type { TorrentState } from 'ui-lib/types/torrent.type';
 
 	interface Props {
 		artist: DisplayMusicBrainzArtist;
@@ -18,8 +26,17 @@
 			eval: boolean;
 			done: boolean;
 		} | null;
-		downloadStatus: { state: string; progress: number } | null;
-		fetchedTorrent: { name: string; quality: string } | null;
+		torrentStatus: {
+			state: TorrentState;
+			progress: number;
+			size: number;
+			downloadSpeed: number;
+			uploadSpeed: number;
+			peers: number;
+			seeds: number;
+			eta: number | null;
+		} | null;
+		fetchedTorrent: { name: string; quality: string; languages: string } | null;
 		onfetch: () => void;
 		ondownload: () => void;
 		onshowsearch: () => void;
@@ -33,7 +50,7 @@
 		fetching,
 		fetched,
 		fetchSteps,
-		downloadStatus,
+		torrentStatus,
 		fetchedTorrent,
 		onfetch,
 		ondownload,
@@ -49,17 +66,16 @@
 		return null;
 	});
 
-	let dlState = $derived(downloadStatus?.state ?? null);
+	let dlState = $derived(torrentStatus?.state ?? null);
 	let isDownloading = $derived(
 		dlState === 'downloading' ||
 			dlState === 'initializing' ||
 			dlState === 'paused' ||
 			dlState === 'checking'
 	);
-	let isDownloaded = $derived(dlState === 'completed' || dlState === 'seeding');
+	let isDownloaded = $derived(dlState === 'seeding');
 	let downloadButtonDisabled = $derived(!fetched || isDownloading || isDownloaded);
-	let dlProgress = $derived(downloadStatus?.progress ?? 0);
-	let dlPercent = $derived(Math.round(dlProgress * 100));
+	let dlPercent = $derived(Math.round((torrentStatus?.progress ?? 0) * 100));
 </script>
 
 <DetailPageLayout>
@@ -77,7 +93,13 @@
 		Back
 	</button>
 
-	<div class="flex items-center gap-4">
+	{#if artist.imageUrl}
+		<img
+			src={artist.imageUrl}
+			alt={artist.name}
+			class="h-24 w-24 shrink-0 rounded-full object-cover"
+		/>
+	{:else}
 		<div
 			class="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-base-200 text-base-content/20"
 		>
@@ -96,43 +118,90 @@
 				/>
 			</svg>
 		</div>
-		<div class="min-w-0">
-			<h1 class="text-xl font-bold">{artist.name}</h1>
-			{#if artist.disambiguation}
-				<p class="text-sm opacity-60">{artist.disambiguation}</p>
-			{/if}
-		</div>
-	</div>
-
-	<div class="flex flex-col gap-1.5">
-		{#if artist.type}
-			<div class="flex items-center gap-1 text-sm">
-				<span class="opacity-40">Type:</span><span>{artist.type}</span>
-			</div>
-		{/if}
-		{#if artist.country}
-			<div class="flex items-center gap-1 text-sm">
-				<span class="opacity-40">Country:</span><span>{artist.country}</span>
-			</div>
-		{/if}
-		{#if lifeSpan}
-			<div class="flex items-center gap-1 text-sm">
-				<span class="opacity-40">Active:</span><span>{lifeSpan}</span>
-			</div>
-		{/if}
-	</div>
-
-	{#if artist.tags.length > 0}
-		<div class="flex flex-wrap gap-1">
-			{#each artist.tags as tag}
-				<span class="badge badge-outline badge-sm">{tag}</span>
-			{/each}
-		</div>
 	{/if}
 
-	<div class="grid grid-cols-2 gap-2">
+	{#snippet cellA()}
+		<h1 class="text-xl font-bold">{artist.name}</h1>
+		{#if artist.disambiguation}
+			<p class="text-sm opacity-60">{artist.disambiguation}</p>
+		{/if}
+
+		<div class="flex flex-col gap-1.5">
+			{#if artist.type}
+				<div class="flex items-center gap-1 text-sm">
+					<span class="opacity-40">Type:</span><span>{artist.type}</span>
+				</div>
+			{/if}
+			{#if artist.country}
+				<div class="flex items-center gap-1 text-sm">
+					<span class="opacity-40">Country:</span><span>{artist.country}</span>
+				</div>
+			{/if}
+			{#if lifeSpan}
+				<div class="flex items-center gap-1 text-sm">
+					<span class="opacity-40">Active:</span><span>{lifeSpan}</span>
+				</div>
+			{/if}
+		</div>
+
+		{#if artist.tags.length > 0}
+			<div class="flex flex-wrap gap-1">
+				{#each artist.tags as tag}
+					<span class="badge badge-outline badge-sm">{tag}</span>
+				{/each}
+			</div>
+		{/if}
+
+		{#if albums.length > 0}
+			<div class="flex flex-col gap-1">
+				<h4 class="text-sm font-semibold opacity-50">Discography ({albums.length})</h4>
+				{#each albums as albumItem (albumItem.id)}
+					<button
+						class="flex items-center gap-2 rounded px-1 py-1 text-left hover:bg-base-200"
+						onclick={() => onalbumclick?.(albumItem.id)}
+					>
+						{#if albumItem.coverArtUrl}
+							<img
+								src={albumItem.coverArtUrl}
+								alt={albumItem.title}
+								class="h-8 w-8 rounded object-cover"
+							/>
+						{:else}
+							<div class="flex h-8 w-8 items-center justify-center rounded bg-base-300">
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									class="h-4 w-4 text-base-content/20"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="1.5"
+										d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+									/>
+								</svg>
+							</div>
+						{/if}
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-sm">{albumItem.title}</p>
+							<p class="text-xs opacity-40">
+								{albumItem.firstReleaseYear}
+								{#if albumItem.primaryType}
+									<span class="ml-1 badge badge-ghost badge-xs">{albumItem.primaryType}</span>
+								{/if}
+							</p>
+						</div>
+					</button>
+				{/each}
+			</div>
+		{/if}
+	{/snippet}
+
+	{#snippet cellB()}
 		<button
-			class="btn col-span-2 btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
+			class="btn w-full btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
 			onclick={onfetch}
 			disabled={fetching}
 		>
@@ -156,9 +225,10 @@
 			{/if}
 			Smart Search Discography
 		</button>
+
 		{#if fetchSteps}
 			<button
-				class="col-span-2 cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
+				class="w-full cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
 				onclick={onshowsearch}
 			>
 				<ul class="steps steps-horizontal w-full text-xs">
@@ -173,18 +243,100 @@
 				</ul>
 			</button>
 		{/if}
-		{#if fetchedTorrent}
-			<div class="col-span-2 flex items-center gap-2">
-				<p class="min-w-0 flex-1 truncate text-xs opacity-60" title={fetchedTorrent.name}>
-					{fetchedTorrent.name}
-				</p>
-				{#if fetchedTorrent.quality}
-					<span class="badge badge-xs badge-info">{fetchedTorrent.quality}</span>
-				{/if}
-			</div>
+
+		{#if fetchedTorrent || torrentStatus}
+			<table class="table table-xs">
+				<tbody>
+					{#if fetchedTorrent}
+						<tr>
+							<td class="font-medium opacity-60">File</td>
+							<td class="break-all">{fetchedTorrent.name}</td>
+						</tr>
+						{#if fetchedTorrent.quality}
+							<tr>
+								<td class="font-medium opacity-60">Quality</td>
+								<td><span class="badge badge-xs badge-info">{fetchedTorrent.quality}</span></td>
+							</tr>
+						{/if}
+						{#if fetchedTorrent.languages}
+							<tr>
+								<td class="font-medium opacity-60">Languages</td>
+								<td><span class="badge badge-ghost badge-xs">{fetchedTorrent.languages}</span></td>
+							</tr>
+						{/if}
+					{/if}
+					{#if torrentStatus}
+						<tr>
+							<td class="font-medium opacity-60">Status</td>
+							<td>
+								<span class="badge badge-xs badge-{getStateColor(torrentStatus.state)}">
+									{getStateLabel(torrentStatus.state)}
+								</span>
+							</td>
+						</tr>
+						<tr>
+							<td class="font-medium opacity-60">Size</td>
+							<td>{formatBytes(torrentStatus.size)}</td>
+						</tr>
+						{#if isDownloading}
+							<tr>
+								<td class="font-medium opacity-60">Progress</td>
+								<td>
+									<div class="flex items-center gap-2">
+										<progress
+											class="progress progress-info flex-1"
+											value={dlPercent}
+											max="100"
+										></progress>
+										<span class="text-xs font-medium">{dlPercent}%</span>
+									</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="font-medium opacity-60">Speed</td>
+								<td>
+									{formatSpeed(torrentStatus.downloadSpeed)} &darr;
+									{formatSpeed(torrentStatus.uploadSpeed)} &uarr;
+								</td>
+							</tr>
+							<tr>
+								<td class="font-medium opacity-60">Peers</td>
+								<td>{torrentStatus.seeds} seeds &middot; {torrentStatus.peers} peers</td>
+							</tr>
+							{#if torrentStatus.eta !== null}
+								<tr>
+									<td class="font-medium opacity-60">ETA</td>
+									<td>{formatEta(torrentStatus.eta)}</td>
+								</tr>
+							{/if}
+						{/if}
+						{#if isDownloaded}
+							<tr>
+								<td class="font-medium opacity-60">Progress</td>
+								<td>
+									<div class="flex items-center gap-2">
+										<progress
+											class="progress progress-success flex-1"
+											value="100"
+											max="100"
+										></progress>
+										<span class="text-xs font-medium">100%</span>
+									</div>
+								</td>
+							</tr>
+						{/if}
+					{:else if fetchedTorrent}
+						<tr>
+							<td class="font-medium opacity-60">Status</td>
+							<td><span class="badge badge-ghost badge-xs">Not started</span></td>
+						</tr>
+					{/if}
+				</tbody>
+			</table>
 		{/if}
+
 		<button
-			class={classNames('btn col-span-2 btn-sm', {
+			class={classNames('btn w-full btn-sm', {
 				'btn-ghost': isDownloaded,
 				'btn-success': !isDownloaded
 			})}
@@ -199,64 +351,5 @@
 				Download
 			{/if}
 		</button>
-		{#if isDownloading || isDownloaded}
-			<div class="col-span-2 flex items-center gap-2">
-				<progress
-					class={classNames('progress flex-1', {
-						'progress-info': isDownloading,
-						'progress-success': isDownloaded
-					})}
-					value={dlPercent}
-					max="100"
-				></progress>
-				<span class="text-xs font-medium opacity-60">{dlPercent}%</span>
-			</div>
-		{/if}
-	</div>
-
-	{#if albums.length > 0}
-		<div class="flex flex-col gap-1">
-			<h4 class="text-sm font-semibold opacity-50">Discography ({albums.length})</h4>
-			{#each albums as albumItem (albumItem.id)}
-				<button
-					class="flex items-center gap-2 rounded px-1 py-1 text-left hover:bg-base-200"
-					onclick={() => onalbumclick?.(albumItem.id)}
-				>
-					{#if albumItem.coverArtUrl}
-						<img
-							src={albumItem.coverArtUrl}
-							alt={albumItem.title}
-							class="h-8 w-8 rounded object-cover"
-						/>
-					{:else}
-						<div class="flex h-8 w-8 items-center justify-center rounded bg-base-300">
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								class="h-4 w-4 text-base-content/20"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="1.5"
-									d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
-								/>
-							</svg>
-						</div>
-					{/if}
-					<div class="min-w-0 flex-1">
-						<p class="truncate text-sm">{albumItem.title}</p>
-						<p class="text-xs opacity-40">
-							{albumItem.firstReleaseYear}
-							{#if albumItem.primaryType}
-								<span class="ml-1 badge badge-ghost badge-xs">{albumItem.primaryType}</span>
-							{/if}
-						</p>
-					</div>
-				</button>
-			{/each}
-		</div>
-	{/if}
+	{/snippet}
 </DetailPageLayout>

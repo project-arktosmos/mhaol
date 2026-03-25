@@ -821,24 +821,6 @@ describe('PlayerService', () => {
 		);
 	});
 
-	it('stop sends stream/stop POST for torrent file', async () => {
-		playerService.state.update((s) => ({
-			...s,
-			connectionState: 'streaming' as const,
-			currentFile: { id: 'torrent:abc123', name: 'test' } as never
-		}));
-
-		const mock = mockFetch({});
-		vi.stubGlobal('fetch', mock);
-
-		await playerService.stop();
-
-		expect(mock).toHaveBeenCalledWith(
-			expect.stringContaining('/api/torrent/torrents/abc123/stream/stop'),
-			expect.objectContaining({ method: 'POST' })
-		);
-	});
-
 	it('stop handles fetch errors during cleanup gracefully', async () => {
 		playerService.state.update((s) => ({
 			...s,

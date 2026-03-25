@@ -1,8 +1,6 @@
 pub mod api;
 pub mod db;
 #[cfg(not(target_os = "android"))]
-pub mod http_stream;
-#[cfg(not(target_os = "android"))]
 pub mod llm_worker;
 pub mod modules;
 #[cfg(not(target_os = "android"))]

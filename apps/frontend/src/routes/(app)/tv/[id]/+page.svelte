@@ -59,12 +59,12 @@
 		};
 	});
 
-	let currentDownloadStatus = $derived.by((): { state: string; progress: number } | null => {
+	let matchedTorrent = $derived.by(() => {
 		const candidate = $searchStore.fetchedCandidate;
 		const _ = $torrentState;
 		if (candidate?.infoHash) {
 			const t = torrentService.findByHash(candidate.infoHash);
-			if (t) return { state: t.state, progress: t.progress };
+			if (t) return t;
 		}
 		return null;
 	});
@@ -333,7 +333,7 @@
 				size: existingTorrent.size,
 				completedAt: ''
 			};
-			playerService.play(file).then(() => playerService.setDisplayMode('sidebar'));
+			playerService.play(file, 'inline');
 		}
 	}
 
@@ -351,7 +351,7 @@
 			size: 0,
 			completedAt: ''
 		};
-		playerService.play(file).then(() => playerService.setDisplayMode('sidebar'));
+		playerService.play(file, 'inline');
 	}
 
 	onMount(() => {
@@ -368,7 +368,14 @@
 		fetching={isFetching}
 		fetched={isFetchedForCurrent}
 		fetchSteps={currentFetchSteps}
-		downloadStatus={currentDownloadStatus}
+		torrentStatus={matchedTorrent}
+		fetchedTorrent={$searchStore.fetchedCandidate
+			? {
+					name: $searchStore.fetchedCandidate.name,
+					quality: $searchStore.fetchedCandidate.analysis?.quality ?? '',
+					languages: $searchStore.fetchedCandidate.analysis?.languages ?? ''
+				}
+			: null}
 		{tvMatchedSeasons}
 		{libraryFiles}
 		onfetch={handleFetch}

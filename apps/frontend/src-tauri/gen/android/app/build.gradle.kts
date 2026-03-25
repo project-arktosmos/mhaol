@@ -39,7 +39,7 @@ android {
     compileSdk = 36
     namespace = "com.arktosmos.mhaol_client"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "false"
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
         applicationId = "com.arktosmos.mhaol_client"
         minSdk = 24
         targetSdk = 36

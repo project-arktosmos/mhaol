@@ -31,6 +31,20 @@ export function getCoverArtUrl(releaseGroupId: string, size: 250 | 500 = 250): s
 	return `https://coverartarchive.org/release-group/${releaseGroupId}/front-${size}`;
 }
 
+let artistImageBaseUrl: string | null = null;
+
+/** Set the base URL for artist images (e.g. to route through local backend). */
+export function setArtistImageBaseUrl(url: string) {
+	artistImageBaseUrl = url;
+}
+
+export function getArtistImageUrl(artistId: string, size: 250 | 500 = 250): string {
+	if (artistImageBaseUrl) {
+		return `${artistImageBaseUrl}/${artistId}/${size}`;
+	}
+	return ``;
+}
+
 export function formatDuration(ms: number | undefined): string | null {
 	if (!ms) return null;
 	const totalSeconds = Math.floor(ms / 1000);
@@ -66,6 +80,7 @@ export function recordingsToDisplay(
 }
 
 export function artistToDisplay(artist: MusicBrainzArtist): DisplayMusicBrainzArtist {
+	const firstRgId = artist['release-groups']?.[0]?.id;
 	return {
 		id: artist.id,
 		name: artist.name,
@@ -77,7 +92,8 @@ export function artistToDisplay(artist: MusicBrainzArtist): DisplayMusicBrainzAr
 		endYear: artist['life-span']?.end?.split('-')[0] || null,
 		ended: artist['life-span']?.ended ?? false,
 		tags: (artist.tags || []).sort((x, y) => y.count - x.count).map((t) => t.name),
-		score: artist.score || 0
+		score: artist.score || 0,
+		imageUrl: firstRgId ? getCoverArtUrl(firstRgId) : getArtistImageUrl(artist.id) || null
 	};
 }
 

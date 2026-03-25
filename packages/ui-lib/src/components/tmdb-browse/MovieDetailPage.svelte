@@ -49,7 +49,6 @@
 		imageOverrides: Record<string, string> | null;
 		onfetch: () => void;
 		ondownload: () => void;
-		onstream?: () => void;
 		onp2pstream: () => void;
 		onshowsearch: () => void;
 		onback: () => void;
@@ -72,7 +71,6 @@
 		imageOverrides,
 		onfetch,
 		ondownload,
-		onstream,
 		onp2pstream,
 		onshowsearch,
 		onback,
@@ -105,7 +103,6 @@
 	let downloadButtonDisabled = $derived(!fetched || isDownloading || isDownloaded);
 	let dlProgress = $derived(torrentStatus?.progress ?? 0);
 	let dlPercent = $derived(Math.round(dlProgress * 100));
-	let streamingTorrent = $state(false);
 	let streamingP2p = $state(false);
 
 	const playerState = playerService.state;
@@ -527,25 +524,12 @@
 				{/if}
 			</button>
 			<button
-				class="btn btn-sm btn-primary"
-				onclick={() => {
-					streamingTorrent = true;
-					onstream?.();
-				}}
-				disabled={downloadButtonDisabled || streamingTorrent}
-			>
-				{#if streamingTorrent}
-					<span class="loading loading-xs loading-spinner"></span>
-				{/if}
-				Stream Torrent
-			</button>
-			<button
-				class="btn col-span-2 btn-sm btn-secondary"
+				class="btn btn-sm btn-secondary"
 				onclick={() => {
 					streamingP2p = true;
 					onp2pstream();
 				}}
-				disabled={!downloadButtonDisabled || streamingP2p}
+				disabled={!fetchedTorrent || isDownloading || streamingP2p}
 			>
 				{#if streamingP2p}
 					<span class="loading loading-xs loading-spinner"></span>

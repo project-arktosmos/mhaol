@@ -1,19 +1,76 @@
 <script lang="ts">
+	import classNames from 'classnames';
 	import DetailPageLayout from 'ui-lib/components/core/DetailPageLayout.svelte';
 	import type { RaGameMetadata } from 'addons/retroachievements/types';
+	import {
+		formatBytes,
+		formatSpeed,
+		formatEta,
+		getStateLabel,
+		getStateColor
+	} from 'ui-lib/types/torrent.type';
+	import type { TorrentState } from 'ui-lib/types/torrent.type';
 
 	interface Props {
 		game: RaGameMetadata;
 		details: RaGameMetadata | null;
 		detailsLoading: boolean;
+		fetching: boolean;
+		fetched: boolean;
+		fetchSteps: {
+			terms: boolean;
+			search: boolean;
+			searching: boolean;
+			eval: boolean;
+			done: boolean;
+		} | null;
+		torrentStatus: {
+			state: TorrentState;
+			progress: number;
+			size: number;
+			downloadSpeed: number;
+			uploadSpeed: number;
+			peers: number;
+			seeds: number;
+			eta: number | null;
+		} | null;
+		fetchedTorrent: { name: string; quality: string; languages: string } | null;
 		onback: () => void;
+		onfetch: () => void;
+		ondownload: () => void;
+		onshowsearch: () => void;
 	}
 
-	let { game, details, detailsLoading, onback }: Props = $props();
+	let {
+		game,
+		details,
+		detailsLoading,
+		fetching,
+		fetched,
+		fetchSteps,
+		torrentStatus,
+		fetchedTorrent,
+		onback,
+		onfetch,
+		ondownload,
+		onshowsearch
+	}: Props = $props();
 
 	let heroImage = $derived(
 		details?.imageTitleUrl || details?.imageIngameUrl || details?.imageBoxArtUrl
 	);
+
+	let dlState = $derived(torrentStatus?.state ?? null);
+	let isDownloading = $derived(
+		dlState === 'downloading' ||
+			dlState === 'initializing' ||
+			dlState === 'paused' ||
+			dlState === 'checking'
+	);
+	let isDownloaded = $derived(dlState === 'seeding');
+	let downloadButtonDisabled = $derived(!fetched || isDownloading || isDownloaded);
+	let dlProgress = $derived(torrentStatus?.progress ?? 0);
+	let dlPercent = $derived(Math.round(dlProgress * 100));
 </script>
 
 <DetailPageLayout>
@@ -30,8 +87,6 @@
 		</svg>
 		Back
 	</button>
-
-	<h1 class="text-xl font-bold">{game.title}</h1>
 
 	{#if heroImage}
 		<img src={heroImage} alt={game.title} class="w-full rounded-lg object-cover" />
@@ -62,79 +117,83 @@
 		</div>
 	{/if}
 
-	<p class="text-sm opacity-60">{game.consoleName}</p>
+	{#snippet cellA()}
+		<h1 class="text-xl font-bold">{game.title}</h1>
 
-	{#if detailsLoading}
-		<div class="flex items-center justify-center py-4">
-			<span class="loading loading-sm loading-spinner"></span>
-		</div>
-	{:else if details}
-		<div class="flex flex-col gap-1.5">
-			{#if details.developer}
-				<div class="flex items-center gap-1 text-sm">
-					<span class="opacity-40">Developer:</span><span>{details.developer}</span>
-				</div>
-			{/if}
-			{#if details.publisher}
-				<div class="flex items-center gap-1 text-sm">
-					<span class="opacity-40">Publisher:</span><span>{details.publisher}</span>
-				</div>
-			{/if}
-			{#if details.genre}
-				<div class="flex items-center gap-1 text-sm">
-					<span class="opacity-40">Genre:</span><span>{details.genre}</span>
-				</div>
-			{/if}
-			{#if details.released}
-				<div class="flex items-center gap-1 text-sm">
-					<span class="opacity-40">Released:</span><span>{details.released}</span>
-				</div>
-			{/if}
-			{#if details.numDistinctPlayers}
-				<div class="flex items-center gap-1 text-sm">
-					<span class="opacity-40">Players:</span><span
-						>{details.numDistinctPlayers.toLocaleString()}</span
-					>
-				</div>
-			{/if}
+		<p class="text-sm opacity-60">{game.consoleName}</p>
 
-			<div class="flex flex-wrap gap-1 pt-1">
-				{#if details.numAchievements > 0}
-					<span class="badge badge-sm badge-info">{details.numAchievements} achievements</span>
+		{#if detailsLoading}
+			<div class="flex items-center justify-center py-4">
+				<span class="loading loading-sm loading-spinner"></span>
+			</div>
+		{:else if details}
+			<div class="flex flex-col gap-1.5">
+				{#if details.developer}
+					<div class="flex items-center gap-1 text-sm">
+						<span class="opacity-40">Developer:</span><span>{details.developer}</span>
+					</div>
 				{/if}
-				{#if details.points > 0}
-					<span class="badge badge-ghost badge-sm">{details.points} points</span>
+				{#if details.publisher}
+					<div class="flex items-center gap-1 text-sm">
+						<span class="opacity-40">Publisher:</span><span>{details.publisher}</span>
+					</div>
+				{/if}
+				{#if details.genre}
+					<div class="flex items-center gap-1 text-sm">
+						<span class="opacity-40">Genre:</span><span>{details.genre}</span>
+					</div>
+				{/if}
+				{#if details.released}
+					<div class="flex items-center gap-1 text-sm">
+						<span class="opacity-40">Released:</span><span>{details.released}</span>
+					</div>
+				{/if}
+				{#if details.numDistinctPlayers}
+					<div class="flex items-center gap-1 text-sm">
+						<span class="opacity-40">Players:</span><span
+							>{details.numDistinctPlayers.toLocaleString()}</span
+						>
+					</div>
+				{/if}
+
+				<div class="flex flex-wrap gap-1 pt-1">
+					{#if details.numAchievements > 0}
+						<span class="badge badge-sm badge-info">{details.numAchievements} achievements</span>
+					{/if}
+					{#if details.points > 0}
+						<span class="badge badge-ghost badge-sm">{details.points} points</span>
+					{/if}
+				</div>
+
+				{#if details.imageBoxArtUrl}
+					<img
+						src={details.imageBoxArtUrl}
+						alt="Box art"
+						class="mt-2 w-full rounded-lg"
+						loading="lazy"
+					/>
+				{/if}
+				{#if details.imageIngameUrl}
+					<img
+						src={details.imageIngameUrl}
+						alt="In-game screenshot"
+						class="w-full rounded-lg"
+						loading="lazy"
+					/>
+				{/if}
+				{#if details.imageTitleUrl}
+					<img
+						src={details.imageTitleUrl}
+						alt="Title screen"
+						class="w-full rounded-lg"
+						loading="lazy"
+					/>
 				{/if}
 			</div>
+		{/if}
 
-			{#if details.imageBoxArtUrl}
-				<img
-					src={details.imageBoxArtUrl}
-					alt="Box art"
-					class="mt-2 w-full rounded-lg"
-					loading="lazy"
-				/>
-			{/if}
-			{#if details.imageIngameUrl}
-				<img
-					src={details.imageIngameUrl}
-					alt="In-game screenshot"
-					class="w-full rounded-lg"
-					loading="lazy"
-				/>
-			{/if}
-			{#if details.imageTitleUrl}
-				<img
-					src={details.imageTitleUrl}
-					alt="Title screen"
-					class="w-full rounded-lg"
-					loading="lazy"
-				/>
-			{/if}
-		</div>
-
-		{#if details.achievements && details.achievements.length > 0}
-			<div class="flex flex-col gap-0.5 pt-2">
+		{#if details?.achievements && details.achievements.length > 0}
+			<div class="flex flex-col gap-0.5">
 				<div class="flex items-center justify-between">
 					<h4 class="text-sm font-semibold opacity-50">Achievements</h4>
 					<span class="text-xs opacity-30">{details.achievements.length} total</span>
@@ -158,5 +217,161 @@
 				{/each}
 			</div>
 		{/if}
-	{/if}
+	{/snippet}
+
+	{#snippet cellB()}
+		<button
+			class="btn w-full btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"
+			onclick={onfetch}
+			disabled={fetching}
+		>
+			{#if fetching}
+				<span class="loading loading-xs loading-spinner"></span>
+			{:else}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+					/>
+				</svg>
+			{/if}
+			Smart Search
+		</button>
+
+		{#if fetchSteps}
+			<button
+				class="w-full cursor-pointer rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
+				onclick={onshowsearch}
+			>
+				<ul class="steps steps-horizontal w-full text-xs">
+					<li class={classNames('step', { 'step-success': fetchSteps.terms })}>Terms</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.search })}>
+						{fetchSteps.searching ? 'Searching...' : 'Search'}
+					</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.eval })}>Analysis</li>
+					<li class={classNames('step', { 'step-success': fetchSteps.done })}>
+						{fetchSteps.done ? 'Done' : 'Candidate'}
+					</li>
+				</ul>
+			</button>
+		{/if}
+
+		{#if fetchedTorrent || torrentStatus}
+			<table class="table table-xs">
+				<tbody>
+					{#if fetchedTorrent}
+						<tr>
+							<td class="font-medium opacity-60">File</td>
+							<td class="break-all">{fetchedTorrent.name}</td>
+						</tr>
+						{#if fetchedTorrent.quality}
+							<tr>
+								<td class="font-medium opacity-60">Quality</td>
+								<td><span class="badge badge-xs badge-info">{fetchedTorrent.quality}</span></td>
+							</tr>
+						{/if}
+						{#if fetchedTorrent.languages}
+							<tr>
+								<td class="font-medium opacity-60">Languages</td>
+								<td
+									><span class="badge badge-ghost badge-xs">{fetchedTorrent.languages}</span></td
+								>
+							</tr>
+						{/if}
+					{/if}
+					{#if torrentStatus}
+						<tr>
+							<td class="font-medium opacity-60">Status</td>
+							<td>
+								<span class="badge badge-xs badge-{getStateColor(torrentStatus.state)}">
+									{getStateLabel(torrentStatus.state)}
+								</span>
+							</td>
+						</tr>
+						<tr>
+							<td class="font-medium opacity-60">Size</td>
+							<td>{formatBytes(torrentStatus.size)}</td>
+						</tr>
+						{#if isDownloading}
+							<tr>
+								<td class="font-medium opacity-60">Progress</td>
+								<td>
+									<div class="flex items-center gap-2">
+										<progress
+											class="progress progress-info flex-1"
+											value={dlPercent}
+											max="100"
+										></progress>
+										<span class="text-xs font-medium">{dlPercent}%</span>
+									</div>
+								</td>
+							</tr>
+							<tr>
+								<td class="font-medium opacity-60">Speed</td>
+								<td>
+									{formatSpeed(torrentStatus.downloadSpeed)} &darr;
+									{formatSpeed(torrentStatus.uploadSpeed)} &uarr;
+								</td>
+							</tr>
+							<tr>
+								<td class="font-medium opacity-60">Peers</td>
+								<td>{torrentStatus.seeds} seeds &middot; {torrentStatus.peers} peers</td>
+							</tr>
+							{#if torrentStatus.eta !== null}
+								<tr>
+									<td class="font-medium opacity-60">ETA</td>
+									<td>{formatEta(torrentStatus.eta)}</td>
+								</tr>
+							{/if}
+						{/if}
+						{#if isDownloaded}
+							<tr>
+								<td class="font-medium opacity-60">Progress</td>
+								<td>
+									<div class="flex items-center gap-2">
+										<progress
+											class="progress progress-success flex-1"
+											value="100"
+											max="100"
+										></progress>
+										<span class="text-xs font-medium">100%</span>
+									</div>
+								</td>
+							</tr>
+						{/if}
+					{:else if fetchedTorrent}
+						<tr>
+							<td class="font-medium opacity-60">Status</td>
+							<td><span class="badge badge-ghost badge-xs">Not started</span></td>
+						</tr>
+					{/if}
+				</tbody>
+			</table>
+		{/if}
+
+		<button
+			class={classNames('btn w-full btn-sm', {
+				'btn-ghost': isDownloaded,
+				'btn-success': !isDownloaded
+			})}
+			onclick={ondownload}
+			disabled={downloadButtonDisabled}
+		>
+			{#if isDownloading}
+				<span class="loading loading-xs loading-spinner"></span> Downloading
+			{:else if isDownloaded}
+				Downloaded
+			{:else}
+				Download
+			{/if}
+		</button>
+	{/snippet}
 </DetailPageLayout>

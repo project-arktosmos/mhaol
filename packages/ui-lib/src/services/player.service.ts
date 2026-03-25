@@ -56,6 +56,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	private localPeerId: string | null = null;
 	private serverIceServers: RTCIceServer[] | null = null;
 	private ephemeralAccount = browser ? privateKeyToAccount(generatePrivateKey()) : null;
+	private playGeneration = 0;
 
 	constructor() {
 		super('player-settings', initialSettings);
@@ -114,6 +115,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		const { streamServerAvailable } = get(this.state);
 
 		await this.stop();
+		const generation = ++this.playGeneration;
 		if (displayMode) {
 			this.displayMode.set(displayMode);
 		}
@@ -155,6 +157,14 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				})
 			});
 
+			if (generation !== this.playGeneration) {
+				console.log('[Player] Stale play() after session creation, cleaning up', session.session_id);
+				fetchRaw(`/api/player/sessions/${session.session_id}`, { method: 'DELETE' }).catch(
+					() => {}
+				);
+				return;
+			}
+
 			console.log(
 				'[Player] Session created:',
 				session.session_id,
@@ -175,6 +185,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				session.room_id
 			);
 		} catch (error) {
+			if (generation !== this.playGeneration) return;
 			console.error('[Player] Playback error:', error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
@@ -611,18 +622,6 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		this.serverIceServers = null;
 
 		const currentState = get(this.state);
-
-		// Resume auto-paused torrents if we were streaming a torrent
-		if (currentState.currentFile?.id.startsWith('torrent:')) {
-			const infoHash = currentState.currentFile.id.replace('torrent:', '');
-			try {
-				await fetchRaw(`/api/torrent/torrents/${infoHash}/stream/stop`, {
-					method: 'POST'
-				});
-			} catch {
-				// Ignore cleanup errors
-			}
-		}
 
 		if (currentState.sessionId) {
 			try {

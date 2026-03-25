@@ -2,7 +2,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
 	formatArtistCredits,
 	setCoverArtBaseUrl,
+	setArtistImageBaseUrl,
 	getCoverArtUrl,
+	getArtistImageUrl,
 	formatDuration,
 	recordingToDisplay,
 	artistToDisplay,
