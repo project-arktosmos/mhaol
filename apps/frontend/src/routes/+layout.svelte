@@ -4,7 +4,7 @@
 	import Navbar from 'ui-lib/components/core/Navbar.svelte';
 	import SideDrawer from 'ui-lib/components/core/SideDrawer.svelte';
 	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
-	import SignalingStatusBadge from 'ui-lib/components/signaling/SignalingStatusBadge.svelte';
+	import NodeStatusBadge from 'ui-lib/components/core/NodeStatusBadge.svelte';
 	import ToastOutlet from 'ui-lib/components/core/ToastOutlet.svelte';
 	import SetupGate from 'ui-lib/components/setup/SetupGate.svelte';
 	import { themeService } from 'ui-lib/services/theme.service';
@@ -61,7 +61,7 @@
 		</ul>
 		<div class="divider"></div>
 		<div class="flex items-center gap-2">
-			<SignalingStatusBadge />
+			<NodeStatusBadge />
 			<button class="btn btn-ghost btn-sm" onclick={() => (setupModalOpen = true)}>Setup</button>
 			<ThemeToggle />
 		</div>
@@ -108,7 +108,7 @@
 					<a href="{base}/roster" class="btn btn-ghost btn-sm">Roster</a>
 					<a href="{base}/import" class="btn btn-ghost btn-sm">Import</a>
 					<a href="{base}/options" class="btn btn-ghost btn-sm">Options</a>
-					<SignalingStatusBadge />
+					<NodeStatusBadge />
 					<button class="btn btn-ghost btn-sm" onclick={() => (setupModalOpen = true)}>
 						Setup
 					</button>

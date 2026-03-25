@@ -55,11 +55,13 @@
 			seasons: Map<number, Set<number>>;
 		};
 		libraryFiles?: LibraryEpisodeFile[];
+		resyncing?: boolean;
 		onfetch: () => void;
 		ondownload: () => void;
 		onp2pstream: () => void;
 		onshowsearch: () => void;
 		onplayfile?: (file: LibraryEpisodeFile) => void;
+		onresync?: () => void;
 		onback: () => void;
 	}
 
@@ -75,11 +77,13 @@
 		fetchedTorrent,
 		tvMatchedSeasons,
 		libraryFiles = [],
+		resyncing = false,
 		onfetch,
 		ondownload,
 		onp2pstream,
 		onshowsearch,
 		onplayfile,
+		onresync,
 		onback
 	}: Props = $props();
 
@@ -529,16 +533,35 @@
 
 		{#if tvSeasonDetails.length > 0}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">
-					Seasons &amp; Episodes
-					{#if hasLibrary}
-						<span class="ml-1 badge badge-xs badge-success"
-							>{libraryFiles.length} file{libraryFiles.length !== 1 ? 's' : ''}</span
+				<div class="mb-1 flex items-center justify-between">
+					<h3 class="text-xs font-semibold tracking-wide uppercase opacity-50">
+						Seasons &amp; Episodes
+						{#if hasLibrary}
+							<span class="ml-1 badge badge-xs badge-success"
+								>{libraryFiles.length} file{libraryFiles.length !== 1 ? 's' : ''}</span
+							>
+						{:else if tvMatchedSeasons.hasComplete}
+							<span class="ml-1 badge badge-xs badge-success">Complete</span>
+						{/if}
+					</h3>
+					{#if onresync}
+						<button
+							class="btn btn-ghost btn-xs"
+							onclick={onresync}
+							disabled={resyncing}
+							title="Resync library files"
 						>
-					{:else if tvMatchedSeasons.hasComplete}
-						<span class="ml-1 badge badge-xs badge-success">Complete</span>
+							{#if resyncing}
+								<span class="loading loading-xs loading-spinner"></span>
+							{:else}
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+								</svg>
+							{/if}
+							Resync
+						</button>
 					{/if}
-				</h3>
+				</div>
 				<div class="flex flex-col gap-1">
 					{#each tvSeasonDetails as season (season.seasonNumber)}
 						{@const isExpanded = expandedSeason === season.seasonNumber}

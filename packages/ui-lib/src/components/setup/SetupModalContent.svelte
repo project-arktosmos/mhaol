@@ -3,10 +3,12 @@
 	import { onMount } from 'svelte';
 	import { DEFAULT_SIGNALING_URL } from 'ui-lib/lib/api-base';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
+	import { clientIdentityService } from 'ui-lib/services/client-identity.service';
 	import {
 		nodeConnectionService,
 		type NodeConnectionPhase
 	} from 'ui-lib/services/node-connection.service';
+	import { generateRandomUsername } from 'ui-lib/utils/random-username';
 	import type { TransportMode } from 'ui-lib/types/connection-config.type';
 
 	let {
@@ -20,10 +22,23 @@
 	const defaults = connectionConfigService.defaults();
 	const existingConfig = connectionConfigService.get();
 
+	const localIdentity = clientIdentityService.loadLocal();
+	let displayName = $state(localIdentity.name);
+	let clientAddress = localIdentity.address;
+
 	let transportMode = $state<TransportMode>(existingConfig?.transportMode ?? 'http');
 	let serverUrl = $state(existingConfig?.serverUrl ?? defaults.serverUrl);
 	let serverAddress = $state(existingConfig?.serverAddress ?? defaults.serverAddress);
 	let signalingUrl = $state(existingConfig?.signalingUrl ?? defaults.signalingUrl);
+
+	function handleNameChange(value: string) {
+		displayName = value;
+		clientIdentityService.updateName(value);
+	}
+
+	function randomizeName() {
+		handleNameChange(generateRandomUsername());
+	}
 
 	onMount(() => {
 		if (!existingConfig) {
@@ -142,6 +157,39 @@
 
 		<button class="btn btn-outline btn-error" onclick={handleDisconnect}> Disconnect </button>
 	{:else}
+		<!-- Client identity -->
+		<div class="rounded-lg bg-base-200 p-3">
+			<div class="text-sm">
+				<span class="text-base-content/60">Your Address</span>
+				<p class="mt-0.5 truncate font-mono text-xs">{clientAddress}</p>
+			</div>
+		</div>
+
+		<div class="form-control">
+			<label class="label" for="display-name">
+				<span class="label-text">Display Name</span>
+			</label>
+			<div class="flex gap-2">
+				<input
+					id="display-name"
+					type="text"
+					class="input-bordered input w-full"
+					placeholder="Enter your name"
+					value={displayName}
+					oninput={(e) => handleNameChange(e.currentTarget.value)}
+					disabled={connecting}
+				/>
+				<button
+					class="btn btn-square btn-ghost btn-sm self-center"
+					title="Generate random name"
+					disabled={connecting}
+					onclick={randomizeName}
+				>
+					&#x21bb;
+				</button>
+			</div>
+		</div>
+
 		<!-- Transport mode selector -->
 		<div class="flex gap-2">
 			<button

@@ -6,6 +6,7 @@ export interface IptvChannel {
 	logo: string | null;
 	website: string | null;
 	isNsfw: boolean;
+	hasEpg: boolean;
 }
 
 export interface IptvStream {
@@ -37,6 +38,19 @@ export interface IptvSearchResult {
 	limit: number;
 }
 
+export interface IptvEpgProgram {
+	title: string;
+	description?: string;
+	episode?: string;
+	start: string;
+	stop: string;
+}
+
+export interface IptvEpgResponse {
+	available: boolean;
+	programs: IptvEpgProgram[];
+}
+
 export interface IptvServiceState {
 	initialized: boolean;
 	loading: boolean;
@@ -49,4 +63,5 @@ export interface IptvServiceState {
 	query: string;
 	selectedCategory: string;
 	selectedCountry: string;
+	epgOnly: boolean;
 }

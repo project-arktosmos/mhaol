@@ -11,54 +11,56 @@
 	} = $props();
 
 	let videoElement = $state<HTMLVideoElement | null>(null);
-	let hls = $state<Hls | null>(null);
 	let error = $state<string | null>(null);
 	let loading = $state(true);
 
+	// Non-reactive — avoids re-triggering the effect
+	let hlsInstance: Hls | null = null;
+
 	$effect(() => {
-		if (!videoElement || !src) return;
+		const el = videoElement;
+		const url = src;
+		if (!el || !url) return;
+
 		destroyHls();
 		loading = true;
 		error = null;
-		attachSource(src);
+		attachSource(el, url);
+
+		return () => destroyHls();
 	});
 
-	function attachSource(url: string): void {
-		if (!videoElement) return;
-
-		// Most IPTV streams are HLS — always try hls.js first
+	function attachSource(el: HTMLVideoElement, url: string): void {
 		if (Hls.isSupported()) {
 			const instance = new Hls({
 				enableWorker: true,
 				lowLatencyMode: true
 			});
 			instance.loadSource(url);
-			instance.attachMedia(videoElement);
+			instance.attachMedia(el);
 			instance.on(Hls.Events.MANIFEST_PARSED, () => {
 				loading = false;
-				videoElement?.play().catch(() => {});
+				el.play().catch(() => {});
 			});
 			instance.on(Hls.Events.ERROR, (_event, data) => {
 				if (data.fatal) {
-					// If HLS fails, try as direct video source
 					instance.destroy();
-					hls = null;
-					tryDirectSource(url);
+					hlsInstance = null;
+					tryDirectSource(el, url);
 				}
 			});
-			hls = instance;
-		} else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-			// Safari native HLS
-			videoElement.src = url;
-			videoElement.addEventListener(
+			hlsInstance = instance;
+		} else if (el.canPlayType('application/vnd.apple.mpegurl')) {
+			el.src = url;
+			el.addEventListener(
 				'loadedmetadata',
 				() => {
 					loading = false;
-					videoElement?.play().catch(() => {});
+					el.play().catch(() => {});
 				},
 				{ once: true }
 			);
-			videoElement.addEventListener(
+			el.addEventListener(
 				'error',
 				() => {
 					error = 'Failed to load stream';
@@ -67,22 +69,21 @@
 				{ once: true }
 			);
 		} else {
-			tryDirectSource(url);
+			tryDirectSource(el, url);
 		}
 	}
 
-	function tryDirectSource(url: string): void {
-		if (!videoElement) return;
-		videoElement.src = url;
-		videoElement.addEventListener(
+	function tryDirectSource(el: HTMLVideoElement, url: string): void {
+		el.src = url;
+		el.addEventListener(
 			'loadedmetadata',
 			() => {
 				loading = false;
-				videoElement?.play().catch(() => {});
+				el.play().catch(() => {});
 			},
 			{ once: true }
 		);
-		videoElement.addEventListener(
+		el.addEventListener(
 			'error',
 			() => {
 				error = 'Failed to load stream';
@@ -93,13 +94,9 @@
 	}
 
 	function destroyHls(): void {
-		if (hls) {
-			hls.destroy();
-			hls = null;
-		}
-		if (videoElement) {
-			videoElement.removeAttribute('src');
-			videoElement.load();
+		if (hlsInstance) {
+			hlsInstance.destroy();
+			hlsInstance = null;
 		}
 	}
 
@@ -132,7 +129,7 @@
 					onclick={() => {
 						error = null;
 						loading = true;
-						if (videoElement && src) attachSource(src);
+						if (videoElement && src) attachSource(videoElement, src);
 					}}
 				>
 					Retry

@@ -22,7 +22,10 @@
 	)}
 	{onclick}
 >
-	<figure class="flex h-32 items-center justify-center overflow-hidden bg-base-300">
+	<figure class="relative flex h-32 items-center justify-center overflow-hidden bg-base-300">
+		{#if channel.hasEpg}
+			<span class="badge badge-xs badge-info absolute right-1 top-1">EPG</span>
+		{/if}
 		{#if channel.logo}
 			<img
 				src={channel.logo}

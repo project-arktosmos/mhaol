@@ -13,9 +13,10 @@
 		iptvService.search();
 	}
 
-	function handleFilterChange(filters: { category?: string; country?: string }): void {
+	function handleFilterChange(filters: { category?: string; country?: string; epgOnly?: boolean }): void {
 		if (filters.category !== undefined) iptvService.setCategory(filters.category);
 		if (filters.country !== undefined) iptvService.setCountry(filters.country);
+		if (filters.epgOnly !== undefined) iptvService.setEpgOnly(filters.epgOnly);
 		iptvService.search();
 	}
 
@@ -43,6 +44,7 @@
 	query={$state.query}
 	selectedCategory={$state.selectedCategory}
 	selectedCountry={$state.selectedCountry}
+	epgOnly={$state.epgOnly}
 	onsearch={handleSearch}
 	onfilterchange={handleFilterChange}
 	onpagechange={handlePageChange}

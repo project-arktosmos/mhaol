@@ -26,6 +26,7 @@
 	let loading = $state(true);
 	let fetchingTmdbId = $state<number | null>(null);
 	let libraryFiles = $state<LibraryEpisodeFile[]>([]);
+	let resyncing = $state(false);
 
 	const searchStore = smartSearchService.store;
 	const torrentState = torrentService.state;
@@ -356,6 +357,32 @@
 		playerService.play(file, 'inline');
 	}
 
+	async function handleResync() {
+		resyncing = true;
+		try {
+			const mediaRes = await fetch(apiUrl('/api/media'));
+			if (!mediaRes.ok) return;
+			const mediaData = await mediaRes.json();
+			const lists: MediaList[] = mediaData.lists ?? [];
+
+			const showLists = lists.filter(
+				(l: MediaList) => l.parentListId === null && l.links?.tmdb?.serviceId === String(tmdbId)
+			);
+
+			const libraryIds = [...new Set(showLists.map((l: MediaList) => l.libraryId))];
+
+			await Promise.all(
+				libraryIds.map((id: string) =>
+					fetch(apiUrl(`/api/libraries/${id}/scan`), { method: 'POST' })
+				)
+			);
+
+			await fetchLibraryData(tmdbId);
+		} finally {
+			resyncing = false;
+		}
+	}
+
 	onMount(() => {
 		fetchTvShow(tmdbId);
 	});
@@ -380,11 +407,13 @@
 			: null}
 		{tvMatchedSeasons}
 		{libraryFiles}
+		{resyncing}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onp2pstream={handleP2pStream}
 		onshowsearch={() => smartSearchService.show()}
 		onplayfile={handlePlayFile}
+		onresync={handleResync}
 		onback={() => goto(`${base}/tv`)}
 	/>
 {:else if loading}
