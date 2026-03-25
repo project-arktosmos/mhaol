@@ -47,6 +47,8 @@
 		fetchedTorrent: { name: string; quality: string; languages: string } | null;
 		imagesVisible: boolean;
 		imageOverrides: Record<string, string> | null;
+		isFavorite: boolean;
+		togglingFavorite: boolean;
 		onfetch: () => void;
 		ondownload: () => void;
 		onp2pstream: () => void;
@@ -54,6 +56,7 @@
 		onback: () => void;
 		ontoggleimages: () => void;
 		onsetimageoverride: (filePath: string, role: 'poster' | 'backdrop') => void;
+		ontogglefavorite: () => void;
 	}
 
 	let {
@@ -69,13 +72,16 @@
 		fetchedTorrent,
 		imagesVisible,
 		imageOverrides,
+		isFavorite,
+		togglingFavorite,
 		onfetch,
 		ondownload,
 		onp2pstream,
 		onshowsearch,
 		onback,
 		ontoggleimages,
-		onsetimageoverride
+		onsetimageoverride,
+		ontogglefavorite
 	}: Props = $props();
 
 	let title = $derived(movie.title);
@@ -370,6 +376,35 @@
 				/>
 			</div>
 		{/if}
+
+		<button
+			class={classNames('btn w-full btn-sm', {
+				'btn-error': isFavorite,
+				'btn-outline': !isFavorite
+			})}
+			onclick={ontogglefavorite}
+			disabled={togglingFavorite}
+		>
+			{#if togglingFavorite}
+				<span class="loading loading-xs loading-spinner"></span>
+			{:else}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4"
+					viewBox="0 0 24 24"
+					fill={isFavorite ? 'currentColor' : 'none'}
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+					/>
+				</svg>
+			{/if}
+			{isFavorite ? 'Unfavorite' : 'Favorite'}
+		</button>
 
 		<button
 			class="btn w-full btn-sm {fetched ? 'btn-ghost' : 'btn-info'}"

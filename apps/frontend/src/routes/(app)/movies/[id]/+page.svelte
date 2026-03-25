@@ -7,6 +7,8 @@
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { playerService } from 'ui-lib/services/player.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { profileService } from 'ui-lib/services/profile.service';
 	import { movieDetailsToDisplay, getPosterUrl, getBackdropUrl } from 'addons/tmdb/transform';
 	import type { DisplayTMDBMovie, DisplayTMDBMovieDetails } from 'addons/tmdb/types';
 	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
@@ -24,6 +26,14 @@
 	let fetchingTmdbId = $state<number | null>(null);
 	let imagesVisible = $state(false);
 	let imageOverrides = $state<Record<string, string> | null>(null);
+	let togglingFavorite = $state(false);
+
+	const favState = favoritesService.state;
+	const profileStore = profileService.state;
+
+	let isFavorite = $derived(
+		$favState.items.some((f) => f.service === 'tmdb' && f.serviceId === String(tmdbId))
+	);
 
 	const searchStore = smartSearchService.store;
 	const torrentState = torrentService.state;
@@ -268,6 +278,16 @@
 		}
 	}
 
+	async function handleToggleFavorite() {
+		if (!movie) return;
+		togglingFavorite = true;
+		try {
+			await favoritesService.toggle('tmdb', String(movie.id), movie.title);
+		} finally {
+			togglingFavorite = false;
+		}
+	}
+
 	onMount(() => {
 		fetchMovie(tmdbId);
 	});
@@ -293,6 +313,8 @@
 			: null}
 		{imagesVisible}
 		{imageOverrides}
+		{isFavorite}
+		{togglingFavorite}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onp2pstream={handleP2pStream}
@@ -300,6 +322,7 @@
 		onback={() => goto(`${base}/movies`)}
 		ontoggleimages={() => { imagesVisible = true; }}
 		onsetimageoverride={handleSetImageOverride}
+		ontogglefavorite={handleToggleFavorite}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">
