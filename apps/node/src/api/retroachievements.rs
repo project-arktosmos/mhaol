@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -16,6 +16,8 @@ pub fn router() -> Router<AppState> {
         .route("/games", get(get_game_list))
         .route("/games/{id}", get(get_game_details))
         .route("/image/{*path}", get(serve_ra_image))
+        .route("/fetch-cache/{ra_game_id}", get(get_game_fetch_cache).delete(delete_game_fetch_cache))
+        .route("/fetch-cache", post(save_game_fetch_cache))
 }
 
 #[derive(Deserialize)]
@@ -222,4 +224,47 @@ async fn serve_ra_image(
         604800,
     )
     .await
+}
+
+// --- Game fetch cache endpoints ---
+
+async fn get_game_fetch_cache(
+    State(state): State<AppState>,
+    Path(ra_game_id): Path<i64>,
+) -> impl IntoResponse {
+    match state.game_torrent_fetch_cache.get(ra_game_id) {
+        Some(row) => Json(serde_json::json!({
+            "raGameId": row.ra_game_id,
+            "candidate": serde_json::from_str::<serde_json::Value>(&row.candidate_json).unwrap_or_default(),
+            "createdAt": row.created_at,
+        }))
+        .into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveGameFetchCacheBody {
+    ra_game_id: i64,
+    candidate: serde_json::Value,
+}
+
+async fn save_game_fetch_cache(
+    State(state): State<AppState>,
+    Json(body): Json<SaveGameFetchCacheBody>,
+) -> impl IntoResponse {
+    let candidate_json = serde_json::to_string(&body.candidate).unwrap_or_default();
+    state
+        .game_torrent_fetch_cache
+        .upsert(body.ra_game_id, &candidate_json);
+    StatusCode::CREATED
+}
+
+async fn delete_game_fetch_cache(
+    State(state): State<AppState>,
+    Path(ra_game_id): Path<i64>,
+) -> impl IntoResponse {
+    state.game_torrent_fetch_cache.delete(ra_game_id);
+    StatusCode::NO_CONTENT
 }

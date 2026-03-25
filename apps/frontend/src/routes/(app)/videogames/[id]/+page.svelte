@@ -117,6 +117,21 @@
 			const detail = gameExtendedToDisplay(data as RaGameExtended);
 			game = detail;
 			details = detail;
+
+			const cached = await smartSearchService.checkGameFetchCache(detail.id);
+			if (cached) {
+				fetchingGameId = detail.id;
+				smartSearchService.setSelection({
+					title: detail.title,
+					year: '',
+					type: 'game',
+					retroachievementsId: detail.id,
+					consoleId: detail.consoleId,
+					consoleName: detail.consoleName,
+					mode: 'fetch'
+				});
+				smartSearchService.setFetchedCandidate(cached);
+			}
 		} catch {
 			game = null;
 			details = null;
@@ -124,8 +139,23 @@
 		detailsLoading = false;
 	}
 
-	function handleFetch() {
+	async function handleFetch() {
 		if (!game) return;
+		const cached = await smartSearchService.checkGameFetchCache(game.id);
+		if (cached) {
+			fetchingGameId = game.id;
+			smartSearchService.setSelection({
+				title: game.title,
+				year: '',
+				type: 'game',
+				retroachievementsId: game.id,
+				consoleId: game.consoleId,
+				consoleName: game.consoleName,
+				mode: 'fetch'
+			});
+			smartSearchService.setFetchedCandidate(cached);
+			return;
+		}
 		fetchingGameId = game.id;
 		smartSearchService.select({
 			title: game.title,

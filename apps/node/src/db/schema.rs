@@ -895,6 +895,17 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: add game_torrent_fetch_cache table
+    if !has_table(conn, "game_torrent_fetch_cache") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE game_torrent_fetch_cache (
+                ra_game_id INTEGER PRIMARY KEY,
+                candidate_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        );
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(

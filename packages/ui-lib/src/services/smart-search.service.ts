@@ -354,6 +354,11 @@ class SmartSearchService {
 			const best = this.pickBestFromList(state.searchResults);
 			if (best) {
 				this.setFetchedCandidate(best);
+				if (selection.type === 'game') {
+					this.saveGameFetchCache(selection.retroachievementsId, best);
+				} else if (selection.type === 'movie') {
+					this.saveFetchCache(selection.tmdbId, 'movie', best);
+				}
 			}
 		}
 
@@ -889,6 +894,34 @@ class SmartSearchService {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ tmdbId, mediaType, candidate })
+			});
+		} catch {
+			// best-effort
+		}
+	}
+
+	async checkGameFetchCache(raGameId: number): Promise<SmartSearchTorrentResult | null> {
+		try {
+			const res = await fetchRaw(`/api/retroachievements/fetch-cache/${raGameId}`);
+			if (!res.ok) return null;
+			const data = await res.json();
+			const candidate = data.candidate as SmartSearchTorrentResult;
+			candidate.uploadedAt = new Date(candidate.uploadedAt);
+			return candidate;
+		} catch {
+			return null;
+		}
+	}
+
+	async saveGameFetchCache(
+		raGameId: number,
+		candidate: SmartSearchTorrentResult
+	): Promise<void> {
+		try {
+			await fetchRaw('/api/retroachievements/fetch-cache', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ raGameId, candidate })
 			});
 		} catch {
 			// best-effort
