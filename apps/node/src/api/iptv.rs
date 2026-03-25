@@ -9,6 +9,7 @@ use axum::{
 };
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -378,6 +379,7 @@ pub fn router() -> Router<AppState> {
         .route("/countries", get(list_countries))
         .route("/languages", get(list_languages))
         .route("/stream", get(proxy_stream))
+        .route("/proxy", get(proxy_url))
         .route("/epg", get(get_epg))
 }
 
@@ -620,7 +622,7 @@ async fn proxy_stream(
             ];
 
             if is_manifest {
-                // Rewrite relative URLs in the manifest to absolute upstream URLs
+                // Rewrite URLs in the manifest to route through the proxy
                 let base_url = stream.url.rsplit_once('/').map(|(b, _)| b).unwrap_or("");
                 let text = match resp.text().await {
                     Ok(t) => t,
@@ -655,25 +657,54 @@ async fn proxy_stream(
     }
 }
 
-/// Rewrite relative URLs in an HLS manifest to absolute URLs.
+// ---------- proxy URL token map ----------
+// Maps short numeric tokens to full URLs to avoid URI length limits.
+
+static PROXY_TOKEN_COUNTER: AtomicU64 = AtomicU64::new(1);
+static PROXY_TOKEN_MAP: OnceLock<RwLock<std::collections::HashMap<String, String>>> =
+    OnceLock::new();
+
+fn proxy_token_map() -> &'static RwLock<std::collections::HashMap<String, String>> {
+    PROXY_TOKEN_MAP.get_or_init(|| RwLock::new(std::collections::HashMap::new()))
+}
+
+fn store_proxy_url(url: &str) -> String {
+    let token = PROXY_TOKEN_COUNTER.fetch_add(1, Ordering::Relaxed).to_string();
+    proxy_token_map()
+        .write()
+        .insert(token.clone(), url.to_string());
+    token
+}
+
+fn resolve_proxy_token(token: &str) -> Option<String> {
+    proxy_token_map().read().get(token).cloned()
+}
+
+/// Resolve a URL to absolute, store it, and return a short proxy URL with a token.
+fn to_proxy_url(url: &str, base_url: &str) -> String {
+    let absolute = if url.starts_with("http://") || url.starts_with("https://") {
+        url.to_string()
+    } else {
+        format!("{}/{}", base_url, url)
+    };
+    let token = store_proxy_url(&absolute);
+    format!("/api/iptv/proxy?t={}", token)
+}
+
+/// Rewrite all URLs in an HLS manifest to go through the proxy endpoint.
 fn rewrite_manifest_urls(manifest: &str, base_url: &str) -> String {
     manifest
         .lines()
         .map(|line| {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with('#') {
-                // For URI= attributes inside tags like #EXT-X-MEDIA
                 if trimmed.contains("URI=\"") {
                     rewrite_uri_attribute(line, base_url)
                 } else {
                     line.to_string()
                 }
-            } else if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-                // Already absolute
-                line.to_string()
             } else {
-                // Relative URL — make absolute
-                format!("{}/{}", base_url, trimmed)
+                to_proxy_url(trimmed, base_url)
             }
         })
         .collect::<Vec<_>>()
@@ -686,18 +717,105 @@ fn rewrite_uri_attribute(line: &str, base_url: &str) -> String {
         let uri_start = start + 5;
         if let Some(end) = result[uri_start..].find('"') {
             let uri = &result[uri_start..uri_start + end];
-            if !uri.starts_with("http://") && !uri.starts_with("https://") {
-                let absolute = format!("{}/{}", base_url, uri);
-                result = format!(
-                    "{}URI=\"{}\"{}",
-                    &line[..start],
-                    absolute,
-                    &line[uri_start + end + 1..]
-                );
-            }
+            let proxied = to_proxy_url(uri, base_url);
+            result = format!(
+                "{}URI=\"{}\"{}",
+                &line[..start],
+                proxied,
+                &line[uri_start + end + 1..]
+            );
         }
     }
     result
+}
+
+// ---------- generic URL proxy ----------
+
+#[derive(Deserialize)]
+struct ProxyQuery {
+    t: String,
+}
+
+async fn proxy_url(
+    State(_state): State<AppState>,
+    Query(query): Query<ProxyQuery>,
+) -> impl IntoResponse {
+    let url = match resolve_proxy_token(&query.t) {
+        Some(u) => u,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Unknown proxy token" })),
+            )
+                .into_response()
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let resp = match client
+        .get(&url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({ "error": format!("Proxy fetch failed: {e}") })),
+            )
+                .into_response()
+        }
+    };
+
+    let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::OK);
+    let content_type = resp
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream")
+        .to_string();
+
+    let is_manifest = content_type.contains("mpegurl")
+        || content_type.contains("x-mpegURL")
+        || url.ends_with(".m3u8")
+        || url.ends_with(".m3u");
+
+    if is_manifest {
+        let base_url = url.rsplit_once('/').map(|(b, _)| b).unwrap_or("");
+        let text = match resp.text().await {
+            Ok(t) => t,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response()
+            }
+        };
+        let rewritten = rewrite_manifest_urls(&text, base_url);
+        (
+            status,
+            [
+                (header::CONTENT_TYPE, content_type),
+                (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".to_string()),
+            ],
+            rewritten,
+        )
+            .into_response()
+    } else {
+        let body = Body::from_stream(resp.bytes_stream());
+        (
+            status,
+            [(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".to_string())],
+            [(header::CONTENT_TYPE, content_type)],
+            body,
+        )
+            .into_response()
+    }
 }
 
 // ---------- EPG ----------
