@@ -54,16 +54,13 @@
 				</a>
 			</li>
 			<li><a href="{base}/iptv">IPTV</a></li>
-			<li><a href="{base}/connect">Connect</a></li>
-			<li><a href="{base}/roster">Roster</a></li>
 			<li><a href="{base}/profiles">Profiles</a></li>
 			<li><a href="{base}/import">Import</a></li>
 			<li><a href="{base}/options">Options</a></li>
 		</ul>
 		<div class="divider"></div>
 		<div class="flex items-center gap-2">
-			<NodeStatusBadge />
-			<button class="btn btn-ghost btn-sm" onclick={() => (setupModalOpen = true)}>Setup</button>
+			<NodeStatusBadge onclick={() => (setupModalOpen = true)} />
 			<ThemeToggle />
 		</div>
 	{/snippet}
@@ -72,19 +69,19 @@
 		<Navbar brand={{ label: 'Mhaol', highlight: 'Media' }} classes="!bg-base-300">
 			{#snippet center()}
 				<div class="hidden items-center gap-1 lg:flex">
-					<a href="{base}/movies" class="btn btn-ghost btn-sm">Movies</a>
-					<a href="{base}/tv" class="btn btn-ghost btn-sm">TV</a>
-					<a href="{base}/music" class="btn btn-ghost btn-sm">Music</a>
-					<a href="{base}/videogames" class="btn btn-ghost btn-sm">Games</a>
-					<a href="{base}/books" class="btn btn-ghost btn-sm">Books</a>
-					<a href="{base}/photos" class="btn btn-ghost btn-sm">Photos</a>
-					<a href="{base}/youtube" class="btn btn-ghost btn-sm">
+					<a href="{base}/movies" class="btn btn-outline btn-sm">Movies</a>
+					<a href="{base}/tv" class="btn btn-outline btn-sm">TV</a>
+					<a href="{base}/music" class="btn btn-outline btn-sm">Music</a>
+					<a href="{base}/videogames" class="btn btn-outline btn-sm">Games</a>
+					<a href="{base}/books" class="btn btn-outline btn-sm">Books</a>
+					<a href="{base}/photos" class="btn btn-outline btn-sm">Photos</a>
+					<a href="{base}/youtube" class="btn btn-outline btn-sm">
 						YouTube
 						{#if ytActiveCount > 0}
 							<span class="badge badge-xs badge-primary ml-1">{ytActiveCount}</span>
 						{/if}
 					</a>
-					<a href="{base}/iptv" class="btn btn-ghost btn-sm">IPTV</a>
+					<a href="{base}/iptv" class="btn btn-outline btn-sm">IPTV</a>
 				</div>
 			{/snippet}
 			{#snippet end()}
@@ -105,15 +102,10 @@
 					</svg>
 				</button>
 				<div class="hidden items-center gap-1 lg:flex">
-					<a href="{base}/connect" class="btn btn-ghost btn-sm">Connect</a>
-					<a href="{base}/roster" class="btn btn-ghost btn-sm">Roster</a>
 					<a href="{base}/profiles" class="btn btn-ghost btn-sm">Profiles</a>
 					<a href="{base}/import" class="btn btn-ghost btn-sm">Import</a>
 					<a href="{base}/options" class="btn btn-ghost btn-sm">Options</a>
-					<NodeStatusBadge />
-					<button class="btn btn-ghost btn-sm" onclick={() => (setupModalOpen = true)}>
-						Setup
-					</button>
+					<NodeStatusBadge onclick={() => (setupModalOpen = true)} />
 					<ThemeToggle />
 				</div>
 			{/snippet}

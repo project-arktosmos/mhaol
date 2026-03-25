@@ -5,6 +5,8 @@
 	import { clientIdentityService } from 'ui-lib/services/client-identity.service';
 	import { signalingAdapter } from 'ui-lib/adapters/classes/signaling.adapter';
 
+	let { onclick }: { onclick?: () => void } = $props();
+
 	const connState = nodeConnectionService.state;
 	const configStore = connectionConfigService.store;
 
@@ -28,46 +30,19 @@
 		: '';
 </script>
 
-<div class="dropdown dropdown-end dropdown-hover">
-	<div
-		tabindex="0"
-		role="button"
-		class="flex cursor-pointer items-center gap-1.5"
-		title={statusLabel}
-	>
-		<span
-			class={classNames('h-2 w-2 rounded-full', {
-				'bg-success': connected,
-				'animate-pulse bg-info': connecting,
-				'bg-base-content/30': !connected && !connecting
-			})}
-		></span>
-		<span class="hidden text-xs text-base-content/60 sm:inline">
-			{statusLabel}
-		</span>
-	</div>
-	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-	<div
-		tabindex="0"
-		class="dropdown-content z-50 mt-2 w-64 rounded-box bg-base-200 p-3 shadow-lg"
-	>
-		<div class="flex flex-col gap-2 text-sm">
-			<div>
-				<span class="text-base-content/60">Name</span>
-				<p class="mt-0.5 font-medium">{localIdentity.name}</p>
-			</div>
-			<div>
-				<span class="text-base-content/60">Address</span>
-				<p class="mt-0.5 truncate font-mono text-xs" title={localIdentity.address}>
-					{shortAddress}
-				</p>
-			</div>
-			{#if $configStore}
-				<div>
-					<span class="text-base-content/60">Transport</span>
-					<p class="mt-0.5">{$configStore.transportMode.toUpperCase()}</p>
-				</div>
-			{/if}
-		</div>
-	</div>
-</div>
+<button
+	class="flex cursor-pointer items-center gap-1.5"
+	title={statusLabel}
+	onclick={onclick}
+>
+	<span
+		class={classNames('h-2 w-2 rounded-full', {
+			'bg-success': connected,
+			'animate-pulse bg-info': connecting,
+			'bg-base-content/30': !connected && !connecting
+		})}
+	></span>
+	<span class="hidden text-xs text-base-content/60 sm:inline">
+		{statusLabel}
+	</span>
+</button>
