@@ -10,6 +10,7 @@
 		selected = false,
 		fetched = false,
 		dimmed = false,
+		matching = false,
 		downloadState = null,
 		downloadProgress = null,
 		onclick
@@ -19,6 +20,7 @@
 		selected?: boolean;
 		fetched?: boolean;
 		dimmed?: boolean;
+		matching?: boolean;
 		downloadState?: TorrentState | null;
 		downloadProgress?: number | null;
 		onclick?: () => void;
@@ -165,7 +167,7 @@
 	</div>
 {:else}
 	<div
-		class={classNames('group card-compact card border border-info/40 bg-base-200 shadow-sm', {
+		class={classNames('group card-compact card relative border border-info/40 bg-base-200 shadow-sm', {
 			'cursor-pointer transition-shadow hover:shadow-md': !!onclick,
 			'ring-2 ring-primary': selected
 		})}
@@ -181,6 +183,11 @@
 				}
 			: undefined}
 	>
+		{#if matching}
+			<div class="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-base-300/70">
+				<span class="loading loading-md loading-spinner text-primary"></span>
+			</div>
+		{/if}
 		<figure class="relative h-48 overflow-hidden bg-base-300">
 			{#if imageUrl}
 				<img src={imageUrl} alt={title} class="h-full w-full object-cover" loading="lazy" />

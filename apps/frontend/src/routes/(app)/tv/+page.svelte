@@ -1,16 +1,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
+  import { goto, invalidateAll } from "$app/navigation";
   import { apiUrl } from "ui-lib/lib/api-base";
   import { tmdbBrowseService } from "ui-lib/services/tmdb-browse.service";
   import { smartPairService } from "ui-lib/services/smart-pair.service";
   import type { DisplayTMDBTvShow } from "addons/tmdb/types";
+  import { tvShowToDisplay } from "addons/tmdb/transform";
   import type {
     MediaCategory,
     MediaLinkSource,
   } from "ui-lib/types/media-card.type";
   import type { MediaList } from "ui-lib/types/media-list.type";
-  import SearchTab from "ui-lib/components/tmdb-browse/SearchTab.svelte";
   import PopularTab from "ui-lib/components/tmdb-browse/PopularTab.svelte";
   import TmdbBrowseGrid from "ui-lib/components/tmdb-browse/TmdbBrowseGrid.svelte";
   import TmdbPagination from "ui-lib/components/tmdb-browse/TmdbPagination.svelte";
@@ -35,22 +35,128 @@
 
   let pinnedTvShows = $state<DisplayTMDBTvShow[]>([]);
   let matchModalList: MediaList | null = $state(null);
+  let tvSearchInput = $state('');
+  let tmdbMetadataMap = $state(new Map<string, DisplayTMDBTvShow>());
+  let autoMatchingDisplayId: number | null = $state(null);
+  let matchAllState: { total: number; completed: number; matched: number } | null = $state(null);
 
   // Navigate to TMDB detail page (for browse results and pinned)
   function handleSelectTvShow(tvShow: DisplayTMDBTvShow) {
     goto(`/tv/${tvShow.id}`);
   }
 
-  // Handle library show click: navigate if TMDB-linked, otherwise open match modal
-  function handleSelectLibraryShow(tvShow: DisplayTMDBTvShow) {
+  // Handle library show click: navigate if TMDB-linked, otherwise auto-match
+  async function handleSelectLibraryShow(tvShow: DisplayTMDBTvShow) {
     const list = listByDisplayId.get(tvShow.id);
     if (!list) return;
 
     const tmdbLink = list.links?.tmdb;
     if (tmdbLink) {
       goto(`/tv/${tmdbLink.serviceId}`);
-    } else {
+      return;
+    }
+
+    // Try auto-match
+    autoMatchingDisplayId = tvShow.id;
+    try {
+      const result = await autoMatchSingle(list);
+      if (result?.matched && result.tmdbId) {
+        await invalidateAll();
+        await fetchTmdbMetadataForLists();
+        goto(`/tv/${result.tmdbId}`);
+      } else {
+        // Low confidence or no match — fall back to manual modal
+        matchModalList = list;
+      }
+    } catch {
       matchModalList = list;
+    } finally {
+      autoMatchingDisplayId = null;
+    }
+  }
+
+  interface AutoMatchResult {
+    listId: string;
+    matched: boolean;
+    tmdbId: number | null;
+    tmdbTitle: string | null;
+    tmdbYear: string | null;
+    tmdbPosterPath: string | null;
+    confidence: string;
+  }
+
+  async function autoMatchSingle(list: MediaList): Promise<AutoMatchResult | null> {
+    const res = await fetch(apiUrl('/api/media-lists/auto-match'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lists: [{ listId: list.id, title: list.title }] }),
+    });
+    if (!res.ok) return null;
+
+    const text = await res.text();
+    const line = text.trim().split('\n')[0];
+    if (!line) return null;
+    return JSON.parse(line) as AutoMatchResult;
+  }
+
+  async function handleMatchAll(libraryId: string) {
+    const unlinked = tvShowLists.filter(
+      (l) => l.libraryId === libraryId && !l.links?.tmdb,
+    );
+    if (unlinked.length === 0) return;
+
+    matchAllState = { total: unlinked.length, completed: 0, matched: 0 };
+
+    try {
+      const res = await fetch(apiUrl('/api/media-lists/auto-match'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lists: unlinked.map((l) => ({ listId: l.id, title: l.title })),
+        }),
+      });
+      if (!res.ok) {
+        matchAllState = null;
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        matchAllState = null;
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const result: AutoMatchResult = JSON.parse(line);
+            matchAllState = {
+              total: matchAllState!.total,
+              completed: matchAllState!.completed + 1,
+              matched: matchAllState!.matched + (result.matched ? 1 : 0),
+            };
+          } catch {
+            // skip malformed
+          }
+        }
+      }
+
+      await invalidateAll();
+      await fetchTmdbMetadataForLists();
+    } finally {
+      // Keep summary visible briefly, then clear
+      setTimeout(() => { matchAllState = null; }, 3000);
     }
   }
 
@@ -66,7 +172,8 @@
 
     if (res.ok) {
       matchModalList = null;
-      goto(`/tv/${tmdbId}`);
+      await invalidateAll();
+      await fetchTmdbMetadataForLists();
     }
   }
 
@@ -116,10 +223,30 @@
     return counts;
   });
 
+  // Count unlinked lists per library for showing Match All button
+  let unlinkedCountByLibrary = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const list of tvShowLists) {
+      if (!list.links?.tmdb) {
+        counts.set(list.libraryId, (counts.get(list.libraryId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  });
+
   function listToDisplayTvShow(list: MediaList): DisplayTMDBTvShow {
     const seasonCount = seasonCountByShowId.get(list.id) ?? null;
     const episodeCount =
       episodeCountByShowId.get(list.id) ?? list.itemCount ?? null;
+    const tmdbMeta = tmdbMetadataMap.get(list.id);
+    if (tmdbMeta) {
+      return {
+        ...tmdbMeta,
+        id: listIdMap.get(list.id)!,
+        numberOfSeasons: seasonCount ?? tmdbMeta.numberOfSeasons,
+        numberOfEpisodes: episodeCount ?? tmdbMeta.numberOfEpisodes,
+      };
+    }
     return {
       id: listIdMap.get(list.id)!,
       name: list.title,
@@ -157,6 +284,33 @@
       .filter((g) => g.tvShows.length > 0);
   });
 
+  async function fetchTmdbMetadataForLists() {
+    const linked = tvShowLists.filter((l) => l.links?.tmdb?.serviceId);
+    if (linked.length === 0) return;
+
+    const results = await Promise.all(
+      linked.map(async (list) => {
+        try {
+          const tmdbId = list.links.tmdb.serviceId;
+          const res = await fetch(apiUrl(`/api/tmdb/tv/${tmdbId}`));
+          if (res.ok) {
+            const raw = await res.json();
+            return { listId: list.id, display: tvShowToDisplay(raw) };
+          }
+        } catch {
+          // best-effort
+        }
+        return null;
+      }),
+    );
+
+    const newMap = new Map(tmdbMetadataMap);
+    for (const r of results) {
+      if (r) newMap.set(r.listId, r.display);
+    }
+    tmdbMetadataMap = newMap;
+  }
+
   onMount(() => {
     tmdbBrowseService.loadPopularTv();
     tmdbBrowseService.loadGenres();
@@ -164,14 +318,27 @@
     smartPairService.loadPinned().then((pinned) => {
       pinnedTvShows = pinned.tv;
     });
+    fetchTmdbMetadataForLists();
   });
 </script>
 
-<div class="relative min-w-0 flex-1 overflow-y-auto p-4">
-  <div class="absolute right-3 top-3 z-10">
-    <BrowseViewToggle />
+<div class="relative min-w-0 flex-1 overflow-y-auto">
+  <div class="flex items-center justify-between gap-4 border-b border-base-300 px-4 py-3">
+    <h1 class="text-lg font-bold">TV Shows</h1>
+    <div class="flex items-center gap-2">
+      <form class="join" onsubmit={(e) => { e.preventDefault(); if (tvSearchInput.trim()) tmdbBrowseService.searchTv(tvSearchInput.trim()); }}>
+        <input
+          type="text"
+          placeholder="Search TV shows..."
+          class="input join-item input-bordered input-sm w-48"
+          bind:value={tvSearchInput}
+        />
+        <button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
+      </form>
+      <BrowseViewToggle />
+    </div>
   </div>
-  <div class="container mx-auto">
+  <div class="container mx-auto p-4">
     {#if pinnedTvShows.length > 0}
       <section class="mb-8">
         <h2 class="mb-3 text-lg font-semibold">Pinned</h2>
@@ -184,33 +351,58 @@
 
     {#each libraryGroups as group (group.libraryId)}
       <section class="mb-8">
-        <h2 class="mb-3 text-lg font-semibold">{group.name}</h2>
+        <div class="mb-3 flex items-center gap-3">
+          <h2 class="text-lg font-semibold">{group.name}</h2>
+          {#if (unlinkedCountByLibrary.get(group.libraryId) ?? 0) > 0}
+            {#if matchAllState}
+              <span class="text-sm opacity-70">
+                {#if matchAllState.completed < matchAllState.total}
+                  Matching {matchAllState.completed}/{matchAllState.total}...
+                  <span class="loading loading-xs loading-spinner"></span>
+                {:else}
+                  Matched {matchAllState.matched}/{matchAllState.total}
+                {/if}
+              </span>
+            {:else}
+              <button
+                class="btn btn-outline btn-xs"
+                onclick={() => handleMatchAll(group.libraryId)}
+              >
+                Match All ({unlinkedCountByLibrary.get(group.libraryId)})
+              </button>
+            {/if}
+          {/if}
+        </div>
         <TmdbBrowseGrid
           tvShows={group.tvShows}
+          matchingTvShowId={autoMatchingDisplayId}
           onselectTvShow={handleSelectLibraryShow}
         />
       </section>
     {/each}
 
-    <section class="mb-8">
-      <h2 class="mb-3 text-lg font-semibold">Search TV Shows</h2>
-      <SearchTab
-        movies={[]}
-        tvShows={$browseState.searchTv}
-        moviesPage={1}
-        tvPage={$browseState.searchTvPage}
-        moviesTotalPages={1}
-        tvTotalPages={$browseState.searchTvTotalPages}
-        query={$browseState.searchQuery}
-        loadingTv={$browseState.loading["searchTv"] ?? false}
-        error={$browseState.error}
-        mediaType="tv"
-        selectedTvShowId={null}
-        onselectTvShow={handleSelectTvShow}
-        onsearchMovies={() => {}}
-        onsearchTv={(q, p) => tmdbBrowseService.searchTv(q, p)}
-      />
-    </section>
+    {#if $browseState.loading["searchTv"]}
+      <section class="mb-8">
+        <h2 class="mb-3 text-lg font-semibold">Search Results</h2>
+        <div class="flex justify-center p-8">
+          <span class="loading loading-lg loading-spinner"></span>
+        </div>
+      </section>
+    {:else if $browseState.searchTv.length > 0}
+      <section class="mb-8">
+        <h2 class="mb-3 text-lg font-semibold">Search Results</h2>
+        <TmdbBrowseGrid
+          tvShows={$browseState.searchTv}
+          onselectTvShow={handleSelectTvShow}
+        />
+        <TmdbPagination
+          page={$browseState.searchTvPage}
+          totalPages={$browseState.searchTvTotalPages}
+          loading={$browseState.loading["searchTv"] ?? false}
+          onpage={(p) => tmdbBrowseService.searchTv($browseState.searchQuery, p)}
+        />
+      </section>
+    {/if}
 
     <section class="mb-8">
       <h2 class="mb-3 text-lg font-semibold">Popular TV Shows</h2>

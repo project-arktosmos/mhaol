@@ -13,14 +13,19 @@
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { fetchRaw, resolveApiUrl } from 'ui-lib/transport/fetch-helpers';
 	import { setImageBaseUrl } from 'addons/tmdb/transform';
-	import { setCoverArtBaseUrl } from 'addons/musicbrainz/transform';
+	import { setCoverArtBaseUrl, setArtistImageBaseUrl } from 'addons/musicbrainz/transform';
 	import { setRaImageBaseUrl } from 'addons/retroachievements/transform';
 	import { rosterService } from 'ui-lib/services/roster.service';
+	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import type { PassportData } from 'webrtc/types';
 
-	setImageBaseUrl(resolveApiUrl('/api/tmdb/image'));
-	setCoverArtBaseUrl(resolveApiUrl('/api/musicbrainz/cover'));
-	setRaImageBaseUrl(resolveApiUrl('/api/retroachievements/image'));
+	const connConfig = connectionConfigService.get();
+	if (!connConfig || connConfig.transportMode === 'http') {
+		setImageBaseUrl(resolveApiUrl('/api/tmdb/image'));
+		setCoverArtBaseUrl(resolveApiUrl('/api/musicbrainz/cover'));
+		setArtistImageBaseUrl(resolveApiUrl('/api/musicbrainz/artist-image'));
+		setRaImageBaseUrl(resolveApiUrl('/api/retroachievements/image'));
+	}
 	import PlayerOverlay from 'ui-lib/components/player/PlayerOverlay.svelte';
 	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';

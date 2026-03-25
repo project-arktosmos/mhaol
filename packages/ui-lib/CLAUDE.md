@@ -30,6 +30,7 @@ src/
 │   ├── plugins/              # Plugin management
 │   ├── roster/               # Peer roster
 │   ├── settings/             # Settings (SettingsModalContent, DiskContent, TubeSettingsContent)
+│   ├── setup/                # Node setup (SetupGate, SetupModalContent — connection config + transport selection)
 │   ├── shepperd/             # Shepperd import (ShepperdImportContent, SmartPairResults)
 │   ├── share/                # Share modal
 │   ├── signaling/            # Signaling/WebRTC

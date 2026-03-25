@@ -59,10 +59,7 @@
 		return null;
 	});
 
-	let currentDownloadStatus = $derived.by((): { state: string; progress: number } | null => {
-		if (matchedTorrent) return { state: matchedTorrent.state, progress: matchedTorrent.progress };
-		return null;
-	});
+	let currentTorrentStatus = $derived(matchedTorrent);
 
 	$effect(() => {
 		const candidate = $searchStore.fetchedCandidate;
@@ -194,7 +191,7 @@
 		fetching={isFetching}
 		fetched={isFetchedForCurrent}
 		fetchSteps={currentFetchSteps}
-		downloadStatus={currentDownloadStatus}
+		torrentStatus={currentTorrentStatus}
 		fetchedTorrent={$searchStore.fetchedCandidate
 			? {
 					name: $searchStore.fetchedCandidate.name,

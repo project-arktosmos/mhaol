@@ -41,7 +41,6 @@
 	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
-	import SearchTab from 'ui-lib/components/tmdb-browse/SearchTab.svelte';
 	import PopularTab from 'ui-lib/components/tmdb-browse/PopularTab.svelte';
 	import classNames from 'classnames';
 	import TmdbBrowseGrid from 'ui-lib/components/tmdb-browse/TmdbBrowseGrid.svelte';
@@ -64,6 +63,7 @@
 
 	let linkModalItem: MediaItem | null = $state(null);
 	let linkModalService: string | null = $state(null);
+	let movieSearchInput = $state('');
 
 	// Pinned movies from smart pairing
 	let pinnedMovies = $state<DisplayTMDBMovie[]>([]);
@@ -913,11 +913,23 @@
 	</div>
 </div>
 {:else}
-<div class="relative min-w-0 flex-1 overflow-y-auto p-4">
-		<div class="absolute right-3 top-3 z-10">
-			<BrowseViewToggle />
+<div class="relative min-w-0 flex-1 overflow-y-auto">
+		<div class="flex items-center justify-between gap-4 border-b border-base-300 px-4 py-3">
+			<h1 class="text-lg font-bold">Movies</h1>
+			<div class="flex items-center gap-2">
+				<form class="join" onsubmit={(e) => { e.preventDefault(); if (movieSearchInput.trim()) tmdbBrowseService.searchMovies(movieSearchInput.trim()); }}>
+					<input
+						type="text"
+						placeholder="Search movies..."
+						class="input join-item input-bordered input-sm w-48"
+						bind:value={movieSearchInput}
+					/>
+					<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
+				</form>
+				<BrowseViewToggle />
+			</div>
 		</div>
-		<div class="container mx-auto">
+		<div class="container mx-auto p-4">
 			{#if pinnedMovies.length > 0}
 				<section class="mb-8">
 					<div class="mb-3 flex items-center gap-2">
@@ -950,31 +962,34 @@
 				</section>
 			{/if}
 
-			<section class="mb-8">
-				<h2 class="mb-3 text-lg font-semibold">Search Movies</h2>
-				<SearchTab
-					movies={applyOverridesToMovies($browseState.searchMovies)}
-					tvShows={$browseState.searchTv}
-					moviesPage={$browseState.searchMoviesPage}
-					tvPage={$browseState.searchTvPage}
-					moviesTotalPages={$browseState.searchMoviesTotalPages}
-					tvTotalPages={$browseState.searchTvTotalPages}
-					query={$browseState.searchQuery}
-					loadingMovies={$browseState.loading['searchMovies'] ?? false}
-					loadingTv={$browseState.loading['searchTv'] ?? false}
-					error={$browseState.error}
-					mediaType="movies"
-					selectedMovieId={selectedBrowseMovie?.id ?? null}
-					fetchedIds={fetchCachedTmdbIds}
-					downloadStatuses={browseDownloadStatuses}
-					{fetchCacheSummaries}
-					{smartSearchingId}
-					onselectMovie={handleBrowseSelectMovie}
-					onsmartSearch={handleSmartSearch}
-					onsearchMovies={(q, p) => tmdbBrowseService.searchMovies(q, p)}
-					onsearchTv={(q, p) => tmdbBrowseService.searchTv(q, p)}
-				/>
-			</section>
+			{#if $browseState.loading['searchMovies']}
+				<section class="mb-8">
+					<h2 class="mb-3 text-lg font-semibold">Search Results</h2>
+					<div class="flex justify-center p-8">
+						<span class="loading loading-lg loading-spinner"></span>
+					</div>
+				</section>
+			{:else if $browseState.searchMovies.length > 0}
+				<section class="mb-8">
+					<h2 class="mb-3 text-lg font-semibold">Search Results</h2>
+					<TmdbBrowseGrid
+						movies={applyOverridesToMovies($browseState.searchMovies)}
+						selectedMovieId={selectedBrowseMovie?.id ?? null}
+						fetchedIds={fetchCachedTmdbIds}
+						downloadStatuses={browseDownloadStatuses}
+						{fetchCacheSummaries}
+						{smartSearchingId}
+						onselectMovie={handleBrowseSelectMovie}
+						onsmartSearch={handleSmartSearch}
+					/>
+					<TmdbPagination
+						page={$browseState.searchMoviesPage}
+						totalPages={$browseState.searchMoviesTotalPages}
+						loading={$browseState.loading['searchMovies'] ?? false}
+						onpage={(p) => tmdbBrowseService.searchMovies($browseState.searchQuery, p)}
+					/>
+				</section>
+			{/if}
 
 			{#each libraryGroups as group (group.libraryId)}
 				<section class="mb-8">

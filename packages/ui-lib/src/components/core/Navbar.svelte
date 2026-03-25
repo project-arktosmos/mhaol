@@ -13,12 +13,14 @@
 		brand = { label: 'Mhaol' },
 		items = [],
 		classes = '',
+		center,
 		end,
 		children
 	}: {
 		brand?: { label: string; href?: string; highlight?: string };
 		items?: NavbarItem[];
 		classes?: string;
+		center?: Snippet;
 		end?: Snippet;
 		children?: Snippet;
 	} = $props();
@@ -32,6 +34,12 @@
 			{brand.label}{#if brand.highlight}<span class="text-primary">{brand.highlight}</span>{/if}
 		</a>
 	</div>
+
+	{#if center}
+		<div class="navbar-center">
+			{@render center()}
+		</div>
+	{/if}
 
 	<div class="navbar-end">
 		{#if children}

@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import { isTauri } from './platform';
+import { isTauri, isMobile } from './platform';
 
 function getApiBase(): string {
 	if (!browser) return '';
@@ -7,12 +7,18 @@ function getApiBase(): string {
 	const override = localStorage.getItem('api-server-url');
 	if (override) return override;
 
-	if (isTauri) return 'http://127.0.0.1:1530';
+	// Desktop Tauri: node runs on same machine
+	// Mobile Tauri: node is on the network — setup flow provides the URL
+	if (isTauri && !isMobile) return 'http://127.0.0.1:1530';
 
 	return '';
 }
 
-export const apiBase = getApiBase();
+export let apiBase = getApiBase();
+
+export function setApiBase(url: string): void {
+	apiBase = url;
+}
 
 export function apiUrl(path: string): string {
 	return `${apiBase}${path}`;

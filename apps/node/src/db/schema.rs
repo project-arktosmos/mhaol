@@ -340,6 +340,12 @@ CREATE TABLE IF NOT EXISTS musicbrainz_popular_artists_cache (
     data TEXT NOT NULL,
     fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS musicbrainz_search_cache (
+    query_key TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 ";
 
 pub const LYRICS_SCHEMA_SQL: &str = "

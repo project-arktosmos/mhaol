@@ -1,12 +1,9 @@
 use anyhow::Result;
-use librqbit::http_api::HttpApi;
 use librqbit::{AddTorrent, AddTorrentOptions, Api, Session, SessionOptions, SessionPersistenceConfig};
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::net::TcpListener;
-use tokio::task::JoinHandle;
 
 use crate::config::{TorrentConfig, DEFAULT_TRACKERS};
 use crate::types::{AddTorrentRequest, TorrentFile, TorrentInfo, TorrentState, TorrentStats};
@@ -20,10 +17,8 @@ pub struct TrackingInfo {
 pub struct TorrentManager {
     session: RwLock<Option<Arc<Session>>>,
     config: RwLock<TorrentConfig>,
-    http_server_handle: RwLock<Option<JoinHandle<()>>>,
     tracking_info: RwLock<HashMap<String, TrackingInfo>>,
     completed_torrents: RwLock<HashSet<String>>,
-    auto_paused: RwLock<Vec<String>>,
 }
 
 impl TorrentManager {
@@ -31,10 +26,8 @@ impl TorrentManager {
         Self {
             session: RwLock::new(None),
             config: RwLock::new(TorrentConfig::default()),
-            http_server_handle: RwLock::new(None),
             tracking_info: RwLock::new(HashMap::new()),
             completed_torrents: RwLock::new(HashSet::new()),
-            auto_paused: RwLock::new(Vec::new()),
         }
     }
 
@@ -105,50 +98,11 @@ impl TorrentManager {
             }
         };
 
-        *self.session.write() = Some(session.clone());
+        *self.session.write() = Some(session);
         *self.config.write() = config.clone();
-
-        // Start HTTP API server for peer injection if configured
-        if config.http_api_bind_addr.is_some() {
-            self.start_http_server(session).await;
-        }
 
         log::info!("Torrent manager initialized");
         Ok(())
-    }
-
-    async fn start_http_server(&self, session: Arc<Session>) {
-        let bind_addr = {
-            let config = self.config.read();
-            match &config.http_api_bind_addr {
-                Some(addr) => addr.clone(),
-                None => return,
-            }
-        };
-
-        let api = Api::new(session, None, None);
-        let http_api = HttpApi::new(api, None);
-
-        let listener = match TcpListener::bind(&bind_addr).await {
-            Ok(l) => l,
-            Err(e) => {
-                log::warn!(
-                    "Failed to bind HTTP API server to {}: {}. Peer injection will not work.",
-                    bind_addr,
-                    e
-                );
-                return;
-            }
-        };
-
-        let server_future = http_api.make_http_api_and_run(listener, None);
-        let handle = tokio::spawn(async move {
-            if let Err(e) = server_future.await {
-                log::error!("Torrent HTTP API server error: {}", e);
-            }
-        });
-        *self.http_server_handle.write() = Some(handle);
-        log::info!("Torrent HTTP API started on {}", bind_addr);
     }
 
     pub(crate) fn session(&self) -> Option<Arc<Session>> {
@@ -464,10 +418,6 @@ impl TorrentManager {
                 .count(),
             Err(_) => 0,
         }
-    }
-
-    pub fn is_auto_paused(&self, info_hash: &str) -> bool {
-        self.auto_paused.read().contains(&info_hash.to_string())
     }
 
     pub async fn pause(&self, id: usize) -> Result<()> {
@@ -786,10 +736,6 @@ impl TorrentManager {
         Ok(logs)
     }
 
-    pub fn get_http_api_addr(&self) -> Option<String> {
-        self.config.read().http_api_bind_addr.clone()
-    }
-
     pub async fn list_files(&self, torrent_id: usize) -> Result<Vec<TorrentFile>> {
         let api = self
             .api()
@@ -812,51 +758,6 @@ impl TorrentManager {
             .collect();
 
         Ok(files)
-    }
-
-    pub async fn pause_all_except(&self, info_hash: &str) -> Result<()> {
-        let torrents = self.list().await?;
-        let mut auto_paused = Vec::new();
-
-        for t in &torrents {
-            if t.info_hash != info_hash && t.state == TorrentState::Downloading {
-                if let Err(e) = self.pause(t.id).await {
-                    log::warn!("Failed to auto-pause torrent {}: {}", t.info_hash, e);
-                } else {
-                    auto_paused.push(t.info_hash.clone());
-                }
-            }
-        }
-
-        log::info!(
-            "Auto-paused {} torrents for streaming {}",
-            auto_paused.len(),
-            info_hash
-        );
-        *self.auto_paused.write() = auto_paused;
-        Ok(())
-    }
-
-    pub async fn resume_auto_paused(&self) -> Result<()> {
-        let to_resume: Vec<String> = self.auto_paused.write().drain(..).collect();
-
-        if to_resume.is_empty() {
-            return Ok(());
-        }
-
-        let torrents = self.list().await?;
-        for info_hash in &to_resume {
-            if let Some(t) = torrents.iter().find(|t| &t.info_hash == info_hash) {
-                if t.state == TorrentState::Paused {
-                    if let Err(e) = self.resume(t.id).await {
-                        log::warn!("Failed to resume torrent {}: {}", info_hash, e);
-                    }
-                }
-            }
-        }
-
-        log::info!("Resumed {} auto-paused torrents", to_resume.len());
-        Ok(())
     }
 
     pub fn complete_download(&self, info_hash: String, output_path: String) -> Result<()> {
@@ -1239,7 +1140,6 @@ mod tests {
             fast_resume: false,
             disable_dht_persistence: true,
             extra_trackers: vec![],
-            http_api_bind_addr: None, // disable HTTP API for tests
         };
         mgr.initialize(config).await.unwrap();
         (mgr, tmp)
@@ -1418,7 +1318,6 @@ mod tests {
             extra_trackers: vec![
                 "udp://extra-tracker.example.com:1234/announce".to_string(),
             ],
-            http_api_bind_addr: None,
         };
         let result = mgr.initialize(config).await;
         assert!(result.is_ok());
@@ -1436,7 +1335,6 @@ mod tests {
             fast_resume: false,
             disable_dht_persistence: true,
             extra_trackers: vec!["not a valid url".to_string()],
-            http_api_bind_addr: None,
         };
         let result = mgr.initialize(config).await;
         assert!(result.is_ok());

@@ -19,7 +19,10 @@ pub fn router() -> Router<AppState> {
         .route("/artist/{id}", get(get_artist))
         .route("/popular", get(get_popular))
         .route("/popular-artists", get(get_popular_artists))
+        .route("/search/artists", get(search_artists))
+        .route("/search/release-groups", get(search_release_groups))
         .route("/cover/{id}/{size}", get(serve_cover_art))
+        .route("/artist-image/{id}/{size}", get(serve_artist_image))
 }
 
 #[derive(Deserialize)]
@@ -30,6 +33,12 @@ struct MbQuery {
 #[derive(Deserialize)]
 struct PopularQuery {
     genre: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: Option<String>,
+    limit: Option<u32>,
 }
 
 async fn get_recording(
@@ -542,6 +551,174 @@ async fn get_popular_artists(
     }
 }
 
+async fn search_artists(
+    State(state): State<AppState>,
+    Query(query): Query<SearchQuery>,
+) -> impl IntoResponse {
+    let q = match query.q.as_deref() {
+        Some(q) if !q.trim().is_empty() => q.trim().to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "Missing query parameter 'q'" })),
+            )
+                .into_response()
+        }
+    };
+    let limit = query.limit.unwrap_or(20).min(100);
+    let cache_key = format!("artist:{}", q.to_lowercase());
+
+    // Check cache (1 hour TTL)
+    {
+        let conn = state.db.lock();
+        if let Ok(data) = conn.query_row(
+            "SELECT data FROM musicbrainz_search_cache WHERE query_key = ?1 AND fetched_at > datetime('now', '-1 hours')",
+            rusqlite::params![cache_key],
+            |row| row.get::<_, String>(0),
+        ) {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                return Json(parsed).into_response();
+            }
+        }
+    }
+
+    let url = format!(
+        "{}/artist?query={}&fmt=json&limit={}",
+        MB_BASE,
+        urlencoding::encode(&q),
+        limit
+    );
+
+    let client = reqwest::Client::new();
+    match client
+        .get(&url)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            match resp.json::<serde_json::Value>().await {
+                Ok(data) => {
+                    let data_str = serde_json::to_string(&data).unwrap_or_default();
+                    let conn = state.db.lock();
+                    let _ = conn.execute(
+                        "INSERT INTO musicbrainz_search_cache (query_key, data) VALUES (?1, ?2)
+                         ON CONFLICT(query_key) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
+                        rusqlite::params![cache_key, data_str],
+                    );
+                    Json(data).into_response()
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response(),
+            }
+        }
+        _ => {
+            let conn = state.db.lock();
+            if let Ok(data) = conn.query_row(
+                "SELECT data FROM musicbrainz_search_cache WHERE query_key = ?1",
+                rusqlite::params![cache_key],
+                |row| row.get::<_, String>(0),
+            ) {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                    return Json(parsed).into_response();
+                }
+            }
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "MusicBrainz API unavailable" })),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn search_release_groups(
+    State(state): State<AppState>,
+    Query(query): Query<SearchQuery>,
+) -> impl IntoResponse {
+    let q = match query.q.as_deref() {
+        Some(q) if !q.trim().is_empty() => q.trim().to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "Missing query parameter 'q'" })),
+            )
+                .into_response()
+        }
+    };
+    let limit = query.limit.unwrap_or(20).min(100);
+    let cache_key = format!("release-group:{}", q.to_lowercase());
+
+    // Check cache (1 hour TTL)
+    {
+        let conn = state.db.lock();
+        if let Ok(data) = conn.query_row(
+            "SELECT data FROM musicbrainz_search_cache WHERE query_key = ?1 AND fetched_at > datetime('now', '-1 hours')",
+            rusqlite::params![cache_key],
+            |row| row.get::<_, String>(0),
+        ) {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                return Json(parsed).into_response();
+            }
+        }
+    }
+
+    let url = format!(
+        "{}/release-group?query={}&fmt=json&limit={}",
+        MB_BASE,
+        urlencoding::encode(&q),
+        limit
+    );
+
+    let client = reqwest::Client::new();
+    match client
+        .get(&url)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            match resp.json::<serde_json::Value>().await {
+                Ok(data) => {
+                    let data_str = serde_json::to_string(&data).unwrap_or_default();
+                    let conn = state.db.lock();
+                    let _ = conn.execute(
+                        "INSERT INTO musicbrainz_search_cache (query_key, data) VALUES (?1, ?2)
+                         ON CONFLICT(query_key) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
+                        rusqlite::params![cache_key, data_str],
+                    );
+                    Json(data).into_response()
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response(),
+            }
+        }
+        _ => {
+            let conn = state.db.lock();
+            if let Ok(data) = conn.query_row(
+                "SELECT data FROM musicbrainz_search_cache WHERE query_key = ?1",
+                rusqlite::params![cache_key],
+                |row| row.get::<_, String>(0),
+            ) {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                    return Json(parsed).into_response();
+                }
+            }
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "MusicBrainz API unavailable" })),
+            )
+                .into_response()
+        }
+    }
+}
+
 /// GET /api/musicbrainz/cover/{id}/{size} — serve MusicBrainz cover art from disk cache.
 async fn serve_cover_art(
     State(state): State<AppState>,
@@ -564,6 +741,110 @@ async fn serve_cover_art(
     let upstream_url = format!(
         "https://coverartarchive.org/release-group/{}/front-{}",
         id, size
+    );
+    super::image_cache::serve_cached_image(
+        &state.data_dir,
+        "musicbrainz-covers",
+        &cache_key,
+        &upstream_url,
+        604800,
+    )
+    .await
+}
+
+/// GET /api/musicbrainz/artist-image/{id}/{size} — serve artist image using their first release group's cover art.
+async fn serve_artist_image(
+    State(state): State<AppState>,
+    Path((id, size)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if id.len() != 36 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Invalid artist ID" })),
+        )
+            .into_response();
+    }
+
+    let size = match size.as_str() {
+        "250" | "500" => size.clone(),
+        _ => "250".to_string(),
+    };
+
+    // Try to get artist data from cache first
+    let artist_data = {
+        let conn = state.db.lock();
+        conn.query_row(
+            "SELECT data FROM musicbrainz_artists WHERE mbid = ?1",
+            rusqlite::params![id],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+    };
+
+    // If not cached, fetch from MusicBrainz
+    let artist_data = match artist_data {
+        Some(d) => d,
+        None => {
+            let url = format!(
+                "{}/artist/{}?inc=release-groups&fmt=json",
+                MB_BASE, id
+            );
+            let client = reqwest::Client::new();
+            match client.get(&url).header("User-Agent", USER_AGENT).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    match resp.json::<serde_json::Value>().await {
+                        Ok(data) => {
+                            let data_str = serde_json::to_string(&data).unwrap_or_default();
+                            let conn = state.db.lock();
+                            let _ = conn.execute(
+                                "INSERT INTO musicbrainz_artists (mbid, data) VALUES (?1, ?2)
+                                 ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
+                                rusqlite::params![id, data_str],
+                            );
+                            data
+                        }
+                        Err(_) => {
+                            return (
+                                StatusCode::NOT_FOUND,
+                                Json(serde_json::json!({ "error": "No image available" })),
+                            )
+                                .into_response();
+                        }
+                    }
+                }
+                _ => {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        Json(serde_json::json!({ "error": "Artist not found" })),
+                    )
+                        .into_response();
+                }
+            }
+        }
+    };
+
+    // Extract first release group ID
+    let rg_id = artist_data["release-groups"]
+        .as_array()
+        .and_then(|rgs| rgs.first())
+        .and_then(|rg| rg["id"].as_str());
+
+    let rg_id = match rg_id {
+        Some(id) => id.to_string(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "No release groups found for artist" })),
+            )
+                .into_response();
+        }
+    };
+
+    let cache_key = format!("{}/front-{}", rg_id, size);
+    let upstream_url = format!(
+        "https://coverartarchive.org/release-group/{}/front-{}",
+        rg_id, size
     );
     super::image_cache::serve_cached_image(
         &state.data_dir,

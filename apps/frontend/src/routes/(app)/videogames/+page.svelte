@@ -141,26 +141,39 @@
 
 <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
 	<BrowseHeader title="Videogames" count={filteredGames.length} countLabel="games">
-		{#snippet tabs()}
-			{#each RA_CONSOLES as console}
-				<button
-					class={classNames('btn btn-xs', {
-						'btn-primary': selectedConsoleId === console.id,
-						'btn-ghost': selectedConsoleId !== console.id
-					})}
-					onclick={() => handleConsoleChange(console.id)}
-				>
-					{#if CONSOLE_IMAGES[console.id]}
-						<img src={CONSOLE_IMAGES[console.id]} alt="" class="h-4 w-4" />
-					{/if}
-					{console.name}
-				</button>
-			{/each}
+		{#snippet controls()}
+			<input
+				type="text"
+				placeholder="Search games..."
+				class="input input-sm input-bordered w-48"
+				bind:value={searchQuery}
+			/>
 		{/snippet}
 	</BrowseHeader>
 
-	<!-- Category tabs + Search -->
-	<div class="flex items-center gap-3 border-b border-base-300 px-4 py-2">
+	<div class="grid grid-cols-3 gap-3 border-b border-base-300 px-4 py-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9">
+		{#each RA_CONSOLES as console}
+			<button
+				class={classNames(
+					'flex flex-col items-center gap-1.5 rounded-lg p-2 transition-colors',
+					{
+						'bg-primary/15 ring-2 ring-primary': selectedConsoleId === console.id,
+						'hover:bg-base-200': selectedConsoleId !== console.id
+					}
+				)}
+				onclick={() => handleConsoleChange(console.id)}
+			>
+				{#if CONSOLE_IMAGES[console.id]}
+					<img src={CONSOLE_IMAGES[console.id]} alt={console.name} class="h-10 w-10 object-contain" />
+				{:else}
+					<div class="flex h-10 w-10 items-center justify-center rounded bg-base-300 text-xs text-base-content/50">?</div>
+				{/if}
+				<span class="text-center text-xs font-medium leading-tight">{console.name}</span>
+			</button>
+		{/each}
+	</div>
+
+	<div class="flex flex-wrap items-center gap-1.5 border-b border-base-300 px-4 py-2">
 		{#each categoryTabs as tab}
 			<button
 				class={classNames('btn btn-xs', {
@@ -172,12 +185,6 @@
 				{tab}
 			</button>
 		{/each}
-		<input
-			type="text"
-			class="input input-sm input-bordered w-full max-w-xs"
-			placeholder="Search games..."
-			bind:value={searchQuery}
-		/>
 	</div>
 
 	<BrowseGrid

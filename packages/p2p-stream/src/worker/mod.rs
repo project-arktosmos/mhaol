@@ -123,6 +123,15 @@ async fn handle_create_session(
     signaling_url: String,
     ice_servers: Option<Vec<protocol::IceServerEntry>>,
 ) -> Event {
+    // Clean up any existing sessions — only one stream at a time
+    if !sessions.is_empty() {
+        info!("Cleaning up {} existing session(s) before creating new one", sessions.len());
+        for (id, mut client) in sessions.drain() {
+            info!(session_id = %id, "Stopping previous session");
+            client.disconnect().await;
+        }
+    }
+
     let is_audio_only = mode.as_deref() == Some("audio");
 
     let path = PathBuf::from(&file_path);

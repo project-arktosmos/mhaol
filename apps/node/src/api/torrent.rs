@@ -1,10 +1,10 @@
 use crate::AppState;
 use axum::{
     extract::{Path, Query, State},
-    http::{header, HeaderMap, StatusCode},
+    http::StatusCode,
     response::{
         sse::{Event, KeepAlive},
-        IntoResponse, Response, Sse,
+        IntoResponse, Sse,
     },
     routing::{delete, get, post},
     Json, Router,
@@ -26,19 +26,6 @@ pub fn router() -> Router<AppState> {
         .route("/torrents/events", get(torrent_events))
         .route("/torrents/remove-all", post(remove_all))
         .route("/torrents/{info_hash}/files", get(list_torrent_files))
-        .route(
-            "/torrents/{info_hash}/stream/{file_idx}",
-            get(stream_torrent_file),
-        )
-        .route("/torrents/{info_hash}/stream", get(stream_torrent_largest))
-        .route(
-            "/torrents/{info_hash}/stream/start",
-            post(start_streaming),
-        )
-        .route(
-            "/torrents/{info_hash}/stream/stop",
-            post(stop_streaming),
-        )
         .route("/fetch-cache/hashes", get(list_fetch_cache_hashes))
         .route("/fetch-cache/summaries", get(list_fetch_cache_summaries))
         .route("/fetch-cache/{tmdb_id}", get(get_fetch_cache).delete(delete_fetch_cache))
@@ -428,8 +415,7 @@ async fn torrent_events(
                     let slots = 10 - downloading_count;
                     let to_resume: Vec<usize> = torrents.iter()
                         .filter(|t| matches!(t.state, mhaol_torrent::TorrentState::Paused)
-                            && t.id > 0
-                            && !torrent_manager.is_auto_paused(&t.info_hash))
+                            && t.id > 0)
                         .take(slots)
                         .map(|t| t.id)
                         .collect();
@@ -591,111 +577,6 @@ async fn list_torrent_files(
         )
             .into_response(),
     }
-}
-
-async fn resolve_stream_url(
-    state: &AppState,
-    info_hash: &str,
-    file_idx: usize,
-) -> Result<String, Response> {
-    let torrent_id = find_torrent_id(state, info_hash).await.ok_or_else(|| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Torrent not found" })),
-        )
-            .into_response()
-    })?;
-
-    let http_api_addr = state.torrent_manager.get_http_api_addr().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({ "error": "Torrent HTTP API not available" })),
-        )
-            .into_response()
-    })?;
-
-    Ok(crate::http_stream::build_stream_url(
-        &http_api_addr,
-        torrent_id,
-        file_idx,
-    ))
-}
-
-async fn stream_torrent_file(
-    State(state): State<AppState>,
-    Path((info_hash, file_idx)): Path<(String, usize)>,
-    headers: HeaderMap,
-) -> Response {
-    let range = headers
-        .get(header::RANGE)
-        .and_then(|v| v.to_str().ok());
-    match resolve_stream_url(&state, &info_hash, file_idx).await {
-        Ok(url) => crate::http_stream::proxy_stream(&url, range).await,
-        Err(resp) => resp,
-    }
-}
-
-async fn stream_torrent_largest(
-    State(state): State<AppState>,
-    Path(info_hash): Path<String>,
-    headers: HeaderMap,
-) -> Response {
-    let torrent_id = match find_torrent_id(&state, &info_hash).await {
-        Some(id) => id,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({ "error": "Torrent not found" })),
-            )
-                .into_response()
-        }
-    };
-
-    let file_idx = match state.torrent_manager.list_files(torrent_id).await {
-        Ok(files) if !files.is_empty() => {
-            files
-                .iter()
-                .max_by_key(|f| f.size)
-                .map(|f| f.id)
-                .unwrap_or(0)
-        }
-        Ok(_) => 0,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
-            )
-                .into_response()
-        }
-    };
-
-    let range = headers
-        .get(header::RANGE)
-        .and_then(|v| v.to_str().ok());
-    match resolve_stream_url(&state, &info_hash, file_idx).await {
-        Ok(url) => crate::http_stream::proxy_stream(&url, range).await,
-        Err(resp) => resp,
-    }
-}
-
-async fn start_streaming(
-    State(state): State<AppState>,
-    Path(info_hash): Path<String>,
-) -> impl IntoResponse {
-    if let Err(e) = state.torrent_manager.pause_all_except(&info_hash).await {
-        tracing::warn!("Failed to pause other torrents: {}", e);
-    }
-
-    let stream_url = format!("/api/torrent/torrents/{}/stream", info_hash);
-    Json(serde_json::json!({ "streamUrl": stream_url }))
-}
-
-async fn stop_streaming(State(state): State<AppState>) -> impl IntoResponse {
-    if let Err(e) = state.torrent_manager.resume_auto_paused().await {
-        tracing::warn!("Failed to resume auto-paused torrents: {}", e);
-    }
-
-    Json(serde_json::json!({ "ok": true }))
 }
 
 // --- Fetch cache endpoints ---
@@ -887,11 +768,6 @@ async fn delete_music_fetch_cache(
 ) -> impl IntoResponse {
     state.music_torrent_fetch_cache.delete_for_id(&musicbrainz_id);
     StatusCode::NO_CONTENT
-}
-
-/// Find a torrent's internal ID by its info_hash. Used by player API for torrent streaming.
-pub async fn find_torrent_id_pub(state: &AppState, info_hash: &str) -> Option<usize> {
-    find_torrent_id(state, info_hash).await
 }
 
 async fn find_torrent_id(state: &AppState, info_hash: &str) -> Option<usize> {

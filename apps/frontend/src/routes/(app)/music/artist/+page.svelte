@@ -20,6 +20,31 @@
 	let artists = $state<DisplayMusicBrainzArtist[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
+	let searchQuery = $state('');
+	let searchResults = $state<DisplayMusicBrainzArtist[]>([]);
+	let searchLoading = $state(false);
+
+	let filteredArtists = $derived.by(() => {
+		if (!searchQuery.trim()) return artists;
+		const lower = searchQuery.toLowerCase();
+		return artists.filter((a) => a.name.toLowerCase().includes(lower));
+	});
+
+	async function handleSearch() {
+		const q = searchQuery.trim();
+		if (!q) { searchResults = []; return; }
+		searchLoading = true;
+		try {
+			const res = await fetch(apiUrl(`/api/musicbrainz/search/artists?q=${encodeURIComponent(q)}`));
+			if (!res.ok) throw new Error('Search failed');
+			const data = await res.json();
+			const rawArtists: MusicBrainzArtist[] = data.artists ?? [];
+			searchResults = artistsToDisplay(rawArtists);
+		} catch {
+			searchResults = [];
+		}
+		searchLoading = false;
+	}
 
 	const torrentState = torrentService.state;
 	let fetchCacheHashes: Map<string, string> = $state(new Map());
@@ -71,6 +96,8 @@
 
 	function handleGenreChange(genre: string) {
 		selectedGenre = genre;
+		searchResults = [];
+		searchQuery = '';
 		fetchPopularArtists(genre);
 	}
 
@@ -85,7 +112,24 @@
 </script>
 
 <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-	<BrowseHeader title="Popular Artists" count={artists.length} countLabel="artists">
+	<BrowseHeader title="Popular Artists" count={filteredArtists.length} countLabel="artists">
+		{#snippet controls()}
+			<form class="join" onsubmit={(e) => { e.preventDefault(); handleSearch(); }}>
+				<input
+					type="text"
+					placeholder="Search artists..."
+					class="input join-item input-sm input-bordered w-48"
+					bind:value={searchQuery}
+				/>
+				<button type="submit" class="btn join-item btn-sm btn-primary" disabled={searchLoading}>
+					{#if searchLoading}
+						<span class="loading loading-xs loading-spinner"></span>
+					{:else}
+						Search
+					{/if}
+				</button>
+			</form>
+		{/snippet}
 		{#snippet tabs()}
 			{#each GENRES as genre}
 				<button
@@ -101,8 +145,27 @@
 		{/snippet}
 	</BrowseHeader>
 
+	{#if searchResults.length > 0}
+		<div class="border-b border-base-300 px-4 py-3">
+			<h3 class="mb-2 text-sm font-semibold opacity-50">Search Results ({searchResults.length})</h3>
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+				{#each searchResults as artist (artist.id)}
+					{@const torrent = artistTorrents.get(artist.id)}
+					<ArtistCard
+						{artist}
+						torrentProgress={torrent?.progress ?? null}
+						torrentState={torrent?.state ?? null}
+						torrentSpeed={torrent?.downloadSpeed ?? null}
+						torrentEta={torrent?.eta ?? null}
+						onselect={handleSelectArtist}
+					/>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<BrowseGrid
-		items={artists}
+		items={filteredArtists}
 		{loading}
 		{error}
 		emptyTitle="No artists found"

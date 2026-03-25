@@ -24,6 +24,31 @@
 	let albums = $state<DisplayMusicBrainzReleaseGroup[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
+	let searchQuery = $state('');
+	let searchResults = $state<DisplayMusicBrainzReleaseGroup[]>([]);
+	let searchLoading = $state(false);
+
+	let filteredAlbums = $derived.by(() => {
+		if (!searchQuery.trim()) return albums;
+		const lower = searchQuery.toLowerCase();
+		return albums.filter((a) => a.title.toLowerCase().includes(lower) || a.artistCredits.toLowerCase().includes(lower));
+	});
+
+	async function handleSearch() {
+		const q = searchQuery.trim();
+		if (!q) { searchResults = []; return; }
+		searchLoading = true;
+		try {
+			const res = await fetch(apiUrl(`/api/musicbrainz/search/release-groups?q=${encodeURIComponent(q)}`));
+			if (!res.ok) throw new Error('Search failed');
+			const data = await res.json();
+			const releaseGroups: MusicBrainzReleaseGroup[] = data['release-groups'] ?? [];
+			searchResults = releaseGroupsToDisplay(releaseGroups);
+		} catch {
+			searchResults = [];
+		}
+		searchLoading = false;
+	}
 
 	let albumTorrentMap = $state<Record<string, string>>({});
 	let fetchCacheHashes: Map<string, string> = $state(new Map());
@@ -88,6 +113,8 @@
 
 	function handleGenreChange(genre: string) {
 		selectedGenre = genre;
+		searchResults = [];
+		searchQuery = '';
 		fetchPopularAlbums(genre);
 	}
 
@@ -102,7 +129,24 @@
 </script>
 
 <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-	<BrowseHeader title="Popular Albums" count={albums.length} countLabel="albums">
+	<BrowseHeader title="Popular Albums" count={filteredAlbums.length} countLabel="albums">
+		{#snippet controls()}
+			<form class="join" onsubmit={(e) => { e.preventDefault(); handleSearch(); }}>
+				<input
+					type="text"
+					placeholder="Search albums..."
+					class="input join-item input-sm input-bordered w-48"
+					bind:value={searchQuery}
+				/>
+				<button type="submit" class="btn join-item btn-sm btn-primary" disabled={searchLoading}>
+					{#if searchLoading}
+						<span class="loading loading-xs loading-spinner"></span>
+					{:else}
+						Search
+					{/if}
+				</button>
+			</form>
+		{/snippet}
 		{#snippet tabs()}
 			{#each GENRES as genre}
 				<button
@@ -118,8 +162,27 @@
 		{/snippet}
 	</BrowseHeader>
 
+	{#if searchResults.length > 0}
+		<div class="border-b border-base-300 px-4 py-3">
+			<h3 class="mb-2 text-sm font-semibold opacity-50">Search Results ({searchResults.length})</h3>
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+				{#each searchResults as album (album.id)}
+					{@const torrent = albumTorrents[album.id]}
+					<AlbumCard
+						{album}
+						torrentProgress={torrent?.progress ?? null}
+						torrentState={torrent?.state ?? null}
+						torrentSpeed={torrent?.downloadSpeed ?? null}
+						torrentEta={torrent?.eta ?? null}
+						onselect={handleSelectAlbum}
+					/>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<BrowseGrid
-		items={albums}
+		items={filteredAlbums}
 		{loading}
 		{error}
 		emptyTitle="No albums found"

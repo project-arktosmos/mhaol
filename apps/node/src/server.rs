@@ -84,6 +84,36 @@ async fn main() {
     state.identity_manager.ensure_identity("SIGNALING_WALLET");
     state.identity_manager.ensure_identity("CLIENT_WALLET");
 
+    // Write node-defaults.json for the frontend setup modal
+    {
+        let local_ip = mhaol_node::api::network::get_local_ip().unwrap_or_default();
+        let server_address = state
+            .identity_manager
+            .get_address("SIGNALING_WALLET")
+            .map(|a| mhaol_identity::to_eip55_checksum(&a))
+            .unwrap_or_default();
+        let signaling_url = std::env::var("SIGNALING_URL")
+            .unwrap_or_else(|_| "https://mhaol-signaling.project-arktosmos.partykit.dev".into());
+        let defaults = serde_json::json!({
+            "serverUrl": format!("http://{}:{}", local_ip, port),
+            "serverAddress": server_address,
+            "signalingUrl": signaling_url,
+            "port": port
+        });
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let json_path = std::path::PathBuf::from(manifest_dir)
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|root| root.join("apps/frontend/static/node-defaults.json"));
+        if let Some(path) = json_path {
+            if let Err(e) = std::fs::write(&path, serde_json::to_string_pretty(&defaults).unwrap()) {
+                tracing::warn!("Failed to write node-defaults.json: {}", e);
+            } else {
+                tracing::info!("Wrote node defaults to {}", path.display());
+            }
+        }
+    }
+
     // Start peer service (signaling + WebRTC + catalog serving) in the background
     #[cfg(not(target_os = "android"))]
     {

@@ -25,8 +25,6 @@ pub struct TorrentConfig {
     pub disable_dht_persistence: bool,
     /// Additional tracker URLs beyond the defaults
     pub extra_trackers: Vec<String>,
-    /// HTTP API bind address for peer injection (None = disabled)
-    pub http_api_bind_addr: Option<String>,
 }
 
 impl Default for TorrentConfig {
@@ -38,7 +36,6 @@ impl Default for TorrentConfig {
             fast_resume: true,
             disable_dht_persistence: true,
             extra_trackers: vec![],
-            http_api_bind_addr: Some("127.0.0.1:13030".to_string()),
         }
     }
 }
@@ -139,15 +136,6 @@ mod tests {
         assert!(config.extra_trackers.is_empty());
     }
 
-    #[test]
-    fn config_default_http_api_bind_addr() {
-        let config = TorrentConfig::default();
-        assert_eq!(
-            config.http_api_bind_addr,
-            Some("127.0.0.1:13030".to_string())
-        );
-    }
-
     // ── TorrentConfig custom values ─────────────────────────────────
 
     #[test]
@@ -159,7 +147,6 @@ mod tests {
             fast_resume: false,
             disable_dht_persistence: false,
             extra_trackers: vec!["udp://custom:1234/announce".to_string()],
-            http_api_bind_addr: None,
         };
         assert_eq!(config.download_path, PathBuf::from("/custom/path"));
         assert_eq!(config.listen_port_range, 7000..7010);
@@ -167,7 +154,6 @@ mod tests {
         assert!(!config.fast_resume);
         assert!(!config.disable_dht_persistence);
         assert_eq!(config.extra_trackers.len(), 1);
-        assert_eq!(config.http_api_bind_addr, None);
     }
 
     #[test]
@@ -179,7 +165,6 @@ mod tests {
             fast_resume: true,
             disable_dht_persistence: true,
             extra_trackers: vec!["udp://extra:1234/announce".to_string()],
-            http_api_bind_addr: Some("0.0.0.0:8080".to_string()),
         };
         let cloned = config.clone();
         assert_eq!(cloned.download_path, config.download_path);
@@ -188,7 +173,6 @@ mod tests {
         assert_eq!(cloned.fast_resume, config.fast_resume);
         assert_eq!(cloned.disable_dht_persistence, config.disable_dht_persistence);
         assert_eq!(cloned.extra_trackers, config.extra_trackers);
-        assert_eq!(cloned.http_api_bind_addr, config.http_api_bind_addr);
     }
 
     #[test]

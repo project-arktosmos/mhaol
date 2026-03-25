@@ -3,7 +3,9 @@ export { searchRecordings, searchArtists, searchReleaseGroups } from './client.j
 export {
 	formatArtistCredits,
 	setCoverArtBaseUrl,
+	setArtistImageBaseUrl,
 	getCoverArtUrl,
+	getArtistImageUrl,
 	formatDuration,
 	recordingToDisplay,
 	recordingsToDisplay,
