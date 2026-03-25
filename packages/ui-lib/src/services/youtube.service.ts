@@ -334,13 +334,10 @@ class YouTubeService {
 		}
 
 		try {
-			const result = await fetchJson<{ downloadIds: string[] }>(
-				'/api/ytdl/downloads/playlist',
-				{
-					method: 'POST',
-					body: JSON.stringify(body)
-				}
-			);
+			const result = await fetchJson<{ downloadIds: string[] }>('/api/ytdl/downloads/playlist', {
+				method: 'POST',
+				body: JSON.stringify(body)
+			});
 
 			this.clearCurrentVideo();
 			return result.downloadIds;

@@ -9,11 +9,10 @@ use axum::{
     routing::{post, put},
     Json, Router,
 };
-use mhaol_queue::QueueEvent;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::info;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -170,7 +169,7 @@ fn parse_folder_name(raw: &str) -> ParsedFolderName {
     static RE_LEADING_TAG: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\[([^\]]*)\]\s*").unwrap());
     // Matches season markers: S01, Season 1, T01 (Spanish), Seasons 1-8, S01-S06, S01-04
     static RE_SEASON: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"(?i)(?:\b(?:seasons?\s*\d|s\d{2}|t\d{2})\b)").unwrap()
+        Regex::new(r"(?i)(?:\b(?:seasons?\s*\d+|s\d{2}|t\d{2})\b)").unwrap()
     });
     // Matches year in parens: (2009) or (2019)
     static RE_YEAR_PAREN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\((\d{4})\)").unwrap());
@@ -267,56 +266,6 @@ fn parse_folder_name(raw: &str) -> ParsedFolderName {
     }
 }
 
-/// Submit an LLM extraction task and wait for the result via the broadcast channel.
-/// Returns (showName, year_string) or None on failure/timeout.
-#[cfg(not(target_os = "android"))]
-async fn extract_show_info_via_llm(
-    state: &AppState,
-    folder_name: &str,
-) -> Option<(String, Option<String>)> {
-    if !state.llm_engine.is_model_loaded() {
-        return None;
-    }
-
-    let task = state.queue.enqueue(
-        "llm:extract-show-info",
-        serde_json::json!({ "folderName": folder_name }),
-    );
-    let task_id = task.id.clone();
-
-    let mut rx = state.queue.subscribe();
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-
-    let result = loop {
-        match tokio::time::timeout_at(deadline, rx.recv()).await {
-            Ok(Ok(QueueEvent::TaskCompleted { task })) if task.id == task_id => {
-                break task.result;
-            }
-            Ok(Ok(QueueEvent::TaskFailed { task })) if task.id == task_id => {
-                warn!("[auto-match] LLM extraction failed for {:?}: {:?}", folder_name, task.error);
-                break None;
-            }
-            Ok(Ok(_)) => continue,
-            Ok(Err(_)) => break None,
-            Err(_) => {
-                warn!("[auto-match] LLM extraction timed out for {:?}", folder_name);
-                break None;
-            }
-        }
-    };
-
-    let result = result?;
-    let show_name = result.get("showName")?.as_str()?.to_string();
-    if show_name.is_empty() {
-        return None;
-    }
-    let year = result
-        .get("year")
-        .and_then(|v| v.as_u64())
-        .map(|y| y.to_string());
-    Some((show_name, year))
-}
-
 async fn auto_match(
     State(state): State<AppState>,
     Json(body): Json<AutoMatchRequest>,
@@ -341,16 +290,12 @@ async fn auto_match(
         for (idx, item) in body.lists.iter().enumerate() {
             // 1. Regex-based extraction (always available, instant)
             let parsed = parse_folder_name(&item.title);
-            let (mut search_query, mut year_filter) = (parsed.show_name, parsed.year);
+            let (search_query, year_filter) = (parsed.show_name, parsed.year);
 
-            // 2. Try LLM enhancement if available (overrides regex result)
-            #[cfg(not(target_os = "android"))]
-            if let Some((llm_name, llm_year)) = extract_show_info_via_llm(&state, &item.title).await {
-                search_query = llm_name;
-                if llm_year.is_some() {
-                    year_filter = llm_year;
-                }
-            }
+            // NOTE: LLM extraction skipped for batch auto-match — the single-threaded
+            // worker can't keep up with batch sizes (each inference ~2min on CPU),
+            // causing every item to hit the 30s timeout. Regex parsing handles the
+            // vast majority of torrent names correctly.
 
             let match_title = search_query.clone();
             let mut tv_params: Vec<(&str, &str)> = vec![("query", &search_query), ("page", "1")];
@@ -566,6 +511,15 @@ mod tests {
     #[test]
     fn test_parse_simple_with_season_and_mp4() {
         assert_parse("Andor Season 2 Mp4 1080p", "Andor", None);
+    }
+
+    #[test]
+    fn test_parse_double_digit_season() {
+        assert_parse(
+            "Archer (2009) Season 11 S11 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 Ghost)",
+            "Archer",
+            Some("2009"),
+        );
     }
 
     #[test]

@@ -485,6 +485,7 @@ impl PeerServiceManager {
             .create_session(
                 &session_id,
                 &resolved_path,
+                None,
                 &self.signaling_url,
                 Some("video".to_string()),
                 None,

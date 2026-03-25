@@ -73,9 +73,7 @@ class LibraryService {
 
 		try {
 			const params = path ? `?path=${encodeURIComponent(path)}` : '';
-			const response = await fetchJson<BrowseDirectoryResponse>(
-				`/api/libraries/browse${params}`
-			);
+			const response = await fetchJson<BrowseDirectoryResponse>(`/api/libraries/browse${params}`);
 
 			this.state.update((s) => ({
 				...s,
@@ -184,9 +182,7 @@ class LibraryService {
 		}));
 
 		try {
-			const response = await fetchJson<LibraryFilesResponse>(
-				`/api/libraries/${libraryId}/files`
-			);
+			const response = await fetchJson<LibraryFilesResponse>(`/api/libraries/${libraryId}/files`);
 			this.state.update((s) => ({
 				...s,
 				libraryFiles: { ...s.libraryFiles, [libraryId]: response.files },
@@ -212,10 +208,9 @@ class LibraryService {
 		}));
 
 		try {
-			const response = await fetchJson<LibraryFilesResponse>(
-				`/api/libraries/${libraryId}/scan`,
-				{ method: 'POST' }
-			);
+			const response = await fetchJson<LibraryFilesResponse>(`/api/libraries/${libraryId}/scan`, {
+				method: 'POST'
+			});
 			this.state.update((s) => ({
 				...s,
 				libraryFiles: { ...s.libraryFiles, [libraryId]: response.files },
@@ -499,7 +494,6 @@ class LibraryService {
 			browseError: null
 		}));
 	}
-
 }
 
 export const libraryService = new LibraryService();
