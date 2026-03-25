@@ -56,6 +56,7 @@
 			<li><a href="{base}/iptv">IPTV</a></li>
 			<li><a href="{base}/connect">Connect</a></li>
 			<li><a href="{base}/roster">Roster</a></li>
+			<li><a href="{base}/profiles">Profiles</a></li>
 			<li><a href="{base}/import">Import</a></li>
 			<li><a href="{base}/options">Options</a></li>
 		</ul>
@@ -106,6 +107,7 @@
 				<div class="hidden items-center gap-1 lg:flex">
 					<a href="{base}/connect" class="btn btn-ghost btn-sm">Connect</a>
 					<a href="{base}/roster" class="btn btn-ghost btn-sm">Roster</a>
+					<a href="{base}/profiles" class="btn btn-ghost btn-sm">Profiles</a>
 					<a href="{base}/import" class="btn btn-ghost btn-sm">Import</a>
 					<a href="{base}/options" class="btn btn-ghost btn-sm">Options</a>
 					<NodeStatusBadge />

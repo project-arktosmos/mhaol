@@ -22,6 +22,8 @@ pub mod roster_contact;
 pub mod openlibrary_api_cache;
 pub mod book_torrent_fetch_cache;
 pub mod music_torrent_fetch_cache;
+pub mod profile;
+pub mod favorite;
 
 pub use settings::SettingsRepo;
 pub use metadata::MetadataRepo;
@@ -47,3 +49,5 @@ pub use roster_contact::RosterContactRepo;
 pub use openlibrary_api_cache::OpenLibraryApiCacheRepo;
 pub use book_torrent_fetch_cache::BookTorrentFetchCacheRepo;
 pub use music_torrent_fetch_cache::MusicTorrentFetchCacheRepo;
+pub use profile::ProfileRepo;
+pub use favorite::FavoriteRepo;

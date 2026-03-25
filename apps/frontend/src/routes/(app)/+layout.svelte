@@ -16,6 +16,8 @@
 	import { setCoverArtBaseUrl, setArtistImageBaseUrl } from 'addons/musicbrainz/transform';
 	import { setRaImageBaseUrl } from 'addons/retroachievements/transform';
 	import { rosterService } from 'ui-lib/services/roster.service';
+	import { profileService } from 'ui-lib/services/profile.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import type { PassportData } from 'webrtc/types';
 
@@ -102,8 +104,20 @@
 		await signalingChatService.connectToRoom(DEFAULT_SIGNALING_URL, serverRoom, passport, signFn);
 	}
 
+	const profileStore = profileService.state;
+	let favoritesInitialized = false;
+
+	$effect(() => {
+		const wallet = $profileStore.local.wallet;
+		if (wallet && !favoritesInitialized) {
+			favoritesInitialized = true;
+			favoritesService.initialize(wallet);
+		}
+	});
+
 	onMount(() => {
 		rosterService.initialize('api');
+		profileService.initialize();
 		youtubeService.initialize();
 		youtubeLibraryService.initialize();
 		torrentService.initialize('server');
