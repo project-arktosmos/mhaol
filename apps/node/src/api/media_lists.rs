@@ -9,8 +9,9 @@ use axum::{
     routing::{post, put},
     Json, Router,
 };
+use mhaol_queue::QueueEvent;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -151,6 +152,57 @@ struct AutoMatchResult {
     confidence: String,
 }
 
+/// Submit an LLM extraction task and wait for the result via the broadcast channel.
+/// Returns (showName, year_string, season) or None on failure/timeout.
+#[cfg(not(target_os = "android"))]
+async fn extract_show_info_via_llm(
+    state: &AppState,
+    folder_name: &str,
+) -> Option<(String, Option<String>, Option<i64>)> {
+    if !state.llm_engine.is_model_loaded() {
+        return None;
+    }
+
+    let task = state.queue.enqueue(
+        "llm:extract-show-info",
+        serde_json::json!({ "folderName": folder_name }),
+    );
+    let task_id = task.id.clone();
+
+    let mut rx = state.queue.subscribe();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+
+    let result = loop {
+        match tokio::time::timeout_at(deadline, rx.recv()).await {
+            Ok(Ok(QueueEvent::TaskCompleted { task })) if task.id == task_id => {
+                break task.result;
+            }
+            Ok(Ok(QueueEvent::TaskFailed { task })) if task.id == task_id => {
+                warn!("[auto-match] LLM extraction failed for {:?}: {:?}", folder_name, task.error);
+                break None;
+            }
+            Ok(Ok(_)) => continue,
+            Ok(Err(_)) => break None,
+            Err(_) => {
+                warn!("[auto-match] LLM extraction timed out for {:?}", folder_name);
+                break None;
+            }
+        }
+    };
+
+    let result = result?;
+    let show_name = result.get("showName")?.as_str()?.to_string();
+    if show_name.is_empty() {
+        return None;
+    }
+    let year = result
+        .get("year")
+        .and_then(|v| v.as_u64())
+        .map(|y| y.to_string());
+    let season = result.get("season").and_then(|v| v.as_i64());
+    Some((show_name, year, season))
+}
+
 async fn auto_match(
     State(state): State<AppState>,
     Json(body): Json<AutoMatchRequest>,
@@ -173,8 +225,24 @@ async fn auto_match(
 
     let stream = async_stream::stream! {
         for (idx, item) in body.lists.iter().enumerate() {
-            let query = &item.title;
-            let tv_params: Vec<(&str, &str)> = vec![("query", query), ("page", "1")];
+            // Use LLM to extract clean show name, fall back to raw title
+            #[cfg(not(target_os = "android"))]
+            let extracted = extract_show_info_via_llm(&state, &item.title).await;
+            #[cfg(target_os = "android")]
+            let extracted: Option<(String, Option<String>, Option<i64>)> = None;
+
+            let (search_query, match_title, year_filter) = match &extracted {
+                Some((name, year, _season)) => (name.clone(), name.clone(), year.clone()),
+                None => (item.title.clone(), item.title.clone(), None),
+            };
+
+            let sq = search_query.clone();
+            let mut tv_params: Vec<(&str, &str)> = vec![("query", &sq), ("page", "1")];
+            let yf_ref;
+            if let Some(ref y) = year_filter {
+                yf_ref = y.clone();
+                tv_params.push(("first_air_date_year", &yf_ref));
+            }
 
             let tv_res = tmdb_fetch_json(&state, "/search/tv", &tv_params).await;
 
@@ -185,7 +253,7 @@ async fn auto_match(
                 if let Some(results_arr) = data.get("results").and_then(|r| r.as_array()) {
                     for r in results_arr.iter().take(3) {
                         if let Some(candidate) = parse_tv_candidate(r) {
-                            let s = score_match(query, &candidate.title, candidate.popularity, candidate.vote_count);
+                            let s = score_match(&match_title, &candidate.title, candidate.popularity, candidate.vote_count);
                             if s > best_score {
                                 best_score = s;
                                 best = Some(candidate);
@@ -197,13 +265,13 @@ async fn auto_match(
 
             let result = match &best {
                 Some(c) => {
-                    let confidence = determine_confidence(query, &c.title, c.vote_count);
+                    let confidence = determine_confidence(&match_title, &c.title, c.vote_count);
                     let should_link = confidence == "high" || confidence == "medium";
 
                     if should_link {
                         info!(
-                            "[auto-match] ({}/{}) \"{}\" -> {} (id={}, confidence={})",
-                            idx + 1, total, query, c.title, c.id, confidence
+                            "[auto-match] ({}/{}) \"{}\" (cleaned: \"{}\") -> {} (id={}, confidence={})",
+                            idx + 1, total, item.title, match_title, c.title, c.id, confidence
                         );
                         state.media_list_links.upsert(
                             &uuid::Uuid::new_v4().to_string(),
@@ -214,8 +282,8 @@ async fn auto_match(
                         );
                     } else {
                         info!(
-                            "[auto-match] ({}/{}) \"{}\" -> {} (id={}, confidence={}, skipped)",
-                            idx + 1, total, query, c.title, c.id, confidence
+                            "[auto-match] ({}/{}) \"{}\" (cleaned: \"{}\") -> {} (id={}, confidence={}, skipped)",
+                            idx + 1, total, item.title, match_title, c.title, c.id, confidence
                         );
                     }
 
@@ -230,7 +298,7 @@ async fn auto_match(
                     }
                 }
                 None => {
-                    info!("[auto-match] ({}/{}) \"{}\" -> no match", idx + 1, total, query);
+                    info!("[auto-match] ({}/{}) \"{}\" (cleaned: \"{}\") -> no match", idx + 1, total, item.title, match_title);
                     AutoMatchResult {
                         list_id: item.list_id.clone(),
                         matched: false,
