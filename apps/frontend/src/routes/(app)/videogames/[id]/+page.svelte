@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { gameExtendedToDisplay } from 'addons/retroachievements';
@@ -64,7 +64,7 @@
 		detailsLoading = true;
 		smartSearchService.clear();
 		try {
-			const res = await fetch(apiUrl(`/api/retroachievements/games/${id}`));
+			const res = await fetchRaw(`/api/retroachievements/games/${id}`);
 			if (!res.ok) throw new Error('Failed to fetch game');
 			const data = await res.json();
 			const detail = gameExtendedToDisplay(data as RaGameExtended);

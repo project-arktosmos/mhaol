@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { goto, invalidateAll } from "$app/navigation";
   import { base } from "$app/paths";
-  import { apiUrl } from "ui-lib/lib/api-base";
+  import { fetchRaw } from "ui-lib/transport/fetch-helpers";
   import { tmdbBrowseService } from "ui-lib/services/tmdb-browse.service";
   import { smartPairService } from "ui-lib/services/smart-pair.service";
   import type { DisplayTMDBTvShow } from "addons/tmdb/types";
@@ -87,7 +87,7 @@
   }
 
   async function autoMatchSingle(list: MediaList): Promise<AutoMatchResult | null> {
-    const res = await fetch(apiUrl('/api/media-lists/auto-match'), {
+    const res = await fetchRaw('/api/media-lists/auto-match', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lists: [{ listId: list.id, title: list.title }] }),
@@ -109,7 +109,7 @@
     matchAllState = { total: unlinked.length, completed: 0, matched: 0 };
 
     try {
-      const res = await fetch(apiUrl('/api/media-lists/auto-match'), {
+      const res = await fetchRaw('/api/media-lists/auto-match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -165,7 +165,7 @@
     if (!matchModalList) return;
     const listId = matchModalList.id;
 
-    const res = await fetch(apiUrl(`/api/media-lists/${listId}/tmdb`), {
+    const res = await fetchRaw(`/api/media-lists/${listId}/tmdb`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tmdbId }),
@@ -301,7 +301,7 @@
       linked.map(async (list) => {
         try {
           const tmdbId = list.links.tmdb.serviceId;
-          const res = await fetch(apiUrl(`/api/tmdb/tv/${tmdbId}`));
+          const res = await fetchRaw(`/api/tmdb/tv/${tmdbId}`);
           if (res.ok) {
             const raw = await res.json();
             return { listId: list.id, display: tvShowToDisplay(raw) };

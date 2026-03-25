@@ -112,11 +112,7 @@
 				<div class="rounded-lg bg-base-200 p-4">
 					{#if channel.logo}
 						<div class="mb-3 flex justify-center">
-							<img
-								src={channel.logo}
-								alt={channel.name}
-								class="h-20 w-auto object-contain"
-							/>
+							<img src={channel.logo} alt={channel.name} class="h-20 w-auto object-contain" />
 						</div>
 					{/if}
 
@@ -129,12 +125,7 @@
 					{#if channel.categories.length > 0}
 						<div class="mt-3 flex flex-wrap gap-1">
 							{#each channel.categories as cat}
-								<span
-									class={classNames(
-										'badge badge-sm',
-										iptvAdapter.getCategoryBadgeClass(cat)
-									)}
-								>
+								<span class={classNames('badge badge-sm', iptvAdapter.getCategoryBadgeClass(cat))}>
 									{cat}
 								</span>
 							{/each}

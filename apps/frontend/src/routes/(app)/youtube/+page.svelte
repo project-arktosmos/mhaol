@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
 	import { goto } from '$app/navigation';
@@ -57,7 +58,7 @@
 	async function fetchChannels() {
 		channelsLoading = true;
 		try {
-			const res = await fetch(apiUrl('/api/youtube/channels'));
+			const res = await fetchRaw('/api/youtube/channels');
 			if (!res.ok) return;
 			const data: YouTubeChannel[] = await res.json();
 			dbChannels = data;
@@ -89,7 +90,7 @@
 		for (const channel of needsFetch) {
 			if (channelMeta[channel.handle]) continue;
 			try {
-				const res = await fetch(apiUrl(`/api/youtube/channel-meta?handle=${channel.handle}`));
+				const res = await fetchRaw(`/api/youtube/channel-meta?handle=${channel.handle}`);
 				if (!res.ok) continue;
 				const data: YouTubeChannelMeta = await res.json();
 				channelMeta = { ...channelMeta, [channel.handle]: data };
@@ -119,7 +120,7 @@
 		expandedFeeds = [...expandedFeeds, feed];
 
 		try {
-			const res = await fetch(apiUrl(`/api/youtube/channel-rss?handle=${channel.handle}`));
+			const res = await fetchRaw(`/api/youtube/channel-rss?handle=${channel.handle}`);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const data: YouTubeRssFeedResponse = await res.json();
 			expandedFeeds = expandedFeeds.map((f) =>
@@ -232,7 +233,7 @@
 	async function handleSubscribe(channel: YouTubeSearchChannelItem) {
 		const handle = extractHandle(channel.url);
 		if (!handle || !channel.channelId) return;
-		await fetch(apiUrl('/api/youtube/channel-subscribe'), {
+		await fetchRaw('/api/youtube/channel-subscribe', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({

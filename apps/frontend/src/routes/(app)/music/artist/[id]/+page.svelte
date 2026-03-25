@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { artistsToDisplay, releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
 	import type {
 		DisplayMusicBrainzArtist,
@@ -73,7 +73,7 @@
 		loading = true;
 		smartSearchService.clear();
 		try {
-			const res = await fetch(apiUrl(`/api/musicbrainz/artist/${artistId}`));
+			const res = await fetchRaw(`/api/musicbrainz/artist/${artistId}`);
 			if (!res.ok) throw new Error('Failed to fetch artist');
 			const data: MusicBrainzArtist = await res.json();
 			const display = artistsToDisplay([data]);

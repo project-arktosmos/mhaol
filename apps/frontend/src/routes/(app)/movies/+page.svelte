@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { playerService } from 'ui-lib/services/player.service';
 	import { playerAdapter } from 'ui-lib/adapters/classes/player.adapter';
 	import { mediaDetailService } from 'ui-lib/services/media-detail.service';
@@ -74,7 +74,7 @@
 
 	async function loadMovieImageOverrides() {
 		try {
-			const res = await fetch(apiUrl('/api/tmdb/image-overrides/movie'));
+			const res = await fetchRaw('/api/tmdb/image-overrides/movie');
 			if (res.ok) {
 				const overrides: Array<{ tmdb_id: number; role: string; file_path: string }> =
 					await res.json();
@@ -122,7 +122,7 @@
 
 	async function fetchRelatedData(itemId: string) {
 		try {
-			const res = await fetch(apiUrl(`/api/media/library-items/${itemId}/related`));
+			const res = await fetchRaw(`/api/media/library-items/${itemId}/related`);
 			if (res.ok) {
 				relatedData = await res.json();
 			}
@@ -173,7 +173,7 @@
 	async function fetchBrowseMovieDetails(tmdbId: number) {
 		browseDetailLoading = true;
 		try {
-			const res = await fetch(apiUrl(`/api/tmdb/movies/${tmdbId}`));
+			const res = await fetchRaw(`/api/tmdb/movies/${tmdbId}`);
 			if (res.ok) {
 				const raw = await res.json();
 				browseMovieDetails = movieDetailsToDisplay(raw);
@@ -188,7 +188,7 @@
 	async function fetchBrowseTvShowDetails(tmdbId: number) {
 		browseDetailLoading = true;
 		try {
-			const res = await fetch(apiUrl(`/api/tmdb/tv/${tmdbId}`));
+			const res = await fetchRaw(`/api/tmdb/tv/${tmdbId}`);
 			if (res.ok) {
 				const raw = await res.json();
 				browseTvShowDetails = tvShowDetailsToDisplay(raw);
@@ -461,7 +461,7 @@
 
 	async function loadFetchCacheIds() {
 		try {
-			const res = await fetch(apiUrl('/api/torrent/fetch-cache'));
+			const res = await fetchRaw('/api/torrent/fetch-cache');
 			if (res.ok) {
 				const ids: number[] = await res.json();
 				fetchCachedTmdbIds = new Set(ids);
@@ -473,7 +473,7 @@
 
 	async function loadFetchCacheSummaries() {
 		try {
-			const res = await fetch(apiUrl('/api/torrent/fetch-cache/summaries'));
+			const res = await fetchRaw('/api/torrent/fetch-cache/summaries');
 			if (res.ok) {
 				const entries: Array<{ tmdbId: number; name: string }> = await res.json();
 				fetchCacheSummaries = new Map(entries.map((e) => [e.tmdbId, e.name]));
@@ -485,7 +485,7 @@
 
 	async function loadFetchCacheHashes() {
 		try {
-			const res = await fetch(apiUrl('/api/torrent/fetch-cache/hashes'));
+			const res = await fetchRaw('/api/torrent/fetch-cache/hashes');
 			if (res.ok) {
 				const entries: Array<{ tmdbId: number; infoHash: string }> = await res.json();
 				fetchCacheHashes = new Map(entries.map((e) => [e.tmdbId, e.infoHash]));
@@ -816,7 +816,7 @@
 		if (!linkModalItem) return;
 		const item = linkModalItem;
 
-		const res = await fetch(apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/tmdb`), {
+		const res = await fetchRaw(`/api/libraries/${item.libraryId}/items/${item.id}/tmdb`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ tmdbId, seasonNumber, episodeNumber })
@@ -836,12 +836,9 @@
 	}
 
 	async function handleUnlink(item: MediaItem, service: string) {
-		const res = await fetch(
-			apiUrl(`/api/libraries/${item.libraryId}/items/${item.id}/${service}`),
-			{
-				method: 'DELETE'
-			}
-		);
+		const res = await fetchRaw(`/api/libraries/${item.libraryId}/items/${item.id}/${service}`, {
+			method: 'DELETE'
+		});
 
 		if (res.ok) {
 			updateItemLinks(item.id, service, null);
@@ -881,7 +878,7 @@
 		tmdbLoading = new Set([...tmdbLoading, item.id]);
 
 		try {
-			const res = await fetch(apiUrl(`/api/tmdb/movies/${tmdbLink.serviceId}`));
+			const res = await fetchRaw(`/api/tmdb/movies/${tmdbLink.serviceId}`);
 			if (res.ok) {
 				const data = await res.json();
 				tmdbMetadata[item.id] = movieDetailsToDisplay(data);

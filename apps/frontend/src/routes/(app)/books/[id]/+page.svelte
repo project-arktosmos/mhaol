@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { workToDisplayDetails, authorToDisplay, getCoverUrl } from 'addons/openlibrary/transform';
 	import type { DisplayBook, DisplayBookDetails } from 'addons/openlibrary/types';
 	import type { OpenLibraryWork, OpenLibraryAuthor } from 'addons/openlibrary/types';
@@ -74,7 +74,7 @@
 		loading = true;
 		smartSearchService.clear();
 		try {
-			const workRes = await fetch(apiUrl(`/api/openlibrary/works/${bookKey}`));
+			const workRes = await fetchRaw(`/api/openlibrary/works/${bookKey}`);
 			if (!workRes.ok) throw new Error('Failed to fetch work');
 			const work: OpenLibraryWork = await workRes.json();
 
@@ -105,7 +105,7 @@
 			const authors = await Promise.all(
 				authorKeys.slice(0, 3).map(async (key) => {
 					try {
-						const res = await fetch(apiUrl(`/api/openlibrary/authors/${key}`));
+						const res = await fetchRaw(`/api/openlibrary/authors/${key}`);
 						if (res.ok) {
 							const raw: OpenLibraryAuthor = await res.json();
 							return authorToDisplay(raw);

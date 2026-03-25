@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
 	import type {
 		DisplayMusicBrainzReleaseGroup,
@@ -40,7 +40,7 @@
 		if (!q) { searchResults = []; return; }
 		searchLoading = true;
 		try {
-			const res = await fetch(apiUrl(`/api/musicbrainz/search/release-groups?q=${encodeURIComponent(q)}`));
+			const res = await fetchRaw(`/api/musicbrainz/search/release-groups?q=${encodeURIComponent(q)}`);
 			if (!res.ok) throw new Error('Search failed');
 			const data = await res.json();
 			const releaseGroups: MusicBrainzReleaseGroup[] = data['release-groups'] ?? [];
@@ -58,7 +58,7 @@
 
 	async function loadMusicFetchCacheHashes() {
 		try {
-			const res = await fetch(apiUrl('/api/torrent/music-fetch-cache/hashes'));
+			const res = await fetchRaw('/api/torrent/music-fetch-cache/hashes');
 			if (res.ok) {
 				const entries: Array<{ musicbrainzId: string; infoHash: string }> = await res.json();
 				fetchCacheHashes = new Map(entries.map((e) => [e.musicbrainzId, e.infoHash]));
@@ -98,7 +98,7 @@
 		loading = true;
 		error = null;
 		try {
-			const res = await fetch(apiUrl(`/api/musicbrainz/popular?genre=${encodeURIComponent(genre)}`));
+			const res = await fetchRaw(`/api/musicbrainz/popular?genre=${encodeURIComponent(genre)}`);
 			if (!res.ok) throw new Error('Failed to fetch popular albums');
 			const data = await res.json();
 			const releaseGroups: MusicBrainzReleaseGroup[] = data['release-groups'] ?? [];

@@ -9,6 +9,8 @@
 		type NodeConnectionPhase
 	} from 'ui-lib/services/node-connection.service';
 	import { generateRandomUsername } from 'ui-lib/utils/random-username';
+	import { toastService } from 'ui-lib/services/toast.service';
+	import { buildConnectUrl } from 'ui-lib/services/connect-url.service';
 	import type { TransportMode } from 'ui-lib/types/connection-config.type';
 
 	let {
@@ -115,6 +117,13 @@
 		connectionConfigService.clear();
 		ondisconnect?.();
 	}
+
+	async function handleShare() {
+		if (!existingConfig) return;
+		const url = buildConnectUrl(existingConfig);
+		await navigator.clipboard.writeText(url);
+		toastService.success('Connection URL copied to clipboard');
+	}
 </script>
 
 <div class="flex flex-col gap-4">
@@ -155,7 +164,12 @@
 			{/if}
 		</div>
 
-		<button class="btn btn-outline btn-error" onclick={handleDisconnect}> Disconnect </button>
+		<div class="flex gap-2">
+			<button class="btn flex-1 btn-outline btn-error" onclick={handleDisconnect}>
+				Disconnect
+			</button>
+			<button class="btn flex-1 btn-outline btn-primary" onclick={handleShare}> Share </button>
+		</div>
 	{:else}
 		<!-- Client identity -->
 		<div class="rounded-lg bg-base-200 p-3">
@@ -180,7 +194,7 @@
 					disabled={connecting}
 				/>
 				<button
-					class="btn btn-square btn-ghost btn-sm self-center"
+					class="btn btn-square self-center btn-ghost btn-sm"
 					title="Generate random name"
 					disabled={connecting}
 					onclick={randomizeName}
