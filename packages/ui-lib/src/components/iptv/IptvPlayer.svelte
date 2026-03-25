@@ -26,40 +26,29 @@
 	function attachSource(url: string): void {
 		if (!videoElement) return;
 
-		if (url.includes('.m3u8') || url.includes('.m3u')) {
-			if (Hls.isSupported()) {
-				const instance = new Hls({
-					enableWorker: true,
-					lowLatencyMode: true
-				});
-				instance.loadSource(url);
-				instance.attachMedia(videoElement);
-				instance.on(Hls.Events.MANIFEST_PARSED, () => {
-					loading = false;
-					videoElement?.play().catch(() => {});
-				});
-				instance.on(Hls.Events.ERROR, (_event, data) => {
-					if (data.fatal) {
-						error = `Stream error: ${data.details}`;
-						loading = false;
-					}
-				});
-				hls = instance;
-			} else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-				videoElement.src = url;
-				videoElement.addEventListener(
-					'loadedmetadata',
-					() => {
-						loading = false;
-						videoElement?.play().catch(() => {});
-					},
-					{ once: true }
-				);
-			} else {
-				error = 'HLS is not supported in this browser';
+		// Most IPTV streams are HLS — always try hls.js first
+		if (Hls.isSupported()) {
+			const instance = new Hls({
+				enableWorker: true,
+				lowLatencyMode: true
+			});
+			instance.loadSource(url);
+			instance.attachMedia(videoElement);
+			instance.on(Hls.Events.MANIFEST_PARSED, () => {
 				loading = false;
-			}
-		} else {
+				videoElement?.play().catch(() => {});
+			});
+			instance.on(Hls.Events.ERROR, (_event, data) => {
+				if (data.fatal) {
+					// If HLS fails, try as direct video source
+					instance.destroy();
+					hls = null;
+					tryDirectSource(url);
+				}
+			});
+			hls = instance;
+		} else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+			// Safari native HLS
 			videoElement.src = url;
 			videoElement.addEventListener(
 				'loadedmetadata',
@@ -69,8 +58,30 @@
 				},
 				{ once: true }
 			);
+			videoElement.addEventListener(
+				'error',
+				() => {
+					error = 'Failed to load stream';
+					loading = false;
+				},
+				{ once: true }
+			);
+		} else {
+			tryDirectSource(url);
 		}
+	}
 
+	function tryDirectSource(url: string): void {
+		if (!videoElement) return;
+		videoElement.src = url;
+		videoElement.addEventListener(
+			'loadedmetadata',
+			() => {
+				loading = false;
+				videoElement?.play().catch(() => {});
+			},
+			{ once: true }
+		);
 		videoElement.addEventListener(
 			'error',
 			() => {
@@ -87,7 +98,8 @@
 			hls = null;
 		}
 		if (videoElement) {
-			videoElement.src = '';
+			videoElement.removeAttribute('src');
+			videoElement.load();
 		}
 	}
 

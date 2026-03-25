@@ -193,6 +193,14 @@ async fn refresh_cache() -> Result<(), String> {
         })
         .collect();
 
+    // Only keep channels that have at least one stream
+    let channels_with_streams: std::collections::HashSet<&str> =
+        streams.iter().map(|s| s.channel.as_str()).collect();
+    let channels: Vec<CachedChannel> = channels
+        .into_iter()
+        .filter(|ch| channels_with_streams.contains(ch.id.as_str()))
+        .collect();
+
     let mut guard = cache_lock().write();
     *guard = Some(IptvCache {
         channels,
@@ -288,7 +296,6 @@ struct ListQuery {
     q: Option<String>,
     category: Option<String>,
     country: Option<String>,
-    language: Option<String>,
     page: Option<usize>,
     limit: Option<usize>,
 }

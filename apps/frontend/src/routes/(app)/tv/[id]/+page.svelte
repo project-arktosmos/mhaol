@@ -126,36 +126,17 @@
 			const data = await res.json();
 			const lists: MediaList[] = data.lists ?? [];
 
-			// Find the show-level list linked to this TMDB ID
-			const showList = lists.find(
+			// Find ALL show-level lists linked to this TMDB ID (multiple season folders may each be a top-level list)
+			const showLists = lists.filter(
 				(l) => l.parentListId === null && l.links?.tmdb?.serviceId === String(showId)
 			);
-			if (!showList) return;
+			if (showLists.length === 0) return;
 
-			// Collect all files: from the show list itself (flat shows) and from season children
 			const files: LibraryEpisodeFile[] = [];
 
-			// Flat show: episodes directly on the show list
-			for (const item of showList.items) {
-				const parsed = parseEpisodeFromFilename(item.name);
-				if (parsed) {
-					files.push({
-						seasonNumber: parsed.season,
-						episodeNumber: parsed.episode,
-						name: item.name,
-						path: item.path
-					});
-				}
-			}
-
-			// Season children
-			const seasonLists = lists.filter((l) => l.parentListId === showList.id);
-			for (const seasonList of seasonLists) {
-				// Try to determine season number from the list's TMDB link or folder name
-				const seasonNum = seasonList.links?.tmdb?.seasonNumber
-					?? parseSeasonFromTitle(seasonList.title);
-
-				for (const item of seasonList.items) {
+			for (const showList of showLists) {
+				// Flat show: episodes directly on the show list
+				for (const item of showList.items) {
 					const parsed = parseEpisodeFromFilename(item.name);
 					if (parsed) {
 						files.push({
@@ -164,15 +145,35 @@
 							name: item.name,
 							path: item.path
 						});
-					} else if (seasonNum != null) {
-						// Can't parse episode from filename — assign position-based episode number
-						const idx = seasonList.items.indexOf(item);
-						files.push({
-							seasonNumber: seasonNum,
-							episodeNumber: idx + 1,
-							name: item.name,
-							path: item.path
-						});
+					}
+				}
+
+				// Season children
+				const seasonLists = lists.filter((l) => l.parentListId === showList.id);
+				for (const seasonList of seasonLists) {
+					// Try to determine season number from the list's TMDB link or folder name
+					const seasonNum = seasonList.links?.tmdb?.seasonNumber
+						?? parseSeasonFromTitle(seasonList.title);
+
+					for (const item of seasonList.items) {
+						const parsed = parseEpisodeFromFilename(item.name);
+						if (parsed) {
+							files.push({
+								seasonNumber: parsed.season,
+								episodeNumber: parsed.episode,
+								name: item.name,
+								path: item.path
+							});
+						} else if (seasonNum != null) {
+							// Can't parse episode from filename — assign position-based episode number
+							const idx = seasonList.items.indexOf(item);
+							files.push({
+								seasonNumber: seasonNum,
+								episodeNumber: idx + 1,
+								name: item.name,
+								path: item.path
+							});
+						}
 					}
 				}
 			}
