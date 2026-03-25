@@ -61,6 +61,29 @@ export const RA_CONSOLES: RaConsole[] = [
 	{ id: 17, name: 'Atari Jaguar' }
 ];
 
+export type WasmStatus = 'yes' | 'experimental' | 'no';
+
+export const CONSOLE_WASM_STATUS: Record<number, WasmStatus> = {
+	5: 'yes', // GBA
+	4: 'yes', // GB
+	6: 'yes', // GBC
+	3: 'yes', // SNES
+	7: 'yes', // NES
+	1: 'yes', // Genesis
+	11: 'yes', // Master System
+	2: 'yes', // N64
+	12: 'yes', // PS1
+	21: 'experimental', // PS2
+	18: 'yes', // NDS
+	9: 'yes', // Atari 2600
+	8: 'yes', // PC Engine
+	10: 'yes', // Atari 7800
+	47: 'no', // GameCube
+	14: 'yes', // Neo Geo Pocket
+	13: 'yes', // Atari Lynx
+	17: 'yes' // Atari Jaguar
+};
+
 // Raw API response types
 
 export interface RaGameListItem {

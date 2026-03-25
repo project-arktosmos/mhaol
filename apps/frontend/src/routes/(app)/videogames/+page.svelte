@@ -5,7 +5,7 @@
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { gameListItemToDisplay, gameExtendedToDisplay } from 'addons/retroachievements';
 	import type { RaGameMetadata, RaGameListItem, RaGameExtended } from 'addons/retroachievements/types';
-	import { RA_CONSOLES } from 'addons/retroachievements/types';
+	import { RA_CONSOLES, CONSOLE_WASM_STATUS } from 'addons/retroachievements/types';
 	import { CONSOLE_IMAGES } from 'assets/game-consoles';
 	import GameCard from 'ui-lib/components/videogames/GameCard.svelte';
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
@@ -156,7 +156,7 @@
 		{#each RA_CONSOLES as console}
 			<button
 				class={classNames(
-					'flex flex-col items-center gap-1.5 rounded-lg p-2 transition-colors',
+					'relative flex flex-col items-center gap-1.5 rounded-lg p-2 transition-colors',
 					{
 						'bg-primary/15 ring-2 ring-primary': selectedConsoleId === console.id,
 						'hover:bg-base-200': selectedConsoleId !== console.id
@@ -164,6 +164,18 @@
 				)}
 				onclick={() => handleConsoleChange(console.id)}
 			>
+				<span
+					class={classNames('absolute right-1 top-1 h-2 w-2 rounded-full', {
+						'bg-success': CONSOLE_WASM_STATUS[console.id] === 'yes',
+						'bg-warning': CONSOLE_WASM_STATUS[console.id] === 'experimental',
+						'bg-error': CONSOLE_WASM_STATUS[console.id] === 'no'
+					})}
+					title={CONSOLE_WASM_STATUS[console.id] === 'yes'
+						? 'WASM emulator available'
+						: CONSOLE_WASM_STATUS[console.id] === 'experimental'
+							? 'WASM emulator (experimental)'
+							: 'No WASM emulator'}
+				></span>
 				{#if CONSOLE_IMAGES[console.id]}
 					<img src={CONSOLE_IMAGES[console.id]} alt={console.name} class="h-10 w-10 object-contain" />
 				{:else}
