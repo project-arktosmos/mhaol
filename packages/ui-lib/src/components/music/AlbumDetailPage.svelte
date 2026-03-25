@@ -239,10 +239,7 @@
 								<td class="font-medium opacity-60">Progress</td>
 								<td>
 									<div class="flex items-center gap-2">
-										<progress
-											class="progress progress-info flex-1"
-											value={dlPercent}
-											max="100"
+										<progress class="progress flex-1 progress-info" value={dlPercent} max="100"
 										></progress>
 										<span class="text-xs font-medium">{dlPercent}%</span>
 									</div>
@@ -271,10 +268,7 @@
 								<td class="font-medium opacity-60">Progress</td>
 								<td>
 									<div class="flex items-center gap-2">
-										<progress
-											class="progress progress-success flex-1"
-											value="100"
-											max="100"
+										<progress class="progress flex-1 progress-success" value="100" max="100"
 										></progress>
 										<span class="text-xs font-medium">100%</span>
 									</div>

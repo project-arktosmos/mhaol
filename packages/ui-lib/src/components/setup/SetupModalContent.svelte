@@ -111,7 +111,7 @@
 	<!-- Connected status view -->
 	{#if connected && existingConfig}
 		<div class="flex items-center gap-2">
-			<span class="badge badge-success gap-1">
+			<span class="badge gap-1 badge-success">
 				<span class="h-2 w-2 rounded-full bg-success-content"></span>
 				Connected
 			</span>
@@ -140,14 +140,12 @@
 			{/if}
 		</div>
 
-		<button class="btn btn-outline btn-error" onclick={handleDisconnect}>
-			Disconnect
-		</button>
+		<button class="btn btn-outline btn-error" onclick={handleDisconnect}> Disconnect </button>
 	{:else}
 		<!-- Transport mode selector -->
 		<div class="flex gap-2">
 			<button
-				class={classNames('btn btn-sm flex-1', {
+				class={classNames('btn flex-1 btn-sm', {
 					'btn-primary': transportMode === 'http',
 					'btn-ghost': transportMode !== 'http'
 				})}
@@ -157,7 +155,7 @@
 				HTTP
 			</button>
 			<button
-				class={classNames('btn btn-sm flex-1', {
+				class={classNames('btn flex-1 btn-sm', {
 					'btn-primary': transportMode === 'webrtc',
 					'btn-ghost': transportMode !== 'webrtc'
 				})}
@@ -177,7 +175,7 @@
 				<input
 					id="server-url"
 					type="text"
-					class="input input-bordered w-full"
+					class="input-bordered input w-full"
 					placeholder="http://192.168.1.5:1530"
 					bind:value={serverUrl}
 					disabled={connecting}
@@ -194,7 +192,7 @@
 				<input
 					id="server-address"
 					type="text"
-					class="input input-bordered w-full font-mono text-sm"
+					class="input-bordered input w-full font-mono text-sm"
 					placeholder="0x..."
 					bind:value={serverAddress}
 					disabled={connecting}
@@ -207,7 +205,7 @@
 				<input
 					id="signaling-url"
 					type="text"
-					class="input input-bordered w-full text-sm"
+					class="input-bordered input w-full text-sm"
 					placeholder={DEFAULT_SIGNALING_URL}
 					bind:value={signalingUrl}
 					disabled={connecting}
@@ -240,17 +238,13 @@
 
 		<!-- Error display -->
 		{#if $connState.error}
-			<div class="alert alert-error text-sm">
+			<div class="alert text-sm alert-error">
 				<span>{$connState.error}</span>
 			</div>
 		{/if}
 
 		<!-- Connect button -->
-		<button
-			class="btn btn-primary"
-			disabled={!canConnect || connecting}
-			onclick={handleConnect}
-		>
+		<button class="btn btn-primary" disabled={!canConnect || connecting} onclick={handleConnect}>
 			{#if connecting}
 				<span class="loading loading-sm loading-spinner"></span>
 				Connecting...

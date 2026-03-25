@@ -25,6 +25,8 @@ enum WorkerCommand {
     CreateSession {
         session_id: String,
         file_path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stream_url: Option<String>,
         mode: Option<String>,
         video_codec: Option<String>,
         video_quality: Option<String>,
@@ -186,6 +188,7 @@ impl WorkerBridge {
         &self,
         session_id: &str,
         file_path: &str,
+        stream_url: Option<String>,
         signaling_url: &str,
         mode: Option<String>,
         video_codec: Option<String>,
@@ -199,6 +202,7 @@ impl WorkerBridge {
         let cmd = WorkerCommand::CreateSession {
             session_id: session_id.to_string(),
             file_path: file_path.to_string(),
+            stream_url,
             mode,
             video_codec,
             video_quality,

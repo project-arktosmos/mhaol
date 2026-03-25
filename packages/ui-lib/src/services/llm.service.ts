@@ -138,9 +138,7 @@ class LlmService {
 
 		if (!response.ok) {
 			const body = await response.json().catch(() => ({}));
-			throw new Error(
-				(body as { error?: string }).error || `Request failed: ${response.status}`
-			);
+			throw new Error((body as { error?: string }).error || `Request failed: ${response.status}`);
 		}
 
 		const text = await response.text();

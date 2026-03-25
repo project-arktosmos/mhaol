@@ -189,7 +189,6 @@ class P2pStreamService {
 		}
 		return servers;
 	}
-
 }
 
 export const p2pStreamService = new P2pStreamService();

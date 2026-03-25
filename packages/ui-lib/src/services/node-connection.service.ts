@@ -79,12 +79,10 @@ class NodeConnectionService {
 			contactHandshakeService.initialize({
 				passport: identity.passport,
 				adapter: {
-					sendToPeer: (peerId, envelope) =>
-						signalingChatService.sendToPeer(peerId, envelope),
+					sendToPeer: (peerId, envelope) => signalingChatService.sendToPeer(peerId, envelope),
 					disconnectPeer: (peerId) => signalingChatService.disconnectPeer(peerId),
 					connectToPeer: (peerId) => signalingChatService.connectToPeer(peerId),
-					getPeerConnectionStatus: (peerId) =>
-						signalingChatService.getPeerConnectionStatus(peerId)
+					getPeerConnectionStatus: (peerId) => signalingChatService.getPeerConnectionStatus(peerId)
 				},
 				callbacks: {
 					onRequestReceived: () => {
