@@ -276,8 +276,29 @@ CREATE TABLE IF NOT EXISTS roster_contacts (
 );
 ";
 
+const PROFILES_SQL: &str = "
+CREATE TABLE IF NOT EXISTS profiles (
+    wallet TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    added_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+";
+
+const FAVORITES_SQL: &str = "
+CREATE TABLE IF NOT EXISTS favorites (
+    id TEXT PRIMARY KEY,
+    wallet TEXT NOT NULL REFERENCES profiles(wallet) ON DELETE CASCADE,
+    service TEXT NOT NULL,
+    service_id TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(wallet, service, service_id)
+);
+CREATE INDEX IF NOT EXISTS idx_favorites_wallet ON favorites(wallet);
+";
+
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '31', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '33', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -847,6 +868,33 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: add profiles table (db_version 32)
+    if !has_table(conn, "profiles") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE profiles (
+                wallet TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                added_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        );
+    }
+
+    // Migration: add favorites table (db_version 33)
+    if !has_table(conn, "favorites") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE favorites (
+                id TEXT PRIMARY KEY,
+                wallet TEXT NOT NULL REFERENCES profiles(wallet) ON DELETE CASCADE,
+                service TEXT NOT NULL,
+                service_id TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(wallet, service, service_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_favorites_wallet ON favorites(wallet);",
+        );
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(
@@ -878,6 +926,8 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
 
     conn.execute_batch(YOUTUBE_TABLES_SQL)?;
     conn.execute_batch(ROSTER_CONTACTS_SQL)?;
+    conn.execute_batch(PROFILES_SQL)?;
+    conn.execute_batch(FAVORITES_SQL)?;
     if !is_server {
         conn.execute_batch(MEDIA_LISTS_SQL)?;
         conn.execute_batch(IMAGE_TAGS_SQL)?;
@@ -937,6 +987,8 @@ mod tests {
         assert!(has_table(&conn, "llm_conversations"));
         assert!(has_table(&conn, "torrent_fetch_cache"));
         assert!(has_table(&conn, "roster_contacts"));
+        assert!(has_table(&conn, "profiles"));
+        assert!(has_table(&conn, "favorites"));
         assert!(has_table(&conn, "tv_torrent_fetch_cache"));
         assert!(has_table(&conn, "book_torrent_fetch_cache"));
         assert!(has_table(&conn, "queue_tasks"));
