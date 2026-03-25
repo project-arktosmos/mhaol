@@ -3,6 +3,7 @@
 	import { get } from 'svelte/store';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import { nodeConnectionService } from 'ui-lib/services/node-connection.service';
+	import { parseConnectUrl, clearConnectParams } from 'ui-lib/services/connect-url.service';
 	import SetupModalContent from './SetupModalContent.svelte';
 
 	let {
@@ -17,25 +18,37 @@
 	let reconnecting = $state(false);
 	let reconnectError = $state<string | null>(null);
 
+	function connectWith(config: import('ui-lib/types/connection-config.type').ConnectionConfig) {
+		reconnecting = true;
+		const promise =
+			config.transportMode === 'http'
+				? nodeConnectionService.connectHttp(config)
+				: nodeConnectionService.connectWebRtc(config);
+
+		promise
+			.then(() => {
+				reconnecting = false;
+				connectionConfigService.save(config);
+			})
+			.catch((err) => {
+				reconnecting = false;
+				reconnectError = err instanceof Error ? err.message : 'Failed to reconnect';
+				connectionConfigService.clear();
+			});
+	}
+
 	onMount(() => {
+		// URL params take priority over saved config
+		const urlConfig = parseConnectUrl();
+		if (urlConfig) {
+			clearConnectParams();
+			connectWith(urlConfig);
+			return;
+		}
+
 		const config = get(configStore);
 		if (config) {
-			reconnecting = true;
-			const promise =
-				config.transportMode === 'http'
-					? nodeConnectionService.connectHttp(config)
-					: nodeConnectionService.connectWebRtc(config);
-
-			promise
-				.then(() => {
-					reconnecting = false;
-				})
-				.catch((err) => {
-					reconnecting = false;
-					reconnectError = err instanceof Error ? err.message : 'Failed to reconnect';
-					// Clear config so the user sees the setup modal again
-					connectionConfigService.clear();
-				});
+			connectWith(config);
 		}
 	});
 
