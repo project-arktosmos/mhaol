@@ -45,6 +45,7 @@ pub async fn run_llm_worker(state: AppState) {
                 info!("[llm-worker] Processing task {} ({})", task.id, task.task_type);
                 match task.task_type.as_str() {
                     "llm:analyze-torrent" => process_analyze_torrent(&state, &task).await,
+                    "llm:extract-show-info" => process_extract_show_info(&state, &task).await,
                     other => {
                         warn!("[llm-worker] Unknown task type: {}", other);
                         state.queue.fail(&task.id, &format!("Unknown task type: {}", other));
@@ -157,6 +158,87 @@ async fn process_analyze_torrent(state: &AppState, task: &mhaol_queue::QueueTask
                     "subs": "",
                     "reason": "Failed to parse LLM output"
                 }),
+            );
+        }
+    }
+}
+
+async fn process_extract_show_info(state: &AppState, task: &mhaol_queue::QueueTask) {
+    let payload = &task.payload;
+    let folder_name = payload["folderName"].as_str().unwrap_or("");
+
+    if folder_name.is_empty() {
+        state.queue.fail(&task.id, "Missing folderName in payload");
+        return;
+    }
+
+    if !state.llm_engine.is_model_loaded() {
+        state.queue.fail(&task.id, "No LLM model available");
+        return;
+    }
+
+    let prompt_text = format!(
+        "Extract the TV show name, release year, and season number from this folder/torrent name.\n\
+         Respond with JSON only, no other text.\n\n\
+         Folder: \"{}\"\n\n\
+         {{\"showName\": \"<name>\", \"year\": <year or null>, \"season\": <number or null>}}",
+        folder_name
+    );
+
+    let messages = vec![ChatMessage {
+        role: "user".to_string(),
+        content: prompt_text,
+    }];
+
+    let system_prompt = "You extract structured metadata from media folder names. Respond in JSON only.";
+    let prompt = build_chat_prompt(&messages, system_prompt);
+
+    let model = match state.llm_engine.get_model() {
+        Ok(m) => m,
+        Err(e) => {
+            state.queue.fail(&task.id, &format!("Failed to get model: {}", e));
+            return;
+        }
+    };
+
+    state.llm_engine.reset_cancel_flag();
+    let cancel_flag = state.llm_engine.cancel_flag();
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<LlmTokenEvent>(64);
+
+    tokio::task::spawn_blocking(move || {
+        run_inference_blocking(model, prompt, 128, cancel_flag, tx);
+    });
+
+    let mut full_response = String::new();
+    while let Some(event) = rx.recv().await {
+        if event.done {
+            break;
+        }
+        full_response.push_str(&event.content);
+    }
+
+    let full_response = full_response.trim().to_string();
+
+    if full_response.is_empty() {
+        state.queue.complete(
+            &task.id,
+            serde_json::json!({ "showName": folder_name, "year": null, "season": null }),
+        );
+        return;
+    }
+
+    let json_result = extract_json(&full_response);
+
+    match json_result {
+        Some(parsed) if parsed.get("showName").and_then(|v| v.as_str()).is_some() => {
+            info!("[llm-worker] Task {} completed: extracted {:?}", task.id, parsed);
+            state.queue.complete(&task.id, parsed);
+        }
+        _ => {
+            warn!("[llm-worker] Task {} — could not parse show info, using raw name", task.id);
+            state.queue.complete(
+                &task.id,
+                serde_json::json!({ "showName": folder_name, "year": null, "season": null }),
             );
         }
     }
