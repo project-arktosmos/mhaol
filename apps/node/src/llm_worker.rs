@@ -1,14 +1,103 @@
 use crate::AppState;
+use futures_util::StreamExt;
 use mhaol_llm::{build_chat_prompt, list_models, load_model_blocking, run_inference_blocking, ChatMessage, LlmTokenEvent};
-use tracing::{info, warn};
+use tokio::io::AsyncWriteExt;
+use tracing::{info, warn, error};
 
-/// Try to load the first available .gguf model if none is loaded.
+const DEFAULT_MODEL_REPO: &str = "Qwen/Qwen2.5-1.5B-Instruct-GGUF";
+const DEFAULT_MODEL_FILE: &str = "qwen2.5-1.5b-instruct-q4_k_m.gguf";
+
+/// Download the default GGUF model from HuggingFace if no models are available.
+async fn download_default_model(state: &AppState) -> Result<String, String> {
+    let models_dir = &state.llm_engine.models_dir;
+    let dest_path = models_dir.join(DEFAULT_MODEL_FILE);
+
+    if dest_path.exists() {
+        return Ok(DEFAULT_MODEL_FILE.to_string());
+    }
+
+    let url = format!(
+        "https://huggingface.co/{}/resolve/main/{}",
+        DEFAULT_MODEL_REPO, DEFAULT_MODEL_FILE
+    );
+
+    info!("[llm-worker] Downloading default model from {}", url);
+
+    let downloads_dir = models_dir.parent().unwrap_or(models_dir).join("downloads");
+    std::fs::create_dir_all(&downloads_dir)
+        .map_err(|e| format!("Failed to create downloads dir: {}", e))?;
+
+    let temp_path = downloads_dir.join(DEFAULT_MODEL_FILE);
+
+    let client = reqwest::Client::new();
+    let response = client.get(&url).send().await
+        .map_err(|e| format!("Download request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Download failed: HTTP {}", response.status()));
+    }
+
+    let total_bytes = response.content_length().unwrap_or(0);
+    info!(
+        "[llm-worker] Downloading {} ({:.1} MB)",
+        DEFAULT_MODEL_FILE,
+        total_bytes as f64 / 1_048_576.0
+    );
+
+    let mut file = tokio::fs::File::create(&temp_path).await
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+
+    let mut byte_stream = response.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut last_log = std::time::Instant::now();
+
+    while let Some(chunk_result) = byte_stream.next().await {
+        let chunk = chunk_result.map_err(|e| format!("Download stream error: {}", e))?;
+        file.write_all(&chunk).await
+            .map_err(|e| format!("Failed to write chunk: {}", e))?;
+        downloaded += chunk.len() as u64;
+
+        if last_log.elapsed() > std::time::Duration::from_secs(10) {
+            let pct = if total_bytes > 0 {
+                (downloaded as f64 / total_bytes as f64) * 100.0
+            } else {
+                0.0
+            };
+            info!("[llm-worker] Download progress: {:.1}% ({:.1} MB)", pct, downloaded as f64 / 1_048_576.0);
+            last_log = std::time::Instant::now();
+        }
+    }
+
+    file.flush().await.map_err(|e| format!("Flush failed: {}", e))?;
+
+    std::fs::rename(&temp_path, &dest_path)
+        .map_err(|e| format!("Failed to move downloaded model: {}", e))?;
+
+    info!("[llm-worker] Download complete: {}", DEFAULT_MODEL_FILE);
+    Ok(DEFAULT_MODEL_FILE.to_string())
+}
+
+/// Ensure a model is loaded. Downloads default model if none available, then loads it.
 async fn ensure_model_loaded(state: &AppState) {
     if state.llm_engine.is_model_loaded() {
         return;
     }
 
-    let models = list_models(&state.llm_engine);
+    let mut models = list_models(&state.llm_engine);
+
+    // No models on disk — download the default one
+    if models.is_empty() {
+        match download_default_model(state).await {
+            Ok(_) => {
+                models = list_models(&state.llm_engine);
+            }
+            Err(e) => {
+                error!("[llm-worker] Failed to download default model: {}", e);
+                return;
+            }
+        }
+    }
+
     let first = match models.first() {
         Some(m) => m,
         None => return,

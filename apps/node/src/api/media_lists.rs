@@ -10,6 +10,8 @@ use axum::{
     Json, Router,
 };
 use mhaol_queue::QueueEvent;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
@@ -152,13 +154,126 @@ struct AutoMatchResult {
     confidence: String,
 }
 
+struct ParsedFolderName {
+    show_name: String,
+    year: Option<String>,
+}
+
+/// Regex-based extraction of show name and year from torrent/folder names.
+/// Handles patterns like:
+///   "Archer (2009) Season 7 S07 (1080p NF WEB-DL ...)"
+///   "Community.S01-S06.COMPLETE.SERIES.REPACK.1080p.Bluray.x265-HiQVE"
+///   "[Anime Time] Attack On Titan (Complete Series) ..."
+///   "Glee 2009 Season 1 Complete TVRip x264 [i_c]"
+///   "evangelion_renewal_hd"
+fn parse_folder_name(raw: &str) -> ParsedFolderName {
+    static RE_LEADING_TAG: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\[([^\]]*)\]\s*").unwrap());
+    // Matches season markers: S01, Season 1, T01 (Spanish), Seasons 1-8, S01-S06, S01-04
+    static RE_SEASON: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)(?:\b(?:seasons?\s*\d|s\d{2}|t\d{2})\b)").unwrap()
+    });
+    // Matches year in parens: (2009) or (2019)
+    static RE_YEAR_PAREN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\((\d{4})\)").unwrap());
+    // Matches standalone year preceded by word boundary: "Glee 2009 Season"
+    static RE_YEAR_BARE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b((?:19|20)\d{2})\b").unwrap());
+    // Quality/codec/source markers that signal end of the show name
+    static RE_QUALITY: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)\b(?:2160p|1080p|720p|480p|360p|4K|WEB[.-]?DL|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV|HDRip|HEVC|x26[45]|H\.?26[45]|10bit|AAC|AC3|EAC3|DD5|DTS|FLAC|Mp4|MKV|REPACK|COMPLETE|Complete)\b").unwrap()
+    });
+    // Trailing release group: -GroupName or -GroupName[tag]
+    static RE_TRAILING_GROUP: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"-[A-Za-z0-9]+(?:\[[^\]]*\])?$").unwrap());
+
+    static RE_BRACKETS: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[[^\]]*\]").unwrap());
+    static RE_PAREN_META: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)\((?:Complete[^)]*|Anime[^)]*|OVA[^)]*|Dual Audio|BD|Movie[^)]*)\)").unwrap()
+    });
+
+    let mut s = raw.to_string();
+
+    // 1. Strip leading [Group] tag
+    s = RE_LEADING_TAG.replace(&s, "").to_string();
+
+    // 2. Extract year from parens before normalizing
+    let year = RE_YEAR_PAREN
+        .captures(&s)
+        .map(|c| c[1].to_string());
+
+    // 3. Remove parenthesized year from string
+    if year.is_some() {
+        s = RE_YEAR_PAREN.replace(&s, "").to_string();
+    }
+
+    // 4. Strip all remaining [bracket] metadata and known paren metadata
+    s = RE_BRACKETS.replace_all(&s, "").to_string();
+    s = RE_PAREN_META.replace_all(&s, "").to_string();
+
+    // 5. Replace dots and underscores with spaces
+    s = s.replace('.', " ").replace('_', " ");
+
+    // 5. Find the earliest "cut point" — season marker or quality marker
+    let season_pos = RE_SEASON.find(&s).map(|m| m.start());
+    let quality_pos = RE_QUALITY.find(&s).map(|m| m.start());
+
+    let cut = match (season_pos, quality_pos) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (Some(a), None) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    };
+
+    let name_part = match cut {
+        Some(pos) if pos > 0 => &s[..pos],
+        _ => &s,
+    };
+
+    // 6. Clean up the name
+    let mut name = name_part.trim().to_string();
+
+    // Remove trailing group tag if still present
+    name = RE_TRAILING_GROUP.replace(&name, "").trim().to_string();
+
+    // Remove trailing brackets/parens content
+    name = name.trim_end_matches(|c: char| c == '(' || c == '[' || c == ' ').to_string();
+
+    // If no parenthesized year found, try bare year (but only if it's clearly a year, not part of the title)
+    let year = year.or_else(|| {
+        // Look for a bare year in the extracted name portion — only take it if it's at the end
+        let re_year_end = Regex::new(r"\b((?:19|20)\d{2})\s*$").unwrap();
+        if let Some(caps) = re_year_end.captures(&name) {
+            let y = caps[1].to_string();
+            name = name[..caps.get(0).unwrap().start()].trim().to_string();
+            Some(y)
+        } else {
+            // Also check the original cut-off portion for a bare year
+            RE_YEAR_BARE.captures(raw).map(|c| c[1].to_string())
+        }
+    });
+
+    // Final cleanup — collapse multiple spaces
+    let show_name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    // If we ended up with nothing useful, return the raw string
+    if show_name.is_empty() {
+        return ParsedFolderName {
+            show_name: raw.to_string(),
+            year: None,
+        };
+    }
+
+    ParsedFolderName {
+        show_name,
+        year,
+    }
+}
+
 /// Submit an LLM extraction task and wait for the result via the broadcast channel.
-/// Returns (showName, year_string, season) or None on failure/timeout.
+/// Returns (showName, year_string) or None on failure/timeout.
 #[cfg(not(target_os = "android"))]
 async fn extract_show_info_via_llm(
     state: &AppState,
     folder_name: &str,
-) -> Option<(String, Option<String>, Option<i64>)> {
+) -> Option<(String, Option<String>)> {
     if !state.llm_engine.is_model_loaded() {
         return None;
     }
@@ -199,8 +314,7 @@ async fn extract_show_info_via_llm(
         .get("year")
         .and_then(|v| v.as_u64())
         .map(|y| y.to_string());
-    let season = result.get("season").and_then(|v| v.as_i64());
-    Some((show_name, year, season))
+    Some((show_name, year))
 }
 
 async fn auto_match(
@@ -225,23 +339,25 @@ async fn auto_match(
 
     let stream = async_stream::stream! {
         for (idx, item) in body.lists.iter().enumerate() {
-            // Use LLM to extract clean show name, fall back to raw title
+            // 1. Regex-based extraction (always available, instant)
+            let parsed = parse_folder_name(&item.title);
+            let (mut search_query, mut year_filter) = (parsed.show_name, parsed.year);
+
+            // 2. Try LLM enhancement if available (overrides regex result)
             #[cfg(not(target_os = "android"))]
-            let extracted = extract_show_info_via_llm(&state, &item.title).await;
-            #[cfg(target_os = "android")]
-            let extracted: Option<(String, Option<String>, Option<i64>)> = None;
+            if let Some((llm_name, llm_year)) = extract_show_info_via_llm(&state, &item.title).await {
+                search_query = llm_name;
+                if llm_year.is_some() {
+                    year_filter = llm_year;
+                }
+            }
 
-            let (search_query, match_title, year_filter) = match &extracted {
-                Some((name, year, _season)) => (name.clone(), name.clone(), year.clone()),
-                None => (item.title.clone(), item.title.clone(), None),
-            };
-
-            let sq = search_query.clone();
-            let mut tv_params: Vec<(&str, &str)> = vec![("query", &sq), ("page", "1")];
-            let yf_ref;
+            let match_title = search_query.clone();
+            let mut tv_params: Vec<(&str, &str)> = vec![("query", &search_query), ("page", "1")];
+            let yf_owned;
             if let Some(ref y) = year_filter {
-                yf_ref = y.clone();
-                tv_params.push(("first_air_date_year", &yf_ref));
+                yf_owned = y.clone();
+                tv_params.push(("first_air_date_year", &yf_owned));
             }
 
             let tv_res = tmdb_fetch_json(&state, "/search/tv", &tv_params).await;
@@ -328,4 +444,196 @@ async fn auto_match(
         .header(header::CONTENT_TYPE, "application/x-ndjson")
         .body(Body::from_stream(stream))
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_parse(input: &str, expected_name: &str, expected_year: Option<&str>) {
+        let parsed = parse_folder_name(input);
+        assert_eq!(
+            parsed.show_name, expected_name,
+            "show_name mismatch for input: {input}"
+        );
+        assert_eq!(
+            parsed.year.as_deref(),
+            expected_year,
+            "year mismatch for input: {input}"
+        );
+    }
+
+    #[test]
+    fn test_parse_show_with_year_and_season() {
+        assert_parse(
+            "Archer (2009) Season 7 S07 (1080p NF WEB-DL x265 HEVC 10bit AC3 5.1 RZeroX)",
+            "Archer",
+            Some("2009"),
+        );
+    }
+
+    #[test]
+    fn test_parse_show_season_no_year() {
+        assert_parse("Archer Season 1  (1080p H265 Joy)", "Archer", None);
+    }
+
+    #[test]
+    fn test_parse_dotted_with_season_range() {
+        assert_parse(
+            "Community.S01-S06.COMPLETE.SERIES.REPACK.1080p.Bluray.x265-HiQVE",
+            "Community",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_parse_dotted_single_season() {
+        assert_parse(
+            "Cunk.On.Earth.S01.1080p.WEBRip.x265[eztv.re]",
+            "Cunk On Earth",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_parse_dotted_rick_and_morty() {
+        assert_parse(
+            "Rick.and.Morty.S07.COMPLETE.1080p.HMAX.WEB-DL.DD5.1.x264-NTb[TGx]",
+            "Rick and Morty",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_parse_anime_with_group_tag() {
+        assert_parse(
+            "[Anime Time] Attack On Titan (Complete Series) (S01-S04+OVA) [Dual Audio][BD][1080p][HEVC 10bit x265][AAC][Eng Sub]",
+            "Attack On Titan",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_parse_anime_with_year() {
+        assert_parse(
+            "[Anime Time] Fullmetal Alchemist (2003) (Anime+Movie) [Dual Audio][BD][1080p][HEVC 10bit x265][AAC][Eng Sub]",
+            "Fullmetal Alchemist",
+            Some("2003"),
+        );
+    }
+
+    #[test]
+    fn test_parse_bare_year_before_season() {
+        assert_parse(
+            "Glee 2009 Season 1 Complete TVRip x264 [i_c]",
+            "Glee",
+            Some("2009"),
+        );
+    }
+
+    #[test]
+    fn test_parse_bare_year_multi_season() {
+        assert_parse(
+            "Brooklyn Nine Nine 2013 Seasons 1 to 8 Complete 1080p BluRay x264 [i_c]",
+            "Brooklyn Nine Nine",
+            Some("2013"),
+        );
+    }
+
+    #[test]
+    fn test_parse_underscore_name() {
+        assert_parse("evangelion_renewal_hd", "evangelion renewal hd", None);
+    }
+
+    #[test]
+    fn test_parse_mr_robot() {
+        assert_parse(
+            "Mr.Robot.Season.1-4.S01-04.COMPLETE.1080p.BluRay.WEB.10bit.DD5.1.x265-POIASD",
+            "Mr Robot",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_parse_show_with_year_and_season_abbott() {
+        assert_parse(
+            "Abbott Elementary (2021) Season 2 S02 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 Silence)",
+            "Abbott Elementary",
+            Some("2021"),
+        );
+    }
+
+    #[test]
+    fn test_parse_simple_with_season_and_mp4() {
+        assert_parse("Andor Season 2 Mp4 1080p", "Andor", None);
+    }
+
+    #[test]
+    fn test_parse_spanish_show() {
+        assert_parse(
+            "Aqui no hay quien viva T01-T05 Spanish DVDRip XviD",
+            "Aqui no hay quien viva",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_parse_the_boys() {
+        assert_parse("The Boys Season 1 Mp4 1080p", "The Boys", None);
+    }
+
+    #[test]
+    fn test_parse_wwdits_year_and_season() {
+        assert_parse(
+            "What We Do in the Shadows (2019) Season 2 S02 (1080p HULU WEB-DL x265 HEVC 10bit EAC3 5.1 Ghost)",
+            "What We Do in the Shadows",
+            Some("2019"),
+        );
+    }
+
+    #[test]
+    fn test_parse_wwdits_dotted() {
+        assert_parse(
+            "What.We.Do.In.the.Shadows.Season.6.COMPLETE.1080p.DSNP.WEB-DL.x264.ESubs.[4GB].[MP4].[S06.Full]-[y2flix]",
+            "What We Do In the Shadows",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_parse_fleabag_multiseason() {
+        assert_parse(
+            "Fleabag (2016) Season 1-2 S01-S02 (1080p BluRay x265 HEVC 10bit AAC 2.0 RZeroX)",
+            "Fleabag",
+            Some("2016"),
+        );
+    }
+
+    #[test]
+    fn test_parse_severance() {
+        assert_parse("Severance Season 1 Mp4 1080p", "Severance", None);
+    }
+
+    #[test]
+    fn test_parse_reaktor_group() {
+        assert_parse(
+            "[Reaktor] Fullmetal Alchemist Brotherhood + OVA Complete v2 [1080p][x265][10-bit][Dual-Audio]",
+            "Fullmetal Alchemist Brotherhood + OVA",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_parse_bojack() {
+        assert_parse("BoJack Horseman", "BoJack Horseman", None);
+    }
+
+    #[test]
+    fn test_parse_superstore_dotted() {
+        assert_parse(
+            "Superstore.S01-S06.Season.01-06.COMPLETE.WEBRip.720p.x265.HEVC",
+            "Superstore",
+            None,
+        );
+    }
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto, invalidateAll } from "$app/navigation";
+  import { base } from "$app/paths";
   import { apiUrl } from "ui-lib/lib/api-base";
   import { tmdbBrowseService } from "ui-lib/services/tmdb-browse.service";
   import { smartPairService } from "ui-lib/services/smart-pair.service";
@@ -42,7 +43,7 @@
 
   // Navigate to TMDB detail page (for browse results and pinned)
   function handleSelectTvShow(tvShow: DisplayTMDBTvShow) {
-    goto(`/tv/${tvShow.id}`);
+    goto(`${base}/tv/${tvShow.id}`);
   }
 
   // Handle library show click: navigate if TMDB-linked, otherwise auto-match
@@ -52,7 +53,7 @@
 
     const tmdbLink = list.links?.tmdb;
     if (tmdbLink) {
-      goto(`/tv/${tmdbLink.serviceId}`);
+      goto(`${base}/tv/${tmdbLink.serviceId}`);
       return;
     }
 
@@ -63,7 +64,7 @@
       if (result?.matched && result.tmdbId) {
         await invalidateAll();
         await fetchTmdbMetadataForLists();
-        goto(`/tv/${result.tmdbId}`);
+        goto(`${base}/tv/${result.tmdbId}`);
       } else {
         // Low confidence or no match — fall back to manual modal
         matchModalList = list;

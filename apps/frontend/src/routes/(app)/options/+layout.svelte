@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/stores";
+  import { base } from "$app/paths";
   import classNames from "classnames";
   import { sections } from "./sections";
 
@@ -17,7 +18,7 @@
     {#each sections as section}
       <li>
         <a
-          href="/options/{section.id}"
+          href="{base}/options/{section.id}"
           class={classNames({ active: section.id === activeId })}
         >
           {section.label}
@@ -31,7 +32,7 @@
       class="select-bordered select select-sm"
       value={activeId}
       onchange={(e) => {
-        window.location.href = `/options/${e.currentTarget.value}`;
+        window.location.href = `${base}/options/${e.currentTarget.value}`;
       }}
     >
       {#each sections as section}

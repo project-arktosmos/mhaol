@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
@@ -296,7 +297,7 @@
 		ondownload={handleDownload}
 		onp2pstream={handleP2pStream}
 		onshowsearch={() => smartSearchService.show()}
-		onback={() => goto('/movies')}
+		onback={() => goto(`${base}/movies`)}
 		ontoggleimages={() => { imagesVisible = true; }}
 		onsetimageoverride={handleSetImageOverride}
 	/>
@@ -307,6 +308,6 @@
 {:else}
 	<div class="flex flex-1 flex-col items-center justify-center gap-2">
 		<p class="text-sm opacity-60">Movie not found</p>
-		<button class="btn btn-ghost btn-sm" onclick={() => goto('/movies')}>Back to movies</button>
+		<button class="btn btn-ghost btn-sm" onclick={() => goto(`${base}/movies`)}>Back to movies</button>
 	</div>
 {/if}

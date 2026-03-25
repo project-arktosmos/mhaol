@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { bookBrowseService } from 'ui-lib/services/book-browse.service';
 	import { BOOK_SUBJECTS, BOOK_SUBJECT_LABELS } from 'addons/openlibrary/types';
 	import type { DisplayBook, BookSubject } from 'addons/openlibrary/types';
@@ -23,7 +24,7 @@
 	}
 
 	function handleSelectBook(book: DisplayBook) {
-		goto(`/books/${book.key}`);
+		goto(`${base}/books/${book.key}`);
 	}
 
 	function handleSubjectChange(subject: BookSubject) {

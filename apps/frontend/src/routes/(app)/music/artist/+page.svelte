@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { artistsToDisplay } from 'addons/musicbrainz/transform';
 	import type { DisplayMusicBrainzArtist, MusicBrainzArtist } from 'addons/musicbrainz/types';
@@ -102,7 +103,7 @@
 	}
 
 	function handleSelectArtist(artist: DisplayMusicBrainzArtist) {
-		goto(`/music/artist/${artist.id}`);
+		goto(`${base}/music/artist/${artist.id}`);
 	}
 
 	onMount(() => {

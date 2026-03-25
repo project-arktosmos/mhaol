@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { youtubeService } from 'ui-lib/services/youtube.service';
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
@@ -326,7 +327,7 @@
 		ondeleteaudio={handleDeleteAudio}
 		ondeletevideo={handleDeleteVideo}
 		onselectsubtitle={handleSubtitleSelect}
-		onback={() => goto('/youtube')}
+		onback={() => goto(`${base}/youtube`)}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">

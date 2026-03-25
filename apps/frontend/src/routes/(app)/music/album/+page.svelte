@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
 	import type {
@@ -119,7 +120,7 @@
 	}
 
 	function handleSelectAlbum(album: DisplayMusicBrainzReleaseGroup) {
-		goto(`/music/album/${album.id}`);
+		goto(`${base}/music/album/${album.id}`);
 	}
 
 	onMount(() => {

@@ -4,6 +4,7 @@
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { youtubeService } from 'ui-lib/services/youtube.service';
 	import { youtubeSearchService } from 'ui-lib/services/youtube-search.service';
 	import type {
@@ -138,7 +139,7 @@
 	}
 
 	function handleFeedVideoClick(video: LibraryCardItem) {
-		goto(`/youtube/${video.videoId}`);
+		goto(`${base}/youtube/${video.videoId}`);
 	}
 
 	$effect(() => {
@@ -202,7 +203,7 @@
 	});
 
 	function handleItemClick(item: LibraryCardItem) {
-		goto(`/youtube/${item.videoId}`);
+		goto(`${base}/youtube/${item.videoId}`);
 	}
 
 	function handleSearch(query: string) {
@@ -210,7 +211,7 @@
 	}
 
 	function handleSearchItemClick(cardItem: LibraryCardItem) {
-		goto(`/youtube/${cardItem.videoId}`);
+		goto(`${base}/youtube/${cardItem.videoId}`);
 	}
 
 	function handleLoadMore() {

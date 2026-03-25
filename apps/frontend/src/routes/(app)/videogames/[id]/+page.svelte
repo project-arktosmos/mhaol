@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
@@ -119,7 +120,7 @@
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onshowsearch={() => smartSearchService.show()}
-		onback={() => goto('/videogames')}
+		onback={() => goto(`${base}/videogames`)}
 	/>
 {:else if detailsLoading}
 	<div class="flex flex-1 items-center justify-center">
@@ -128,6 +129,6 @@
 {:else}
 	<div class="flex flex-1 flex-col items-center justify-center gap-2">
 		<p class="text-sm opacity-60">Game not found</p>
-		<button class="btn btn-ghost btn-sm" onclick={() => goto('/videogames')}>Back to games</button>
+		<button class="btn btn-ghost btn-sm" onclick={() => goto(`${base}/videogames`)}>Back to games</button>
 	</div>
 {/if}

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
@@ -383,7 +384,7 @@
 		onp2pstream={handleP2pStream}
 		onshowsearch={() => smartSearchService.show()}
 		onplayfile={handlePlayFile}
-		onback={() => goto('/tv')}
+		onback={() => goto(`${base}/tv`)}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">
@@ -392,6 +393,6 @@
 {:else}
 	<div class="flex flex-1 flex-col items-center justify-center gap-2">
 		<p class="text-sm opacity-60">TV show not found</p>
-		<button class="btn btn-ghost btn-sm" onclick={() => goto('/tv')}>Back to TV</button>
+		<button class="btn btn-ghost btn-sm" onclick={() => goto(`${base}/tv`)}>Back to TV</button>
 	</div>
 {/if}
