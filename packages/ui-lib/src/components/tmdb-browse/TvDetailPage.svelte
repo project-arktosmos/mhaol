@@ -309,7 +309,6 @@
 				</div>
 			</div>
 		{/if}
-
 	{/snippet}
 
 	{#snippet cellB()}
@@ -426,7 +425,8 @@
 							{#if fetchedTorrent.languages}
 								<tr>
 									<td class="font-medium opacity-60">Languages</td>
-									<td><span class="badge badge-ghost badge-xs">{fetchedTorrent.languages}</span></td>
+									<td><span class="badge badge-ghost badge-xs">{fetchedTorrent.languages}</span></td
+									>
 								</tr>
 							{/if}
 						{/if}
@@ -448,10 +448,7 @@
 									<td class="font-medium opacity-60">Progress</td>
 									<td>
 										<div class="flex items-center gap-2">
-											<progress
-												class="progress progress-info flex-1"
-												value={dlPercent}
-												max="100"
+											<progress class="progress flex-1 progress-info" value={dlPercent} max="100"
 											></progress>
 											<span class="text-xs font-medium">{dlPercent}%</span>
 										</div>
@@ -480,10 +477,7 @@
 									<td class="font-medium opacity-60">Progress</td>
 									<td>
 										<div class="flex items-center gap-2">
-											<progress
-												class="progress progress-success flex-1"
-												value="100"
-												max="100"
+											<progress class="progress flex-1 progress-success" value="100" max="100"
 											></progress>
 											<span class="text-xs font-medium">100%</span>
 										</div>
@@ -538,7 +532,9 @@
 				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">
 					Seasons &amp; Episodes
 					{#if hasLibrary}
-						<span class="ml-1 badge badge-xs badge-success">{libraryFiles.length} file{libraryFiles.length !== 1 ? 's' : ''}</span>
+						<span class="ml-1 badge badge-xs badge-success"
+							>{libraryFiles.length} file{libraryFiles.length !== 1 ? 's' : ''}</span
+						>
 					{:else if tvMatchedSeasons.hasComplete}
 						<span class="ml-1 badge badge-xs badge-success">Complete</span>
 					{/if}
@@ -578,7 +574,9 @@
 								</span>
 								<span class="flex shrink-0 items-center gap-1">
 									{#if hasSeasonLib}
-										<span class="text-xs text-success">{seasonLibFiles?.length}/{season.episodes.length}</span>
+										<span class="text-xs text-success"
+											>{seasonLibFiles?.length}/{season.episodes.length}</span
+										>
 									{:else if seasonMatch}
 										{@const epCount = [...seasonMatch].filter((e) => e !== -1).length}
 										{#if epCount > 0}
@@ -616,14 +614,16 @@
 											<div class="min-w-0 flex-1">
 												{#if libFile}
 													<p class="truncate text-xs font-medium">{ep.name}</p>
-													<p class="truncate text-xs opacity-50" title={libFile.name}>{libFile.name}</p>
+													<p class="truncate text-xs opacity-50" title={libFile.name}>
+														{libFile.name}
+													</p>
 												{:else}
 													<p class="truncate text-xs">{ep.name}</p>
 												{/if}
 											</div>
 											{#if libFile && onplayfile}
 												<button
-													class="btn shrink-0 opacity-0 group-hover:opacity-100 btn-ghost btn-xs"
+													class="btn shrink-0 opacity-0 btn-ghost btn-xs group-hover:opacity-100"
 													onclick={() => onplayfile(libFile)}
 													title="Play"
 												>

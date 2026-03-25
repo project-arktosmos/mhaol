@@ -24,6 +24,7 @@ pub mod roster;
 pub mod signaling;
 pub mod signaling_ws;
 pub mod openlibrary;
+pub mod iptv;
 pub mod smart_pair;
 pub mod smart_search;
 pub mod tmdb;
@@ -73,6 +74,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/youtube-search", youtube_search::router())
         .nest("/api/openlibrary", openlibrary::router())
         .nest("/api/queue", queue::router())
+        .nest("/api/iptv", iptv::router())
         .nest("/api/smart-pair", smart_pair::router())
         .nest("/api/smart-search", smart_search::router())
         .merge(signaling_ws::signaling_routes());

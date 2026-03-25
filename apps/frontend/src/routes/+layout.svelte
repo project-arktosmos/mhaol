@@ -53,6 +53,7 @@
 					{/if}
 				</a>
 			</li>
+			<li><a href="{base}/iptv">IPTV</a></li>
 			<li><a href="{base}/connect">Connect</a></li>
 			<li><a href="{base}/roster">Roster</a></li>
 			<li><a href="{base}/import">Import</a></li>
@@ -82,6 +83,7 @@
 							<span class="badge badge-xs badge-primary ml-1">{ytActiveCount}</span>
 						{/if}
 					</a>
+					<a href="{base}/iptv" class="btn btn-ghost btn-sm">IPTV</a>
 				</div>
 			{/snippet}
 			{#snippet end()}

@@ -156,9 +156,7 @@ export class WebRtcTransport implements Transport {
 
 			const fullBody = req.chunks.join('');
 			const resp = req.response!;
-			req.resolve(
-				this.buildResponse(resp.status, resp.statusText, resp.headers ?? {}, fullBody)
-			);
+			req.resolve(this.buildResponse(resp.status, resp.statusText, resp.headers ?? {}, fullBody));
 		}
 	}
 

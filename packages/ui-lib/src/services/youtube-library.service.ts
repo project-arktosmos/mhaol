@@ -171,7 +171,6 @@ class YouTubeLibraryService {
 		if (!response.ok) throw new Error(`HTTP ${response.status}`);
 		await this.fetchContent();
 	}
-
 }
 
 export const youtubeLibraryService = new YouTubeLibraryService();
