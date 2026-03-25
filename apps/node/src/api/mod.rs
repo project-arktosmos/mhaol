@@ -21,6 +21,7 @@ pub mod player;
 pub mod plugins;
 pub mod profiles;
 pub mod favorites;
+pub mod pins;
 pub mod queue;
 pub mod roster;
 pub mod signaling;
@@ -68,6 +69,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/network", network::router())
         .nest("/api/profiles", profiles::router())
         .nest("/api/favorites", favorites::router())
+        .nest("/api/pins", pins::router())
         .nest("/api/roster", roster::router())
         .nest("/api/signaling", signaling::router())
         .nest("/api/images", images::router())

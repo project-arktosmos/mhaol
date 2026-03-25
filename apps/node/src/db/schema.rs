@@ -297,8 +297,21 @@ CREATE TABLE IF NOT EXISTS favorites (
 CREATE INDEX IF NOT EXISTS idx_favorites_wallet ON favorites(wallet);
 ";
 
+const PINS_SQL: &str = "
+CREATE TABLE IF NOT EXISTS pins (
+    id TEXT PRIMARY KEY,
+    wallet TEXT NOT NULL REFERENCES profiles(wallet) ON DELETE CASCADE,
+    service TEXT NOT NULL,
+    service_id TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(wallet, service, service_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pins_wallet ON pins(wallet);
+";
+
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '33', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '34', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -895,6 +908,22 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: add pins table (db_version 34)
+    if !has_table(conn, "pins") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE pins (
+                id TEXT PRIMARY KEY,
+                wallet TEXT NOT NULL REFERENCES profiles(wallet) ON DELETE CASCADE,
+                service TEXT NOT NULL,
+                service_id TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(wallet, service, service_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_pins_wallet ON pins(wallet);",
+        );
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(
@@ -928,6 +957,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(ROSTER_CONTACTS_SQL)?;
     conn.execute_batch(PROFILES_SQL)?;
     conn.execute_batch(FAVORITES_SQL)?;
+    conn.execute_batch(PINS_SQL)?;
     if !is_server {
         conn.execute_batch(MEDIA_LISTS_SQL)?;
         conn.execute_batch(IMAGE_TAGS_SQL)?;
@@ -989,6 +1019,7 @@ mod tests {
         assert!(has_table(&conn, "roster_contacts"));
         assert!(has_table(&conn, "profiles"));
         assert!(has_table(&conn, "favorites"));
+        assert!(has_table(&conn, "pins"));
         assert!(has_table(&conn, "tv_torrent_fetch_cache"));
         assert!(has_table(&conn, "book_torrent_fetch_cache"));
         assert!(has_table(&conn, "queue_tasks"));
