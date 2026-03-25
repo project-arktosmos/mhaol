@@ -8,6 +8,7 @@
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { playerService } from 'ui-lib/services/player.service';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import { profileService } from 'ui-lib/services/profile.service';
 	import { movieDetailsToDisplay, getPosterUrl, getBackdropUrl } from 'addons/tmdb/transform';
 	import type { DisplayTMDBMovie, DisplayTMDBMovieDetails } from 'addons/tmdb/types';
@@ -27,12 +28,18 @@
 	let imagesVisible = $state(false);
 	let imageOverrides = $state<Record<string, string> | null>(null);
 	let togglingFavorite = $state(false);
+	let togglingPin = $state(false);
 
 	const favState = favoritesService.state;
+	const pinState = pinsService.state;
 	const profileStore = profileService.state;
 
 	let isFavorite = $derived(
 		$favState.items.some((f) => f.service === 'tmdb' && f.serviceId === String(tmdbId))
+	);
+
+	let isPinned = $derived(
+		$pinState.items.some((p) => p.service === 'tmdb' && p.serviceId === String(tmdbId))
 	);
 
 	const searchStore = smartSearchService.store;
@@ -288,6 +295,16 @@
 		}
 	}
 
+	async function handleTogglePin() {
+		if (!movie) return;
+		togglingPin = true;
+		try {
+			await pinsService.toggle('tmdb', String(movie.id), movie.title);
+		} finally {
+			togglingPin = false;
+		}
+	}
+
 	onMount(() => {
 		fetchMovie(tmdbId);
 	});
@@ -315,6 +332,8 @@
 		{imageOverrides}
 		{isFavorite}
 		{togglingFavorite}
+		{isPinned}
+		{togglingPin}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onp2pstream={handleP2pStream}
@@ -323,6 +342,7 @@
 		ontoggleimages={() => { imagesVisible = true; }}
 		onsetimageoverride={handleSetImageOverride}
 		ontogglefavorite={handleToggleFavorite}
+		ontogglepin={handleTogglePin}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">
