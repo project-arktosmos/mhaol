@@ -158,7 +158,10 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			});
 
 			if (generation !== this.playGeneration) {
-				console.log('[Player] Stale play() after session creation, cleaning up', session.session_id);
+				console.log(
+					'[Player] Stale play() after session creation, cleaning up',
+					session.session_id
+				);
 				fetchRaw(`/api/player/sessions/${session.session_id}`, { method: 'DELETE' }).catch(
 					() => {}
 				);

@@ -32,8 +32,7 @@
 				})
 				.catch((err) => {
 					reconnecting = false;
-					reconnectError =
-						err instanceof Error ? err.message : 'Failed to reconnect';
+					reconnectError = err instanceof Error ? err.message : 'Failed to reconnect';
 					// Clear config so the user sees the setup modal again
 					connectionConfigService.clear();
 				});
@@ -56,7 +55,7 @@
 	<div class="modal-open modal" role="dialog" aria-modal="true">
 		<div class="modal-box max-h-[90vh] max-w-md overflow-y-auto">
 			{#if reconnectError}
-				<div class="alert alert-warning mb-4 text-sm">
+				<div class="mb-4 alert text-sm alert-warning">
 					<span>Previous connection failed: {reconnectError}</span>
 				</div>
 			{/if}

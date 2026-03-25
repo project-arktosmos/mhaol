@@ -204,7 +204,6 @@ class CloudLibraryService {
 	setSelectedName(name: string): void {
 		this.state.update((s) => ({ ...s, selectedName: name }));
 	}
-
 }
 
 export const cloudLibraryService = new CloudLibraryService();

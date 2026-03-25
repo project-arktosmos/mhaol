@@ -3,10 +3,12 @@
 	import { onMount } from 'svelte';
 	import { DEFAULT_SIGNALING_URL } from 'ui-lib/lib/api-base';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
+	import { clientIdentityService } from 'ui-lib/services/client-identity.service';
 	import {
 		nodeConnectionService,
 		type NodeConnectionPhase
 	} from 'ui-lib/services/node-connection.service';
+	import { generateRandomUsername } from 'ui-lib/utils/random-username';
 	import type { TransportMode } from 'ui-lib/types/connection-config.type';
 
 	let {
@@ -20,10 +22,23 @@
 	const defaults = connectionConfigService.defaults();
 	const existingConfig = connectionConfigService.get();
 
+	const localIdentity = clientIdentityService.loadLocal();
+	let displayName = $state(localIdentity.name);
+	let clientAddress = localIdentity.address;
+
 	let transportMode = $state<TransportMode>(existingConfig?.transportMode ?? 'http');
 	let serverUrl = $state(existingConfig?.serverUrl ?? defaults.serverUrl);
 	let serverAddress = $state(existingConfig?.serverAddress ?? defaults.serverAddress);
 	let signalingUrl = $state(existingConfig?.signalingUrl ?? defaults.signalingUrl);
+
+	function handleNameChange(value: string) {
+		displayName = value;
+		clientIdentityService.updateName(value);
+	}
+
+	function randomizeName() {
+		handleNameChange(generateRandomUsername());
+	}
 
 	onMount(() => {
 		if (!existingConfig) {
@@ -111,7 +126,7 @@
 	<!-- Connected status view -->
 	{#if connected && existingConfig}
 		<div class="flex items-center gap-2">
-			<span class="badge badge-success gap-1">
+			<span class="badge gap-1 badge-success">
 				<span class="h-2 w-2 rounded-full bg-success-content"></span>
 				Connected
 			</span>
@@ -140,14 +155,45 @@
 			{/if}
 		</div>
 
-		<button class="btn btn-outline btn-error" onclick={handleDisconnect}>
-			Disconnect
-		</button>
+		<button class="btn btn-outline btn-error" onclick={handleDisconnect}> Disconnect </button>
 	{:else}
+		<!-- Client identity -->
+		<div class="rounded-lg bg-base-200 p-3">
+			<div class="text-sm">
+				<span class="text-base-content/60">Your Address</span>
+				<p class="mt-0.5 truncate font-mono text-xs">{clientAddress}</p>
+			</div>
+		</div>
+
+		<div class="form-control">
+			<label class="label" for="display-name">
+				<span class="label-text">Display Name</span>
+			</label>
+			<div class="flex gap-2">
+				<input
+					id="display-name"
+					type="text"
+					class="input-bordered input w-full"
+					placeholder="Enter your name"
+					value={displayName}
+					oninput={(e) => handleNameChange(e.currentTarget.value)}
+					disabled={connecting}
+				/>
+				<button
+					class="btn btn-square btn-ghost btn-sm self-center"
+					title="Generate random name"
+					disabled={connecting}
+					onclick={randomizeName}
+				>
+					&#x21bb;
+				</button>
+			</div>
+		</div>
+
 		<!-- Transport mode selector -->
 		<div class="flex gap-2">
 			<button
-				class={classNames('btn btn-sm flex-1', {
+				class={classNames('btn flex-1 btn-sm', {
 					'btn-primary': transportMode === 'http',
 					'btn-ghost': transportMode !== 'http'
 				})}
@@ -157,7 +203,7 @@
 				HTTP
 			</button>
 			<button
-				class={classNames('btn btn-sm flex-1', {
+				class={classNames('btn flex-1 btn-sm', {
 					'btn-primary': transportMode === 'webrtc',
 					'btn-ghost': transportMode !== 'webrtc'
 				})}
@@ -177,7 +223,7 @@
 				<input
 					id="server-url"
 					type="text"
-					class="input input-bordered w-full"
+					class="input-bordered input w-full"
 					placeholder="http://192.168.1.5:1530"
 					bind:value={serverUrl}
 					disabled={connecting}
@@ -194,7 +240,7 @@
 				<input
 					id="server-address"
 					type="text"
-					class="input input-bordered w-full font-mono text-sm"
+					class="input-bordered input w-full font-mono text-sm"
 					placeholder="0x..."
 					bind:value={serverAddress}
 					disabled={connecting}
@@ -207,7 +253,7 @@
 				<input
 					id="signaling-url"
 					type="text"
-					class="input input-bordered w-full text-sm"
+					class="input-bordered input w-full text-sm"
 					placeholder={DEFAULT_SIGNALING_URL}
 					bind:value={signalingUrl}
 					disabled={connecting}
@@ -240,17 +286,13 @@
 
 		<!-- Error display -->
 		{#if $connState.error}
-			<div class="alert alert-error text-sm">
+			<div class="alert text-sm alert-error">
 				<span>{$connState.error}</span>
 			</div>
 		{/if}
 
 		<!-- Connect button -->
-		<button
-			class="btn btn-primary"
-			disabled={!canConnect || connecting}
-			onclick={handleConnect}
-		>
+		<button class="btn btn-primary" disabled={!canConnect || connecting} onclick={handleConnect}>
 			{#if connecting}
 				<span class="loading loading-sm loading-spinner"></span>
 				Connecting...

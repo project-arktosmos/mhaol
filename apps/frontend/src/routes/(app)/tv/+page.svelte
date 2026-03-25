@@ -178,12 +178,20 @@
     }
   }
 
-  // Filter to show-level TV lists (no parent)
-  let tvShowLists = $derived(
-    (data.lists ?? []).filter(
+  // Filter to show-level TV lists (no parent), deduplicated by TMDB ID
+  let tvShowLists = $derived.by(() => {
+    const parentTvLists = (data.lists ?? []).filter(
       (list) => list.parentListId === null && list.libraryType === "tv",
-    ),
-  );
+    );
+    const seenTmdbIds = new Set<string>();
+    return parentTvLists.filter((list) => {
+      const tmdbId = list.links?.tmdb?.serviceId;
+      if (!tmdbId) return true;
+      if (seenTmdbIds.has(tmdbId)) return false;
+      seenTmdbIds.add(tmdbId);
+      return true;
+    });
+  });
 
   // Assign unique numeric IDs to each list (DisplayTMDBTvShow requires numeric id)
   // Use negative IDs to avoid collisions with real TMDB IDs

@@ -182,6 +182,7 @@ async fn stream_status(State(_state): State<AppState>) -> impl IntoResponse {
 #[derive(Deserialize)]
 struct CreateSessionBody {
     file_path: String,
+    stream_url: Option<String>,
     mode: Option<String>,
     video_codec: Option<String>,
     video_quality: Option<String>,
@@ -218,6 +219,7 @@ async fn create_session(
         .create_session(
             &session_id,
             &resolved,
+            body.stream_url,
             &signaling_url,
             body.mode,
             body.video_codec,

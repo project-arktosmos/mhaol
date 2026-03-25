@@ -1,5 +1,9 @@
 import { getTransport } from './transport-context';
-import type { TransportRequestInit, TransportResponse, TransportEventSource } from './transport.type';
+import type {
+	TransportRequestInit,
+	TransportResponse,
+	TransportEventSource
+} from './transport.type';
 
 export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 	const transport = getTransport();
@@ -31,10 +35,7 @@ export async function fetchRaw(path: string, init?: RequestInit): Promise<Transp
 	});
 }
 
-export function subscribeSSE(
-	path: string,
-	signal?: AbortSignal
-): TransportEventSource {
+export function subscribeSSE(path: string, signal?: AbortSignal): TransportEventSource {
 	const transport = getTransport();
 	return transport.subscribe(path, { signal });
 }

@@ -267,7 +267,10 @@ class SmartSearchService {
 				if (signal.aborted) return;
 
 				try {
-					const res = await fetchRaw(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`, { signal });
+					const res = await fetchRaw(
+						`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`,
+						{ signal }
+					);
 					if (!res.ok) continue;
 					const data: TorrentSearchResult[] = await res.json();
 
@@ -439,7 +442,10 @@ class SmartSearchService {
 				if (signal.aborted) return;
 
 				try {
-					const res = await fetchRaw(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`, { signal });
+					const res = await fetchRaw(
+						`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`,
+						{ signal }
+					);
 					if (!res.ok) continue;
 					const data: TorrentSearchResult[] = await res.json();
 
@@ -608,7 +614,10 @@ class SmartSearchService {
 				if (signal.aborted) return;
 
 				try {
-					const res = await fetchRaw(`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`, { signal });
+					const res = await fetchRaw(
+						`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`,
+						{ signal }
+					);
 					if (!res.ok) continue;
 					const data: TorrentSearchResult[] = await res.json();
 
@@ -875,7 +884,9 @@ class SmartSearchService {
 
 	async checkBookFetchCache(openlibraryKey: string): Promise<SmartSearchTorrentResult | null> {
 		try {
-			const res = await fetchRaw(`/api/openlibrary/fetch-cache?key=${encodeURIComponent(openlibraryKey)}`);
+			const res = await fetchRaw(
+				`/api/openlibrary/fetch-cache?key=${encodeURIComponent(openlibraryKey)}`
+			);
 			if (!res.ok) return null;
 			const candidate = (await res.json()) as SmartSearchTorrentResult;
 			candidate.uploadedAt = new Date(candidate.uploadedAt);
@@ -985,11 +996,14 @@ class SmartSearchService {
 		this.store.update((s) => ({ ...s, downloadedHash: infoHash }));
 
 		try {
-			await fetchRaw(`/api/libraries/${state.pendingLibraryId}/items/${state.pendingItemId}/torrent`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ infoHash, outputPath, mode })
-			});
+			await fetchRaw(
+				`/api/libraries/${state.pendingLibraryId}/items/${state.pendingItemId}/torrent`,
+				{
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ infoHash, outputPath, mode })
+				}
+			);
 		} catch {
 			// best-effort
 		}

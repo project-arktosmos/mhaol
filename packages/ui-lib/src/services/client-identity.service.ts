@@ -2,6 +2,7 @@ import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { hashMessage } from 'viem';
+import { generateRandomUsername } from 'ui-lib/utils/random-username';
 import type { PassportData } from 'webrtc/types';
 
 const STORAGE_KEY = 'client-identity';
@@ -35,19 +36,7 @@ class ClientIdentityService {
 		this._signalingUrl = signalingUrl;
 
 		try {
-			const stored = localStorage.getItem(STORAGE_KEY);
-			let name: string;
-			let privateKey: `0x${string}`;
-
-			if (stored) {
-				const parsed: StoredIdentity = JSON.parse(stored);
-				name = parsed.name;
-				privateKey = parsed.privateKey;
-			} else {
-				name = 'default';
-				privateKey = generatePrivateKey();
-				localStorage.setItem(STORAGE_KEY, JSON.stringify({ name, privateKey }));
-			}
+			const { name, privateKey } = this.loadOrCreateStored();
 
 			const identity = await this.buildIdentity(name, privateKey);
 			this.state.set({ loading: false, identity, error: null });
@@ -68,11 +57,42 @@ class ClientIdentityService {
 
 	async regenerate(): Promise<void> {
 		if (!browser) return;
-		const name = 'default';
+		const name = generateRandomUsername();
 		const privateKey = generatePrivateKey();
 		localStorage.setItem(STORAGE_KEY, JSON.stringify({ name, privateKey }));
 		const identity = await this.buildIdentity(name, privateKey);
 		this.state.set({ loading: false, identity, error: null });
+	}
+
+	/** Load or create the stored keypair without full initialization (no signalingUrl needed). */
+	loadLocal(): { name: string; address: string } {
+		if (!browser) return { name: '', address: '' };
+		const { name, privateKey } = this.loadOrCreateStored();
+		const account = privateKeyToAccount(privateKey);
+		return { name, address: account.address };
+	}
+
+	/** Update the stored display name. */
+	updateName(newName: string): void {
+		if (!browser) return;
+		const stored = localStorage.getItem(STORAGE_KEY);
+		if (!stored) return;
+		const parsed: StoredIdentity = JSON.parse(stored);
+		parsed.name = newName;
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+	}
+
+	private loadOrCreateStored(): StoredIdentity {
+		const stored = localStorage.getItem(STORAGE_KEY);
+		if (stored) {
+			return JSON.parse(stored);
+		}
+		const identity: StoredIdentity = {
+			name: generateRandomUsername(),
+			privateKey: generatePrivateKey()
+		};
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
+		return identity;
 	}
 
 	private async buildIdentity(

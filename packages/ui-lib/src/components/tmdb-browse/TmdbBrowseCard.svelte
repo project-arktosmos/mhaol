@@ -167,10 +167,13 @@
 	</div>
 {:else}
 	<div
-		class={classNames('group card-compact card relative border border-info/40 bg-base-200 shadow-sm', {
-			'cursor-pointer transition-shadow hover:shadow-md': !!onclick,
-			'ring-2 ring-primary': selected
-		})}
+		class={classNames(
+			'group card-compact card relative border border-info/40 bg-base-200 shadow-sm',
+			{
+				'cursor-pointer transition-shadow hover:shadow-md': !!onclick,
+				'ring-2 ring-primary': selected
+			}
+		)}
 		{onclick}
 		role={onclick ? 'button' : undefined}
 		tabindex={onclick ? 0 : undefined}

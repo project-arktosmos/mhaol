@@ -61,8 +61,7 @@ class ConnectionConfigService {
 				signalingUrl: DEFAULT_SIGNALING_URL
 			};
 		}
-		const host =
-			typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+		const host = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
 		return {
 			serverUrl: `http://${host}:1530`,
 			serverAddress: '',

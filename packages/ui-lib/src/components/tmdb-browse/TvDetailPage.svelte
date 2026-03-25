@@ -55,11 +55,13 @@
 			seasons: Map<number, Set<number>>;
 		};
 		libraryFiles?: LibraryEpisodeFile[];
+		resyncing?: boolean;
 		onfetch: () => void;
 		ondownload: () => void;
 		onp2pstream: () => void;
 		onshowsearch: () => void;
 		onplayfile?: (file: LibraryEpisodeFile) => void;
+		onresync?: () => void;
 		onback: () => void;
 	}
 
@@ -75,11 +77,13 @@
 		fetchedTorrent,
 		tvMatchedSeasons,
 		libraryFiles = [],
+		resyncing = false,
 		onfetch,
 		ondownload,
 		onp2pstream,
 		onshowsearch,
 		onplayfile,
+		onresync,
 		onback
 	}: Props = $props();
 
@@ -309,7 +313,6 @@
 				</div>
 			</div>
 		{/if}
-
 	{/snippet}
 
 	{#snippet cellB()}
@@ -426,7 +429,8 @@
 							{#if fetchedTorrent.languages}
 								<tr>
 									<td class="font-medium opacity-60">Languages</td>
-									<td><span class="badge badge-ghost badge-xs">{fetchedTorrent.languages}</span></td>
+									<td><span class="badge badge-ghost badge-xs">{fetchedTorrent.languages}</span></td
+									>
 								</tr>
 							{/if}
 						{/if}
@@ -448,10 +452,7 @@
 									<td class="font-medium opacity-60">Progress</td>
 									<td>
 										<div class="flex items-center gap-2">
-											<progress
-												class="progress progress-info flex-1"
-												value={dlPercent}
-												max="100"
+											<progress class="progress flex-1 progress-info" value={dlPercent} max="100"
 											></progress>
 											<span class="text-xs font-medium">{dlPercent}%</span>
 										</div>
@@ -480,10 +481,7 @@
 									<td class="font-medium opacity-60">Progress</td>
 									<td>
 										<div class="flex items-center gap-2">
-											<progress
-												class="progress progress-success flex-1"
-												value="100"
-												max="100"
+											<progress class="progress flex-1 progress-success" value="100" max="100"
 											></progress>
 											<span class="text-xs font-medium">100%</span>
 										</div>
@@ -535,14 +533,35 @@
 
 		{#if tvSeasonDetails.length > 0}
 			<div>
-				<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">
-					Seasons &amp; Episodes
-					{#if hasLibrary}
-						<span class="ml-1 badge badge-xs badge-success">{libraryFiles.length} file{libraryFiles.length !== 1 ? 's' : ''}</span>
-					{:else if tvMatchedSeasons.hasComplete}
-						<span class="ml-1 badge badge-xs badge-success">Complete</span>
+				<div class="mb-1 flex items-center justify-between">
+					<h3 class="text-xs font-semibold tracking-wide uppercase opacity-50">
+						Seasons &amp; Episodes
+						{#if hasLibrary}
+							<span class="ml-1 badge badge-xs badge-success"
+								>{libraryFiles.length} file{libraryFiles.length !== 1 ? 's' : ''}</span
+							>
+						{:else if tvMatchedSeasons.hasComplete}
+							<span class="ml-1 badge badge-xs badge-success">Complete</span>
+						{/if}
+					</h3>
+					{#if onresync}
+						<button
+							class="btn btn-ghost btn-xs"
+							onclick={onresync}
+							disabled={resyncing}
+							title="Resync library files"
+						>
+							{#if resyncing}
+								<span class="loading loading-xs loading-spinner"></span>
+							{:else}
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+								</svg>
+							{/if}
+							Resync
+						</button>
 					{/if}
-				</h3>
+				</div>
 				<div class="flex flex-col gap-1">
 					{#each tvSeasonDetails as season (season.seasonNumber)}
 						{@const isExpanded = expandedSeason === season.seasonNumber}
@@ -578,7 +597,9 @@
 								</span>
 								<span class="flex shrink-0 items-center gap-1">
 									{#if hasSeasonLib}
-										<span class="text-xs text-success">{seasonLibFiles?.length}/{season.episodes.length}</span>
+										<span class="text-xs text-success"
+											>{seasonLibFiles?.length}/{season.episodes.length}</span
+										>
 									{:else if seasonMatch}
 										{@const epCount = [...seasonMatch].filter((e) => e !== -1).length}
 										{#if epCount > 0}
@@ -616,14 +637,16 @@
 											<div class="min-w-0 flex-1">
 												{#if libFile}
 													<p class="truncate text-xs font-medium">{ep.name}</p>
-													<p class="truncate text-xs opacity-50" title={libFile.name}>{libFile.name}</p>
+													<p class="truncate text-xs opacity-50" title={libFile.name}>
+														{libFile.name}
+													</p>
 												{:else}
 													<p class="truncate text-xs">{ep.name}</p>
 												{/if}
 											</div>
 											{#if libFile && onplayfile}
 												<button
-													class="btn shrink-0 opacity-0 group-hover:opacity-100 btn-ghost btn-xs"
+													class="btn shrink-0 opacity-0 btn-ghost btn-xs group-hover:opacity-100"
 													onclick={() => onplayfile(libFile)}
 													title="Play"
 												>

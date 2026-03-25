@@ -265,7 +265,6 @@ class ImageTaggerService {
 	setFilter(value: string): void {
 		this.state.update((s) => ({ ...s, filter: value }));
 	}
-
 }
 
 export const imageTaggerService = new ImageTaggerService();

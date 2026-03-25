@@ -110,7 +110,9 @@
 
 		playerService.initialize();
 		identityService.initialize();
-		connectSignaling().catch(() => {});
+		if (connConfig?.transportMode === 'webrtc') {
+			connectSignaling().catch(() => {});
+		}
 	});
 
 	onDestroy(() => {
