@@ -92,13 +92,13 @@ impl LibraryItemRepo {
             .collect()
     }
 
-    pub fn insert(&self, item: &InsertLibraryItem) {
+    pub fn insert(&self, item: &InsertLibraryItem) -> Result<(), rusqlite::Error> {
         let conn = self.db.lock();
         conn.execute(
             "INSERT INTO library_items (id, library_id, path, extension, media_type, category_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![item.id, item.library_id, item.path, item.extension, item.media_type, item.category_id],
-        )
-        .unwrap();
+        )?;
+        Ok(())
     }
 
     pub fn insert_many(&self, items: &[InsertLibraryItem]) {

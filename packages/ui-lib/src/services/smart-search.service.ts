@@ -232,36 +232,30 @@ class SmartSearchService {
 	private async runSearches(selection: SmartSearchSelection, signal: AbortSignal) {
 		const { title, year } = selection;
 
-		let cat: number;
-		let queries: string[];
+		let searches: Array<{ query: string; cat: number }>;
 
 		switch (selection.type) {
 			case 'music':
-				cat = 100;
-				queries = [`${selection.artist} ${title}`];
+				searches = [{ query: `${selection.artist} ${title}`, cat: 100 }];
 				break;
 			case 'game': {
-				cat = 400;
 				const cleanTitle = title.replace(/^~[^~]+~\s*/g, '').trim();
 				const searchNames = CONSOLE_SEARCH_NAMES[selection.consoleId] ?? [];
 				const shortName = searchNames[0] ?? selection.consoleName;
-				queries = [
-					`${cleanTitle} ${shortName}`,
-					cleanTitle
+				searches = [
+					{ query: `${cleanTitle} ${shortName}`, cat: 0 },
+					{ query: cleanTitle, cat: 0 }
 				];
 				break;
 			}
 			case 'book':
-				cat = 601;
-				queries = [`${title} ${selection.author}`];
+				searches = [{ query: `${title} ${selection.author}`, cat: 601 }];
 				break;
 			case 'movie':
-				cat = 200;
-				queries = [`${title} ${year}`];
+				searches = [{ query: `${title} ${year}`, cat: 200 }];
 				break;
 			default:
-				cat = 200;
-				queries = [`${title} ${year}`];
+				searches = [{ query: `${title} ${year}`, cat: 200 }];
 				break;
 		}
 
@@ -271,7 +265,7 @@ class SmartSearchService {
 			const seen = new Map<string, SmartSearchTorrentResult>();
 			const analyzeHashes = new Set<string>();
 
-			for (const query of queries) {
+			for (const { query, cat } of searches) {
 				if (signal.aborted) return;
 
 				try {

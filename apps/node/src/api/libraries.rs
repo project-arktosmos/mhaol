@@ -252,14 +252,20 @@ async fn create_item(
         .unwrap_or("")
         .to_lowercase();
 
-    state.library_items.insert(&crate::db::repo::library_item::InsertLibraryItem {
+    if let Err(e) = state.library_items.insert(&crate::db::repo::library_item::InsertLibraryItem {
         id: item_id.clone(),
         library_id: library_id.clone(),
         path: body.path.clone(),
         extension,
         media_type: body.media_type.unwrap_or_else(|| "video".to_string()),
         category_id: body.category_id,
-    });
+    }) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response();
+    }
 
     if let Some(tmdb_id) = body.tmdb_id {
         state.library_item_links.upsert(
