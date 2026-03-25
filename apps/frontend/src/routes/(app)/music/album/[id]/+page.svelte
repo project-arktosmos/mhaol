@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { releaseGroupsToDisplay, releaseToDisplay } from 'addons/musicbrainz/transform';
 	import type {
@@ -186,7 +187,7 @@
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onshowsearch={() => smartSearchService.show()}
-		onback={() => goto('/music/album')}
+		onback={() => goto(`${base}/music/album`)}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">
@@ -195,6 +196,6 @@
 {:else}
 	<div class="flex flex-1 flex-col items-center justify-center gap-2">
 		<p class="text-sm opacity-60">Album not found</p>
-		<button class="btn btn-ghost btn-sm" onclick={() => goto('/music/album')}>Back to albums</button>
+		<button class="btn btn-ghost btn-sm" onclick={() => goto(`${base}/music/album`)}>Back to albums</button>
 	</div>
 {/if}

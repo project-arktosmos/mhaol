@@ -13,6 +13,7 @@
 	import SetupModalContent from 'ui-lib/components/setup/SetupModalContent.svelte';
 	import { onMount } from 'svelte';
 	import { afterNavigate } from '$app/navigation';
+	import { base } from '$app/paths';
 
 	let { children } = $props();
 
@@ -38,24 +39,24 @@
 	{#snippet sidebar()}
 		<div class="mb-4 text-lg font-bold">Mhaol<span class="text-primary">Media</span></div>
 		<ul class="menu gap-1">
-			<li><a href="/movies">Movies</a></li>
-			<li><a href="/tv">TV</a></li>
-			<li><a href="/music">Music</a></li>
-			<li><a href="/videogames">Games</a></li>
-			<li><a href="/books">Books</a></li>
-			<li><a href="/photos">Photos</a></li>
+			<li><a href="{base}/movies">Movies</a></li>
+			<li><a href="{base}/tv">TV</a></li>
+			<li><a href="{base}/music">Music</a></li>
+			<li><a href="{base}/videogames">Games</a></li>
+			<li><a href="{base}/books">Books</a></li>
+			<li><a href="{base}/photos">Photos</a></li>
 			<li>
-				<a href="/youtube">
+				<a href="{base}/youtube">
 					YouTube
 					{#if ytActiveCount > 0}
 						<span class="badge badge-xs badge-primary">{ytActiveCount}</span>
 					{/if}
 				</a>
 			</li>
-			<li><a href="/connect">Connect</a></li>
-			<li><a href="/roster">Roster</a></li>
-			<li><a href="/import">Import</a></li>
-			<li><a href="/options">Options</a></li>
+			<li><a href="{base}/connect">Connect</a></li>
+			<li><a href="{base}/roster">Roster</a></li>
+			<li><a href="{base}/import">Import</a></li>
+			<li><a href="{base}/options">Options</a></li>
 		</ul>
 		<div class="divider"></div>
 		<div class="flex items-center gap-2">
@@ -69,13 +70,13 @@
 		<Navbar brand={{ label: 'Mhaol', highlight: 'Media' }} classes="!bg-base-300">
 			{#snippet center()}
 				<div class="hidden items-center gap-1 lg:flex">
-					<a href="/movies" class="btn btn-ghost btn-sm">Movies</a>
-					<a href="/tv" class="btn btn-ghost btn-sm">TV</a>
-					<a href="/music" class="btn btn-ghost btn-sm">Music</a>
-					<a href="/videogames" class="btn btn-ghost btn-sm">Games</a>
-					<a href="/books" class="btn btn-ghost btn-sm">Books</a>
-					<a href="/photos" class="btn btn-ghost btn-sm">Photos</a>
-					<a href="/youtube" class="btn btn-ghost btn-sm">
+					<a href="{base}/movies" class="btn btn-ghost btn-sm">Movies</a>
+					<a href="{base}/tv" class="btn btn-ghost btn-sm">TV</a>
+					<a href="{base}/music" class="btn btn-ghost btn-sm">Music</a>
+					<a href="{base}/videogames" class="btn btn-ghost btn-sm">Games</a>
+					<a href="{base}/books" class="btn btn-ghost btn-sm">Books</a>
+					<a href="{base}/photos" class="btn btn-ghost btn-sm">Photos</a>
+					<a href="{base}/youtube" class="btn btn-ghost btn-sm">
 						YouTube
 						{#if ytActiveCount > 0}
 							<span class="badge badge-xs badge-primary ml-1">{ytActiveCount}</span>
@@ -101,10 +102,10 @@
 					</svg>
 				</button>
 				<div class="hidden items-center gap-1 lg:flex">
-					<a href="/connect" class="btn btn-ghost btn-sm">Connect</a>
-					<a href="/roster" class="btn btn-ghost btn-sm">Roster</a>
-					<a href="/import" class="btn btn-ghost btn-sm">Import</a>
-					<a href="/options" class="btn btn-ghost btn-sm">Options</a>
+					<a href="{base}/connect" class="btn btn-ghost btn-sm">Connect</a>
+					<a href="{base}/roster" class="btn btn-ghost btn-sm">Roster</a>
+					<a href="{base}/import" class="btn btn-ghost btn-sm">Import</a>
+					<a href="{base}/options" class="btn btn-ghost btn-sm">Options</a>
 					<SignalingStatusBadge />
 					<button class="btn btn-ghost btn-sm" onclick={() => (setupModalOpen = true)}>
 						Setup

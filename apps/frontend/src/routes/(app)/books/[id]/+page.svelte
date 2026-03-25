@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { workToDisplayDetails, authorToDisplay, getCoverUrl } from 'addons/openlibrary/transform';
 	import type { DisplayBook, DisplayBookDetails } from 'addons/openlibrary/types';
@@ -202,7 +203,7 @@
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onshowsearch={() => smartSearchService.show()}
-		onback={() => goto('/books')}
+		onback={() => goto(`${base}/books`)}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">
@@ -211,6 +212,6 @@
 {:else}
 	<div class="flex flex-1 flex-col items-center justify-center gap-2">
 		<p class="text-sm opacity-60">Book not found</p>
-		<button class="btn btn-ghost btn-sm" onclick={() => goto('/books')}>Back to books</button>
+		<button class="btn btn-ghost btn-sm" onclick={() => goto(`${base}/books`)}>Back to books</button>
 	</div>
 {/if}

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { playerService } from 'ui-lib/services/player.service';
 	import { playerAdapter } from 'ui-lib/adapters/classes/player.adapter';
@@ -131,7 +132,7 @@
 	}
 
 	async function handleBrowseSelectMovie(movie: DisplayTMDBMovie) {
-		goto(`/movies/${movie.id}`);
+		goto(`${base}/movies/${movie.id}`);
 	}
 
 	async function checkFetchCacheForTmdbId(tmdbId: number, displayId?: number) {
@@ -437,7 +438,7 @@
 		if (!item) return;
 		const tmdbLink = getItemLinks(item).tmdb;
 		if (tmdbLink) {
-			goto(`/movies/${tmdbLink.serviceId}`);
+			goto(`${base}/movies/${tmdbLink.serviceId}`);
 		}
 	}
 

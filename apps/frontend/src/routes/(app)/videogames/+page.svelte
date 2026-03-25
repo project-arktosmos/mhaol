@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { gameListItemToDisplay, gameExtendedToDisplay } from 'addons/retroachievements';
 	import type { RaGameMetadata, RaGameListItem, RaGameExtended } from 'addons/retroachievements/types';
@@ -127,7 +128,7 @@
 	}
 
 	function handleSelectGame(game: RaGameMetadata) {
-		goto(`/videogames/${game.id}`);
+		goto(`${base}/videogames/${game.id}`);
 	}
 
 	function handlePageChange(newPage: number) {

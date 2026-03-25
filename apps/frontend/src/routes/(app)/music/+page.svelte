@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
 	import { artistsToDisplay } from 'addons/musicbrainz/transform';
@@ -91,7 +92,7 @@
 	<section class="mb-8">
 		<div class="mb-3 flex items-center justify-between">
 			<h2 class="text-lg font-semibold">Albums</h2>
-			<a href="/music/album" class="btn btn-ghost btn-sm">View all</a>
+			<a href="{base}/music/album" class="btn btn-ghost btn-sm">View all</a>
 		</div>
 		{#if albumsLoading}
 			<div class="flex items-center justify-center py-12">
@@ -109,7 +110,7 @@
 						torrentState={torrent?.state ?? null}
 						torrentSpeed={torrent?.downloadSpeed ?? null}
 						torrentEta={torrent?.eta ?? null}
-						onselect={(a) => goto(`/music/album/${a.id}`)}
+						onselect={(a) => goto(`${base}/music/album/${a.id}`)}
 					/>
 				{/each}
 			</div>
@@ -119,7 +120,7 @@
 	<section>
 		<div class="mb-3 flex items-center justify-between">
 			<h2 class="text-lg font-semibold">Artists</h2>
-			<a href="/music/artist" class="btn btn-ghost btn-sm">View all</a>
+			<a href="{base}/music/artist" class="btn btn-ghost btn-sm">View all</a>
 		</div>
 		{#if artistsLoading}
 			<div class="flex items-center justify-center py-12">
@@ -137,7 +138,7 @@
 						torrentState={torrent?.state ?? null}
 						torrentSpeed={torrent?.downloadSpeed ?? null}
 						torrentEta={torrent?.eta ?? null}
-						onselect={(a) => goto(`/music/artist/${a.id}`)}
+						onselect={(a) => goto(`${base}/music/artist/${a.id}`)}
 					/>
 				{/each}
 			</div>
