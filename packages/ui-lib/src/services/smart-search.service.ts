@@ -346,6 +346,15 @@ class SmartSearchService {
 			return { ...s, searchResults: results, analyzing: false };
 		});
 
+		// Auto-select best candidate in fetch mode
+		if (selection.mode === 'fetch') {
+			const state = this.getState();
+			const best = this.pickBestFromList(state.searchResults);
+			if (best) {
+				this.setFetchedCandidate(best);
+			}
+		}
+
 		// Step 2: Fire off LLM tasks in background to enhance heuristic results
 		this.enhanceWithLlm(selection, analyzeHashes, artist, consoleName);
 	}
