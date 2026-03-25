@@ -491,7 +491,11 @@ async fn search_torrents(
         cat
     );
 
-    match reqwest::get(&url).await {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap_or_default();
+    match client.get(&url).send().await {
         Ok(resp) if resp.status().is_success() => {
             match resp.json::<Vec<serde_json::Value>>().await {
                 Ok(results) => {

@@ -183,7 +183,7 @@ class SmartSearchService {
 			...s,
 			selection,
 			visible: false,
-			searching: false,
+			searching: true,
 			analyzing: false,
 			searchResults: [],
 			searchError: null,

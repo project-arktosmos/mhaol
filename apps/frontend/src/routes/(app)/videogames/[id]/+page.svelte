@@ -29,14 +29,22 @@
 		fetchingGameId !== null &&
 			fetchingGameId === gameId &&
 			$searchStore.fetchedCandidate === null &&
-			$searchStore.selection?.mode === 'fetch'
+			$searchStore.selection?.mode === 'fetch' &&
+			$searchStore.searching
 	);
 	let isFetchedForCurrent = $derived(
 		$searchStore.fetchedCandidate !== null && fetchingGameId === gameId
 	);
+	let fetchFailed = $derived(
+		fetchingGameId !== null &&
+			fetchingGameId === gameId &&
+			!$searchStore.searching &&
+			$searchStore.selection?.mode === 'fetch' &&
+			$searchStore.fetchedCandidate === null
+	);
 
 	let currentFetchSteps = $derived.by(() => {
-		if (!isFetching && !isFetchedForCurrent) return null;
+		if (!isFetching && !isFetchedForCurrent && !fetchFailed) return null;
 		if (isFetchedForCurrent) {
 			return { terms: true, search: true, searching: false, eval: true, done: true };
 		}
@@ -157,6 +165,7 @@
 					languages: $searchStore.fetchedCandidate.analysis?.languages ?? ''
 				}
 			: null}
+		{fetchFailed}
 		{romFileUrl}
 		{ejsCore}
 		onfetch={handleFetch}

@@ -37,6 +37,7 @@
 			eta: number | null;
 		} | null;
 		fetchedTorrent: { name: string; quality: string; languages: string } | null;
+		fetchFailed: boolean;
 		romFileUrl: string | null;
 		ejsCore: string | null;
 		onback: () => void;
@@ -54,6 +55,7 @@
 		fetchSteps,
 		torrentStatus,
 		fetchedTorrent,
+		fetchFailed,
 		romFileUrl,
 		ejsCore,
 		onback,
@@ -257,6 +259,12 @@
 			{/if}
 			Smart Search
 		</button>
+
+		{#if fetchFailed}
+			<div class="rounded-lg bg-error/10 p-3 text-center text-sm text-error">
+				No torrents found for this game
+			</div>
+		{/if}
 
 		{#if fetchSteps}
 			<button
