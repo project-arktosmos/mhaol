@@ -84,6 +84,27 @@ export const CONSOLE_WASM_STATUS: Record<number, WasmStatus> = {
 	17: 'yes' // Atari Jaguar
 };
 
+export const CONSOLE_SEARCH_NAMES: Record<number, string[]> = {
+	5: ['GBA', 'Game Boy Advance'],
+	4: ['GB', 'Game Boy'],
+	6: ['GBC', 'Game Boy Color'],
+	3: ['SNES', 'Super Nintendo'],
+	7: ['NES', 'Famicom'],
+	1: ['Genesis', 'Mega Drive'],
+	11: ['SMS', 'Master System'],
+	2: ['N64', 'Nintendo 64'],
+	12: ['PSX', 'PS1', 'PlayStation'],
+	21: ['PS2', 'PlayStation 2'],
+	18: ['NDS', 'Nintendo DS'],
+	9: ['Atari 2600'],
+	8: ['PC Engine', 'TurboGrafx'],
+	10: ['Atari 7800'],
+	47: ['GameCube', 'GCN'],
+	14: ['Neo Geo Pocket', 'NGP'],
+	13: ['Atari Lynx', 'Lynx'],
+	17: ['Atari Jaguar', 'Jaguar']
+};
+
 export const CONSOLE_EJS_CORE: Record<number, string> = {
 	5: 'gba',
 	4: 'gb',

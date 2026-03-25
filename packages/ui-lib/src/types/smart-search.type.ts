@@ -63,6 +63,7 @@ export interface SmartSearchMusicSelection extends SmartSearchBaseSelection {
 export interface SmartSearchGameSelection extends SmartSearchBaseSelection {
 	type: 'game';
 	retroachievementsId: number;
+	consoleId: number;
 	consoleName: string;
 }
 

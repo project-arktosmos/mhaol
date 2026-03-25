@@ -124,6 +124,7 @@
 			year: '',
 			type: 'game',
 			retroachievementsId: game.id,
+			consoleId: game.consoleId,
 			consoleName: game.consoleName,
 			mode: 'fetch'
 		});

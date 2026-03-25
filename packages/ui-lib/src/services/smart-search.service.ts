@@ -16,6 +16,7 @@ import type {
 } from 'ui-lib/types/smart-search.type';
 import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/types';
 import { parseTorrentName } from 'addons/torrent-search-thepiratebay/parse-torrent-name';
+import { CONSOLE_SEARCH_NAMES } from 'addons/retroachievements/types';
 import { queueService } from 'ui-lib/services/queue.service';
 
 const defaultConfigs: SmartSearchAllConfigs = {
@@ -239,10 +240,17 @@ class SmartSearchService {
 				cat = 100;
 				queries = [`${selection.artist} ${title}`];
 				break;
-			case 'game':
+			case 'game': {
 				cat = 400;
-				queries = [`${title} ${selection.consoleName}`];
+				const cleanTitle = title.replace(/^~[^~]+~\s*/g, '').trim();
+				const searchNames = CONSOLE_SEARCH_NAMES[selection.consoleId] ?? [];
+				const shortName = searchNames[0] ?? selection.consoleName;
+				queries = [
+					`${cleanTitle} ${shortName}`,
+					cleanTitle
+				];
 				break;
+			}
 			case 'book':
 				cat = 601;
 				queries = [`${title} ${selection.author}`];
