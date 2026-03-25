@@ -40,7 +40,7 @@ class IptvAdapter extends AdapterClass {
 	}
 
 	getStreamUrl(channelId: string): string {
-		return `/api/iptv/stream/${encodeURIComponent(channelId)}`;
+		return `/api/iptv/stream?id=${encodeURIComponent(channelId)}`;
 	}
 }
 

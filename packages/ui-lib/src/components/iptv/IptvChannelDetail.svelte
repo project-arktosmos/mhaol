@@ -2,13 +2,15 @@
 	import classNames from 'classnames';
 	import { iptvAdapter } from 'ui-lib/adapters/classes/iptv.adapter';
 	import IptvPlayer from './IptvPlayer.svelte';
-	import type { IptvChannel, IptvStream } from 'ui-lib/types/iptv.type';
+	import type { IptvChannel, IptvStream, IptvEpgProgram } from 'ui-lib/types/iptv.type';
 
 	let {
 		channel,
 		streams,
 		streamUrl,
 		loading = false,
+		epgPrograms = [],
+		epgAvailable = false,
 		onback,
 		onstreamselect
 	}: {
@@ -16,12 +18,31 @@
 		streams: IptvStream[];
 		streamUrl: string;
 		loading?: boolean;
+		epgPrograms?: IptvEpgProgram[];
+		epgAvailable?: boolean;
 		onback?: () => void;
 		onstreamselect?: (stream: IptvStream) => void;
 	} = $props();
 
 	let selectedStreamIndex = $state(0);
 	let subtitle = $derived(iptvAdapter.formatChannelSubtitle(channel));
+
+	function formatEpgTime(raw: string): string {
+		// Format: "20260325125722 +0000"
+		if (raw.length < 12) return raw;
+		const h = raw.slice(8, 10);
+		const m = raw.slice(10, 12);
+		return `${h}:${m}`;
+	}
+
+	function isNowPlaying(program: IptvEpgProgram): boolean {
+		const now = new Date();
+		const pad = (n: number) => String(n).padStart(2, '0');
+		const nowStr =
+			`${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}` +
+			`${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())} +0000`;
+		return program.start <= nowStr && program.stop > nowStr;
+	}
 </script>
 
 <div class="flex h-full flex-col overflow-y-auto">
@@ -91,7 +112,11 @@
 				<div class="rounded-lg bg-base-200 p-4">
 					{#if channel.logo}
 						<div class="mb-3 flex justify-center">
-							<img src={channel.logo} alt={channel.name} class="h-20 w-auto object-contain" />
+							<img
+								src={channel.logo}
+								alt={channel.name}
+								class="h-20 w-auto object-contain"
+							/>
 						</div>
 					{/if}
 
@@ -104,14 +129,18 @@
 					{#if channel.categories.length > 0}
 						<div class="mt-3 flex flex-wrap gap-1">
 							{#each channel.categories as cat}
-								<span class={classNames('badge badge-sm', iptvAdapter.getCategoryBadgeClass(cat))}>
+								<span
+									class={classNames(
+										'badge badge-sm',
+										iptvAdapter.getCategoryBadgeClass(cat)
+									)}
+								>
 									{cat}
 								</span>
 							{/each}
 						</div>
 					{/if}
 
-	
 					{#if channel.website}
 						<div class="mt-3">
 							<a
@@ -125,6 +154,41 @@
 						</div>
 					{/if}
 				</div>
+
+				{#if epgAvailable && epgPrograms.length > 0}
+					<div class="mt-3 rounded-lg bg-base-200 p-4">
+						<h3 class="mb-2 text-sm font-bold">Program Guide</h3>
+						<div class="flex flex-col gap-1">
+							{#each epgPrograms as program, i}
+								{@const playing = isNowPlaying(program)}
+								<div
+									class={classNames('rounded-md p-2 text-sm', {
+										'bg-primary/10 ring-1 ring-primary/30': playing,
+										'opacity-80': !playing
+									})}
+								>
+									<div class="flex items-center gap-2">
+										<span class="shrink-0 font-mono text-xs opacity-50">
+											{formatEpgTime(program.start)}
+										</span>
+										{#if playing}
+											<span class="badge badge-xs badge-primary">LIVE</span>
+										{/if}
+									</div>
+									<p class="font-medium">{program.title}</p>
+									{#if program.episode}
+										<p class="text-xs opacity-50">{program.episode}</p>
+									{/if}
+									{#if playing && program.description}
+										<p class="mt-1 text-xs opacity-60">
+											{program.description}
+										</p>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}

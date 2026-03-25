@@ -6,7 +6,8 @@ import type {
 	IptvCategory,
 	IptvCountry,
 	IptvSearchResult,
-	IptvChannelDetail
+	IptvChannelDetail,
+	IptvEpgResponse
 } from 'ui-lib/types/iptv.type';
 
 const API_PREFIX = '/api/iptv';
@@ -22,7 +23,8 @@ const initialState: IptvServiceState = {
 	countries: [],
 	query: '',
 	selectedCategory: '',
-	selectedCountry: ''
+	selectedCountry: '',
+	epgOnly: false
 };
 
 class IptvService {
@@ -67,6 +69,7 @@ class IptvService {
 		if (current.query) params.set('q', current.query);
 		if (current.selectedCategory) params.set('category', current.selectedCategory);
 		if (current.selectedCountry) params.set('country', current.selectedCountry);
+		if (current.epgOnly) params.set('hasEpg', 'true');
 		params.set('page', String(page));
 		params.set('limit', '50');
 
@@ -93,7 +96,7 @@ class IptvService {
 	async getChannel(id: string): Promise<IptvChannelDetail | null> {
 		try {
 			return await fetchJson<IptvChannelDetail>(
-				`${API_PREFIX}/channels/${encodeURIComponent(id)}`
+				`${API_PREFIX}/channel?id=${encodeURIComponent(id)}`
 			);
 		} catch {
 			return null;
@@ -101,7 +104,17 @@ class IptvService {
 	}
 
 	getStreamUrl(channelId: string): string {
-		return resolveApiUrl(`${API_PREFIX}/stream/${encodeURIComponent(channelId)}`);
+		return resolveApiUrl(`${API_PREFIX}/stream?id=${encodeURIComponent(channelId)}`);
+	}
+
+	async getEpg(channelId: string): Promise<IptvEpgResponse | null> {
+		try {
+			return await fetchJson<IptvEpgResponse>(
+				`${API_PREFIX}/epg?id=${encodeURIComponent(channelId)}`
+			);
+		} catch {
+			return null;
+		}
 	}
 
 	setQuery(query: string): void {
@@ -114,6 +127,10 @@ class IptvService {
 
 	setCountry(country: string): void {
 		this.state.update((s) => ({ ...s, selectedCountry: country }));
+	}
+
+	setEpgOnly(epgOnly: boolean): void {
+		this.state.update((s) => ({ ...s, epgOnly }));
 	}
 }
 

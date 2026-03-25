@@ -5,12 +5,14 @@
 	import { base } from '$app/paths';
 	import IptvChannelDetail from 'ui-lib/components/iptv/IptvChannelDetail.svelte';
 	import { iptvService } from 'ui-lib/services/iptv.service';
-	import type { IptvChannel, IptvStream } from 'ui-lib/types/iptv.type';
+	import type { IptvChannel, IptvStream, IptvEpgProgram } from 'ui-lib/types/iptv.type';
 
 	let channel = $state<IptvChannel | null>(null);
 	let streams = $state<IptvStream[]>([]);
 	let streamUrl = $state('');
 	let loading = $state(true);
+	let epgPrograms = $state<IptvEpgProgram[]>([]);
+	let epgAvailable = $state(false);
 
 	let id = $derived($page.params.id ?? '');
 
@@ -25,6 +27,13 @@
 			}
 		}
 		loading = false;
+
+		// Fetch EPG in background
+		const epg = await iptvService.getEpg(channelId);
+		if (epg) {
+			epgAvailable = epg.available;
+			epgPrograms = epg.programs;
+		}
 	}
 
 	function handleStreamSelect(stream: IptvStream): void {
@@ -42,6 +51,8 @@
 		{streams}
 		{streamUrl}
 		{loading}
+		{epgPrograms}
+		{epgAvailable}
 		onback={() => goto(`${base}/iptv`)}
 		onstreamselect={handleStreamSelect}
 	/>

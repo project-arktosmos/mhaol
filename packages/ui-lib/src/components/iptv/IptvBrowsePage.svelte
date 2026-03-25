@@ -14,6 +14,7 @@
 		query = '',
 		selectedCategory = '',
 		selectedCountry = '',
+		epgOnly = false,
 		onsearch,
 		onfilterchange,
 		onpagechange,
@@ -29,8 +30,9 @@
 		query?: string;
 		selectedCategory?: string;
 		selectedCountry?: string;
+		epgOnly?: boolean;
 		onsearch?: (query: string) => void;
-		onfilterchange?: (filters: { category?: string; country?: string }) => void;
+		onfilterchange?: (filters: { category?: string; country?: string; epgOnly?: boolean }) => void;
 		onpagechange?: (page: number) => void;
 		onchannelclick?: (channel: IptvChannel) => void;
 	} = $props();
@@ -83,6 +85,16 @@
 						<option value={co.code}>{co.name}</option>
 					{/each}
 				</select>
+
+				<label class="label cursor-pointer gap-2">
+					<span class="text-sm">EPG only</span>
+					<input
+						type="checkbox"
+						class="toggle toggle-sm toggle-info"
+						checked={epgOnly}
+						onchange={(e) => onfilterchange?.({ epgOnly: e.currentTarget.checked })}
+					/>
+				</label>
 			</div>
 		</div>
 
