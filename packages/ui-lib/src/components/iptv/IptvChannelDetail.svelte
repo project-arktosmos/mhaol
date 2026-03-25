@@ -55,7 +55,13 @@
 	{:else}
 		<div class="flex flex-1 flex-col gap-4 p-4 lg:flex-row">
 			<div class="flex-1">
-				<IptvPlayer src={streamUrl} poster={channel.logo} />
+				{#if streamUrl}
+					<IptvPlayer src={streamUrl} poster={channel.logo} />
+				{:else}
+					<div class="flex aspect-video items-center justify-center rounded-lg bg-base-300">
+						<p class="text-sm opacity-60">No streams available for this channel</p>
+					</div>
+				{/if}
 
 				{#if streams.length > 1}
 					<div class="mt-3">
