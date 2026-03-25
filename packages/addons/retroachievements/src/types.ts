@@ -84,6 +84,46 @@ export const CONSOLE_WASM_STATUS: Record<number, WasmStatus> = {
 	17: 'yes' // Atari Jaguar
 };
 
+export const CONSOLE_EJS_CORE: Record<number, string> = {
+	5: 'gba',
+	4: 'gb',
+	6: 'gb',
+	3: 'snes',
+	7: 'nes',
+	1: 'segaMD',
+	11: 'segaMS',
+	2: 'n64',
+	12: 'psx',
+	21: 'ps2',
+	18: 'nds',
+	9: 'atari2600',
+	8: 'pce',
+	10: 'atari7800',
+	14: 'ngp',
+	13: 'lynx',
+	17: 'jaguar'
+};
+
+export const CONSOLE_ROM_EXTENSIONS: Record<number, string[]> = {
+	5: ['gba'],
+	4: ['gb'],
+	6: ['gbc'],
+	3: ['smc', 'sfc', 'zip'],
+	7: ['nes', 'zip'],
+	1: ['md', 'gen', 'bin', 'zip'],
+	11: ['sms', 'zip'],
+	2: ['n64', 'z64', 'v64', 'zip'],
+	12: ['bin', 'cue', 'iso', 'img', 'zip'],
+	21: ['iso'],
+	18: ['nds', 'zip'],
+	9: ['a26', 'bin', 'zip'],
+	8: ['pce', 'zip'],
+	10: ['a78', 'zip'],
+	14: ['ngp', 'ngc', 'zip'],
+	13: ['lnx', 'zip'],
+	17: ['j64', 'jag', 'zip']
+};
+
 // Raw API response types
 
 export interface RaGameListItem {

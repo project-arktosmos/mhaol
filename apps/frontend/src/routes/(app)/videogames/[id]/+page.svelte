@@ -8,6 +8,7 @@
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { gameExtendedToDisplay } from 'addons/retroachievements';
 	import type { RaGameMetadata, RaGameExtended } from 'addons/retroachievements/types';
+	import { CONSOLE_EJS_CORE, CONSOLE_ROM_EXTENSIONS } from 'addons/retroachievements/types';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 	import GameDetailPage from 'ui-lib/components/videogames/GameDetailPage.svelte';
 
@@ -15,6 +16,8 @@
 	let details = $state<RaGameMetadata | null>(null);
 	let detailsLoading = $state(true);
 	let fetchingGameId = $state<number | null>(null);
+	let romFileUrl = $state<string | null>(null);
+	let ejsCore = $state<string | null>(null);
 
 	const searchStore = smartSearchService.store;
 	const torrentState = torrentService.state;
@@ -59,10 +62,46 @@
 	});
 
 	let currentTorrentStatus = $derived(matchedTorrent);
+	let isDownloaded = $derived(currentTorrentStatus?.state === 'seeding');
+
+	$effect(() => {
+		if (!isDownloaded || !game) return;
+		const candidate = $searchStore.fetchedCandidate;
+		if (!candidate?.infoHash) return;
+
+		const consoleId = game.consoleId;
+		const core = CONSOLE_EJS_CORE[consoleId];
+		if (!core) {
+			ejsCore = null;
+			romFileUrl = null;
+			return;
+		}
+
+		const validExts = CONSOLE_ROM_EXTENSIONS[consoleId] ?? [];
+		const infoHash = candidate.infoHash;
+
+		fetch(apiUrl(`/api/torrent/torrents/${infoHash}/files`))
+			.then((res) => (res.ok ? res.json() : []))
+			.then((files: Array<{ id: number; name: string; size: number }>) => {
+				const romFile = files.find((f) => {
+					const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+					return validExts.includes(ext);
+				});
+				if (romFile) {
+					romFileUrl = apiUrl(`/api/torrent/torrents/${infoHash}/serve/${romFile.id}`);
+					ejsCore = core;
+				} else {
+					romFileUrl = null;
+					ejsCore = null;
+				}
+			});
+	});
 
 	async function fetchGame(id: string) {
 		detailsLoading = true;
 		smartSearchService.clear();
+		romFileUrl = null;
+		ejsCore = null;
 		try {
 			const res = await fetch(apiUrl(`/api/retroachievements/games/${id}`));
 			if (!res.ok) throw new Error('Failed to fetch game');
@@ -117,6 +156,8 @@
 					languages: $searchStore.fetchedCandidate.analysis?.languages ?? ''
 				}
 			: null}
+		{romFileUrl}
+		{ejsCore}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onshowsearch={() => smartSearchService.show()}

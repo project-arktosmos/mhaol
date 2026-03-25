@@ -1,7 +1,9 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import DetailPageLayout from 'ui-lib/components/core/DetailPageLayout.svelte';
+	import EmulatorPlayer from 'ui-lib/components/videogames/EmulatorPlayer.svelte';
 	import type { RaGameMetadata } from 'addons/retroachievements/types';
+	import { CONSOLE_WASM_STATUS } from 'addons/retroachievements/types';
 	import {
 		formatBytes,
 		formatSpeed,
@@ -35,6 +37,8 @@
 			eta: number | null;
 		} | null;
 		fetchedTorrent: { name: string; quality: string; languages: string } | null;
+		romFileUrl: string | null;
+		ejsCore: string | null;
 		onback: () => void;
 		onfetch: () => void;
 		ondownload: () => void;
@@ -50,11 +54,15 @@
 		fetchSteps,
 		torrentStatus,
 		fetchedTorrent,
+		romFileUrl,
+		ejsCore,
 		onback,
 		onfetch,
 		ondownload,
 		onshowsearch
 	}: Props = $props();
+
+	let playing = $state(false);
 
 	let heroImage = $derived(
 		details?.imageTitleUrl || details?.imageIngameUrl || details?.imageBoxArtUrl
@@ -71,6 +79,10 @@
 	let downloadButtonDisabled = $derived(!fetched || isDownloading || isDownloaded);
 	let dlProgress = $derived(torrentStatus?.progress ?? 0);
 	let dlPercent = $derived(Math.round(dlProgress * 100));
+	let wasmStatus = $derived(CONSOLE_WASM_STATUS[game.consoleId] ?? 'no');
+	let canPlay = $derived(
+		isDownloaded && romFileUrl !== null && ejsCore !== null && wasmStatus !== 'no'
+	);
 </script>
 
 <DetailPageLayout>
@@ -365,5 +377,31 @@
 				Download
 			{/if}
 		</button>
+
+		{#if canPlay}
+			<button class="btn w-full btn-sm btn-accent" onclick={() => (playing = true)}>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-4 w-4"
+					fill="currentColor"
+					viewBox="0 0 24 24"
+				>
+					<path d="M8 5v14l11-7z" />
+				</svg>
+				Play
+				{#if wasmStatus === 'experimental'}
+					<span class="badge badge-xs badge-warning">Experimental</span>
+				{/if}
+			</button>
+		{/if}
 	{/snippet}
 </DetailPageLayout>
+
+{#if playing && romFileUrl && ejsCore}
+	<EmulatorPlayer
+		romUrl={romFileUrl}
+		core={ejsCore}
+		gameName={game.title}
+		onclose={() => (playing = false)}
+	/>
+{/if}

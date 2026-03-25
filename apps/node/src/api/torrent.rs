@@ -26,6 +26,7 @@ pub fn router() -> Router<AppState> {
         .route("/torrents/events", get(torrent_events))
         .route("/torrents/remove-all", post(remove_all))
         .route("/torrents/{info_hash}/files", get(list_torrent_files))
+        .route("/torrents/{info_hash}/serve/{file_index}", get(serve_torrent_file))
         .route("/fetch-cache/hashes", get(list_fetch_cache_hashes))
         .route("/fetch-cache/summaries", get(list_fetch_cache_summaries))
         .route("/fetch-cache/{tmdb_id}", get(get_fetch_cache).delete(delete_fetch_cache))
@@ -571,6 +572,95 @@ async fn list_torrent_files(
 
     match state.torrent_manager.list_files(torrent_id).await {
         Ok(files) => Json(serde_json::to_value(files).unwrap()).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+async fn serve_torrent_file(
+    State(state): State<AppState>,
+    Path((info_hash, file_index)): Path<(String, usize)>,
+) -> impl IntoResponse {
+    let torrent_id = match find_torrent_id(&state, &info_hash).await {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Torrent not found" })),
+            )
+                .into_response()
+        }
+    };
+
+    let files = match state.torrent_manager.list_files(torrent_id).await {
+        Ok(f) => f,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    };
+
+    let file = match files.iter().find(|f| f.id == file_index) {
+        Some(f) => f,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "File not found in torrent" })),
+            )
+                .into_response()
+        }
+    };
+
+    let dl = match state.downloads.get(&info_hash) {
+        Some(row) => row,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Download record not found" })),
+            )
+                .into_response()
+        }
+    };
+
+    let base_dir = match &dl.output_path {
+        Some(p) => {
+            let path = std::path::Path::new(p);
+            path.parent()
+                .unwrap_or(path)
+                .to_path_buf()
+        }
+        None => state.torrent_manager.download_path(),
+    };
+
+    let full_path = base_dir.join(&file.name);
+
+    if !full_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "File not found on disk" })),
+        )
+            .into_response();
+    }
+
+    match tokio::fs::read(&full_path).await {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [
+                (axum::http::header::CONTENT_TYPE, "application/octet-stream"),
+                (
+                    axum::http::header::CONTENT_DISPOSITION,
+                    "inline",
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
