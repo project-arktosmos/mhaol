@@ -30,6 +30,7 @@ pub mod openlibrary;
 pub mod iptv;
 pub mod smart_pair;
 pub mod smart_search;
+pub mod catalog;
 pub mod tmdb;
 pub mod youtube;
 pub mod youtube_search;
@@ -83,6 +84,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/iptv", iptv::router())
         .nest("/api/smart-pair", smart_pair::router())
         .nest("/api/smart-search", smart_search::router())
+        .nest("/api/catalog", catalog::router())
         .merge(signaling_ws::signaling_routes());
 
     #[cfg(not(target_os = "android"))]
