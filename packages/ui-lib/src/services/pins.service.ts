@@ -85,6 +85,7 @@ class PinsService {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ service, serviceId })
 		});
+		await this.refresh();
 	}
 
 	isPinned(service: string, serviceId: string): boolean {

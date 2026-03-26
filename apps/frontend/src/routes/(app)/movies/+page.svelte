@@ -148,12 +148,16 @@
 
 	$effect(() => {
 		const ids = [...pinnedTmdbIds];
-		resolveMovieIds(ids).then((movies) => { pinnedMovies = movies; });
+		let cancelled = false;
+		resolveMovieIds(ids).then((movies) => { if (!cancelled) pinnedMovies = movies; });
+		return () => { cancelled = true; };
 	});
 
 	$effect(() => {
 		const ids = [...favoritedTmdbIds];
-		resolveMovieIds(ids).then((movies) => { favoritedMovies = movies; });
+		let cancelled = false;
+		resolveMovieIds(ids).then((movies) => { if (!cancelled) favoritedMovies = movies; });
+		return () => { cancelled = true; };
 	});
 
 	// === Image overrides ===

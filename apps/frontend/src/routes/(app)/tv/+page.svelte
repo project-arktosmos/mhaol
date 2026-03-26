@@ -286,12 +286,16 @@
 
 	$effect(() => {
 		const ids = [...pinnedTmdbTvIds];
-		resolveTvShowIds(ids).then((shows) => { pinnedTvShows = shows; });
+		let cancelled = false;
+		resolveTvShowIds(ids).then((shows) => { if (!cancelled) pinnedTvShows = shows; });
+		return () => { cancelled = true; };
 	});
 
 	$effect(() => {
 		const ids = [...favoritedTmdbTvIds];
-		resolveTvShowIds(ids).then((shows) => { favoritedTvShows = shows; });
+		let cancelled = false;
+		resolveTvShowIds(ids).then((shows) => { if (!cancelled) favoritedTvShows = shows; });
+		return () => { cancelled = true; };
 	});
 
 	async function fetchTmdbMetadataForLists() {

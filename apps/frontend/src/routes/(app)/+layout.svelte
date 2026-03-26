@@ -112,7 +112,9 @@
 		const wallet = $profileStore.local.wallet;
 		if (wallet && !favoritesInitialized) {
 			favoritesInitialized = true;
-			favoritesService.initialize(wallet);
+			profileService.shareWithNode().then(() => {
+				favoritesService.initialize(wallet);
+			});
 		}
 	});
 
