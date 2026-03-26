@@ -270,7 +270,7 @@ pub(crate) const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "wmv"
 /// Resolve a media path to an actual video file.
 /// - If it's a file, return as-is.
 /// - If it's a directory, find the largest video file inside.
-/// - If it doesn't exist, search the parent directory for the largest video file.
+/// - If it doesn't exist, return the path as-is (caller handles the error).
 pub(crate) fn resolve_media_path(path: &str) -> String {
     let p = std::path::Path::new(path);
     if p.is_file() {
@@ -278,14 +278,6 @@ pub(crate) fn resolve_media_path(path: &str) -> String {
     }
     if p.is_dir() {
         return find_largest_video(p).unwrap_or_else(|| path.to_string());
-    }
-    // Path doesn't exist — try the parent directory
-    if let Some(parent) = p.parent() {
-        if parent.is_dir() {
-            if let Some(found) = find_largest_video(parent) {
-                return found;
-            }
-        }
     }
     path.to_string()
 }
