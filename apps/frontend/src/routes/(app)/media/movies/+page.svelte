@@ -26,12 +26,15 @@
 	import classNames from 'classnames';
 	import TmdbCatalogGrid from 'ui-lib/components/catalog/TmdbCatalogGrid.svelte';
 	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
+	import RecommendationsModalContent from 'ui-lib/components/recommendations/RecommendationsModalContent.svelte';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
 	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
 
 	const mediaBar = getContext<MediaBarContext>(MEDIA_BAR_KEY);
 	mediaBar.configure({ title: 'Movies' });
+
+	let recsModalOpen = $state(false);
 
 	interface Props {
 		data: {
@@ -360,6 +363,15 @@
 		new Map(itemsWithOverrides.map((item) => [stableNumericId(item.id), item]))
 	);
 
+	let libraryMovieTmdbIds = $derived(
+		itemsWithOverrides
+			.map((item) => {
+				const tmdbLink = getItemLinks(item).tmdb;
+				return tmdbLink ? Number(tmdbLink.serviceId) : null;
+			})
+			.filter((id): id is number => id !== null)
+	);
+
 	let fetchedDisplayIds = $derived.by(() => {
 		const ids = new Set<number>();
 		for (const item of itemsWithOverrides) {
@@ -534,6 +546,7 @@
 		<input type="text" placeholder="Search movies..." class="input join-item input-bordered input-sm w-48" bind:value={movieSearchInput} />
 		<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
 	</form>
+	<button class="btn btn-ghost btn-sm" onclick={() => (recsModalOpen = true)}>Recs</button>
 	<BrowseViewToggle />
 </Portal>
 
@@ -744,3 +757,15 @@
 		/>
 	{/if}
 {/if}
+
+<Modal open={recsModalOpen} maxWidth="max-w-3xl" onclose={() => (recsModalOpen = false)}>
+	{#if recsModalOpen}
+		<div class="p-4">
+			<RecommendationsModalContent
+				{pinnedMovies}
+				{favoritedMovies}
+				{libraryMovieTmdbIds}
+			/>
+		</div>
+	{/if}
+</Modal>
