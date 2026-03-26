@@ -448,6 +448,54 @@ CREATE TABLE IF NOT EXISTS openlibrary_api_cache (
 );
 ";
 
+pub const CATALOG_SCHEMA_SQL: &str = "
+CREATE TABLE IF NOT EXISTS catalog_items (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    sort_title TEXT NOT NULL,
+    year TEXT,
+    overview TEXT,
+    poster_url TEXT,
+    backdrop_url TEXT,
+    vote_average REAL,
+    vote_count INTEGER,
+    parent_id TEXT REFERENCES catalog_items(id) ON DELETE CASCADE,
+    position INTEGER,
+    source TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(source, source_id, kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_items_kind ON catalog_items(kind);
+CREATE INDEX IF NOT EXISTS idx_catalog_items_source ON catalog_items(source, source_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_items_parent ON catalog_items(parent_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_items_sort_title ON catalog_items(sort_title);
+CREATE INDEX IF NOT EXISTS idx_catalog_items_kind_source ON catalog_items(kind, source);
+
+CREATE TRIGGER IF NOT EXISTS catalog_items_updated_at
+    AFTER UPDATE ON catalog_items
+    FOR EACH ROW
+BEGIN
+    UPDATE catalog_items SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
+
+CREATE TABLE IF NOT EXISTS catalog_fetch_cache (
+    id TEXT PRIMARY KEY,
+    catalog_item_id TEXT NOT NULL REFERENCES catalog_items(id) ON DELETE CASCADE,
+    scope TEXT NOT NULL DEFAULT 'default',
+    scope_key TEXT NOT NULL DEFAULT '',
+    candidate_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(catalog_item_id, scope, scope_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_fetch_cache_item ON catalog_fetch_cache(catalog_item_id);
+";
+
 fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
     let sql = format!("PRAGMA table_info({})", table);
     let mut stmt = conn.prepare(&sql).unwrap();
@@ -974,6 +1022,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(PROFILES_SQL)?;
     conn.execute_batch(FAVORITES_SQL)?;
     conn.execute_batch(PINS_SQL)?;
+    conn.execute_batch(CATALOG_SCHEMA_SQL)?;
     if !is_server {
         conn.execute_batch(MEDIA_LISTS_SQL)?;
         conn.execute_batch(IMAGE_TAGS_SQL)?;

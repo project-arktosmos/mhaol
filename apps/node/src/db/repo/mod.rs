@@ -25,6 +25,8 @@ pub mod music_torrent_fetch_cache;
 pub mod profile;
 pub mod favorite;
 pub mod pin;
+pub mod catalog;
+pub mod catalog_fetch_cache;
 
 pub use settings::SettingsRepo;
 pub use metadata::MetadataRepo;
@@ -53,3 +55,5 @@ pub use music_torrent_fetch_cache::MusicTorrentFetchCacheRepo;
 pub use profile::ProfileRepo;
 pub use favorite::FavoriteRepo;
 pub use pin::PinRepo;
+pub use catalog::CatalogRepo;
+pub use catalog_fetch_cache::CatalogFetchCacheRepo;
