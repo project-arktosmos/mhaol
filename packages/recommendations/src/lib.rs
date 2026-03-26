@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS tmdb_recommendations (
     recommended_tmdb_id INTEGER NOT NULL,
     recommended_media_type TEXT NOT NULL CHECK (recommended_media_type IN ('movie', 'tv')),
     title TEXT,
+    genres TEXT,
     data TEXT NOT NULL,
     fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(source_tmdb_id, source_media_type, recommended_tmdb_id)
@@ -33,6 +34,7 @@ pub struct RecommendationRow {
     pub recommended_tmdb_id: i64,
     pub recommended_media_type: String,
     pub title: Option<String>,
+    pub genres: Option<String>,
     pub data: serde_json::Value,
     pub fetched_at: String,
 }
@@ -54,15 +56,16 @@ impl RecommendationsRepo {
         rec_tmdb_id: i64,
         rec_media_type: &str,
         title: Option<&str>,
+        genres: Option<&str>,
         data: &str,
     ) {
         let conn = self.db.lock();
         let _ = conn.execute(
-            "INSERT INTO tmdb_recommendations (source_tmdb_id, source_media_type, recommended_tmdb_id, recommended_media_type, title, data)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "INSERT INTO tmdb_recommendations (source_tmdb_id, source_media_type, recommended_tmdb_id, recommended_media_type, title, genres, data)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(source_tmdb_id, source_media_type, recommended_tmdb_id)
-             DO UPDATE SET title = ?5, data = ?6, fetched_at = datetime('now')",
-            params![source_tmdb_id, source_media_type, rec_tmdb_id, rec_media_type, title, data],
+             DO UPDATE SET title = ?5, genres = ?6, data = ?7, fetched_at = datetime('now')",
+            params![source_tmdb_id, source_media_type, rec_tmdb_id, rec_media_type, title, genres, data],
         );
     }
 
@@ -70,14 +73,14 @@ impl RecommendationsRepo {
         let conn = self.db.lock();
         let mut stmt = conn
             .prepare(
-                "SELECT id, source_tmdb_id, source_media_type, recommended_tmdb_id, recommended_media_type, title, data, fetched_at
+                "SELECT id, source_tmdb_id, source_media_type, recommended_tmdb_id, recommended_media_type, title, genres, data, fetched_at
                  FROM tmdb_recommendations
                  WHERE source_tmdb_id = ?1 AND source_media_type = ?2
                  ORDER BY id ASC",
             )
             .unwrap();
         stmt.query_map(params![source_tmdb_id, media_type], |row| {
-            let data_str: String = row.get(6)?;
+            let data_str: String = row.get(7)?;
             let data = serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
             Ok(RecommendationRow {
                 id: row.get(0)?,
@@ -86,8 +89,9 @@ impl RecommendationsRepo {
                 recommended_tmdb_id: row.get(3)?,
                 recommended_media_type: row.get(4)?,
                 title: row.get(5)?,
+                genres: row.get(6)?,
                 data,
-                fetched_at: row.get(7)?,
+                fetched_at: row.get(8)?,
             })
         })
         .unwrap()
@@ -130,8 +134,8 @@ mod tests {
     #[test]
     fn test_upsert_and_get() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", Some("Pulp Fiction"), r#"{"id":680}"#);
-        repo.upsert(550, "movie", 13, "movie", Some("Forrest Gump"), r#"{"id":13}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("Pulp Fiction"), Some("Crime, Drama"), r#"{"id":680}"#);
+        repo.upsert(550, "movie", 13, "movie", Some("Forrest Gump"), Some("Drama, Comedy"), r#"{"id":13}"#);
 
         let recs = repo.get_for_source(550, "movie");
         assert_eq!(recs.len(), 2);
@@ -143,8 +147,8 @@ mod tests {
     #[test]
     fn test_upsert_dedup() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", Some("Old Title"), r#"{"id":680}"#);
-        repo.upsert(550, "movie", 680, "movie", Some("New Title"), r#"{"id":680,"updated":true}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("Old Title"), None, r#"{"id":680}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("New Title"), Some("Action"), r#"{"id":680,"updated":true}"#);
 
         let recs = repo.get_for_source(550, "movie");
         assert_eq!(recs.len(), 1);
@@ -154,8 +158,8 @@ mod tests {
     #[test]
     fn test_different_media_types() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", Some("Movie Rec"), r#"{"id":680}"#);
-        repo.upsert(100, "tv", 200, "tv", Some("TV Rec"), r#"{"id":200}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("Movie Rec"), None, r#"{"id":680}"#);
+        repo.upsert(100, "tv", 200, "tv", Some("TV Rec"), None, r#"{"id":200}"#);
 
         assert_eq!(repo.get_for_source(550, "movie").len(), 1);
         assert_eq!(repo.get_for_source(100, "tv").len(), 1);
@@ -165,9 +169,9 @@ mod tests {
     #[test]
     fn test_delete_for_source() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", Some("A"), r#"{"id":680}"#);
-        repo.upsert(550, "movie", 13, "movie", Some("B"), r#"{"id":13}"#);
-        repo.upsert(100, "tv", 200, "tv", Some("C"), r#"{"id":200}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("A"), None, r#"{"id":680}"#);
+        repo.upsert(550, "movie", 13, "movie", Some("B"), None, r#"{"id":13}"#);
+        repo.upsert(100, "tv", 200, "tv", Some("C"), None, r#"{"id":200}"#);
 
         let deleted = repo.delete_for_source(550, "movie");
         assert_eq!(deleted, 2);
@@ -178,9 +182,9 @@ mod tests {
     #[test]
     fn test_list_sources() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", None, r#"{"id":680}"#);
-        repo.upsert(550, "movie", 13, "movie", None, r#"{"id":13}"#);
-        repo.upsert(100, "tv", 200, "tv", None, r#"{"id":200}"#);
+        repo.upsert(550, "movie", 680, "movie", None, None, r#"{"id":680}"#);
+        repo.upsert(550, "movie", 13, "movie", None, None, r#"{"id":13}"#);
+        repo.upsert(100, "tv", 200, "tv", None, None, r#"{"id":200}"#);
 
         let sources = repo.list_sources();
         assert_eq!(sources.len(), 2);

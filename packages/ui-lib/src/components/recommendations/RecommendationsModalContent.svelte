@@ -304,6 +304,7 @@
 													<tr>
 														<th>TMDB ID</th>
 														<th>Title</th>
+														<th>Genres</th>
 														<th>Type</th>
 														<th>Fetched</th>
 													</tr>
@@ -316,6 +317,9 @@
 															<td class="max-w-40 truncate">
 																{rec.title ?? parsed?.title ?? parsed?.name ?? '—'}
 															</td>
+															<td class="max-w-48 truncate text-xs">
+																{rec.genres ?? '—'}
+															</td>
 															<td>{rec.recommendedMediaType}</td>
 															<td class="text-xs text-base-content/50">
 																{new Date(rec.fetchedAt).toLocaleDateString()}
@@ -323,7 +327,7 @@
 														</tr>
 														{#if parsed}
 															<tr>
-																<td colspan="4" class="text-xs text-base-content/40">
+																<td colspan="5" class="text-xs text-base-content/40">
 																	{#if parsed.overview}
 																		<p class="line-clamp-2">{parsed.overview}</p>
 																	{/if}

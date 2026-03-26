@@ -5,6 +5,7 @@ export interface RecommendationRow {
 	recommendedTmdbId: number;
 	recommendedMediaType: string;
 	title: string | null;
+	genres: string | null;
 	data: Record<string, unknown>;
 	fetchedAt: string;
 }

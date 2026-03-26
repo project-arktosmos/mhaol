@@ -1016,6 +1016,13 @@ fn run_migrations(conn: &Connection) {
         let _ = conn.execute_batch(mhaol_recommendations::RECOMMENDATIONS_SCHEMA_SQL);
     }
 
+    // Migration: add genres column to tmdb_recommendations
+    if has_table(conn, "tmdb_recommendations")
+        && !has_column(conn, "tmdb_recommendations", "genres")
+    {
+        let _ = conn.execute_batch("ALTER TABLE tmdb_recommendations ADD COLUMN genres TEXT");
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(

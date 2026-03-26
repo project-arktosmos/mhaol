@@ -1,5 +1,6 @@
 use crate::api::tmdb::tmdb_fetch_json;
 use crate::AppState;
+use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{error, info, warn};
 
@@ -60,6 +61,25 @@ async fn process_fetch_recommendations(state: &AppState, task: &mhaol_queue::Que
         }
     };
 
+    // Fetch genre list for name resolution
+    let genre_path = format!("/genre/{}/list", media_type);
+    let genre_map: HashMap<i64, String> =
+        match tmdb_fetch_json(state, &genre_path, &[]).await {
+            Ok(data) => data["genres"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|g| {
+                            let id = g["id"].as_i64()?;
+                            let name = g["name"].as_str()?;
+                            Some((id, name.to_string()))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            Err(_) => HashMap::new(),
+        };
+
     let path = format!("/{}/{}/recommendations", media_type, tmdb_id);
     match tmdb_fetch_json(state, &path, &[("page", "1")]).await {
         Ok(data) => {
@@ -72,10 +92,27 @@ async fn process_fetch_recommendations(state: &AppState, task: &mhaol_queue::Que
                             continue;
                         }
                         let title = item["title"].as_str().or_else(|| item["name"].as_str());
+                        let genres = item["genre_ids"]
+                            .as_array()
+                            .map(|ids| {
+                                ids.iter()
+                                    .filter_map(|id| {
+                                        id.as_i64().and_then(|n| genre_map.get(&n).cloned())
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            })
+                            .filter(|s| !s.is_empty());
                         let data_str = serde_json::to_string(item).unwrap_or_default();
-                        state
-                            .recommendations
-                            .upsert(tmdb_id, media_type, rec_id, media_type, title, &data_str);
+                        state.recommendations.upsert(
+                            tmdb_id,
+                            media_type,
+                            rec_id,
+                            media_type,
+                            title,
+                            genres.as_deref(),
+                            &data_str,
+                        );
                         inserted += 1;
                     }
                     inserted
