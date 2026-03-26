@@ -1,5 +1,6 @@
 use crate::peer_service::rpc_handler::RpcHandler;
 use crate::peer_service::rpc_types::RpcIncoming;
+use crate::peer_service::types::DataChannelEnvelope;
 use crate::AppState;
 use axum::{
     extract::{
@@ -85,10 +86,23 @@ async fn handle_rpc_socket(socket: WebSocket, peer_address: String, state: AppSt
             _ => continue,
         };
 
-        let incoming: RpcIncoming = match serde_json::from_str(&text) {
+        let envelope: DataChannelEnvelope = match serde_json::from_str(&text) {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::debug!(error = %e, "Failed to parse WS envelope");
+                continue;
+            }
+        };
+
+        if envelope.channel != "rpc" {
+            tracing::debug!(channel = %envelope.channel, "Ignoring non-rpc channel");
+            continue;
+        }
+
+        let incoming: RpcIncoming = match serde_json::from_value(envelope.payload) {
             Ok(msg) => msg,
             Err(e) => {
-                tracing::debug!(error = %e, "Failed to parse RPC message");
+                tracing::debug!(error = %e, "Failed to parse RPC payload");
                 continue;
             }
         };
