@@ -3,9 +3,10 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
-	import { tmdbBrowseService } from 'ui-lib/services/tmdb-browse.service';
 	import { smartPairService } from 'ui-lib/services/smart-pair.service';
-	import type { DisplayTMDBTvShow } from 'addons/tmdb/types';
+	import type { DisplayTMDBTvShow, TMDBTvShow } from 'addons/tmdb/types';
+	import { fetchJson } from 'ui-lib/transport/fetch-helpers';
+	import { tvShowsToDisplay } from 'addons/tmdb/transform';
 	import { tvShowToDisplay } from 'addons/tmdb/transform';
 	import type { MediaCategory, MediaLinkSource } from 'ui-lib/types/media-card.type';
 	import type { MediaList } from 'ui-lib/types/media-list.type';
@@ -30,7 +31,67 @@
 
 	let { data }: Props = $props();
 
-	const browseState = tmdbBrowseService.state;
+	// === Browse state (inline, replaces tmdbBrowseService) ===
+	interface TmdbTvPagedResponse { results: TMDBTvShow[]; total_pages: number; page: number; }
+	let popularTv = $state<DisplayTMDBTvShow[]>([]);
+	let popularTvPage = $state(1);
+	let popularTvTotalPages = $state(1);
+	let discoverTv = $state<DisplayTMDBTvShow[]>([]);
+	let discoverTvPage = $state(1);
+	let discoverTvTotalPages = $state(1);
+	let tvSelectedGenreId = $state<number | null>(null);
+	let tvGenres = $state<Array<{ id: number; name: string }>>([]);
+	let searchTv = $state<DisplayTMDBTvShow[]>([]);
+	let searchTvPage = $state(1);
+	let searchTvTotalPages = $state(1);
+	let tvSearchQuery = $state('');
+	let tvBrowseLoading = $state<Record<string, boolean>>({});
+
+	async function loadPopularTv(page = 1) {
+		tvBrowseLoading = { ...tvBrowseLoading, popularTv: true };
+		try {
+			const data = await fetchJson<TmdbTvPagedResponse>(`/api/tmdb/popular/tv?page=${page}`);
+			popularTv = tvShowsToDisplay(data.results);
+			popularTvPage = data.page;
+			popularTvTotalPages = data.total_pages;
+		} catch { /* best-effort */ }
+		tvBrowseLoading = { ...tvBrowseLoading, popularTv: false };
+	}
+
+	async function loadDiscoverTv(page = 1, genreId: number | null = null) {
+		tvBrowseLoading = { ...tvBrowseLoading, discoverTv: true };
+		tvSelectedGenreId = genreId;
+		try {
+			let url = `/api/tmdb/discover/tv?page=${page}`;
+			if (genreId) url += `&with_genres=${genreId}`;
+			const data = await fetchJson<TmdbTvPagedResponse>(url);
+			discoverTv = tvShowsToDisplay(data.results);
+			discoverTvPage = data.page;
+			discoverTvTotalPages = data.total_pages;
+		} catch { /* best-effort */ }
+		tvBrowseLoading = { ...tvBrowseLoading, discoverTv: false };
+	}
+
+	async function loadTvGenres() {
+		try {
+			const data = await fetchJson<{ genres: Array<{ id: number; name: string }> }>('/api/tmdb/genres/tv');
+			tvGenres = data?.genres ?? [];
+		} catch { /* best-effort */ }
+	}
+
+	async function doSearchTv(query: string, page = 1) {
+		if (!query.trim()) return;
+		tvBrowseLoading = { ...tvBrowseLoading, searchTv: true };
+		tvSearchQuery = query;
+		try {
+			const data = await fetchJson<TmdbTvPagedResponse>(`/api/tmdb/search/tv?q=${encodeURIComponent(query)}&page=${page}`);
+			searchTv = tvShowsToDisplay(data.results);
+			searchTvPage = data.page;
+			searchTvTotalPages = data.total_pages;
+		} catch { /* best-effort */ }
+		tvBrowseLoading = { ...tvBrowseLoading, searchTv: false };
+	}
+
 	const favState = favoritesService.state;
 	const pinState = pinsService.state;
 
@@ -230,9 +291,9 @@
 	}
 
 	onMount(() => {
-		tmdbBrowseService.loadPopularTv();
-		tmdbBrowseService.loadGenres();
-		tmdbBrowseService.loadDiscoverTv();
+		loadPopularTv();
+		loadTvGenres();
+		loadDiscoverTv();
 		smartPairService.loadPinned().then((pinned) => { pinnedTvShows = pinned.tv; });
 		fetchTmdbMetadataForLists();
 	});
@@ -242,7 +303,7 @@
 	<div class="flex items-center justify-between gap-4 border-b border-base-300 px-4 py-3">
 		<h1 class="text-lg font-bold">TV Shows</h1>
 		<div class="flex items-center gap-2">
-			<form class="join" onsubmit={(e) => { e.preventDefault(); if (tvSearchInput.trim()) tmdbBrowseService.searchTv(tvSearchInput.trim()); }}>
+			<form class="join" onsubmit={(e) => { e.preventDefault(); if (tvSearchInput.trim()) doSearchTv(tvSearchInput.trim()); }}>
 				<input type="text" placeholder="Search TV shows..." class="input join-item input-bordered input-sm w-48" bind:value={tvSearchInput} />
 				<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
 			</form>
@@ -293,62 +354,62 @@
 			</section>
 		{/each}
 
-		{#if $browseState.loading['searchTv']}
+		{#if tvBrowseLoading['searchTv']}
 			<section class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold">Search Results</h2>
 				<div class="flex justify-center p-8"><span class="loading loading-lg loading-spinner"></span></div>
 			</section>
-		{:else if $browseState.searchTv.length > 0}
+		{:else if searchTv.length > 0}
 			<section class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold">Search Results</h2>
 				<TmdbCatalogGrid
-					tvShows={$browseState.searchTv}
+					tvShows={searchTv}
 					favoritedIds={favoritedTmdbTvIds}
 					pinnedIds={pinnedTmdbTvIds}
 					onselectTvShow={handleSelectTvShow}
 				/>
 				<TmdbPagination
-					page={$browseState.searchTvPage}
-					totalPages={$browseState.searchTvTotalPages}
-					loading={$browseState.loading['searchTv'] ?? false}
-					onpage={(p) => tmdbBrowseService.searchTv($browseState.searchQuery, p)}
+					page={searchTvPage}
+					totalPages={searchTvTotalPages}
+					loading={tvBrowseLoading['searchTv'] ?? false}
+					onpage={(p) => doSearchTv(tvSearchQuery, p)}
 				/>
 			</section>
 		{/if}
 
 		<section class="mb-8">
 			<h2 class="mb-3 text-lg font-semibold">Popular TV Shows</h2>
-			{#if $browseState.loading['popularTv']}
+			{#if tvBrowseLoading['popularTv']}
 				<div class="flex justify-center p-8"><span class="loading loading-lg loading-spinner"></span></div>
-			{:else if $browseState.popularTv.length > 0}
+			{:else if popularTv.length > 0}
 				<TmdbCatalogGrid
-					tvShows={$browseState.popularTv}
+					tvShows={popularTv}
 					favoritedIds={favoritedTmdbTvIds}
 					pinnedIds={pinnedTmdbTvIds}
 					onselectTvShow={handleSelectTvShow}
 				/>
 				<TmdbPagination
-					page={$browseState.popularTvPage}
-					totalPages={$browseState.popularTvTotalPages}
-					loading={$browseState.loading['popularTv'] ?? false}
-					onpage={(p) => tmdbBrowseService.loadPopularTv(p)}
+					page={popularTvPage}
+					totalPages={popularTvTotalPages}
+					loading={tvBrowseLoading['popularTv'] ?? false}
+					onpage={(p) => loadPopularTv(p)}
 				/>
 			{/if}
 		</section>
 
 		<section class="mb-8">
 			<h2 class="mb-3 text-lg font-semibold">Discover TV Shows</h2>
-			{#if $browseState.tvGenres.length > 0}
+			{#if tvGenres.length > 0}
 				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-					{#each $browseState.tvGenres as genre (genre.id)}
+					{#each tvGenres as genre (genre.id)}
 						<button
 							class={classNames('btn btn-sm h-auto min-h-12 flex-col py-2', {
-								'btn-primary': $browseState.selectedGenreId === genre.id,
-								'btn-ghost bg-base-200': $browseState.selectedGenreId !== genre.id
+								'btn-primary': tvSelectedGenreId === genre.id,
+								'btn-ghost bg-base-200': tvSelectedGenreId !== genre.id
 							})}
 							onclick={() => {
-								const genreId = $browseState.selectedGenreId === genre.id ? null : genre.id;
-								tmdbBrowseService.loadDiscoverTv(1, genreId);
+								const genreId = tvSelectedGenreId === genre.id ? null : genre.id;
+								loadDiscoverTv(1, genreId);
 							}}
 						>
 							{genre.name}
@@ -356,21 +417,21 @@
 					{/each}
 				</div>
 			{/if}
-			{#if $browseState.loading['discoverTv']}
+			{#if tvBrowseLoading['discoverTv']}
 				<div class="flex justify-center p-8"><span class="loading loading-lg loading-spinner"></span></div>
-			{:else if $browseState.discoverTv.length > 0}
+			{:else if discoverTv.length > 0}
 				<div class="mt-4">
 					<TmdbCatalogGrid
-						tvShows={$browseState.discoverTv}
+						tvShows={discoverTv}
 						favoritedIds={favoritedTmdbTvIds}
 						pinnedIds={pinnedTmdbTvIds}
 						onselectTvShow={handleSelectTvShow}
 					/>
 					<TmdbPagination
-						page={$browseState.discoverTvPage}
-						totalPages={$browseState.discoverTvTotalPages}
-						loading={$browseState.loading['discoverTv'] ?? false}
-						onpage={(p) => tmdbBrowseService.loadDiscoverTv(p, $browseState.selectedGenreId)}
+						page={discoverTvPage}
+						totalPages={discoverTvTotalPages}
+						loading={tvBrowseLoading['discoverTv'] ?? false}
+						onpage={(p) => loadDiscoverTv(p, tvSelectedGenreId)}
 					/>
 				</div>
 			{/if}
