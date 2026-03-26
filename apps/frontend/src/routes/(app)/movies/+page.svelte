@@ -18,7 +18,6 @@
 	import { movieDetailsToDisplay, moviesToDisplay, getPosterUrl, getBackdropUrl } from 'addons/tmdb/transform';
 	import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
-	import { smartPairService } from 'ui-lib/services/smart-pair.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { libraryService } from 'ui-lib/services/library.service';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
@@ -47,6 +46,7 @@
 	let linkModalService: string | null = $state(null);
 	let movieSearchInput = $state('');
 	let pinnedMovies = $state<DisplayTMDBMovie[]>([]);
+	let favoritedMovies = $state<DisplayTMDBMovie[]>([]);
 	let movieImageOverrides = $state<Map<number, Record<string, string>>>(new Map());
 
 	// === Browse state (inline, replaces tmdbBrowseService) ===
@@ -132,6 +132,29 @@
 	let pinnedTmdbIds = $derived(
 		new Set($pinState.items.filter((p) => p.service === 'tmdb').map((p) => Number(p.serviceId)))
 	);
+
+	// === Resolve pinned/favorited movies ===
+	async function resolveMovieIds(ids: number[]): Promise<DisplayTMDBMovie[]> {
+		if (ids.length === 0) return [];
+		const results = await Promise.allSettled(
+			ids.map((id) => fetchJson<TMDBMovie>(`/api/tmdb/movies/${id}`))
+		);
+		return moviesToDisplay(
+			results
+				.filter((r): r is PromiseFulfilledResult<TMDBMovie> => r.status === 'fulfilled' && r.value != null)
+				.map((r) => r.value)
+		);
+	}
+
+	$effect(() => {
+		const ids = [...pinnedTmdbIds];
+		resolveMovieIds(ids).then((movies) => { pinnedMovies = movies; });
+	});
+
+	$effect(() => {
+		const ids = [...favoritedTmdbIds];
+		resolveMovieIds(ids).then((movies) => { favoritedMovies = movies; });
+	});
 
 	// === Image overrides ===
 	async function loadMovieImageOverrides() {
@@ -494,7 +517,6 @@
 		loadPopularMovies();
 		loadMovieGenres();
 		loadDiscoverMovies();
-		smartPairService.loadPinned().then((pinned) => { pinnedMovies = pinned.movies; });
 	});
 </script>
 
@@ -534,6 +556,23 @@
 					</div>
 					<TmdbCatalogGrid
 						movies={pinnedMovies}
+						fetchedIds={fetchCachedTmdbIds}
+						favoritedIds={favoritedTmdbIds}
+						pinnedIds={pinnedTmdbIds}
+						downloadStatuses={browseDownloadStatuses}
+						{fetchCacheSummaries}
+						{smartSearchingId}
+						onselectMovie={handleBrowseSelectMovie}
+						onsmartSearch={handleSmartSearch}
+					/>
+				</section>
+			{/if}
+
+			{#if favoritedMovies.length > 0}
+				<section class="mb-8">
+					<h2 class="mb-3 text-lg font-semibold">Favorites</h2>
+					<TmdbCatalogGrid
+						movies={applyOverridesToMovies(favoritedMovies)}
 						fetchedIds={fetchCachedTmdbIds}
 						favoritedIds={favoritedTmdbIds}
 						pinnedIds={pinnedTmdbIds}
