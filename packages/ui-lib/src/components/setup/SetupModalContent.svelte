@@ -10,7 +10,7 @@
 	} from 'ui-lib/services/node-connection.service';
 	import { generateRandomUsername } from 'ui-lib/utils/random-username';
 	import { toastService } from 'ui-lib/services/toast.service';
-	import { buildConnectUrl } from 'ui-lib/services/connect-url.service';
+	import { buildInvite, parseInvite } from 'ui-lib/services/connect-invite.service';
 	import type { TransportMode } from 'ui-lib/types/connection-config.type';
 
 	let {
@@ -32,6 +32,9 @@
 	let serverUrl = $state(existingConfig?.serverUrl ?? defaults.serverUrl);
 	let serverAddress = $state(existingConfig?.serverAddress ?? defaults.serverAddress);
 	let signalingUrl = $state(existingConfig?.signalingUrl ?? defaults.signalingUrl);
+
+	let inviteInput = $state('');
+	let inviteError = $state<string | null>(null);
 
 	function handleNameChange(value: string) {
 		displayName = value;
@@ -91,6 +94,28 @@
 			: serverAddress.trim().length > 0 && signalingUrl.trim().length > 0
 	);
 
+	let parsedInvite = $derived(inviteInput.trim() ? parseInvite(inviteInput.trim()) : null);
+	let canConnectInvite = $derived(parsedInvite !== null);
+
+	async function handleConnectInvite() {
+		if (!parsedInvite) return;
+		inviteError = null;
+
+		try {
+			if (parsedInvite.transportMode === 'http') {
+				await nodeConnectionService.connectHttp(parsedInvite);
+			} else if (parsedInvite.transportMode === 'ws') {
+				await nodeConnectionService.connectWs(parsedInvite);
+			} else {
+				await nodeConnectionService.connectWebRtc(parsedInvite);
+			}
+			connectionConfigService.save(parsedInvite);
+			onconnected();
+		} catch {
+			// Error is already in connState
+		}
+	}
+
 	async function handleConnect() {
 		const config = {
 			transportMode,
@@ -120,11 +145,11 @@
 		ondisconnect?.();
 	}
 
-	async function handleShare() {
+	async function handleCopyInvite() {
 		if (!existingConfig) return;
-		const url = buildConnectUrl(existingConfig);
-		await navigator.clipboard.writeText(url);
-		toastService.success('Connection URL copied to clipboard');
+		const json = buildInvite(existingConfig);
+		await navigator.clipboard.writeText(json);
+		toastService.success('Invite copied to clipboard');
 	}
 </script>
 
@@ -166,11 +191,26 @@
 			{/if}
 		</div>
 
+		<div class="form-control">
+			<label class="label" for="invite-output">
+				<span class="label-text text-base-content/60">Invite</span>
+			</label>
+			<textarea
+				id="invite-output"
+				class="textarea-bordered textarea w-full font-mono text-xs"
+				readonly
+				rows="2"
+				value={buildInvite(existingConfig)}
+			></textarea>
+		</div>
+
 		<div class="flex gap-2">
 			<button class="btn flex-1 btn-outline btn-error" onclick={handleDisconnect}>
 				Disconnect
 			</button>
-			<button class="btn flex-1 btn-outline btn-primary" onclick={handleShare}> Share </button>
+			<button class="btn flex-1 btn-outline btn-primary" onclick={handleCopyInvite}>
+				Copy Invite
+			</button>
 		</div>
 	{:else}
 		<!-- Client identity -->
@@ -205,6 +245,41 @@
 				</button>
 			</div>
 		</div>
+
+		<!-- Invite paste -->
+		<div class="form-control">
+			<label class="label" for="invite-input">
+				<span class="label-text">Paste Invite</span>
+			</label>
+			<textarea
+				id="invite-input"
+				class={classNames('textarea-bordered textarea w-full font-mono text-xs', {
+					'textarea-error': inviteInput.trim() && !parsedInvite
+				})}
+				placeholder={'{"transport":"ws","serverUrl":"http://192.168.1.5:1530"}'}
+				rows="2"
+				bind:value={inviteInput}
+				disabled={connecting}
+			></textarea>
+			{#if inviteInput.trim() && !parsedInvite}
+				<label class="label">
+					<span class="label-text-alt text-error">Invalid invite JSON</span>
+				</label>
+			{/if}
+		</div>
+
+		{#if canConnectInvite}
+			<button class="btn btn-primary" disabled={connecting} onclick={handleConnectInvite}>
+				{#if connecting}
+					<span class="loading loading-sm loading-spinner"></span>
+					Connecting...
+				{:else}
+					Connect with Invite
+				{/if}
+			</button>
+		{/if}
+
+		<div class="divider text-xs text-base-content/40">or configure manually</div>
 
 		<!-- Transport mode selector -->
 		<div class="flex gap-2">
@@ -318,13 +393,15 @@
 		{/if}
 
 		<!-- Connect button -->
-		<button class="btn btn-primary" disabled={!canConnect || connecting} onclick={handleConnect}>
-			{#if connecting}
-				<span class="loading loading-sm loading-spinner"></span>
-				Connecting...
-			{:else}
-				Connect
-			{/if}
-		</button>
+		{#if !canConnectInvite}
+			<button class="btn btn-primary" disabled={!canConnect || connecting} onclick={handleConnect}>
+				{#if connecting}
+					<span class="loading loading-sm loading-spinner"></span>
+					Connecting...
+				{:else}
+					Connect
+				{/if}
+			</button>
+		{/if}
 	{/if}
 </div>

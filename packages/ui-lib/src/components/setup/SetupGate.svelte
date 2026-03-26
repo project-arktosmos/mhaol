@@ -3,7 +3,6 @@
 	import { get } from 'svelte/store';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import { nodeConnectionService } from 'ui-lib/services/node-connection.service';
-	import { parseConnectUrl, clearConnectParams } from 'ui-lib/services/connect-url.service';
 	import SetupModalContent from './SetupModalContent.svelte';
 
 	let {
@@ -20,10 +19,15 @@
 
 	function connectWith(config: import('ui-lib/types/connection-config.type').ConnectionConfig) {
 		reconnecting = true;
-		const promise =
-			config.transportMode === 'http'
-				? nodeConnectionService.connectHttp(config)
-				: nodeConnectionService.connectWebRtc(config);
+		let promise: Promise<void>;
+
+		if (config.transportMode === 'ws') {
+			promise = nodeConnectionService.connectWs(config);
+		} else if (config.transportMode === 'webrtc') {
+			promise = nodeConnectionService.connectWebRtc(config);
+		} else {
+			promise = nodeConnectionService.connectHttp(config);
+		}
 
 		promise
 			.then(() => {
@@ -38,14 +42,6 @@
 	}
 
 	onMount(() => {
-		// URL params take priority over saved config
-		const urlConfig = parseConnectUrl();
-		if (urlConfig) {
-			clearConnectParams();
-			connectWith(urlConfig);
-			return;
-		}
-
 		const config = get(configStore);
 		if (config) {
 			connectWith(config);

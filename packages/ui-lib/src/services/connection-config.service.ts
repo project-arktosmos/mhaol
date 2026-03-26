@@ -29,7 +29,7 @@ class ConnectionConfigService {
 	save(config: ConnectionConfig): void {
 		this.store.set(config);
 
-		if (config.transportMode === 'http') {
+		if (config.transportMode === 'http' || config.transportMode === 'ws') {
 			localStorage.setItem('api-server-url', config.serverUrl);
 		} else {
 			localStorage.setItem('signaling-url', config.signalingUrl);
