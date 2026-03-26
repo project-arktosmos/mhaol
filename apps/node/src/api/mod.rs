@@ -49,13 +49,10 @@ use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-/// Build the complete API router with all route groups.
-pub fn build_router(state: AppState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-
+/// Build the app router without external-facing middleware.
+/// Used by the WS/WebRTC RPC handler which pre-verifies identity
+/// and injects `x-verified-address` directly.
+pub fn build_app_router(state: AppState) -> Router {
     // Public routes — no auth required
     let public = Router::new()
         .nest("/api/health", health::router())
@@ -122,8 +119,17 @@ pub fn build_router(state: AppState) -> Router {
         router
     };
 
-    router
-        .with_state(state)
+    router.with_state(state)
+}
+
+/// Build the complete HTTP-facing router with CORS and internal header stripping.
+pub fn build_router(state: AppState) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    build_app_router(state)
         .layer(axum::middleware::from_fn(auth::strip_internal_header))
         .layer(cors)
 }

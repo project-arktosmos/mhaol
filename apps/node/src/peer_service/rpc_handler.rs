@@ -15,7 +15,7 @@ pub struct RpcHandler {
 
 impl RpcHandler {
     pub fn new(state: AppState) -> Self {
-        let router = crate::api::build_router(state);
+        let router = crate::api::build_app_router(state);
         Self { router }
     }
 
