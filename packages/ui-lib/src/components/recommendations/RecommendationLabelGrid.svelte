@@ -12,12 +12,12 @@
 	let { labels, activeLabelId, loading = false, onlabelclick }: Props = $props();
 </script>
 
-<div class="flex flex-wrap gap-2">
+<div class="grid grid-cols-4 gap-2">
 	{#each labels as label (label.id)}
 		<button
-			class={classNames('btn btn-sm', {
-				'btn-primary': activeLabelId === label.id,
-				'btn-ghost': activeLabelId !== label.id,
+			class={classNames('btn btn-sm w-full', {
+				'btn-primary btn-outline': activeLabelId === label.id,
+				'btn-outline': activeLabelId !== label.id,
 				'btn-disabled': loading
 			})}
 			onclick={() => onlabelclick?.(label.id)}
