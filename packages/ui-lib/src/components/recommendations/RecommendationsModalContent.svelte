@@ -159,7 +159,7 @@
 
 	function parseRecData(row: RecommendationRow): Record<string, unknown> | null {
 		try {
-			return JSON.parse(row.data);
+			return row.data as Record<string, unknown>;
 		} catch {
 			return null;
 		}
@@ -312,13 +312,13 @@
 													{#each recs as rec (rec.id)}
 														{@const parsed = parseRecData(rec)}
 														<tr>
-															<td class="font-mono">{rec.recommended_tmdb_id}</td>
+															<td class="font-mono">{rec.recommendedTmdbId}</td>
 															<td class="max-w-40 truncate">
 																{rec.title ?? parsed?.title ?? parsed?.name ?? '—'}
 															</td>
-															<td>{rec.recommended_media_type}</td>
+															<td>{rec.recommendedMediaType}</td>
 															<td class="text-xs text-base-content/50">
-																{new Date(rec.fetched_at).toLocaleDateString()}
+																{new Date(rec.fetchedAt).toLocaleDateString()}
 															</td>
 														</tr>
 														{#if parsed}

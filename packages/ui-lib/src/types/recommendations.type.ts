@@ -1,12 +1,12 @@
 export interface RecommendationRow {
 	id: number;
-	source_tmdb_id: number;
-	source_media_type: string;
-	recommended_tmdb_id: number;
-	recommended_media_type: string;
+	sourceTmdbId: number;
+	sourceMediaType: string;
+	recommendedTmdbId: number;
+	recommendedMediaType: string;
 	title: string | null;
-	data: string;
-	fetched_at: string;
+	data: Record<string, unknown>;
+	fetchedAt: string;
 }
 
 export interface RecommendationsStatus {
