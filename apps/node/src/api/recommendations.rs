@@ -31,11 +31,36 @@ async fn bulk_enqueue(
     State(state): State<AppState>,
     Json(body): Json<BulkRequest>,
 ) -> impl IntoResponse {
+    let existing_tasks = state
+        .queue
+        .list(None, Some(mhaol_recommendations::TASK_FETCH));
+
     let mut enqueued = 0;
     for item in &body.items {
         if item.media_type != "movie" && item.media_type != "tv" {
             continue;
         }
+
+        // Cancel/remove existing queue tasks for this tmdbId
+        for task in &existing_tasks {
+            if let Some(tid) = task.payload.get("tmdbId").and_then(|v| v.as_i64()) {
+                let mt = task
+                    .payload
+                    .get("mediaType")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if tid == item.tmdb_id && mt == item.media_type {
+                    let _ = state.queue.cancel(&task.id);
+                    state.queue.remove(&task.id);
+                }
+            }
+        }
+
+        // Delete existing recommendation records
+        state
+            .recommendations
+            .delete_for_source(item.tmdb_id, &item.media_type);
+
         state.queue.enqueue(
             mhaol_recommendations::TASK_FETCH,
             serde_json::json!({
