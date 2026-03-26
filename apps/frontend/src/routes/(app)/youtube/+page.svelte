@@ -20,6 +20,8 @@
 	import LibraryContentGrid from 'ui-lib/components/libraries/LibraryContentGrid.svelte';
 	import YouTubeSearchInput from 'ui-lib/components/youtube-search/YouTubeSearchInput.svelte';
 	import YouTubeChannelCard from 'ui-lib/components/youtube-search/YouTubeChannelCard.svelte';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 
 	const libState = youtubeLibraryService.state;
 	const ytState = youtubeService.state;
@@ -159,12 +161,22 @@
 
 	const ACTIVE_STATES = ['pending', 'fetching', 'downloading', 'muxing'];
 
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+
+	let favoritedYtIds = $derived(
+		new Set($favState.items.filter((f) => f.service === 'youtube').map((f) => f.serviceId))
+	);
+	let pinnedYtIds = $derived(
+		new Set($pinState.items.filter((p) => p.service === 'youtube').map((p) => p.serviceId))
+	);
+
 	let cardItems = $derived(
 		$libState.content.map(youTubeCardAdapter.fromContent.bind(youTubeCardAdapter))
 	);
 
 	let favoriteItems = $derived(
-		$libState.favorites.map(youTubeCardAdapter.fromContent.bind(youTubeCardAdapter))
+		cardItems.filter((item) => favoritedYtIds.has(item.videoId))
 	);
 
 	let videoItems = $derived(cardItems.filter((item) => item.hasVideo));
@@ -446,6 +458,8 @@
 				title="Favorites"
 				items={favoriteItems}
 				{activeDownloadMap}
+				favoritedIds={favoritedYtIds}
+				pinnedIds={pinnedYtIds}
 				onitemclick={handleItemClick}
 			/>
 		{/if}
@@ -455,6 +469,8 @@
 				title="Videos"
 				items={videoItems}
 				{activeDownloadMap}
+				favoritedIds={favoritedYtIds}
+				pinnedIds={pinnedYtIds}
 				onitemclick={handleItemClick}
 			/>
 		{/if}
@@ -464,6 +480,8 @@
 				title="Music"
 				items={musicItems}
 				{activeDownloadMap}
+				favoritedIds={favoritedYtIds}
+				pinnedIds={pinnedYtIds}
 				onitemclick={handleItemClick}
 			/>
 		{/if}
@@ -472,6 +490,8 @@
 			title="All cached"
 			items={cardItems}
 			{activeDownloadMap}
+			favoritedIds={favoritedYtIds}
+			pinnedIds={pinnedYtIds}
 			onitemclick={handleItemClick}
 		/>
 	{/if}
