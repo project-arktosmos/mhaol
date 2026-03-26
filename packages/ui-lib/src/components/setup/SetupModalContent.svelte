@@ -162,14 +162,26 @@
 
 	<!-- Connected status view -->
 	{#if connected && existingConfig}
-		<div class="flex items-center gap-2">
-			<span class="badge gap-1 badge-success">
-				<span class="h-2 w-2 rounded-full bg-success-content"></span>
-				Connected
-			</span>
-			<span class="badge badge-outline badge-sm">
-				{existingConfig.transportMode.toUpperCase()}
-			</span>
+		<div class="flex items-center gap-3 rounded-lg bg-base-200 p-3">
+			{#if clientAddress}
+				<img
+					src={blo(clientAddress as `0x${string}`)}
+					alt="identicon"
+					class="h-10 w-10 rounded-full"
+				/>
+			{/if}
+			<div class="min-w-0">
+				<div class="flex items-center gap-2">
+					<span class="badge gap-1 badge-sm badge-success">
+						<span class="h-1.5 w-1.5 rounded-full bg-success-content"></span>
+						Connected
+					</span>
+					<span class="badge badge-outline badge-sm">
+						{existingConfig.transportMode.toUpperCase()}
+					</span>
+				</div>
+				<p class="mt-1 truncate font-mono text-xs">{clientAddress}</p>
+			</div>
 		</div>
 
 		<div class="rounded-lg bg-base-200 p-3">
