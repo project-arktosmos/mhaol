@@ -72,39 +72,36 @@
 			No recommendations yet. Use the Recs modal to enqueue movies first.
 		</p>
 	{:else}
-		<div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4 overflow-hidden">
-			<!-- Left: Top movies list -->
-			<div class="flex flex-col gap-1 overflow-y-auto">
-				{#each movies as movie, i (movie.tmdbId)}
-					<button
-						class={classNames(
-							'flex items-center gap-2 rounded-lg p-2 text-left transition-colors',
-							{
-								'bg-primary/20': selectedIndex === i,
-								'bg-base-200 hover:bg-base-300': selectedIndex !== i
-							}
-						)}
-						onclick={() => scrollToCard(i)}
-					>
-						<span class="min-w-6 text-right text-xs text-base-content/40">{i + 1}</span>
-						{#if posterUrl(movie.data)}
-							<img
-								src={posterUrl(movie.data)}
-								alt=""
-								class="h-12 w-8 flex-shrink-0 rounded object-cover"
-							/>
-						{:else}
-							<div class="h-12 w-8 flex-shrink-0 rounded bg-base-300"></div>
-						{/if}
-						<div class="min-w-0 flex-1">
-							<p class="truncate text-sm font-medium">{movie.title ?? '—'}</p>
-							<p class="text-xs text-base-content/50">
-								{year(movie.data)} &middot; {rating(movie.data)}
-							</p>
-						</div>
-						<span class="badge badge-ghost badge-sm flex-shrink-0">{movie.count}</span>
-					</button>
-				{/each}
+		<div class="grid min-h-0 flex-1 grid-cols-2 gap-4 overflow-hidden">
+			<!-- Left: Top Recommended Movies table (same as Recs modal right panel) -->
+			<div class="flex flex-col gap-2 overflow-y-auto">
+				<h3 class="text-sm font-semibold">Top Recommended Movies</h3>
+				<table class="table table-xs">
+					<thead>
+						<tr>
+							<th>#</th>
+							<th>Title</th>
+							<th>TMDB ID</th>
+							<th>Count</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each movies as movie, i (movie.tmdbId)}
+							<tr
+								class={classNames('cursor-pointer', {
+									'bg-primary/20': selectedIndex === i,
+									'hover:bg-base-200': selectedIndex !== i
+								})}
+								onclick={() => scrollToCard(i)}
+							>
+								<td class="text-base-content/40">{i + 1}</td>
+								<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
+								<td class="font-mono text-xs">{movie.tmdbId}</td>
+								<td class="font-semibold">{movie.count}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
 
 			<!-- Right: Detail cards -->
