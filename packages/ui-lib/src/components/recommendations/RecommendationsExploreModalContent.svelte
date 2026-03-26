@@ -34,6 +34,16 @@
 		return assignmentMap.get(key) ?? null;
 	});
 
+	let labelEmojiMap = $derived.by(() => {
+		const emojiByLabelId = new Map(labelDefs.map((l) => [l.id, l.emoji]));
+		const result = new Map<string, string>();
+		for (const [key, labelId] of assignmentMap) {
+			const emoji = emojiByLabelId.get(labelId);
+			if (emoji) result.set(key, emoji);
+		}
+		return result;
+	});
+
 	let selectedDetail = $derived(
 		selectedMovie ? (detailMap.get(selectedMovie.tmdbId) ?? null) : null
 	);
@@ -157,6 +167,7 @@
 			<TopRecommendedTable
 				bind:this={topTable}
 				{selectedIndex}
+				labelMap={labelEmojiMap}
 				onrowclick={handleRowClick}
 			/>
 		</div>

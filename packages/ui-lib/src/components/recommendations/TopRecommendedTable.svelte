@@ -6,10 +6,11 @@
 	interface Props {
 		mediaType?: string;
 		selectedIndex?: number | null;
+		labelMap?: Map<string, string>;
 		onrowclick?: (index: number, movie: TopRecommendedMovie) => void;
 	}
 
-	let { mediaType, selectedIndex = null, onrowclick }: Props = $props();
+	let { mediaType, selectedIndex = null, labelMap, onrowclick }: Props = $props();
 
 	let movies = $state<TopRecommendedMovie[]>([]);
 	let loading = $state(false);
@@ -47,6 +48,9 @@
 			<tr>
 				<th>#</th>
 				<th>Title</th>
+				{#if labelMap}
+					<th class="text-center"></th>
+				{/if}
 				{#each lvls as lvl}
 					<th class="text-center" colspan="2">L{lvl}</th>
 				{/each}
@@ -65,6 +69,9 @@
 				>
 					<td class="text-base-content/40">{i + 1}</td>
 					<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
+					{#if labelMap}
+						<td class="text-center">{labelMap.get(`${movie.tmdbId}:${movie.mediaType}`) ?? ''}</td>
+					{/if}
 					{#each lvls as lvl}
 						{@const cnt = movie.levelCounts[lvl] ?? 0}
 						{@const pct = movie.levelPercentages[lvl] ?? 0}
