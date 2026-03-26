@@ -205,6 +205,23 @@ class SmartSearchService {
 			this.runSearches(selection, this.abortController.signal);
 		}
 		this.createPendingItem(selection);
+
+		if (selection.mode === 'fetch') {
+			this.autoPickOnSearchComplete();
+		}
+	}
+
+	private autoPickOnSearchComplete() {
+		let started = false;
+		const unsubscribe = this.store.subscribe((state) => {
+			if (state.searching) started = true;
+			if (started && !state.searching) {
+				unsubscribe();
+				if (state.searchError || state.searchResults.length === 0) return;
+				const best = this.pickBestFromList(state.searchResults);
+				if (best) this.setFetchedCandidate(best);
+			}
+		});
 	}
 
 	clear() {
