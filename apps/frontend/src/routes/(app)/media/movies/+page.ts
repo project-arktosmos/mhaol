@@ -6,6 +6,12 @@ export const load: PageLoad = async () => {
     return await fetchJson("/api/media");
   } catch (err) {
     return {
+      mediaTypes: [],
+      categories: [],
+      linkSources: [],
+      itemsByCategory: {},
+      itemsByType: {},
+      libraries: {},
       error: err instanceof Error ? err.message : String(err),
     };
   }

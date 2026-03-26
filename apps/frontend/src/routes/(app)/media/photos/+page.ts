@@ -10,6 +10,13 @@ export const load: PageLoad = async () => {
     return { ...media, images: images.images ?? [] };
   } catch (err) {
     return {
+      mediaTypes: [],
+      categories: [],
+      linkSources: [],
+      itemsByCategory: {},
+      itemsByType: {},
+      libraries: {},
+      images: [],
       error: err instanceof Error ? err.message : String(err),
     };
   }
