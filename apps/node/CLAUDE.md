@@ -14,6 +14,7 @@ src/
 ├── api/                  # Route handlers (one module per feature)
 │   ├── mod.rs            # build_router() — registers all routes
 │   ├── addons.rs
+│   ├── catalog.rs          # Unified media catalog (items CRUD, fetch cache, search)
 │   ├── database.rs
 │   ├── downloads.rs
 │   ├── health.rs           # GET /api/health — simple status check
