@@ -49,6 +49,20 @@
 		return totals;
 	});
 
+	function movieScore(movie: TopRecommendedMovie): number {
+		const lvls = levels();
+		const tots = levelTotals();
+		return lvls.reduce((sum, lvl) => {
+			const cnt = movie.levelCounts[lvl] ?? 0;
+			const total = tots[lvl] ?? 0;
+			return sum + (total > 0 ? Math.round((cnt / total) * 100) : 0);
+		}, 0);
+	}
+
+	let sortedTopMovies = $derived(
+		[...topMovies].sort((a, b) => movieScore(b) - movieScore(a))
+	);
+
 	const queueStore = queueService.store;
 
 	let recTasks = $derived(
@@ -453,12 +467,8 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each topMovies as movie, i (movie.tmdbId)}
-									{@const score = levels().reduce((sum, lvl) => {
-										const cnt = movie.levelCounts[lvl] ?? 0;
-										const total = levelTotals()[lvl] ?? 0;
-										return sum + (total > 0 ? Math.round((cnt / total) * 100) : 0);
-									}, 0)}
+								{#each sortedTopMovies as movie, i (movie.tmdbId)}
+									{@const score = movieScore(movie)}
 									<tr>
 										<td class="text-base-content/40">{i + 1}</td>
 										<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
