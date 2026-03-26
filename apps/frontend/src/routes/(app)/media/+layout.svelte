@@ -11,11 +11,16 @@
 	let tabsTarget: HTMLDivElement | undefined = $state();
 	let filterBarTarget: HTMLDivElement | undefined = $state();
 
+	let prevUrl = $state($page.url.pathname);
+
 	$effect(() => {
-		void $page.url;
-		title = '';
-		count = null;
-		countLabel = 'items';
+		const current = $page.url.pathname;
+		if (current !== prevUrl) {
+			prevUrl = current;
+			title = '';
+			count = null;
+			countLabel = 'items';
+		}
 	});
 
 	setContext<MediaBarContext>(MEDIA_BAR_KEY, {
