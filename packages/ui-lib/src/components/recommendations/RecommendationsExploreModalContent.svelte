@@ -209,55 +209,55 @@
 								<p class="text-sm text-base-content/50">{data.original_title}</p>
 							{/if}
 							{#if genres(data).length > 0}
-								<div class="mt-2 flex flex-wrap gap-1">
+								<div class="mt-1 flex flex-wrap gap-1">
 									{#each genres(data) as genre}
 										<span class="badge badge-outline badge-sm">{genre}</span>
 									{/each}
 								</div>
 							{/if}
-						</div>
-					</div>
 
-					<!-- Metadata grid -->
-					<div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-						{#if data?.release_date}
-							<span class="text-base-content/50">Release Date</span>
-							<span>{data.release_date}</span>
-						{/if}
-						{#if data?.vote_average != null}
-							<span class="text-base-content/50">Rating</span>
-							<span>{Number(data.vote_average).toFixed(1)} / 10</span>
-						{/if}
-						{#if data?.vote_count != null}
-							<span class="text-base-content/50">Vote Count</span>
-							<span>{Number(data.vote_count).toLocaleString()}</span>
-						{/if}
-						{#if data?.popularity != null}
-							<span class="text-base-content/50">Popularity</span>
-							<span>{Number(data.popularity).toFixed(1)}</span>
-						{/if}
-						{#if data?.original_language}
-							<span class="text-base-content/50">Language</span>
-							<span class="uppercase">{data.original_language}</span>
-						{/if}
-						{#if data?.runtime != null}
-							<span class="text-base-content/50">Runtime</span>
-							<span>{data.runtime} min</span>
-						{/if}
-						{#if data?.status}
-							<span class="text-base-content/50">Status</span>
-							<span>{data.status}</span>
-						{/if}
-						{#if data?.budget != null && Number(data.budget) > 0}
-							<span class="text-base-content/50">Budget</span>
-							<span>${Number(data.budget).toLocaleString()}</span>
-						{/if}
-						{#if data?.revenue != null && Number(data.revenue) > 0}
-							<span class="text-base-content/50">Revenue</span>
-							<span>${Number(data.revenue).toLocaleString()}</span>
-						{/if}
-						<span class="text-base-content/50">TMDB ID</span>
-						<span>{selectedMovie.tmdbId}</span>
+							<!-- Metadata grid -->
+							<div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+								{#if data?.release_date}
+									<span class="text-base-content/50">Release Date</span>
+									<span>{data.release_date}</span>
+								{/if}
+								{#if data?.vote_average != null}
+									<span class="text-base-content/50">Rating</span>
+									<span>{Number(data.vote_average).toFixed(1)} / 10</span>
+								{/if}
+								{#if data?.vote_count != null}
+									<span class="text-base-content/50">Vote Count</span>
+									<span>{Number(data.vote_count).toLocaleString()}</span>
+								{/if}
+								{#if data?.popularity != null}
+									<span class="text-base-content/50">Popularity</span>
+									<span>{Number(data.popularity).toFixed(1)}</span>
+								{/if}
+								{#if data?.original_language}
+									<span class="text-base-content/50">Language</span>
+									<span class="uppercase">{data.original_language}</span>
+								{/if}
+								{#if data?.runtime != null}
+									<span class="text-base-content/50">Runtime</span>
+									<span>{data.runtime} min</span>
+								{/if}
+								{#if data?.status}
+									<span class="text-base-content/50">Status</span>
+									<span>{data.status}</span>
+								{/if}
+								{#if data?.budget != null && Number(data.budget) > 0}
+									<span class="text-base-content/50">Budget</span>
+									<span>${Number(data.budget).toLocaleString()}</span>
+								{/if}
+								{#if data?.revenue != null && Number(data.revenue) > 0}
+									<span class="text-base-content/50">Revenue</span>
+									<span>${Number(data.revenue).toLocaleString()}</span>
+								{/if}
+								<span class="text-base-content/50">TMDB ID</span>
+								<span>{selectedMovie.tmdbId}</span>
+							</div>
+						</div>
 					</div>
 
 					<!-- Recommendation stats -->
