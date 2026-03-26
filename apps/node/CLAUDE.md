@@ -30,6 +30,7 @@ src/
 │   ├── plugins.rs
 │   ├── retroachievements.rs  # RetroAchievements game metadata proxy
 │   ├── queue.rs           # Queue task management (CRUD + SSE subscribe)
+│   ├── recommendation_labels.rs # Per-user recommendation labels (CRUD, wallet-scoped)
 │   ├── recommendations.rs # TMDB recommendations (bulk enqueue + query)
 │   ├── roster.rs           # Roster contacts CRUD (GET/POST/DELETE /api/roster)
 │   ├── signaling.rs
@@ -59,6 +60,7 @@ All API handlers receive `AppState` which contains:
 - `HubManager` for app process management (start/stop headless apps)
 - `QueueManager` for task queue management (from `mhaol-queue` crate)
 - `RecommendationsRepo` for TMDB recommendation storage (from `mhaol-recommendations` crate)
+- `RecommendationLabelRepo` for per-user recommendation labels (wallet-scoped, in `db/repo/`)
 - `SignalingRoomManager` and `WorkerBridge` (auto-started on server boot)
 
 ## Adding a New API Module
