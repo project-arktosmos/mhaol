@@ -47,6 +47,7 @@ target/
 downloads/
 **/downloads/
 !packages/ui-lib/src/components/downloads/
+!apps/frontend/src/routes/(app)/options/downloads/
 
 # LLM models
 models/*

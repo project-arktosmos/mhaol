@@ -6,7 +6,7 @@
 
   let { children } = $props();
 
-  let activeId = $derived($page.params.section || sections[0].id);
+  let activeId = $derived($page.url.pathname.split("/").pop() || sections[0].id);
 </script>
 
 <div class="flex min-h-0 flex-1">
