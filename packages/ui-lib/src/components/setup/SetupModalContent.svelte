@@ -16,10 +16,12 @@
 
 	let {
 		onconnected,
-		ondisconnect
+		ondisconnect,
+		initialInvite
 	}: {
 		onconnected: () => void;
 		ondisconnect?: () => void;
+		initialInvite?: string;
 	} = $props();
 
 	const defaults = connectionConfigService.defaults();
@@ -36,7 +38,7 @@
 	let serverAddress = $state(existingConfig?.serverAddress ?? defaults.serverAddress);
 	let signalingUrl = $state(existingConfig?.signalingUrl ?? defaults.signalingUrl);
 
-	let inviteInput = $state('');
+	let inviteInput = $state(initialInvite ?? '');
 
 	function handleNameChange(value: string) {
 		displayName = value;

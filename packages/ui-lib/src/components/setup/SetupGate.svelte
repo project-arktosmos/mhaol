@@ -3,10 +3,7 @@
 	import { get } from 'svelte/store';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import { nodeConnectionService } from 'ui-lib/services/node-connection.service';
-	import {
-		extractInviteFromUrl,
-		clearInviteFromUrl
-	} from 'ui-lib/services/connect-invite.service';
+	import { extractInviteFromUrl, clearInviteFromUrl } from 'ui-lib/services/connect-invite.service';
 	import SetupModalContent from './SetupModalContent.svelte';
 
 	let {

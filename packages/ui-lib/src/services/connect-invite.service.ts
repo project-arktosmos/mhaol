@@ -38,6 +38,24 @@ export function buildInvite(config: ConnectionConfig): string {
 	return JSON.stringify(invite);
 }
 
+export function extractInviteFromUrl(): string | null {
+	try {
+		const params = new URLSearchParams(window.location.search);
+		const encoded = params.get('invite');
+		if (!encoded) return null;
+		return atob(encoded);
+	} catch {
+		return null;
+	}
+}
+
+export function clearInviteFromUrl(): void {
+	const url = new URL(window.location.href);
+	if (!url.searchParams.has('invite')) return;
+	url.searchParams.delete('invite');
+	history.replaceState(history.state, '', url.toString());
+}
+
 export function parseInvite(json: string): ConnectionConfig | null {
 	try {
 		const data = JSON.parse(json);
