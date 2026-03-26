@@ -90,7 +90,7 @@
 					<span class="text-sm">EPG only</span>
 					<input
 						type="checkbox"
-						class="toggle toggle-sm toggle-info"
+						class="toggle toggle-info toggle-sm"
 						checked={epgOnly}
 						onchange={(e) => onfilterchange?.({ epgOnly: e.currentTarget.checked })}
 					/>

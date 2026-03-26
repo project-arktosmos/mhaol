@@ -180,7 +180,7 @@
 					disabled={connecting}
 				/>
 				<button
-					class="btn btn-square btn-ghost btn-sm self-center"
+					class="btn btn-square self-center btn-ghost btn-sm"
 					title="Generate random name"
 					disabled={connecting}
 					onclick={randomizeName}

@@ -1,7 +1,12 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
-import type { UserProfile, RemoteProfile, ProfileState, ProfileDetail } from 'ui-lib/types/profile.type';
+import type {
+	UserProfile,
+	RemoteProfile,
+	ProfileState,
+	ProfileDetail
+} from 'ui-lib/types/profile.type';
 import { clientIdentityService } from 'ui-lib/services/client-identity.service';
 import { generateRandomUsername } from 'ui-lib/utils/random-username';
 
@@ -102,9 +107,7 @@ class ProfileService {
 		const res = await fetchRaw(`/api/profiles/${encodeURIComponent(wallet)}`);
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const data = await res.json();
-		const countRes = await fetchRaw(
-			`/api/favorites/count?wallet=${encodeURIComponent(wallet)}`
-		);
+		const countRes = await fetchRaw(`/api/favorites/count?wallet=${encodeURIComponent(wallet)}`);
 		const countData = countRes.ok ? await countRes.json() : { count: 0 };
 		return {
 			profile: {

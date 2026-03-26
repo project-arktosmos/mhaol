@@ -30,11 +30,7 @@
 		: '';
 </script>
 
-<button
-	class="flex cursor-pointer items-center gap-1.5"
-	title={statusLabel}
-	onclick={onclick}
->
+<button class="flex cursor-pointer items-center gap-1.5" title={statusLabel} {onclick}>
 	<span
 		class={classNames('h-2 w-2 rounded-full', {
 			'bg-success': connected,
