@@ -66,14 +66,14 @@
 			<div class="relative flex-1">
 				<input
 					type="text"
-					class="input input-bordered input-sm w-full max-w-xs"
+					class="input-bordered input input-sm w-full max-w-xs"
 					placeholder="Search..."
 					value={searchInput}
 					oninput={handleSearchInput}
 				/>
 				{#if searchInput}
 					<button
-						class="btn btn-circle btn-ghost btn-xs absolute right-1 top-1"
+						class="btn absolute top-1 right-1 btn-circle btn-ghost btn-xs"
 						onclick={handleSearchClear}
 					>
 						✕
@@ -109,10 +109,7 @@
 	>
 		{#snippet card(item, _index)}
 			{@const catalogItem = item as CatalogItem}
-			<CatalogCard
-				card={cardDataFor(catalogItem)}
-				onclick={() => onselectitem(catalogItem)}
-			/>
+			<CatalogCard card={cardDataFor(catalogItem)} onclick={() => onselectitem(catalogItem)} />
 		{/snippet}
 	</BrowseGrid>
 </div>

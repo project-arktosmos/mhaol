@@ -1,5 +1,10 @@
 import { fetchJson } from 'ui-lib/transport/fetch-helpers';
-import type { IptvChannel, IptvSearchResult, IptvCategory, IptvCountry } from 'ui-lib/types/iptv.type';
+import type {
+	IptvChannel,
+	IptvSearchResult,
+	IptvCategory,
+	IptvCountry
+} from 'ui-lib/types/iptv.type';
 import type { CatalogItem, CatalogFilterOption } from 'ui-lib/types/catalog.type';
 import type { CatalogKindStrategy } from 'ui-lib/services/catalog.service';
 
@@ -41,14 +46,20 @@ export const iptvStrategy: CatalogKindStrategy = {
 			label: 'Category',
 			loadOptions: async () => {
 				const data = await fetchJson<IptvCategory[]>('/api/iptv/categories');
-				return [{ id: '', label: 'All' }, ...(data ?? []).map((c) => ({ id: c.id, label: c.name }))];
+				return [
+					{ id: '', label: 'All' },
+					...(data ?? []).map((c) => ({ id: c.id, label: c.name }))
+				];
 			}
 		},
 		country: {
 			label: 'Country',
 			loadOptions: async () => {
 				const data = await fetchJson<IptvCountry[]>('/api/iptv/countries');
-				return [{ id: '', label: 'All' }, ...(data ?? []).map((c) => ({ id: c.code, label: c.name }))];
+				return [
+					{ id: '', label: 'All' },
+					...(data ?? []).map((c) => ({ id: c.code, label: c.name }))
+				];
 			}
 		}
 	},

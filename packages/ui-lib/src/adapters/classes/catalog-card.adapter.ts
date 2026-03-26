@@ -1,8 +1,4 @@
-import type {
-	CatalogItem,
-	CatalogCardData,
-	CatalogBadge
-} from 'ui-lib/types/catalog.type';
+import type { CatalogItem, CatalogCardData, CatalogBadge } from 'ui-lib/types/catalog.type';
 
 function getSubtitle(item: CatalogItem): string | null {
 	switch (item.kind) {

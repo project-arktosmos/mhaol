@@ -5,13 +5,25 @@ import type { CatalogItem, CatalogFilterOption } from 'ui-lib/types/catalog.type
 import type { CatalogKindStrategy } from 'ui-lib/services/catalog.service';
 
 const GENRES: CatalogFilterOption[] = [
-	'rock', 'pop', 'electronic', 'hip hop', 'jazz', 'classical', 'r&b', 'metal',
-	'folk', 'soul', 'punk', 'blues', 'country', 'ambient', 'indie', 'alternative'
+	'rock',
+	'pop',
+	'electronic',
+	'hip hop',
+	'jazz',
+	'classical',
+	'r&b',
+	'metal',
+	'folk',
+	'soul',
+	'punk',
+	'blues',
+	'country',
+	'ambient',
+	'indie',
+	'alternative'
 ].map((g) => ({ id: g, label: g }));
 
-function toArtistCatalogItems(
-	artists: ReturnType<typeof artistsToDisplay>
-): CatalogItem[] {
+function toArtistCatalogItems(artists: ReturnType<typeof artistsToDisplay>): CatalogItem[] {
 	return artists.map((a) => ({
 		id: a.id,
 		kind: 'artist' as const,

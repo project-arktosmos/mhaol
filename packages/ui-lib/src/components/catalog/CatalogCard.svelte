@@ -18,10 +18,13 @@
 	);
 
 	let containerClasses = $derived(
-		classNames('card card-compact bg-base-200 shadow-sm cursor-pointer transition-all hover:shadow-md', {
-			'ring-2 ring-primary': card.fetched,
-			'opacity-40': card.torrentState === 'paused'
-		})
+		classNames(
+			'card card-compact bg-base-200 shadow-sm cursor-pointer transition-all hover:shadow-md',
+			{
+				'ring-2 ring-primary': card.fetched,
+				'opacity-40': card.torrentState === 'paused'
+			}
+		)
 	);
 
 	let ratingColor = $derived(
@@ -37,17 +40,12 @@
 	class={containerClasses}
 	role="button"
 	tabindex="0"
-	onclick={onclick}
+	{onclick}
 	onkeydown={(e) => e.key === 'Enter' && onclick?.()}
 >
 	<figure class={classNames('relative overflow-hidden', aspectClass)}>
 		{#if card.imageUrl}
-			<img
-				src={card.imageUrl}
-				alt={card.title}
-				class="h-full w-full object-cover"
-				loading="lazy"
-			/>
+			<img src={card.imageUrl} alt={card.title} class="h-full w-full object-cover" loading="lazy" />
 		{:else}
 			<div class="flex h-full w-full items-center justify-center bg-base-300 text-base-content/20">
 				<svg class="h-12 w-12" fill="currentColor" viewBox="0 0 24 24">
@@ -58,7 +56,7 @@
 			</div>
 		{/if}
 		{#if card.torrentProgress !== undefined && card.torrentProgress > 0 && card.torrentProgress < 1}
-			<div class="absolute bottom-0 left-0 right-0 h-1 bg-base-300">
+			<div class="absolute right-0 bottom-0 left-0 h-1 bg-base-300">
 				<div
 					class="h-full bg-primary transition-all"
 					style="width: {card.torrentProgress * 100}%"
@@ -66,12 +64,12 @@
 			</div>
 		{/if}
 		{#if card.favorited || card.pinned}
-			<div class="absolute right-1 top-1 flex gap-0.5">
+			<div class="absolute top-1 right-1 flex gap-0.5">
 				{#if card.favorited}
-					<span class="badge badge-error badge-xs">♥</span>
+					<span class="badge badge-xs badge-error">♥</span>
 				{/if}
 				{#if card.pinned}
-					<span class="badge badge-info badge-xs">📌</span>
+					<span class="badge badge-xs badge-info">📌</span>
 				{/if}
 			</div>
 		{/if}

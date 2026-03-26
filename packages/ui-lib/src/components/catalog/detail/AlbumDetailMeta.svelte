@@ -57,7 +57,9 @@
 			</h3>
 			<div class="flex flex-col">
 				{#each tracks as track}
-					<div class="flex items-center justify-between border-b border-base-200 py-1.5 text-sm last:border-0">
+					<div
+						class="flex items-center justify-between border-b border-base-200 py-1.5 text-sm last:border-0"
+					>
 						<div class="flex items-center gap-2">
 							<span class="w-6 text-right text-xs opacity-40">{track.number}</span>
 							<span>{track.title}</span>

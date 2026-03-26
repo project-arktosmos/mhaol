@@ -48,9 +48,7 @@ export const photoStrategy: CatalogKindStrategy = {
 		const data = await fetchJson<PhotoItem[]>('/api/media?type=image');
 		const q = query.toLowerCase();
 		const filtered = (data ?? []).filter(
-			(p) =>
-				p.name.toLowerCase().includes(q) ||
-				p.tags.some((t) => t.tag.toLowerCase().includes(q))
+			(p) => p.name.toLowerCase().includes(q) || p.tags.some((t) => t.tag.toLowerCase().includes(q))
 		);
 		return { items: toPhotoCatalogItems(filtered), totalPages: 1 };
 	},

@@ -25,7 +25,7 @@
 	{#if renderedDescription}
 		<div>
 			<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Description</h3>
-			<div class="prose prose-sm max-w-none">
+			<div class="prose-sm prose max-w-none">
 				{@html renderedDescription}
 			</div>
 		</div>

@@ -61,13 +61,28 @@
 			<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Screenshots</h3>
 			<div class="grid grid-cols-3 gap-1">
 				{#if imageBoxArtUrl}
-					<img src={imageBoxArtUrl} alt="Box art" class="w-full rounded object-cover" loading="lazy" />
+					<img
+						src={imageBoxArtUrl}
+						alt="Box art"
+						class="w-full rounded object-cover"
+						loading="lazy"
+					/>
 				{/if}
 				{#if imageTitleUrl}
-					<img src={imageTitleUrl} alt="Title screen" class="w-full rounded object-cover" loading="lazy" />
+					<img
+						src={imageTitleUrl}
+						alt="Title screen"
+						class="w-full rounded object-cover"
+						loading="lazy"
+					/>
 				{/if}
 				{#if imageIngameUrl}
-					<img src={imageIngameUrl} alt="In-game" class="w-full rounded object-cover" loading="lazy" />
+					<img
+						src={imageIngameUrl}
+						alt="In-game"
+						class="w-full rounded object-cover"
+						loading="lazy"
+					/>
 				{/if}
 			</div>
 		</div>
@@ -81,12 +96,17 @@
 			<div class="flex flex-col gap-1">
 				{#each achievements.slice(0, 20) as achievement}
 					<div class="flex items-center gap-2 rounded p-1.5 text-sm hover:bg-base-200">
-						<img src={achievement.badgeUrl} alt={achievement.title} class="h-8 w-8 rounded" loading="lazy" />
+						<img
+							src={achievement.badgeUrl}
+							alt={achievement.title}
+							class="h-8 w-8 rounded"
+							loading="lazy"
+						/>
 						<div class="flex-1">
 							<p class="text-xs font-medium">{achievement.title}</p>
 							<p class="text-xs opacity-50">{achievement.description}</p>
 						</div>
-						<span class="badge badge-accent badge-xs">{achievement.points}</span>
+						<span class="badge badge-xs badge-accent">{achievement.points}</span>
 					</div>
 				{/each}
 			</div>

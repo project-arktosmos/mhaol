@@ -37,7 +37,13 @@
 		{#if beginYear}
 			<div>
 				<span class="opacity-50">Active:</span>
-				<span class="font-medium">{beginYear}{ended && endYear ? ` – ${endYear}` : ended ? ' – dissolved' : ' – present'}</span>
+				<span class="font-medium"
+					>{beginYear}{ended && endYear
+						? ` – ${endYear}`
+						: ended
+							? ' – dissolved'
+							: ' – present'}</span
+				>
 			</div>
 		{/if}
 	</div>

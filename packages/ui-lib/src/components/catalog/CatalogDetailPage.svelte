@@ -77,7 +77,10 @@
 	let supportsTorrent = $derived(TORRENT_KINDS.includes(item.kind));
 	let dlState = $derived(torrentStatus?.state ?? null);
 	let isDownloading = $derived(
-		dlState === 'downloading' || dlState === 'initializing' || dlState === 'paused' || dlState === 'checking'
+		dlState === 'downloading' ||
+			dlState === 'initializing' ||
+			dlState === 'paused' ||
+			dlState === 'checking'
 	);
 	let isDownloaded = $derived(dlState === 'seeding');
 	let dlProgress = $derived(torrentStatus?.progress ?? 0);
@@ -86,14 +89,26 @@
 
 <DetailPageLayout>
 	<button class="btn self-start btn-ghost btn-sm" onclick={onback}>
-		<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			class="h-4 w-4"
+			fill="none"
+			viewBox="0 0 24 24"
+			stroke="currentColor"
+			stroke-width="2"
+		>
 			<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
 		</svg>
 		Back
 	</button>
 
 	{#if item.posterUrl}
-		<img src={item.posterUrl} alt="{item.title} poster" class="w-full rounded-lg object-cover" loading="lazy" />
+		<img
+			src={item.posterUrl}
+			alt="{item.title} poster"
+			class="w-full rounded-lg object-cover"
+			loading="lazy"
+		/>
 	{/if}
 
 	{#if sidebar}
@@ -108,7 +123,12 @@
 		{:else}
 			<div class="flex flex-col gap-3">
 				{#if item.backdropUrl}
-					<img src={item.backdropUrl} alt="{item.title} backdrop" class="w-full rounded-lg object-cover" loading="lazy" />
+					<img
+						src={item.backdropUrl}
+						alt="{item.title} backdrop"
+						class="w-full rounded-lg object-cover"
+						loading="lazy"
+					/>
 				{/if}
 
 				<h1 class="text-2xl font-bold">{item.title}</h1>
@@ -118,17 +138,22 @@
 						<span class="badge badge-outline">{item.year}</span>
 					{/if}
 					{#if item.voteAverage}
-						<span class={classNames('badge', {
-							'badge-success': item.voteAverage >= 7,
-							'badge-warning': item.voteAverage >= 5 && item.voteAverage < 7,
-							'badge-error': item.voteAverage < 5
-						})}>
+						<span
+							class={classNames('badge', {
+								'badge-success': item.voteAverage >= 7,
+								'badge-warning': item.voteAverage >= 5 && item.voteAverage < 7,
+								'badge-error': item.voteAverage < 5
+							})}
+						>
 							{item.voteAverage.toFixed(1)}
 						</span>
 					{/if}
 					{#if ontogglefavorite}
 						<button
-							class={classNames('btn btn-xs', { 'btn-error': isFavorite, 'btn-ghost': !isFavorite })}
+							class={classNames('btn btn-xs', {
+								'btn-error': isFavorite,
+								'btn-ghost': !isFavorite
+							})}
 							onclick={ontogglefavorite}
 						>
 							{isFavorite ? '♥ Favorited' : '♡ Favorite'}
@@ -151,11 +176,7 @@
 				{#if supportsTorrent}
 					<div class="flex flex-wrap gap-2">
 						{#if onfetch}
-							<button
-								class="btn btn-primary btn-sm"
-								disabled={fetching}
-								onclick={onfetch}
-							>
+							<button class="btn btn-sm btn-primary" disabled={fetching} onclick={onfetch}>
 								{#if fetching}
 									<span class="loading loading-xs loading-spinner"></span>
 								{/if}
@@ -164,7 +185,7 @@
 						{/if}
 						{#if ondownload}
 							<button
-								class="btn btn-secondary btn-sm"
+								class="btn btn-sm btn-secondary"
 								disabled={!fetched || isDownloading || isDownloaded}
 								onclick={ondownload}
 							>
@@ -172,14 +193,10 @@
 							</button>
 						{/if}
 						{#if onstream}
-							<button class="btn btn-accent btn-sm" onclick={onstream}>
-								Stream
-							</button>
+							<button class="btn btn-sm btn-accent" onclick={onstream}> Stream </button>
 						{/if}
 						{#if onshowsearch}
-							<button class="btn btn-ghost btn-sm" onclick={onshowsearch}>
-								Manual Search
-							</button>
+							<button class="btn btn-ghost btn-sm" onclick={onshowsearch}> Manual Search </button>
 						{/if}
 					</div>
 				{/if}
@@ -216,7 +233,8 @@
 							</span>
 							<span class="font-mono">{dlPercent}%</span>
 						</div>
-						<progress class="progress progress-primary mt-1 w-full" value={dlProgress} max="1"></progress>
+						<progress class="progress mt-1 w-full progress-primary" value={dlProgress} max="1"
+						></progress>
 						<div class="mt-1 flex gap-3 text-xs opacity-60">
 							<span>↓ {formatSpeed(torrentStatus.downloadSpeed)}</span>
 							<span>↑ {formatSpeed(torrentStatus.uploadSpeed)}</span>

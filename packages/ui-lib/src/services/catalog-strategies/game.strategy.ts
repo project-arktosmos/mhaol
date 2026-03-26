@@ -55,22 +55,19 @@ export const gameStrategy: CatalogKindStrategy = {
 	filterDefinitions: {
 		console: {
 			label: 'Console',
-			loadOptions: async () =>
-				RA_CONSOLES.map((c) => ({ id: String(c.id), label: c.name }))
+			loadOptions: async () => RA_CONSOLES.map((c) => ({ id: String(c.id), label: c.name }))
 		}
 	},
 
 	async search(query, page, filters) {
 		const consoleId = Number(filters.console) || RA_CONSOLES[0]?.id;
 		if (!consoleId) return { items: [], totalPages: 1 };
-		const consoleName =
-			RA_CONSOLES.find((c) => c.id === consoleId)?.name ?? '';
+		const consoleName = RA_CONSOLES.find((c) => c.id === consoleId)?.name ?? '';
 		let games = cachedGames.get(consoleId);
 		if (!games) {
 			games =
-				(await fetchJson<RaGameListItem[]>(
-					`/api/retroachievements/games?console=${consoleId}`
-				)) ?? [];
+				(await fetchJson<RaGameListItem[]>(`/api/retroachievements/games?console=${consoleId}`)) ??
+				[];
 			cachedGames.set(consoleId, games);
 		}
 		const q = query.toLowerCase();
@@ -86,14 +83,12 @@ export const gameStrategy: CatalogKindStrategy = {
 	async loadTab(_tabId, page, filters) {
 		const consoleId = Number(filters.console) || RA_CONSOLES[0]?.id;
 		if (!consoleId) return { items: [], totalPages: 1 };
-		const consoleName =
-			RA_CONSOLES.find((c) => c.id === consoleId)?.name ?? '';
+		const consoleName = RA_CONSOLES.find((c) => c.id === consoleId)?.name ?? '';
 		let games = cachedGames.get(consoleId);
 		if (!games) {
 			games =
-				(await fetchJson<RaGameListItem[]>(
-					`/api/retroachievements/games?console=${consoleId}`
-				)) ?? [];
+				(await fetchJson<RaGameListItem[]>(`/api/retroachievements/games?console=${consoleId}`)) ??
+				[];
 			cachedGames.set(consoleId, games);
 		}
 		const totalPages = Math.ceil(games.length / ITEMS_PER_PAGE);

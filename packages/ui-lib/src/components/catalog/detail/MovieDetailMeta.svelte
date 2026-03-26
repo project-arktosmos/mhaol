@@ -66,9 +66,18 @@
 				{#each cast.slice(0, 10) as member}
 					<div class="flex items-center gap-2">
 						{#if member.profileUrl}
-							<img src={member.profileUrl} alt={member.name} class="h-8 w-8 rounded-full object-cover" loading="lazy" />
+							<img
+								src={member.profileUrl}
+								alt={member.name}
+								class="h-8 w-8 rounded-full object-cover"
+								loading="lazy"
+							/>
 						{:else}
-							<div class="flex h-8 w-8 items-center justify-center rounded-full bg-base-300 text-xs">{member.name[0]}</div>
+							<div
+								class="flex h-8 w-8 items-center justify-center rounded-full bg-base-300 text-xs"
+							>
+								{member.name[0]}
+							</div>
 						{/if}
 						<div>
 							<p class="text-xs font-medium">{member.name}</p>

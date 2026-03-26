@@ -48,9 +48,7 @@ function toTvCatalogItems(shows: TMDBTvShow[]): CatalogItem[] {
 }
 
 async function loadGenres(): Promise<CatalogFilterOption[]> {
-	const data = await fetchJson<{ genres: { id: number; name: string }[] }>(
-		'/api/tmdb/genres/tv'
-	);
+	const data = await fetchJson<{ genres: { id: number; name: string }[] }>('/api/tmdb/genres/tv');
 	return (data?.genres ?? []).map((g) => ({ id: String(g.id), label: g.name }));
 }
 
