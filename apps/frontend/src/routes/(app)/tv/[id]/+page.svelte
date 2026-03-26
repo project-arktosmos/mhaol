@@ -10,27 +10,27 @@
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
 	import { tvShowDetailsToDisplay, seasonDetailsToDisplay } from 'addons/tmdb/transform';
-	import type {
-		DisplayTMDBTvShow,
-		DisplayTMDBTvShowDetails,
-		DisplayTMDBSeasonDetails
-	} from 'addons/tmdb/types';
-	import type { SmartSearchTorrentResult, TvSeasonMeta } from 'ui-lib/types/smart-search.type';
+	import type { DisplayTMDBTvShowDetails, DisplayTMDBSeasonDetails } from 'addons/tmdb/types';
+	import type { TvSeasonMeta } from 'ui-lib/types/smart-search.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import type { MediaList } from 'ui-lib/types/media-list.type';
-	import TvDetailPage from 'ui-lib/components/tmdb-browse/TvDetailPage.svelte';
-	import type { LibraryEpisodeFile } from 'ui-lib/components/tmdb-browse/TvDetailPage.svelte';
+	import type { CatalogTvShow } from 'ui-lib/types/catalog.type';
+	import CatalogDetailPage from 'ui-lib/components/catalog/CatalogDetailPage.svelte';
+	import TvDetailMeta from 'ui-lib/components/catalog/detail/TvDetailMeta.svelte';
 
-	let tvShow = $state<DisplayTMDBTvShow | null>(null);
-	let tvShowDetails = $state<DisplayTMDBTvShowDetails | null>(null);
-	let tvSeasonDetailsList = $state<DisplayTMDBSeasonDetails[]>([]);
+	interface LibraryEpisodeFile {
+		seasonNumber: number;
+		episodeNumber: number;
+		name: string;
+		path: string;
+	}
+
+	let catalogItem = $state<CatalogTvShow | null>(null);
 	let tvSeasonsMeta = $state<TvSeasonMeta[]>([]);
 	let loading = $state(true);
 	let fetchingTmdbId = $state<number | null>(null);
 	let libraryFiles = $state<LibraryEpisodeFile[]>([]);
 	let resyncing = $state(false);
-	let togglingFavorite = $state(false);
-	let togglingPin = $state(false);
 
 	const searchStore = smartSearchService.store;
 	const torrentState = torrentService.state;
@@ -40,11 +40,16 @@
 	let id = $derived($page.params.id ?? '');
 	let tmdbId = $derived(Number(id));
 
+	let isFavorite = $derived(
+		$favState.items.some((f) => f.service === 'tmdb-tv' && f.serviceId === String(tmdbId))
+	);
+	let isPinned = $derived(
+		$pinState.items.some((p) => p.service === 'tmdb-tv' && p.serviceId === String(tmdbId))
+	);
+
 	let isFetching = $derived(
-		fetchingTmdbId !== null &&
-			fetchingTmdbId === tmdbId &&
-			$searchStore.fetchedCandidate === null &&
-			$searchStore.selection?.mode === 'fetch'
+		fetchingTmdbId !== null && fetchingTmdbId === tmdbId &&
+			$searchStore.fetchedCandidate === null && $searchStore.selection?.mode === 'fetch'
 	);
 	let isFetchedForCurrent = $derived(
 		$searchStore.fetchedCandidate !== null && fetchingTmdbId === tmdbId
@@ -52,17 +57,13 @@
 
 	let currentFetchSteps = $derived.by(() => {
 		if (!isFetching && !isFetchedForCurrent) return null;
-		if (isFetchedForCurrent) {
-			return { terms: true, search: true, searching: false, eval: true, done: true };
-		}
+		if (isFetchedForCurrent) return { terms: true, search: true, searching: false, eval: true, done: true };
 		const s = $searchStore;
-		const hasResults = s.searchResults.length > 0;
-		const hasAnalysis = s.searchResults.some((r) => r.analysis !== null);
 		return {
 			terms: s.selection !== null,
-			search: !s.searching && hasResults,
+			search: !s.searching && s.searchResults.length > 0,
 			searching: s.searching,
-			eval: hasAnalysis,
+			eval: s.searchResults.some((r) => r.analysis !== null),
 			done: s.fetchedCandidate !== null
 		};
 	});
@@ -77,53 +78,65 @@
 		return null;
 	});
 
-	let tvMatchedSeasons = $derived.by(() => {
-		const tvResults = $searchStore.tvResults;
-		if (!tvResults) return { hasComplete: false, seasons: new Map<number, Set<number>>() };
-		const hasComplete = tvResults.complete.length > 0;
-		const seasons = new Map<number, Set<number>>();
-		for (const [snStr, data] of Object.entries(tvResults.seasons)) {
-			const sn = Number(snStr);
-			const eps = new Set<number>();
-			if (data.seasonPacks.length > 0) eps.add(-1);
-			for (const en of Object.keys(data.episodes).map(Number)) {
-				if (data.episodes[en].length > 0) eps.add(en);
-			}
-			if (eps.size > 0) seasons.set(sn, eps);
-		}
-		return { hasComplete, seasons };
-	});
-
 	$effect(() => {
 		const candidate = $searchStore.fetchedCandidate;
-		const tid = fetchingTmdbId;
-		if (candidate && tid) {
+		if (candidate && fetchingTmdbId) {
 			const analysis = candidate.analysis;
 			let scope = 'complete';
 			let seasonNumber: number | null = null;
 			let episodeNumber: number | null = null;
 			if (analysis) {
-				if (analysis.isCompleteSeries) {
-					scope = 'complete';
-				} else if (analysis.seasonNumber != null && analysis.episodeNumber != null) {
-					scope = 'episode';
-					seasonNumber = analysis.seasonNumber;
-					episodeNumber = analysis.episodeNumber;
+				if (analysis.isCompleteSeries) scope = 'complete';
+				else if (analysis.seasonNumber != null && analysis.episodeNumber != null) {
+					scope = 'episode'; seasonNumber = analysis.seasonNumber; episodeNumber = analysis.episodeNumber;
 				} else if (analysis.seasonNumber != null) {
-					scope = 'season';
-					seasonNumber = analysis.seasonNumber;
+					scope = 'season'; seasonNumber = analysis.seasonNumber;
 				}
 			}
-			smartSearchService.saveTvFetchCache(tid, scope, seasonNumber, episodeNumber, candidate);
+			smartSearchService.saveTvFetchCache(fetchingTmdbId, scope, seasonNumber, episodeNumber, candidate);
 		}
 	});
 
+	function buildCatalogItem(details: DisplayTMDBTvShowDetails, seasonDetails: DisplayTMDBSeasonDetails[]): CatalogTvShow {
+		return {
+			id: String(details.id), kind: 'tv_show',
+			title: details.name, sortTitle: details.name.toLowerCase(),
+			year: details.firstAirYear || null, overview: details.overview || null,
+			posterUrl: details.posterUrl, backdropUrl: details.backdropUrl,
+			voteAverage: details.voteAverage, voteCount: details.voteCount,
+			parentId: null, position: null,
+			source: 'tmdb', sourceId: String(details.id),
+			createdAt: '', updatedAt: '',
+			metadata: {
+				tmdbId: details.id, originalName: details.originalName,
+				lastAirYear: details.lastAirYear, status: details.status,
+				networks: details.networks, createdBy: details.createdBy,
+				cast: details.cast.map((c) => ({ id: c.id, name: c.name, character: c.character, profileUrl: c.profileUrl })),
+				genres: details.genres, tagline: details.tagline,
+				numberOfSeasons: details.numberOfSeasons, numberOfEpisodes: details.numberOfEpisodes,
+				seasons: (details.seasons ?? []).map((s) => ({
+					id: s.id, name: s.name, overview: s.overview, airDate: s.airDate,
+					episodeCount: s.episodeCount, posterUrl: s.posterUrl, seasonNumber: s.seasonNumber
+				})),
+				images: details.images.map((img) => ({
+					thumbnailUrl: img.thumbnailUrl, fullUrl: img.fullUrl,
+					width: img.width, height: img.height, filePath: img.filePath, imageType: img.imageType
+				})),
+				imageOverrides: {}
+			}
+		};
+	}
+
 	function parseEpisodeFromFilename(name: string): { season: number; episode: number } | null {
 		const match = name.match(/[Ss](\d{1,2})[Ee](\d{1,2})/);
-		if (match) {
-			return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
-		}
-		return null;
+		return match ? { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) } : null;
+	}
+
+	function parseSeasonFromTitle(title: string): number | null {
+		const match = title.match(/[Ss]eason\s*(\d+)/i);
+		if (match) return parseInt(match[1], 10);
+		const numMatch = title.match(/^(\d+)$/);
+		return numMatch ? parseInt(numMatch[1], 10) : null;
 	}
 
 	async function fetchLibraryData(showId: number) {
@@ -132,330 +145,189 @@
 			if (!res.ok) return;
 			const data = await res.json();
 			const lists: MediaList[] = data.lists ?? [];
-
-			// Find ALL show-level lists linked to this TMDB ID (multiple season folders may each be a top-level list)
-			const showLists = lists.filter(
-				(l) => l.parentListId === null && l.links?.tmdb?.serviceId === String(showId)
-			);
+			const showLists = lists.filter((l) => l.parentListId === null && l.links?.tmdb?.serviceId === String(showId));
 			if (showLists.length === 0) return;
-
 			const files: LibraryEpisodeFile[] = [];
-
 			for (const showList of showLists) {
-				// Flat show: episodes directly on the show list
 				for (const item of showList.items) {
 					const parsed = parseEpisodeFromFilename(item.name);
-					if (parsed) {
-						files.push({
-							seasonNumber: parsed.season,
-							episodeNumber: parsed.episode,
-							name: item.name,
-							path: item.path
-						});
-					}
+					if (parsed) files.push({ seasonNumber: parsed.season, episodeNumber: parsed.episode, name: item.name, path: item.path });
 				}
-
-				// Season children
 				const seasonLists = lists.filter((l) => l.parentListId === showList.id);
 				for (const seasonList of seasonLists) {
-					// Try to determine season number from the list's TMDB link or folder name
-					const seasonNum = seasonList.links?.tmdb?.seasonNumber
-						?? parseSeasonFromTitle(seasonList.title);
-
+					const seasonNum = seasonList.links?.tmdb?.seasonNumber ?? parseSeasonFromTitle(seasonList.title);
 					for (const item of seasonList.items) {
 						const parsed = parseEpisodeFromFilename(item.name);
-						if (parsed) {
-							files.push({
-								seasonNumber: parsed.season,
-								episodeNumber: parsed.episode,
-								name: item.name,
-								path: item.path
-							});
-						} else if (seasonNum != null) {
-							// Can't parse episode from filename — assign position-based episode number
+						if (parsed) files.push({ ...parsed, seasonNumber: parsed.season, episodeNumber: parsed.episode, name: item.name, path: item.path });
+						else if (seasonNum != null) {
 							const idx = seasonList.items.indexOf(item);
-							files.push({
-								seasonNumber: seasonNum,
-								episodeNumber: idx + 1,
-								name: item.name,
-								path: item.path
-							});
+							files.push({ seasonNumber: seasonNum, episodeNumber: idx + 1, name: item.name, path: item.path });
 						}
 					}
 				}
 			}
-
 			libraryFiles = files;
-		} catch {
-			// best-effort
-		}
-	}
-
-	function parseSeasonFromTitle(title: string): number | null {
-		const match = title.match(/[Ss]eason\s*(\d+)/i);
-		if (match) return parseInt(match[1], 10);
-		const numMatch = title.match(/^(\d+)$/);
-		if (numMatch) return parseInt(numMatch[1], 10);
-		return null;
+		} catch { /* best-effort */ }
 	}
 
 	async function fetchTvShow(showId: number) {
 		loading = true;
 		smartSearchService.clear();
 		try {
-			// Fetch full details
 			const res = await fetchRaw(`/api/tmdb/tv/${showId}`);
 			if (res.ok) {
 				const raw = await res.json();
-				tvShowDetails = tvShowDetailsToDisplay(raw);
-				tvShow = {
-					id: showId,
-					name: tvShowDetails?.name ?? '',
-					originalName: tvShowDetails?.originalName ?? '',
-					posterUrl: tvShowDetails?.posterUrl ?? null,
-					backdropUrl: tvShowDetails?.backdropUrl ?? null,
-					overview: tvShowDetails?.overview ?? '',
-					firstAirYear: tvShowDetails?.firstAirYear ?? '',
-					lastAirYear: tvShowDetails?.lastAirYear ?? null,
-					voteAverage: tvShowDetails?.voteAverage ?? 0,
-					voteCount: tvShowDetails?.voteCount ?? 0,
-					genres: tvShowDetails?.genres ?? [],
-					numberOfSeasons: tvShowDetails?.numberOfSeasons ?? null,
-					numberOfEpisodes: tvShowDetails?.numberOfEpisodes ?? null
-				};
-
-				// Fetch season details
-				if (tvShowDetails?.seasons) {
-					const seasonPromises = tvShowDetails.seasons
-						.filter((s) => s.seasonNumber > 0)
-						.map(async (s) => {
+				const details = tvShowDetailsToDisplay(raw);
+				let seasonDetailsList: DisplayTMDBSeasonDetails[] = [];
+				if (details?.seasons) {
+					const results = await Promise.all(
+						details.seasons.filter((s) => s.seasonNumber > 0).map(async (s) => {
 							try {
 								const sRes = await fetchRaw(`/api/tmdb/tv/${showId}/season/${s.seasonNumber}`);
-								if (sRes.ok) {
-									const sRaw = await sRes.json();
-									return seasonDetailsToDisplay(sRaw);
-								}
-							} catch {
-								// best-effort
-							}
+								if (sRes.ok) return seasonDetailsToDisplay(await sRes.json());
+							} catch { /* best-effort */ }
 							return null;
-						});
-					const results = await Promise.all(seasonPromises);
-					const details = results.filter((r): r is DisplayTMDBSeasonDetails => r !== null);
-					tvSeasonDetailsList = details;
-					tvSeasonsMeta = details.map((d) => ({
-						seasonNumber: d.seasonNumber,
-						name: d.name,
-						episodeCount: d.episodes.length,
-						episodes: d.episodes.map((ep) => ({
-							episodeNumber: ep.episodeNumber,
-							seasonNumber: ep.seasonNumber,
-							name: ep.name
-						}))
+						})
+					);
+					seasonDetailsList = results.filter((r): r is DisplayTMDBSeasonDetails => r !== null);
+					tvSeasonsMeta = seasonDetailsList.map((d) => ({
+						seasonNumber: d.seasonNumber, name: d.name, episodeCount: d.episodes.length,
+						episodes: d.episodes.map((ep) => ({ episodeNumber: ep.episodeNumber, seasonNumber: ep.seasonNumber, name: ep.name }))
 					}));
 				}
+				catalogItem = buildCatalogItem(details, seasonDetailsList);
 			}
-
-			// Fetch library data (show list + season children)
 			await fetchLibraryData(showId);
-
-			// Only check smart search cache if no library files
 			if (libraryFiles.length === 0) {
 				const cached = await smartSearchService.checkTvFetchCache(showId);
 				if (cached && cached.length > 0) {
 					fetchingTmdbId = showId;
-					const completeEntry = cached.find((e) => e.scope === 'complete');
-					const bestEntry = completeEntry ?? cached[0];
-					const sel = {
-						title: tvShow?.name ?? '',
-						year: tvShow?.firstAirYear ?? '',
-						type: 'tv' as const,
-						tmdbId: showId,
-						mode: 'fetch' as const,
-						seasons: tvSeasonsMeta
-					};
+					const bestEntry = cached.find((e) => e.scope === 'complete') ?? cached[0];
+					const sel = { title: catalogItem?.title ?? '', year: catalogItem?.year ?? '', type: 'tv' as const, tmdbId: showId, mode: 'fetch' as const, seasons: tvSeasonsMeta };
 					smartSearchService.setSelection(sel);
 					smartSearchService.setFetchedCandidate(bestEntry.candidate);
 					smartSearchService.ensurePendingItem(sel);
 				}
 			}
-		} catch (e) {
-			console.error('Failed to load TV show details:', e);
-		}
+		} catch (e) { console.error('Failed to load TV show:', e); }
 		loading = false;
 	}
 
 	async function handleFetch() {
-		if (!tvShow) return;
-		const isRefetch = isFetchedForCurrent;
-		fetchingTmdbId = tvShow.id;
-		if (!isRefetch) {
-			const cached = await smartSearchService.checkTvFetchCache(tvShow.id);
+		if (!catalogItem) return;
+		const tid = Number(catalogItem.sourceId);
+		fetchingTmdbId = tid;
+		if (!isFetchedForCurrent) {
+			const cached = await smartSearchService.checkTvFetchCache(tid);
 			if (cached && cached.length > 0) {
-				const completeEntry = cached.find((e) => e.scope === 'complete');
-				const bestEntry = completeEntry ?? cached[0];
-				const sel = {
-					title: tvShow.name,
-					year: tvShow.firstAirYear,
-					type: 'tv' as const,
-					tmdbId: tvShow.id,
-					mode: 'fetch' as const,
-					seasons: tvSeasonsMeta
-				};
+				const bestEntry = cached.find((e) => e.scope === 'complete') ?? cached[0];
+				const sel = { title: catalogItem.title, year: catalogItem.year ?? '', type: 'tv' as const, tmdbId: tid, mode: 'fetch' as const, seasons: tvSeasonsMeta };
 				smartSearchService.setSelection(sel);
 				smartSearchService.setFetchedCandidate(bestEntry.candidate);
 				smartSearchService.ensurePendingItem(sel);
 				return;
 			}
 		}
-		smartSearchService.select({
-			title: tvShow.name,
-			year: tvShow.firstAirYear,
-			type: 'tv',
-			tmdbId: tvShow.id,
-			mode: 'fetch',
-			seasons: tvSeasonsMeta
-		});
+		smartSearchService.select({ title: catalogItem.title, year: catalogItem.year ?? '', type: 'tv', tmdbId: tid, mode: 'fetch', seasons: tvSeasonsMeta });
 	}
 
 	function handleDownload() {
 		const candidate = smartSearchService.getFetchedCandidate();
-		if (!candidate) return;
-		smartSearchService.startDownload(candidate);
+		if (candidate) smartSearchService.startDownload(candidate);
 	}
 
 	function handleP2pStream() {
-		const candidate = smartSearchService.getFetchedCandidate();
-		if (!candidate) return;
-		const existingTorrent = candidate.infoHash ? torrentService.findByHash(candidate.infoHash) : null;
-		if (existingTorrent?.outputPath && (existingTorrent.state === 'seeding' || existingTorrent.progress >= 1.0)) {
+		const torrent = matchedTorrent;
+		if (torrent?.outputPath && (torrent.state === 'seeding' || torrent.progress >= 1.0)) {
 			const file: PlayableFile = {
-				id: `p2p:${existingTorrent.infoHash}`,
-				type: 'torrent',
-				name: existingTorrent.name,
-				outputPath: existingTorrent.outputPath,
-				mode: 'video',
-				format: null,
-				videoFormat: null,
-				thumbnailUrl: null,
-				durationSeconds: null,
-				size: existingTorrent.size,
-				completedAt: ''
+				id: `p2p:${torrent.infoHash}`, type: 'torrent', name: torrent.name,
+				outputPath: torrent.outputPath, mode: 'video', format: null,
+				videoFormat: null, thumbnailUrl: null, durationSeconds: null,
+				size: torrent.size, completedAt: ''
 			};
 			playerService.play(file, 'inline');
 		}
 	}
 
-	function handlePlayFile(libFile: LibraryEpisodeFile) {
-		const file: PlayableFile = {
-			id: `library:${libFile.path}`,
-			type: 'library',
-			name: libFile.name,
-			outputPath: libFile.path,
-			mode: 'video',
-			format: null,
-			videoFormat: null,
-			thumbnailUrl: null,
-			durationSeconds: null,
-			size: 0,
-			completedAt: ''
+	function handlePlayFile(file: LibraryEpisodeFile) {
+		const pf: PlayableFile = {
+			id: `library:${file.path}`, type: 'library', name: file.name,
+			outputPath: file.path, mode: 'video', format: null,
+			videoFormat: null, thumbnailUrl: null, durationSeconds: null, size: 0, completedAt: ''
 		};
-		playerService.play(file, 'inline');
+		playerService.play(pf, 'inline');
 	}
 
 	async function handleResync() {
 		resyncing = true;
 		try {
-			const mediaRes = await fetchRaw('/api/media');
-			if (!mediaRes.ok) return;
-			const mediaData = await mediaRes.json();
-			const lists: MediaList[] = mediaData.lists ?? [];
-
-			const showLists = lists.filter(
-				(l: MediaList) => l.parentListId === null && l.links?.tmdb?.serviceId === String(tmdbId)
-			);
-
+			const res = await fetchRaw('/api/media');
+			if (!res.ok) return;
+			const data = await res.json();
+			const lists: MediaList[] = data.lists ?? [];
+			const showLists = lists.filter((l: MediaList) => l.parentListId === null && l.links?.tmdb?.serviceId === String(tmdbId));
 			const libraryIds = [...new Set(showLists.map((l: MediaList) => l.libraryId))];
-
-			await Promise.all(
-				libraryIds.map((id: string) =>
-					fetchRaw(`/api/libraries/${id}/scan`, { method: 'POST' })
-				)
-			);
-
+			await Promise.all(libraryIds.map((lid: string) => fetchRaw(`/api/libraries/${lid}/scan`, { method: 'POST' })));
 			await fetchLibraryData(tmdbId);
-		} finally {
-			resyncing = false;
-		}
+		} finally { resyncing = false; }
 	}
-
-	let isFavorite = $derived(
-		$favState.items.some((f) => f.service === 'tmdb-tv' && f.serviceId === String(tmdbId))
-	);
-
-	let isPinned = $derived(
-		$pinState.items.some((p) => p.service === 'tmdb-tv' && p.serviceId === String(tmdbId))
-	);
 
 	async function handleToggleFavorite() {
-		if (!tvShow) return;
-		togglingFavorite = true;
-		try {
-			await favoritesService.toggle('tmdb-tv', String(tvShow.id), tvShow.name);
-		} finally {
-			togglingFavorite = false;
-		}
+		if (catalogItem) await favoritesService.toggle('tmdb-tv', catalogItem.sourceId, catalogItem.title);
 	}
-
 	async function handleTogglePin() {
-		if (!tvShow) return;
-		togglingPin = true;
-		try {
-			await pinsService.toggle('tmdb-tv', String(tvShow.id), tvShow.name);
-		} finally {
-			togglingPin = false;
-		}
+		if (catalogItem) await pinsService.toggle('tmdb-tv', catalogItem.sourceId, catalogItem.title);
 	}
 
-	onMount(() => {
-		fetchTvShow(tmdbId);
-	});
+	onMount(() => fetchTvShow(tmdbId));
 </script>
 
-{#if tvShow}
-	<TvDetailPage
-		{tvShow}
-		{tvShowDetails}
-		tvSeasonDetails={tvSeasonDetailsList}
+{#if catalogItem}
+	<CatalogDetailPage
+		item={catalogItem}
 		{loading}
 		fetching={isFetching}
 		fetched={isFetchedForCurrent}
 		fetchSteps={currentFetchSteps}
 		torrentStatus={matchedTorrent}
 		fetchedTorrent={$searchStore.fetchedCandidate
-			? {
-					name: $searchStore.fetchedCandidate.name,
-					quality: $searchStore.fetchedCandidate.analysis?.quality ?? '',
-					languages: $searchStore.fetchedCandidate.analysis?.languages ?? ''
-				}
+			? { name: $searchStore.fetchedCandidate.name, quality: $searchStore.fetchedCandidate.analysis?.quality ?? '', languages: $searchStore.fetchedCandidate.analysis?.languages ?? '' }
 			: null}
-		{tvMatchedSeasons}
-		{libraryFiles}
-		{resyncing}
 		{isFavorite}
-		{togglingFavorite}
 		{isPinned}
-		{togglingPin}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
-		onp2pstream={handleP2pStream}
+		onstream={handleP2pStream}
 		onshowsearch={() => smartSearchService.show()}
-		onplayfile={handlePlayFile}
-		onresync={handleResync}
 		onback={() => goto(`${base}/tv`)}
 		ontogglefavorite={handleToggleFavorite}
 		ontogglepin={handleTogglePin}
-	/>
+	>
+		{#snippet extra()}
+			<TvDetailMeta item={catalogItem!} />
+			{#if libraryFiles.length > 0}
+				<div>
+					<div class="flex items-center justify-between">
+						<h3 class="text-xs font-semibold tracking-wide uppercase opacity-50">Library Files ({libraryFiles.length})</h3>
+						<button class="btn btn-ghost btn-xs" onclick={handleResync} disabled={resyncing}>
+							{resyncing ? 'Syncing...' : 'Resync'}
+						</button>
+					</div>
+					<div class="mt-1 flex flex-col gap-0.5">
+						{#each libraryFiles as file}
+							<button
+								class="flex items-center justify-between rounded p-1.5 text-left text-sm hover:bg-base-200"
+								onclick={() => handlePlayFile(file)}
+							>
+								<span class="truncate">{file.name}</span>
+								<span class="badge badge-ghost badge-xs">S{String(file.seasonNumber).padStart(2, '0')}E{String(file.episodeNumber).padStart(2, '0')}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		{/snippet}
+	</CatalogDetailPage>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">
 		<span class="loading loading-lg loading-spinner"></span>
