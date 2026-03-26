@@ -9,8 +9,10 @@ use axum::{
 use serde::Deserialize;
 
 #[derive(Deserialize)]
-struct LimitQuery {
+#[serde(rename_all = "camelCase")]
+struct FilterQuery {
     limit: Option<usize>,
+    media_type: Option<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -18,6 +20,7 @@ pub fn router() -> Router<AppState> {
         .route("/bulk", post(bulk_enqueue))
         .route("/status", get(status))
         .route("/top-movies", get(top_movies))
+        .route("/top-movies-detail", get(top_movies_detail))
         .route("/top-genres", get(top_genres))
         .route("/{media_type}/{tmdb_id}", get(get_recommendations))
 }
@@ -134,6 +137,27 @@ async fn top_movies(
                 "mediaType": media_type,
                 "title": title,
                 "count": count,
+            })
+        })
+        .collect();
+    Json(serde_json::json!(result))
+}
+
+async fn top_movies_detail(
+    State(state): State<AppState>,
+    Query(q): Query<LimitQuery>,
+) -> impl IntoResponse {
+    let limit = q.limit.unwrap_or(50);
+    let rows = state.recommendations.top_recommended_movies_with_data(limit);
+    let result: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(tmdb_id, media_type, title, count, data)| {
+            serde_json::json!({
+                "tmdbId": tmdb_id,
+                "mediaType": media_type,
+                "title": title,
+                "count": count,
+                "data": data,
             })
         })
         .collect();

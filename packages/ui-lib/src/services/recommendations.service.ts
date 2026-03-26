@@ -5,6 +5,7 @@ import type {
 	BulkEnqueueItem,
 	BulkEnqueueResponse,
 	TopRecommendedMovie,
+	TopRecommendedMovieDetail,
 	TopGenre
 } from 'ui-lib/types/recommendations.type';
 
@@ -29,6 +30,12 @@ class RecommendationsService {
 
 	async getTopMovies(limit = 50): Promise<TopRecommendedMovie[]> {
 		return fetchJson<TopRecommendedMovie[]>(`/api/recommendations/top-movies?limit=${limit}`);
+	}
+
+	async getTopMoviesDetail(limit = 50): Promise<TopRecommendedMovieDetail[]> {
+		return fetchJson<TopRecommendedMovieDetail[]>(
+			`/api/recommendations/top-movies-detail?limit=${limit}`
+		);
 	}
 
 	async getTopGenres(limit = 50): Promise<TopGenre[]> {

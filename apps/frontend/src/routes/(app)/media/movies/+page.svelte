@@ -27,6 +27,7 @@
 	import TmdbCatalogGrid from 'ui-lib/components/catalog/TmdbCatalogGrid.svelte';
 	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
 	import RecommendationsModalContent from 'ui-lib/components/recommendations/RecommendationsModalContent.svelte';
+	import RecommendationsExploreModalContent from 'ui-lib/components/recommendations/RecommendationsExploreModalContent.svelte';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
 	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
@@ -35,6 +36,7 @@
 	mediaBar.configure({ title: 'Movies' });
 
 	let recsModalOpen = $state(false);
+	let exploreModalOpen = $state(false);
 
 	interface Props {
 		data: {
@@ -547,6 +549,7 @@
 		<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
 	</form>
 	<button class="btn btn-ghost btn-sm" onclick={() => (recsModalOpen = true)}>Recs</button>
+	<button class="btn btn-ghost btn-sm" onclick={() => (exploreModalOpen = true)}>Explore</button>
 	<BrowseViewToggle />
 </Portal>
 
@@ -766,6 +769,14 @@
 				{favoritedMovies}
 				{libraryMovieTmdbIds}
 			/>
+		</div>
+	{/if}
+</Modal>
+
+<Modal open={exploreModalOpen} maxWidth="max-w-[90vw]" onclose={() => (exploreModalOpen = false)}>
+	{#if exploreModalOpen}
+		<div class="p-4">
+			<RecommendationsExploreModalContent />
 		</div>
 	{/if}
 </Modal>

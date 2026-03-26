@@ -108,6 +108,30 @@ impl RecommendationsRepo {
         .unwrap_or(0)
     }
 
+    pub fn top_recommended_movies_with_data(
+        &self,
+        limit: usize,
+    ) -> Vec<(i64, String, Option<String>, i64, serde_json::Value)> {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT recommended_tmdb_id, recommended_media_type, title, COUNT(*) as cnt, data
+                 FROM tmdb_recommendations
+                 GROUP BY recommended_tmdb_id, recommended_media_type
+                 ORDER BY cnt DESC
+                 LIMIT ?1",
+            )
+            .unwrap();
+        stmt.query_map(params![limit as i64], |row| {
+            let data_str: String = row.get(4)?;
+            let data = serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, data))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect()
+    }
+
     pub fn top_recommended_movies(&self, limit: usize) -> Vec<(i64, String, Option<String>, i64)> {
         let conn = self.db.lock();
         let mut stmt = conn
@@ -152,6 +176,30 @@ impl RecommendationsRepo {
         sorted.sort_by(|a, b| b.1.cmp(&a.1));
         sorted.truncate(limit);
         sorted
+    }
+
+    pub fn top_recommended_by_source_type(
+        &self,
+        source_media_type: &str,
+        limit: usize,
+    ) -> Vec<(i64, String, Option<String>, i64)> {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT recommended_tmdb_id, recommended_media_type, title, COUNT(*) as cnt
+                 FROM tmdb_recommendations
+                 WHERE source_media_type = ?1
+                 GROUP BY recommended_tmdb_id, recommended_media_type
+                 ORDER BY cnt DESC
+                 LIMIT ?2",
+            )
+            .unwrap();
+        stmt.query_map(params![source_media_type, limit as i64], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect()
     }
 
     pub fn list_sources(&self) -> Vec<(i64, String)> {
