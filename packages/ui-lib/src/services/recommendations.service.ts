@@ -3,7 +3,9 @@ import type {
 	RecommendationRow,
 	RecommendationsStatus,
 	BulkEnqueueItem,
-	BulkEnqueueResponse
+	BulkEnqueueResponse,
+	TopRecommendedMovie,
+	TopGenre
 } from 'ui-lib/types/recommendations.type';
 
 class RecommendationsService {
@@ -23,6 +25,14 @@ class RecommendationsService {
 
 	async getForSource(tmdbId: number, mediaType: string): Promise<RecommendationRow[]> {
 		return fetchJson<RecommendationRow[]>(`/api/recommendations/${mediaType}/${tmdbId}`);
+	}
+
+	async getTopMovies(limit = 50): Promise<TopRecommendedMovie[]> {
+		return fetchJson<TopRecommendedMovie[]>(`/api/recommendations/top-movies?limit=${limit}`);
+	}
+
+	async getTopGenres(limit = 50): Promise<TopGenre[]> {
+		return fetchJson<TopGenre[]>(`/api/recommendations/top-genres?limit=${limit}`);
 	}
 }
 

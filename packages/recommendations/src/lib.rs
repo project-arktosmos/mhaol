@@ -108,6 +108,52 @@ impl RecommendationsRepo {
         .unwrap_or(0)
     }
 
+    pub fn top_recommended_movies(&self, limit: usize) -> Vec<(i64, String, Option<String>, i64)> {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT recommended_tmdb_id, recommended_media_type, title, COUNT(*) as cnt
+                 FROM tmdb_recommendations
+                 GROUP BY recommended_tmdb_id, recommended_media_type
+                 ORDER BY cnt DESC
+                 LIMIT ?1",
+            )
+            .unwrap();
+        stmt.query_map(params![limit as i64], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect()
+    }
+
+    pub fn top_genres(&self, limit: usize) -> Vec<(String, i64)> {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare("SELECT genres FROM tmdb_recommendations WHERE genres IS NOT NULL AND genres != ''")
+            .unwrap();
+        let rows: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut counts = std::collections::HashMap::<String, i64>::new();
+        for genres_str in &rows {
+            for genre in genres_str.split(',') {
+                let g = genre.trim();
+                if !g.is_empty() {
+                    *counts.entry(g.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+
+        let mut sorted: Vec<(String, i64)> = counts.into_iter().collect();
+        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.truncate(limit);
+        sorted
+    }
+
     pub fn list_sources(&self) -> Vec<(i64, String)> {
         let conn = self.db.lock();
         let mut stmt = conn

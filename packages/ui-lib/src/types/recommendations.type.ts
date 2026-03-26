@@ -26,3 +26,15 @@ export interface BulkEnqueueItem {
 export interface BulkEnqueueResponse {
 	enqueued: number;
 }
+
+export interface TopRecommendedMovie {
+	tmdbId: number;
+	mediaType: string;
+	title: string | null;
+	count: number;
+}
+
+export interface TopGenre {
+	genre: string;
+	count: number;
+}

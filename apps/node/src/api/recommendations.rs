@@ -1,6 +1,6 @@
 use crate::AppState;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -8,10 +8,17 @@ use axum::{
 };
 use serde::Deserialize;
 
+#[derive(Deserialize)]
+struct LimitQuery {
+    limit: Option<usize>,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/bulk", post(bulk_enqueue))
         .route("/status", get(status))
+        .route("/top-movies", get(top_movies))
+        .route("/top-genres", get(top_genres))
         .route("/{media_type}/{tmdb_id}", get(get_recommendations))
 }
 
@@ -111,4 +118,42 @@ async fn status(State(state): State<AppState>) -> impl IntoResponse {
         "failed": failed,
         "total": all.len(),
     }))
+}
+
+async fn top_movies(
+    State(state): State<AppState>,
+    Query(q): Query<LimitQuery>,
+) -> impl IntoResponse {
+    let limit = q.limit.unwrap_or(50);
+    let rows = state.recommendations.top_recommended_movies(limit);
+    let result: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(tmdb_id, media_type, title, count)| {
+            serde_json::json!({
+                "tmdbId": tmdb_id,
+                "mediaType": media_type,
+                "title": title,
+                "count": count,
+            })
+        })
+        .collect();
+    Json(serde_json::json!(result))
+}
+
+async fn top_genres(
+    State(state): State<AppState>,
+    Query(q): Query<LimitQuery>,
+) -> impl IntoResponse {
+    let limit = q.limit.unwrap_or(50);
+    let rows = state.recommendations.top_genres(limit);
+    let result: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(genre, count)| {
+            serde_json::json!({
+                "genre": genre,
+                "count": count,
+            })
+        })
+        .collect();
+    Json(serde_json::json!(result))
 }

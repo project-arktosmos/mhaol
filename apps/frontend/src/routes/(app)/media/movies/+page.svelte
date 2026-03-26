@@ -758,7 +758,7 @@
 	{/if}
 {/if}
 
-<Modal open={recsModalOpen} maxWidth="max-w-3xl" onclose={() => (recsModalOpen = false)}>
+<Modal open={recsModalOpen} maxWidth="max-w-[90vw]" onclose={() => (recsModalOpen = false)}>
 	{#if recsModalOpen}
 		<div class="p-4">
 			<RecommendationsModalContent
