@@ -175,6 +175,10 @@
 		$libState.content.map(youTubeCardAdapter.fromContent.bind(youTubeCardAdapter))
 	);
 
+	let pinnedItems = $derived(
+		cardItems.filter((item) => pinnedYtIds.has(item.videoId))
+	);
+
 	let favoriteItems = $derived(
 		cardItems.filter((item) => favoritedYtIds.has(item.videoId))
 	);
@@ -355,6 +359,28 @@
 			<p class="opacity-50">No downloaded content yet. Search for videos above to get started.</p>
 		</div>
 	{:else}
+		{#if pinnedItems.length > 0}
+			<LibraryContentGrid
+				title="Pinned"
+				items={pinnedItems}
+				{activeDownloadMap}
+				favoritedIds={favoritedYtIds}
+				pinnedIds={pinnedYtIds}
+				onitemclick={handleItemClick}
+			/>
+		{/if}
+
+		{#if favoriteItems.length > 0}
+			<LibraryContentGrid
+				title="Favorites"
+				items={favoriteItems}
+				{activeDownloadMap}
+				favoritedIds={favoritedYtIds}
+				pinnedIds={pinnedYtIds}
+				onitemclick={handleItemClick}
+			/>
+		{/if}
+
 		{#if dbChannels.length > 0}
 			<div class="mb-4">
 				<h2 class="sticky top-0 z-10 mb-4 rounded-lg bg-base-100 px-3 py-2 text-xl font-semibold">
@@ -452,17 +478,6 @@
 				</div>
 			{/if}
 		{/each}
-
-		{#if favoriteItems.length > 0}
-			<LibraryContentGrid
-				title="Favorites"
-				items={favoriteItems}
-				{activeDownloadMap}
-				favoritedIds={favoritedYtIds}
-				pinnedIds={pinnedYtIds}
-				onitemclick={handleItemClick}
-			/>
-		{/if}
 
 		{#if videoItems.length > 0}
 			<LibraryContentGrid
