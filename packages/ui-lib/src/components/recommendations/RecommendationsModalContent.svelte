@@ -249,9 +249,20 @@
 						{pendingCount} pending, {runningCount} running, {completedCount} completed, {failedCount}
 						failed
 					</span>
-					<button class="btn btn-ghost btn-xs" onclick={() => queueService.clearCompleted()}>
-						Clear Done
-					</button>
+					<div class="flex gap-1">
+						<button class="btn btn-ghost btn-xs" onclick={() => queueService.clearCompleted()}>
+							Clear Done
+						</button>
+						<button
+							class="btn btn-ghost btn-xs text-error"
+							onclick={async () => {
+								await Promise.all(recTasks.map((t) => queueService.cancelTask(t.id)));
+								await queueService.fetchTasks(undefined, 'recommendations:fetch');
+							}}
+						>
+							Clear All
+						</button>
+					</div>
 				</div>
 			{/if}
 
