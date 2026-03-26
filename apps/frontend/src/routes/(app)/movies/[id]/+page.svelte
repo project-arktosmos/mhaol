@@ -31,7 +31,7 @@
 	const favState = favoritesService.state;
 	const pinState = pinsService.state;
 	const searchStore = smartSearchService.store;
-	const torrentState = torrentService.state;
+
 	const playerState = playerService.state;
 	const playerDisplayMode = playerService.displayMode;
 
@@ -69,12 +69,6 @@
 	});
 
 	let matchedTorrent = $derived.by((): TorrentInfo | null => {
-		const torrents = $torrentState.allTorrents;
-		if (libraryItem) {
-			for (const t of torrents) {
-				if (t.outputPath && libraryItem.path.startsWith(t.outputPath)) return t;
-			}
-		}
 		if (relatedData?.torrentDownload?.infoHash) {
 			const t = torrentService.findByHash(relatedData.torrentDownload.infoHash);
 			if (t) return t;
