@@ -11,6 +11,7 @@
 	import { generateRandomUsername } from 'ui-lib/utils/random-username';
 	import { toastService } from 'ui-lib/services/toast.service';
 	import { buildInvite, parseInvite } from 'ui-lib/services/connect-invite.service';
+	import { blo } from 'blo';
 	import type { TransportMode } from 'ui-lib/types/connection-config.type';
 
 	let {
@@ -214,8 +215,15 @@
 		</div>
 	{:else}
 		<!-- Client identity -->
-		<div class="rounded-lg bg-base-200 p-3">
-			<div class="text-sm">
+		<div class="flex items-center gap-3 rounded-lg bg-base-200 p-3">
+			{#if clientAddress}
+				<img
+					src={blo(clientAddress as `0x${string}`)}
+					alt="identicon"
+					class="h-10 w-10 rounded-full"
+				/>
+			{/if}
+			<div class="min-w-0 text-sm">
 				<span class="text-base-content/60">Your Address</span>
 				<p class="mt-0.5 truncate font-mono text-xs">{clientAddress}</p>
 			</div>

@@ -241,6 +241,9 @@ importers:
       addons:
         specifier: workspace:*
         version: link:../addons
+      blo:
+        specifier: ^2.0.0
+        version: 2.0.0
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
@@ -1558,6 +1561,9 @@ packages:
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
+
+  blo@2.0.0:
+    resolution: {integrity: sha512-VUUr1+vWisNSaHVswkbPbk1+GhygClKILkGchae7nsyuJ4ZVz5l1hEW4eR5F/ly/asM5vzigYGXjPnvrd//CVg==}
 
   brace-expansion@1.1.12:
     resolution: {integrity: sha512-9T9UjW3r0UW5c1Q7GTwllptXwhvYmEzFhzMfZ9H7FQWt+uZePjZPjBP/W1ZEyZ1twGWom5/56TF4lPcqjnDHcg==}
@@ -4021,6 +4027,8 @@ snapshots:
       buffer: 5.7.1
       inherits: 2.0.4
       readable-stream: 3.6.2
+
+  blo@2.0.0: {}
 
   brace-expansion@1.1.12:
     dependencies:
