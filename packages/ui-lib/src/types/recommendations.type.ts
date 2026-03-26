@@ -33,7 +33,7 @@ export interface TopRecommendedMovie {
 	mediaType: string;
 	title: string | null;
 	count: number;
-	minLevel: number;
+	levelCounts: Record<string, number>;
 }
 
 export interface RecommendationSource {

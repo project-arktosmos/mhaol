@@ -30,6 +30,14 @@
 	let topMovies = $state<TopRecommendedMovie[]>([]);
 	let statsLoading = $state(false);
 
+	let levels = $derived(() => {
+		const s = new Set<number>();
+		for (const m of topMovies) {
+			for (const k of Object.keys(m.levelCounts)) s.add(Number(k));
+		}
+		return [...s].sort((a, b) => a - b);
+	});
+
 	const queueStore = queueService.store;
 
 	let recTasks = $derived(
@@ -427,9 +435,9 @@
 								<tr>
 									<th>#</th>
 									<th>Title</th>
-									<th>TMDB ID</th>
-									<th>Count</th>
-									<th>Level</th>
+									{#each levels() as lvl}
+										<th class="text-center">L{lvl}</th>
+									{/each}
 								</tr>
 							</thead>
 							<tbody>
@@ -437,9 +445,11 @@
 									<tr>
 										<td class="text-base-content/40">{i + 1}</td>
 										<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
-										<td class="font-mono text-xs">{movie.tmdbId}</td>
-										<td class="font-semibold">{movie.count}</td>
-										<td><span class="badge badge-ghost badge-xs">L{movie.minLevel}</span></td>
+										{#each levels() as lvl}
+											<td class="text-center">
+												{movie.levelCounts[lvl] ?? ''}
+											</td>
+										{/each}
 									</tr>
 								{/each}
 							</tbody>

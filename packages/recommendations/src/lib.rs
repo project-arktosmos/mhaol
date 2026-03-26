@@ -206,6 +206,70 @@ impl RecommendationsRepo {
         .collect()
     }
 
+    /// Top recommended movies with per-level count breakdown.
+    /// Returns (tmdb_id, media_type, title, total_count, level_counts).
+    pub fn top_recommended_with_level_counts(
+        &self,
+        source_media_type: Option<&str>,
+        limit: usize,
+    ) -> Vec<(i64, String, Option<String>, i64, std::collections::HashMap<i64, i64>)> {
+        let conn = self.db.lock();
+        let (sql, params_vec): (String, Vec<Box<dyn rusqlite::types::ToSql>>) =
+            if let Some(mt) = source_media_type {
+                (
+                    "SELECT recommended_tmdb_id, recommended_media_type, title, level, COUNT(*) as cnt
+                     FROM tmdb_recommendations
+                     WHERE source_media_type = ?1
+                     GROUP BY recommended_tmdb_id, recommended_media_type, level"
+                        .to_string(),
+                    vec![Box::new(mt.to_string()) as Box<dyn rusqlite::types::ToSql>],
+                )
+            } else {
+                (
+                    "SELECT recommended_tmdb_id, recommended_media_type, title, level, COUNT(*) as cnt
+                     FROM tmdb_recommendations
+                     GROUP BY recommended_tmdb_id, recommended_media_type, level"
+                        .to_string(),
+                    vec![],
+                )
+            };
+
+        let mut stmt = conn.prepare(&sql).unwrap();
+        let rows: Vec<(i64, String, Option<String>, i64, i64)> = stmt
+            .query_map(rusqlite::params_from_iter(&params_vec), |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+            })
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Aggregate by (tmdb_id, media_type)
+        let mut map: std::collections::HashMap<
+            (i64, String),
+            (Option<String>, i64, std::collections::HashMap<i64, i64>),
+        > = std::collections::HashMap::new();
+        for (tmdb_id, media_type, title, level, cnt) in rows {
+            let entry = map
+                .entry((tmdb_id, media_type))
+                .or_insert_with(|| (title.clone(), 0, std::collections::HashMap::new()));
+            entry.1 += cnt;
+            *entry.2.entry(level).or_insert(0) += cnt;
+            if entry.0.is_none() && title.is_some() {
+                entry.0 = title;
+            }
+        }
+
+        let mut result: Vec<_> = map
+            .into_iter()
+            .map(|((tmdb_id, media_type), (title, total, levels))| {
+                (tmdb_id, media_type, title, total, levels)
+            })
+            .collect();
+        result.sort_by(|a, b| b.3.cmp(&a.3));
+        result.truncate(limit);
+        result
+    }
+
     /// For each recommended_tmdb_id, return its source movies: (recommended_tmdb_id, source_tmdb_id, source_media_type, source_title).
     /// Source title is resolved via self-join (where the source appears as a recommended movie elsewhere).
     pub fn sources_for_recommended(&self, recommended_ids: &[i64]) -> Vec<(i64, i64, String, Option<String>)> {

@@ -145,22 +145,22 @@ async fn top_movies(
     Query(q): Query<FilterQuery>,
 ) -> impl IntoResponse {
     let limit = q.limit.unwrap_or(50);
-    let rows = if let Some(ref mt) = q.media_type {
-        state
-            .recommendations
-            .top_recommended_by_source_type(mt, limit)
-    } else {
-        state.recommendations.top_recommended_movies(limit)
-    };
+    let rows = state
+        .recommendations
+        .top_recommended_with_level_counts(q.media_type.as_deref(), limit);
     let result: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(|(tmdb_id, media_type, title, count, min_level)| {
+        .map(|(tmdb_id, media_type, title, count, level_counts)| {
+            let lc: serde_json::Map<String, serde_json::Value> = level_counts
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), serde_json::Value::from(v)))
+                .collect();
             serde_json::json!({
                 "tmdbId": tmdb_id,
                 "mediaType": media_type,
                 "title": title,
                 "count": count,
-                "minLevel": min_level,
+                "levelCounts": lc,
             })
         })
         .collect();
