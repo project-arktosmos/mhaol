@@ -202,6 +202,36 @@ impl RecommendationsRepo {
         .collect()
     }
 
+    /// For each recommended_tmdb_id, return its source movies: (recommended_tmdb_id, source_tmdb_id, source_media_type, source_title).
+    /// Source title is resolved via self-join (where the source appears as a recommended movie elsewhere).
+    pub fn sources_for_recommended(&self, recommended_ids: &[i64]) -> Vec<(i64, i64, String, Option<String>)> {
+        if recommended_ids.is_empty() {
+            return vec![];
+        }
+        let conn = self.db.lock();
+        let placeholders: Vec<String> = recommended_ids.iter().map(|_| "?".to_string()).collect();
+        let sql = format!(
+            "SELECT r.recommended_tmdb_id, r.source_tmdb_id, r.source_media_type,
+                    (SELECT r2.title FROM tmdb_recommendations r2
+                     WHERE r2.recommended_tmdb_id = r.source_tmdb_id LIMIT 1) as source_title
+             FROM tmdb_recommendations r
+             WHERE r.recommended_tmdb_id IN ({})
+             GROUP BY r.recommended_tmdb_id, r.source_tmdb_id",
+            placeholders.join(",")
+        );
+        let mut stmt = conn.prepare(&sql).unwrap();
+        let params: Vec<&dyn rusqlite::ToSql> = recommended_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::ToSql)
+            .collect();
+        stmt.query_map(params.as_slice(), |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect()
+    }
+
     pub fn list_sources(&self) -> Vec<(i64, String)> {
         let conn = self.db.lock();
         let mut stmt = conn

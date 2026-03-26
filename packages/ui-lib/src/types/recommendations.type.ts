@@ -34,12 +34,19 @@ export interface TopRecommendedMovie {
 	count: number;
 }
 
+export interface RecommendationSource {
+	tmdbId: number;
+	mediaType: string;
+	title: string | null;
+}
+
 export interface TopRecommendedMovieDetail {
 	tmdbId: number;
 	mediaType: string;
 	title: string | null;
 	count: number;
 	data: Record<string, unknown>;
+	sources: RecommendationSource[];
 }
 
 export interface TopGenre {

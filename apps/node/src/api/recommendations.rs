@@ -171,15 +171,35 @@ async fn top_movies_detail(
 ) -> impl IntoResponse {
     let limit = q.limit.unwrap_or(50);
     let rows = state.recommendations.top_recommended_movies_with_data(limit);
+
+    // Collect recommended IDs to batch-fetch their sources
+    let rec_ids: Vec<i64> = rows.iter().map(|(id, _, _, _, _)| *id).collect();
+    let source_rows = state.recommendations.sources_for_recommended(&rec_ids);
+
+    // Group sources by recommended_tmdb_id
+    let mut sources_map: std::collections::HashMap<i64, Vec<serde_json::Value>> =
+        std::collections::HashMap::new();
+    for (rec_id, src_id, src_media_type, src_title) in source_rows {
+        sources_map.entry(rec_id).or_default().push(serde_json::json!({
+            "tmdbId": src_id,
+            "mediaType": src_media_type,
+            "title": src_title,
+        }));
+    }
+
     let result: Vec<serde_json::Value> = rows
         .into_iter()
         .map(|(tmdb_id, media_type, title, count, data)| {
+            let sources = sources_map
+                .remove(&tmdb_id)
+                .unwrap_or_default();
             serde_json::json!({
                 "tmdbId": tmdb_id,
                 "mediaType": media_type,
                 "title": title,
                 "count": count,
                 "data": data,
+                "sources": sources,
             })
         })
         .collect();

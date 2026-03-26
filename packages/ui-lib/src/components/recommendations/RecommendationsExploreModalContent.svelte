@@ -114,11 +114,7 @@
 						})}
 					>
 						{#if backdropUrl(movie.data)}
-							<img
-								src={backdropUrl(movie.data)}
-								alt=""
-								class="h-44 w-full object-cover"
-							/>
+							<img src={backdropUrl(movie.data)} alt="" class="h-44 w-full object-cover" />
 						{/if}
 						<div class="flex gap-4 p-4">
 							{#if posterUrl(movie.data)}
@@ -142,6 +138,13 @@
 								{#if overview(movie.data)}
 									<p class="mt-2 text-sm leading-relaxed text-base-content/70">
 										{overview(movie.data)}
+									</p>
+								{/if}
+								{#if movie.sources.length > 0}
+									<p class="mt-2 text-xs text-base-content/50">
+										Recommended from: {movie.sources
+											.map((s) => s.title ?? `TMDB #${s.tmdbId}`)
+											.join(', ')}
 									</p>
 								{/if}
 							</div>
