@@ -38,6 +38,17 @@
 		return [...s].sort((a, b) => a - b);
 	});
 
+	let levelTotals = $derived(() => {
+		const totals: Record<number, number> = {};
+		for (const m of topMovies) {
+			for (const [k, v] of Object.entries(m.levelCounts)) {
+				const lvl = Number(k);
+				totals[lvl] = (totals[lvl] ?? 0) + v;
+			}
+		}
+		return totals;
+	});
+
 	const queueStore = queueService.store;
 
 	let recTasks = $derived(
@@ -436,7 +447,7 @@
 									<th>#</th>
 									<th>Title</th>
 									{#each levels() as lvl}
-										<th class="text-center">L{lvl}</th>
+										<th class="text-center" colspan="2">L{lvl}</th>
 									{/each}
 								</tr>
 							</thead>
@@ -446,8 +457,12 @@
 										<td class="text-base-content/40">{i + 1}</td>
 										<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
 										{#each levels() as lvl}
-											<td class="text-center">
-												{movie.levelCounts[lvl] ?? ''}
+											{@const cnt = movie.levelCounts[lvl] ?? 0}
+											{@const total = levelTotals()[lvl] ?? 0}
+											{@const pct = total > 0 ? Math.round((cnt / total) * 100) : 0}
+											<td class="text-center">{cnt || ''}</td>
+											<td class="text-center text-base-content/40">
+												{cnt ? `${pct}%` : ''}
 											</td>
 										{/each}
 									</tr>
