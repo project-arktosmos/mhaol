@@ -9,6 +9,21 @@ pub struct Passport {
     pub signature: String,
 }
 
+/// Internal struct for passport payload serialization.
+/// Uses `skip_serializing_if` to omit optional profile fields from the signed JSON.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PassportPayloadData<'a> {
+    name: &'a str,
+    address: &'a str,
+    instance_type: &'a str,
+    signaling_url: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    username: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    profile_picture_url: Option<&'a str>,
+}
+
 /// Sign an arbitrary message using EIP-191 personal_sign, returning the 0x-prefixed hex signature.
 pub fn eip191_sign(message: &str, private_key_hex: &str) -> String {
     let prefix = format!("\x19Ethereum Signed Message:\n{}", message.len());
@@ -66,8 +81,24 @@ pub fn eip191_recover(message: &str, signature_hex: &str) -> Result<String, Stri
 }
 
 /// Sign a passport message using EIP-191 personal_sign.
-pub fn sign_passport(name: &str, address: &str, instance_type: &str, signaling_url: &str, private_key_hex: &str) -> Passport {
-    let raw = serde_json::json!({ "name": name, "address": address, "instanceType": instance_type, "signalingUrl": signaling_url }).to_string();
+pub fn sign_passport(
+    name: &str,
+    address: &str,
+    instance_type: &str,
+    signaling_url: &str,
+    private_key_hex: &str,
+    username: Option<&str>,
+    profile_picture_url: Option<&str>,
+) -> Passport {
+    let payload = PassportPayloadData {
+        name,
+        address,
+        instance_type,
+        signaling_url,
+        username,
+        profile_picture_url,
+    };
+    let raw = serde_json::to_string(&payload).unwrap();
 
     // EIP-191: "\x19Ethereum Signed Message:\n" + len + message
     let prefix = format!("\x19Ethereum Signed Message:\n{}", raw.len());

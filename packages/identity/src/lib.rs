@@ -4,9 +4,19 @@ pub use passport::{eip191_recover, eip191_sign, Passport};
 
 use k256::ecdsa::SigningKey;
 use rand::rngs::OsRng;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
+
+/// Profile data associated with an identity (stored as a JSON sidecar file).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Profile {
+    pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_picture_url: Option<String>,
+}
 
 /// Manages Ethereum-like secp256k1 identities stored as individual files in a directory.
 /// Each file is named after the identity (e.g. `SIGNALING_WALLET`) and contains the private key hex.
@@ -41,7 +51,10 @@ impl IdentityManager {
         };
         for entry in read_dir.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with('.') || !entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+            if name.starts_with('.')
+                || name.ends_with(".profile.json")
+                || !entry.file_type().map(|ft| ft.is_file()).unwrap_or(false)
+            {
                 continue;
             }
             if let Ok(content) = fs::read_to_string(entry.path()) {
@@ -133,20 +146,65 @@ impl IdentityManager {
         self.set(name, &pk)
     }
 
-    /// Remove an identity.
+    /// Remove an identity and its profile sidecar.
     pub fn remove(&self, name: &str) -> bool {
         if !Self::validate_name(name) {
             return false;
         }
         let path = self.dir_path.join(name);
+        let removed = fs::remove_file(&path).is_ok();
+        // Also remove profile sidecar if it exists
+        let profile_path = self.dir_path.join(format!("{}.profile.json", name));
+        let _ = fs::remove_file(&profile_path);
+        removed
+    }
+
+    /// Get the profile for a named identity.
+    pub fn get_profile(&self, name: &str) -> Option<Profile> {
+        if !Self::validate_name(name) {
+            return None;
+        }
+        let path = self.dir_path.join(format!("{}.profile.json", name));
+        let content = fs::read_to_string(&path).ok()?;
+        serde_json::from_str(&content).ok()
+    }
+
+    /// Set the profile for a named identity. Uses atomic write (tmp + rename).
+    pub fn set_profile(&self, name: &str, profile: &Profile) {
+        if !Self::validate_name(name) {
+            return;
+        }
+        let _ = fs::create_dir_all(&self.dir_path);
+        let target = self.dir_path.join(format!("{}.profile.json", name));
+        let tmp = self.dir_path.join(format!(".{}.profile.json.tmp", name));
+        let json = serde_json::to_string_pretty(profile).unwrap();
+        fs::write(&tmp, format!("{}\n", json)).unwrap();
+        fs::rename(&tmp, &target).unwrap();
+    }
+
+    /// Remove the profile sidecar for a named identity.
+    pub fn remove_profile(&self, name: &str) -> bool {
+        if !Self::validate_name(name) {
+            return false;
+        }
+        let path = self.dir_path.join(format!("{}.profile.json", name));
         fs::remove_file(&path).is_ok()
     }
 
-    /// Get a signed passport for the named identity.
+    /// Get a signed passport for the named identity, including profile data if available.
     pub fn get_passport(&self, name: &str) -> Option<passport::Passport> {
         let private_key_hex = self.load_one(name)?;
         let address = Self::private_key_to_address(&private_key_hex);
-        Some(passport::sign_passport(name, &address, &self.instance_type, &self.signaling_url, &private_key_hex))
+        let profile = self.get_profile(name);
+        Some(passport::sign_passport(
+            name,
+            &address,
+            &self.instance_type,
+            &self.signaling_url,
+            &private_key_hex,
+            profile.as_ref().map(|p| p.username.as_str()),
+            profile.as_ref().and_then(|p| p.profile_picture_url.as_deref()),
+        ))
     }
 
     /// Ensure an identity exists; create one if missing.
@@ -297,6 +355,65 @@ mod tests {
         assert!(mgr.get_address("../escape").is_none());
         assert!(mgr.get_address(".hidden").is_none());
         assert!(mgr.get_address("path/traversal").is_none());
+
+        let _ = fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn test_profile_lifecycle() {
+        let tmp_dir = std::env::temp_dir().join(format!("test_profile_{}", uuid::Uuid::new_v4()));
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
+
+        mgr.regenerate("PROFILE_TEST");
+
+        // No profile initially
+        assert!(mgr.get_profile("PROFILE_TEST").is_none());
+
+        // Set profile
+        let profile = Profile {
+            username: "Alice".to_string(),
+            profile_picture_url: Some("https://example.com/pic.png".to_string()),
+        };
+        mgr.set_profile("PROFILE_TEST", &profile);
+
+        // Read profile back
+        let loaded = mgr.get_profile("PROFILE_TEST").unwrap();
+        assert_eq!(loaded.username, "Alice");
+        assert_eq!(loaded.profile_picture_url.as_deref(), Some("https://example.com/pic.png"));
+
+        // Profile sidecar should not appear in get_all
+        let all = mgr.get_all();
+        assert_eq!(all.len(), 1);
+        assert!(all.contains_key("PROFILE_TEST"));
+
+        // Passport should include profile data
+        let passport = mgr.get_passport("PROFILE_TEST").unwrap();
+        let payload: serde_json::Value = serde_json::from_str(&passport.raw).unwrap();
+        assert_eq!(payload["username"], "Alice");
+        assert_eq!(payload["profilePictureUrl"], "https://example.com/pic.png");
+
+        // Remove identity should also remove profile sidecar
+        assert!(mgr.remove("PROFILE_TEST"));
+        assert!(mgr.get_profile("PROFILE_TEST").is_none());
+        assert!(!tmp_dir.join("PROFILE_TEST.profile.json").exists());
+
+        let _ = fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn test_passport_without_profile() {
+        let tmp_dir = std::env::temp_dir().join(format!("test_no_profile_{}", uuid::Uuid::new_v4()));
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
+
+        mgr.regenerate("NO_PROFILE");
+
+        // Passport without profile should not include username/profilePictureUrl
+        let passport = mgr.get_passport("NO_PROFILE").unwrap();
+        let payload: serde_json::Value = serde_json::from_str(&passport.raw).unwrap();
+        assert!(payload.get("username").is_none());
+        assert!(payload.get("profilePictureUrl").is_none());
+        assert_eq!(payload["name"], "NO_PROFILE");
+        assert_eq!(payload["instanceType"], "server");
 
         let _ = fs::remove_dir_all(&tmp_dir);
     }
