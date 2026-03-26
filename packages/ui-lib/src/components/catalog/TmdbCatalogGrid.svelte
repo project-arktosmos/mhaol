@@ -164,9 +164,7 @@
 								{/if}
 								{#if dl}
 									{@const label =
-										dl.state === 'downloading'
-											? `${Math.round(dl.progress * 100)}%`
-											: dl.state}
+										dl.state === 'downloading' ? `${Math.round(dl.progress * 100)}%` : dl.state}
 									<span
 										class={classNames('badge badge-xs', {
 											'badge-primary': dl.state === 'downloading',

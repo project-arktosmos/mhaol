@@ -2,14 +2,22 @@
 	import classNames from 'classnames';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { imageTaggerService } from 'ui-lib/services/image-tagger.service';
-	import type { PhotoImageData } from 'ui-lib/types/browse-detail.type';
+	import type { ImageTag } from 'ui-lib/types/image-tagger.type';
+
+	interface PhotoImageData {
+		id: string;
+		libraryId: string;
+		name: string;
+		path: string;
+		extension: string;
+		tags: ImageTag[];
+	}
 	import ImageUncategorizedCard from 'ui-lib/components/media/ImageUncategorizedCard.svelte';
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import TagPill from 'ui-lib/components/images/TagPill.svelte';
 	import type { MediaItem, MediaCategory, MediaLinkSource } from 'ui-lib/types/media-card.type';
-	import type { ImageTag } from 'ui-lib/types/image-tagger.type';
 
 	interface Props {
 		data: {

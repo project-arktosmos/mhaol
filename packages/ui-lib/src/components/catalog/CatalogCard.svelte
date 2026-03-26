@@ -71,16 +71,9 @@
 >
 	<figure class={classNames('relative overflow-hidden', aspectClass)}>
 		{#if card.imageUrl}
-			<img
-				src={card.imageUrl}
-				alt={card.title}
-				class="h-full w-full object-cover"
-				loading="lazy"
-			/>
+			<img src={card.imageUrl} alt={card.title} class="h-full w-full object-cover" loading="lazy" />
 		{:else}
-			<div
-				class="flex h-full w-full items-center justify-center bg-base-300 text-base-content/20"
-			>
+			<div class="flex h-full w-full items-center justify-center bg-base-300 text-base-content/20">
 				<svg class="h-12 w-12" fill="currentColor" viewBox="0 0 24 24">
 					<path
 						d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"
@@ -97,7 +90,7 @@
 			</div>
 		{/if}
 		{#if card.loading}
-			<div class="absolute right-1 top-1">
+			<div class="absolute top-1 right-1">
 				<span class="loading loading-xs loading-spinner"></span>
 			</div>
 		{:else if card.favorited || card.pinned}
