@@ -39,21 +39,21 @@
 	{#snippet sidebar()}
 		<div class="mb-4 text-lg font-bold">Mhaol<span class="text-primary">Media</span></div>
 		<ul class="menu gap-1">
-			<li><a href="{base}/movies">Movies</a></li>
-			<li><a href="{base}/tv">TV</a></li>
-			<li><a href="{base}/music">Music</a></li>
-			<li><a href="{base}/videogames">Games</a></li>
-			<li><a href="{base}/books">Books</a></li>
-			<li><a href="{base}/photos">Photos</a></li>
+			<li><a href="{base}/media/movies">Movies</a></li>
+			<li><a href="{base}/media/tv">TV</a></li>
+			<li><a href="{base}/media/music">Music</a></li>
+			<li><a href="{base}/media/videogames">Games</a></li>
+			<li><a href="{base}/media/books">Books</a></li>
+			<li><a href="{base}/media/photos">Photos</a></li>
 			<li>
-				<a href="{base}/youtube">
+				<a href="{base}/media/youtube">
 					YouTube
 					{#if ytActiveCount > 0}
 						<span class="badge badge-xs badge-primary">{ytActiveCount}</span>
 					{/if}
 				</a>
 			</li>
-			<li><a href="{base}/iptv">IPTV</a></li>
+			<li><a href="{base}/media/iptv">IPTV</a></li>
 			<li><a href="{base}/profiles">Profiles</a></li>
 			<li><a href="{base}/import">Import</a></li>
 			<li><a href="{base}/queue">Queue</a></li>
@@ -70,19 +70,19 @@
 		<Navbar brand={{ label: 'Mhaol', highlight: 'Media' }} classes="!bg-base-300">
 			{#snippet center()}
 				<div class="hidden items-center gap-1 lg:flex">
-					<a href="{base}/movies" class="btn btn-outline btn-sm">Movies</a>
-					<a href="{base}/tv" class="btn btn-outline btn-sm">TV</a>
-					<a href="{base}/music" class="btn btn-outline btn-sm">Music</a>
-					<a href="{base}/videogames" class="btn btn-outline btn-sm">Games</a>
-					<a href="{base}/books" class="btn btn-outline btn-sm">Books</a>
-					<a href="{base}/photos" class="btn btn-outline btn-sm">Photos</a>
-					<a href="{base}/youtube" class="btn btn-outline btn-sm">
+					<a href="{base}/media/movies" class="btn btn-outline btn-sm">Movies</a>
+					<a href="{base}/media/tv" class="btn btn-outline btn-sm">TV</a>
+					<a href="{base}/media/music" class="btn btn-outline btn-sm">Music</a>
+					<a href="{base}/media/videogames" class="btn btn-outline btn-sm">Games</a>
+					<a href="{base}/media/books" class="btn btn-outline btn-sm">Books</a>
+					<a href="{base}/media/photos" class="btn btn-outline btn-sm">Photos</a>
+					<a href="{base}/media/youtube" class="btn btn-outline btn-sm">
 						YouTube
 						{#if ytActiveCount > 0}
 							<span class="badge badge-xs badge-primary ml-1">{ytActiveCount}</span>
 						{/if}
 					</a>
-					<a href="{base}/iptv" class="btn btn-outline btn-sm">IPTV</a>
+					<a href="{base}/media/iptv" class="btn btn-outline btn-sm">IPTV</a>
 				</div>
 			{/snippet}
 			{#snippet end()}
