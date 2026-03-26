@@ -1,6 +1,5 @@
 export interface Pin {
 	id: string;
-	wallet: string;
 	service: string;
 	serviceId: string;
 	label: string;

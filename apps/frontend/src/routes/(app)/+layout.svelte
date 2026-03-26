@@ -113,13 +113,13 @@
 		if (wallet && !favoritesInitialized) {
 			favoritesInitialized = true;
 			favoritesService.initialize(wallet);
-			pinsService.initialize(wallet);
 		}
 	});
 
 	onMount(() => {
 		rosterService.initialize('api');
 		profileService.initialize();
+		pinsService.initialize();
 		youtubeService.initialize();
 		youtubeLibraryService.initialize();
 		torrentService.initialize('server');

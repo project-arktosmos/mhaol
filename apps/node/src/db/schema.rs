@@ -300,18 +300,16 @@ CREATE INDEX IF NOT EXISTS idx_favorites_wallet ON favorites(wallet);
 const PINS_SQL: &str = "
 CREATE TABLE IF NOT EXISTS pins (
     id TEXT PRIMARY KEY,
-    wallet TEXT NOT NULL REFERENCES profiles(wallet) ON DELETE CASCADE,
     service TEXT NOT NULL,
     service_id TEXT NOT NULL,
     label TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(wallet, service, service_id)
+    UNIQUE(service, service_id)
 );
-CREATE INDEX IF NOT EXISTS idx_pins_wallet ON pins(wallet);
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '34', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '35', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -913,15 +911,33 @@ fn run_migrations(conn: &Connection) {
         let _ = conn.execute_batch(
             "CREATE TABLE pins (
                 id TEXT PRIMARY KEY,
-                wallet TEXT NOT NULL REFERENCES profiles(wallet) ON DELETE CASCADE,
                 service TEXT NOT NULL,
                 service_id TEXT NOT NULL,
                 label TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(wallet, service, service_id)
-            );
-            CREATE INDEX IF NOT EXISTS idx_pins_wallet ON pins(wallet);",
+                UNIQUE(service, service_id)
+            );",
         );
+    }
+
+    // Migration: pins are now per-node, not per-wallet (db_version 35)
+    {
+        let has_wallet_col = conn
+            .prepare("SELECT wallet FROM pins LIMIT 0")
+            .is_ok();
+        if has_wallet_col {
+            let _ = conn.execute_batch(
+                "DROP TABLE pins;
+                CREATE TABLE pins (
+                    id TEXT PRIMARY KEY,
+                    service TEXT NOT NULL,
+                    service_id TEXT NOT NULL,
+                    label TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    UNIQUE(service, service_id)
+                );",
+            );
+        }
     }
 
     // Migration: add music_torrent_fetch_cache table

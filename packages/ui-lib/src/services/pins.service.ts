@@ -14,7 +14,6 @@ const initialState: PinsState = {
 function mapFromApi(raw: Record<string, unknown>): Pin {
 	return {
 		id: raw.id as string,
-		wallet: raw.wallet as string,
 		service: raw.service as string,
 		serviceId: raw.service_id as string,
 		label: raw.label as string,
@@ -26,11 +25,9 @@ class PinsService {
 	public state: Writable<PinsState> = writable(initialState);
 
 	private _initialized = false;
-	private _wallet = '';
 
-	async initialize(wallet: string): Promise<void> {
-		if (!browser || !wallet) return;
-		this._wallet = wallet;
+	async initialize(): Promise<void> {
+		if (!browser || this._initialized) return;
 		this._initialized = true;
 
 		const local = this.readLocal();
@@ -40,10 +37,9 @@ class PinsService {
 	}
 
 	async refresh(): Promise<void> {
-		if (!this._wallet) return;
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const res = await fetchRaw(`/api/pins?wallet=${encodeURIComponent(this._wallet)}`);
+			const res = await fetchRaw('/api/pins');
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const raw: Record<string, unknown>[] = await res.json();
 			const items = raw.map(mapFromApi);
@@ -58,7 +54,6 @@ class PinsService {
 	async add(service: string, serviceId: string, label: string): Promise<void> {
 		const tempItem: Pin = {
 			id: crypto.randomUUID(),
-			wallet: this._wallet,
 			service,
 			serviceId,
 			label,
@@ -73,7 +68,7 @@ class PinsService {
 		await fetchRaw('/api/pins', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ wallet: this._wallet, service, serviceId, label })
+			body: JSON.stringify({ service, serviceId, label })
 		});
 		await this.refresh();
 	}
@@ -88,7 +83,7 @@ class PinsService {
 		await fetchRaw('/api/pins', {
 			method: 'DELETE',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ wallet: this._wallet, service, serviceId })
+			body: JSON.stringify({ service, serviceId })
 		});
 	}
 
