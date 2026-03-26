@@ -2,64 +2,77 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import IptvBrowsePage from 'ui-lib/components/iptv/IptvBrowsePage.svelte';
-	import { iptvService } from 'ui-lib/services/iptv.service';
+	import classNames from 'classnames';
+	import CatalogBrowsePage from 'ui-lib/components/catalog/CatalogBrowsePage.svelte';
+	import { catalogService } from 'ui-lib/services/catalog.service';
+	import { iptvStrategy } from 'ui-lib/services/catalog-strategies/iptv.strategy';
+	import type { CatalogItem } from 'ui-lib/types/catalog.type';
+	import { isIptvChannel } from 'ui-lib/types/catalog.type';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
-	import type { IptvChannel } from 'ui-lib/types/iptv.type';
 
-	const state = iptvService.state;
-	const favState = favoritesService.state;
-	const pinState = pinsService.state;
-
-	let favoritedIptvIds = $derived(
-		new Set($favState.items.filter((f) => f.service === 'iptv').map((f) => f.serviceId))
-	);
-	let pinnedIptvIds = $derived(
-		new Set($pinState.items.filter((p) => p.service === 'iptv').map((p) => p.serviceId))
-	);
-
-	function handleSearch(query: string): void {
-		iptvService.setQuery(query);
-		iptvService.search();
-	}
-
-	function handleFilterChange(filters: { category?: string; country?: string; epgOnly?: boolean }): void {
-		if (filters.category !== undefined) iptvService.setCategory(filters.category);
-		if (filters.country !== undefined) iptvService.setCountry(filters.country);
-		if (filters.epgOnly !== undefined) iptvService.setEpgOnly(filters.epgOnly);
-		iptvService.search();
-	}
-
-	function handlePageChange(page: number): void {
-		iptvService.search(page);
-	}
-
-	function handleChannelClick(channel: IptvChannel): void {
-		goto(`${base}/iptv/${encodeURIComponent(channel.id)}`);
-	}
+	const browseState = catalogService.state;
+	const favs = favoritesService.state;
+	const pins = pinsService.state;
 
 	onMount(() => {
-		iptvService.initialize();
+		catalogService.registerStrategy(iptvStrategy);
+		catalogService.activate('iptv_channel');
 	});
+
+	function handleSelectItem(item: CatalogItem) {
+		if (isIptvChannel(item)) {
+			goto(`${base}/iptv/${encodeURIComponent(item.sourceId)}`);
+		}
+	}
+
+	function cardOverlays(item: CatalogItem) {
+		return {
+			favorited: $favs.items.some(
+				(f) => f.service === 'iptv' && f.serviceId === item.sourceId
+			),
+			pinned: $pins.items.some(
+				(p) => p.service === 'iptv' && p.serviceId === item.sourceId
+			)
+		};
+	}
 </script>
 
-<IptvBrowsePage
-	channels={$state.channels}
-	total={$state.total}
-	page={$state.page}
-	categories={$state.categories}
-	countries={$state.countries}
-	loading={$state.loading}
-	error={$state.error}
-	query={$state.query}
-	selectedCategory={$state.selectedCategory}
-	selectedCountry={$state.selectedCountry}
-	epgOnly={$state.epgOnly}
-	favoritedIds={favoritedIptvIds}
-	pinnedIds={pinnedIptvIds}
-	onsearch={handleSearch}
-	onfilterchange={handleFilterChange}
-	onpagechange={handlePageChange}
-	onchannelclick={handleChannelClick}
-/>
+<CatalogBrowsePage
+	browseState={$browseState}
+	title="IPTV"
+	{cardOverlays}
+	onsearch={(q) => catalogService.search(q)}
+	ontabchange={(tab) => catalogService.loadTab(tab)}
+	onpagechange={(p) => catalogService.loadPage(p)}
+	onselectitem={handleSelectItem}
+>
+	{#snippet filterBar()}
+		{#if $browseState.filterOptions.category || $browseState.filterOptions.country}
+			<div class="flex flex-wrap items-center gap-2">
+				{#if $browseState.filterOptions.category}
+					<select
+						class="select select-bordered select-xs"
+						value={$browseState.filters.category ?? ''}
+						onchange={(e) => catalogService.setFilter('category', (e.target as HTMLSelectElement).value)}
+					>
+						{#each $browseState.filterOptions.category as option}
+							<option value={option.id}>{option.label}</option>
+						{/each}
+					</select>
+				{/if}
+				{#if $browseState.filterOptions.country}
+					<select
+						class="select select-bordered select-xs"
+						value={$browseState.filters.country ?? ''}
+						onchange={(e) => catalogService.setFilter('country', (e.target as HTMLSelectElement).value)}
+					>
+						{#each $browseState.filterOptions.country as option}
+							<option value={option.id}>{option.label}</option>
+						{/each}
+					</select>
+				{/if}
+			</div>
+		{/if}
+	{/snippet}
+</CatalogBrowsePage>
