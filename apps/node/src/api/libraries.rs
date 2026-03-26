@@ -252,14 +252,20 @@ async fn create_item(
         .unwrap_or("")
         .to_lowercase();
 
-    state.library_items.insert(&crate::db::repo::library_item::InsertLibraryItem {
+    if let Err(e) = state.library_items.insert(&crate::db::repo::library_item::InsertLibraryItem {
         id: item_id.clone(),
         library_id: library_id.clone(),
         path: body.path.clone(),
         extension,
         media_type: body.media_type.unwrap_or_else(|| "video".to_string()),
         category_id: body.category_id,
-    });
+    }) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to insert library item: {}", e) })),
+        )
+            .into_response();
+    }
 
     if let Some(tmdb_id) = body.tmdb_id {
         state.library_item_links.upsert(
@@ -374,7 +380,13 @@ async fn scan_library(
     let ext_map = build_extension_map(library_type);
     let mut scanned_files = Vec::new();
     scan_dir(&library.path, &id, &ext_map, &mut scanned_files);
-    state.library_items.sync_library(&id, &scanned_files);
+    if let Err(e) = state.library_items.sync_library(&id, &scanned_files) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to sync library: {}", e) })),
+        )
+            .into_response();
+    }
 
     generate_auto_lists(&state, &id, &library.path, library_type);
 
