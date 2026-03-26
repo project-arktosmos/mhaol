@@ -1,4 +1,4 @@
-export type TransportMode = 'http' | 'webrtc';
+export type TransportMode = 'http' | 'webrtc' | 'ws';
 
 export interface ConnectionConfig {
 	transportMode: TransportMode;

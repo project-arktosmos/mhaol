@@ -86,7 +86,7 @@
 	}
 
 	let canConnect = $derived(
-		transportMode === 'http'
+		transportMode === 'http' || transportMode === 'ws'
 			? serverUrl.trim().length > 0
 			: serverAddress.trim().length > 0 && signalingUrl.trim().length > 0
 	);
@@ -102,6 +102,8 @@
 		try {
 			if (transportMode === 'http') {
 				await nodeConnectionService.connectHttp(config);
+			} else if (transportMode === 'ws') {
+				await nodeConnectionService.connectWs(config);
 			} else {
 				await nodeConnectionService.connectWebRtc(config);
 			}
@@ -145,7 +147,7 @@
 		</div>
 
 		<div class="rounded-lg bg-base-200 p-3">
-			{#if existingConfig.transportMode === 'http'}
+			{#if existingConfig.transportMode === 'http' || existingConfig.transportMode === 'ws'}
 				<div class="text-sm">
 					<span class="text-base-content/60">Server URL</span>
 					<p class="mt-0.5 truncate font-mono">{existingConfig.serverUrl}</p>
@@ -218,6 +220,16 @@
 			</button>
 			<button
 				class={classNames('btn flex-1 btn-sm', {
+					'btn-primary': transportMode === 'ws',
+					'btn-ghost': transportMode !== 'ws'
+				})}
+				disabled={connecting}
+				onclick={() => (transportMode = 'ws')}
+			>
+				WebSocket
+			</button>
+			<button
+				class={classNames('btn flex-1 btn-sm', {
 					'btn-primary': transportMode === 'webrtc',
 					'btn-ghost': transportMode !== 'webrtc'
 				})}
@@ -228,8 +240,8 @@
 			</button>
 		</div>
 
-		<!-- HTTP fields -->
-		{#if transportMode === 'http'}
+		<!-- HTTP / WS fields -->
+		{#if transportMode === 'http' || transportMode === 'ws'}
 			<div class="form-control">
 				<label class="label" for="server-url">
 					<span class="label-text">Server URL</span>
