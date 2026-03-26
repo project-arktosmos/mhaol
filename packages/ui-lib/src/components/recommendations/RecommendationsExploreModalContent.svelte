@@ -77,9 +77,9 @@
 			No recommendations yet. Use the Recs modal to enqueue movies first.
 		</p>
 	{:else}
-		<div class="grid min-h-0 flex-1 grid-cols-2 gap-4 overflow-hidden">
+		<div class="grid min-h-0 flex-1 grid-cols-2 grid-rows-1 gap-4">
 			<!-- Left: Top Recommended Movies table (same as Recs modal right panel) -->
-			<div class="flex flex-col gap-2 overflow-y-auto">
+			<div class="min-h-0 flex flex-col gap-2 overflow-y-auto">
 				<h3 class="text-sm font-semibold">Top Recommended Movies</h3>
 				<table class="table table-xs">
 					<thead>
@@ -112,7 +112,7 @@
 			</div>
 
 			<!-- Right: Detail cards -->
-			<div class="flex flex-col gap-6 overflow-y-auto pr-1">
+			<div class="min-h-0 flex flex-col gap-6 overflow-y-auto pr-1">
 				{#each movies as movie, i (movie.tmdbId)}
 					<div
 						id={`rec-card-${i}`}
