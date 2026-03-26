@@ -61,10 +61,10 @@
 	});
 
 	let matchedTorrent = $derived.by((): TorrentInfo | null => {
-		void $torrentState;
+		const torrents = $torrentState.allTorrents;
 		const candidate = $searchStore.fetchedCandidate;
 		if (candidate?.infoHash) {
-			const t = torrentService.findByHash(candidate.infoHash);
+			const t = torrents.find((t) => t.infoHash === candidate.infoHash);
 			if (t) return t;
 		}
 		return null;
@@ -212,10 +212,10 @@
 		});
 	}
 
-	function handleDownload() {
+	async function handleDownload() {
 		const candidate = smartSearchService.getFetchedCandidate();
 		if (!candidate) return;
-		smartSearchService.startDownload(candidate);
+		await smartSearchService.startDownload(candidate);
 	}
 
 	onMount(() => {
