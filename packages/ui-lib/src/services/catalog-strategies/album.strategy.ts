@@ -1,8 +1,13 @@
 import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import { releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
 import type { MusicBrainzReleaseGroup } from 'addons/musicbrainz/types';
-import type { CatalogItem } from 'ui-lib/types/catalog.type';
+import type { CatalogItem, CatalogFilterOption } from 'ui-lib/types/catalog.type';
 import type { CatalogKindStrategy } from 'ui-lib/services/catalog.service';
+
+const GENRES: CatalogFilterOption[] = [
+	'rock', 'pop', 'electronic', 'hip hop', 'jazz', 'classical', 'r&b', 'metal',
+	'folk', 'soul', 'punk', 'blues', 'country', 'ambient', 'indie', 'alternative'
+].map((g) => ({ id: g, label: g }));
 
 function toAlbumCatalogItems(
 	albums: ReturnType<typeof releaseGroupsToDisplay>
@@ -39,7 +44,9 @@ function toAlbumCatalogItems(
 export const albumStrategy: CatalogKindStrategy = {
 	kind: 'album',
 	tabs: [{ id: 'popular', label: 'Popular' }],
-	filterDefinitions: {},
+	filterDefinitions: {
+		genre: { label: 'Genre', loadOptions: async () => GENRES }
+	},
 
 	async search(query, _page, _filters) {
 		const data = await fetchJson<{ 'release-groups': MusicBrainzReleaseGroup[] }>(
@@ -51,9 +58,10 @@ export const albumStrategy: CatalogKindStrategy = {
 		};
 	},
 
-	async loadTab(_tabId, _page, _filters) {
+	async loadTab(_tabId, _page, filters) {
+		const genre = filters.genre || 'rock';
 		const data = await fetchJson<{ 'release-groups': MusicBrainzReleaseGroup[] }>(
-			'/api/musicbrainz/popular/release-groups'
+			`/api/musicbrainz/popular?genre=${encodeURIComponent(genre)}`
 		);
 		return {
 			items: toAlbumCatalogItems(releaseGroupsToDisplay(data?.['release-groups'] ?? [])),
