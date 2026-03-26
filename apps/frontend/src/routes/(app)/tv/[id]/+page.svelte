@@ -7,6 +7,8 @@
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { playerService } from 'ui-lib/services/player.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import { tvShowDetailsToDisplay, seasonDetailsToDisplay } from 'addons/tmdb/transform';
 	import type {
 		DisplayTMDBTvShow,
@@ -27,9 +29,13 @@
 	let fetchingTmdbId = $state<number | null>(null);
 	let libraryFiles = $state<LibraryEpisodeFile[]>([]);
 	let resyncing = $state(false);
+	let togglingFavorite = $state(false);
+	let togglingPin = $state(false);
 
 	const searchStore = smartSearchService.store;
 	const torrentState = torrentService.state;
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
 
 	let id = $derived($page.params.id ?? '');
 	let tmdbId = $derived(Number(id));
@@ -383,6 +389,34 @@
 		}
 	}
 
+	let isFavorite = $derived(
+		$favState.items.some((f) => f.service === 'tmdb-tv' && f.serviceId === String(tmdbId))
+	);
+
+	let isPinned = $derived(
+		$pinState.items.some((p) => p.service === 'tmdb-tv' && p.serviceId === String(tmdbId))
+	);
+
+	async function handleToggleFavorite() {
+		if (!tvShow) return;
+		togglingFavorite = true;
+		try {
+			await favoritesService.toggle('tmdb-tv', String(tvShow.id), tvShow.name);
+		} finally {
+			togglingFavorite = false;
+		}
+	}
+
+	async function handleTogglePin() {
+		if (!tvShow) return;
+		togglingPin = true;
+		try {
+			await pinsService.toggle('tmdb-tv', String(tvShow.id), tvShow.name);
+		} finally {
+			togglingPin = false;
+		}
+	}
+
 	onMount(() => {
 		fetchTvShow(tmdbId);
 	});
@@ -408,6 +442,10 @@
 		{tvMatchedSeasons}
 		{libraryFiles}
 		{resyncing}
+		{isFavorite}
+		{togglingFavorite}
+		{isPinned}
+		{togglingPin}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onp2pstream={handleP2pStream}
@@ -415,6 +453,8 @@
 		onplayfile={handlePlayFile}
 		onresync={handleResync}
 		onback={() => goto(`${base}/tv`)}
+		ontogglefavorite={handleToggleFavorite}
+		ontogglepin={handleTogglePin}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">

@@ -18,6 +18,8 @@
   import BrowseViewToggle from "ui-lib/components/browse/BrowseViewToggle.svelte";
   import TvShowMatchModal from "ui-lib/components/libraries/TvShowMatchModal.svelte";
   import classNames from "classnames";
+  import { favoritesService } from "ui-lib/services/favorites.service";
+  import { pinsService } from "ui-lib/services/pins.service";
 
   interface Props {
     data: {
@@ -33,6 +35,24 @@
   let { data }: Props = $props();
 
   const browseState = tmdbBrowseService.state;
+  const favState = favoritesService.state;
+  const pinState = pinsService.state;
+
+  let favoritedTmdbTvIds = $derived(
+    new Set(
+      $favState.items
+        .filter((f) => f.service === 'tmdb-tv')
+        .map((f) => Number(f.serviceId))
+    )
+  );
+
+  let pinnedTmdbTvIds = $derived(
+    new Set(
+      $pinState.items
+        .filter((p) => p.service === 'tmdb-tv')
+        .map((p) => Number(p.serviceId))
+    )
+  );
 
   let pinnedTvShows = $state<DisplayTMDBTvShow[]>([]);
   let matchModalList: MediaList | null = $state(null);
@@ -353,6 +373,8 @@
         <h2 class="mb-3 text-lg font-semibold">Pinned</h2>
         <TmdbBrowseGrid
           tvShows={pinnedTvShows}
+          favoritedIds={favoritedTmdbTvIds}
+          pinnedIds={pinnedTmdbTvIds}
           onselectTvShow={handleSelectTvShow}
         />
       </section>
@@ -384,6 +406,8 @@
         </div>
         <TmdbBrowseGrid
           tvShows={group.tvShows}
+          favoritedIds={favoritedTmdbTvIds}
+          pinnedIds={pinnedTmdbTvIds}
           matchingTvShowId={autoMatchingDisplayId}
           onselectTvShow={handleSelectLibraryShow}
         />
@@ -402,6 +426,8 @@
         <h2 class="mb-3 text-lg font-semibold">Search Results</h2>
         <TmdbBrowseGrid
           tvShows={$browseState.searchTv}
+          favoritedIds={favoritedTmdbTvIds}
+          pinnedIds={pinnedTmdbTvIds}
           onselectTvShow={handleSelectTvShow}
         />
         <TmdbPagination
@@ -426,6 +452,8 @@
         error={$browseState.error}
         mediaType="tv"
         selectedTvShowId={null}
+        favoritedIds={favoritedTmdbTvIds}
+        pinnedIds={pinnedTmdbTvIds}
         onselectTvShow={handleSelectTvShow}
         onloadMovies={() => {}}
         onloadTv={(p) => tmdbBrowseService.loadPopularTv(p)}
@@ -464,6 +492,8 @@
         <div class="mt-4">
           <TmdbBrowseGrid
             tvShows={$browseState.discoverTv}
+            favoritedIds={favoritedTmdbTvIds}
+            pinnedIds={pinnedTmdbTvIds}
             selectedTvShowId={null}
             onselectTvShow={handleSelectTvShow}
           />
