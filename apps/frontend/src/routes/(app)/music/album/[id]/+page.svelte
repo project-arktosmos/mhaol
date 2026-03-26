@@ -14,6 +14,8 @@
 	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import AlbumDetailPage from 'ui-lib/components/music/AlbumDetailPage.svelte';
 
 	let album = $state<DisplayMusicBrainzReleaseGroup | null>(null);
@@ -21,9 +23,40 @@
 	let loading = $state(true);
 	let tracksLoading = $state(false);
 	let fetchingId = $state<string | null>(null);
+	let togglingFavorite = $state(false);
+	let togglingPin = $state(false);
 
 	const searchStore = smartSearchService.store;
 	const torrentState = torrentService.state;
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+
+	let isFavorite = $derived(
+		$favState.items.some((f) => f.service === 'musicbrainz-album' && f.serviceId === id)
+	);
+	let isPinned = $derived(
+		$pinState.items.some((p) => p.service === 'musicbrainz-album' && p.serviceId === id)
+	);
+
+	async function handleToggleFavorite() {
+		if (!album) return;
+		togglingFavorite = true;
+		try {
+			await favoritesService.toggle('musicbrainz-album', album.id, album.title);
+		} finally {
+			togglingFavorite = false;
+		}
+	}
+
+	async function handleTogglePin() {
+		if (!album) return;
+		togglingPin = true;
+		try {
+			await pinsService.toggle('musicbrainz-album', album.id, album.title);
+		} finally {
+			togglingPin = false;
+		}
+	}
 
 	let id = $derived($page.params.id ?? '');
 
@@ -184,10 +217,16 @@
 					languages: $searchStore.fetchedCandidate.analysis?.languages ?? ''
 				}
 			: null}
+		{isFavorite}
+		{togglingFavorite}
+		{isPinned}
+		{togglingPin}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onshowsearch={() => smartSearchService.show()}
 		onback={() => goto(`${base}/music/album`)}
+		ontogglefavorite={handleToggleFavorite}
+		ontogglepin={handleTogglePin}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">

@@ -15,6 +15,8 @@
 	import AlbumCard from 'ui-lib/components/music/AlbumCard.svelte';
 	import ArtistCard from 'ui-lib/components/music/ArtistCard.svelte';
 	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 
 	let albums = $state<DisplayMusicBrainzReleaseGroup[]>([]);
 	let artists = $state<DisplayMusicBrainzArtist[]>([]);
@@ -22,6 +24,21 @@
 	let artistsLoading = $state(false);
 
 	const torrentState = torrentService.state;
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+
+	let favoritedAlbumIds = $derived(
+		new Set($favState.items.filter((f) => f.service === 'musicbrainz-album').map((f) => f.serviceId))
+	);
+	let pinnedAlbumIds = $derived(
+		new Set($pinState.items.filter((p) => p.service === 'musicbrainz-album').map((p) => p.serviceId))
+	);
+	let favoritedArtistIds = $derived(
+		new Set($favState.items.filter((f) => f.service === 'musicbrainz-artist').map((f) => f.serviceId))
+	);
+	let pinnedArtistIds = $derived(
+		new Set($pinState.items.filter((p) => p.service === 'musicbrainz-artist').map((p) => p.serviceId))
+	);
 	let fetchCacheHashes: Map<string, string> = $state(new Map());
 
 	async function loadMusicFetchCacheHashes() {
@@ -106,6 +123,8 @@
 					{@const torrent = musicTorrents.get(album.id)}
 					<AlbumCard
 						{album}
+						favorited={favoritedAlbumIds.has(album.id)}
+						pinned={pinnedAlbumIds.has(album.id)}
 						torrentProgress={torrent?.progress ?? null}
 						torrentState={torrent?.state ?? null}
 						torrentSpeed={torrent?.downloadSpeed ?? null}
@@ -134,6 +153,8 @@
 					{@const torrent = musicTorrents.get(artist.id)}
 					<ArtistCard
 						{artist}
+						favorited={favoritedArtistIds.has(artist.id)}
+						pinned={pinnedArtistIds.has(artist.id)}
 						torrentProgress={torrent?.progress ?? null}
 						torrentState={torrent?.state ?? null}
 						torrentSpeed={torrent?.downloadSpeed ?? null}

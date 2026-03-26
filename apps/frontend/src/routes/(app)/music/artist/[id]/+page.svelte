@@ -12,14 +12,20 @@
 	} from 'addons/musicbrainz/types';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import ArtistDetailPage from 'ui-lib/components/music/ArtistDetailPage.svelte';
 
 	let artist = $state<DisplayMusicBrainzArtist | null>(null);
 	let albums = $state<DisplayMusicBrainzReleaseGroup[]>([]);
 	let loading = $state(true);
 	let fetchingId = $state<string | null>(null);
+	let togglingFavorite = $state(false);
+	let togglingPin = $state(false);
 
 	const searchStore = smartSearchService.store;
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
 
 	let id = $derived($page.params.id ?? '');
 
@@ -153,6 +159,33 @@
 		smartSearchService.startDownload(candidate);
 	}
 
+	let isFavorite = $derived(
+		$favState.items.some((f) => f.service === 'musicbrainz-artist' && f.serviceId === id)
+	);
+	let isPinned = $derived(
+		$pinState.items.some((p) => p.service === 'musicbrainz-artist' && p.serviceId === id)
+	);
+
+	async function handleToggleFavorite() {
+		if (!artist) return;
+		togglingFavorite = true;
+		try {
+			await favoritesService.toggle('musicbrainz-artist', artist.id, artist.name);
+		} finally {
+			togglingFavorite = false;
+		}
+	}
+
+	async function handleTogglePin() {
+		if (!artist) return;
+		togglingPin = true;
+		try {
+			await pinsService.toggle('musicbrainz-artist', artist.id, artist.name);
+		} finally {
+			togglingPin = false;
+		}
+	}
+
 	onMount(() => {
 		smartSearchService.initializeConfig();
 		fetchArtist(id);
@@ -174,11 +207,17 @@
 					languages: $searchStore.fetchedCandidate.analysis?.languages ?? ''
 				}
 			: null}
+		{isFavorite}
+		{togglingFavorite}
+		{isPinned}
+		{togglingPin}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onshowsearch={() => smartSearchService.show()}
 		onback={() => goto(`${base}/music/artist`)}
 		onalbumclick={(albumId) => goto(`${base}/music/album/${albumId}`)}
+		ontogglefavorite={handleToggleFavorite}
+		ontogglepin={handleTogglePin}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">
