@@ -1,8 +1,12 @@
 <script lang="ts">
-	import { onMount, type Snippet } from 'svelte';
+	import { onMount, tick, type Snippet } from 'svelte';
 	import { get } from 'svelte/store';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import { nodeConnectionService } from 'ui-lib/services/node-connection.service';
+	import {
+		extractInviteFromUrl,
+		clearInviteFromUrl
+	} from 'ui-lib/services/connect-invite.service';
 	import SetupModalContent from './SetupModalContent.svelte';
 
 	let {
@@ -18,6 +22,7 @@
 
 	let reconnecting = $state(false);
 	let reconnectError = $state<string | null>(null);
+	let urlInvite = $state<string | null>(null);
 
 	function connectWith(config: import('ui-lib/types/connection-config.type').ConnectionConfig) {
 		reconnecting = true;
@@ -35,6 +40,7 @@
 			.then(async () => {
 				reconnecting = false;
 				connectionConfigService.save(config);
+				await tick();
 				await onready?.();
 			})
 			.catch((err) => {
@@ -45,6 +51,9 @@
 	}
 
 	onMount(() => {
+		urlInvite = extractInviteFromUrl();
+		clearInviteFromUrl();
+
 		const config = get(configStore);
 		if (config) {
 			connectWith(config);
@@ -52,7 +61,8 @@
 	});
 
 	async function handleConnected() {
-		// Config is saved by SetupModalContent — notify parent so pages re-fetch with auth
+		// Config is saved by SetupModalContent — wait for children to render, then re-fetch with auth
+		await tick();
 		await onready?.();
 	}
 </script>
@@ -72,7 +82,7 @@
 					<span>Previous connection failed: {reconnectError}</span>
 				</div>
 			{/if}
-			<SetupModalContent onconnected={handleConnected} />
+			<SetupModalContent onconnected={handleConnected} initialInvite={urlInvite ?? undefined} />
 		</div>
 		<div class="modal-backdrop"></div>
 	</div>
