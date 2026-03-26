@@ -13,6 +13,8 @@ export interface PassportPayload {
 	address: string;
 	instanceType: string;
 	signalingUrl: string;
+	username?: string;
+	profilePictureUrl?: string;
 }
 
 // ===== Endorsement =====
@@ -59,6 +61,8 @@ export interface PendingContactRequest {
 	passport: PassportData;
 	name: string;
 	address: string;
+	username?: string;
+	profilePictureUrl?: string;
 	receivedAt: string;
 }
 
@@ -68,6 +72,8 @@ export interface AcceptedContact {
 	passport: PassportData;
 	acceptedAt: string;
 	endorsement?: Endorsement;
+	username?: string;
+	profilePictureUrl?: string;
 }
 
 export interface ContactHandshakeState {
