@@ -1,23 +1,28 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import classNames from 'classnames';
 	import { recommendationsService } from 'ui-lib/services/recommendations.service';
 	import type {
 		TopRecommendedMovie,
 		TopRecommendedMovieDetail
 	} from 'ui-lib/types/recommendations.type';
-	import { getPosterUrl, getBackdropUrl, extractYear } from 'addons/tmdb/transform';
+	import { getPosterUrl, getBackdropUrl } from 'addons/tmdb/transform';
 	import TopRecommendedTable from './TopRecommendedTable.svelte';
 
 	let topTable: ReturnType<typeof TopRecommendedTable>;
-	let detailMovies = $state<TopRecommendedMovieDetail[]>([]);
+	let detailMap = $state<Map<number, TopRecommendedMovieDetail>>(new Map());
 	let detailLoading = $state(false);
 	let selectedIndex = $state<number | null>(null);
+	let selectedMovie = $state<TopRecommendedMovie | null>(null);
+
+	let selectedDetail = $derived(
+		selectedMovie ? (detailMap.get(selectedMovie.tmdbId) ?? null) : null
+	);
 
 	async function loadDetails() {
 		detailLoading = true;
 		try {
-			detailMovies = await recommendationsService.getTopMoviesDetail();
+			const movies = await recommendationsService.getTopMoviesDetail();
+			detailMap = new Map(movies.map((m) => [m.tmdbId, m]));
 		} catch {
 			/* best-effort */
 		} finally {
@@ -35,26 +40,16 @@
 		return getBackdropUrl(data.backdrop_path as string | null);
 	}
 
-	function year(data: Record<string, unknown> | null): string {
-		if (!data) return '';
-		return extractYear(data.release_date as string | undefined);
+	function genres(data: Record<string, unknown> | null): string[] {
+		if (!data) return [];
+		const g = data.genres as Array<{ id: number; name: string }> | undefined;
+		if (Array.isArray(g)) return g.map((x) => x.name);
+		return [];
 	}
 
-	function rating(data: Record<string, unknown> | null): string {
-		if (!data) return '—';
-		const val = data.vote_average as number | undefined;
-		return val != null ? val.toFixed(1) : '—';
-	}
-
-	function overview(data: Record<string, unknown> | null): string {
-		if (!data) return '';
-		return (data.overview as string) ?? '';
-	}
-
-	function handleRowClick(index: number, _movie: TopRecommendedMovie) {
+	function handleRowClick(index: number, movie: TopRecommendedMovie) {
 		selectedIndex = index;
-		const el = document.getElementById(`rec-card-${index}`);
-		if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		selectedMovie = movie;
 	}
 
 	onMount(() => {
@@ -92,62 +87,157 @@
 			/>
 		</div>
 
-		<!-- Right: Detail cards -->
-		<div class="min-h-0 flex flex-col gap-6 overflow-y-auto pr-1">
-			{#if detailLoading && detailMovies.length === 0}
+		<!-- Right: Selected movie detail -->
+		<div class="min-h-0 flex flex-col overflow-y-auto pr-1">
+			{#if !selectedMovie}
+				<p class="py-12 text-center text-sm text-base-content/50">
+					Select a movie to see details
+				</p>
+			{:else if detailLoading && !selectedDetail}
 				<div class="flex justify-center py-12">
 					<span class="loading loading-lg loading-spinner"></span>
 				</div>
-			{:else if detailMovies.length === 0}
-				<p class="py-12 text-center text-sm text-base-content/50">
-					No recommendations yet. Use the Recs modal to enqueue movies first.
-				</p>
 			{:else}
-				{#each detailMovies as movie, i (movie.tmdbId)}
-					<div
-						id={`rec-card-${i}`}
-						class={classNames('overflow-hidden rounded-xl bg-base-200', {
-							'ring-2 ring-primary': selectedIndex === i
-						})}
-					>
-						{#if backdropUrl(movie.data)}
-							<img src={backdropUrl(movie.data)} alt="" class="h-44 w-full object-cover" />
+				{@const data = selectedDetail?.data ?? null}
+				<div class="flex flex-col gap-4">
+					{#if backdropUrl(data)}
+						<img
+							src={backdropUrl(data)}
+							alt=""
+							class="h-48 w-full rounded-lg object-cover"
+						/>
+					{/if}
+
+					<div class="flex gap-4">
+						{#if posterUrl(data)}
+							<img
+								src={posterUrl(data)}
+								alt=""
+								class="h-48 w-32 flex-shrink-0 rounded-lg object-cover shadow-md"
+							/>
 						{/if}
-						<div class="flex gap-4 p-4">
-							{#if posterUrl(movie.data)}
-								<img
-									src={posterUrl(movie.data)}
-									alt=""
-									class="h-36 w-24 flex-shrink-0 rounded-lg object-cover shadow-md"
-								/>
+						<div class="min-w-0 flex-1">
+							<h3 class="text-lg font-bold">
+								{selectedMovie.title ?? '—'}
+							</h3>
+							{#if data?.original_title && data.original_title !== selectedMovie.title}
+								<p class="text-sm text-base-content/50">{data.original_title}</p>
 							{/if}
-							<div class="min-w-0 flex-1">
-								<h3 class="text-base font-bold">{movie.title ?? '—'}</h3>
-								<div class="mt-1 flex flex-wrap items-center gap-2 text-sm text-base-content/60">
-									<span>{year(movie.data)}</span>
-									<span>&middot;</span>
-									<span>{rating(movie.data)} / 10</span>
-									<span>&middot;</span>
-									<span class="badge badge-ghost badge-sm">
-										Recommended {movie.count}x
-									</span>
+							{#if genres(data).length > 0}
+								<div class="mt-2 flex flex-wrap gap-1">
+									{#each genres(data) as genre}
+										<span class="badge badge-outline badge-sm">{genre}</span>
+									{/each}
 								</div>
-								{#if overview(movie.data)}
-									<p class="mt-2 text-sm leading-relaxed text-base-content/70">
-										{overview(movie.data)}
-									</p>
-								{/if}
-								{#if movie.sources.length > 0}
-									<p class="mt-2 text-xs text-base-content/50">
-										Recommended from: {movie.sources
-											.map((s) => s.title ?? `TMDB #${s.tmdbId}`)
-											.join(', ')}
-									</p>
-								{/if}
-							</div>
+							{/if}
 						</div>
 					</div>
-				{/each}
+
+					<!-- Metadata grid -->
+					<div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+						{#if data?.release_date}
+							<span class="text-base-content/50">Release Date</span>
+							<span>{data.release_date}</span>
+						{/if}
+						{#if data?.vote_average != null}
+							<span class="text-base-content/50">Rating</span>
+							<span>{Number(data.vote_average).toFixed(1)} / 10</span>
+						{/if}
+						{#if data?.vote_count != null}
+							<span class="text-base-content/50">Vote Count</span>
+							<span>{Number(data.vote_count).toLocaleString()}</span>
+						{/if}
+						{#if data?.popularity != null}
+							<span class="text-base-content/50">Popularity</span>
+							<span>{Number(data.popularity).toFixed(1)}</span>
+						{/if}
+						{#if data?.original_language}
+							<span class="text-base-content/50">Language</span>
+							<span class="uppercase">{data.original_language}</span>
+						{/if}
+						{#if data?.runtime != null}
+							<span class="text-base-content/50">Runtime</span>
+							<span>{data.runtime} min</span>
+						{/if}
+						{#if data?.status}
+							<span class="text-base-content/50">Status</span>
+							<span>{data.status}</span>
+						{/if}
+						{#if data?.budget != null && Number(data.budget) > 0}
+							<span class="text-base-content/50">Budget</span>
+							<span>${Number(data.budget).toLocaleString()}</span>
+						{/if}
+						{#if data?.revenue != null && Number(data.revenue) > 0}
+							<span class="text-base-content/50">Revenue</span>
+							<span>${Number(data.revenue).toLocaleString()}</span>
+						{/if}
+						<span class="text-base-content/50">TMDB ID</span>
+						<span>{selectedMovie.tmdbId}</span>
+					</div>
+
+					<!-- Recommendation stats -->
+					<div class="rounded-lg bg-base-200 p-3">
+						<h4 class="mb-2 text-sm font-semibold">Recommendation Stats</h4>
+						<div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+							<span class="text-base-content/50">Times Recommended</span>
+							<span>{selectedMovie.count}</span>
+							<span class="text-base-content/50">Score</span>
+							<span class="font-semibold">{selectedMovie.score}</span>
+							{#if selectedDetail?.minLevel != null}
+								<span class="text-base-content/50">Min Level</span>
+								<span>{selectedDetail.minLevel}</span>
+							{/if}
+							{#each Object.entries(selectedMovie.levelCounts) as [lvl, cnt]}
+								{#if cnt > 0}
+									<span class="text-base-content/50">Level {lvl}</span>
+									<span>
+										{cnt}x ({selectedMovie.levelPercentages[lvl] ?? 0}%)
+									</span>
+								{/if}
+							{/each}
+						</div>
+					</div>
+
+					<!-- Overview -->
+					{#if data?.overview}
+						<div>
+							<h4 class="mb-1 text-sm font-semibold">Overview</h4>
+							<p class="text-sm leading-relaxed text-base-content/70">
+								{data.overview}
+							</p>
+						</div>
+					{/if}
+
+					{#if data?.tagline}
+						<p class="text-sm italic text-base-content/50">"{data.tagline}"</p>
+					{/if}
+
+					<!-- Production companies -->
+					{#if Array.isArray(data?.production_companies) && (data.production_companies as Array<{name: string}>).length > 0}
+						<div>
+							<h4 class="mb-1 text-sm font-semibold">Production</h4>
+							<p class="text-sm text-base-content/70">
+								{(data.production_companies as Array<{name: string}>).map((c) => c.name).join(', ')}
+							</p>
+						</div>
+					{/if}
+
+					<!-- Sources -->
+					{#if selectedDetail && selectedDetail.sources.length > 0}
+						<div>
+							<h4 class="mb-1 text-sm font-semibold">
+								Recommended From ({selectedDetail.sources.length})
+							</h4>
+							<div class="flex flex-wrap gap-1">
+								{#each selectedDetail.sources as source}
+									<span class="badge badge-ghost badge-sm">
+										{source.title ?? `TMDB #${source.tmdbId}`}
+									</span>
+								{/each}
+							</div>
+						</div>
+					{/if}
+				</div>
 			{/if}
 		</div>
 	</div>
