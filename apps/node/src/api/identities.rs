@@ -12,9 +12,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_identities).post(create_identity))
         .route("/{name}", put(regenerate_identity).delete(delete_identity))
+        .route("/{name}/profile", patch(update_profile))
 }
 
-use axum::routing::put;
+use axum::routing::{patch, put};
 
 async fn list_identities(State(state): State<AppState>) -> impl IntoResponse {
     let identities = state.identity_manager.get_all();
@@ -30,11 +31,19 @@ async fn list_identities(State(state): State<AppState>) -> impl IntoResponse {
                 })
                 .to_string()
             });
-            serde_json::json!({
+            let profile = state.identity_manager.get_profile(&name);
+            let mut entry = serde_json::json!({
                 "name": name,
                 "address": address,
                 "passport": passport_json,
-            })
+            });
+            if let Some(p) = profile {
+                entry["username"] = serde_json::Value::String(p.username);
+                if let Some(pic) = p.profile_picture_url {
+                    entry["profilePictureUrl"] = serde_json::Value::String(pic);
+                }
+            }
+            entry
         })
         .collect();
     Json(entries)
@@ -54,7 +63,13 @@ async fn create_identity(
             .trim()
             .to_uppercase()
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect::<String>(),
         _ => {
             return (
@@ -103,6 +118,35 @@ async fn regenerate_identity(
     }
     let address = state.identity_manager.regenerate(&name);
     Json(serde_json::json!({ "name": name, "address": address })).into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateProfileBody {
+    username: String,
+    #[serde(default)]
+    profile_picture_url: Option<String>,
+}
+
+/// PATCH /api/identities/{name}/profile — set profile for identity
+async fn update_profile(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Json(body): Json<UpdateProfileBody>,
+) -> impl IntoResponse {
+    if state.identity_manager.get_address(&name).is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Identity not found" })),
+        )
+            .into_response();
+    }
+    let profile = mhaol_identity::Profile {
+        username: body.username,
+        profile_picture_url: body.profile_picture_url,
+    };
+    state.identity_manager.set_profile(&name, &profile);
+    Json(serde_json::json!({ "ok": true })).into_response()
 }
 
 /// DELETE /api/identities/{name} — delete identity

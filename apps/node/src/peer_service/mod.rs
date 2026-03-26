@@ -337,10 +337,11 @@ impl PeerServiceManager {
                                         return;
                                     }
 
-                                    // Save to roster
+                                    // Save to roster, preferring username from profile
+                                    let display_name = payload.username.as_deref().unwrap_or(&payload.name);
                                     self.state.roster_contacts.insert(
                                         &payload.address,
-                                        &payload.name,
+                                        display_name,
                                         Some(&passport.raw),
                                         Some(&payload.instance_type),
                                         None,

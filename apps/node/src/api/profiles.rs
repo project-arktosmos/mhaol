@@ -20,9 +20,12 @@ async fn list_profiles(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct AddProfileBody {
     username: String,
     wallet: String,
+    #[serde(default)]
+    profile_picture_url: Option<String>,
 }
 
 async fn get_profile(
@@ -46,6 +49,6 @@ async fn add_profile(
     State(state): State<AppState>,
     Json(body): Json<AddProfileBody>,
 ) -> impl IntoResponse {
-    state.profiles.upsert(&body.username, &body.wallet);
+    state.profiles.upsert(&body.username, &body.wallet, body.profile_picture_url.as_deref());
     StatusCode::CREATED
 }

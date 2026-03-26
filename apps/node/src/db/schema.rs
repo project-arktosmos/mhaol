@@ -280,6 +280,7 @@ const PROFILES_SQL: &str = "
 CREATE TABLE IF NOT EXISTS profiles (
     wallet TEXT PRIMARY KEY,
     username TEXT NOT NULL,
+    profile_picture_url TEXT,
     added_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 ";
@@ -309,7 +310,7 @@ CREATE TABLE IF NOT EXISTS pins (
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '36', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '37', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -1021,6 +1022,11 @@ fn run_migrations(conn: &Connection) {
         && !has_column(conn, "tmdb_recommendations", "genres")
     {
         let _ = conn.execute_batch("ALTER TABLE tmdb_recommendations ADD COLUMN genres TEXT");
+    }
+
+    // Migration: add profile_picture_url to profiles table (db_version 37)
+    if has_table(conn, "profiles") && !has_column(conn, "profiles", "profile_picture_url") {
+        let _ = conn.execute_batch("ALTER TABLE profiles ADD COLUMN profile_picture_url TEXT");
     }
 
     // Migration: add music_torrent_fetch_cache table

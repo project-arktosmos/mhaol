@@ -95,6 +95,17 @@ async fn main() {
     state.identity_manager.ensure_identity("SIGNALING_WALLET");
     state.identity_manager.ensure_identity("CLIENT_WALLET");
 
+    // Bootstrap default profile for SIGNALING_WALLET if none exists
+    if state.identity_manager.get_profile("SIGNALING_WALLET").is_none() {
+        state.identity_manager.set_profile(
+            "SIGNALING_WALLET",
+            &mhaol_identity::Profile {
+                username: "Node".to_string(),
+                profile_picture_url: None,
+            },
+        );
+    }
+
     // Write node-defaults.json for the frontend setup modal
     {
         let local_ip = mhaol_node::api::network::get_local_ip().unwrap_or_default();
