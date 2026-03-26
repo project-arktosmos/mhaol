@@ -765,9 +765,10 @@
 	{#if recsModalOpen}
 		<div class="p-4">
 			<RecommendationsModalContent
-				{pinnedMovies}
-				{favoritedMovies}
-				{libraryMovieTmdbIds}
+				mediaType="movie"
+				pinnedIds={pinnedMovies.map((m) => m.id)}
+				favoritedIds={favoritedMovies.map((m) => m.id)}
+				libraryTmdbIds={libraryMovieTmdbIds}
 			/>
 		</div>
 	{/if}

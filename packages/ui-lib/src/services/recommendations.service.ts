@@ -20,21 +20,26 @@ class RecommendationsService {
 		return res.json();
 	}
 
-	async getStatus(): Promise<RecommendationsStatus> {
-		return fetchJson<RecommendationsStatus>('/api/recommendations/status');
+	async getStatus(mediaType?: string): Promise<RecommendationsStatus> {
+		const params = mediaType ? `?mediaType=${mediaType}` : '';
+		return fetchJson<RecommendationsStatus>(`/api/recommendations/status${params}`);
 	}
 
 	async getForSource(tmdbId: number, mediaType: string): Promise<RecommendationRow[]> {
 		return fetchJson<RecommendationRow[]>(`/api/recommendations/${mediaType}/${tmdbId}`);
 	}
 
-	async getTopMovies(limit = 50): Promise<TopRecommendedMovie[]> {
-		return fetchJson<TopRecommendedMovie[]>(`/api/recommendations/top-movies?limit=${limit}`);
+	async getTopMovies(mediaType?: string, limit = 50): Promise<TopRecommendedMovie[]> {
+		const params = new URLSearchParams({ limit: String(limit) });
+		if (mediaType) params.set('mediaType', mediaType);
+		return fetchJson<TopRecommendedMovie[]>(`/api/recommendations/top-movies?${params}`);
 	}
 
-	async getTopMoviesDetail(limit = 50): Promise<TopRecommendedMovieDetail[]> {
+	async getTopMoviesDetail(mediaType?: string, limit = 50): Promise<TopRecommendedMovieDetail[]> {
+		const params = new URLSearchParams({ limit: String(limit) });
+		if (mediaType) params.set('mediaType', mediaType);
 		return fetchJson<TopRecommendedMovieDetail[]>(
-			`/api/recommendations/top-movies-detail?limit=${limit}`
+			`/api/recommendations/top-movies-detail?${params}`
 		);
 	}
 

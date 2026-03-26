@@ -9,15 +9,17 @@
 		RecommendationsStatus,
 		TopRecommendedMovie
 	} from 'ui-lib/types/recommendations.type';
-	import type { DisplayTMDBMovie } from 'addons/tmdb/types';
 
 	interface Props {
-		pinnedMovies: DisplayTMDBMovie[];
-		favoritedMovies: DisplayTMDBMovie[];
-		libraryMovieTmdbIds: number[];
+		mediaType: 'movie' | 'tv';
+		pinnedIds: number[];
+		favoritedIds: number[];
+		libraryTmdbIds: number[];
 	}
 
-	let { pinnedMovies, favoritedMovies, libraryMovieTmdbIds }: Props = $props();
+	let { mediaType, pinnedIds, favoritedIds, libraryTmdbIds }: Props = $props();
+
+	let label = $derived(mediaType === 'movie' ? 'Movie' : 'TV');
 
 	let status = $state<RecommendationsStatus | null>(null);
 	let enqueueing = $state(false);
@@ -30,14 +32,18 @@
 
 	const queueStore = queueService.store;
 
-	let recTasks = $derived($queueStore.tasks.filter((t) => t.taskType === 'recommendations:fetch'));
+	let recTasks = $derived(
+		$queueStore.tasks.filter(
+			(t) => t.taskType === 'recommendations:fetch' && t.payload.mediaType === mediaType
+		)
+	);
 	let connected = $derived($queueStore.connected);
 
 	let allTmdbIds = $derived(() => {
 		const ids = new Set<number>();
-		for (const m of pinnedMovies) ids.add(m.id);
-		for (const m of favoritedMovies) ids.add(m.id);
-		for (const id of libraryMovieTmdbIds) ids.add(id);
+		for (const id of pinnedIds) ids.add(id);
+		for (const id of favoritedIds) ids.add(id);
+		for (const id of libraryTmdbIds) ids.add(id);
 		return ids;
 	});
 
@@ -48,7 +54,7 @@
 
 	async function loadStatus() {
 		try {
-			status = await recommendationsService.getStatus();
+			status = await recommendationsService.getStatus(mediaType);
 		} catch {
 			/* best-effort */
 		}
@@ -57,7 +63,7 @@
 	async function loadStats() {
 		statsLoading = true;
 		try {
-			topMovies = await recommendationsService.getTopMovies();
+			topMovies = await recommendationsService.getTopMovies(mediaType);
 		} catch {
 			/* best-effort */
 		} finally {
@@ -65,7 +71,7 @@
 		}
 	}
 
-	async function enqueueAndRefresh(items: { tmdbId: number; mediaType: 'movie' }[]) {
+	async function enqueueAndRefresh(items: { tmdbId: number; mediaType: 'movie' | 'tv' }[]) {
 		if (items.length === 0) return;
 		enqueueing = true;
 		try {
@@ -82,19 +88,19 @@
 	}
 
 	function enqueueAll() {
-		enqueueAndRefresh([...allTmdbIds()].map((tmdbId) => ({ tmdbId, mediaType: 'movie' })));
+		enqueueAndRefresh([...allTmdbIds()].map((tmdbId) => ({ tmdbId, mediaType })));
 	}
 
 	function enqueuePinned() {
-		enqueueAndRefresh(pinnedMovies.map((m) => ({ tmdbId: m.id, mediaType: 'movie' })));
+		enqueueAndRefresh(pinnedIds.map((tmdbId) => ({ tmdbId, mediaType })));
 	}
 
 	function enqueueFavorited() {
-		enqueueAndRefresh(favoritedMovies.map((m) => ({ tmdbId: m.id, mediaType: 'movie' })));
+		enqueueAndRefresh(favoritedIds.map((tmdbId) => ({ tmdbId, mediaType })));
 	}
 
 	function enqueueLibrary() {
-		enqueueAndRefresh(libraryMovieTmdbIds.map((tmdbId) => ({ tmdbId, mediaType: 'movie' })));
+		enqueueAndRefresh(libraryTmdbIds.map((tmdbId) => ({ tmdbId, mediaType })));
 	}
 
 	async function toggleExpand(task: QueueTask) {
@@ -176,7 +182,7 @@
 
 <div class="flex max-h-[80vh] flex-col gap-4 overflow-hidden">
 	<div class="flex items-center justify-between">
-		<h2 class="text-lg font-bold">Recommendations Queue</h2>
+		<h2 class="text-lg font-bold">{label} Recommendations Queue</h2>
 		<div class="flex items-center gap-2">
 			<span class={classNames('badge badge-xs', connected ? 'badge-success' : 'badge-error')}
 			></span>
@@ -197,24 +203,24 @@
 		</button>
 		<button
 			class="btn btn-outline btn-sm"
-			disabled={enqueueing || pinnedMovies.length === 0}
+			disabled={enqueueing || pinnedIds.length === 0}
 			onclick={enqueuePinned}
 		>
-			Pinned ({pinnedMovies.length})
+			Pinned ({pinnedIds.length})
 		</button>
 		<button
 			class="btn btn-outline btn-sm"
-			disabled={enqueueing || favoritedMovies.length === 0}
+			disabled={enqueueing || favoritedIds.length === 0}
 			onclick={enqueueFavorited}
 		>
-			Favorites ({favoritedMovies.length})
+			Favorites ({favoritedIds.length})
 		</button>
 		<button
 			class="btn btn-outline btn-sm"
-			disabled={enqueueing || libraryMovieTmdbIds.length === 0}
+			disabled={enqueueing || libraryTmdbIds.length === 0}
 			onclick={enqueueLibrary}
 		>
-			Library ({libraryMovieTmdbIds.length})
+			Library ({libraryTmdbIds.length})
 		</button>
 		<button class="btn btn-ghost btn-sm" onclick={loadStats} disabled={statsLoading}>
 			{#if statsLoading}

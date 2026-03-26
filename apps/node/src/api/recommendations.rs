@@ -94,23 +94,39 @@ async fn get_recommendations(
     Json(serde_json::json!(recs))
 }
 
-async fn status(State(state): State<AppState>) -> impl IntoResponse {
+async fn status(
+    State(state): State<AppState>,
+    Query(q): Query<FilterQuery>,
+) -> impl IntoResponse {
     let all = state
         .queue
         .list(None, Some(mhaol_recommendations::TASK_FETCH));
-    let pending = all
+    let filtered: Vec<_> = if let Some(ref mt) = q.media_type {
+        all.into_iter()
+            .filter(|t| {
+                t.payload
+                    .get("mediaType")
+                    .and_then(|v| v.as_str())
+                    .map(|v| v == mt)
+                    .unwrap_or(false)
+            })
+            .collect()
+    } else {
+        all
+    };
+    let pending = filtered
         .iter()
         .filter(|t| t.status == mhaol_queue::QueueTaskStatus::Pending)
         .count();
-    let running = all
+    let running = filtered
         .iter()
         .filter(|t| t.status == mhaol_queue::QueueTaskStatus::Running)
         .count();
-    let completed = all
+    let completed = filtered
         .iter()
         .filter(|t| t.status == mhaol_queue::QueueTaskStatus::Completed)
         .count();
-    let failed = all
+    let failed = filtered
         .iter()
         .filter(|t| t.status == mhaol_queue::QueueTaskStatus::Failed)
         .count();
@@ -119,16 +135,22 @@ async fn status(State(state): State<AppState>) -> impl IntoResponse {
         "running": running,
         "completed": completed,
         "failed": failed,
-        "total": all.len(),
+        "total": filtered.len(),
     }))
 }
 
 async fn top_movies(
     State(state): State<AppState>,
-    Query(q): Query<LimitQuery>,
+    Query(q): Query<FilterQuery>,
 ) -> impl IntoResponse {
     let limit = q.limit.unwrap_or(50);
-    let rows = state.recommendations.top_recommended_movies(limit);
+    let rows = if let Some(ref mt) = q.media_type {
+        state
+            .recommendations
+            .top_recommended_by_source_type(mt, limit)
+    } else {
+        state.recommendations.top_recommended_movies(limit)
+    };
     let result: Vec<serde_json::Value> = rows
         .into_iter()
         .map(|(tmdb_id, media_type, title, count)| {
@@ -145,7 +167,7 @@ async fn top_movies(
 
 async fn top_movies_detail(
     State(state): State<AppState>,
-    Query(q): Query<LimitQuery>,
+    Query(q): Query<FilterQuery>,
 ) -> impl IntoResponse {
     let limit = q.limit.unwrap_or(50);
     let rows = state.recommendations.top_recommended_movies_with_data(limit);
@@ -166,7 +188,7 @@ async fn top_movies_detail(
 
 async fn top_genres(
     State(state): State<AppState>,
-    Query(q): Query<LimitQuery>,
+    Query(q): Query<FilterQuery>,
 ) -> impl IntoResponse {
     let limit = q.limit.unwrap_or(50);
     let rows = state.recommendations.top_genres(limit);

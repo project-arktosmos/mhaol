@@ -12,6 +12,8 @@
 	import TmdbCatalogGrid from 'ui-lib/components/catalog/TmdbCatalogGrid.svelte';
 	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
 	import TvShowMatchModal from 'ui-lib/components/libraries/TvShowMatchModal.svelte';
+	import Modal from 'ui-lib/components/core/Modal.svelte';
+	import RecommendationsModalContent from 'ui-lib/components/recommendations/RecommendationsModalContent.svelte';
 	import Portal from 'ui-lib/components/core/Portal.svelte';
 	import classNames from 'classnames';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
@@ -20,6 +22,8 @@
 
 	const mediaBar = getContext<MediaBarContext>(MEDIA_BAR_KEY);
 	mediaBar.configure({ title: 'TV Shows' });
+
+	let recsModalOpen = $state(false);
 
 	interface Props {
 		data: {
@@ -217,6 +221,13 @@
 	let listIdMap = $derived(new Map(tvShowLists.map((list, i) => [list.id, -(i + 1)])));
 	let listByDisplayId = $derived(new Map(tvShowLists.map((list) => [listIdMap.get(list.id)!, list])));
 
+	let libraryTvTmdbIds = $derived(
+		tvShowLists
+			.map((list) => list.links?.tmdb?.serviceId)
+			.filter((id): id is string => id != null)
+			.map(Number)
+	);
+
 	let seasonCountByShowId = $derived.by(() => {
 		const counts = new Map<string, number>();
 		for (const list of data.lists ?? []) {
@@ -333,6 +344,7 @@
 		<input type="text" placeholder="Search TV shows..." class="input join-item input-bordered input-sm w-48" bind:value={tvSearchInput} />
 		<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
 	</form>
+	<button class="btn btn-ghost btn-sm" onclick={() => (recsModalOpen = true)}>Recs</button>
 	<BrowseViewToggle />
 </Portal>
 
@@ -486,3 +498,16 @@
 		onclose={() => (matchModalList = null)}
 	/>
 {/if}
+
+<Modal open={recsModalOpen} maxWidth="max-w-[90vw]" onclose={() => (recsModalOpen = false)}>
+	{#if recsModalOpen}
+		<div class="p-4">
+			<RecommendationsModalContent
+				mediaType="tv"
+				pinnedIds={[...pinnedTmdbTvIds]}
+				favoritedIds={[...favoritedTmdbTvIds]}
+				libraryTmdbIds={libraryTvTmdbIds}
+			/>
+		</div>
+	{/if}
+</Modal>
