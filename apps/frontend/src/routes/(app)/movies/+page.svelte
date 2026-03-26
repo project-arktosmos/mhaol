@@ -14,9 +14,9 @@
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 	import type { LibraryFile } from 'ui-lib/types/library.type';
 	import type { MediaItem, MediaItemLink, MediaLinkSource, MediaCategory } from 'ui-lib/types/media-card.type';
-	import type { DisplayTMDBMovie, DisplayTMDBMovieDetails } from 'addons/tmdb/types';
-	import { movieDetailsToDisplay, getPosterUrl, getBackdropUrl } from 'addons/tmdb/transform';
-	import { tmdbBrowseService } from 'ui-lib/services/tmdb-browse.service';
+	import type { DisplayTMDBMovie, DisplayTMDBMovieDetails, TMDBMovie } from 'addons/tmdb/types';
+	import { movieDetailsToDisplay, moviesToDisplay, getPosterUrl, getBackdropUrl } from 'addons/tmdb/transform';
+	import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { smartPairService } from 'ui-lib/services/smart-pair.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
@@ -50,9 +50,67 @@
 	let pinnedMovies = $state<DisplayTMDBMovie[]>([]);
 	let movieImageOverrides = $state<Map<number, Record<string, string>>>(new Map());
 
-	// === Browse state ===
-	const browseState = tmdbBrowseService.state;
+	// === Browse state (inline, replaces tmdbBrowseService) ===
+	interface TmdbPagedResponse { results: TMDBMovie[]; total_pages: number; page: number; }
+	let popularMovies = $state<DisplayTMDBMovie[]>([]);
+	let popularMoviesPage = $state(1);
+	let popularMoviesTotalPages = $state(1);
+	let discoverMovies = $state<DisplayTMDBMovie[]>([]);
+	let discoverMoviesPage = $state(1);
+	let discoverMoviesTotalPages = $state(1);
+	let selectedGenreId = $state<number | null>(null);
+	let movieGenres = $state<Array<{ id: number; name: string }>>([]);
+	let searchMovies = $state<DisplayTMDBMovie[]>([]);
+	let searchMoviesPage = $state(1);
+	let searchMoviesTotalPages = $state(1);
+	let searchQuery = $state('');
+	let browseLoading = $state<Record<string, boolean>>({});
 	let browseTab: 'popular' | 'discover' = $state('popular');
+
+	async function loadPopularMovies(page = 1) {
+		browseLoading = { ...browseLoading, popularMovies: true };
+		try {
+			const data = await fetchJson<TmdbPagedResponse>(`/api/tmdb/popular/movies?page=${page}`);
+			popularMovies = moviesToDisplay(data.results);
+			popularMoviesPage = data.page;
+			popularMoviesTotalPages = data.total_pages;
+		} catch { /* best-effort */ }
+		browseLoading = { ...browseLoading, popularMovies: false };
+	}
+
+	async function loadDiscoverMovies(page = 1, genreId: number | null = null) {
+		browseLoading = { ...browseLoading, discoverMovies: true };
+		selectedGenreId = genreId;
+		try {
+			let url = `/api/tmdb/discover/movies?page=${page}`;
+			if (genreId) url += `&with_genres=${genreId}`;
+			const data = await fetchJson<TmdbPagedResponse>(url);
+			discoverMovies = moviesToDisplay(data.results);
+			discoverMoviesPage = data.page;
+			discoverMoviesTotalPages = data.total_pages;
+		} catch { /* best-effort */ }
+		browseLoading = { ...browseLoading, discoverMovies: false };
+	}
+
+	async function loadMovieGenres() {
+		try {
+			const data = await fetchJson<{ genres: Array<{ id: number; name: string }> }>('/api/tmdb/genres/movie');
+			movieGenres = data?.genres ?? [];
+		} catch { /* best-effort */ }
+	}
+
+	async function doSearchMovies(query: string, page = 1) {
+		if (!query.trim()) return;
+		browseLoading = { ...browseLoading, searchMovies: true };
+		searchQuery = query;
+		try {
+			const data = await fetchJson<TmdbPagedResponse>(`/api/tmdb/search/movies?q=${encodeURIComponent(query)}&page=${page}`);
+			searchMovies = moviesToDisplay(data.results);
+			searchMoviesPage = data.page;
+			searchMoviesTotalPages = data.total_pages;
+		} catch { /* best-effort */ }
+		browseLoading = { ...browseLoading, searchMovies: false };
+	}
 
 	// === Smart search ===
 	const searchStore = smartSearchService.store;
@@ -434,9 +492,9 @@
 		loadFetchCacheIds();
 		loadFetchCacheHashes();
 		loadFetchCacheSummaries();
-		tmdbBrowseService.loadPopularMovies();
-		tmdbBrowseService.loadGenres();
-		tmdbBrowseService.loadDiscoverMovies();
+		loadPopularMovies();
+		loadMovieGenres();
+		loadDiscoverMovies();
 		smartPairService.loadPinned().then((pinned) => { pinnedMovies = pinned.movies; });
 	});
 </script>
@@ -452,7 +510,7 @@
 		<div class="flex items-center justify-between gap-4 border-b border-base-300 px-4 py-3">
 			<h1 class="text-lg font-bold">Movies</h1>
 			<div class="flex items-center gap-2">
-				<form class="join" onsubmit={(e) => { e.preventDefault(); if (movieSearchInput.trim()) tmdbBrowseService.searchMovies(movieSearchInput.trim()); }}>
+				<form class="join" onsubmit={(e) => { e.preventDefault(); if (movieSearchInput.trim()) doSearchMovies(movieSearchInput.trim()); }}>
 					<input type="text" placeholder="Search movies..." class="input join-item input-bordered input-sm w-48" bind:value={movieSearchInput} />
 					<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
 				</form>
@@ -489,16 +547,16 @@
 				</section>
 			{/if}
 
-			{#if $browseState.loading['searchMovies']}
+			{#if browseLoading['searchMovies']}
 				<section class="mb-8">
 					<h2 class="mb-3 text-lg font-semibold">Search Results</h2>
 					<div class="flex justify-center p-8"><span class="loading loading-lg loading-spinner"></span></div>
 				</section>
-			{:else if $browseState.searchMovies.length > 0}
+			{:else if searchMovies.length > 0}
 				<section class="mb-8">
 					<h2 class="mb-3 text-lg font-semibold">Search Results</h2>
 					<TmdbCatalogGrid
-						movies={applyOverridesToMovies($browseState.searchMovies)}
+						movies={applyOverridesToMovies(searchMovies)}
 						fetchedIds={fetchCachedTmdbIds}
 						favoritedIds={favoritedTmdbIds}
 						pinnedIds={pinnedTmdbIds}
@@ -509,10 +567,10 @@
 						onsmartSearch={handleSmartSearch}
 					/>
 					<TmdbPagination
-						page={$browseState.searchMoviesPage}
-						totalPages={$browseState.searchMoviesTotalPages}
-						loading={$browseState.loading['searchMovies'] ?? false}
-						onpage={(p) => tmdbBrowseService.searchMovies($browseState.searchQuery, p)}
+						page={searchMoviesPage}
+						totalPages={searchMoviesTotalPages}
+						loading={browseLoading['searchMovies'] ?? false}
+						onpage={(p) => doSearchMovies(searchQuery, p)}
 					/>
 				</section>
 			{/if}
@@ -541,11 +599,11 @@
 				</div>
 
 				{#if browseTab === 'popular'}
-					{#if $browseState.loading['popularMovies']}
+					{#if browseLoading['popularMovies']}
 						<div class="flex justify-center p-8"><span class="loading loading-lg loading-spinner"></span></div>
-					{:else if $browseState.popularMovies.length > 0}
+					{:else if popularMovies.length > 0}
 						<TmdbCatalogGrid
-							movies={applyOverridesToMovies($browseState.popularMovies)}
+							movies={applyOverridesToMovies(popularMovies)}
 							fetchedIds={fetchCachedTmdbIds}
 							favoritedIds={favoritedTmdbIds}
 							pinnedIds={pinnedTmdbIds}
@@ -556,24 +614,24 @@
 							onsmartSearch={handleSmartSearch}
 						/>
 						<TmdbPagination
-							page={$browseState.popularMoviesPage}
-							totalPages={$browseState.popularMoviesTotalPages}
-							loading={$browseState.loading['popularMovies'] ?? false}
-							onpage={(p) => tmdbBrowseService.loadPopularMovies(p)}
+							page={popularMoviesPage}
+							totalPages={popularMoviesTotalPages}
+							loading={browseLoading['popularMovies'] ?? false}
+							onpage={(p) => loadPopularMovies(p)}
 						/>
 					{/if}
 				{:else}
-					{#if $browseState.movieGenres.length > 0}
+					{#if movieGenres.length > 0}
 						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-							{#each $browseState.movieGenres as genre (genre.id)}
+							{#each movieGenres as genre (genre.id)}
 								<button
 									class={classNames('btn btn-sm h-auto min-h-12 flex-col py-2', {
-										'btn-primary': $browseState.selectedGenreId === genre.id,
-										'btn-ghost bg-base-200': $browseState.selectedGenreId !== genre.id
+										'btn-primary': selectedGenreId === genre.id,
+										'btn-ghost bg-base-200': selectedGenreId !== genre.id
 									})}
 									onclick={() => {
-										const genreId = $browseState.selectedGenreId === genre.id ? null : genre.id;
-										tmdbBrowseService.loadDiscoverMovies(1, genreId);
+										const genreId = selectedGenreId === genre.id ? null : genre.id;
+										loadDiscoverMovies(1, genreId);
 									}}
 								>
 									{genre.name}
@@ -581,12 +639,12 @@
 							{/each}
 						</div>
 					{/if}
-					{#if $browseState.loading['discoverMovies']}
+					{#if browseLoading['discoverMovies']}
 						<div class="flex justify-center p-8"><span class="loading loading-lg loading-spinner"></span></div>
-					{:else if $browseState.discoverMovies.length > 0}
+					{:else if discoverMovies.length > 0}
 						<div class="mt-4">
 							<TmdbCatalogGrid
-								movies={applyOverridesToMovies($browseState.discoverMovies)}
+								movies={applyOverridesToMovies(discoverMovies)}
 								fetchedIds={fetchCachedTmdbIds}
 								favoritedIds={favoritedTmdbIds}
 								pinnedIds={pinnedTmdbIds}
@@ -597,10 +655,10 @@
 								onsmartSearch={handleSmartSearch}
 							/>
 							<TmdbPagination
-								page={$browseState.discoverMoviesPage}
-								totalPages={$browseState.discoverMoviesTotalPages}
-								loading={$browseState.loading['discoverMovies'] ?? false}
-								onpage={(p) => tmdbBrowseService.loadDiscoverMovies(p, $browseState.selectedGenreId)}
+								page={discoverMoviesPage}
+								totalPages={discoverMoviesTotalPages}
+								loading={browseLoading['discoverMovies'] ?? false}
+								onpage={(p) => loadDiscoverMovies(p, selectedGenreId)}
 							/>
 						</div>
 					{/if}
