@@ -2,13 +2,16 @@
 	import type { Snippet } from 'svelte';
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
+	import PinnedFavoritesSection from './PinnedFavoritesSection.svelte';
 	import CatalogCard from './CatalogCard.svelte';
 	import { catalogItemToCardData } from 'ui-lib/adapters/classes/catalog-card.adapter';
+	import type { CatalogKindStrategy } from 'ui-lib/services/catalog.service';
 	import type { CatalogBrowseState, CatalogItem, CatalogCardData } from 'ui-lib/types/catalog.type';
 
 	interface Props {
 		browseState: CatalogBrowseState;
 		title: string;
+		strategy?: CatalogKindStrategy;
 		cardOverlays?: (item: CatalogItem) => Partial<CatalogCardData>;
 		onsearch: (query: string) => void;
 		ontabchange: (tabId: string) => void;
@@ -20,6 +23,7 @@
 	let {
 		browseState,
 		title,
+		strategy,
 		cardOverlays,
 		onsearch,
 		ontabchange,
@@ -97,6 +101,10 @@
 		<div class="border-b border-base-300 px-4 py-2">
 			{@render filterBar()}
 		</div>
+	{/if}
+
+	{#if strategy?.resolveByIds}
+		<PinnedFavoritesSection {strategy} {cardOverlays} {onselectitem} />
 	{/if}
 
 	<BrowseGrid
