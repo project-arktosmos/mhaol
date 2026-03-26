@@ -34,6 +34,9 @@ export interface TopRecommendedMovie {
 	title: string | null;
 	count: number;
 	levelCounts: Record<string, number>;
+	levelPercentages: Record<string, number>;
+	score: number;
+	levels: number[];
 }
 
 export interface RecommendationSource {

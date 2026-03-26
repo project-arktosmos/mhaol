@@ -30,39 +30,6 @@
 	let topMovies = $state<TopRecommendedMovie[]>([]);
 	let statsLoading = $state(false);
 
-	let levels = $derived(() => {
-		const s = new Set<number>();
-		for (const m of topMovies) {
-			for (const k of Object.keys(m.levelCounts)) s.add(Number(k));
-		}
-		return [...s].sort((a, b) => a - b);
-	});
-
-	let levelTotals = $derived(() => {
-		const totals: Record<number, number> = {};
-		for (const m of topMovies) {
-			for (const [k, v] of Object.entries(m.levelCounts)) {
-				const lvl = Number(k);
-				totals[lvl] = (totals[lvl] ?? 0) + v;
-			}
-		}
-		return totals;
-	});
-
-	function movieScore(movie: TopRecommendedMovie): number {
-		const lvls = levels();
-		const tots = levelTotals();
-		return lvls.reduce((sum, lvl) => {
-			const cnt = movie.levelCounts[lvl] ?? 0;
-			const total = tots[lvl] ?? 0;
-			return sum + (total > 0 ? Math.round((cnt / total) * 100) : 0);
-		}, 0);
-	}
-
-	let sortedTopMovies = $derived(
-		[...topMovies].sort((a, b) => movieScore(b) - movieScore(a))
-	);
-
 	const queueStore = queueService.store;
 
 	let recTasks = $derived(
@@ -454,34 +421,33 @@
 				{:else if topMovies.length === 0}
 					<p class="py-4 text-center text-xs text-base-content/50">No data yet</p>
 				{:else}
+					{@const lvls = topMovies[0]?.levels ?? []}
 					<div class="max-h-[35vh] overflow-y-auto">
 						<table class="table table-xs">
 							<thead>
 								<tr>
 									<th>#</th>
 									<th>Title</th>
-									{#each levels() as lvl}
+									{#each lvls as lvl}
 										<th class="text-center" colspan="2">L{lvl}</th>
 									{/each}
 									<th class="text-center">Score</th>
 								</tr>
 							</thead>
 							<tbody>
-								{#each sortedTopMovies as movie, i (movie.tmdbId)}
-									{@const score = movieScore(movie)}
+								{#each topMovies as movie, i (movie.tmdbId)}
 									<tr>
 										<td class="text-base-content/40">{i + 1}</td>
 										<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
-										{#each levels() as lvl}
+										{#each lvls as lvl}
 											{@const cnt = movie.levelCounts[lvl] ?? 0}
-											{@const total = levelTotals()[lvl] ?? 0}
-											{@const pct = total > 0 ? Math.round((cnt / total) * 100) : 0}
+											{@const pct = movie.levelPercentages[lvl] ?? 0}
 											<td class="text-center">{cnt || ''}</td>
 											<td class="text-center text-base-content/40">
 												{cnt ? `${pct}%` : ''}
 											</td>
 										{/each}
-										<td class="text-center font-semibold">{score}</td>
+										<td class="text-center font-semibold">{movie.score}</td>
 									</tr>
 								{/each}
 							</tbody>

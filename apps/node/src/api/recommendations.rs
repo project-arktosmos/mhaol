@@ -148,22 +148,59 @@ async fn top_movies(
     let rows = state
         .recommendations
         .top_recommended_with_level_counts(q.media_type.as_deref(), limit);
-    let result: Vec<serde_json::Value> = rows
+
+    // Compute totals per level across all results
+    let mut level_totals: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+    for (_, _, _, _, ref level_counts) in &rows {
+        for (&lvl, &cnt) in level_counts {
+            *level_totals.entry(lvl).or_insert(0) += cnt;
+        }
+    }
+
+    // Collect all levels sorted
+    let mut levels: Vec<i64> = level_totals.keys().copied().collect();
+    levels.sort();
+
+    // Build result with percentages and scores, sorted by score desc
+    let mut result: Vec<serde_json::Value> = rows
         .into_iter()
         .map(|(tmdb_id, media_type, title, count, level_counts)| {
-            let lc: serde_json::Map<String, serde_json::Value> = level_counts
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), serde_json::Value::from(v)))
-                .collect();
+            let mut lc = serde_json::Map::new();
+            let mut lp = serde_json::Map::new();
+            let mut score: i64 = 0;
+
+            for &lvl in &levels {
+                let cnt = level_counts.get(&lvl).copied().unwrap_or(0);
+                let total = level_totals.get(&lvl).copied().unwrap_or(0);
+                let pct = if total > 0 {
+                    ((cnt as f64 / total as f64) * 100.0).round() as i64
+                } else {
+                    0
+                };
+                lc.insert(lvl.to_string(), serde_json::Value::from(cnt));
+                lp.insert(lvl.to_string(), serde_json::Value::from(pct));
+                score += pct;
+            }
+
             serde_json::json!({
                 "tmdbId": tmdb_id,
                 "mediaType": media_type,
                 "title": title,
                 "count": count,
                 "levelCounts": lc,
+                "levelPercentages": lp,
+                "score": score,
+                "levels": levels,
             })
         })
         .collect();
+
+    result.sort_by(|a, b| {
+        let sa = a["score"].as_i64().unwrap_or(0);
+        let sb = b["score"].as_i64().unwrap_or(0);
+        sb.cmp(&sa)
+    });
+
     Json(serde_json::json!(result))
 }
 
