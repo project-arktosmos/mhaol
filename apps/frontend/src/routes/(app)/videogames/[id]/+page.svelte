@@ -61,6 +61,7 @@
 	});
 
 	let matchedTorrent = $derived.by((): TorrentInfo | null => {
+		void $torrentState;
 		const candidate = $searchStore.fetchedCandidate;
 		if (candidate?.infoHash) {
 			const t = torrentService.findByHash(candidate.infoHash);
