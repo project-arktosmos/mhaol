@@ -4,11 +4,8 @@
 	import { queueService } from 'ui-lib/services/queue.service';
 	import { recommendationsService } from 'ui-lib/services/recommendations.service';
 	import type { QueueTask } from 'ui-lib/types/queue.type';
-	import type {
-		RecommendationRow,
-		RecommendationsStatus,
-		TopRecommendedMovie
-	} from 'ui-lib/types/recommendations.type';
+	import type { RecommendationRow, RecommendationsStatus } from 'ui-lib/types/recommendations.type';
+	import TopRecommendedTable from './TopRecommendedTable.svelte';
 
 	interface Props {
 		mediaType: 'movie' | 'tv';
@@ -27,8 +24,7 @@
 	let expandedRecs = $state<Map<string, RecommendationRow[]>>(new Map());
 	let loadingRecs = $state<Set<string>>(new Set());
 
-	let topMovies = $state<TopRecommendedMovie[]>([]);
-	let statsLoading = $state(false);
+	let topTable: ReturnType<typeof TopRecommendedTable>;
 
 	const queueStore = queueService.store;
 
@@ -57,17 +53,6 @@
 			status = await recommendationsService.getStatus(mediaType);
 		} catch {
 			/* best-effort */
-		}
-	}
-
-	async function loadStats() {
-		statsLoading = true;
-		try {
-			topMovies = await recommendationsService.getTopMovies(mediaType);
-		} catch {
-			/* best-effort */
-		} finally {
-			statsLoading = false;
 		}
 	}
 
@@ -134,7 +119,7 @@
 	$effect(() => {
 		const c = completedCount;
 		if (c > prevCompleted && prevCompleted > 0) {
-			loadStats();
+			topTable?.refresh();
 		}
 		prevCompleted = c;
 	});
@@ -170,7 +155,7 @@
 
 	onMount(() => {
 		loadStatus();
-		loadStats();
+		topTable?.refresh();
 		queueService.fetchTasks(undefined, 'recommendations:fetch');
 		queueService.subscribe();
 	});
@@ -222,8 +207,12 @@
 		>
 			Library ({libraryTmdbIds.length})
 		</button>
-		<button class="btn btn-ghost btn-sm" onclick={loadStats} disabled={statsLoading}>
-			{#if statsLoading}
+		<button
+			class="btn btn-ghost btn-sm"
+			onclick={() => topTable?.refresh()}
+			disabled={topTable?.isLoading()}
+		>
+			{#if topTable?.isLoading()}
 				<span class="loading loading-xs loading-spinner"></span>
 			{/if}
 			Refresh Stats
@@ -240,9 +229,9 @@
 		</div>
 	{/if}
 
-	<div class="grid min-h-0 flex-1 grid-cols-2 gap-4 overflow-hidden">
+	<div class="grid min-h-0 flex-1 grid-cols-2 grid-rows-1 gap-4">
 		<!-- Left: Queue tasks -->
-		<div class="flex flex-col gap-2 overflow-y-auto">
+		<div class="min-h-0 flex flex-col gap-2 overflow-y-auto">
 			{#if recTasks.length > 0}
 				<div class="flex items-center justify-between text-xs text-base-content/50">
 					<span>
@@ -411,50 +400,9 @@
 		</div>
 
 		<!-- Right: Aggregated stats -->
-		<div class="flex flex-col gap-4 overflow-y-auto">
-			<div>
-				<h3 class="mb-2 text-sm font-semibold">Top Recommended Movies</h3>
-				{#if statsLoading && topMovies.length === 0}
-					<div class="flex justify-center py-4">
-						<span class="loading loading-sm loading-spinner"></span>
-					</div>
-				{:else if topMovies.length === 0}
-					<p class="py-4 text-center text-xs text-base-content/50">No data yet</p>
-				{:else}
-					{@const lvls = topMovies[0]?.levels ?? []}
-					<div class="max-h-[35vh] overflow-y-auto">
-						<table class="table table-xs">
-							<thead>
-								<tr>
-									<th>#</th>
-									<th>Title</th>
-									{#each lvls as lvl}
-										<th class="text-center" colspan="2">L{lvl}</th>
-									{/each}
-									<th class="text-center">Score</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each topMovies as movie, i (movie.tmdbId)}
-									<tr>
-										<td class="text-base-content/40">{i + 1}</td>
-										<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
-										{#each lvls as lvl}
-											{@const cnt = movie.levelCounts[lvl] ?? 0}
-											{@const pct = movie.levelPercentages[lvl] ?? 0}
-											<td class="text-center">{cnt || ''}</td>
-											<td class="text-center text-base-content/40">
-												{cnt ? `${pct}%` : ''}
-											</td>
-										{/each}
-										<td class="text-center font-semibold">{movie.score}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				{/if}
-			</div>
+		<div class="min-h-0 flex flex-col gap-4 overflow-y-auto">
+			<h3 class="mb-2 text-sm font-semibold">Top Recommended Movies</h3>
+			<TopRecommendedTable bind:this={topTable} {mediaType} />
 		</div>
 	</div>
 </div>
