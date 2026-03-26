@@ -28,6 +28,7 @@ pub mod player;
 pub mod plugins;
 pub mod profiles;
 pub mod queue;
+pub mod recommendation_labels;
 pub mod recommendations;
 pub mod retroachievements;
 pub mod roster;
@@ -91,7 +92,8 @@ pub fn build_app_router(state: AppState) -> Router {
         .nest("/api/smart-pair", smart_pair::router())
         .nest("/api/smart-search", smart_search::router())
         .nest("/api/catalog", catalog::router())
-        .nest("/api/recommendations", recommendations::router());
+        .nest("/api/recommendations", recommendations::router())
+        .nest("/api/recommendation-labels", recommendation_labels::router());
 
     #[cfg(not(target_os = "android"))]
     let protected = protected.nest("/api/ytdl", ytdl::router());
