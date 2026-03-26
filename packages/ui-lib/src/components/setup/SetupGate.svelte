@@ -3,7 +3,6 @@
 	import { get } from 'svelte/store';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import { nodeConnectionService } from 'ui-lib/services/node-connection.service';
-	import { extractInviteFromUrl, clearInviteFromUrl } from 'ui-lib/services/connect-invite.service';
 	import SetupModalContent from './SetupModalContent.svelte';
 
 	let {
@@ -19,8 +18,6 @@
 
 	let reconnecting = $state(connectionConfigService.isConfigured());
 	let reconnectError = $state<string | null>(null);
-	let urlInvite = $state<string | null>(null);
-
 	function connectWith(config: import('ui-lib/types/connection-config.type').ConnectionConfig) {
 		reconnecting = true;
 		let promise: Promise<void>;
@@ -48,9 +45,6 @@
 	}
 
 	onMount(() => {
-		urlInvite = extractInviteFromUrl();
-		clearInviteFromUrl();
-
 		const config = get(configStore);
 		if (config) {
 			connectWith(config);
@@ -79,7 +73,7 @@
 					<span>Previous connection failed: {reconnectError}</span>
 				</div>
 			{/if}
-			<SetupModalContent onconnected={handleConnected} initialInvite={urlInvite ?? undefined} />
+			<SetupModalContent onconnected={handleConnected} />
 		</div>
 		<div class="modal-backdrop"></div>
 	</div>

@@ -10,19 +10,25 @@
 	} from 'ui-lib/services/node-connection.service';
 	import { generateRandomUsername } from 'ui-lib/utils/random-username';
 	import { toastService } from 'ui-lib/services/toast.service';
-	import { buildInvite, parseInvite } from 'ui-lib/services/connect-invite.service';
+	import {
+		buildInvite,
+		parseInvite,
+		extractInviteFromUrl,
+		clearInviteFromUrl
+	} from 'ui-lib/services/connect-invite.service';
 	import { blo } from 'blo';
 	import type { TransportMode } from 'ui-lib/types/connection-config.type';
 
 	let {
 		onconnected,
-		ondisconnect,
-		initialInvite
+		ondisconnect
 	}: {
 		onconnected: () => void;
 		ondisconnect?: () => void;
-		initialInvite?: string;
 	} = $props();
+
+	const urlInvite = extractInviteFromUrl();
+	if (urlInvite) clearInviteFromUrl();
 
 	const defaults = connectionConfigService.defaults();
 	const existingConfig = connectionConfigService.get();
@@ -38,7 +44,7 @@
 	let serverAddress = $state(existingConfig?.serverAddress ?? defaults.serverAddress);
 	let signalingUrl = $state(existingConfig?.signalingUrl ?? defaults.signalingUrl);
 
-	let inviteInput = $state(initialInvite ?? '');
+	let inviteInput = $state(urlInvite ?? '');
 
 	function handleNameChange(value: string) {
 		displayName = value;
