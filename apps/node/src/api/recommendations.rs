@@ -167,7 +167,7 @@ async fn top_movies(
         .map(|(tmdb_id, media_type, title, count, level_counts)| {
             let mut lc = serde_json::Map::new();
             let mut lp = serde_json::Map::new();
-            let mut score: i64 = 0;
+            let mut score: f64 = 0.0;
 
             for &lvl in &levels {
                 let cnt = level_counts.get(&lvl).copied().unwrap_or(0);
@@ -177,11 +177,14 @@ async fn top_movies(
                 } else {
                     0
                 };
+                if lvl > 0 {
+                    score += pct as f64 / lvl as f64;
+                }
                 lc.insert(lvl.to_string(), serde_json::Value::from(cnt));
                 lp.insert(lvl.to_string(), serde_json::Value::from(pct));
-                score += pct;
             }
 
+            let rounded_score = (score * 10.0).round() / 10.0;
             serde_json::json!({
                 "tmdbId": tmdb_id,
                 "mediaType": media_type,
@@ -189,16 +192,16 @@ async fn top_movies(
                 "count": count,
                 "levelCounts": lc,
                 "levelPercentages": lp,
-                "score": score,
+                "score": rounded_score,
                 "levels": levels,
             })
         })
         .collect();
 
     result.sort_by(|a, b| {
-        let sa = a["score"].as_i64().unwrap_or(0);
-        let sb = b["score"].as_i64().unwrap_or(0);
-        sb.cmp(&sa)
+        let sa = a["score"].as_f64().unwrap_or(0.0);
+        let sb = b["score"].as_f64().unwrap_or(0.0);
+        sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
     });
 
     Json(serde_json::json!(result))
