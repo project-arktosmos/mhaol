@@ -12,7 +12,7 @@
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import SetupModalContent from 'ui-lib/components/setup/SetupModalContent.svelte';
 	import { onMount } from 'svelte';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, invalidateAll } from '$app/navigation';
 	import { base } from '$app/paths';
 
 	let { children } = $props();
@@ -112,7 +112,7 @@
 				</div>
 			{/snippet}
 		</Navbar>
-		<SetupGate>
+		<SetupGate onready={() => invalidateAll()}>
 			<main class="flex min-w-0 flex-1 overflow-hidden">
 				<div class="relative flex min-w-0 flex-1 flex-col">
 					{@render children?.()}

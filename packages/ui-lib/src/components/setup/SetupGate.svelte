@@ -6,9 +6,11 @@
 	import SetupModalContent from './SetupModalContent.svelte';
 
 	let {
-		children
+		children,
+		onready
 	}: {
 		children?: Snippet;
+		onready?: () => void | Promise<void>;
 	} = $props();
 
 	const configStore = connectionConfigService.store;
@@ -30,9 +32,10 @@
 		}
 
 		promise
-			.then(() => {
+			.then(async () => {
 				reconnecting = false;
 				connectionConfigService.save(config);
+				await onready?.();
 			})
 			.catch((err) => {
 				reconnecting = false;
@@ -48,8 +51,9 @@
 		}
 	});
 
-	function handleConnected() {
-		// Config is saved by SetupModalContent — children will now render
+	async function handleConnected() {
+		// Config is saved by SetupModalContent — notify parent so pages re-fetch with auth
+		await onready?.();
 	}
 </script>
 
