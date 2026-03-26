@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { getContext } from 'svelte';
 	import classNames from 'classnames';
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { imageTaggerService } from 'ui-lib/services/image-tagger.service';
@@ -13,11 +14,14 @@
 		tags: ImageTag[];
 	}
 	import ImageUncategorizedCard from 'ui-lib/components/media/ImageUncategorizedCard.svelte';
-	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
+	import Portal from 'ui-lib/components/core/Portal.svelte';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import TagPill from 'ui-lib/components/images/TagPill.svelte';
 	import type { MediaItem, MediaCategory, MediaLinkSource } from 'ui-lib/types/media-card.type';
+	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
+
+	const mediaBar = getContext<MediaBarContext>(MEDIA_BAR_KEY);
 
 	interface Props {
 		data: {
@@ -34,6 +38,11 @@
 	let { data }: Props = $props();
 
 	let imageItems = $derived(data.images ?? []);
+
+	$effect(() => {
+		mediaBar.configure({ title: 'Photo Gallery', count: imageItems.length, countLabel: 'photos' });
+	});
+
 	let allTags = $derived(
 		[...new Set(imageItems.flatMap((img) => img.tags.map((t) => t.tag)))].sort()
 	);
@@ -117,52 +126,48 @@
 
 </script>
 
-<div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-	<BrowseHeader title="Photo Gallery" count={imageItems.length} countLabel="photos">
-		{#snippet controls()}
-			<div class="flex items-center gap-2">
-				<button
-					class={classNames('btn btn-xs', { 'btn-active': showUntaggedOnly })}
-					onclick={() => { showUntaggedOnly = !showUntaggedOnly; selectedTag = null; }}
-				>
-					Untagged
-				</button>
-				{#if selectedTag}
-					<span class="badge badge-primary gap-1">
-						{selectedTag}
-						<button class="btn btn-ghost btn-xs" onclick={() => (selectedTag = null)}>x</button>
-					</span>
-				{/if}
-			</div>
-			<div class="ml-auto flex items-center gap-2">
-				<input
-					type="text"
-					placeholder="Search photos..."
-					class="input input-sm input-bordered w-48"
-					bind:value={searchQuery}
-				/>
-				<button class="btn btn-primary btn-sm" onclick={handleAutoTagAll}>Auto-tag All</button>
-			</div>
-		{/snippet}
-	</BrowseHeader>
+<Portal target={mediaBar.controlsTarget}>
+	<div class="flex items-center gap-2">
+		<button
+			class={classNames('btn btn-xs', { 'btn-active': showUntaggedOnly })}
+			onclick={() => { showUntaggedOnly = !showUntaggedOnly; selectedTag = null; }}
+		>
+			Untagged
+		</button>
+		{#if selectedTag}
+			<span class="badge badge-primary gap-1">
+				{selectedTag}
+				<button class="btn btn-ghost btn-xs" onclick={() => (selectedTag = null)}>x</button>
+			</span>
+		{/if}
+	</div>
+	<div class="ml-auto flex items-center gap-2">
+		<input
+			type="text"
+			placeholder="Search photos..."
+			class="input input-sm input-bordered w-48"
+			bind:value={searchQuery}
+		/>
+		<button class="btn btn-primary btn-sm" onclick={handleAutoTagAll}>Auto-tag All</button>
+	</div>
+</Portal>
 
-	<BrowseGrid
-		items={filteredItems()}
-		emptyTitle={imageItems.length === 0 ? 'No images found' : 'No matching photos'}
-		emptySubtitle={imageItems.length === 0 ? 'Add a library with image files to get started' : ''}
-	>
-		{#snippet card(item)}
-			{@const img = item as PhotoImageData}
-			<ImageUncategorizedCard
-				item={toMediaItem(img)}
-				tags={img.tags}
-				tagging={taggingItems.has(img.id)}
-				selected={selectedImage?.id === img.id}
-				onselect={() => handleSelectImage(img)}
-			/>
-		{/snippet}
-	</BrowseGrid>
-</div>
+<BrowseGrid
+	items={filteredItems()}
+	emptyTitle={imageItems.length === 0 ? 'No images found' : 'No matching photos'}
+	emptySubtitle={imageItems.length === 0 ? 'Add a library with image files to get started' : ''}
+>
+	{#snippet card(item)}
+		{@const img = item as PhotoImageData}
+		<ImageUncategorizedCard
+			item={toMediaItem(img)}
+			tags={img.tags}
+			tagging={taggingItems.has(img.id)}
+			selected={selectedImage?.id === img.id}
+			onselect={() => handleSelectImage(img)}
+		/>
+	{/snippet}
+</BrowseGrid>
 
 <Modal open={!!selectedImage} maxWidth="max-w-lg" onclose={() => (selectedImage = null)}>
 	{#if selectedImage}

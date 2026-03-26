@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
@@ -8,6 +8,7 @@
 	import { mediaDetailService } from 'ui-lib/services/media-detail.service';
 	import { modalRouterService } from 'ui-lib/services/modal-router.service';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
+	import Portal from 'ui-lib/components/core/Portal.svelte';
 	import type { MediaDetailCardType } from 'ui-lib/types/media-detail.type';
 	import TmdbLinkModal from 'ui-lib/components/libraries/TmdbLinkModal.svelte';
 	import MediaDetail from 'ui-lib/components/media/MediaDetail.svelte';
@@ -27,6 +28,10 @@
 	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
+	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
+
+	const mediaBar = getContext<MediaBarContext>(MEDIA_BAR_KEY);
+	mediaBar.configure({ title: 'Movies' });
 
 	interface Props {
 		data: {
@@ -524,6 +529,14 @@
 	});
 </script>
 
+<Portal target={mediaBar.controlsTarget}>
+	<form class="join" onsubmit={(e) => { e.preventDefault(); if (movieSearchInput.trim()) doSearchMovies(movieSearchInput.trim()); }}>
+		<input type="text" placeholder="Search movies..." class="input join-item input-bordered input-sm w-48" bind:value={movieSearchInput} />
+		<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
+	</form>
+	<BrowseViewToggle />
+</Portal>
+
 {#if data.error}
 	<div class="flex min-h-[50vh] items-center justify-center p-4">
 		<div class="alert alert-error max-w-xl">
@@ -531,18 +544,7 @@
 		</div>
 	</div>
 {:else}
-	<div class="relative min-w-0 flex-1 overflow-y-auto">
-		<div class="flex items-center justify-between gap-4 border-b border-base-300 px-4 py-3">
-			<h1 class="text-lg font-bold">Movies</h1>
-			<div class="flex items-center gap-2">
-				<form class="join" onsubmit={(e) => { e.preventDefault(); if (movieSearchInput.trim()) doSearchMovies(movieSearchInput.trim()); }}>
-					<input type="text" placeholder="Search movies..." class="input join-item input-bordered input-sm w-48" bind:value={movieSearchInput} />
-					<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
-				</form>
-				<BrowseViewToggle />
-			</div>
-		</div>
-		<div class="container mx-auto p-4">
+	<div class="container mx-auto p-4">
 			{#if pinnedMovies.length > 0}
 				<section class="mb-8">
 					<div class="mb-3 flex items-center gap-2">
@@ -710,7 +712,6 @@
 				{/if}
 			</section>
 		</div>
-	</div>
 
 	<Modal open={!!$mediaDetailStore} maxWidth="max-w-lg" onclose={closeMediaDetail}>
 		{#if $mediaDetailStore}

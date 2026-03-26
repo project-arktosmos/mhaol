@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, getContext } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
@@ -12,9 +12,14 @@
 	import TmdbCatalogGrid from 'ui-lib/components/catalog/TmdbCatalogGrid.svelte';
 	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
 	import TvShowMatchModal from 'ui-lib/components/libraries/TvShowMatchModal.svelte';
+	import Portal from 'ui-lib/components/core/Portal.svelte';
 	import classNames from 'classnames';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
+	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
+
+	const mediaBar = getContext<MediaBarContext>(MEDIA_BAR_KEY);
+	mediaBar.configure({ title: 'TV Shows' });
 
 	interface Props {
 		data: {
@@ -323,18 +328,15 @@
 	});
 </script>
 
-<div class="relative min-w-0 flex-1 overflow-y-auto">
-	<div class="flex items-center justify-between gap-4 border-b border-base-300 px-4 py-3">
-		<h1 class="text-lg font-bold">TV Shows</h1>
-		<div class="flex items-center gap-2">
-			<form class="join" onsubmit={(e) => { e.preventDefault(); if (tvSearchInput.trim()) doSearchTv(tvSearchInput.trim()); }}>
-				<input type="text" placeholder="Search TV shows..." class="input join-item input-bordered input-sm w-48" bind:value={tvSearchInput} />
-				<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
-			</form>
-			<BrowseViewToggle />
-		</div>
-	</div>
-	<div class="container mx-auto p-4">
+<Portal target={mediaBar.controlsTarget}>
+	<form class="join" onsubmit={(e) => { e.preventDefault(); if (tvSearchInput.trim()) doSearchTv(tvSearchInput.trim()); }}>
+		<input type="text" placeholder="Search TV shows..." class="input join-item input-bordered input-sm w-48" bind:value={tvSearchInput} />
+		<button type="submit" class="btn join-item btn-sm btn-primary">Search</button>
+	</form>
+	<BrowseViewToggle />
+</Portal>
+
+<div class="container mx-auto p-4">
 		{#if pinnedTvShows.length > 0}
 			<section class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold">Pinned</h2>
@@ -476,7 +478,6 @@
 			{/if}
 		</section>
 	</div>
-</div>
 
 {#if matchModalList}
 	<TvShowMatchModal

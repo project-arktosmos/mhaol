@@ -1,7 +1,12 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, getContext } from 'svelte';
 	import classNames from 'classnames';
 	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
+	import Portal from 'ui-lib/components/core/Portal.svelte';
+	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
+
+	const mediaBar = getContext<MediaBarContext>(MEDIA_BAR_KEY);
+	mediaBar.configure({ title: 'YouTube' });
 	import { apiUrl } from 'ui-lib/lib/api-base';
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
 	import { goto } from '$app/navigation';
@@ -265,14 +270,15 @@
 	}
 </script>
 
+<Portal target={mediaBar.controlsTarget}>
+	<YouTubeSearchInput
+		query={$searchState.query}
+		searching={$searchState.searching}
+		onsearch={handleSearch}
+	/>
+</Portal>
+
 <div class="container mx-auto p-4">
-	<div class="mb-6">
-		<YouTubeSearchInput
-			query={$searchState.query}
-			searching={$searchState.searching}
-			onsearch={handleSearch}
-		/>
-	</div>
 
 	{#if $searchState.error}
 		<div class="mb-4 alert alert-error">

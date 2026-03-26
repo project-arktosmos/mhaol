@@ -1,8 +1,12 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { fetchJson } from 'ui-lib/transport/fetch-helpers';
+	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
+
+	const mediaBar = getContext<MediaBarContext>(MEDIA_BAR_KEY);
+	mediaBar.configure({ title: 'Music' });
 	import { releaseGroupsToDisplay, artistsToDisplay } from 'addons/musicbrainz/transform';
 	import type { MusicBrainzReleaseGroup, MusicBrainzArtist } from 'addons/musicbrainz/types';
 	import { catalogItemToCardData } from 'ui-lib/adapters/classes/catalog-card.adapter';
@@ -150,11 +154,7 @@
 	});
 </script>
 
-<div class="flex min-w-0 flex-1 flex-col overflow-y-auto">
-	<div class="flex items-center justify-between gap-4 border-b border-base-300 px-4 py-3">
-		<h1 class="text-lg font-bold">Music</h1>
-	</div>
-	<div class="p-4">
+<div class="p-4">
 		{#if pinnedLoading || pinnedItems.length > 0}
 			<section class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold">Pinned</h2>
@@ -241,4 +241,3 @@
 			{/if}
 		</section>
 	</div>
-</div>

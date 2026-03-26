@@ -1,12 +1,15 @@
 <script lang="ts">
+	import { hasContext, getContext } from 'svelte';
 	import type { Snippet } from 'svelte';
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
+	import Portal from 'ui-lib/components/core/Portal.svelte';
 	import PinnedFavoritesSection from './PinnedFavoritesSection.svelte';
 	import CatalogCard from './CatalogCard.svelte';
 	import { catalogItemToCardData } from 'ui-lib/adapters/classes/catalog-card.adapter';
 	import type { CatalogKindStrategy } from 'ui-lib/services/catalog.service';
 	import type { CatalogBrowseState, CatalogItem, CatalogCardData } from 'ui-lib/types/catalog.type';
+	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
 
 	interface Props {
 		browseState: CatalogBrowseState;
@@ -31,6 +34,16 @@
 		onselectitem,
 		filterBar
 	}: Props = $props();
+
+	const mediaBar: MediaBarContext | null = hasContext(MEDIA_BAR_KEY)
+		? getContext<MediaBarContext>(MEDIA_BAR_KEY)
+		: null;
+
+	$effect(() => {
+		if (mediaBar) {
+			mediaBar.configure({ title, count: browseState.items.length });
+		}
+	});
 
 	let searchInput = $state('');
 	let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -64,43 +77,71 @@
 	}
 </script>
 
-<div class="flex h-full flex-col">
-	<BrowseHeader {title} count={browseState.items.length}>
-		{#snippet controls()}
-			<div class="relative flex-1">
-				<input
-					type="text"
-					class="input-bordered input input-sm w-full max-w-xs"
-					placeholder="Search..."
-					value={searchInput}
-					oninput={handleSearchInput}
-				/>
-				{#if searchInput}
-					<button
-						class="btn absolute top-1 right-1 btn-circle btn-ghost btn-xs"
-						onclick={handleSearchClear}
-					>
-						✕
-					</button>
-				{/if}
-			</div>
-		{/snippet}
-		{#snippet tabs()}
-			{#each browseState.tabs as tab}
-				<button
-					class="btn btn-xs {browseState.activeTab === tab.id ? 'btn-primary' : 'btn-ghost'}"
-					onclick={() => ontabchange(tab.id)}
-				>
-					{tab.label}
-				</button>
-			{/each}
-		{/snippet}
-	</BrowseHeader>
+{#snippet searchControls()}
+	<div class="relative flex-1">
+		<input
+			type="text"
+			class="input-bordered input input-sm w-full max-w-xs"
+			placeholder="Search..."
+			value={searchInput}
+			oninput={handleSearchInput}
+		/>
+		{#if searchInput}
+			<button
+				class="btn absolute top-1 right-1 btn-circle btn-ghost btn-xs"
+				onclick={handleSearchClear}
+			>
+				✕
+			</button>
+		{/if}
+	</div>
+{/snippet}
 
-	{#if filterBar}
-		<div class="border-b border-base-300 px-4 py-2">
-			{@render filterBar()}
-		</div>
+{#snippet tabsList()}
+	{#each browseState.tabs as tab}
+		<button
+			class="btn btn-xs {browseState.activeTab === tab.id ? 'btn-primary' : 'btn-ghost'}"
+			onclick={() => ontabchange(tab.id)}
+		>
+			{tab.label}
+		</button>
+	{/each}
+{/snippet}
+
+<div class="flex h-full flex-col">
+	{#if mediaBar}
+		<Portal target={mediaBar.controlsTarget}>
+			{@render searchControls()}
+		</Portal>
+		{#if browseState.tabs.length > 0}
+			<Portal target={mediaBar.tabsTarget}>
+				<div class="flex flex-wrap gap-1.5 border-b border-base-300 px-4 py-2">
+					{@render tabsList()}
+				</div>
+			</Portal>
+		{/if}
+		{#if filterBar}
+			<Portal target={mediaBar.filterBarTarget}>
+				<div class="border-b border-base-300 px-4 py-2">
+					{@render filterBar()}
+				</div>
+			</Portal>
+		{/if}
+	{:else}
+		<BrowseHeader {title} count={browseState.items.length}>
+			{#snippet controls()}
+				{@render searchControls()}
+			{/snippet}
+			{#snippet tabs()}
+				{@render tabsList()}
+			{/snippet}
+		</BrowseHeader>
+
+		{#if filterBar}
+			<div class="border-b border-base-300 px-4 py-2">
+				{@render filterBar()}
+			</div>
+		{/if}
 	{/if}
 
 	{#if strategy?.resolveByIds}
