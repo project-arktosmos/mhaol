@@ -20,24 +20,29 @@
 		}
 	}
 
-	function posterUrl(data: Record<string, unknown>): string | null {
+	function posterUrl(data: Record<string, unknown> | null): string | null {
+		if (!data) return null;
 		return getPosterUrl(data.poster_path as string | null);
 	}
 
-	function backdropUrl(data: Record<string, unknown>): string | null {
+	function backdropUrl(data: Record<string, unknown> | null): string | null {
+		if (!data) return null;
 		return getBackdropUrl(data.backdrop_path as string | null);
 	}
 
-	function year(data: Record<string, unknown>): string {
+	function year(data: Record<string, unknown> | null): string {
+		if (!data) return '';
 		return extractYear(data.release_date as string | undefined);
 	}
 
-	function rating(data: Record<string, unknown>): string {
+	function rating(data: Record<string, unknown> | null): string {
+		if (!data) return '—';
 		const val = data.vote_average as number | undefined;
 		return val != null ? val.toFixed(1) : '—';
 	}
 
-	function overview(data: Record<string, unknown>): string {
+	function overview(data: Record<string, unknown> | null): string {
+		if (!data) return '';
 		return (data.overview as string) ?? '';
 	}
 
