@@ -7,8 +7,7 @@
 	import type {
 		RecommendationRow,
 		RecommendationsStatus,
-		TopRecommendedMovie,
-		TopGenre
+		TopRecommendedMovie
 	} from 'ui-lib/types/recommendations.type';
 	import type { DisplayTMDBMovie } from 'addons/tmdb/types';
 
@@ -27,7 +26,6 @@
 	let loadingRecs = $state<Set<string>>(new Set());
 
 	let topMovies = $state<TopRecommendedMovie[]>([]);
-	let topGenres = $state<TopGenre[]>([]);
 	let statsLoading = $state(false);
 
 	const queueStore = queueService.store;
@@ -59,12 +57,7 @@
 	async function loadStats() {
 		statsLoading = true;
 		try {
-			const [movies, genres] = await Promise.all([
-				recommendationsService.getTopMovies(),
-				recommendationsService.getTopGenres()
-			]);
-			topMovies = movies;
-			topGenres = genres;
+			topMovies = await recommendationsService.getTopMovies();
 		} catch {
 			/* best-effort */
 		} finally {
@@ -318,7 +311,6 @@
 														<tr>
 															<th>TMDB ID</th>
 															<th>Title</th>
-															<th>Genres</th>
 															<th>Type</th>
 															<th>Fetched</th>
 														</tr>
@@ -331,9 +323,6 @@
 																<td class="max-w-40 truncate">
 																	{rec.title ?? parsed?.title ?? parsed?.name ?? '—'}
 																</td>
-																<td class="max-w-48 truncate text-xs">
-																	{rec.genres ?? '—'}
-																</td>
 																<td>{rec.recommendedMediaType}</td>
 																<td class="text-xs text-base-content/50">
 																	{new Date(rec.fetchedAt).toLocaleDateString()}
@@ -341,7 +330,7 @@
 															</tr>
 															{#if parsed}
 																<tr>
-																	<td colspan="5" class="text-xs text-base-content/40">
+																	<td colspan="4" class="text-xs text-base-content/40">
 																		{#if parsed.overview}
 																			<p class="line-clamp-2">{parsed.overview}</p>
 																		{/if}
@@ -429,38 +418,6 @@
 										<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
 										<td class="font-mono text-xs">{movie.tmdbId}</td>
 										<td class="font-semibold">{movie.count}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				{/if}
-			</div>
-
-			<div>
-				<h3 class="mb-2 text-sm font-semibold">Top Genres</h3>
-				{#if statsLoading && topGenres.length === 0}
-					<div class="flex justify-center py-4">
-						<span class="loading loading-sm loading-spinner"></span>
-					</div>
-				{:else if topGenres.length === 0}
-					<p class="py-4 text-center text-xs text-base-content/50">No data yet</p>
-				{:else}
-					<div class="max-h-[35vh] overflow-y-auto">
-						<table class="table table-xs">
-							<thead>
-								<tr>
-									<th>#</th>
-									<th>Genre</th>
-									<th>Count</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each topGenres as genre, i (genre.genre)}
-									<tr>
-										<td class="text-base-content/40">{i + 1}</td>
-										<td>{genre.genre}</td>
-										<td class="font-semibold">{genre.count}</td>
 									</tr>
 								{/each}
 							</tbody>
