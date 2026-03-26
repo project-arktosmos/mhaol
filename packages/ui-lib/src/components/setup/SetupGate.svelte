@@ -17,7 +17,7 @@
 	const configStore = connectionConfigService.store;
 	let configured = $derived($configStore !== null);
 
-	let reconnecting = $state(false);
+	let reconnecting = $state(connectionConfigService.isConfigured());
 	let reconnectError = $state<string | null>(null);
 	let urlInvite = $state<string | null>(null);
 
