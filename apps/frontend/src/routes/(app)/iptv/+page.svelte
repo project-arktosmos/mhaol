@@ -4,9 +4,20 @@
 	import { base } from '$app/paths';
 	import IptvBrowsePage from 'ui-lib/components/iptv/IptvBrowsePage.svelte';
 	import { iptvService } from 'ui-lib/services/iptv.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import type { IptvChannel } from 'ui-lib/types/iptv.type';
 
 	const state = iptvService.state;
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+
+	let favoritedIptvIds = $derived(
+		new Set($favState.items.filter((f) => f.service === 'iptv').map((f) => f.serviceId))
+	);
+	let pinnedIptvIds = $derived(
+		new Set($pinState.items.filter((p) => p.service === 'iptv').map((p) => p.serviceId))
+	);
 
 	function handleSearch(query: string): void {
 		iptvService.setQuery(query);
@@ -45,6 +56,8 @@
 	selectedCategory={$state.selectedCategory}
 	selectedCountry={$state.selectedCountry}
 	epgOnly={$state.epgOnly}
+	favoritedIds={favoritedIptvIds}
+	pinnedIds={pinnedIptvIds}
 	onsearch={handleSearch}
 	onfilterchange={handleFilterChange}
 	onpagechange={handlePageChange}

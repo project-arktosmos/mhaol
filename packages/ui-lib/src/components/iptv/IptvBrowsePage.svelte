@@ -15,6 +15,8 @@
 		selectedCategory = '',
 		selectedCountry = '',
 		epgOnly = false,
+		favoritedIds,
+		pinnedIds,
 		onsearch,
 		onfilterchange,
 		onpagechange,
@@ -31,6 +33,8 @@
 		selectedCategory?: string;
 		selectedCountry?: string;
 		epgOnly?: boolean;
+		favoritedIds?: Set<string>;
+		pinnedIds?: Set<string>;
 		onsearch?: (query: string) => void;
 		onfilterchange?: (filters: { category?: string; country?: string; epgOnly?: boolean }) => void;
 		onpagechange?: (page: number) => void;
@@ -125,7 +129,12 @@
 				class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 			>
 				{#each channels as channel (channel.id)}
-					<IptvChannelCard {channel} onclick={() => onchannelclick?.(channel)} />
+					<IptvChannelCard
+						{channel}
+						favorited={favoritedIds?.has(channel.id) ?? false}
+						pinned={pinnedIds?.has(channel.id) ?? false}
+						onclick={() => onchannelclick?.(channel)}
+					/>
 				{/each}
 			</div>
 		{/if}
