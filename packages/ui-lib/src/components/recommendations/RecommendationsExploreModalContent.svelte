@@ -2,21 +2,26 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { recommendationsService } from 'ui-lib/services/recommendations.service';
-	import type { TopRecommendedMovieDetail } from 'ui-lib/types/recommendations.type';
+	import type {
+		TopRecommendedMovie,
+		TopRecommendedMovieDetail
+	} from 'ui-lib/types/recommendations.type';
 	import { getPosterUrl, getBackdropUrl, extractYear } from 'addons/tmdb/transform';
+	import TopRecommendedTable from './TopRecommendedTable.svelte';
 
-	let movies = $state<TopRecommendedMovieDetail[]>([]);
-	let loading = $state(false);
+	let topTable: ReturnType<typeof TopRecommendedTable>;
+	let detailMovies = $state<TopRecommendedMovieDetail[]>([]);
+	let detailLoading = $state(false);
 	let selectedIndex = $state<number | null>(null);
 
-	async function loadMovies() {
-		loading = true;
+	async function loadDetails() {
+		detailLoading = true;
 		try {
-			movies = await recommendationsService.getTopMoviesDetail();
+			detailMovies = await recommendationsService.getTopMoviesDetail();
 		} catch {
 			/* best-effort */
 		} finally {
-			loading = false;
+			detailLoading = false;
 		}
 	}
 
@@ -46,74 +51,59 @@
 		return (data.overview as string) ?? '';
 	}
 
-	function scrollToCard(index: number) {
+	function handleRowClick(index: number, _movie: TopRecommendedMovie) {
 		selectedIndex = index;
 		const el = document.getElementById(`rec-card-${index}`);
 		if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
 	onMount(() => {
-		loadMovies();
+		topTable?.refresh();
+		loadDetails();
 	});
 </script>
 
 <div class="flex max-h-[80vh] flex-col gap-4 overflow-hidden">
 	<div class="flex items-center justify-between">
 		<h2 class="text-lg font-bold">Explore Recommendations</h2>
-		<button class="btn btn-ghost btn-sm" onclick={loadMovies} disabled={loading}>
-			{#if loading}
+		<button
+			class="btn btn-ghost btn-sm"
+			onclick={() => {
+				topTable?.refresh();
+				loadDetails();
+			}}
+			disabled={detailLoading}
+		>
+			{#if detailLoading}
 				<span class="loading loading-xs loading-spinner"></span>
 			{/if}
 			Refresh
 		</button>
 	</div>
 
-	{#if loading && movies.length === 0}
-		<div class="flex justify-center py-12">
-			<span class="loading loading-lg loading-spinner"></span>
+	<div class="grid min-h-0 flex-1 grid-cols-2 grid-rows-1 gap-4">
+		<!-- Left: Top Recommended Movies table -->
+		<div class="min-h-0 flex flex-col gap-2 overflow-y-auto">
+			<h3 class="text-sm font-semibold">Top Recommended Movies</h3>
+			<TopRecommendedTable
+				bind:this={topTable}
+				{selectedIndex}
+				onrowclick={handleRowClick}
+			/>
 		</div>
-	{:else if movies.length === 0}
-		<p class="py-12 text-center text-sm text-base-content/50">
-			No recommendations yet. Use the Recs modal to enqueue movies first.
-		</p>
-	{:else}
-		<div class="grid min-h-0 flex-1 grid-cols-2 grid-rows-1 gap-4">
-			<!-- Left: Top Recommended Movies table (same as Recs modal right panel) -->
-			<div class="min-h-0 flex flex-col gap-2 overflow-y-auto">
-				<h3 class="text-sm font-semibold">Top Recommended Movies</h3>
-				<table class="table table-xs">
-					<thead>
-						<tr>
-							<th>#</th>
-							<th>Title</th>
-							<th>TMDB ID</th>
-							<th>Count</th>
-							<th>Level</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each movies as movie, i (movie.tmdbId)}
-							<tr
-								class={classNames('cursor-pointer', {
-									'bg-primary/20': selectedIndex === i,
-									'hover:bg-base-200': selectedIndex !== i
-								})}
-								onclick={() => scrollToCard(i)}
-							>
-								<td class="text-base-content/40">{i + 1}</td>
-								<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
-								<td class="font-mono text-xs">{movie.tmdbId}</td>
-								<td class="font-semibold">{movie.count}</td>
-								<td><span class="badge badge-ghost badge-xs">L{movie.minLevel}</span></td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
 
-			<!-- Right: Detail cards -->
-			<div class="min-h-0 flex flex-col gap-6 overflow-y-auto pr-1">
-				{#each movies as movie, i (movie.tmdbId)}
+		<!-- Right: Detail cards -->
+		<div class="min-h-0 flex flex-col gap-6 overflow-y-auto pr-1">
+			{#if detailLoading && detailMovies.length === 0}
+				<div class="flex justify-center py-12">
+					<span class="loading loading-lg loading-spinner"></span>
+				</div>
+			{:else if detailMovies.length === 0}
+				<p class="py-12 text-center text-sm text-base-content/50">
+					No recommendations yet. Use the Recs modal to enqueue movies first.
+				</p>
+			{:else}
+				{#each detailMovies as movie, i (movie.tmdbId)}
 					<div
 						id={`rec-card-${i}`}
 						class={classNames('overflow-hidden rounded-xl bg-base-200', {
@@ -141,9 +131,6 @@
 									<span class="badge badge-ghost badge-sm">
 										Recommended {movie.count}x
 									</span>
-									<span class="badge badge-ghost badge-sm">
-										Level {movie.minLevel}
-									</span>
 								</div>
 								{#if overview(movie.data)}
 									<p class="mt-2 text-sm leading-relaxed text-base-content/70">
@@ -161,7 +148,7 @@
 						</div>
 					</div>
 				{/each}
-			</div>
+			{/if}
 		</div>
-	{/if}
+	</div>
 </div>
