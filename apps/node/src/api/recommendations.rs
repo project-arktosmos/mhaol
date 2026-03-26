@@ -76,6 +76,7 @@ async fn bulk_enqueue(
             serde_json::json!({
                 "tmdbId": item.tmdb_id,
                 "mediaType": item.media_type,
+                "level": 1,
             }),
         );
         enqueued += 1;
@@ -153,12 +154,13 @@ async fn top_movies(
     };
     let result: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(|(tmdb_id, media_type, title, count)| {
+        .map(|(tmdb_id, media_type, title, count, min_level)| {
             serde_json::json!({
                 "tmdbId": tmdb_id,
                 "mediaType": media_type,
                 "title": title,
                 "count": count,
+                "minLevel": min_level,
             })
         })
         .collect();
@@ -173,7 +175,7 @@ async fn top_movies_detail(
     let rows = state.recommendations.top_recommended_movies_with_data(limit);
 
     // Collect recommended IDs to batch-fetch their sources
-    let rec_ids: Vec<i64> = rows.iter().map(|(id, _, _, _, _)| *id).collect();
+    let rec_ids: Vec<i64> = rows.iter().map(|(id, _, _, _, _, _)| *id).collect();
     let source_rows = state.recommendations.sources_for_recommended(&rec_ids);
 
     // Group sources by recommended_tmdb_id
@@ -189,7 +191,7 @@ async fn top_movies_detail(
 
     let result: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(|(tmdb_id, media_type, title, count, data)| {
+        .map(|(tmdb_id, media_type, title, count, min_level, data)| {
             let sources = sources_map
                 .remove(&tmdb_id)
                 .unwrap_or_default();
@@ -198,6 +200,7 @@ async fn top_movies_detail(
                 "mediaType": media_type,
                 "title": title,
                 "count": count,
+                "minLevel": min_level,
                 "data": data,
                 "sources": sources,
             })

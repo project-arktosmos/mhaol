@@ -6,6 +6,7 @@ export interface RecommendationRow {
 	recommendedMediaType: string;
 	title: string | null;
 	genres: string | null;
+	level: number;
 	data: Record<string, unknown>;
 	fetchedAt: string;
 }
@@ -32,6 +33,7 @@ export interface TopRecommendedMovie {
 	mediaType: string;
 	title: string | null;
 	count: number;
+	minLevel: number;
 }
 
 export interface RecommendationSource {
@@ -45,6 +47,7 @@ export interface TopRecommendedMovieDetail {
 	mediaType: string;
 	title: string | null;
 	count: number;
+	minLevel: number;
 	data: Record<string, unknown>;
 	sources: RecommendationSource[];
 }

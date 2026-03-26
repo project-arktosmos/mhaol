@@ -83,6 +83,7 @@
 							<th>Title</th>
 							<th>TMDB ID</th>
 							<th>Count</th>
+							<th>Level</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -98,6 +99,7 @@
 								<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
 								<td class="font-mono text-xs">{movie.tmdbId}</td>
 								<td class="font-semibold">{movie.count}</td>
+								<td><span class="badge badge-ghost badge-xs">L{movie.minLevel}</span></td>
 							</tr>
 						{/each}
 					</tbody>
@@ -133,6 +135,9 @@
 									<span>&middot;</span>
 									<span class="badge badge-ghost badge-sm">
 										Recommended {movie.count}x
+									</span>
+									<span class="badge badge-ghost badge-sm">
+										Level {movie.minLevel}
 									</span>
 								</div>
 								{#if overview(movie.data)}

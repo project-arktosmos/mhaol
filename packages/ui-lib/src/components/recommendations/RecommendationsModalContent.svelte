@@ -271,6 +271,7 @@
 								onclick={() => toggleExpand(task)}
 							>
 								<span class={statusBadgeClass(task.status)}>{task.status}</span>
+								<span class="badge badge-ghost badge-xs">L{task.payload.level ?? 1}</span>
 								<span class="flex-1 truncate text-sm font-medium">{taskTitle(task)}</span>
 								{#if task.status === 'running'}
 									<span class="loading loading-xs loading-spinner"></span>
@@ -318,6 +319,7 @@
 															<th>TMDB ID</th>
 															<th>Title</th>
 															<th>Type</th>
+															<th>Level</th>
 															<th>Fetched</th>
 														</tr>
 													</thead>
@@ -330,13 +332,14 @@
 																	{rec.title ?? parsed?.title ?? parsed?.name ?? '—'}
 																</td>
 																<td>{rec.recommendedMediaType}</td>
+																<td>{rec.level}</td>
 																<td class="text-xs text-base-content/50">
 																	{new Date(rec.fetchedAt).toLocaleDateString()}
 																</td>
 															</tr>
 															{#if parsed}
 																<tr>
-																	<td colspan="4" class="text-xs text-base-content/40">
+																	<td colspan="5" class="text-xs text-base-content/40">
 																		{#if parsed.overview}
 																			<p class="line-clamp-2">{parsed.overview}</p>
 																		{/if}
@@ -415,6 +418,7 @@
 									<th>Title</th>
 									<th>TMDB ID</th>
 									<th>Count</th>
+									<th>Level</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -424,6 +428,7 @@
 										<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
 										<td class="font-mono text-xs">{movie.tmdbId}</td>
 										<td class="font-semibold">{movie.count}</td>
+										<td><span class="badge badge-ghost badge-xs">L{movie.minLevel}</span></td>
 									</tr>
 								{/each}
 							</tbody>

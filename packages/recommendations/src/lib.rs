@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS tmdb_recommendations (
     recommended_media_type TEXT NOT NULL CHECK (recommended_media_type IN ('movie', 'tv')),
     title TEXT,
     genres TEXT,
+    level INTEGER NOT NULL DEFAULT 1,
     data TEXT NOT NULL,
     fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(source_tmdb_id, source_media_type, recommended_tmdb_id)
@@ -35,6 +36,7 @@ pub struct RecommendationRow {
     pub recommended_media_type: String,
     pub title: Option<String>,
     pub genres: Option<String>,
+    pub level: i64,
     pub data: serde_json::Value,
     pub fetched_at: String,
 }
@@ -57,15 +59,16 @@ impl RecommendationsRepo {
         rec_media_type: &str,
         title: Option<&str>,
         genres: Option<&str>,
+        level: i64,
         data: &str,
     ) {
         let conn = self.db.lock();
         let _ = conn.execute(
-            "INSERT INTO tmdb_recommendations (source_tmdb_id, source_media_type, recommended_tmdb_id, recommended_media_type, title, genres, data)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO tmdb_recommendations (source_tmdb_id, source_media_type, recommended_tmdb_id, recommended_media_type, title, genres, level, data)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(source_tmdb_id, source_media_type, recommended_tmdb_id)
-             DO UPDATE SET title = ?5, genres = ?6, data = ?7, fetched_at = datetime('now')",
-            params![source_tmdb_id, source_media_type, rec_tmdb_id, rec_media_type, title, genres, data],
+             DO UPDATE SET title = ?5, genres = ?6, level = MIN(level, ?7), data = ?8, fetched_at = datetime('now')",
+            params![source_tmdb_id, source_media_type, rec_tmdb_id, rec_media_type, title, genres, level, data],
         );
     }
 
@@ -73,14 +76,14 @@ impl RecommendationsRepo {
         let conn = self.db.lock();
         let mut stmt = conn
             .prepare(
-                "SELECT id, source_tmdb_id, source_media_type, recommended_tmdb_id, recommended_media_type, title, genres, data, fetched_at
+                "SELECT id, source_tmdb_id, source_media_type, recommended_tmdb_id, recommended_media_type, title, genres, level, data, fetched_at
                  FROM tmdb_recommendations
                  WHERE source_tmdb_id = ?1 AND source_media_type = ?2
                  ORDER BY id ASC",
             )
             .unwrap();
         stmt.query_map(params![source_tmdb_id, media_type], |row| {
-            let data_str: String = row.get(7)?;
+            let data_str: String = row.get(8)?;
             let data = serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
             Ok(RecommendationRow {
                 id: row.get(0)?,
@@ -90,8 +93,9 @@ impl RecommendationsRepo {
                 recommended_media_type: row.get(4)?,
                 title: row.get(5)?,
                 genres: row.get(6)?,
+                level: row.get(7)?,
                 data,
-                fetched_at: row.get(8)?,
+                fetched_at: row.get(9)?,
             })
         })
         .unwrap()
@@ -111,11 +115,11 @@ impl RecommendationsRepo {
     pub fn top_recommended_movies_with_data(
         &self,
         limit: usize,
-    ) -> Vec<(i64, String, Option<String>, i64, serde_json::Value)> {
+    ) -> Vec<(i64, String, Option<String>, i64, i64, serde_json::Value)> {
         let conn = self.db.lock();
         let mut stmt = conn
             .prepare(
-                "SELECT recommended_tmdb_id, recommended_media_type, title, COUNT(*) as cnt, data
+                "SELECT recommended_tmdb_id, recommended_media_type, title, COUNT(*) as cnt, MIN(level) as min_level, data
                  FROM tmdb_recommendations
                  GROUP BY recommended_tmdb_id, recommended_media_type
                  ORDER BY cnt DESC
@@ -123,20 +127,20 @@ impl RecommendationsRepo {
             )
             .unwrap();
         stmt.query_map(params![limit as i64], |row| {
-            let data_str: String = row.get(4)?;
+            let data_str: String = row.get(5)?;
             let data = serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, data))
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, data))
         })
         .unwrap()
         .filter_map(|r| r.ok())
         .collect()
     }
 
-    pub fn top_recommended_movies(&self, limit: usize) -> Vec<(i64, String, Option<String>, i64)> {
+    pub fn top_recommended_movies(&self, limit: usize) -> Vec<(i64, String, Option<String>, i64, i64)> {
         let conn = self.db.lock();
         let mut stmt = conn
             .prepare(
-                "SELECT recommended_tmdb_id, recommended_media_type, title, COUNT(*) as cnt
+                "SELECT recommended_tmdb_id, recommended_media_type, title, COUNT(*) as cnt, MIN(level) as min_level
                  FROM tmdb_recommendations
                  GROUP BY recommended_tmdb_id, recommended_media_type
                  ORDER BY cnt DESC
@@ -144,7 +148,7 @@ impl RecommendationsRepo {
             )
             .unwrap();
         stmt.query_map(params![limit as i64], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
         })
         .unwrap()
         .filter_map(|r| r.ok())
@@ -182,11 +186,11 @@ impl RecommendationsRepo {
         &self,
         source_media_type: &str,
         limit: usize,
-    ) -> Vec<(i64, String, Option<String>, i64)> {
+    ) -> Vec<(i64, String, Option<String>, i64, i64)> {
         let conn = self.db.lock();
         let mut stmt = conn
             .prepare(
-                "SELECT recommended_tmdb_id, recommended_media_type, title, COUNT(*) as cnt
+                "SELECT recommended_tmdb_id, recommended_media_type, title, COUNT(*) as cnt, MIN(level) as min_level
                  FROM tmdb_recommendations
                  WHERE source_media_type = ?1
                  GROUP BY recommended_tmdb_id, recommended_media_type
@@ -195,7 +199,7 @@ impl RecommendationsRepo {
             )
             .unwrap();
         stmt.query_map(params![source_media_type, limit as i64], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
         })
         .unwrap()
         .filter_map(|r| r.ok())
@@ -232,6 +236,16 @@ impl RecommendationsRepo {
         .collect()
     }
 
+    pub fn has_source(&self, tmdb_id: i64, media_type: &str) -> bool {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT 1 FROM tmdb_recommendations WHERE source_tmdb_id = ?1 AND source_media_type = ?2 LIMIT 1",
+            )
+            .unwrap();
+        stmt.exists(params![tmdb_id, media_type]).unwrap_or(false)
+    }
+
     pub fn list_sources(&self) -> Vec<(i64, String)> {
         let conn = self.db.lock();
         let mut stmt = conn
@@ -258,21 +272,22 @@ mod tests {
     #[test]
     fn test_upsert_and_get() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", Some("Pulp Fiction"), Some("Crime, Drama"), r#"{"id":680}"#);
-        repo.upsert(550, "movie", 13, "movie", Some("Forrest Gump"), Some("Drama, Comedy"), r#"{"id":13}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("Pulp Fiction"), Some("Crime, Drama"), 1, r#"{"id":680}"#);
+        repo.upsert(550, "movie", 13, "movie", Some("Forrest Gump"), Some("Drama, Comedy"), 1, r#"{"id":13}"#);
 
         let recs = repo.get_for_source(550, "movie");
         assert_eq!(recs.len(), 2);
         assert_eq!(recs[0].recommended_tmdb_id, 680);
         assert_eq!(recs[0].title.as_deref(), Some("Pulp Fiction"));
+        assert_eq!(recs[0].level, 1);
         assert_eq!(recs[1].recommended_tmdb_id, 13);
     }
 
     #[test]
     fn test_upsert_dedup() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", Some("Old Title"), None, r#"{"id":680}"#);
-        repo.upsert(550, "movie", 680, "movie", Some("New Title"), Some("Action"), r#"{"id":680,"updated":true}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("Old Title"), None, 1, r#"{"id":680}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("New Title"), Some("Action"), 1, r#"{"id":680,"updated":true}"#);
 
         let recs = repo.get_for_source(550, "movie");
         assert_eq!(recs.len(), 1);
@@ -280,10 +295,28 @@ mod tests {
     }
 
     #[test]
+    fn test_upsert_keeps_min_level() {
+        let repo = setup();
+        repo.upsert(550, "movie", 680, "movie", Some("Pulp Fiction"), None, 3, r#"{"id":680}"#);
+        let recs = repo.get_for_source(550, "movie");
+        assert_eq!(recs[0].level, 3);
+
+        // Re-upsert at a lower level — should keep the lower one
+        repo.upsert(550, "movie", 680, "movie", Some("Pulp Fiction"), None, 1, r#"{"id":680}"#);
+        let recs = repo.get_for_source(550, "movie");
+        assert_eq!(recs[0].level, 1);
+
+        // Re-upsert at a higher level — should still keep 1
+        repo.upsert(550, "movie", 680, "movie", Some("Pulp Fiction"), None, 5, r#"{"id":680}"#);
+        let recs = repo.get_for_source(550, "movie");
+        assert_eq!(recs[0].level, 1);
+    }
+
+    #[test]
     fn test_different_media_types() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", Some("Movie Rec"), None, r#"{"id":680}"#);
-        repo.upsert(100, "tv", 200, "tv", Some("TV Rec"), None, r#"{"id":200}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("Movie Rec"), None, 1, r#"{"id":680}"#);
+        repo.upsert(100, "tv", 200, "tv", Some("TV Rec"), None, 1, r#"{"id":200}"#);
 
         assert_eq!(repo.get_for_source(550, "movie").len(), 1);
         assert_eq!(repo.get_for_source(100, "tv").len(), 1);
@@ -293,9 +326,9 @@ mod tests {
     #[test]
     fn test_delete_for_source() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", Some("A"), None, r#"{"id":680}"#);
-        repo.upsert(550, "movie", 13, "movie", Some("B"), None, r#"{"id":13}"#);
-        repo.upsert(100, "tv", 200, "tv", Some("C"), None, r#"{"id":200}"#);
+        repo.upsert(550, "movie", 680, "movie", Some("A"), None, 1, r#"{"id":680}"#);
+        repo.upsert(550, "movie", 13, "movie", Some("B"), None, 1, r#"{"id":13}"#);
+        repo.upsert(100, "tv", 200, "tv", Some("C"), None, 1, r#"{"id":200}"#);
 
         let deleted = repo.delete_for_source(550, "movie");
         assert_eq!(deleted, 2);
@@ -304,11 +337,42 @@ mod tests {
     }
 
     #[test]
+    fn test_has_source() {
+        let repo = setup();
+        assert!(!repo.has_source(550, "movie"));
+
+        repo.upsert(550, "movie", 680, "movie", None, None, 1, r#"{"id":680}"#);
+        assert!(repo.has_source(550, "movie"));
+        assert!(!repo.has_source(550, "tv"));
+        assert!(!repo.has_source(680, "movie"));
+    }
+
+    #[test]
+    fn test_top_movies_min_level() {
+        let repo = setup();
+        // Movie 680 recommended at level 1 by source 550
+        repo.upsert(550, "movie", 680, "movie", Some("Pulp Fiction"), None, 1, r#"{"id":680}"#);
+        // Movie 680 also recommended at level 2 by source 100
+        repo.upsert(100, "movie", 680, "movie", Some("Pulp Fiction"), None, 2, r#"{"id":680}"#);
+        // Movie 13 only at level 3
+        repo.upsert(200, "movie", 13, "movie", Some("Forrest Gump"), None, 3, r#"{"id":13}"#);
+
+        let top = repo.top_recommended_movies(10);
+        // 680 has count=2, 13 has count=1
+        assert_eq!(top[0].0, 680);
+        assert_eq!(top[0].3, 2); // count
+        assert_eq!(top[0].4, 1); // min_level
+        assert_eq!(top[1].0, 13);
+        assert_eq!(top[1].3, 1); // count
+        assert_eq!(top[1].4, 3); // min_level
+    }
+
+    #[test]
     fn test_list_sources() {
         let repo = setup();
-        repo.upsert(550, "movie", 680, "movie", None, None, r#"{"id":680}"#);
-        repo.upsert(550, "movie", 13, "movie", None, None, r#"{"id":13}"#);
-        repo.upsert(100, "tv", 200, "tv", None, None, r#"{"id":200}"#);
+        repo.upsert(550, "movie", 680, "movie", None, None, 1, r#"{"id":680}"#);
+        repo.upsert(550, "movie", 13, "movie", None, None, 1, r#"{"id":13}"#);
+        repo.upsert(100, "tv", 200, "tv", None, None, 1, r#"{"id":200}"#);
 
         let sources = repo.list_sources();
         assert_eq!(sources.len(), 2);

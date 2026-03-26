@@ -1024,6 +1024,15 @@ fn run_migrations(conn: &Connection) {
         let _ = conn.execute_batch("ALTER TABLE tmdb_recommendations ADD COLUMN genres TEXT");
     }
 
+    // Migration: add level column to tmdb_recommendations
+    if has_table(conn, "tmdb_recommendations")
+        && !has_column(conn, "tmdb_recommendations", "level")
+    {
+        let _ = conn.execute_batch(
+            "ALTER TABLE tmdb_recommendations ADD COLUMN level INTEGER NOT NULL DEFAULT 1",
+        );
+    }
+
     // Migration: add profile_picture_url to profiles table (db_version 37)
     if has_table(conn, "profiles") && !has_column(conn, "profiles", "profile_picture_url") {
         let _ = conn.execute_batch("ALTER TABLE profiles ADD COLUMN profile_picture_url TEXT");
