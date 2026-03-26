@@ -4,6 +4,9 @@ use http_body_util::BodyExt;
 use mhaol_node::{api::build_router, AppState};
 use tower::ServiceExt;
 
+/// A fixed test private key (not used for anything real).
+const TEST_PRIVATE_KEY: &str = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
 /// Build a test app with an in-memory database and initialized modules.
 fn test_app() -> axum::Router {
     let state = AppState::new(None).expect("Failed to create in-memory AppState");
@@ -29,6 +32,71 @@ async fn body_string(body: Body) -> String {
 async fn body_json(body: Body) -> serde_json::Value {
     let s = body_string(body).await;
     serde_json::from_str(&s).expect("Response body is not valid JSON")
+}
+
+/// Build an authenticated GET request.
+fn auth_get(uri: &str) -> Request<Body> {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+        .to_string();
+    let message = format!("mhaol-auth:{}", timestamp);
+    let signature = mhaol_identity::eip191_sign(&message, TEST_PRIVATE_KEY);
+    let address = test_address();
+
+    Request::builder()
+        .uri(uri)
+        .header("x-auth-address", &address)
+        .header("x-auth-signature", &signature)
+        .header("x-auth-timestamp", &timestamp)
+        .body(Body::empty())
+        .unwrap()
+}
+
+/// Build an authenticated request with a custom method and optional JSON body.
+fn auth_request(method: &str, uri: &str, json_body: Option<serde_json::Value>) -> Request<Body> {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+        .to_string();
+    let message = format!("mhaol-auth:{}", timestamp);
+    let signature = mhaol_identity::eip191_sign(&message, TEST_PRIVATE_KEY);
+    let address = test_address();
+
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("x-auth-address", &address)
+        .header("x-auth-signature", &signature)
+        .header("x-auth-timestamp", &timestamp);
+
+    if json_body.is_some() {
+        builder = builder.header("content-type", "application/json");
+    }
+
+    let body = match json_body {
+        Some(v) => Body::from(v.to_string()),
+        None => Body::empty(),
+    };
+
+    builder.body(body).unwrap()
+}
+
+/// Derive the Ethereum address from the test private key.
+fn test_address() -> String {
+    use k256::ecdsa::SigningKey;
+    use sha3::{Digest, Keccak256};
+
+    let hex_str = TEST_PRIVATE_KEY.strip_prefix("0x").unwrap();
+    let key_bytes = hex::decode(hex_str).unwrap();
+    let signing_key = SigningKey::from_bytes((&key_bytes[..]).into()).unwrap();
+    let verifying_key = signing_key.verifying_key();
+    let public_key_bytes = verifying_key.to_encoded_point(false);
+    let pub_bytes = &public_key_bytes.as_bytes()[1..];
+    let hash = Keccak256::digest(pub_bytes);
+    format!("0x{}", hex::encode(&hash[12..]))
 }
 
 // ---------------------------------------------------------------------------
@@ -60,15 +128,7 @@ async fn test_health_returns_ok() {
 #[tokio::test]
 async fn test_database_list_tables() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/database/tables")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/database/tables")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
@@ -76,25 +136,26 @@ async fn test_database_list_tables() {
     assert!(!tables.is_empty(), "should have at least one table");
 
     // Check that expected tables exist
-    let table_names: Vec<&str> = tables
-        .iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
-    assert!(table_names.contains(&"settings"), "should have settings table");
-    assert!(table_names.contains(&"libraries"), "should have libraries table");
-    assert!(table_names.contains(&"metadata"), "should have metadata table");
+    let table_names: Vec<&str> = tables.iter().filter_map(|t| t["name"].as_str()).collect();
+    assert!(
+        table_names.contains(&"settings"),
+        "should have settings table"
+    );
+    assert!(
+        table_names.contains(&"libraries"),
+        "should have libraries table"
+    );
+    assert!(
+        table_names.contains(&"metadata"),
+        "should have metadata table"
+    );
 }
 
 #[tokio::test]
 async fn test_database_get_table_settings() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/database/tables/settings")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_get("/api/database/tables/settings"))
         .await
         .unwrap();
 
@@ -110,12 +171,7 @@ async fn test_database_get_table_settings() {
 async fn test_database_get_nonexistent_table() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/database/tables/nonexistent_table_xyz")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_get("/api/database/tables/nonexistent_table_xyz"))
         .await
         .unwrap();
 
@@ -126,12 +182,7 @@ async fn test_database_get_nonexistent_table() {
 async fn test_database_get_table_with_pagination() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/database/tables/settings?page=1&limit=5")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_get("/api/database/tables/settings?page=1&limit=5"))
         .await
         .unwrap();
 
@@ -148,15 +199,7 @@ async fn test_database_get_table_with_pagination() {
 #[tokio::test]
 async fn test_list_libraries() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/libraries")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/libraries")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
@@ -172,21 +215,15 @@ async fn test_create_and_delete_library() {
     // Create library
     let response = app
         .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/libraries")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "name": "Test Library",
-                        "path": "/tmp/test-lib",
-                        "libraryType": "movies"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "POST",
+            "/api/libraries",
+            Some(serde_json::json!({
+                "name": "Test Library",
+                "path": "/tmp/test-lib",
+                "libraryType": "movies"
+            })),
+        ))
         .await
         .unwrap();
 
@@ -198,13 +235,11 @@ async fn test_create_and_delete_library() {
 
     // Delete library
     let response = app
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/libraries/{}", lib_id))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "DELETE",
+            &format!("/api/libraries/{}", lib_id),
+            None,
+        ))
         .await
         .unwrap();
 
@@ -219,12 +254,7 @@ async fn test_create_and_delete_library() {
 async fn test_get_media_types() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/libraries/media-types")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_get("/api/libraries/media-types"))
         .await
         .unwrap();
 
@@ -237,12 +267,7 @@ async fn test_get_media_types() {
 async fn test_get_categories() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/libraries/categories")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_get("/api/libraries/categories"))
         .await
         .unwrap();
 
@@ -258,15 +283,7 @@ async fn test_get_categories() {
 #[tokio::test]
 async fn test_list_addons() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/addons")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/addons")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
@@ -280,16 +297,11 @@ async fn test_update_addon_setting_missing_fields() {
     // Missing addon field
     let response = app
         .clone()
-        .oneshot(
-            Request::builder()
-                .method("PUT")
-                .uri("/api/addons/settings")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({ "key": "some_key", "value": "some_value" }).to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "PUT",
+            "/api/addons/settings",
+            Some(serde_json::json!({ "key": "some_key", "value": "some_value" })),
+        ))
         .await
         .unwrap();
 
@@ -298,16 +310,11 @@ async fn test_update_addon_setting_missing_fields() {
     // Missing key field
     let response = app
         .clone()
-        .oneshot(
-            Request::builder()
-                .method("PUT")
-                .uri("/api/addons/settings")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({ "addon": "tmdb", "value": "some_value" }).to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "PUT",
+            "/api/addons/settings",
+            Some(serde_json::json!({ "addon": "tmdb", "value": "some_value" })),
+        ))
         .await
         .unwrap();
 
@@ -315,16 +322,11 @@ async fn test_update_addon_setting_missing_fields() {
 
     // Missing value field
     let response = app
-        .oneshot(
-            Request::builder()
-                .method("PUT")
-                .uri("/api/addons/settings")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({ "addon": "tmdb", "key": "apiKey" }).to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "PUT",
+            "/api/addons/settings",
+            Some(serde_json::json!({ "addon": "tmdb", "key": "apiKey" })),
+        ))
         .await
         .unwrap();
 
@@ -335,21 +337,15 @@ async fn test_update_addon_setting_missing_fields() {
 async fn test_update_addon_setting_not_found() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .method("PUT")
-                .uri("/api/addons/settings")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "addon": "nonexistent_addon",
-                        "key": "apiKey",
-                        "value": "abc123"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "PUT",
+            "/api/addons/settings",
+            Some(serde_json::json!({
+                "addon": "nonexistent_addon",
+                "key": "apiKey",
+                "value": "abc123"
+            })),
+        ))
         .await
         .unwrap();
 
@@ -363,38 +359,28 @@ async fn test_update_addon_setting_not_found() {
 #[tokio::test]
 async fn test_list_plugins() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/plugins")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/plugins")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
     assert!(json.is_array(), "plugins should be an array");
     // With modules initialized, there should be several plugins
     let plugins = json.as_array().unwrap();
-    assert!(!plugins.is_empty(), "should have registered plugins after initialize_modules");
+    assert!(
+        !plugins.is_empty(),
+        "should have registered plugins after initialize_modules"
+    );
 }
 
 #[tokio::test]
 async fn test_update_plugin_setting_missing_fields() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .method("PUT")
-                .uri("/api/plugins/settings")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({ "key": "k", "value": "v" }).to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "PUT",
+            "/api/plugins/settings",
+            Some(serde_json::json!({ "key": "k", "value": "v" })),
+        ))
         .await
         .unwrap();
 
@@ -408,15 +394,7 @@ async fn test_update_plugin_setting_missing_fields() {
 #[tokio::test]
 async fn test_list_downloads_empty() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/downloads")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/downloads")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
@@ -431,22 +409,17 @@ async fn test_list_downloads_empty() {
 #[tokio::test]
 async fn test_get_media() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/media")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/media")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
     assert!(json["mediaTypes"].is_array(), "should have mediaTypes");
     assert!(json["categories"].is_array(), "should have categories");
     assert!(json["linkSources"].is_array(), "should have linkSources");
-    assert!(json["itemsByCategory"].is_object(), "should have itemsByCategory");
+    assert!(
+        json["itemsByCategory"].is_object(),
+        "should have itemsByCategory"
+    );
     assert!(json["itemsByType"].is_object(), "should have itemsByType");
     assert!(json["lists"].is_array(), "should have lists");
     assert!(json["libraries"].is_object(), "should have libraries");
@@ -459,15 +432,7 @@ async fn test_get_media() {
 #[tokio::test]
 async fn test_network_info() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/network/info")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/network/info")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
@@ -483,18 +448,16 @@ async fn test_network_info() {
 async fn test_signaling_status() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/signaling/status")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_get("/api/signaling/status"))
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
-    assert!(json.get("devAvailable").is_some(), "should have devAvailable");
+    assert!(
+        json.get("devAvailable").is_some(),
+        "should have devAvailable"
+    );
     assert!(json.get("devUrl").is_some(), "should have devUrl");
 }
 
@@ -505,15 +468,7 @@ async fn test_signaling_status() {
 #[tokio::test]
 async fn test_hub_list_apps() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/hub")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/hub")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
@@ -534,15 +489,7 @@ async fn test_hub_list_apps() {
 #[tokio::test]
 async fn test_player_list_playable() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/player/playable")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/player/playable")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
@@ -560,21 +507,15 @@ async fn test_create_library_item() {
     // First create a library
     let response = app
         .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/libraries")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "name": "Items Test Lib",
-                        "path": "/tmp/items-test",
-                        "libraryType": "movies"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "POST",
+            "/api/libraries",
+            Some(serde_json::json!({
+                "name": "Items Test Lib",
+                "path": "/tmp/items-test",
+                "libraryType": "movies"
+            })),
+        ))
         .await
         .unwrap();
 
@@ -585,21 +526,15 @@ async fn test_create_library_item() {
     // Create an item in that library
     let response = app
         .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(format!("/api/libraries/{}/items", lib_id))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "name": "Test Movie",
-                        "path": "/tmp/items-test/movie.mp4",
-                        "mediaType": "video"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "POST",
+            &format!("/api/libraries/{}/items", lib_id),
+            Some(serde_json::json!({
+                "name": "Test Movie",
+                "path": "/tmp/items-test/movie.mp4",
+                "mediaType": "video"
+            })),
+        ))
         .await
         .unwrap();
 
@@ -610,12 +545,7 @@ async fn test_create_library_item() {
 
     // Get library files and verify item is there
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri(format!("/api/libraries/{}/files", lib_id))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_get(&format!("/api/libraries/{}/files", lib_id)))
         .await
         .unwrap();
 
@@ -634,12 +564,7 @@ async fn test_create_library_item() {
 async fn test_get_library_files_not_found() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/libraries/nonexistent-id/files")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_get("/api/libraries/nonexistent-id/files"))
         .await
         .unwrap();
 
@@ -654,13 +579,7 @@ async fn test_get_library_files_not_found() {
 async fn test_database_reset() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/database/reset")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_request("POST", "/api/database/reset", None))
         .await
         .unwrap();
 
@@ -678,12 +597,7 @@ async fn test_database_reset() {
 async fn test_browse_directory() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/libraries/browse?path=/tmp")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(auth_get("/api/libraries/browse?path=/tmp"))
         .await
         .unwrap();
 
@@ -700,15 +614,7 @@ async fn test_browse_directory() {
 #[tokio::test]
 async fn test_list_identities() {
     let app = test_app();
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/identities")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(auth_get("/api/identities")).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response.into_body()).await;
@@ -719,14 +625,11 @@ async fn test_list_identities() {
 async fn test_create_identity_missing_name() {
     let app = test_app();
     let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/identities")
-                .header("content-type", "application/json")
-                .body(Body::from(serde_json::json!({}).to_string()))
-                .unwrap(),
-        )
+        .oneshot(auth_request(
+            "POST",
+            "/api/identities",
+            Some(serde_json::json!({})),
+        ))
         .await
         .unwrap();
 

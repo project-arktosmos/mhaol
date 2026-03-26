@@ -33,6 +33,7 @@ async-stream = "0.3"
 tracing = "0.1"
 mhaol-identity = { path = "../../packages/identity" }
 mhaol-queue = { path = "../../packages/queue" }
+mhaol-recommendations = { path = "../../packages/recommendations" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2.0"
 parking_lot = "0.12"
@@ -67,3 +68,6 @@ hex = "0.4"
 tokio = { version = "1", features = ["full", "test-util"] }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+k256 = { version = "0.13", features = ["ecdsa"] }
+sha3 = "0.10"
+hex = "0.4"

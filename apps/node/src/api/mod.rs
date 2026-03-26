@@ -1,45 +1,47 @@
-#[cfg(feature = "embed-frontend")]
-pub mod frontend;
 pub mod addons;
-pub mod image_cache;
+pub mod auth;
 pub mod database;
 pub mod downloads;
+#[cfg(feature = "embed-frontend")]
+pub mod frontend;
 pub mod health;
 pub mod hub;
-pub mod images;
 pub mod identities;
+pub mod image_cache;
+pub mod images;
 pub mod libraries;
 pub mod lyrics;
 
+pub mod catalog;
+pub mod favorites;
+pub mod iptv;
+#[cfg(not(target_os = "android"))]
+pub mod llm;
 pub mod media;
 pub mod media_lists;
 pub mod musicbrainz;
 pub mod network;
+pub mod openlibrary;
 pub mod p2p_stream;
-pub mod retroachievements;
+pub mod pins;
 pub mod player;
 pub mod plugins;
 pub mod profiles;
-pub mod favorites;
-pub mod pins;
 pub mod queue;
+pub mod retroachievements;
 pub mod roster;
 pub mod signaling;
 pub mod signaling_ws;
-pub mod openlibrary;
-pub mod iptv;
 pub mod smart_pair;
 pub mod smart_search;
-pub mod catalog;
 pub mod tmdb;
+#[cfg(not(target_os = "android"))]
+pub mod torrent;
+pub mod ws_rpc;
 pub mod youtube;
 pub mod youtube_search;
 #[cfg(not(target_os = "android"))]
 pub mod ytdl;
-#[cfg(not(target_os = "android"))]
-pub mod llm;
-#[cfg(not(target_os = "android"))]
-pub mod torrent;
 
 use crate::AppState;
 use axum::Router;
@@ -53,8 +55,14 @@ pub fn build_router(state: AppState) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let router = Router::new()
+    // Public routes — no auth required
+    let public = Router::new()
         .nest("/api/health", health::router())
+        .merge(signaling_ws::signaling_routes())
+        .nest("/api/rpc", ws_rpc::router());
+
+    // Protected routes — require passport auth
+    let protected = Router::new()
         .nest("/api/hub", hub::router())
         .nest("/api/libraries", libraries::router())
         .nest("/api/media", media::router())
@@ -84,17 +92,20 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/iptv", iptv::router())
         .nest("/api/smart-pair", smart_pair::router())
         .nest("/api/smart-search", smart_search::router())
-        .nest("/api/catalog", catalog::router())
-        .merge(signaling_ws::signaling_routes());
+        .nest("/api/catalog", catalog::router());
 
     #[cfg(not(target_os = "android"))]
-    let router = router.nest("/api/ytdl", ytdl::router());
+    let protected = protected.nest("/api/ytdl", ytdl::router());
 
     #[cfg(not(target_os = "android"))]
-    let router = router.nest("/api/torrent", torrent::router());
+    let protected = protected.nest("/api/torrent", torrent::router());
 
     #[cfg(not(target_os = "android"))]
-    let router = router.nest("/api/llm", llm::router());
+    let protected = protected.nest("/api/llm", llm::router());
+
+    let protected = protected.layer(axum::middleware::from_fn(auth::require_auth));
+
+    let router = Router::new().merge(public).merge(protected);
 
     #[cfg(feature = "embed-frontend")]
     let router = router.fallback(frontend::serve_frontend);
@@ -109,5 +120,8 @@ pub fn build_router(state: AppState) -> Router {
         router
     };
 
-    router.with_state(state).layer(cors)
+    router
+        .with_state(state)
+        .layer(axum::middleware::from_fn(auth::strip_internal_header))
+        .layer(cors)
 }
