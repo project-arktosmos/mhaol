@@ -1038,6 +1038,39 @@ fn run_migrations(conn: &Connection) {
         let _ = conn.execute_batch("ALTER TABLE profiles ADD COLUMN profile_picture_url TEXT");
     }
 
+    // Migration: add recommendation_labels definitions table
+    if !has_table(conn, "recommendation_labels") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE recommendation_labels (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                emoji TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT OR IGNORE INTO recommendation_labels (id, name, emoji, sort_order) VALUES ('thumbs-up', 'thumbs_up', '👍', 1);
+            INSERT OR IGNORE INTO recommendation_labels (id, name, emoji, sort_order) VALUES ('thumbs-down', 'thumbs_down', '👎', 2);
+            INSERT OR IGNORE INTO recommendation_labels (id, name, emoji, sort_order) VALUES ('love', 'love', '❤️', 3);
+            INSERT OR IGNORE INTO recommendation_labels (id, name, emoji, sort_order) VALUES ('hate', 'hate', '💀', 4);",
+        );
+    }
+
+    // Migration: add recommendation_label_assignments table (per-user)
+    if !has_table(conn, "recommendation_label_assignments") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE recommendation_label_assignments (
+                id TEXT PRIMARY KEY,
+                wallet TEXT NOT NULL REFERENCES profiles(wallet) ON DELETE CASCADE,
+                recommended_tmdb_id INTEGER NOT NULL,
+                recommended_media_type TEXT NOT NULL CHECK (recommended_media_type IN ('movie', 'tv')),
+                label_id TEXT NOT NULL REFERENCES recommendation_labels(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(wallet, recommended_tmdb_id, recommended_media_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rec_label_assign_wallet
+                ON recommendation_label_assignments(wallet);",
+        );
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(
