@@ -269,8 +269,8 @@ pub(crate) const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "wmv"
 
 /// Resolve a media path to an actual video file.
 /// - If it's a file, return as-is.
-/// - If it's a directory, find the largest video file inside.
-/// - If it doesn't exist, return the path as-is (caller handles the error).
+/// - If it's a directory, find the largest video file inside (recursive).
+/// - If it doesn't exist, check the parent for a matching video file (non-recursive).
 pub(crate) fn resolve_media_path(path: &str) -> String {
     let p = std::path::Path::new(path);
     if p.is_file() {
@@ -279,7 +279,40 @@ pub(crate) fn resolve_media_path(path: &str) -> String {
     if p.is_dir() {
         return find_largest_video(p).unwrap_or_else(|| path.to_string());
     }
+    // Path doesn't exist — try finding a video file in the parent that belongs
+    // to this entry (same stem or contained within a same-named subdirectory).
+    if let Some(parent) = p.parent() {
+        if parent.is_dir() {
+            if let Some(found) = find_largest_video_shallow(parent) {
+                return found;
+            }
+        }
+    }
     path.to_string()
+}
+
+/// Like find_largest_video but only checks direct file children — never recurses
+/// into subdirectories. Used when falling back to the parent directory so we don't
+/// pick up unrelated files from sibling torrent directories.
+fn find_largest_video_shallow(dir: &std::path::Path) -> Option<String> {
+    let mut best: Option<(u64, String)> = None;
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let ft = entry.file_type().ok()?;
+        if !ft.is_file() {
+            continue;
+        }
+        let entry_path = entry.path();
+        if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
+            if VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                if best.as_ref().is_none_or(|(s, _)| size > *s) {
+                    best = Some((size, entry_path.to_string_lossy().to_string()));
+                }
+            }
+        }
+    }
+    best.map(|(_, path)| path)
 }
 
 fn find_largest_video(dir: &std::path::Path) -> Option<String> {
