@@ -73,6 +73,37 @@
 	let currentTorrentStatus = $derived(matchedTorrent);
 	let isDownloaded = $derived(currentTorrentStatus?.state === 'seeding');
 
+	function findBestRom(
+		files: Array<{ id: number; name: string; size: number }>,
+		gameTitle: string,
+		validExts: string[]
+	): { id: number; name: string; size: number } | null {
+		const romFiles = files.filter((f) => {
+			const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+			return validExts.includes(ext);
+		});
+		if (romFiles.length === 0) return null;
+		if (romFiles.length === 1) return romFiles[0];
+
+		const normalize = (s: string) =>
+			s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+		const titleWords = normalize(gameTitle).split(' ').filter(Boolean);
+
+		let best = romFiles[0];
+		let bestScore = -1;
+		for (const f of romFiles) {
+			const basename = f.name.split('/').pop() ?? f.name;
+			const nameNoExt = basename.replace(/\.[^.]+$/, '');
+			const normName = normalize(nameNoExt);
+			const score = titleWords.filter((w) => normName.includes(w)).length;
+			if (score > bestScore || (score === bestScore && f.size > best.size)) {
+				best = f;
+				bestScore = score;
+			}
+		}
+		return best;
+	}
+
 	$effect(() => {
 		if (!isDownloaded || !game) return;
 		const candidate = $searchStore.fetchedCandidate;
@@ -88,17 +119,29 @@
 
 		const validExts = CONSOLE_ROM_EXTENSIONS[consoleId] ?? [];
 		const infoHash = candidate.infoHash;
+		const gameTitle = game.title;
 
 		fetch(apiUrl(`/api/torrent/torrents/${infoHash}/files`))
 			.then((res) => (res.ok ? res.json() : []))
 			.then((files: Array<{ id: number; name: string; size: number }>) => {
-				const romFile = files.find((f) => {
-					const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-					return validExts.includes(ext);
-				});
+				const romFile = findBestRom(files, gameTitle, validExts);
 				if (romFile) {
 					romFileUrl = apiUrl(`/api/torrent/torrents/${infoHash}/serve/${romFile.id}`);
 					ejsCore = core;
+
+					const itemId = $searchStore.pendingItemId;
+					const libId = $searchStore.pendingLibraryId;
+					if (itemId && libId) {
+						fetch(apiUrl(`/api/libraries/${libId}/items/${itemId}/torrent`), {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								infoHash,
+								outputPath: romFile.name,
+								mode: 'download'
+							})
+						});
+					}
 				} else {
 					romFileUrl = null;
 					ejsCore = null;
