@@ -11,8 +11,28 @@
 	import BrowseHeader from 'ui-lib/components/browse/BrowseHeader.svelte';
 	import BrowseGrid from 'ui-lib/components/browse/BrowseGrid.svelte';
 	import classNames from 'classnames';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 
 	const PAGE_SIZE = 20;
+
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+
+	let favoritedGameIds = $derived(
+		new Set(
+			$favState.items
+				.filter((f) => f.service === 'retroachievements')
+				.map((f) => Number(f.serviceId))
+		)
+	);
+	let pinnedGameIds = $derived(
+		new Set(
+			$pinState.items
+				.filter((p) => p.service === 'retroachievements')
+				.map((p) => Number(p.serviceId))
+		)
+	);
 
 	let selectedConsoleId = $state(5);
 	let games = $state<RaGameMetadata[]>([]);
@@ -202,6 +222,8 @@
 			{@const game = item as RaGameMetadata}
 			<GameCard
 				{game}
+				favorited={favoritedGameIds.has(game.id)}
+				pinned={pinnedGameIds.has(game.id)}
 				onselect={handleSelectGame}
 			/>
 		{/snippet}

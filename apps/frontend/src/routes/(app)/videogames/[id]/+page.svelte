@@ -6,6 +6,8 @@
 	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import { gameExtendedToDisplay } from 'addons/retroachievements';
 	import type { RaGameMetadata, RaGameExtended } from 'addons/retroachievements/types';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
@@ -15,9 +17,40 @@
 	let details = $state<RaGameMetadata | null>(null);
 	let detailsLoading = $state(true);
 	let fetchingGameId = $state<number | null>(null);
+	let togglingFavorite = $state(false);
+	let togglingPin = $state(false);
 
 	const searchStore = smartSearchService.store;
 	const torrentState = torrentService.state;
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+
+	let isFavorite = $derived(
+		$favState.items.some((f) => f.service === 'retroachievements' && f.serviceId === String(gameId))
+	);
+	let isPinned = $derived(
+		$pinState.items.some((p) => p.service === 'retroachievements' && p.serviceId === String(gameId))
+	);
+
+	async function handleToggleFavorite() {
+		if (!game) return;
+		togglingFavorite = true;
+		try {
+			await favoritesService.toggle('retroachievements', String(game.id), game.title);
+		} finally {
+			togglingFavorite = false;
+		}
+	}
+
+	async function handleTogglePin() {
+		if (!game) return;
+		togglingPin = true;
+		try {
+			await pinsService.toggle('retroachievements', String(game.id), game.title);
+		} finally {
+			togglingPin = false;
+		}
+	}
 
 	let id = $derived($page.params.id ?? '');
 	let gameId = $derived(Number(id));
@@ -117,10 +150,16 @@
 					languages: $searchStore.fetchedCandidate.analysis?.languages ?? ''
 				}
 			: null}
+		{isFavorite}
+		{togglingFavorite}
+		{isPinned}
+		{togglingPin}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
 		onshowsearch={() => smartSearchService.show()}
 		onback={() => goto(`${base}/videogames`)}
+		ontogglefavorite={handleToggleFavorite}
+		ontogglepin={handleTogglePin}
 	/>
 {:else if detailsLoading}
 	<div class="flex flex-1 items-center justify-center">
