@@ -8,6 +8,8 @@
 	import type { OpenLibraryWork, OpenLibraryAuthor } from 'addons/openlibrary/types';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import type { CatalogBook } from 'ui-lib/types/catalog.type';
 	import CatalogDetailPage from 'ui-lib/components/catalog/CatalogDetailPage.svelte';
 	import BookDetailMeta from 'ui-lib/components/catalog/detail/BookDetailMeta.svelte';
@@ -16,9 +18,18 @@
 	let loading = $state(true);
 	let fetchingKey = $state<string | null>(null);
 
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
 	const searchStore = smartSearchService.store;
 
 	let id = $derived($page.params.id ?? '');
+
+	let isFavorite = $derived(
+		$favState.items.some((f) => f.service === 'openlibrary' && f.serviceId === id)
+	);
+	let isPinned = $derived(
+		$pinState.items.some((p) => p.service === 'openlibrary' && p.serviceId === id)
+	);
 
 	let isFetching = $derived(
 		fetchingKey !== null && fetchingKey === id &&
@@ -150,6 +161,14 @@
 		if (candidate) smartSearchService.startDownload(candidate);
 	}
 
+	async function handleToggleFavorite() {
+		if (catalogItem) await favoritesService.toggle('openlibrary', catalogItem.sourceId, catalogItem.title);
+	}
+
+	async function handleTogglePin() {
+		if (catalogItem) await pinsService.toggle('openlibrary', catalogItem.sourceId, catalogItem.title);
+	}
+
 	onMount(() => { smartSearchService.initializeConfig(); fetchBook(id); });
 </script>
 
@@ -159,9 +178,13 @@
 		fetching={isFetching} fetched={isFetchedForCurrent}
 		fetchSteps={currentFetchSteps} torrentStatus={matchedTorrent}
 		fetchedTorrent={$searchStore.fetchedCandidate ? { name: $searchStore.fetchedCandidate.name, quality: $searchStore.fetchedCandidate.analysis?.quality ?? '', languages: $searchStore.fetchedCandidate.analysis?.languages ?? '' } : null}
+		{isFavorite}
+		{isPinned}
 		onfetch={handleFetch} ondownload={handleDownload}
 		onshowsearch={() => smartSearchService.show()}
 		onback={() => goto(`${base}/books`)}
+		ontogglefavorite={handleToggleFavorite}
+		ontogglepin={handleTogglePin}
 	>
 		{#snippet extra()}
 			<BookDetailMeta item={catalogItem!} />
