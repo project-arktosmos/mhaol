@@ -148,11 +148,22 @@
 		ondisconnect?.();
 	}
 
+	let inviteBase64 = $derived(existingConfig ? btoa(buildInvite(existingConfig)) : '');
+
 	async function handleCopyInvite() {
 		if (!existingConfig) return;
 		const json = buildInvite(existingConfig);
 		await navigator.clipboard.writeText(json);
 		toastService.success('Invite copied to clipboard');
+	}
+
+	async function handleCopyInviteLink() {
+		if (!existingConfig) return;
+		const url = new URL(window.location.href);
+		url.search = '';
+		url.searchParams.set('invite', inviteBase64);
+		await navigator.clipboard.writeText(url.toString());
+		toastService.success('Invite link copied to clipboard');
 	}
 </script>
 
@@ -219,12 +230,28 @@
 			></textarea>
 		</div>
 
+		<div class="form-control">
+			<label class="label" for="invite-base64-output">
+				<span class="label-text text-base-content/60">Invite (Base64)</span>
+			</label>
+			<textarea
+				id="invite-base64-output"
+				class="textarea-bordered textarea w-full font-mono text-xs"
+				readonly
+				rows="2"
+				value={inviteBase64}
+			></textarea>
+		</div>
+
 		<div class="flex gap-2">
 			<button class="btn flex-1 btn-outline btn-error" onclick={handleDisconnect}>
 				Disconnect
 			</button>
 			<button class="btn flex-1 btn-outline btn-primary" onclick={handleCopyInvite}>
 				Copy Invite
+			</button>
+			<button class="btn flex-1 btn-outline btn-primary" onclick={handleCopyInviteLink}>
+				Copy Link
 			</button>
 		</div>
 	{:else}
