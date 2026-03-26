@@ -25,7 +25,6 @@
 	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import classNames from 'classnames';
 	import TmdbCatalogGrid from 'ui-lib/components/catalog/TmdbCatalogGrid.svelte';
-	import TmdbPagination from 'ui-lib/components/tmdb-browse/TmdbPagination.svelte';
 	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
@@ -566,12 +565,13 @@
 						onselectMovie={handleBrowseSelectMovie}
 						onsmartSearch={handleSmartSearch}
 					/>
-					<TmdbPagination
-						page={searchMoviesPage}
-						totalPages={searchMoviesTotalPages}
-						loading={browseLoading['searchMovies'] ?? false}
-						onpage={(p) => doSearchMovies(searchQuery, p)}
-					/>
+					{#if searchMoviesTotalPages > 1}
+						<div class="mt-4 flex items-center justify-center gap-2">
+							<button class="btn btn-ghost btn-sm" disabled={searchMoviesPage <= 1} onclick={() => doSearchMovies(searchQuery, searchMoviesPage - 1)}>Prev</button>
+							<span class="text-sm opacity-60">{searchMoviesPage} / {searchMoviesTotalPages}</span>
+							<button class="btn btn-ghost btn-sm" disabled={searchMoviesPage >= searchMoviesTotalPages} onclick={() => doSearchMovies(searchQuery, searchMoviesPage + 1)}>Next</button>
+						</div>
+					{/if}
 				</section>
 			{/if}
 
@@ -613,12 +613,13 @@
 							onselectMovie={handleBrowseSelectMovie}
 							onsmartSearch={handleSmartSearch}
 						/>
-						<TmdbPagination
-							page={popularMoviesPage}
-							totalPages={popularMoviesTotalPages}
-							loading={browseLoading['popularMovies'] ?? false}
-							onpage={(p) => loadPopularMovies(p)}
-						/>
+						{#if popularMoviesTotalPages > 1}
+							<div class="mt-4 flex items-center justify-center gap-2">
+								<button class="btn btn-ghost btn-sm" disabled={popularMoviesPage <= 1} onclick={() => loadPopularMovies(popularMoviesPage - 1)}>Prev</button>
+								<span class="text-sm opacity-60">{popularMoviesPage} / {popularMoviesTotalPages}</span>
+								<button class="btn btn-ghost btn-sm" disabled={popularMoviesPage >= popularMoviesTotalPages} onclick={() => loadPopularMovies(popularMoviesPage + 1)}>Next</button>
+							</div>
+						{/if}
 					{/if}
 				{:else}
 					{#if movieGenres.length > 0}
@@ -654,12 +655,13 @@
 								onselectMovie={handleBrowseSelectMovie}
 								onsmartSearch={handleSmartSearch}
 							/>
-							<TmdbPagination
-								page={discoverMoviesPage}
-								totalPages={discoverMoviesTotalPages}
-								loading={browseLoading['discoverMovies'] ?? false}
-								onpage={(p) => loadDiscoverMovies(p, selectedGenreId)}
-							/>
+							{#if discoverMoviesTotalPages > 1}
+								<div class="mt-4 flex items-center justify-center gap-2">
+									<button class="btn btn-ghost btn-sm" disabled={discoverMoviesPage <= 1} onclick={() => loadDiscoverMovies(discoverMoviesPage - 1, selectedGenreId)}>Prev</button>
+									<span class="text-sm opacity-60">{discoverMoviesPage} / {discoverMoviesTotalPages}</span>
+									<button class="btn btn-ghost btn-sm" disabled={discoverMoviesPage >= discoverMoviesTotalPages} onclick={() => loadDiscoverMovies(discoverMoviesPage + 1, selectedGenreId)}>Next</button>
+								</div>
+							{/if}
 						</div>
 					{/if}
 				{/if}

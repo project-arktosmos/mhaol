@@ -11,7 +11,6 @@
 	import type { MediaCategory, MediaLinkSource } from 'ui-lib/types/media-card.type';
 	import type { MediaList } from 'ui-lib/types/media-list.type';
 	import TmdbCatalogGrid from 'ui-lib/components/catalog/TmdbCatalogGrid.svelte';
-	import TmdbPagination from 'ui-lib/components/tmdb-browse/TmdbPagination.svelte';
 	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
 	import TvShowMatchModal from 'ui-lib/components/libraries/TvShowMatchModal.svelte';
 	import classNames from 'classnames';
@@ -368,12 +367,13 @@
 					pinnedIds={pinnedTmdbTvIds}
 					onselectTvShow={handleSelectTvShow}
 				/>
-				<TmdbPagination
-					page={searchTvPage}
-					totalPages={searchTvTotalPages}
-					loading={tvBrowseLoading['searchTv'] ?? false}
-					onpage={(p) => doSearchTv(tvSearchQuery, p)}
-				/>
+				{#if searchTvTotalPages > 1}
+					<div class="mt-4 flex items-center justify-center gap-2">
+						<button class="btn btn-ghost btn-sm" disabled={searchTvPage <= 1} onclick={() => doSearchTv(tvSearchQuery, searchTvPage - 1)}>Prev</button>
+						<span class="text-sm opacity-60">{searchTvPage} / {searchTvTotalPages}</span>
+						<button class="btn btn-ghost btn-sm" disabled={searchTvPage >= searchTvTotalPages} onclick={() => doSearchTv(tvSearchQuery, searchTvPage + 1)}>Next</button>
+					</div>
+				{/if}
 			</section>
 		{/if}
 
@@ -388,12 +388,13 @@
 					pinnedIds={pinnedTmdbTvIds}
 					onselectTvShow={handleSelectTvShow}
 				/>
-				<TmdbPagination
-					page={popularTvPage}
-					totalPages={popularTvTotalPages}
-					loading={tvBrowseLoading['popularTv'] ?? false}
-					onpage={(p) => loadPopularTv(p)}
-				/>
+				{#if popularTvTotalPages > 1}
+					<div class="mt-4 flex items-center justify-center gap-2">
+						<button class="btn btn-ghost btn-sm" disabled={popularTvPage <= 1} onclick={() => loadPopularTv(popularTvPage - 1)}>Prev</button>
+						<span class="text-sm opacity-60">{popularTvPage} / {popularTvTotalPages}</span>
+						<button class="btn btn-ghost btn-sm" disabled={popularTvPage >= popularTvTotalPages} onclick={() => loadPopularTv(popularTvPage + 1)}>Next</button>
+					</div>
+				{/if}
 			{/if}
 		</section>
 
@@ -427,12 +428,13 @@
 						pinnedIds={pinnedTmdbTvIds}
 						onselectTvShow={handleSelectTvShow}
 					/>
-					<TmdbPagination
-						page={discoverTvPage}
-						totalPages={discoverTvTotalPages}
-						loading={tvBrowseLoading['discoverTv'] ?? false}
-						onpage={(p) => loadDiscoverTv(p, tvSelectedGenreId)}
-					/>
+					{#if discoverTvTotalPages > 1}
+						<div class="mt-4 flex items-center justify-center gap-2">
+							<button class="btn btn-ghost btn-sm" disabled={discoverTvPage <= 1} onclick={() => loadDiscoverTv(discoverTvPage - 1, tvSelectedGenreId)}>Prev</button>
+							<span class="text-sm opacity-60">{discoverTvPage} / {discoverTvTotalPages}</span>
+							<button class="btn btn-ghost btn-sm" disabled={discoverTvPage >= discoverTvTotalPages} onclick={() => loadDiscoverTv(discoverTvPage + 1, tvSelectedGenreId)}>Next</button>
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</section>
