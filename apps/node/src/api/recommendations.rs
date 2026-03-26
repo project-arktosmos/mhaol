@@ -177,9 +177,8 @@ async fn top_movies(
                 } else {
                     0
                 };
-                if lvl > 0 {
-                    score += pct as f64 / lvl as f64;
-                }
+                let divisor = 1.0 + (lvl as f64 / 10.0);
+                score += pct as f64 / divisor;
                 lc.insert(lvl.to_string(), serde_json::Value::from(cnt));
                 lp.insert(lvl.to_string(), serde_json::Value::from(pct));
             }
