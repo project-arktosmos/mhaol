@@ -18,6 +18,7 @@
 	import type { CatalogMovie } from 'ui-lib/types/catalog.type';
 	import CatalogDetailPage from 'ui-lib/components/catalog/CatalogDetailPage.svelte';
 	import MovieDetailMeta from 'ui-lib/components/catalog/detail/MovieDetailMeta.svelte';
+	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 
 	let catalogItem = $state<CatalogMovie | null>(null);
 	let movieDetails = $state<DisplayTMDBMovieDetails | null>(null);
@@ -31,6 +32,8 @@
 	const pinState = pinsService.state;
 	const searchStore = smartSearchService.store;
 	const torrentState = torrentService.state;
+	const playerState = playerService.state;
+	const playerDisplayMode = playerService.displayMode;
 
 	let id = $derived($page.params.id ?? '');
 	let tmdbId = $derived(Number(id));
@@ -287,6 +290,24 @@
 	>
 		{#snippet extra()}
 			<MovieDetailMeta item={catalogItem!} />
+		{/snippet}
+		{#snippet cellB()}
+			{#if $playerState.currentFile && $playerDisplayMode === 'inline'}
+				<div class="flex flex-col gap-2">
+					<div class="flex items-center justify-between">
+						<h2 class="text-sm font-semibold tracking-wide text-base-content/50 uppercase">Now Playing</h2>
+						<button class="btn btn-square btn-ghost btn-xs" onclick={() => playerService.stop()} aria-label="Close player">&times;</button>
+					</div>
+					<p class="truncate text-xs opacity-60" title={$playerState.currentFile.name}>{$playerState.currentFile.name}</p>
+					<PlayerVideo
+						file={$playerState.currentFile}
+						connectionState={$playerState.connectionState}
+						positionSecs={$playerState.positionSecs}
+						durationSecs={$playerState.durationSecs}
+						buffering={$playerState.buffering}
+					/>
+				</div>
+			{/if}
 		{/snippet}
 	</CatalogDetailPage>
 {:else if loading}

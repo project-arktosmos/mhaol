@@ -51,6 +51,7 @@
 		ontogglepin?: () => void;
 		sidebar?: Snippet;
 		extra?: Snippet;
+		cellB?: Snippet;
 	}
 
 	let {
@@ -71,7 +72,8 @@
 		ontogglefavorite,
 		ontogglepin,
 		sidebar,
-		extra
+		extra,
+		cellB
 	}: Props = $props();
 
 	let supportsTorrent = $derived(TORRENT_KINDS.includes(item.kind));
@@ -87,7 +89,7 @@
 	let dlPercent = $derived(Math.round(dlProgress * 100));
 </script>
 
-<DetailPageLayout>
+<DetailPageLayout {cellB}>
 	<button class="btn self-start btn-ghost btn-sm" onclick={onback}>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -258,4 +260,5 @@
 			</div>
 		{/if}
 	{/snippet}
+
 </DetailPageLayout>
