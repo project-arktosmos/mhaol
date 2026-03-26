@@ -51,6 +51,7 @@
 <CatalogBrowsePage
 	browseState={$browseState}
 	title="Videogames"
+	strategy={gameStrategy}
 	{cardOverlays}
 	onsearch={(q) => catalogService.search(q)}
 	ontabchange={(tab) => catalogService.loadTab(tab)}

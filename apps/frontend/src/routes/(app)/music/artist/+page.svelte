@@ -41,6 +41,7 @@
 <CatalogBrowsePage
 	browseState={$browseState}
 	title="Artists"
+	strategy={artistStrategy}
 	{cardOverlays}
 	onsearch={(q) => catalogService.search(q)}
 	ontabchange={(tab) => catalogService.loadTab(tab)}

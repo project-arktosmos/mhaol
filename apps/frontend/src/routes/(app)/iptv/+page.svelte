@@ -41,6 +41,7 @@
 <CatalogBrowsePage
 	browseState={$browseState}
 	title="IPTV"
+	strategy={iptvStrategy}
 	{cardOverlays}
 	onsearch={(q) => catalogService.search(q)}
 	ontabchange={(tab) => catalogService.loadTab(tab)}
