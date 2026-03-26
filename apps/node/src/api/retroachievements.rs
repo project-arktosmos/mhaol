@@ -68,7 +68,10 @@ async fn get_game_list(
         RA_BASE, user, key, console_id
     );
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap_or_default();
     match client
         .get(&url)
         .header("User-Agent", USER_AGENT)
@@ -149,7 +152,10 @@ async fn get_game_details(
         RA_BASE, user, key, id
     );
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap_or_default();
     match client
         .get(&url)
         .header("User-Agent", USER_AGENT)

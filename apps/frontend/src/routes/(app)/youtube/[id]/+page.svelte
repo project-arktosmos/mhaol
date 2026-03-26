@@ -7,6 +7,8 @@
 	import { youtubeService } from 'ui-lib/services/youtube.service';
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
 	import { mediaModeService } from 'ui-lib/services/media-mode.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import type { YouTubeChannelMeta, SubtitleTrack } from 'ui-lib/types/youtube.type';
 	import type { YouTubeSearchChannelItem } from 'ui-lib/types/youtube-search.type';
 	import type { RightPanelVideo } from 'ui-lib/types/youtube.type';
@@ -35,6 +37,7 @@
 	let ytDownloadingAudio = $state(false);
 	let ytDownloadingVideo = $state(false);
 	let ytTogglingFavorite = $state(false);
+	let ytTogglingPin = $state(false);
 	let ytDeletingAudio = $state(false);
 	let ytDeletingVideo = $state(false);
 
@@ -46,7 +49,14 @@
 	let ytVideoSrc = $derived(
 		ytHasVideo && video ? youtubeLibraryService.streamVideoUrl(video.videoId) : null
 	);
-	let ytIsFavorite = $derived(ytLiveContent?.isFavorite ?? false);
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+	let ytIsFavorite = $derived(
+		$favState.items.some((f) => f.service === 'youtube' && f.serviceId === id)
+	);
+	let ytIsPinned = $derived(
+		$pinState.items.some((p) => p.service === 'youtube' && p.serviceId === id)
+	);
 
 	let ytVideoDownloads = $derived(
 		video ? $ytState.downloads.filter((d) => d.videoId === video!.videoId) : []
@@ -215,8 +225,21 @@
 	async function handleToggleFavorite() {
 		if (!video || ytTogglingFavorite) return;
 		ytTogglingFavorite = true;
-		await youtubeLibraryService.toggleFavorite(video.videoId);
-		ytTogglingFavorite = false;
+		try {
+			await favoritesService.toggle('youtube', video.videoId, video.title);
+		} finally {
+			ytTogglingFavorite = false;
+		}
+	}
+
+	async function handleTogglePin() {
+		if (!video || ytTogglingPin) return;
+		ytTogglingPin = true;
+		try {
+			await pinsService.toggle('youtube', video.videoId, video.title);
+		} finally {
+			ytTogglingPin = false;
+		}
 	}
 
 	async function handleDeleteAudio() {
@@ -308,6 +331,7 @@
 		hasVideo={ytHasVideo}
 		hasAudio={ytHasAudio}
 		isFavorite={ytIsFavorite}
+		isPinned={ytIsPinned}
 		activeDownload={ytActiveDownload}
 		audioInProgress={ytAudioInProgress}
 		videoInProgress={ytVideoInProgress}
@@ -315,11 +339,13 @@
 		downloadingAudio={ytDownloadingAudio}
 		downloadingVideo={ytDownloadingVideo}
 		togglingFavorite={ytTogglingFavorite}
+		togglingPin={ytTogglingPin}
 		deletingAudio={ytDeletingAudio}
 		deletingVideo={ytDeletingVideo}
 		ondownloadaudio={() => handleDownload('audio')}
 		ondownloadvideo={() => handleDownload('video')}
 		ontogglefavorite={handleToggleFavorite}
+		ontogglepin={handleTogglePin}
 		ondeleteaudio={handleDeleteAudio}
 		ondeletevideo={handleDeleteVideo}
 		onselectsubtitle={handleSubtitleSelect}

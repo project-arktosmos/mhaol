@@ -131,7 +131,7 @@ mod tests {
             extension: "mp4".into(),
             media_type: "video".into(),
             category_id: None,
-        });
+        }).unwrap();
         LibraryItemLinkRepo::new(db)
     }
 

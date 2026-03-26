@@ -297,8 +297,19 @@ CREATE TABLE IF NOT EXISTS favorites (
 CREATE INDEX IF NOT EXISTS idx_favorites_wallet ON favorites(wallet);
 ";
 
+const PINS_SQL: &str = "
+CREATE TABLE IF NOT EXISTS pins (
+    id TEXT PRIMARY KEY,
+    service TEXT NOT NULL,
+    service_id TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(service, service_id)
+);
+";
+
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '33', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '35', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -435,6 +446,54 @@ CREATE TABLE IF NOT EXISTS openlibrary_api_cache (
     data TEXT NOT NULL,
     fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+";
+
+pub const CATALOG_SCHEMA_SQL: &str = "
+CREATE TABLE IF NOT EXISTS catalog_items (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    sort_title TEXT NOT NULL,
+    year TEXT,
+    overview TEXT,
+    poster_url TEXT,
+    backdrop_url TEXT,
+    vote_average REAL,
+    vote_count INTEGER,
+    parent_id TEXT REFERENCES catalog_items(id) ON DELETE CASCADE,
+    position INTEGER,
+    source TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(source, source_id, kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_items_kind ON catalog_items(kind);
+CREATE INDEX IF NOT EXISTS idx_catalog_items_source ON catalog_items(source, source_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_items_parent ON catalog_items(parent_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_items_sort_title ON catalog_items(sort_title);
+CREATE INDEX IF NOT EXISTS idx_catalog_items_kind_source ON catalog_items(kind, source);
+
+CREATE TRIGGER IF NOT EXISTS catalog_items_updated_at
+    AFTER UPDATE ON catalog_items
+    FOR EACH ROW
+BEGIN
+    UPDATE catalog_items SET updated_at = datetime('now') WHERE id = OLD.id;
+END;
+
+CREATE TABLE IF NOT EXISTS catalog_fetch_cache (
+    id TEXT PRIMARY KEY,
+    catalog_item_id TEXT NOT NULL REFERENCES catalog_items(id) ON DELETE CASCADE,
+    scope TEXT NOT NULL DEFAULT 'default',
+    scope_key TEXT NOT NULL DEFAULT '',
+    candidate_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(catalog_item_id, scope, scope_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_fetch_cache_item ON catalog_fetch_cache(catalog_item_id);
 ";
 
 fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
@@ -895,6 +954,69 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: add pins table (db_version 34)
+    if !has_table(conn, "pins") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE pins (
+                id TEXT PRIMARY KEY,
+                service TEXT NOT NULL,
+                service_id TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(service, service_id)
+            );",
+        );
+    }
+
+    // Migration: pins are now per-node, not per-wallet (db_version 35)
+    {
+        let has_wallet_col = conn
+            .prepare("SELECT wallet FROM pins LIMIT 0")
+            .is_ok();
+        if has_wallet_col {
+            let _ = conn.execute_batch(
+                "DROP TABLE pins;
+                CREATE TABLE pins (
+                    id TEXT PRIMARY KEY,
+                    service TEXT NOT NULL,
+                    service_id TEXT NOT NULL,
+                    label TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    UNIQUE(service, service_id)
+                );",
+            );
+        }
+    }
+
+    // Migration: migrate youtube_content and youtube_channels to catalog_items
+    if has_table(conn, "youtube_content") && has_table(conn, "catalog_items") {
+        let migrated: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM catalog_items WHERE source = 'youtube' AND kind = 'youtube_video')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !migrated {
+            let _ = conn.execute_batch(
+                "INSERT OR IGNORE INTO catalog_items (id, kind, title, sort_title, year, overview, poster_url, backdrop_url, vote_average, vote_count, parent_id, position, source, source_id, metadata)
+                 SELECT lower(hex(randomblob(16))), 'youtube_video', title, lower(title), NULL, NULL, thumbnail_url, NULL, NULL, NULL, NULL, NULL, 'youtube', youtube_id,
+                    json_object('youtubeId', youtube_id, 'channelId', channel_id, 'channelName', channel_name,
+                        'durationSeconds', duration_seconds, 'videoPath', video_path, 'audioPath', audio_path,
+                        'videoSize', NULL, 'audioSize', NULL, 'isFavorite', CASE WHEN is_favorite = 1 THEN json('true') ELSE json('false') END,
+                        'favoritedAt', favorited_at)
+                 FROM youtube_content"
+            );
+            let _ = conn.execute_batch(
+                "INSERT OR IGNORE INTO catalog_items (id, kind, title, sort_title, year, overview, poster_url, backdrop_url, vote_average, vote_count, parent_id, position, source, source_id, metadata)
+                 SELECT lower(hex(randomblob(16))), 'youtube_channel', name, lower(name), NULL, NULL, image_url, NULL, NULL, NULL, NULL, NULL, 'youtube', id,
+                    json_object('channelId', id, 'handle', handle, 'url', url,
+                        'subscriberText', subscriber_text, 'imageUrl', image_url)
+                 FROM youtube_channels"
+            );
+        }
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(
@@ -928,6 +1050,8 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(ROSTER_CONTACTS_SQL)?;
     conn.execute_batch(PROFILES_SQL)?;
     conn.execute_batch(FAVORITES_SQL)?;
+    conn.execute_batch(PINS_SQL)?;
+    conn.execute_batch(CATALOG_SCHEMA_SQL)?;
     if !is_server {
         conn.execute_batch(MEDIA_LISTS_SQL)?;
         conn.execute_batch(IMAGE_TAGS_SQL)?;
@@ -989,6 +1113,7 @@ mod tests {
         assert!(has_table(&conn, "roster_contacts"));
         assert!(has_table(&conn, "profiles"));
         assert!(has_table(&conn, "favorites"));
+        assert!(has_table(&conn, "pins"));
         assert!(has_table(&conn, "tv_torrent_fetch_cache"));
         assert!(has_table(&conn, "book_torrent_fetch_cache"));
         assert!(has_table(&conn, "queue_tasks"));

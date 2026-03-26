@@ -92,55 +92,53 @@ impl LibraryItemRepo {
             .collect()
     }
 
-    pub fn insert(&self, item: &InsertLibraryItem) {
+    pub fn insert(&self, item: &InsertLibraryItem) -> Result<(), rusqlite::Error> {
         let conn = self.db.lock();
         conn.execute(
             "INSERT INTO library_items (id, library_id, path, extension, media_type, category_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![item.id, item.library_id, item.path, item.extension, item.media_type, item.category_id],
-        )
-        .unwrap();
+        )?;
+        Ok(())
     }
 
-    pub fn insert_many(&self, items: &[InsertLibraryItem]) {
+    pub fn insert_many(&self, items: &[InsertLibraryItem]) -> Result<(), rusqlite::Error> {
         let conn = self.db.lock();
-        let tx = conn.unchecked_transaction().unwrap();
+        let tx = conn.unchecked_transaction()?;
         for item in items {
             tx.execute(
                 "INSERT INTO library_items (id, library_id, path, extension, media_type, category_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![item.id, item.library_id, item.path, item.extension, item.media_type, item.category_id],
-            )
-            .unwrap();
+            )?;
         }
-        tx.commit().unwrap();
+        tx.commit()?;
+        Ok(())
     }
 
     /// Sync a library's items: delete items whose paths are no longer present, insert new ones.
-    pub fn sync_library(&self, library_id: &str, new_files: &[InsertLibraryItem]) {
+    pub fn sync_library(&self, library_id: &str, new_files: &[InsertLibraryItem]) -> Result<(), rusqlite::Error> {
         let conn = self.db.lock();
 
         // Get existing items before starting transaction
         let existing: Vec<(String, String)> = {
             let mut stmt = conn
-                .prepare("SELECT id, path FROM library_items WHERE library_id = ?1")
-                .unwrap();
-            stmt.query_map(params![library_id], |row| {
+                .prepare("SELECT id, path FROM library_items WHERE library_id = ?1")?;
+            let rows = stmt.query_map(params![library_id], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .unwrap()
+            })?
             .filter_map(|r| r.ok())
-            .collect()
+            .collect();
+            rows
         };
 
         let new_paths: HashSet<&str> = new_files.iter().map(|f| f.path.as_str()).collect();
         let existing_paths: HashSet<&str> = existing.iter().map(|(_, p)| p.as_str()).collect();
 
-        let tx = conn.unchecked_transaction().unwrap();
+        let tx = conn.unchecked_transaction()?;
 
         // Delete items no longer present
         for (id, path) in &existing {
             if !new_paths.contains(path.as_str()) {
-                tx.execute("DELETE FROM library_items WHERE id = ?1", params![id])
-                    .unwrap();
+                tx.execute("DELETE FROM library_items WHERE id = ?1", params![id])?;
             }
         }
 
@@ -150,12 +148,12 @@ impl LibraryItemRepo {
                 tx.execute(
                     "INSERT INTO library_items (id, library_id, path, extension, media_type, category_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                     params![item.id, item.library_id, item.path, item.extension, item.media_type, item.category_id],
-                )
-                .unwrap();
+                )?;
             }
         }
 
-        tx.commit().unwrap();
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn delete(&self, id: &str) {
@@ -258,7 +256,7 @@ mod tests {
             extension: "mp4".into(),
             media_type: "video".into(),
             category_id: None,
-        });
+        }).unwrap();
 
         let item = repo.get("item1").unwrap();
         assert_eq!(item.path, "/tmp/video.mp4");
@@ -284,7 +282,7 @@ mod tests {
             extension: "mp4".into(),
             media_type: "video".into(),
             category_id: None,
-        });
+        }).unwrap();
         repo.insert(&InsertLibraryItem {
             id: "b".into(),
             library_id: "lib1".into(),
@@ -292,7 +290,7 @@ mod tests {
             extension: "mp4".into(),
             media_type: "video".into(),
             category_id: None,
-        });
+        }).unwrap();
 
         // Sync: remove b, add c
         let new_files = vec![
@@ -313,7 +311,7 @@ mod tests {
                 category_id: None,
             },
         ];
-        repo.sync_library("lib1", &new_files);
+        repo.sync_library("lib1", &new_files).unwrap();
 
         let items = repo.get_by_library("lib1");
         assert_eq!(items.len(), 2);

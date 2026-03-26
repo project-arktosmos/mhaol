@@ -18,6 +18,7 @@
 	import { rosterService } from 'ui-lib/services/roster.service';
 	import { profileService } from 'ui-lib/services/profile.service';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import type { PassportData } from 'webrtc/types';
 
@@ -111,13 +112,16 @@
 		const wallet = $profileStore.local.wallet;
 		if (wallet && !favoritesInitialized) {
 			favoritesInitialized = true;
-			favoritesService.initialize(wallet);
+			profileService.shareWithNode().then(() => {
+				favoritesService.initialize(wallet);
+			});
 		}
 	});
 
 	onMount(() => {
 		rosterService.initialize('api');
 		profileService.initialize();
+		pinsService.initialize();
 		youtubeService.initialize();
 		youtubeLibraryService.initialize();
 		torrentService.initialize('server');

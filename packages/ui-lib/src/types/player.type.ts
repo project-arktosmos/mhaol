@@ -22,6 +22,7 @@ export interface PlayableFile {
 	size: number;
 	completedAt: string;
 	subtitles?: PlayableFileSubtitle[];
+	infoHash?: string;
 }
 
 // ===== Player Display Mode =====

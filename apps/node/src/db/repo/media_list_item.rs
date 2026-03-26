@@ -91,7 +91,7 @@ mod tests {
             extension: "mp4".into(),
             media_type: "video".into(),
             category_id: None,
-        });
+        }).unwrap();
         item_repo.insert(&InsertLibraryItem {
             id: "item2".into(),
             library_id: "lib1".into(),
@@ -99,7 +99,7 @@ mod tests {
             extension: "mp4".into(),
             media_type: "video".into(),
             category_id: None,
-        });
+        }).unwrap();
         list_repo.insert("list1", "lib1", "Test Show", None, None, "video", "auto", Some("/tmp:video"), None);
 
         (list_repo, list_item_repo)

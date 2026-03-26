@@ -606,6 +606,7 @@ async fn proxy_stream(
     match req.send().await {
         Ok(resp) => {
             let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::OK);
+            let final_url = resp.url().to_string();
             let content_type = resp
                 .headers()
                 .get(header::CONTENT_TYPE)
@@ -614,8 +615,8 @@ async fn proxy_stream(
                 .to_string();
             let is_manifest = content_type.contains("mpegurl")
                 || content_type.contains("x-mpegURL")
-                || stream.url.ends_with(".m3u8")
-                || stream.url.ends_with(".m3u");
+                || final_url.ends_with(".m3u8")
+                || final_url.ends_with(".m3u");
 
             let cors_headers = [
                 (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".to_string()),
@@ -623,7 +624,7 @@ async fn proxy_stream(
 
             if is_manifest {
                 // Rewrite URLs in the manifest to route through the proxy
-                let base_url = stream.url.rsplit_once('/').map(|(b, _)| b).unwrap_or("");
+                let base_url = final_url.rsplit_once('/').map(|(b, _)| b).unwrap_or("");
                 let text = match resp.text().await {
                     Ok(t) => t,
                     Err(e) => {
@@ -772,6 +773,7 @@ async fn proxy_url(
     };
 
     let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::OK);
+    let final_url = resp.url().to_string();
     let content_type = resp
         .headers()
         .get(header::CONTENT_TYPE)
@@ -781,11 +783,11 @@ async fn proxy_url(
 
     let is_manifest = content_type.contains("mpegurl")
         || content_type.contains("x-mpegURL")
-        || url.ends_with(".m3u8")
-        || url.ends_with(".m3u");
+        || final_url.ends_with(".m3u8")
+        || final_url.ends_with(".m3u");
 
     if is_manifest {
-        let base_url = url.rsplit_once('/').map(|(b, _)| b).unwrap_or("");
+        let base_url = final_url.rsplit_once('/').map(|(b, _)| b).unwrap_or("");
         let text = match resp.text().await {
             Ok(t) => t,
             Err(e) => {

@@ -20,6 +20,8 @@
 	import LibraryContentGrid from 'ui-lib/components/libraries/LibraryContentGrid.svelte';
 	import YouTubeSearchInput from 'ui-lib/components/youtube-search/YouTubeSearchInput.svelte';
 	import YouTubeChannelCard from 'ui-lib/components/youtube-search/YouTubeChannelCard.svelte';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 
 	const libState = youtubeLibraryService.state;
 	const ytState = youtubeService.state;
@@ -159,12 +161,26 @@
 
 	const ACTIVE_STATES = ['pending', 'fetching', 'downloading', 'muxing'];
 
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+
+	let favoritedYtIds = $derived(
+		new Set($favState.items.filter((f) => f.service === 'youtube').map((f) => f.serviceId))
+	);
+	let pinnedYtIds = $derived(
+		new Set($pinState.items.filter((p) => p.service === 'youtube').map((p) => p.serviceId))
+	);
+
 	let cardItems = $derived(
 		$libState.content.map(youTubeCardAdapter.fromContent.bind(youTubeCardAdapter))
 	);
 
+	let pinnedItems = $derived(
+		cardItems.filter((item) => pinnedYtIds.has(item.videoId))
+	);
+
 	let favoriteItems = $derived(
-		$libState.favorites.map(youTubeCardAdapter.fromContent.bind(youTubeCardAdapter))
+		cardItems.filter((item) => favoritedYtIds.has(item.videoId))
 	);
 
 	let videoItems = $derived(cardItems.filter((item) => item.hasVideo));
@@ -343,6 +359,28 @@
 			<p class="opacity-50">No downloaded content yet. Search for videos above to get started.</p>
 		</div>
 	{:else}
+		{#if pinnedItems.length > 0}
+			<LibraryContentGrid
+				title="Pinned"
+				items={pinnedItems}
+				{activeDownloadMap}
+				favoritedIds={favoritedYtIds}
+				pinnedIds={pinnedYtIds}
+				onitemclick={handleItemClick}
+			/>
+		{/if}
+
+		{#if favoriteItems.length > 0}
+			<LibraryContentGrid
+				title="Favorites"
+				items={favoriteItems}
+				{activeDownloadMap}
+				favoritedIds={favoritedYtIds}
+				pinnedIds={pinnedYtIds}
+				onitemclick={handleItemClick}
+			/>
+		{/if}
+
 		{#if dbChannels.length > 0}
 			<div class="mb-4">
 				<h2 class="sticky top-0 z-10 mb-4 rounded-lg bg-base-100 px-3 py-2 text-xl font-semibold">
@@ -441,20 +479,13 @@
 			{/if}
 		{/each}
 
-		{#if favoriteItems.length > 0}
-			<LibraryContentGrid
-				title="Favorites"
-				items={favoriteItems}
-				{activeDownloadMap}
-				onitemclick={handleItemClick}
-			/>
-		{/if}
-
 		{#if videoItems.length > 0}
 			<LibraryContentGrid
 				title="Videos"
 				items={videoItems}
 				{activeDownloadMap}
+				favoritedIds={favoritedYtIds}
+				pinnedIds={pinnedYtIds}
 				onitemclick={handleItemClick}
 			/>
 		{/if}
@@ -464,6 +495,8 @@
 				title="Music"
 				items={musicItems}
 				{activeDownloadMap}
+				favoritedIds={favoritedYtIds}
+				pinnedIds={pinnedYtIds}
 				onitemclick={handleItemClick}
 			/>
 		{/if}
@@ -472,6 +505,8 @@
 			title="All cached"
 			items={cardItems}
 			{activeDownloadMap}
+			favoritedIds={favoritedYtIds}
+			pinnedIds={pinnedYtIds}
 			onitemclick={handleItemClick}
 		/>
 	{/if}

@@ -12,7 +12,8 @@ This package contains everything shared across all apps: UI components, state ma
 src/
 ├── components/               # UI components organized by feature
 │   ├── addons/               # Addon management
-│   ├── browse/               # Unified browse components (BrowseGrid, BrowseHeader, BrowseDetailPanel)
+│   ├── browse/               # Generic browse primitives (BrowseGrid, BrowseHeader, BrowseViewToggle)
+│   ├── catalog/              # Unified media catalog (CatalogCard, CatalogBrowsePage, CatalogDetailPage, PinnedFavoritesSection, TmdbCatalogGrid, detail/, filters/)
 │   ├── core/                 # Shared reusable (Button, Modal, Navbar, ModalOutlet, ThemeToggle, ConnectionStatus, etc.)
 │   ├── downloads/            # Download management
 │   ├── hub/                  # Hub dashboard (app management)
@@ -23,7 +24,7 @@ src/
 │   ├── llm/                  # LLM model management + smart search config
 │   ├── queue/                # Queue task monitor (real-time visualization)
 │   ├── media/                # Media cards (Movie, TV, Audio, Image, YouTube, uncategorized)
-│   ├── music/                # Music components (AlbumCard, ArtistCard)
+│   ├── music/                # Music components (legacy, being replaced by catalog/)
 │   ├── p2p-stream/           # P2P streaming
 │   ├── peer-libraries/       # Peer library browsing
 │   ├── player/               # Video/audio player (PlayerVideo, PlayerControls, MediaPlayer, LyricsPanel)
@@ -34,14 +35,16 @@ src/
 │   ├── shepperd/             # Shepperd import (ShepperdImportContent, SmartPairResults)
 │   ├── share/                # Share modal
 │   ├── signaling/            # Signaling/WebRTC
-│   ├── tmdb-browse/          # TMDB movie/TV browsing
+│   ├── tmdb-browse/          # TMDB pagination (TmdbPagination — used by movies/TV pages)
 │   ├── torrent/              # Torrent management (TorrentProgressOverlay, TorrentSettings, etc.)
-│   ├── videogames/           # Videogame browsing (GameCard — RetroAchievements)
+│   ├── videogames/           # Videogame WASM emulator components
 │   ├── youtube/              # YouTube download (queue, settings, preview, RightPanel)
 │   └── youtube-search/       # YouTube search (input, results, channel cards)
 ├── services/                 # State management + API calls (singleton services)
 │   ├── classes/              # Base classes: ArrayServiceClass, ObjectServiceClass
+│   ├── catalog-strategies/   # Per-kind browse strategies (movie, tv, book, album, artist, game, iptv, youtube, photo)
 │   ├── i18n/                 # svelte-i18n locales (en.json, qq.json)
+│   ├── catalog.service.ts    # Unified catalog browse service with strategy pattern
 │   └── *.service.ts          # Feature services
 ├── adapters/                 # Data transformation logic
 │   └── classes/              # Adapter singletons (player, signaling, library-file, etc.)

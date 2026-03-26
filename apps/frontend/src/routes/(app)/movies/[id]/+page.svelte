@@ -8,38 +8,42 @@
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { playerService } from 'ui-lib/services/player.service';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
-	import { profileService } from 'ui-lib/services/profile.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import { movieDetailsToDisplay, getPosterUrl, getBackdropUrl } from 'addons/tmdb/transform';
-	import type { DisplayTMDBMovie, DisplayTMDBMovieDetails } from 'addons/tmdb/types';
-	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
+	import type { DisplayTMDBMovieDetails } from 'addons/tmdb/types';
 	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import type { MediaItem } from 'ui-lib/types/media-card.type';
 	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
-	import MovieDetailPage from 'ui-lib/components/tmdb-browse/MovieDetailPage.svelte';
+	import type { CatalogMovie } from 'ui-lib/types/catalog.type';
+	import CatalogDetailPage from 'ui-lib/components/catalog/CatalogDetailPage.svelte';
+	import MovieDetailMeta from 'ui-lib/components/catalog/detail/MovieDetailMeta.svelte';
+	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 
-	let movie = $state<DisplayTMDBMovie | null>(null);
+	let catalogItem = $state<CatalogMovie | null>(null);
 	let movieDetails = $state<DisplayTMDBMovieDetails | null>(null);
 	let libraryItem = $state<MediaItem | null>(null);
 	let relatedData = $state<LibraryItemRelated | null>(null);
 	let loading = $state(true);
 	let fetchingTmdbId = $state<number | null>(null);
-	let imagesVisible = $state(false);
 	let imageOverrides = $state<Record<string, string> | null>(null);
-	let togglingFavorite = $state(false);
 
 	const favState = favoritesService.state;
-	const profileStore = profileService.state;
+	const pinState = pinsService.state;
+	const searchStore = smartSearchService.store;
+
+	const playerState = playerService.state;
+	const playerDisplayMode = playerService.displayMode;
+
+	let id = $derived($page.params.id ?? '');
+	let tmdbId = $derived(Number(id));
 
 	let isFavorite = $derived(
 		$favState.items.some((f) => f.service === 'tmdb' && f.serviceId === String(tmdbId))
 	);
-
-	const searchStore = smartSearchService.store;
-	const torrentState = torrentService.state;
-
-	let id = $derived($page.params.id ?? '');
-	let tmdbId = $derived(Number(id));
+	let isPinned = $derived(
+		$pinState.items.some((p) => p.service === 'tmdb' && p.serviceId === String(tmdbId))
+	);
 
 	let isFetching = $derived(
 		fetchingTmdbId !== null &&
@@ -53,35 +57,22 @@
 
 	let currentFetchSteps = $derived.by(() => {
 		if (!isFetching && !isFetchedForCurrent) return null;
-		if (isFetchedForCurrent) {
-			return { terms: true, search: true, searching: false, eval: true, done: true };
-		}
+		if (isFetchedForCurrent) return { terms: true, search: true, searching: false, eval: true, done: true };
 		const s = $searchStore;
-		const hasResults = s.searchResults.length > 0;
-		const hasAnalysis = s.searchResults.some((r) => r.analysis !== null);
 		return {
 			terms: s.selection !== null,
-			search: !s.searching && hasResults,
+			search: !s.searching && s.searchResults.length > 0,
 			searching: s.searching,
-			eval: hasAnalysis,
+			eval: s.searchResults.some((r) => r.analysis !== null),
 			done: s.fetchedCandidate !== null
 		};
 	});
 
 	let matchedTorrent = $derived.by((): TorrentInfo | null => {
-		const torrents = $torrentState.allTorrents;
-		// 1. By library item path
-		if (libraryItem) {
-			for (const t of torrents) {
-				if (t.outputPath && libraryItem.path.startsWith(t.outputPath)) return t;
-			}
-		}
-		// 2. By related data info hash
 		if (relatedData?.torrentDownload?.infoHash) {
 			const t = torrentService.findByHash(relatedData.torrentDownload.infoHash);
 			if (t) return t;
 		}
-		// 3. By fetched candidate hash
 		const candidate = $searchStore.fetchedCandidate;
 		if (candidate?.infoHash) {
 			const t = torrentService.findByHash(candidate.infoHash);
@@ -90,62 +81,89 @@
 		return null;
 	});
 
-	let currentTorrentStatus = $derived(matchedTorrent);
-
 	$effect(() => {
 		const candidate = $searchStore.fetchedCandidate;
-		const tid = fetchingTmdbId;
-		if (candidate && tid) {
-			smartSearchService.saveFetchCache(tid, 'movie', candidate);
+		if (candidate && fetchingTmdbId) {
+			smartSearchService.saveFetchCache(fetchingTmdbId, 'movie', candidate);
 		}
 	});
+
+	function buildCatalogItem(details: DisplayTMDBMovieDetails): CatalogMovie {
+		return {
+			id: String(details.id),
+			kind: 'movie',
+			title: details.title,
+			sortTitle: details.title.toLowerCase(),
+			year: details.releaseYear || null,
+			overview: details.overview || null,
+			posterUrl: details.posterUrl,
+			backdropUrl: details.backdropUrl,
+			voteAverage: details.voteAverage,
+			voteCount: details.voteCount,
+			parentId: null,
+			position: null,
+			source: 'tmdb',
+			sourceId: String(details.id),
+			createdAt: '',
+			updatedAt: '',
+			metadata: {
+				tmdbId: details.id,
+				originalTitle: details.originalTitle,
+				runtime: details.runtime,
+				director: details.director,
+				cast: details.cast.map((c) => ({
+					id: c.id,
+					name: c.name,
+					character: c.character,
+					profileUrl: c.profileUrl
+				})),
+				genres: details.genres,
+				tagline: details.tagline,
+				budget: details.budget,
+				revenue: details.revenue,
+				imdbId: details.imdbId,
+				images: details.images.map((img) => ({
+					thumbnailUrl: img.thumbnailUrl,
+					fullUrl: img.fullUrl,
+					width: img.width,
+					height: img.height,
+					filePath: img.filePath,
+					imageType: img.imageType
+				})),
+				imageOverrides: imageOverrides ?? {}
+			}
+		};
+	}
 
 	async function fetchMovie(showId: number) {
 		loading = true;
 		smartSearchService.clear();
 		try {
-			// Fetch details
 			const res = await fetchRaw(`/api/tmdb/movies/${showId}`);
 			if (res.ok) {
 				const raw = await res.json();
 				movieDetails = movieDetailsToDisplay(raw);
-				movie = {
-					id: showId,
-					title: movieDetails?.title ?? '',
-					originalTitle: movieDetails?.originalTitle ?? '',
-					posterUrl: movieDetails?.posterUrl ?? null,
-					backdropUrl: movieDetails?.backdropUrl ?? null,
-					overview: movieDetails?.overview ?? '',
-					releaseYear: movieDetails?.releaseYear ?? '',
-					voteAverage: movieDetails?.voteAverage ?? 0,
-					voteCount: movieDetails?.voteCount ?? 0,
-					genres: movieDetails?.genres ?? []
-				};
+				catalogItem = buildCatalogItem(movieDetails);
 			}
 
-			// Look up library item and image overrides
 			await fetchLibraryItem(showId);
 			await fetchImageOverrides(showId);
 
-			// Apply image overrides to display URLs
-			if (movie && imageOverrides) {
-				if (imageOverrides.poster) {
-					movie = { ...movie, posterUrl: getPosterUrl(imageOverrides.poster) };
-				}
-				if (imageOverrides.backdrop) {
-					movie = { ...movie, backdropUrl: getBackdropUrl(imageOverrides.backdrop) };
-				}
+			if (catalogItem && imageOverrides) {
+				catalogItem = {
+					...catalogItem,
+					posterUrl: imageOverrides.poster ? getPosterUrl(imageOverrides.poster) : catalogItem.posterUrl,
+					backdropUrl: imageOverrides.backdrop ? getBackdropUrl(imageOverrides.backdrop) : catalogItem.backdropUrl,
+					metadata: { ...catalogItem.metadata, imageOverrides: imageOverrides ?? {} }
+				};
 			}
 
-			imagesVisible = false;
-
-			// Check fetch cache
 			const cached = await smartSearchService.checkFetchCache(showId);
 			if (cached) {
 				fetchingTmdbId = showId;
 				smartSearchService.setSelection({
-					title: movie?.title ?? '',
-					year: movie?.releaseYear ?? '',
+					title: catalogItem?.title ?? '',
+					year: catalogItem?.year ?? '',
 					type: 'movie',
 					tmdbId: showId,
 					mode: 'fetch',
@@ -166,20 +184,13 @@
 			if (!res.ok) return;
 			const data = await res.json();
 			const allItems: MediaItem[] = Object.values(data.itemsByType ?? {}).flat() as MediaItem[];
-			const match = allItems.find(
-				(item) => item.links?.tmdb?.serviceId === String(showId)
-			);
+			const match = allItems.find((item) => item.links?.tmdb?.serviceId === String(showId));
 			if (match) {
 				libraryItem = match;
-				// Fetch related data for library item
 				const relRes = await fetchRaw(`/api/media/library-items/${match.id}/related`);
-				if (relRes.ok) {
-					relatedData = await relRes.json();
-				}
+				if (relRes.ok) relatedData = await relRes.json();
 			}
-		} catch {
-			// best-effort
-		}
+		} catch { /* best-effort */ }
 	}
 
 	async function fetchImageOverrides(showId: number) {
@@ -188,122 +199,73 @@
 			if (res.ok) {
 				const overrides: Array<{ role: string; file_path: string }> = await res.json();
 				const map: Record<string, string> = {};
-				for (const o of overrides) {
-					map[o.role] = o.file_path;
-				}
+				for (const o of overrides) map[o.role] = o.file_path;
 				imageOverrides = Object.keys(map).length > 0 ? map : null;
 			}
-		} catch {
-			// best-effort
-		}
-	}
-
-	async function handleSetImageOverride(filePath: string, role: 'poster' | 'backdrop') {
-		if (!movie) return;
-		try {
-			const res = await fetchRaw(`/api/tmdb/image-overrides/movie/${movie.id}/${role}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ file_path: filePath })
-			});
-			if (res.ok) {
-				imageOverrides = { ...imageOverrides, [role]: filePath };
-				if (role === 'poster') {
-					movie = { ...movie, posterUrl: getPosterUrl(filePath) };
-				} else {
-					movie = { ...movie, backdropUrl: getBackdropUrl(filePath) };
-				}
-			}
-		} catch {
-			// best-effort
-		}
+		} catch { /* best-effort */ }
 	}
 
 	async function handleFetch() {
-		if (!movie) return;
-		const isRefetch = isFetchedForCurrent;
-		fetchingTmdbId = movie.id;
-		if (!isRefetch) {
-			const cached = await smartSearchService.checkFetchCache(movie.id);
+		if (!catalogItem) return;
+		const tid = Number(catalogItem.sourceId);
+		fetchingTmdbId = tid;
+		if (!isFetchedForCurrent) {
+			const cached = await smartSearchService.checkFetchCache(tid);
 			if (cached) {
 				smartSearchService.setSelection({
-					title: movie.title,
-					year: movie.releaseYear,
-					type: 'movie',
-					tmdbId: movie.id,
-					mode: 'fetch',
-					existingItemId: libraryItem?.id,
-					existingLibraryId: libraryItem?.libraryId
+					title: catalogItem.title, year: catalogItem.year ?? '', type: 'movie',
+					tmdbId: tid, mode: 'fetch',
+					existingItemId: libraryItem?.id, existingLibraryId: libraryItem?.libraryId
 				});
 				smartSearchService.setFetchedCandidate(cached);
 				return;
 			}
 		}
 		smartSearchService.select({
-			title: movie.title,
-			year: movie.releaseYear,
-			type: 'movie',
-			tmdbId: movie.id,
-			mode: 'fetch',
-			existingItemId: libraryItem?.id,
-			existingLibraryId: libraryItem?.libraryId
+			title: catalogItem.title, year: catalogItem.year ?? '', type: 'movie',
+			tmdbId: tid, mode: 'fetch',
+			existingItemId: libraryItem?.id, existingLibraryId: libraryItem?.libraryId
 		});
 	}
 
 	function handleDownload() {
 		const candidate = smartSearchService.getFetchedCandidate();
-		if (!candidate) return;
-		smartSearchService.startDownload(candidate);
+		if (candidate) smartSearchService.startDownload(candidate);
 	}
 
 	function handleP2pStream() {
-		const candidate = smartSearchService.getFetchedCandidate();
-		if (!candidate) return;
 		const torrent = matchedTorrent;
 		if (torrent?.outputPath && (torrent.state === 'seeding' || torrent.progress >= 1.0)) {
 			const file: PlayableFile = {
-				id: `p2p:${torrent.infoHash}`,
-				type: 'torrent',
-				name: torrent.name,
-				outputPath: torrent.outputPath,
-				mode: 'video',
-				format: null,
-				videoFormat: null,
-				thumbnailUrl: null,
-				durationSeconds: null,
-				size: torrent.size,
-				completedAt: ''
+				id: `p2p:${torrent.infoHash}`, type: 'torrent', name: torrent.name,
+				outputPath: torrent.outputPath, mode: 'video', format: null,
+				videoFormat: null, thumbnailUrl: null, durationSeconds: null,
+				size: torrent.size, completedAt: '',
+				infoHash: torrent.infoHash
 			};
 			playerService.play(file, 'inline');
 		}
 	}
 
 	async function handleToggleFavorite() {
-		if (!movie) return;
-		togglingFavorite = true;
-		try {
-			await favoritesService.toggle('tmdb', String(movie.id), movie.title);
-		} finally {
-			togglingFavorite = false;
-		}
+		if (catalogItem) await favoritesService.toggle('tmdb', catalogItem.sourceId, catalogItem.title);
 	}
 
-	onMount(() => {
-		fetchMovie(tmdbId);
-	});
+	async function handleTogglePin() {
+		if (catalogItem) await pinsService.toggle('tmdb', catalogItem.sourceId, catalogItem.title);
+	}
+
+	onMount(() => fetchMovie(tmdbId));
 </script>
 
-{#if movie}
-	<MovieDetailPage
-		{movie}
-		{movieDetails}
-		{libraryItem}
-		{relatedData}
+{#if catalogItem}
+	<CatalogDetailPage
+		item={catalogItem}
 		{loading}
 		fetching={isFetching}
 		fetched={isFetchedForCurrent}
 		fetchSteps={currentFetchSteps}
-		torrentStatus={currentTorrentStatus}
+		torrentStatus={matchedTorrent}
 		fetchedTorrent={$searchStore.fetchedCandidate
 			? {
 					name: $searchStore.fetchedCandidate.name,
@@ -311,19 +273,38 @@
 					languages: $searchStore.fetchedCandidate.analysis?.languages ?? ''
 				}
 			: null}
-		{imagesVisible}
-		{imageOverrides}
 		{isFavorite}
-		{togglingFavorite}
+		{isPinned}
 		onfetch={handleFetch}
 		ondownload={handleDownload}
-		onp2pstream={handleP2pStream}
+		onstream={handleP2pStream}
 		onshowsearch={() => smartSearchService.show()}
 		onback={() => goto(`${base}/movies`)}
-		ontoggleimages={() => { imagesVisible = true; }}
-		onsetimageoverride={handleSetImageOverride}
 		ontogglefavorite={handleToggleFavorite}
-	/>
+		ontogglepin={handleTogglePin}
+	>
+		{#snippet extra()}
+			<MovieDetailMeta item={catalogItem!} />
+		{/snippet}
+		{#snippet cellB()}
+			{#if $playerState.currentFile && $playerDisplayMode === 'inline'}
+				<div class="flex flex-col gap-2">
+					<div class="flex items-center justify-between">
+						<h2 class="text-sm font-semibold tracking-wide text-base-content/50 uppercase">Now Playing</h2>
+						<button class="btn btn-square btn-ghost btn-xs" onclick={() => playerService.stop()} aria-label="Close player">&times;</button>
+					</div>
+					<p class="truncate text-xs opacity-60" title={$playerState.currentFile.name}>{$playerState.currentFile.name}</p>
+					<PlayerVideo
+						file={$playerState.currentFile}
+						connectionState={$playerState.connectionState}
+						positionSecs={$playerState.positionSecs}
+						durationSecs={$playerState.durationSecs}
+						buffering={$playerState.buffering}
+					/>
+				</div>
+			{/if}
+		{/snippet}
+	</CatalogDetailPage>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">
 		<span class="loading loading-lg loading-spinner"></span>

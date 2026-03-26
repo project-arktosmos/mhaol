@@ -90,6 +90,7 @@ class FavoritesService {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ wallet: this._wallet, service, serviceId })
 		});
+		await this.refresh();
 	}
 
 	isFavorite(service: string, serviceId: string): boolean {

@@ -143,18 +143,24 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		try {
 			const streamConfig = p2pStreamService.getSessionConfig();
 
+			const sessionBody: Record<string, unknown> = {
+				mode: file.mode,
+				video_codec: streamConfig.video_codec,
+				video_quality: streamConfig.video_quality
+			};
+			if (file.infoHash) {
+				sessionBody.info_hash = file.infoHash;
+			} else {
+				sessionBody.file_path = file.outputPath;
+			}
+
 			const session = await fetchJson<{
 				session_id: string;
 				room_id: string;
 				signaling_url: string;
 			}>('/api/player/sessions', {
 				method: 'POST',
-				body: JSON.stringify({
-					file_path: file.outputPath,
-					mode: file.mode,
-					video_codec: streamConfig.video_codec,
-					video_quality: streamConfig.video_quality
-				})
+				body: JSON.stringify(sessionBody)
 			});
 
 			if (generation !== this.playGeneration) {

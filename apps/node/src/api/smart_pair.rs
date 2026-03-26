@@ -251,14 +251,17 @@ async fn pair_items(
                         );
                     } else {
                         let item_id = uuid::Uuid::new_v4().to_string();
-                        state.library_items.insert(&InsertLibraryItem {
+                        if let Err(e) = state.library_items.insert(&InsertLibraryItem {
                             id: item_id.clone(),
                             library_id: library_id.clone(),
                             path,
                             extension: String::new(),
                             media_type: "video".to_string(),
                             category_id: Some(category_id.to_string()),
-                        });
+                        }) {
+                            tracing::warn!("[smart-pair] Failed to insert library item: {}", e);
+                            continue;
+                        }
                         state.library_item_links.upsert(
                             &uuid::Uuid::new_v4().to_string(),
                             &item_id,

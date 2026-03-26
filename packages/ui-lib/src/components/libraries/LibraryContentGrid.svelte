@@ -8,6 +8,8 @@
 		title,
 		items,
 		activeDownloadMap,
+		favoritedIds,
+		pinnedIds,
 		onitemclick,
 		onloadmore,
 		loadingMore = false,
@@ -16,6 +18,8 @@
 		title: string;
 		items: LibraryCardItem[];
 		activeDownloadMap: Map<string, YouTubeDownloadProgress>;
+		favoritedIds?: Set<string>;
+		pinnedIds?: Set<string>;
 		onitemclick: (item: LibraryCardItem) => void;
 		onloadmore?: () => void;
 		loadingMore?: boolean;
@@ -77,6 +81,8 @@
 			<LibraryContentCard
 				{item}
 				download={activeDownloadMap.get(item.videoId)}
+				favorited={favoritedIds?.has(item.videoId) ?? false}
+				pinned={pinnedIds?.has(item.videoId) ?? false}
 				onclick={() => onitemclick(item)}
 			/>
 		{/each}

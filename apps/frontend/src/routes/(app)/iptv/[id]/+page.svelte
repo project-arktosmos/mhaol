@@ -5,6 +5,8 @@
 	import { base } from '$app/paths';
 	import IptvChannelDetail from 'ui-lib/components/iptv/IptvChannelDetail.svelte';
 	import { iptvService } from 'ui-lib/services/iptv.service';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
 	import type { IptvChannel, IptvStream, IptvEpgProgram } from 'ui-lib/types/iptv.type';
 
 	let channel = $state<IptvChannel | null>(null);
@@ -13,8 +15,40 @@
 	let loading = $state(true);
 	let epgPrograms = $state<IptvEpgProgram[]>([]);
 	let epgAvailable = $state(false);
+	let togglingFavorite = $state(false);
+	let togglingPin = $state(false);
 
 	let id = $derived($page.params.id ?? '');
+
+	const favState = favoritesService.state;
+	const pinState = pinsService.state;
+
+	let isFavorite = $derived(
+		$favState.items.some((f) => f.service === 'iptv' && f.serviceId === id)
+	);
+	let isPinned = $derived(
+		$pinState.items.some((p) => p.service === 'iptv' && p.serviceId === id)
+	);
+
+	async function handleToggleFavorite() {
+		if (!channel) return;
+		togglingFavorite = true;
+		try {
+			await favoritesService.toggle('iptv', channel.id, channel.name);
+		} finally {
+			togglingFavorite = false;
+		}
+	}
+
+	async function handleTogglePin() {
+		if (!channel) return;
+		togglingPin = true;
+		try {
+			await pinsService.toggle('iptv', channel.id, channel.name);
+		} finally {
+			togglingPin = false;
+		}
+	}
 
 	async function loadChannel(channelId: string): Promise<void> {
 		loading = true;
@@ -53,8 +87,14 @@
 		{loading}
 		{epgPrograms}
 		{epgAvailable}
+		{isFavorite}
+		{togglingFavorite}
+		{isPinned}
+		{togglingPin}
 		onback={() => goto(`${base}/iptv`)}
 		onstreamselect={handleStreamSelect}
+		ontogglefavorite={handleToggleFavorite}
+		ontogglepin={handleTogglePin}
 	/>
 {:else if loading}
 	<div class="flex flex-1 items-center justify-center">

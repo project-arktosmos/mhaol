@@ -55,14 +55,15 @@ impl FavoriteRepo {
         .unwrap_or(0)
     }
 
-    pub fn insert(&self, wallet: &str, service: &str, service_id: &str, label: &str) {
+    pub fn insert(&self, wallet: &str, service: &str, service_id: &str, label: &str) -> bool {
         let conn = self.db.lock();
         conn.execute(
             "INSERT OR IGNORE INTO favorites (id, wallet, service, service_id, label)
              VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3, ?4)",
             params![wallet, service, service_id, label],
         )
-        .unwrap();
+        .map(|n| n > 0)
+        .unwrap_or(false)
     }
 
     pub fn delete(&self, wallet: &str, service: &str, service_id: &str) -> bool {

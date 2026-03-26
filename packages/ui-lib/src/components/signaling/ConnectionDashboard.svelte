@@ -7,7 +7,7 @@
 	import { serverCatalogService } from 'ui-lib/services/server-catalog.service';
 	import { playerService } from 'ui-lib/services/player.service';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
-	import TmdbBrowseGrid from 'ui-lib/components/tmdb-browse/TmdbBrowseGrid.svelte';
+	import TmdbCatalogGrid from 'ui-lib/components/catalog/TmdbCatalogGrid.svelte';
 	import type { PeerConnectionStatus, SignalingPeerInfo } from 'ui-lib/types/signaling.type';
 	import type { ContactHandshakePhase } from 'webrtc/types';
 	import type { DisplayTMDBMovie } from 'addons/tmdb/types';
@@ -369,7 +369,7 @@
 	{#if displayMovies.length > 0}
 		<div>
 			<h2 class="mb-3 text-lg font-semibold">Server Movies</h2>
-			<TmdbBrowseGrid movies={displayMovies} {dimmedIds} onselectMovie={handleSelectMovie} />
+			<TmdbCatalogGrid movies={displayMovies} {dimmedIds} onselectMovie={handleSelectMovie} />
 		</div>
 	{/if}
 

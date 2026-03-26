@@ -15,6 +15,7 @@ import type {
 	MusicSmartSearchResults
 } from 'ui-lib/types/smart-search.type';
 import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/types';
+import type { CatalogItem } from 'ui-lib/types/catalog.type';
 import { parseTorrentName } from 'addons/torrent-search-thepiratebay/parse-torrent-name';
 import { queueService } from 'ui-lib/services/queue.service';
 
@@ -204,6 +205,23 @@ class SmartSearchService {
 			this.runSearches(selection, this.abortController.signal);
 		}
 		this.createPendingItem(selection);
+
+		if (selection.mode === 'fetch') {
+			this.autoPickOnSearchComplete();
+		}
+	}
+
+	private autoPickOnSearchComplete() {
+		let started = false;
+		const unsubscribe = this.store.subscribe((state) => {
+			if (state.searching) started = true;
+			if (started && !state.searching) {
+				unsubscribe();
+				if (state.searchError || state.searchResults.length === 0) return;
+				const best = this.pickBestFromList(state.searchResults);
+				if (best) this.setFetchedCandidate(best);
+			}
+		});
 	}
 
 	clear() {
@@ -1165,6 +1183,69 @@ class SmartSearchService {
 		} catch {
 			// best-effort
 		}
+	}
+
+	selectFromCatalog(item: CatalogItem, mode: SmartSearchMode = 'fetch') {
+		let selection: SmartSearchSelection;
+		switch (item.kind) {
+			case 'movie':
+				selection = {
+					type: 'movie',
+					tmdbId: item.metadata.tmdbId,
+					title: item.title,
+					year: item.year ?? '',
+					mode
+				};
+				break;
+			case 'tv_show':
+				selection = {
+					type: 'tv',
+					tmdbId: item.metadata.tmdbId,
+					title: item.title,
+					year: item.year ?? '',
+					mode,
+					seasons: item.metadata.seasons.map((s) => ({
+						seasonNumber: s.seasonNumber,
+						name: s.name,
+						episodeCount: s.episodeCount,
+						episodes: []
+					}))
+				};
+				break;
+			case 'album':
+				selection = {
+					type: 'music',
+					musicbrainzId: item.metadata.musicbrainzId,
+					title: item.title,
+					year: item.year ?? '',
+					artist: item.metadata.artistCredits,
+					mode
+				};
+				break;
+			case 'game':
+				selection = {
+					type: 'game',
+					retroachievementsId: item.metadata.retroachievementsId,
+					title: item.title,
+					year: item.year ?? '',
+					consoleName: item.metadata.consoleName,
+					mode
+				};
+				break;
+			case 'book':
+				selection = {
+					type: 'book',
+					openlibraryKey: item.metadata.openlibraryKey,
+					title: item.title,
+					year: item.year ?? '',
+					author: item.metadata.authors[0] ?? '',
+					mode
+				};
+				break;
+			default:
+				return;
+		}
+		this.select(selection);
 	}
 }
 

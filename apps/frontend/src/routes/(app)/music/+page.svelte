@@ -2,84 +2,151 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
-	import { releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
-	import { artistsToDisplay } from 'addons/musicbrainz/transform';
-	import type {
-		DisplayMusicBrainzReleaseGroup,
-		DisplayMusicBrainzArtist,
-		MusicBrainzReleaseGroup,
-		MusicBrainzArtist
-	} from 'addons/musicbrainz/types';
-	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
-	import AlbumCard from 'ui-lib/components/music/AlbumCard.svelte';
-	import ArtistCard from 'ui-lib/components/music/ArtistCard.svelte';
-	import { torrentService } from 'ui-lib/services/torrent.service';
+	import { fetchJson } from 'ui-lib/transport/fetch-helpers';
+	import { releaseGroupsToDisplay, artistsToDisplay } from 'addons/musicbrainz/transform';
+	import type { MusicBrainzReleaseGroup, MusicBrainzArtist } from 'addons/musicbrainz/types';
+	import { catalogItemToCardData } from 'ui-lib/adapters/classes/catalog-card.adapter';
+	import CatalogCard from 'ui-lib/components/catalog/CatalogCard.svelte';
+	import type { CatalogItem } from 'ui-lib/types/catalog.type';
+	import { favoritesService } from 'ui-lib/services/favorites.service';
+	import { pinsService } from 'ui-lib/services/pins.service';
+	import { albumStrategy } from 'ui-lib/services/catalog-strategies/album.strategy';
+	import { artistStrategy } from 'ui-lib/services/catalog-strategies/artist.strategy';
 
-	let albums = $state<DisplayMusicBrainzReleaseGroup[]>([]);
-	let artists = $state<DisplayMusicBrainzArtist[]>([]);
+	const favs = favoritesService.state;
+	const pins = pinsService.state;
+
+	let albums = $state<CatalogItem[]>([]);
+	let artists = $state<CatalogItem[]>([]);
 	let albumsLoading = $state(false);
 	let artistsLoading = $state(false);
 
-	const torrentState = torrentService.state;
-	let fetchCacheHashes: Map<string, string> = $state(new Map());
+	let pinnedItems = $state<CatalogItem[]>([]);
+	let favoriteItems = $state<CatalogItem[]>([]);
+	let pinnedLoading = $state(false);
+	let favoritesLoading = $state(false);
 
-	async function loadMusicFetchCacheHashes() {
-		try {
-			const res = await fetchRaw('/api/torrent/music-fetch-cache/hashes');
-			if (res.ok) {
-				const entries: Array<{ musicbrainzId: string; infoHash: string }> = await res.json();
-				fetchCacheHashes = new Map(entries.map((e) => [e.musicbrainzId, e.infoHash]));
-			}
-		} catch {
-			// best-effort
-		}
-	}
+	let pinnedAlbumIds = $derived(
+		$pins.items.filter((p) => p.service === 'musicbrainz-album').map((p) => p.serviceId)
+	);
+	let pinnedArtistIds = $derived(
+		$pins.items.filter((p) => p.service === 'musicbrainz-artist').map((p) => p.serviceId)
+	);
+	let favAlbumIds = $derived(
+		$favs.items.filter((f) => f.service === 'musicbrainz-album').map((f) => f.serviceId)
+	);
+	let favArtistIds = $derived(
+		$favs.items.filter((f) => f.service === 'musicbrainz-artist').map((f) => f.serviceId)
+	);
 
-	let musicTorrents = $derived.by(() => {
-		const torrents = $torrentState.allTorrents;
-		if (torrents.length === 0 || fetchCacheHashes.size === 0) return new Map<string, TorrentInfo>();
-		const torrentsByHash = new Map(torrents.map((t) => [t.infoHash, t]));
-		const result = new Map<string, TorrentInfo>();
-		for (const [mbId, infoHash] of fetchCacheHashes) {
-			const torrent = torrentsByHash.get(infoHash);
-			if (torrent) result.set(mbId, torrent);
-		}
-		return result;
+	$effect(() => {
+		const albumIds = pinnedAlbumIds;
+		const artistIds = pinnedArtistIds;
+		if (albumIds.length === 0 && artistIds.length === 0) { pinnedItems = []; return; }
+		pinnedLoading = true;
+		Promise.all([
+			albumIds.length > 0 && albumStrategy.resolveByIds ? albumStrategy.resolveByIds(albumIds) : Promise.resolve([]),
+			artistIds.length > 0 && artistStrategy.resolveByIds ? artistStrategy.resolveByIds(artistIds) : Promise.resolve([])
+		]).then(([a, b]) => { pinnedItems = [...a, ...b]; pinnedLoading = false; })
+			.catch(() => { pinnedLoading = false; });
 	});
 
-	async function fetchAlbums() {
+	$effect(() => {
+		const albumIds = favAlbumIds;
+		const artistIds = favArtistIds;
+		if (albumIds.length === 0 && artistIds.length === 0) { favoriteItems = []; return; }
+		favoritesLoading = true;
+		Promise.all([
+			albumIds.length > 0 && albumStrategy.resolveByIds ? albumStrategy.resolveByIds(albumIds) : Promise.resolve([]),
+			artistIds.length > 0 && artistStrategy.resolveByIds ? artistStrategy.resolveByIds(artistIds) : Promise.resolve([])
+		]).then(([a, b]) => { favoriteItems = [...a, ...b]; favoritesLoading = false; })
+			.catch(() => { favoritesLoading = false; });
+	});
+
+	function toAlbumItems(data: MusicBrainzReleaseGroup[]): CatalogItem[] {
+		return releaseGroupsToDisplay(data).slice(0, 6).map((a) => ({
+			id: a.id,
+			kind: 'album' as const,
+			title: a.title,
+			sortTitle: a.title.toLowerCase(),
+			year: a.firstReleaseYear || null,
+			overview: null,
+			posterUrl: a.coverArtUrl,
+			backdropUrl: null,
+			voteAverage: null,
+			voteCount: null,
+			parentId: null,
+			position: null,
+			source: 'musicbrainz' as const,
+			sourceId: a.id,
+			createdAt: '',
+			updatedAt: '',
+			metadata: {
+				musicbrainzId: a.id,
+				primaryType: a.primaryType,
+				secondaryTypes: a.secondaryTypes,
+				artistCredits: a.artistCredits,
+				firstReleaseYear: a.firstReleaseYear,
+				coverArtUrl: a.coverArtUrl,
+				releases: []
+			}
+		}));
+	}
+
+	function toArtistItems(data: MusicBrainzArtist[]): CatalogItem[] {
+		return artistsToDisplay(data).slice(0, 6).map((a) => ({
+			id: a.id,
+			kind: 'artist' as const,
+			title: a.name,
+			sortTitle: a.sortName.toLowerCase(),
+			year: a.beginYear || null,
+			overview: null,
+			posterUrl: a.imageUrl,
+			backdropUrl: null,
+			voteAverage: null,
+			voteCount: null,
+			parentId: null,
+			position: null,
+			source: 'musicbrainz' as const,
+			sourceId: a.id,
+			createdAt: '',
+			updatedAt: '',
+			metadata: {
+				musicbrainzId: a.id,
+				sortName: a.sortName,
+				type: a.type,
+				country: a.country,
+				disambiguation: a.disambiguation,
+				beginYear: a.beginYear,
+				endYear: a.endYear,
+				ended: a.ended,
+				tags: a.tags,
+				imageUrl: a.imageUrl
+			}
+		}));
+	}
+
+	function cardWithOverlays(item: CatalogItem) {
+		const base = catalogItemToCardData(item);
+		const service = item.kind === 'album' ? 'musicbrainz-album' : 'musicbrainz-artist';
+		return {
+			...base,
+			favorited: $favs.items.some((f) => f.service === service && f.serviceId === item.sourceId),
+			pinned: $pins.items.some((p) => p.service === service && p.serviceId === item.sourceId)
+		};
+	}
+
+	onMount(async () => {
 		albumsLoading = true;
-		try {
-			const res = await fetchRaw('/api/musicbrainz/popular?genre=rock');
-			if (!res.ok) throw new Error('Failed to fetch albums');
-			const data = await res.json();
-			const releaseGroups: MusicBrainzReleaseGroup[] = data['release-groups'] ?? [];
-			albums = releaseGroupsToDisplay(releaseGroups).slice(0, 6);
-		} catch {
-			albums = [];
-		}
-		albumsLoading = false;
-	}
-
-	async function fetchArtists() {
 		artistsLoading = true;
-		try {
-			const res = await fetchRaw('/api/musicbrainz/popular-artists?genre=rock');
-			if (!res.ok) throw new Error('Failed to fetch artists');
-			const data = await res.json();
-			const rawArtists: MusicBrainzArtist[] = data.artists ?? [];
-			artists = artistsToDisplay(rawArtists).slice(0, 6);
-		} catch {
-			artists = [];
-		}
+		const [albumData, artistData] = await Promise.all([
+			fetchJson<{ 'release-groups': MusicBrainzReleaseGroup[] }>('/api/musicbrainz/popular?genre=rock'),
+			fetchJson<{ artists: MusicBrainzArtist[] }>('/api/musicbrainz/popular-artists?genre=rock')
+		]);
+		albums = toAlbumItems(albumData?.['release-groups'] ?? []);
+		albumsLoading = false;
+		artists = toArtistItems(artistData?.artists ?? []);
 		artistsLoading = false;
-	}
-
-	onMount(() => {
-		fetchAlbums();
-		fetchArtists();
-		loadMusicFetchCacheHashes();
 	});
 </script>
 
@@ -88,61 +155,90 @@
 		<h1 class="text-lg font-bold">Music</h1>
 	</div>
 	<div class="p-4">
-
-	<section class="mb-8">
-		<div class="mb-3 flex items-center justify-between">
-			<h2 class="text-lg font-semibold">Albums</h2>
-			<a href="{base}/music/album" class="btn btn-ghost btn-sm">View all</a>
-		</div>
-		{#if albumsLoading}
-			<div class="flex items-center justify-center py-12">
-				<span class="loading loading-spinner loading-md"></span>
-			</div>
-		{:else if albums.length === 0}
-			<p class="py-8 text-center text-sm opacity-50">No albums available</p>
-		{:else}
-			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-				{#each albums as album (album.id)}
-					{@const torrent = musicTorrents.get(album.id)}
-					<AlbumCard
-						{album}
-						torrentProgress={torrent?.progress ?? null}
-						torrentState={torrent?.state ?? null}
-						torrentSpeed={torrent?.downloadSpeed ?? null}
-						torrentEta={torrent?.eta ?? null}
-						onselect={(a) => goto(`${base}/music/album/${a.id}`)}
-					/>
-				{/each}
-			</div>
+		{#if pinnedLoading || pinnedItems.length > 0}
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Pinned</h2>
+				{#if pinnedLoading}
+					<div class="flex justify-center py-6">
+						<span class="loading loading-sm loading-spinner"></span>
+					</div>
+				{:else}
+					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+						{#each pinnedItems as item (item.id)}
+							<CatalogCard
+								card={cardWithOverlays(item)}
+								onclick={() => goto(`${base}/music/${item.kind === 'album' ? 'album' : 'artist'}/${item.sourceId}`)}
+							/>
+						{/each}
+					</div>
+				{/if}
+			</section>
 		{/if}
-	</section>
 
-	<section>
-		<div class="mb-3 flex items-center justify-between">
-			<h2 class="text-lg font-semibold">Artists</h2>
-			<a href="{base}/music/artist" class="btn btn-ghost btn-sm">View all</a>
-		</div>
-		{#if artistsLoading}
-			<div class="flex items-center justify-center py-12">
-				<span class="loading loading-spinner loading-md"></span>
-			</div>
-		{:else if artists.length === 0}
-			<p class="py-8 text-center text-sm opacity-50">No artists available</p>
-		{:else}
-			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-				{#each artists as artist (artist.id)}
-					{@const torrent = musicTorrents.get(artist.id)}
-					<ArtistCard
-						{artist}
-						torrentProgress={torrent?.progress ?? null}
-						torrentState={torrent?.state ?? null}
-						torrentSpeed={torrent?.downloadSpeed ?? null}
-						torrentEta={torrent?.eta ?? null}
-						onselect={(a) => goto(`${base}/music/artist/${a.id}`)}
-					/>
-				{/each}
-			</div>
+		{#if favoritesLoading || favoriteItems.length > 0}
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Favorites</h2>
+				{#if favoritesLoading}
+					<div class="flex justify-center py-6">
+						<span class="loading loading-sm loading-spinner"></span>
+					</div>
+				{:else}
+					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+						{#each favoriteItems as item (item.id)}
+							<CatalogCard
+								card={cardWithOverlays(item)}
+								onclick={() => goto(`${base}/music/${item.kind === 'album' ? 'album' : 'artist'}/${item.sourceId}`)}
+							/>
+						{/each}
+					</div>
+				{/if}
+			</section>
 		{/if}
-	</section>
+
+		<section class="mb-8">
+			<div class="mb-3 flex items-center justify-between">
+				<h2 class="text-lg font-semibold">Albums</h2>
+				<a href="{base}/music/album" class="btn btn-ghost btn-sm">View all</a>
+			</div>
+			{#if albumsLoading}
+				<div class="flex items-center justify-center py-12">
+					<span class="loading loading-spinner loading-md"></span>
+				</div>
+			{:else if albums.length === 0}
+				<p class="py-8 text-center text-sm opacity-50">No albums available</p>
+			{:else}
+				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+					{#each albums as album (album.id)}
+						<CatalogCard
+							card={cardWithOverlays(album)}
+							onclick={() => goto(`${base}/music/album/${album.sourceId}`)}
+						/>
+					{/each}
+				</div>
+			{/if}
+		</section>
+
+		<section>
+			<div class="mb-3 flex items-center justify-between">
+				<h2 class="text-lg font-semibold">Artists</h2>
+				<a href="{base}/music/artist" class="btn btn-ghost btn-sm">View all</a>
+			</div>
+			{#if artistsLoading}
+				<div class="flex items-center justify-center py-12">
+					<span class="loading loading-spinner loading-md"></span>
+				</div>
+			{:else if artists.length === 0}
+				<p class="py-8 text-center text-sm opacity-50">No artists available</p>
+			{:else}
+				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+					{#each artists as artist (artist.id)}
+						<CatalogCard
+							card={cardWithOverlays(artist)}
+							onclick={() => goto(`${base}/music/artist/${artist.sourceId}`)}
+						/>
+					{/each}
+				</div>
+			{/if}
+		</section>
 	</div>
 </div>

@@ -47,10 +47,14 @@ async fn add_favorite(
     State(state): State<AppState>,
     Json(body): Json<AddFavoriteBody>,
 ) -> impl IntoResponse {
-    state
+    if state
         .favorites
-        .insert(&body.wallet, &body.service, &body.service_id, &body.label);
-    StatusCode::CREATED
+        .insert(&body.wallet, &body.service, &body.service_id, &body.label)
+    {
+        StatusCode::CREATED
+    } else {
+        StatusCode::CONFLICT
+    }
 }
 
 #[derive(Deserialize)]

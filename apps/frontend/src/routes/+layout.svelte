@@ -56,6 +56,7 @@
 			<li><a href="{base}/iptv">IPTV</a></li>
 			<li><a href="{base}/profiles">Profiles</a></li>
 			<li><a href="{base}/import">Import</a></li>
+			<li><a href="{base}/queue">Queue</a></li>
 			<li><a href="{base}/options">Options</a></li>
 		</ul>
 		<div class="divider"></div>
@@ -104,6 +105,7 @@
 				<div class="hidden items-center gap-1 lg:flex">
 					<a href="{base}/profiles" class="btn btn-ghost btn-sm">Profiles</a>
 					<a href="{base}/import" class="btn btn-ghost btn-sm">Import</a>
+					<a href="{base}/queue" class="btn btn-ghost btn-sm">Queue</a>
 					<a href="{base}/options" class="btn btn-ghost btn-sm">Options</a>
 					<NodeStatusBadge onclick={() => (setupModalOpen = true)} />
 					<ThemeToggle />
