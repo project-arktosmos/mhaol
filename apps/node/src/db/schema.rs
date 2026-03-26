@@ -988,6 +988,35 @@ fn run_migrations(conn: &Connection) {
         }
     }
 
+    // Migration: migrate youtube_content and youtube_channels to catalog_items
+    if has_table(conn, "youtube_content") && has_table(conn, "catalog_items") {
+        let migrated: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM catalog_items WHERE source = 'youtube' AND kind = 'youtube_video')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !migrated {
+            let _ = conn.execute_batch(
+                "INSERT OR IGNORE INTO catalog_items (id, kind, title, sort_title, year, overview, poster_url, backdrop_url, vote_average, vote_count, parent_id, position, source, source_id, metadata)
+                 SELECT lower(hex(randomblob(16))), 'youtube_video', title, lower(title), NULL, NULL, thumbnail_url, NULL, NULL, NULL, NULL, NULL, 'youtube', youtube_id,
+                    json_object('youtubeId', youtube_id, 'channelId', channel_id, 'channelName', channel_name,
+                        'durationSeconds', duration_seconds, 'videoPath', video_path, 'audioPath', audio_path,
+                        'videoSize', NULL, 'audioSize', NULL, 'isFavorite', CASE WHEN is_favorite = 1 THEN json('true') ELSE json('false') END,
+                        'favoritedAt', favorited_at)
+                 FROM youtube_content"
+            );
+            let _ = conn.execute_batch(
+                "INSERT OR IGNORE INTO catalog_items (id, kind, title, sort_title, year, overview, poster_url, backdrop_url, vote_average, vote_count, parent_id, position, source, source_id, metadata)
+                 SELECT lower(hex(randomblob(16))), 'youtube_channel', name, lower(name), NULL, NULL, image_url, NULL, NULL, NULL, NULL, NULL, 'youtube', id,
+                    json_object('channelId', id, 'handle', handle, 'url', url,
+                        'subscriberText', subscriber_text, 'imageUrl', image_url)
+                 FROM youtube_channels"
+            );
+        }
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(
