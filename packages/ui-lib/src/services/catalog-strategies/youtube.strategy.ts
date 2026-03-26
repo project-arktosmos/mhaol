@@ -38,6 +38,7 @@ function toYoutubeCatalogItems(items: YouTubeContent[]): CatalogItem[] {
 
 export const youtubeStrategy: CatalogKindStrategy = {
 	kind: 'youtube_video',
+	pinService: 'youtube',
 	tabs: [{ id: 'library', label: 'Library' }],
 	filterDefinitions: {},
 
@@ -51,5 +52,12 @@ export const youtubeStrategy: CatalogKindStrategy = {
 	async loadTab(_tabId, _page, _filters) {
 		const data = await fetchJson<YouTubeContent[]>('/api/youtube/content');
 		return { items: toYoutubeCatalogItems(data ?? []), totalPages: 1 };
+	},
+
+	async resolveByIds(ids) {
+		const data = await fetchJson<YouTubeContent[]>('/api/youtube/content');
+		const idSet = new Set(ids);
+		const matched = (data ?? []).filter((v) => idSet.has(v.youtubeId));
+		return toYoutubeCatalogItems(matched);
 	}
 };

@@ -1,7 +1,7 @@
 import { fetchJson } from 'ui-lib/transport/fetch-helpers';
-import { gameListItemToDisplay } from 'addons/retroachievements/transform';
+import { gameListItemToDisplay, gameExtendedToDisplay } from 'addons/retroachievements/transform';
 import { RA_CONSOLES } from 'addons/retroachievements/types';
-import type { RaGameListItem } from 'addons/retroachievements/types';
+import type { RaGameListItem, RaGameExtended } from 'addons/retroachievements/types';
 import type { CatalogItem, CatalogFilterOption } from 'ui-lib/types/catalog.type';
 import type { CatalogKindStrategy } from 'ui-lib/services/catalog.service';
 
@@ -49,8 +49,47 @@ function toGameCatalogItems(games: RaGameListItem[], consoleName: string): Catal
 
 const cachedGames = new Map<number, RaGameListItem[]>();
 
+function gameDetailToCatalogItem(detail: RaGameExtended): CatalogItem {
+	const display = gameExtendedToDisplay(detail);
+	return {
+		id: String(display.id),
+		kind: 'game' as const,
+		title: display.title,
+		sortTitle: display.title.toLowerCase(),
+		year: display.released ?? null,
+		overview: null,
+		posterUrl: display.imageIconUrl || null,
+		backdropUrl: null,
+		voteAverage: null,
+		voteCount: null,
+		parentId: null,
+		position: null,
+		source: 'retroachievements' as const,
+		sourceId: String(display.id),
+		createdAt: '',
+		updatedAt: '',
+		metadata: {
+			retroachievementsId: display.id,
+			consoleId: display.consoleId,
+			consoleName: display.consoleName,
+			imageIconUrl: display.imageIconUrl,
+			numAchievements: display.numAchievements,
+			points: display.points,
+			developer: display.developer ?? null,
+			publisher: display.publisher ?? null,
+			genre: display.genre ?? null,
+			released: display.released ?? null,
+			imageTitleUrl: display.imageTitleUrl ?? null,
+			imageIngameUrl: display.imageIngameUrl ?? null,
+			imageBoxArtUrl: display.imageBoxArtUrl ?? null,
+			achievements: []
+		}
+	};
+}
+
 export const gameStrategy: CatalogKindStrategy = {
 	kind: 'game',
+	pinService: 'retroachievements',
 	tabs: [{ id: 'browse', label: 'Browse' }],
 	filterDefinitions: {
 		console: {
@@ -97,5 +136,17 @@ export const gameStrategy: CatalogKindStrategy = {
 			items: toGameCatalogItems(games.slice(offset, offset + ITEMS_PER_PAGE), consoleName),
 			totalPages
 		};
+	},
+
+	async resolveByIds(ids) {
+		const results = await Promise.allSettled(
+			ids.map((id) => fetchJson<RaGameExtended>(`/api/retroachievements/games/${id}`))
+		);
+		return results
+			.filter(
+				(r): r is PromiseFulfilledResult<RaGameExtended> =>
+					r.status === 'fulfilled' && r.value != null
+			)
+			.map((r) => gameDetailToCatalogItem(r.value));
 	}
 };

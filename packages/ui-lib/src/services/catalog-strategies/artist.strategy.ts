@@ -58,6 +58,7 @@ function toArtistCatalogItems(artists: ReturnType<typeof artistsToDisplay>): Cat
 
 export const artistStrategy: CatalogKindStrategy = {
 	kind: 'artist',
+	pinService: 'musicbrainz-artist',
 	tabs: [{ id: 'popular', label: 'Popular' }],
 	filterDefinitions: {
 		genre: { label: 'Genre', loadOptions: async () => GENRES }
@@ -82,5 +83,17 @@ export const artistStrategy: CatalogKindStrategy = {
 			items: toArtistCatalogItems(artistsToDisplay(data?.artists ?? [])),
 			totalPages: 1
 		};
+	},
+
+	async resolveByIds(ids) {
+		const results = await Promise.allSettled(
+			ids.map((id) => fetchJson<MusicBrainzArtist>(`/api/musicbrainz/artist/${id}`))
+		);
+		return results
+			.filter(
+				(r): r is PromiseFulfilledResult<MusicBrainzArtist> =>
+					r.status === 'fulfilled' && r.value != null
+			)
+			.flatMap((r) => toArtistCatalogItems(artistsToDisplay([r.value])));
 	}
 };

@@ -55,6 +55,7 @@ function toAlbumCatalogItems(albums: ReturnType<typeof releaseGroupsToDisplay>):
 
 export const albumStrategy: CatalogKindStrategy = {
 	kind: 'album',
+	pinService: 'musicbrainz-album',
 	tabs: [{ id: 'popular', label: 'Popular' }],
 	filterDefinitions: {
 		genre: { label: 'Genre', loadOptions: async () => GENRES }
@@ -79,5 +80,17 @@ export const albumStrategy: CatalogKindStrategy = {
 			items: toAlbumCatalogItems(releaseGroupsToDisplay(data?.['release-groups'] ?? [])),
 			totalPages: 1
 		};
+	},
+
+	async resolveByIds(ids) {
+		const results = await Promise.allSettled(
+			ids.map((id) => fetchJson<MusicBrainzReleaseGroup>(`/api/musicbrainz/release-group/${id}`))
+		);
+		return results
+			.filter(
+				(r): r is PromiseFulfilledResult<MusicBrainzReleaseGroup> =>
+					r.status === 'fulfilled' && r.value != null
+			)
+			.flatMap((r) => toAlbumCatalogItems(releaseGroupsToDisplay([r.value])));
 	}
 };

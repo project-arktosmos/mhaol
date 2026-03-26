@@ -40,6 +40,7 @@ function toIptvCatalogItems(channels: IptvChannel[]): CatalogItem[] {
 
 export const iptvStrategy: CatalogKindStrategy = {
 	kind: 'iptv_channel',
+	pinService: 'iptv',
 	tabs: [{ id: 'browse', label: 'Channels' }],
 	filterDefinitions: {
 		category: {
@@ -86,5 +87,17 @@ export const iptvStrategy: CatalogKindStrategy = {
 			items: toIptvCatalogItems(data?.channels ?? []),
 			totalPages: Math.ceil(total / 20)
 		};
+	},
+
+	async resolveByIds(ids) {
+		const results = await Promise.allSettled(
+			ids.map((id) => fetchJson<IptvChannel>(`/api/iptv/channel?id=${encodeURIComponent(id)}`))
+		);
+		return results
+			.filter(
+				(r): r is PromiseFulfilledResult<IptvChannel> =>
+					r.status === 'fulfilled' && r.value != null
+			)
+			.flatMap((r) => toIptvCatalogItems([r.value]));
 	}
 };

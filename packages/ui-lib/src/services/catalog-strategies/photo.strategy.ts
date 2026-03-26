@@ -41,6 +41,7 @@ function toPhotoCatalogItems(photos: PhotoItem[]): CatalogItem[] {
 
 export const photoStrategy: CatalogKindStrategy = {
 	kind: 'photo',
+	pinService: 'photo',
 	tabs: [{ id: 'all', label: 'All' }],
 	filterDefinitions: {},
 

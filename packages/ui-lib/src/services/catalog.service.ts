@@ -10,6 +10,7 @@ import type {
 
 export interface CatalogKindStrategy {
 	kind: CatalogKind;
+	pinService: string;
 	tabs: CatalogTab[];
 	filterDefinitions: Record<
 		string,
@@ -25,6 +26,7 @@ export interface CatalogKindStrategy {
 		page: number,
 		filters: Record<string, string>
 	): Promise<{ items: CatalogItem[]; totalPages: number }>;
+	resolveByIds?(ids: string[]): Promise<CatalogItem[]>;
 }
 
 const initialState: CatalogBrowseState = {

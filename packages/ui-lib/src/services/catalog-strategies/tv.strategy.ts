@@ -54,6 +54,7 @@ async function loadGenres(): Promise<CatalogFilterOption[]> {
 
 export const tvStrategy: CatalogKindStrategy = {
 	kind: 'tv_show',
+	pinService: 'tmdb-tv',
 	tabs: [
 		{ id: 'popular', label: 'Popular' },
 		{ id: 'discover', label: 'Discover' }
@@ -86,5 +87,17 @@ export const tvStrategy: CatalogKindStrategy = {
 			items: toTvCatalogItems(data?.results ?? []),
 			totalPages: data?.total_pages ?? 1
 		};
+	},
+
+	async resolveByIds(ids) {
+		const results = await Promise.allSettled(
+			ids.map((id) => fetchJson<TMDBTvShow>(`/api/tmdb/tv/${id}`))
+		);
+		return results
+			.filter(
+				(r): r is PromiseFulfilledResult<TMDBTvShow> =>
+					r.status === 'fulfilled' && r.value != null
+			)
+			.flatMap((r) => toTvCatalogItems([r.value]));
 	}
 };
