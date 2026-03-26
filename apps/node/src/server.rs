@@ -38,7 +38,11 @@ async fn main() {
     let db_path = std::env::var("DB_PATH")
         .ok()
         .map(PathBuf::from)
-        .or_else(|| std::env::var("DATA_DIR").ok().map(|d| PathBuf::from(d).join("mhaol.db")))
+        .or_else(|| {
+            std::env::var("DATA_DIR")
+                .ok()
+                .map(|d| PathBuf::from(d).join("mhaol.db"))
+        })
         .unwrap_or_else(|| {
             // Default: packages/database/mhaol.db relative to the workspace root.
             // The server binary lives at apps/server/backend/, so go up three levels.
@@ -59,8 +63,7 @@ async fn main() {
         std::fs::create_dir_all(parent).ok();
     }
 
-    let state = AppState::new(Some(db_path.as_path()))
-        .expect("Failed to initialize database");
+    let state = AppState::new(Some(db_path.as_path())).expect("Failed to initialize database");
 
     state.seed_default_libraries();
     state.initialize_modules();
@@ -77,6 +80,14 @@ async fn main() {
         let llm_state = state.clone();
         tokio::spawn(async move {
             mhaol_node::llm_worker::run_llm_worker(llm_state).await;
+        });
+    }
+
+    // Start recommendations queue worker in the background
+    {
+        let recs_state = state.clone();
+        tokio::spawn(async move {
+            mhaol_node::recommendations_worker::run_recommendations_worker(recs_state).await;
         });
     }
 
@@ -106,7 +117,8 @@ async fn main() {
             .and_then(|p| p.parent())
             .map(|root| root.join("apps/frontend/static/node-defaults.json"));
         if let Some(path) = json_path {
-            if let Err(e) = std::fs::write(&path, serde_json::to_string_pretty(&defaults).unwrap()) {
+            if let Err(e) = std::fs::write(&path, serde_json::to_string_pretty(&defaults).unwrap())
+            {
                 tracing::warn!("Failed to write node-defaults.json: {}", e);
             } else {
                 tracing::info!("Wrote node defaults to {}", path.display());
@@ -164,7 +176,5 @@ async fn main() {
         });
     }
 
-    axum::serve(listener, app)
-        .await
-        .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }

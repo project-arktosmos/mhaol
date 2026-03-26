@@ -30,6 +30,7 @@ src/
 │   ├── plugins.rs
 │   ├── retroachievements.rs  # RetroAchievements game metadata proxy
 │   ├── queue.rs           # Queue task management (CRUD + SSE subscribe)
+│   ├── recommendations.rs # TMDB recommendations (bulk enqueue + query)
 │   ├── roster.rs           # Roster contacts CRUD (GET/POST/DELETE /api/roster)
 │   ├── signaling.rs
 │   ├── smart_pair.rs      # Smart pairing: TMDB matching + pinned items
@@ -39,6 +40,7 @@ src/
 │   └── ytdl.rs           # cfg(not(target_os = "android"))
 ├── db/                   # Database layer (rusqlite repos)
 ├── llm_worker.rs         # Background LLM queue worker (processes llm:* tasks)
+├── recommendations_worker.rs  # Background recommendations queue worker (processes recommendations:* tasks)
 ├── modules/              # Plugin modules (image tagger, etc.)
 ├── signaling_rooms.rs    # WebSocket signaling room management
 └── worker_bridge.rs      # Background worker bridge
@@ -56,6 +58,7 @@ All API handlers receive `AppState` which contains:
 - `ImageTaggerManager` (ONNX/ML, desktop only)
 - `HubManager` for app process management (start/stop headless apps)
 - `QueueManager` for task queue management (from `mhaol-queue` crate)
+- `RecommendationsRepo` for TMDB recommendation storage (from `mhaol-recommendations` crate)
 - `SignalingRoomManager` and `WorkerBridge` (auto-started on server boot)
 
 ## Adding a New API Module
@@ -71,6 +74,7 @@ Always included:
 
 - `mhaol-identity` — Ethereum identity/wallet management (`packages/identity/`)
 - `mhaol-queue` — Task queue management with SQLite + broadcast (`packages/queue/`)
+- `mhaol-recommendations` — TMDB recommendations storage + queue types (`packages/recommendations/`)
 
 Conditionally compiled with `#[cfg(not(target_os = "android"))]`:
 

@@ -1,0 +1,15 @@
+[package]
+name = "mhaol-recommendations"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "mhaol_recommendations"
+path = "src/lib.rs"
+
+[dependencies]
+parking_lot = "0.12"
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

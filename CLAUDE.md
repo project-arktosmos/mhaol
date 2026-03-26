@@ -23,6 +23,7 @@ mhaol.git/
 │   ├── signaling/                    # PartyKit signaling service
 │   ├── queue/                        # Rust task queue (SQLite + broadcast)
 │   ├── p2p-stream/                   # Rust P2P streaming library
+│   ├── recommendations/              # Rust TMDB recommendations (queue worker + SQLite storage)
 │   ├── torrent/                      # Rust torrent implementation
 │   └── webrtc/                       # WebRTC contact handshake layer (TypeScript)
 ├── pnpm-workspace.yaml

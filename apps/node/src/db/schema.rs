@@ -309,7 +309,7 @@ CREATE TABLE IF NOT EXISTS pins (
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '35', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '36', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -438,7 +438,6 @@ CREATE TABLE IF NOT EXISTS tmdb_image_overrides (
     PRIMARY KEY (tmdb_id, media_type, role)
 );
 ";
-
 
 pub const OPENLIBRARY_SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS openlibrary_api_cache (
@@ -642,8 +641,7 @@ fn run_migrations(conn: &Connection) {
     // Migration: add season_number to media_list_links (db_version 18)
     if has_table(conn, "media_list_links") && !has_column(conn, "media_list_links", "season_number")
     {
-        let _ =
-            conn.execute_batch("ALTER TABLE media_list_links ADD COLUMN season_number INTEGER");
+        let _ = conn.execute_batch("ALTER TABLE media_list_links ADD COLUMN season_number INTEGER");
     }
 
     // Migration: add signaling_servers table (db_version 19)
@@ -881,9 +879,7 @@ fn run_migrations(conn: &Connection) {
             .prepare("SELECT endorsement FROM roster_contacts LIMIT 0")
             .is_ok();
         if !has_col {
-            let _ = conn.execute_batch(
-                "ALTER TABLE roster_contacts ADD COLUMN endorsement TEXT;",
-            );
+            let _ = conn.execute_batch("ALTER TABLE roster_contacts ADD COLUMN endorsement TEXT;");
         }
     }
 
@@ -970,9 +966,7 @@ fn run_migrations(conn: &Connection) {
 
     // Migration: pins are now per-node, not per-wallet (db_version 35)
     {
-        let has_wallet_col = conn
-            .prepare("SELECT wallet FROM pins LIMIT 0")
-            .is_ok();
+        let has_wallet_col = conn.prepare("SELECT wallet FROM pins LIMIT 0").is_ok();
         if has_wallet_col {
             let _ = conn.execute_batch(
                 "DROP TABLE pins;
@@ -1015,6 +1009,11 @@ fn run_migrations(conn: &Connection) {
                  FROM youtube_channels"
             );
         }
+    }
+
+    // Migration: add tmdb_recommendations table (db_version 36)
+    if !has_table(conn, "tmdb_recommendations") {
+        let _ = conn.execute_batch(mhaol_recommendations::RECOMMENDATIONS_SCHEMA_SQL);
     }
 
     // Migration: add music_torrent_fetch_cache table
@@ -1117,6 +1116,7 @@ mod tests {
         assert!(has_table(&conn, "tv_torrent_fetch_cache"));
         assert!(has_table(&conn, "book_torrent_fetch_cache"));
         assert!(has_table(&conn, "queue_tasks"));
+        assert!(has_table(&conn, "tmdb_recommendations"));
 
         // Verify seed data
         let count: i64 = conn
