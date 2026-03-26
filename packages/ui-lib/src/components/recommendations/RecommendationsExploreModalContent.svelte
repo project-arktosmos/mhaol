@@ -193,6 +193,19 @@
 						/>
 					{/if}
 
+					<!-- Sentiment Labels -->
+					{#if labelDefs.length > 0 && wallet}
+						<div class="rounded-lg bg-base-200 p-3">
+							<h4 class="mb-2 text-sm font-semibold">Your Rating</h4>
+							<RecommendationLabelGrid
+								labels={labelDefs}
+								{activeLabelId}
+								loading={labelLoading}
+								onlabelclick={handleLabelClick}
+							/>
+						</div>
+					{/if}
+
 					<div class="flex gap-4">
 						{#if posterUrl(data)}
 							<img
@@ -282,19 +295,6 @@
 							{/each}
 						</div>
 					</div>
-
-					<!-- Sentiment Labels -->
-					{#if labelDefs.length > 0 && wallet}
-						<div class="rounded-lg bg-base-200 p-3">
-							<h4 class="mb-2 text-sm font-semibold">Your Rating</h4>
-							<RecommendationLabelGrid
-								labels={labelDefs}
-								{activeLabelId}
-								loading={labelLoading}
-								onlabelclick={handleLabelClick}
-							/>
-						</div>
-					{/if}
 
 					<!-- Overview -->
 					{#if data?.overview}
