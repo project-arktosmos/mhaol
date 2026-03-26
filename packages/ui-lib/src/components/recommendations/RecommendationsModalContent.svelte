@@ -449,10 +449,16 @@
 									{#each levels() as lvl}
 										<th class="text-center" colspan="2">L{lvl}</th>
 									{/each}
+									<th class="text-center">Score</th>
 								</tr>
 							</thead>
 							<tbody>
 								{#each topMovies as movie, i (movie.tmdbId)}
+									{@const score = levels().reduce((sum, lvl) => {
+										const cnt = movie.levelCounts[lvl] ?? 0;
+										const total = levelTotals()[lvl] ?? 0;
+										return sum + (total > 0 ? Math.round((cnt / total) * 100) : 0);
+									}, 0)}
 									<tr>
 										<td class="text-base-content/40">{i + 1}</td>
 										<td class="max-w-48 truncate">{movie.title ?? '—'}</td>
@@ -465,6 +471,7 @@
 												{cnt ? `${pct}%` : ''}
 											</td>
 										{/each}
+										<td class="text-center font-semibold">{score}</td>
 									</tr>
 								{/each}
 							</tbody>
