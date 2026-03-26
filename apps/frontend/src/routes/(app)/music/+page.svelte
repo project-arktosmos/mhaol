@@ -10,6 +10,8 @@
 	import type { CatalogItem } from 'ui-lib/types/catalog.type';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
+	import { albumStrategy } from 'ui-lib/services/catalog-strategies/album.strategy';
+	import { artistStrategy } from 'ui-lib/services/catalog-strategies/artist.strategy';
 
 	const favs = favoritesService.state;
 	const pins = pinsService.state;
@@ -18,6 +20,48 @@
 	let artists = $state<CatalogItem[]>([]);
 	let albumsLoading = $state(false);
 	let artistsLoading = $state(false);
+
+	let pinnedItems = $state<CatalogItem[]>([]);
+	let favoriteItems = $state<CatalogItem[]>([]);
+	let pinnedLoading = $state(false);
+	let favoritesLoading = $state(false);
+
+	let pinnedAlbumIds = $derived(
+		$pins.items.filter((p) => p.service === 'musicbrainz-album').map((p) => p.serviceId)
+	);
+	let pinnedArtistIds = $derived(
+		$pins.items.filter((p) => p.service === 'musicbrainz-artist').map((p) => p.serviceId)
+	);
+	let favAlbumIds = $derived(
+		$favs.items.filter((f) => f.service === 'musicbrainz-album').map((f) => f.serviceId)
+	);
+	let favArtistIds = $derived(
+		$favs.items.filter((f) => f.service === 'musicbrainz-artist').map((f) => f.serviceId)
+	);
+
+	$effect(() => {
+		const albumIds = pinnedAlbumIds;
+		const artistIds = pinnedArtistIds;
+		if (albumIds.length === 0 && artistIds.length === 0) { pinnedItems = []; return; }
+		pinnedLoading = true;
+		Promise.all([
+			albumIds.length > 0 && albumStrategy.resolveByIds ? albumStrategy.resolveByIds(albumIds) : Promise.resolve([]),
+			artistIds.length > 0 && artistStrategy.resolveByIds ? artistStrategy.resolveByIds(artistIds) : Promise.resolve([])
+		]).then(([a, b]) => { pinnedItems = [...a, ...b]; pinnedLoading = false; })
+			.catch(() => { pinnedLoading = false; });
+	});
+
+	$effect(() => {
+		const albumIds = favAlbumIds;
+		const artistIds = favArtistIds;
+		if (albumIds.length === 0 && artistIds.length === 0) { favoriteItems = []; return; }
+		favoritesLoading = true;
+		Promise.all([
+			albumIds.length > 0 && albumStrategy.resolveByIds ? albumStrategy.resolveByIds(albumIds) : Promise.resolve([]),
+			artistIds.length > 0 && artistStrategy.resolveByIds ? artistStrategy.resolveByIds(artistIds) : Promise.resolve([])
+		]).then(([a, b]) => { favoriteItems = [...a, ...b]; favoritesLoading = false; })
+			.catch(() => { favoritesLoading = false; });
+	});
 
 	function toAlbumItems(data: MusicBrainzReleaseGroup[]): CatalogItem[] {
 		return releaseGroupsToDisplay(data).slice(0, 6).map((a) => ({
@@ -111,6 +155,46 @@
 		<h1 class="text-lg font-bold">Music</h1>
 	</div>
 	<div class="p-4">
+		{#if pinnedLoading || pinnedItems.length > 0}
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Pinned</h2>
+				{#if pinnedLoading}
+					<div class="flex justify-center py-6">
+						<span class="loading loading-sm loading-spinner"></span>
+					</div>
+				{:else}
+					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+						{#each pinnedItems as item (item.id)}
+							<CatalogCard
+								card={cardWithOverlays(item)}
+								onclick={() => goto(`${base}/music/${item.kind === 'album' ? 'album' : 'artist'}/${item.sourceId}`)}
+							/>
+						{/each}
+					</div>
+				{/if}
+			</section>
+		{/if}
+
+		{#if favoritesLoading || favoriteItems.length > 0}
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Favorites</h2>
+				{#if favoritesLoading}
+					<div class="flex justify-center py-6">
+						<span class="loading loading-sm loading-spinner"></span>
+					</div>
+				{:else}
+					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+						{#each favoriteItems as item (item.id)}
+							<CatalogCard
+								card={cardWithOverlays(item)}
+								onclick={() => goto(`${base}/music/${item.kind === 'album' ? 'album' : 'artist'}/${item.sourceId}`)}
+							/>
+						{/each}
+					</div>
+				{/if}
+			</section>
+		{/if}
+
 		<section class="mb-8">
 			<div class="mb-3 flex items-center justify-between">
 				<h2 class="text-lg font-semibold">Albums</h2>
