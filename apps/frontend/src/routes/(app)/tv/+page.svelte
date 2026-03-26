@@ -3,7 +3,6 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
-	import { smartPairService } from 'ui-lib/services/smart-pair.service';
 	import type { DisplayTMDBTvShow, TMDBTvShow } from 'addons/tmdb/types';
 	import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 	import { tvShowsToDisplay } from 'addons/tmdb/transform';
@@ -102,6 +101,7 @@
 	);
 
 	let pinnedTvShows = $state<DisplayTMDBTvShow[]>([]);
+	let favoritedTvShows = $state<DisplayTMDBTvShow[]>([]);
 	let matchModalList: MediaList | null = $state(null);
 	let tvSearchInput = $state('');
 	let tmdbMetadataMap = $state(new Map<string, DisplayTMDBTvShow>());
@@ -272,6 +272,28 @@
 			.filter((g) => g.tvShows.length > 0);
 	});
 
+	async function resolveTvShowIds(ids: number[]): Promise<DisplayTMDBTvShow[]> {
+		if (ids.length === 0) return [];
+		const results = await Promise.allSettled(
+			ids.map((id) => fetchJson<TMDBTvShow>(`/api/tmdb/tv/${id}`))
+		);
+		return tvShowsToDisplay(
+			results
+				.filter((r): r is PromiseFulfilledResult<TMDBTvShow> => r.status === 'fulfilled' && r.value != null)
+				.map((r) => r.value)
+		);
+	}
+
+	$effect(() => {
+		const ids = [...pinnedTmdbTvIds];
+		resolveTvShowIds(ids).then((shows) => { pinnedTvShows = shows; });
+	});
+
+	$effect(() => {
+		const ids = [...favoritedTmdbTvIds];
+		resolveTvShowIds(ids).then((shows) => { favoritedTvShows = shows; });
+	});
+
 	async function fetchTmdbMetadataForLists() {
 		const linked = tvShowLists.filter((l) => l.links?.tmdb?.serviceId);
 		if (linked.length === 0) return;
@@ -293,7 +315,6 @@
 		loadPopularTv();
 		loadTvGenres();
 		loadDiscoverTv();
-		smartPairService.loadPinned().then((pinned) => { pinnedTvShows = pinned.tv; });
 		fetchTmdbMetadataForLists();
 	});
 </script>
@@ -315,6 +336,18 @@
 				<h2 class="mb-3 text-lg font-semibold">Pinned</h2>
 				<TmdbCatalogGrid
 					tvShows={pinnedTvShows}
+					favoritedIds={favoritedTmdbTvIds}
+					pinnedIds={pinnedTmdbTvIds}
+					onselectTvShow={handleSelectTvShow}
+				/>
+			</section>
+		{/if}
+
+		{#if favoritedTvShows.length > 0}
+			<section class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold">Favorites</h2>
+				<TmdbCatalogGrid
+					tvShows={favoritedTvShows}
 					favoritedIds={favoritedTmdbTvIds}
 					pinnedIds={pinnedTmdbTvIds}
 					onselectTvShow={handleSelectTvShow}
