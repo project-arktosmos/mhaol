@@ -1,18 +1,38 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { recommendationsService } from 'ui-lib/services/recommendations.service';
+	import { recommendationLabelsService } from 'ui-lib/services/recommendation-labels.service';
+	import { profileService } from 'ui-lib/services/profile.service';
 	import type {
 		TopRecommendedMovie,
 		TopRecommendedMovieDetail
 	} from 'ui-lib/types/recommendations.type';
+	import type { RecommendationLabel } from 'ui-lib/types/recommendation-label.type';
 	import { getPosterUrl, getBackdropUrl } from 'addons/tmdb/transform';
 	import TopRecommendedTable from './TopRecommendedTable.svelte';
+	import RecommendationLabelGrid from './RecommendationLabelGrid.svelte';
 
 	let topTable: ReturnType<typeof TopRecommendedTable>;
 	let detailMap = $state<Map<number, TopRecommendedMovieDetail>>(new Map());
 	let detailLoading = $state(false);
 	let selectedIndex = $state<number | null>(null);
 	let selectedMovie = $state<TopRecommendedMovie | null>(null);
+
+	let labelDefs = $state<RecommendationLabel[]>([]);
+	let assignmentMap = $state<Map<string, string>>(new Map());
+	let labelLoading = $state(false);
+	let wallet = $state('');
+
+	const profileStore = profileService.state;
+	profileStore.subscribe((s) => {
+		wallet = s.local.wallet;
+	});
+
+	let activeLabelId = $derived.by(() => {
+		if (!selectedMovie) return null;
+		const key = `${selectedMovie.tmdbId}:${selectedMovie.mediaType}`;
+		return assignmentMap.get(key) ?? null;
+	});
 
 	let selectedDetail = $derived(
 		selectedMovie ? (detailMap.get(selectedMovie.tmdbId) ?? null) : null
@@ -27,6 +47,58 @@
 			/* best-effort */
 		} finally {
 			detailLoading = false;
+		}
+	}
+
+	async function loadLabelDefs() {
+		try {
+			labelDefs = await recommendationLabelsService.getDefinitions();
+		} catch {
+			/* best-effort */
+		}
+	}
+
+	async function loadAssignments() {
+		if (!wallet) return;
+		try {
+			const assignments = await recommendationLabelsService.getAssignments(wallet);
+			assignmentMap = new Map(
+				assignments.map((a) => [`${a.recommendedTmdbId}:${a.recommendedMediaType}`, a.labelId])
+			);
+		} catch {
+			/* best-effort */
+		}
+	}
+
+	async function handleLabelClick(labelId: string) {
+		if (!selectedMovie || !wallet) return;
+		const key = `${selectedMovie.tmdbId}:${selectedMovie.mediaType}`;
+		labelLoading = true;
+		try {
+			if (activeLabelId === labelId) {
+				await recommendationLabelsService.removeLabel(
+					wallet,
+					selectedMovie.tmdbId,
+					selectedMovie.mediaType
+				);
+				const next = new Map(assignmentMap);
+				next.delete(key);
+				assignmentMap = next;
+			} else {
+				await recommendationLabelsService.setLabel(
+					wallet,
+					selectedMovie.tmdbId,
+					selectedMovie.mediaType,
+					labelId
+				);
+				const next = new Map(assignmentMap);
+				next.set(key, labelId);
+				assignmentMap = next;
+			}
+		} catch {
+			/* best-effort */
+		} finally {
+			labelLoading = false;
 		}
 	}
 
@@ -55,6 +127,8 @@
 	onMount(() => {
 		topTable?.refresh();
 		loadDetails();
+		loadLabelDefs();
+		loadAssignments();
 	});
 </script>
 
@@ -197,6 +271,19 @@
 							{/each}
 						</div>
 					</div>
+
+					<!-- Sentiment Labels -->
+					{#if labelDefs.length > 0 && wallet}
+						<div class="rounded-lg bg-base-200 p-3">
+							<h4 class="mb-2 text-sm font-semibold">Your Rating</h4>
+							<RecommendationLabelGrid
+								labels={labelDefs}
+								{activeLabelId}
+								loading={labelLoading}
+								onlabelclick={handleLabelClick}
+							/>
+						</div>
+					{/if}
 
 					<!-- Overview -->
 					{#if data?.overview}
