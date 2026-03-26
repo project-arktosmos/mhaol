@@ -13,7 +13,7 @@ src/
 ├── components/               # UI components organized by feature
 │   ├── addons/               # Addon management
 │   ├── browse/               # Generic browse primitives (BrowseGrid, BrowseHeader, BrowseViewToggle)
-│   ├── catalog/              # Unified media catalog (CatalogCard, CatalogBrowsePage, CatalogDetailPage, TmdbCatalogGrid, detail/, filters/)
+│   ├── catalog/              # Unified media catalog (CatalogCard, CatalogBrowsePage, CatalogDetailPage, PinnedFavoritesSection, TmdbCatalogGrid, detail/, filters/)
 │   ├── core/                 # Shared reusable (Button, Modal, Navbar, ModalOutlet, ThemeToggle, ConnectionStatus, etc.)
 │   ├── downloads/            # Download management
 │   ├── hub/                  # Hub dashboard (app management)

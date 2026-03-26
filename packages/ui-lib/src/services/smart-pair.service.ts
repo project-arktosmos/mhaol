@@ -1,7 +1,6 @@
 import { writable } from 'svelte/store';
 import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 import type { SmartPairItem, SmartPairResult, SmartPairState } from 'ui-lib/types/smart-pair.type';
-import type { DisplayTMDBMovie, DisplayTMDBTvShow } from 'addons/tmdb/types';
 
 const initialState: SmartPairState = {
 	pairing: false,
@@ -71,18 +70,6 @@ class SmartPairService {
 				error: `Pairing failed: ${e instanceof Error ? e.message : String(e)}`
 			}));
 		}
-	}
-
-	async loadPinned(): Promise<{ movies: DisplayTMDBMovie[]; tv: DisplayTMDBTvShow[] }> {
-		try {
-			const res = await fetchRaw('/api/smart-pair/pinned');
-			if (res.ok) {
-				return await res.json();
-			}
-		} catch {
-			// best-effort
-		}
-		return { movies: [], tv: [] };
 	}
 
 	reset() {
