@@ -28,13 +28,14 @@
 	let displayName = $state(localIdentity.name);
 	let clientAddress = localIdentity.address;
 
+	type ConnectionTab = 'invite' | TransportMode;
+	let activeTab = $state<ConnectionTab>('invite');
 	let transportMode = $state<TransportMode>(existingConfig?.transportMode ?? 'http');
 	let serverUrl = $state(existingConfig?.serverUrl ?? defaults.serverUrl);
 	let serverAddress = $state(existingConfig?.serverAddress ?? defaults.serverAddress);
 	let signalingUrl = $state(existingConfig?.signalingUrl ?? defaults.signalingUrl);
 
 	let inviteInput = $state('');
-	let inviteError = $state<string | null>(null);
 
 	function handleNameChange(value: string) {
 		displayName = value;
@@ -99,7 +100,6 @@
 
 	async function handleConnectInvite() {
 		if (!parsedInvite) return;
-		inviteError = null;
 
 		try {
 			if (parsedInvite.transportMode === 'http') {
@@ -246,77 +246,48 @@
 			</div>
 		</div>
 
-		<!-- Invite paste -->
-		<div class="form-control">
-			<label class="label" for="invite-input">
-				<span class="label-text">Paste Invite</span>
-			</label>
-			<textarea
-				id="invite-input"
-				class={classNames('textarea-bordered textarea w-full font-mono text-xs', {
-					'textarea-error': inviteInput.trim() && !parsedInvite
-				})}
-				placeholder={'{"transport":"ws","serverUrl":"http://192.168.1.5:1530"}'}
-				rows="2"
-				bind:value={inviteInput}
-				disabled={connecting}
-			></textarea>
-			{#if inviteInput.trim() && !parsedInvite}
-				<label class="label">
-					<span class="label-text-alt text-error">Invalid invite JSON</span>
-				</label>
-			{/if}
+		<!-- Connection mode tabs -->
+		<div class="flex flex-wrap gap-1">
+			{#each [{ id: 'invite', label: 'Paste Invite' }, { id: 'http', label: 'HTTP' }, { id: 'ws', label: 'WebSocket' }, { id: 'webrtc', label: 'WebRTC' }] as tab (tab.id)}
+				<button
+					class={classNames('btn btn-sm', {
+						'btn-primary': activeTab === tab.id,
+						'btn-ghost': activeTab !== tab.id
+					})}
+					disabled={connecting}
+					onclick={() => {
+						activeTab = tab.id as ConnectionTab;
+						if (tab.id !== 'invite') transportMode = tab.id as TransportMode;
+					}}
+				>
+					{tab.label}
+				</button>
+			{/each}
 		</div>
 
-		{#if canConnectInvite}
-			<button class="btn btn-primary" disabled={connecting} onclick={handleConnectInvite}>
-				{#if connecting}
-					<span class="loading loading-sm loading-spinner"></span>
-					Connecting...
-				{:else}
-					Connect with Invite
+		<!-- Invite paste tab -->
+		{#if activeTab === 'invite'}
+			<div class="form-control">
+				<textarea
+					id="invite-input"
+					class={classNames('textarea-bordered textarea w-full font-mono text-xs', {
+						'textarea-error': inviteInput.trim() && !parsedInvite
+					})}
+					placeholder={'{"transport":"ws","serverUrl":"http://192.168.1.5:1530"}'}
+					rows="3"
+					bind:value={inviteInput}
+					disabled={connecting}
+				></textarea>
+				{#if inviteInput.trim() && !parsedInvite}
+					<label class="label">
+						<span class="label-text-alt text-error">Invalid invite JSON</span>
+					</label>
 				{/if}
-			</button>
+			</div>
 		{/if}
 
-		<div class="divider text-xs text-base-content/40">or configure manually</div>
-
-		<!-- Transport mode selector -->
-		<div class="flex gap-2">
-			<button
-				class={classNames('btn flex-1 btn-sm', {
-					'btn-primary': transportMode === 'http',
-					'btn-ghost': transportMode !== 'http'
-				})}
-				disabled={connecting}
-				onclick={() => (transportMode = 'http')}
-			>
-				HTTP
-			</button>
-			<button
-				class={classNames('btn flex-1 btn-sm', {
-					'btn-primary': transportMode === 'ws',
-					'btn-ghost': transportMode !== 'ws'
-				})}
-				disabled={connecting}
-				onclick={() => (transportMode = 'ws')}
-			>
-				WebSocket
-			</button>
-			<button
-				class={classNames('btn flex-1 btn-sm', {
-					'btn-primary': transportMode === 'webrtc',
-					'btn-ghost': transportMode !== 'webrtc'
-				})}
-				disabled={connecting}
-				onclick={() => (transportMode = 'webrtc')}
-			>
-				WebRTC
-			</button>
-		</div>
-
 		<!-- HTTP / WS fields -->
-		{#if transportMode === 'http' || transportMode === 'ws'}
+		{#if activeTab === 'http' || activeTab === 'ws'}
 			<div class="form-control">
 				<label class="label" for="server-url">
 					<span class="label-text">Server URL</span>
@@ -333,7 +304,7 @@
 		{/if}
 
 		<!-- WebRTC fields -->
-		{#if transportMode === 'webrtc'}
+		{#if activeTab === 'webrtc'}
 			<div class="form-control">
 				<label class="label" for="server-address">
 					<span class="label-text">Server Ethereum Address</span>
@@ -363,7 +334,7 @@
 		{/if}
 
 		<!-- WebRTC connection progress -->
-		{#if transportMode === 'webrtc' && $connState.phase !== 'idle'}
+		{#if activeTab === 'webrtc' && $connState.phase !== 'idle'}
 			<ul class="steps steps-vertical text-sm">
 				{#each WEBRTC_STEPS as step (step.phase)}
 					{@const status = stepStatus(step.phase, $connState.phase)}
@@ -393,7 +364,20 @@
 		{/if}
 
 		<!-- Connect button -->
-		{#if !canConnectInvite}
+		{#if activeTab === 'invite'}
+			<button
+				class="btn btn-primary"
+				disabled={!canConnectInvite || connecting}
+				onclick={handleConnectInvite}
+			>
+				{#if connecting}
+					<span class="loading loading-sm loading-spinner"></span>
+					Connecting...
+				{:else}
+					Connect
+				{/if}
+			</button>
+		{:else}
 			<button class="btn btn-primary" disabled={!canConnect || connecting} onclick={handleConnect}>
 				{#if connecting}
 					<span class="loading loading-sm loading-spinner"></span>
