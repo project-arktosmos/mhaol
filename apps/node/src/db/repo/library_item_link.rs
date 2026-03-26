@@ -116,22 +116,24 @@ impl LibraryItemLinkRepo {
 mod tests {
     use super::*;
     use crate::db::open_test_database;
-    use crate::db::repo::{LibraryItemRepo, LibraryRepo};
     use crate::db::repo::library_item::InsertLibraryItem;
+    use crate::db::repo::{LibraryItemRepo, LibraryRepo};
 
     fn setup() -> LibraryItemLinkRepo {
         let db = open_test_database();
         let lib_repo = LibraryRepo::new(db.clone());
         let item_repo = LibraryItemRepo::new(db.clone());
         lib_repo.insert("lib1", "Test", "/tmp", "[\"video\"]", 1000);
-        item_repo.insert(&InsertLibraryItem {
-            id: "item1".into(),
-            library_id: "lib1".into(),
-            path: "/tmp/movie.mp4".into(),
-            extension: "mp4".into(),
-            media_type: "video".into(),
-            category_id: None,
-        }).unwrap();
+        item_repo
+            .insert(&InsertLibraryItem {
+                id: "item1".into(),
+                library_id: "lib1".into(),
+                path: "/tmp/movie.mp4".into(),
+                extension: "mp4".into(),
+                media_type: "video".into(),
+                category_id: None,
+            })
+            .unwrap();
         LibraryItemLinkRepo::new(db)
     }
 

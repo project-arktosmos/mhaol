@@ -67,7 +67,12 @@ pub(crate) struct TmdbCandidate {
     pub(crate) vote_count: i64,
 }
 
-pub(crate) fn score_match(query_title: &str, candidate_title: &str, popularity: f64, vote_count: i64) -> f64 {
+pub(crate) fn score_match(
+    query_title: &str,
+    candidate_title: &str,
+    popularity: f64,
+    vote_count: i64,
+) -> f64 {
     let q = query_title.to_lowercase();
     let r = candidate_title.to_lowercase();
 
@@ -83,7 +88,11 @@ pub(crate) fn score_match(query_title: &str, candidate_title: &str, popularity: 
     title_score * (1.0 + (popularity + 1.0).log10()) * (1.0 + (vote_count as f64 + 1.0).log10())
 }
 
-pub(crate) fn determine_confidence(query_title: &str, candidate_title: &str, vote_count: i64) -> String {
+pub(crate) fn determine_confidence(
+    query_title: &str,
+    candidate_title: &str,
+    vote_count: i64,
+) -> String {
     let q = query_title.to_lowercase();
     let r = candidate_title.to_lowercase();
     if q == r && vote_count > 100 {
@@ -104,10 +113,19 @@ fn parse_movie_candidate(result: &serde_json::Value) -> Option<TmdbCandidate> {
         id: result.get("id")?.as_i64()?,
         title: result.get("title")?.as_str()?.to_string(),
         year: extract_year(result.get("release_date")?.as_str().unwrap_or("")),
-        poster_path: result.get("poster_path").and_then(|p| p.as_str()).map(|s| s.to_string()),
+        poster_path: result
+            .get("poster_path")
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string()),
         media_type: "movie".to_string(),
-        popularity: result.get("popularity").and_then(|p| p.as_f64()).unwrap_or(0.0),
-        vote_count: result.get("vote_count").and_then(|v| v.as_i64()).unwrap_or(0),
+        popularity: result
+            .get("popularity")
+            .and_then(|p| p.as_f64())
+            .unwrap_or(0.0),
+        vote_count: result
+            .get("vote_count")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
     })
 }
 
@@ -116,18 +134,24 @@ pub(crate) fn parse_tv_candidate(result: &serde_json::Value) -> Option<TmdbCandi
         id: result.get("id")?.as_i64()?,
         title: result.get("name")?.as_str()?.to_string(),
         year: extract_year(result.get("first_air_date")?.as_str().unwrap_or("")),
-        poster_path: result.get("poster_path").and_then(|p| p.as_str()).map(|s| s.to_string()),
+        poster_path: result
+            .get("poster_path")
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string()),
         media_type: "tv".to_string(),
-        popularity: result.get("popularity").and_then(|p| p.as_f64()).unwrap_or(0.0),
-        vote_count: result.get("vote_count").and_then(|v| v.as_i64()).unwrap_or(0),
+        popularity: result
+            .get("popularity")
+            .and_then(|p| p.as_f64())
+            .unwrap_or(0.0),
+        vote_count: result
+            .get("vote_count")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
     })
 }
 
 /// Streams results as newline-delimited JSON so the UI updates per item.
-async fn pair_items(
-    State(state): State<AppState>,
-    Json(body): Json<PairRequest>,
-) -> Response {
+async fn pair_items(State(state): State<AppState>, Json(body): Json<PairRequest>) -> Response {
     // Fail fast if TMDB API key is not configured
     let has_key = state
         .settings
@@ -346,22 +370,33 @@ async fn resolve_pinned_movie(
     let tmdb_link = links.iter().find(|l| l.service == "tmdb")?;
     let tmdb_id: i64 = tmdb_link.service_id.parse().ok()?;
 
-    let data = tmdb_fetch_json(state, &format!("/movie/{}", tmdb_id), &[
-        ("append_to_response", "credits,images"),
-        ("include_image_language", "en,null"),
-    ])
+    let data = tmdb_fetch_json(
+        state,
+        &format!("/movie/{}", tmdb_id),
+        &[
+            ("append_to_response", "credits,images"),
+            ("include_image_language", "en,null"),
+        ],
+    )
     .await
     .ok()?;
 
     let poster_path = data.get("poster_path").and_then(|p| p.as_str());
     let backdrop_path = data.get("backdrop_path").and_then(|p| p.as_str());
-    let release_date = data.get("release_date").and_then(|d| d.as_str()).unwrap_or("");
+    let release_date = data
+        .get("release_date")
+        .and_then(|d| d.as_str())
+        .unwrap_or("");
     let genres = data
         .get("genres")
         .and_then(|g| g.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|g| g.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                .filter_map(|g| {
+                    g.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
@@ -388,23 +423,34 @@ async fn resolve_pinned_tv(
     let tmdb_link = links.iter().find(|l| l.service == "tmdb")?;
     let tmdb_id: i64 = tmdb_link.service_id.parse().ok()?;
 
-    let data = tmdb_fetch_json(state, &format!("/tv/{}", tmdb_id), &[
-        ("append_to_response", "credits,images"),
-        ("include_image_language", "en,null"),
-    ])
+    let data = tmdb_fetch_json(
+        state,
+        &format!("/tv/{}", tmdb_id),
+        &[
+            ("append_to_response", "credits,images"),
+            ("include_image_language", "en,null"),
+        ],
+    )
     .await
     .ok()?;
 
     let poster_path = data.get("poster_path").and_then(|p| p.as_str());
     let backdrop_path = data.get("backdrop_path").and_then(|p| p.as_str());
-    let first_air_date = data.get("first_air_date").and_then(|d| d.as_str()).unwrap_or("");
+    let first_air_date = data
+        .get("first_air_date")
+        .and_then(|d| d.as_str())
+        .unwrap_or("");
     let last_air_date = data.get("last_air_date").and_then(|d| d.as_str());
     let genres = data
         .get("genres")
         .and_then(|g| g.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|g| g.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                .filter_map(|g| {
+                    g.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();

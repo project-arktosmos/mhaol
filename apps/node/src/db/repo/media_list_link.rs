@@ -108,7 +108,9 @@ mod tests {
         let lib_repo = LibraryRepo::new(db.clone());
         let list_repo = MediaListRepo::new(db.clone());
         lib_repo.insert("lib1", "Test", "/tmp", "[\"video\"]", 1000);
-        list_repo.insert("list1", "lib1", "My List", None, None, "video", "auto", None, None);
+        list_repo.insert(
+            "list1", "lib1", "My List", None, None, "video", "auto", None, None,
+        );
         MediaListLinkRepo::new(db)
     }
 

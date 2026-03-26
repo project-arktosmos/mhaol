@@ -1,4 +1,4 @@
-use super::{Module, ModuleManifest, ModuleLinkSource, ModuleSettingDef};
+use super::{Module, ModuleLinkSource, ModuleManifest, ModuleSettingDef};
 use crate::AppState;
 use mhaol_yt_dlp::{DownloadManager, YtDownloadConfig};
 use std::sync::Arc;

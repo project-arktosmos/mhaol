@@ -150,11 +150,14 @@
 		try {
 			const body: Record<string, string> = { username: editUsername };
 			if (editProfilePicture) body.profilePictureUrl = editProfilePicture;
-			const res = await fetch(apiUrl(`/api/identities/${encodeURIComponent(editingProfile)}/profile`), {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(body)
-			});
+			const res = await fetch(
+				apiUrl(`/api/identities/${encodeURIComponent(editingProfile)}/profile`),
+				{
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(body)
+				}
+			);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			editingProfile = null;
 			await loadIdentities();
@@ -265,10 +268,7 @@
 							</div>
 						</div>
 						<div class="flex gap-1">
-							<button
-								class="btn btn-ghost btn-xs"
-								onclick={() => startEditProfile(identity)}
-							>
+							<button class="btn btn-ghost btn-xs" onclick={() => startEditProfile(identity)}>
 								Profile
 							</button>
 							<button
@@ -290,20 +290,22 @@
 						<div class="flex flex-col gap-2 rounded-lg bg-base-300 p-3">
 							<input
 								type="text"
-								class="input input-bordered input-sm w-full"
+								class="input-bordered input input-sm w-full"
 								placeholder="Username"
 								bind:value={editUsername}
 							/>
 							<input
 								type="url"
-								class="input input-bordered input-sm w-full"
+								class="input-bordered input input-sm w-full"
 								placeholder="Profile picture URL"
 								bind:value={editProfilePicture}
 							/>
 							<div class="flex justify-end gap-1">
-								<button class="btn btn-ghost btn-xs" onclick={() => (editingProfile = null)}>Cancel</button>
+								<button class="btn btn-ghost btn-xs" onclick={() => (editingProfile = null)}
+									>Cancel</button
+								>
 								<button
-									class={classNames('btn btn-primary btn-xs', { loading: savingProfile })}
+									class={classNames('btn btn-xs btn-primary', { loading: savingProfile })}
 									disabled={savingProfile || !editUsername.trim()}
 									onclick={saveProfile}
 								>

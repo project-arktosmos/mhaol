@@ -94,7 +94,12 @@ class ClientIdentityService {
 		parsed.username = username;
 		parsed.profilePictureUrl = profilePictureUrl;
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-		const identity = await this.buildIdentity(parsed.name, parsed.privateKey, username, profilePictureUrl);
+		const identity = await this.buildIdentity(
+			parsed.name,
+			parsed.privateKey,
+			username,
+			profilePictureUrl
+		);
 		this.state.set({ loading: false, identity, error: null });
 	}
 

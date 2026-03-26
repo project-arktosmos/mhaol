@@ -10,7 +10,12 @@ use serde::Deserialize;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/", get(list_favorites).post(add_favorite).delete(remove_favorite))
+        .route(
+            "/",
+            get(list_favorites)
+                .post(add_favorite)
+                .delete(remove_favorite),
+        )
         .route("/count", get(count_favorites))
 }
 

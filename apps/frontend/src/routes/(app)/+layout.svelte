@@ -11,10 +11,7 @@
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
 	import SmartSearchToast from 'ui-lib/components/llm/SmartSearchToast.svelte';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
-	import { fetchRaw, resolveApiUrl } from 'ui-lib/transport/fetch-helpers';
-	import { setImageBaseUrl } from 'addons/tmdb/transform';
-	import { setCoverArtBaseUrl, setArtistImageBaseUrl } from 'addons/musicbrainz/transform';
-	import { setRaImageBaseUrl } from 'addons/retroachievements/transform';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { rosterService } from 'ui-lib/services/roster.service';
 	import { profileService } from 'ui-lib/services/profile.service';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
@@ -23,12 +20,6 @@
 	import type { PassportData } from 'webrtc/types';
 
 	const connConfig = connectionConfigService.get();
-	if (!connConfig || connConfig.transportMode === 'http') {
-		setImageBaseUrl(resolveApiUrl('/api/tmdb/image'));
-		setCoverArtBaseUrl(resolveApiUrl('/api/musicbrainz/cover'));
-		setArtistImageBaseUrl(resolveApiUrl('/api/musicbrainz/artist-image'));
-		setRaImageBaseUrl(resolveApiUrl('/api/retroachievements/image'));
-	}
 	import PlayerOverlay from 'ui-lib/components/player/PlayerOverlay.svelte';
 	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';

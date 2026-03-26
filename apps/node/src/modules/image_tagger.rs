@@ -164,11 +164,9 @@ impl SiglipPipeline {
                     ))
                 })?;
 
-            let image_embed_view = image_embeds
-                .try_extract_array::<f32>()
-                .map_err(|e| {
-                    TaggerError::Inference(format!("Failed to extract image embeds: {e}"))
-                })?;
+            let image_embed_view = image_embeds.try_extract_array::<f32>().map_err(|e| {
+                TaggerError::Inference(format!("Failed to extract image embeds: {e}"))
+            })?;
 
             // Shape depends on model export: [1, embed_dim] or [1, seq_len, embed_dim]
             if image_embed_view.ndim() == 3 {
@@ -316,10 +314,9 @@ impl ImageTaggerManager {
 
         tracing::info!("[image-tagger] Loading ONNX sessions and tokenizer...");
 
-        let pipeline =
-            tokio::task::spawn_blocking(move || load_pipeline(&model_paths, threshold))
-                .await
-                .map_err(|e| TaggerError::Init(format!("Task join error: {e}")))?;
+        let pipeline = tokio::task::spawn_blocking(move || load_pipeline(&model_paths, threshold))
+            .await
+            .map_err(|e| TaggerError::Init(format!("Task join error: {e}")))?;
 
         match pipeline {
             Ok(pipeline) => {
@@ -538,9 +535,11 @@ fn load_pipeline(paths: &ModelPaths, threshold: f64) -> Result<SiglipPipeline, T
     } else {
         let shape = text_embed_view.shape();
         let mut embeds = Array2::<f32>::zeros((shape[0], shape[1]));
-        embeds.assign(&text_embed_view.into_dimensionality::<ndarray::Ix2>().map_err(|e| {
-            TaggerError::Init(format!("Unexpected text embed shape: {e}"))
-        })?);
+        embeds.assign(
+            &text_embed_view
+                .into_dimensionality::<ndarray::Ix2>()
+                .map_err(|e| TaggerError::Init(format!("Unexpected text embed shape: {e}")))?,
+        );
         embeds
     };
 

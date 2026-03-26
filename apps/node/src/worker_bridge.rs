@@ -1,11 +1,11 @@
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::oneshot;
-use std::collections::HashMap;
-use std::sync::Arc;
 
 /// An ICE server entry passed to the p2p-stream worker.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,9 +35,7 @@ enum WorkerCommand {
         ice_servers: Option<Vec<IceServerEntry>>,
     },
     #[serde(rename = "delete_session")]
-    DeleteSession {
-        session_id: String,
-    },
+    DeleteSession { session_id: String },
 }
 
 /// Events received from the p2p-stream-worker via stdout.
@@ -49,7 +47,10 @@ pub enum WorkerEvent {
     #[serde(rename = "session_deleted")]
     SessionDeleted { session_id: String },
     #[serde(rename = "error")]
-    Error { session_id: Option<String>, error: String },
+    Error {
+        session_id: Option<String>,
+        error: String,
+    },
 }
 
 type PendingRequests = Arc<Mutex<HashMap<String, oneshot::Sender<WorkerEvent>>>>;
@@ -91,7 +92,10 @@ impl WorkerBridge {
         let exe = match std::env::current_exe() {
             Ok(p) => p,
             Err(e) => {
-                tracing::error!("[worker-bridge] Could not determine current executable: {}", e);
+                tracing::error!(
+                    "[worker-bridge] Could not determine current executable: {}",
+                    e
+                );
                 return;
             }
         };
@@ -146,7 +150,9 @@ impl WorkerBridge {
                 match serde_json::from_str::<WorkerEvent>(trimmed) {
                     Ok(event) => {
                         let sid = match &event {
-                            WorkerEvent::SessionCreated { session_id, .. } => Some(session_id.clone()),
+                            WorkerEvent::SessionCreated { session_id, .. } => {
+                                Some(session_id.clone())
+                            }
                             WorkerEvent::SessionDeleted { session_id } => Some(session_id.clone()),
                             WorkerEvent::Error { session_id, .. } => session_id.clone(),
                         };
@@ -157,7 +163,11 @@ impl WorkerBridge {
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("[worker-bridge] Failed to parse worker event: {} (line: {})", e, trimmed);
+                        tracing::warn!(
+                            "[worker-bridge] Failed to parse worker event: {} (line: {})",
+                            e,
+                            trimmed
+                        );
                     }
                 }
             }
@@ -226,7 +236,11 @@ impl WorkerBridge {
         self.send_command(session_id, &cmd).await
     }
 
-    async fn send_command(&self, session_id: &str, cmd: &WorkerCommand) -> Result<WorkerEvent, String> {
+    async fn send_command(
+        &self,
+        session_id: &str,
+        cmd: &WorkerCommand,
+    ) -> Result<WorkerEvent, String> {
         let mut json = serde_json::to_string(cmd).map_err(|e| e.to_string())?;
         json.push('\n');
 
@@ -235,7 +249,10 @@ impl WorkerBridge {
 
         let stdin_tx = self.stdin_tx.lock().clone();
         if let Some(stdin_tx) = stdin_tx {
-            stdin_tx.send(json).await.map_err(|_| "Failed to send command to worker".to_string())?;
+            stdin_tx
+                .send(json)
+                .await
+                .map_err(|_| "Failed to send command to worker".to_string())?;
         } else {
             self.pending.lock().remove(session_id);
             return Err("Worker stdin not available".to_string());
@@ -251,4 +268,3 @@ impl WorkerBridge {
         }
     }
 }
-

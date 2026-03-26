@@ -28,8 +28,14 @@ pub fn router() -> Router<AppState> {
         .route("/movies/{id}/recommendations", get(movie_recommendations))
         .route("/tv/{id}/recommendations", get(tv_recommendations))
         .route("/image/{*path}", get(serve_tmdb_image))
-        .route("/image-overrides/{media_type}", get(get_all_image_overrides))
-        .route("/image-overrides/{media_type}/{id}", get(get_image_overrides))
+        .route(
+            "/image-overrides/{media_type}",
+            get(get_all_image_overrides),
+        )
+        .route(
+            "/image-overrides/{media_type}/{id}",
+            get(get_image_overrides),
+        )
         .route(
             "/image-overrides/{media_type}/{id}/{role}",
             put(set_image_override).delete(delete_image_override),
@@ -136,16 +142,14 @@ pub(crate) async fn tmdb_fetch_json(
     }
 
     match reqwest::get(&url).await {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    state.tmdb_api_cache.upsert(&cache_key, &data_str);
-                    Ok(data)
-                }
-                Err(e) => Err(e.to_string()),
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                state.tmdb_api_cache.upsert(&cache_key, &data_str);
+                Ok(data)
             }
-        }
+            Err(e) => Err(e.to_string()),
+        },
         _ => {
             // Graceful degradation: return stale cache on error
             if let Some((data, _)) = state.tmdb_api_cache.get(&cache_key) {
@@ -189,7 +193,7 @@ async fn popular_movies(
     Query(query): Query<PageQuery>,
 ) -> impl IntoResponse {
     let page = query.page.unwrap_or(1).to_string();
-    tmdb_cached_proxy(&state,"/movie/popular", &[("page", &page)]).await
+    tmdb_cached_proxy(&state, "/movie/popular", &[("page", &page)]).await
 }
 
 async fn popular_tv(
@@ -197,15 +201,15 @@ async fn popular_tv(
     Query(query): Query<PageQuery>,
 ) -> impl IntoResponse {
     let page = query.page.unwrap_or(1).to_string();
-    tmdb_cached_proxy(&state,"/tv/popular", &[("page", &page)]).await
+    tmdb_cached_proxy(&state, "/tv/popular", &[("page", &page)]).await
 }
 
 async fn genres_movie(State(state): State<AppState>) -> impl IntoResponse {
-    tmdb_cached_proxy(&state,"/genre/movie/list", &[]).await
+    tmdb_cached_proxy(&state, "/genre/movie/list", &[]).await
 }
 
 async fn genres_tv(State(state): State<AppState>) -> impl IntoResponse {
-    tmdb_cached_proxy(&state,"/genre/tv/list", &[]).await
+    tmdb_cached_proxy(&state, "/genre/tv/list", &[]).await
 }
 
 #[derive(Deserialize)]
@@ -220,13 +224,15 @@ async fn discover_movies(
     Query(query): Query<DiscoverQuery>,
 ) -> impl IntoResponse {
     let page = query.page.unwrap_or(1).to_string();
-    let sort = query.sort_by.unwrap_or_else(|| "popularity.desc".to_string());
+    let sort = query
+        .sort_by
+        .unwrap_or_else(|| "popularity.desc".to_string());
     let mut params: Vec<(&str, &str)> = vec![("page", &page), ("sort_by", &sort)];
     let genres = query.with_genres.unwrap_or_default();
     if !genres.is_empty() {
         params.push(("with_genres", &genres));
     }
-    tmdb_cached_proxy(&state,"/discover/movie", &params).await
+    tmdb_cached_proxy(&state, "/discover/movie", &params).await
 }
 
 async fn discover_tv(
@@ -234,13 +240,15 @@ async fn discover_tv(
     Query(query): Query<DiscoverQuery>,
 ) -> impl IntoResponse {
     let page = query.page.unwrap_or(1).to_string();
-    let sort = query.sort_by.unwrap_or_else(|| "popularity.desc".to_string());
+    let sort = query
+        .sort_by
+        .unwrap_or_else(|| "popularity.desc".to_string());
     let mut params: Vec<(&str, &str)> = vec![("page", &page), ("sort_by", &sort)];
     let genres = query.with_genres.unwrap_or_default();
     if !genres.is_empty() {
         params.push(("with_genres", &genres));
     }
-    tmdb_cached_proxy(&state,"/discover/tv", &params).await
+    tmdb_cached_proxy(&state, "/discover/tv", &params).await
 }
 
 async fn movie_recommendations(
@@ -439,25 +447,23 @@ async fn get_tv_season(
     );
 
     match reqwest::get(&url).await {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
                         "INSERT INTO tmdb_seasons (tmdb_id, season_number, data) VALUES (?1, ?2, ?3)
                          ON CONFLICT(tmdb_id, season_number) DO UPDATE SET data = ?3, fetched_at = datetime('now')",
                         rusqlite::params![tmdb_id, season, data_str],
                     );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Season not found" })),
@@ -532,25 +538,23 @@ async fn get_tv(
     );
 
     match reqwest::get(&url).await {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
                         "INSERT INTO tmdb_tv_shows (tmdb_id, data) VALUES (?1, ?2)
                          ON CONFLICT(tmdb_id) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
                         rusqlite::params![tmdb_id, data_str],
                     );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "TV show not found" })),
@@ -583,7 +587,14 @@ async fn serve_tmdb_image(
     Path(path): Path<String>,
 ) -> impl IntoResponse {
     let upstream_url = format!("{}/{}", TMDB_IMAGE_BASE, path);
-    super::image_cache::serve_cached_image(&state.data_dir, "tmdb-images", &path, &upstream_url, 604800).await
+    super::image_cache::serve_cached_image(
+        &state.data_dir,
+        "tmdb-images",
+        &path,
+        &upstream_url,
+        604800,
+    )
+    .await
 }
 
 // Image override handlers
@@ -592,7 +603,9 @@ async fn get_all_image_overrides(
     State(state): State<AppState>,
     Path(media_type): Path<String>,
 ) -> impl IntoResponse {
-    let overrides = state.tmdb_image_overrides.get_all_for_media_type(&media_type);
+    let overrides = state
+        .tmdb_image_overrides
+        .get_all_for_media_type(&media_type);
     Json(overrides)
 }
 
@@ -627,4 +640,3 @@ async fn delete_image_override(
     state.tmdb_image_overrides.delete(id, &media_type, &role);
     StatusCode::NO_CONTENT
 }
-

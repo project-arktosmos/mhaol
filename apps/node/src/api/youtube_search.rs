@@ -178,11 +178,17 @@ fn parse_innertube_response(
 
     // Initial search: contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents
     // Continuation: onResponseReceivedCommands[].appendContinuationItemsAction.continuationItems
-    let sections: Vec<&serde_json::Value> = if let Some(contents) = data
-        .pointer("/contents/twoColumnSearchResultsRenderer/primaryContents/sectionListRenderer/contents")
+    let sections: Vec<&serde_json::Value> = if let Some(contents) = data.pointer(
+        "/contents/twoColumnSearchResultsRenderer/primaryContents/sectionListRenderer/contents",
+    ) {
+        contents
+            .as_array()
+            .map(|a| a.iter().collect())
+            .unwrap_or_default()
+    } else if let Some(commands) = data
+        .get("onResponseReceivedCommands")
+        .and_then(|c| c.as_array())
     {
-        contents.as_array().map(|a| a.iter().collect()).unwrap_or_default()
-    } else if let Some(commands) = data.get("onResponseReceivedCommands").and_then(|c| c.as_array()) {
         let mut cont_items = Vec::new();
         for cmd in commands {
             if let Some(action) = cmd.get("appendContinuationItemsAction") {

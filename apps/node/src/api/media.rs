@@ -157,7 +157,6 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
         })
         .collect();
 
-
     let map_rows = |rows: Vec<crate::db::repo::library_item::LibraryItemRow>,
                     media_type_id: &str|
      -> Vec<MappedItem> {
@@ -220,10 +219,23 @@ async fn get_media(State(state): State<AppState>) -> impl IntoResponse {
         .into_iter()
         .map(|lib| {
             let types: Vec<String> = serde_json::from_str(&lib.media_types).unwrap_or_default();
-            let raw = types.into_iter().next().unwrap_or_else(|| "movies".to_string());
+            let raw = types
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| "movies".to_string());
             // Normalize "video" → "movies" so the server UI filters work correctly
-            let lt = if raw == "video" { "movies".to_string() } else { raw };
-            (lib.id, MappedLibraryInfo { name: lib.name, library_type: lt })
+            let lt = if raw == "video" {
+                "movies".to_string()
+            } else {
+                raw
+            };
+            (
+                lib.id,
+                MappedLibraryInfo {
+                    name: lib.name,
+                    library_type: lt,
+                },
+            )
         })
         .collect();
 
@@ -405,13 +417,16 @@ async fn get_library_item_related(
     };
 
     // Library
-    let library = state.libraries.get(&item.library_id).map(|lib| RelatedLibrary {
-        id: lib.id,
-        name: lib.name,
-        path: lib.path,
-        media_types: lib.media_types,
-        created_at: lib.created_at,
-    });
+    let library = state
+        .libraries
+        .get(&item.library_id)
+        .map(|lib| RelatedLibrary {
+            id: lib.id,
+            name: lib.name,
+            path: lib.path,
+            media_types: lib.media_types,
+            created_at: lib.created_at,
+        });
 
     // Links
     let link_rows = state.library_item_links.get_by_item(&id);

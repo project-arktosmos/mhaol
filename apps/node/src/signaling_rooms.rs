@@ -56,11 +56,9 @@ impl SignalingRoomManager {
         tx: mpsc::UnboundedSender<String>,
     ) -> (Vec<String>, Vec<mpsc::UnboundedSender<String>>) {
         let mut rooms = self.rooms.write();
-        let room = rooms
-            .entry(room_id.to_string())
-            .or_insert_with(|| Room {
-                peers: HashMap::new(),
-            });
+        let room = rooms.entry(room_id.to_string()).or_insert_with(|| Room {
+            peers: HashMap::new(),
+        });
 
         // Evict existing connections for this peer_id
         let mut evicted_txs = Vec::new();
@@ -86,11 +84,8 @@ impl SignalingRoomManager {
             .collect();
 
         // Collect existing peer tx channels for broadcasting peer-joined
-        let broadcast_txs: Vec<mpsc::UnboundedSender<String>> = room
-            .peers
-            .values()
-            .map(|p| p.tx.clone())
-            .collect();
+        let broadcast_txs: Vec<mpsc::UnboundedSender<String>> =
+            room.peers.values().map(|p| p.tx.clone()).collect();
 
         room.peers.insert(
             connection_id.to_string(),
@@ -113,11 +108,8 @@ impl SignalingRoomManager {
         let room = rooms.get_mut(room_id)?;
         let removed = room.peers.remove(connection_id)?;
 
-        let remaining_txs: Vec<mpsc::UnboundedSender<String>> = room
-            .peers
-            .values()
-            .map(|p| p.tx.clone())
-            .collect();
+        let remaining_txs: Vec<mpsc::UnboundedSender<String>> =
+            room.peers.values().map(|p| p.tx.clone()).collect();
 
         if room.peers.is_empty() {
             rooms.remove(room_id);

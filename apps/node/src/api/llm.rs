@@ -1,7 +1,3 @@
-use mhaol_llm::{
-    list_models, load_model_blocking,
-    LlmConfigUpdate, LlmDownloadProgress, LlmStatus,
-};
 use crate::AppState;
 use axum::{
     extract::State,
@@ -14,6 +10,9 @@ use axum::{
     Json, Router,
 };
 use futures_util::StreamExt;
+use mhaol_llm::{
+    list_models, load_model_blocking, LlmConfigUpdate, LlmDownloadProgress, LlmStatus,
+};
 use serde::Deserialize;
 use std::convert::Infallible;
 use tokio::io::AsyncWriteExt;
@@ -107,8 +106,10 @@ struct DownloadModelRequest {
 async fn download_model(
     State(state): State<AppState>,
     Json(body): Json<DownloadModelRequest>,
-) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, (StatusCode, Json<serde_json::Value>)>
-{
+) -> Result<
+    Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>,
+    (StatusCode, Json<serde_json::Value>),
+> {
     let url = format!(
         "https://huggingface.co/{}/resolve/main/{}",
         body.repo_id, body.file_name

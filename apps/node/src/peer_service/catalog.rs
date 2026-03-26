@@ -1,6 +1,5 @@
 use super::types::{
-    CatalogMediaItem, CatalogMediaItemLink, CatalogMovie, DataChannelEnvelope,
-    ServerCatalogMessage,
+    CatalogMediaItem, CatalogMediaItemLink, CatalogMovie, DataChannelEnvelope, ServerCatalogMessage,
 };
 use crate::api::tmdb::tmdb_fetch_json;
 use crate::AppState;
@@ -21,10 +20,7 @@ pub fn new_cache() -> CatalogCache {
 
 /// Build the movie catalog from the database.
 /// Always rebuilds because the streamable flag depends on live download state.
-pub async fn get_or_build_catalog(
-    state: &AppState,
-    _cache: &CatalogCache,
-) -> Vec<CatalogMovie> {
+pub async fn get_or_build_catalog(state: &AppState, _cache: &CatalogCache) -> Vec<CatalogMovie> {
     let catalog = build_catalog(state).await;
     info!(count = catalog.len(), "Built movie catalog");
     catalog
@@ -72,7 +68,9 @@ fn is_available(
             .library_item_links
             .get_by_service_id("tmdb", &tmdb.service_id);
         for sibling in &all_items_with_tmdb {
-            let sibling_links = state.library_item_links.get_by_item(&sibling.library_item_id);
+            let sibling_links = state
+                .library_item_links
+                .get_by_item(&sibling.library_item_id);
             for sl in &sibling_links {
                 if sl.service == "torrent-download" || sl.service == "torrent-stream" {
                     if let Some(row) = state.downloads.get(&sl.service_id) {
@@ -142,7 +140,10 @@ async fn build_catalog(state: &AppState) -> Vec<CatalogMovie> {
 
         // Skip if already in catalog via a torrent link
         if seen_tmdb.values().any(|&idx| {
-            catalog[idx].item.links.get("torrent-download")
+            catalog[idx]
+                .item
+                .links
+                .get("torrent-download")
                 .or(catalog[idx].item.links.get("torrent-stream"))
                 .map_or(false, |l| l.service_id == dl.id)
         }) {
@@ -236,30 +237,32 @@ async fn build_catalog_entry(
 }
 
 /// Resolve TMDB data into the DisplayTMDBMovie format expected by the frontend.
-async fn resolve_tmdb_display(
-    state: &AppState,
-    tmdb_id: i64,
-) -> Option<serde_json::Value> {
-    let data = tmdb_fetch_json(state, &format!("/movie/{}", tmdb_id), &[]).await.ok()?;
+async fn resolve_tmdb_display(state: &AppState, tmdb_id: i64) -> Option<serde_json::Value> {
+    let data = tmdb_fetch_json(state, &format!("/movie/{}", tmdb_id), &[])
+        .await
+        .ok()?;
 
     let poster_path = data.get("poster_path").and_then(|p| p.as_str());
     let backdrop_path = data.get("backdrop_path").and_then(|p| p.as_str());
-    let release_date = data.get("release_date").and_then(|d| d.as_str()).unwrap_or("");
+    let release_date = data
+        .get("release_date")
+        .and_then(|d| d.as_str())
+        .unwrap_or("");
     let genres = data
         .get("genres")
         .and_then(|g| g.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|g| g.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                .filter_map(|g| {
+                    g.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
 
-    let release_year = release_date
-        .split('-')
-        .next()
-        .unwrap_or("")
-        .to_string();
+    let release_year = release_date.split('-').next().unwrap_or("").to_string();
 
     Some(serde_json::json!({
         "id": tmdb_id,

@@ -4,11 +4,11 @@ pub mod lyrics;
 pub mod musicbrainz;
 #[cfg(not(target_os = "android"))]
 pub mod p2p_stream;
+pub mod retroachievements;
 pub mod signaling;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
-pub mod retroachievements;
 pub mod torrent_search;
 pub mod youtube_meta;
 #[cfg(not(target_os = "android"))]
@@ -280,7 +280,10 @@ impl ModuleRegistry {
         key: &str,
         value: &str,
     ) -> bool {
-        let module = self.modules.iter().find(|m| m.manifest().name == module_name);
+        let module = self
+            .modules
+            .iter()
+            .find(|m| m.manifest().name == module_name);
         if let Some(module) = module {
             let manifest = module.manifest();
             let valid_keys: Vec<&str> = manifest.settings.iter().map(|s| s.key.as_str()).collect();
@@ -309,10 +312,7 @@ fn seed_settings(settings: &[ModuleSettingDef], state: &AppState) {
     }
     let mut entries: HashMap<String, String> = HashMap::new();
     for setting in settings {
-        let env_val = setting
-            .env_key
-            .as_ref()
-            .and_then(|k| std::env::var(k).ok());
+        let env_val = setting.env_key.as_ref().and_then(|k| std::env::var(k).ok());
         let current = state.settings.get(&setting.key);
         if let Some(db_val) = &current {
             if let Some(env_val) = &env_val {

@@ -51,10 +51,7 @@ async fn create_task(
     (StatusCode::CREATED, Json(task))
 }
 
-async fn get_task(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+async fn get_task(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     match state.queue.get(&id) {
         Some(task) => Json(serde_json::to_value(task).unwrap()).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),

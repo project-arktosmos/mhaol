@@ -53,7 +53,10 @@ impl Module for TorrentModule {
             if let Err(e) = manager.initialize(config).await {
                 tracing::error!("[torrent] Failed to initialize: {}", e);
             } else {
-                tracing::info!("[torrent] Engine initialized, download path: {}", download_path);
+                tracing::info!(
+                    "[torrent] Engine initialized, download path: {}",
+                    download_path
+                );
             }
         });
 

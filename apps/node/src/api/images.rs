@@ -35,11 +35,7 @@ async fn serve_image(
 ) -> impl IntoResponse {
     // Verify the path exists in the library
     if state.library_items.exists_by_path(&query.path).is_none() {
-        return (
-            StatusCode::FORBIDDEN,
-            "Path not found in library",
-        )
-            .into_response();
+        return (StatusCode::FORBIDDEN, "Path not found in library").into_response();
     }
 
     let file_path = std::path::Path::new(&query.path);
@@ -221,10 +217,13 @@ async fn tag_batch(
 
                 results.insert(
                     item_id.clone(),
-                    serde_json::json!(tags.iter().map(|t| serde_json::json!({
-                        "tag": t.tag,
-                        "score": t.score,
-                    })).collect::<Vec<_>>()),
+                    serde_json::json!(tags
+                        .iter()
+                        .map(|t| serde_json::json!({
+                            "tag": t.tag,
+                            "score": t.score,
+                        }))
+                        .collect::<Vec<_>>()),
                 );
             }
             Err(e) => {
@@ -249,7 +248,9 @@ async fn add_tag(
     State(state): State<AppState>,
     Json(body): Json<ManageTagBody>,
 ) -> impl IntoResponse {
-    state.image_tags.add_tag(&body.library_item_id, &body.tag, 1.0);
+    state
+        .image_tags
+        .add_tag(&body.library_item_id, &body.tag, 1.0);
     StatusCode::OK
 }
 
@@ -258,6 +259,8 @@ async fn remove_tag(
     State(state): State<AppState>,
     Json(body): Json<ManageTagBody>,
 ) -> impl IntoResponse {
-    state.image_tags.delete_tag(&body.library_item_id, &body.tag);
+    state
+        .image_tags
+        .delete_tag(&body.library_item_id, &body.tag);
     StatusCode::OK
 }

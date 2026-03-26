@@ -1,5 +1,5 @@
-use crate::AppState;
 use crate::worker_bridge::IceServerEntry;
+use crate::AppState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -57,23 +57,24 @@ async fn fetch_ice_servers() -> Option<Vec<IceServerEntry>> {
         format!("https://{domain}/api/v1/turn/credentials?apiKey={secret_key}")
     };
     match reqwest::get(&url).await {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<Vec<IceServerEntry>>().await {
-                Ok(servers) => {
-                    tracing::info!("[player] Fetched {} ICE servers from Metered", servers.len());
-                    let mut cache = cache_mutex.lock().await;
-                    *cache = Some(IceCache {
-                        servers: servers.clone(),
-                        expires_at: now + ICE_CACHE_TTL_MS,
-                    });
-                    Some(servers)
-                }
-                Err(e) => {
-                    tracing::warn!("[player] Failed to parse Metered response: {e}");
-                    None
-                }
+        Ok(resp) if resp.status().is_success() => match resp.json::<Vec<IceServerEntry>>().await {
+            Ok(servers) => {
+                tracing::info!(
+                    "[player] Fetched {} ICE servers from Metered",
+                    servers.len()
+                );
+                let mut cache = cache_mutex.lock().await;
+                *cache = Some(IceCache {
+                    servers: servers.clone(),
+                    expires_at: now + ICE_CACHE_TTL_MS,
+                });
+                Some(servers)
             }
-        }
+            Err(e) => {
+                tracing::warn!("[player] Failed to parse Metered response: {e}");
+                None
+            }
+        },
         Ok(resp) => {
             tracing::warn!("[player] Metered API returned {}", resp.status());
             None
@@ -249,7 +250,10 @@ async fn create_session(
         )
         .await
     {
-        Ok(crate::worker_bridge::WorkerEvent::SessionCreated { session_id, room_id }) => (
+        Ok(crate::worker_bridge::WorkerEvent::SessionCreated {
+            session_id,
+            room_id,
+        }) => (
             StatusCode::CREATED,
             Json(serde_json::json!({
                 "session_id": session_id,
@@ -286,7 +290,8 @@ async fn delete_session(
     Json(serde_json::json!({ "ok": true }))
 }
 
-pub(crate) const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "wmv", "webm", "flv", "m4v"];
+pub(crate) const VIDEO_EXTENSIONS: &[&str] =
+    &["mp4", "mkv", "avi", "mov", "wmv", "webm", "flv", "m4v"];
 
 /// Resolve the video file path for a torrent by its info_hash.
 /// Uses the torrent manager's file list to find the largest video file,
@@ -322,7 +327,9 @@ async fn resolve_torrent_video(state: &AppState, info_hash: &str) -> Result<Stri
         .iter()
         .filter(|f| {
             let name_lower = f.name.to_lowercase();
-            VIDEO_EXTENSIONS.iter().any(|ext| name_lower.ends_with(&format!(".{}", ext)))
+            VIDEO_EXTENSIONS
+                .iter()
+                .any(|ext| name_lower.ends_with(&format!(".{}", ext)))
         })
         .max_by_key(|f| f.size)
         .ok_or_else(|| format!("No video files found in torrent {}", info_hash))?;

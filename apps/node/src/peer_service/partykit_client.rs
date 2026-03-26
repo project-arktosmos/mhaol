@@ -209,11 +209,7 @@ fn build_ws_url(
 
     let message = format!("partykit-auth:{room_id}:{timestamp}");
 
-    let prefixed = format!(
-        "\x19Ethereum Signed Message:\n{}{}",
-        message.len(),
-        message
-    );
+    let prefixed = format!("\x19Ethereum Signed Message:\n{}{}", message.len(), message);
     let hash = Keccak256::digest(prefixed.as_bytes());
 
     let (signature, recovery_id) = signing_key

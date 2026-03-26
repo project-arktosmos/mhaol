@@ -82,25 +82,23 @@ async fn get_recording(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
-                        "INSERT INTO musicbrainz_recordings (mbid, data) VALUES (?1, ?2)
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
+                    "INSERT INTO musicbrainz_recordings (mbid, data) VALUES (?1, ?2)
                          ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![id, data_str],
-                    );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                    rusqlite::params![id, data_str],
+                );
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Recording not found" })),
@@ -167,25 +165,23 @@ async fn get_release_group(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
-                        "INSERT INTO musicbrainz_release_groups (mbid, data) VALUES (?1, ?2)
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
+                    "INSERT INTO musicbrainz_release_groups (mbid, data) VALUES (?1, ?2)
                          ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![id, data_str],
-                    );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                    rusqlite::params![id, data_str],
+                );
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Release group not found" })),
@@ -251,25 +247,23 @@ async fn get_release(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
-                        "INSERT INTO musicbrainz_releases (mbid, data) VALUES (?1, ?2)
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
+                    "INSERT INTO musicbrainz_releases (mbid, data) VALUES (?1, ?2)
                          ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![id, data_str],
-                    );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                    rusqlite::params![id, data_str],
+                );
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Release not found" })),
@@ -323,10 +317,7 @@ async fn get_artist(
         }
     }
 
-    let url = format!(
-        "{}/artist/{}?inc=release-groups+tags&fmt=json",
-        MB_BASE, id
-    );
+    let url = format!("{}/artist/{}?inc=release-groups+tags&fmt=json", MB_BASE, id);
 
     let client = reqwest::Client::new();
     match client
@@ -335,25 +326,23 @@ async fn get_artist(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
-                        "INSERT INTO musicbrainz_artists (mbid, data) VALUES (?1, ?2)
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
+                    "INSERT INTO musicbrainz_artists (mbid, data) VALUES (?1, ?2)
                          ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![id, data_str],
-                    );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                    rusqlite::params![id, data_str],
+                );
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Artist not found" })),
@@ -380,9 +369,22 @@ async fn get_artist(
 }
 
 const POPULAR_GENRES: &[&str] = &[
-    "rock", "pop", "electronic", "hip hop", "jazz", "classical",
-    "r&b", "metal", "folk", "soul", "punk", "blues", "country",
-    "ambient", "indie", "alternative",
+    "rock",
+    "pop",
+    "electronic",
+    "hip hop",
+    "jazz",
+    "classical",
+    "r&b",
+    "metal",
+    "folk",
+    "soul",
+    "punk",
+    "blues",
+    "country",
+    "ambient",
+    "indie",
+    "alternative",
 ];
 
 async fn get_popular(
@@ -415,7 +417,10 @@ async fn get_popular(
         }
     }
 
-    let search_query = format!("tag:{} AND primarytype:album AND status:official", genre_lower);
+    let search_query = format!(
+        "tag:{} AND primarytype:album AND status:official",
+        genre_lower
+    );
     let url = format!(
         "{}/release-group?query={}&fmt=json&limit=30",
         MB_BASE,
@@ -429,25 +434,23 @@ async fn get_popular(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
-                        "INSERT INTO musicbrainz_popular_cache (genre, data) VALUES (?1, ?2)
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
+                    "INSERT INTO musicbrainz_popular_cache (genre, data) VALUES (?1, ?2)
                          ON CONFLICT(genre) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![genre_lower, data_str],
-                    );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                    rusqlite::params![genre_lower, data_str],
+                );
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         _ => {
             // Try stale cache
             let conn = state.db.lock();
@@ -512,25 +515,23 @@ async fn get_popular_artists(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
-                        "INSERT INTO musicbrainz_popular_artists_cache (genre, data) VALUES (?1, ?2)
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
+                    "INSERT INTO musicbrainz_popular_artists_cache (genre, data) VALUES (?1, ?2)
                          ON CONFLICT(genre) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![genre_lower, data_str],
-                    );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                    rusqlite::params![genre_lower, data_str],
+                );
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         _ => {
             let conn = state.db.lock();
             if let Ok(data) = conn.query_row(
@@ -596,25 +597,23 @@ async fn search_artists(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
                         "INSERT INTO musicbrainz_search_cache (query_key, data) VALUES (?1, ?2)
                          ON CONFLICT(query_key) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
                         rusqlite::params![cache_key, data_str],
                     );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         _ => {
             let conn = state.db.lock();
             if let Ok(data) = conn.query_row(
@@ -680,25 +679,23 @@ async fn search_release_groups(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
                         "INSERT INTO musicbrainz_search_cache (query_key, data) VALUES (?1, ?2)
                          ON CONFLICT(query_key) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
                         rusqlite::params![cache_key, data_str],
                     );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         _ => {
             let conn = state.db.lock();
             if let Ok(data) = conn.query_row(
@@ -786,12 +783,14 @@ async fn serve_artist_image(
     let artist_data = match artist_data {
         Some(d) => d,
         None => {
-            let url = format!(
-                "{}/artist/{}?inc=release-groups&fmt=json",
-                MB_BASE, id
-            );
+            let url = format!("{}/artist/{}?inc=release-groups&fmt=json", MB_BASE, id);
             let client = reqwest::Client::new();
-            match client.get(&url).header("User-Agent", USER_AGENT).send().await {
+            match client
+                .get(&url)
+                .header("User-Agent", USER_AGENT)
+                .send()
+                .await
+            {
                 Ok(resp) if resp.status().is_success() => {
                     match resp.json::<serde_json::Value>().await {
                         Ok(data) => {

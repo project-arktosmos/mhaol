@@ -115,18 +115,23 @@ impl LibraryItemRepo {
     }
 
     /// Sync a library's items: delete items whose paths are no longer present, insert new ones.
-    pub fn sync_library(&self, library_id: &str, new_files: &[InsertLibraryItem]) -> Result<(), rusqlite::Error> {
+    pub fn sync_library(
+        &self,
+        library_id: &str,
+        new_files: &[InsertLibraryItem],
+    ) -> Result<(), rusqlite::Error> {
         let conn = self.db.lock();
 
         // Get existing items before starting transaction
         let existing: Vec<(String, String)> = {
-            let mut stmt = conn
-                .prepare("SELECT id, path FROM library_items WHERE library_id = ?1")?;
-            let rows = stmt.query_map(params![library_id], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
+            let mut stmt =
+                conn.prepare("SELECT id, path FROM library_items WHERE library_id = ?1")?;
+            let rows = stmt
+                .query_map(params![library_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
             rows
         };
 
@@ -256,7 +261,8 @@ mod tests {
             extension: "mp4".into(),
             media_type: "video".into(),
             category_id: None,
-        }).unwrap();
+        })
+        .unwrap();
 
         let item = repo.get("item1").unwrap();
         assert_eq!(item.path, "/tmp/video.mp4");
@@ -282,7 +288,8 @@ mod tests {
             extension: "mp4".into(),
             media_type: "video".into(),
             category_id: None,
-        }).unwrap();
+        })
+        .unwrap();
         repo.insert(&InsertLibraryItem {
             id: "b".into(),
             library_id: "lib1".into(),
@@ -290,7 +297,8 @@ mod tests {
             extension: "mp4".into(),
             media_type: "video".into(),
             category_id: None,
-        }).unwrap();
+        })
+        .unwrap();
 
         // Sync: remove b, add c
         let new_files = vec![

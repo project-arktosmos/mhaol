@@ -17,7 +17,10 @@ pub fn router() -> Router<AppState> {
         .route("/", get(list_libraries).post(create_library))
         .route("/{id}", delete(delete_library))
         .route("/{id}/items", post(create_item))
-        .route("/{id}/items/{item_id}/category", post(update_item_category).delete(clear_item_category))
+        .route(
+            "/{id}/items/{item_id}/category",
+            post(update_item_category).delete(clear_item_category),
+        )
         .route(
             "/{id}/items/{item_id}/media-type",
             put(update_item_media_type),
@@ -27,7 +30,6 @@ pub fn router() -> Router<AppState> {
             put(link_tmdb).delete(unlink_tmdb),
         )
         .route("/{id}/items/{item_id}/torrent", put(link_torrent))
-
         .route("/{id}/files", get(get_library_files))
         .route("/{id}/scan", get(scan_library).post(scan_library))
         .route("/browse", get(browse_directory))
@@ -50,9 +52,11 @@ struct MappedLibrary {
 
 impl MappedLibrary {
     fn from_row(row: crate::db::repo::library::LibraryRow) -> Self {
-        let media_types: Vec<String> =
-            serde_json::from_str(&row.media_types).unwrap_or_default();
-        let library_type = media_types.into_iter().next().unwrap_or_else(|| "movies".to_string());
+        let media_types: Vec<String> = serde_json::from_str(&row.media_types).unwrap_or_default();
+        let library_type = media_types
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "movies".to_string());
         Self {
             id: row.id,
             name: row.name,
@@ -170,7 +174,8 @@ async fn create_library(
     Json(body): Json<CreateLibraryBody>,
 ) -> impl IntoResponse {
     let id = uuid::Uuid::new_v4().to_string();
-    let media_types_json = serde_json::to_string(&[&body.library_type]).unwrap_or_else(|_| "[]".into());
+    let media_types_json =
+        serde_json::to_string(&[&body.library_type]).unwrap_or_else(|_| "[]".into());
     let date_added = chrono::Utc::now().timestamp_millis();
     state
         .libraries
@@ -252,14 +257,17 @@ async fn create_item(
         .unwrap_or("")
         .to_lowercase();
 
-    if let Err(e) = state.library_items.insert(&crate::db::repo::library_item::InsertLibraryItem {
-        id: item_id.clone(),
-        library_id: library_id.clone(),
-        path: body.path.clone(),
-        extension,
-        media_type: body.media_type.unwrap_or_else(|| "video".to_string()),
-        category_id: body.category_id,
-    }) {
+    if let Err(e) = state
+        .library_items
+        .insert(&crate::db::repo::library_item::InsertLibraryItem {
+            id: item_id.clone(),
+            library_id: library_id.clone(),
+            path: body.path.clone(),
+            extension,
+            media_type: body.media_type.unwrap_or_else(|| "video".to_string()),
+            category_id: body.category_id,
+        })
+    {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": format!("Failed to insert library item: {}", e) })),
@@ -358,10 +366,7 @@ async fn get_library_files(
 }
 
 /// POST/GET /api/libraries/{id}/scan — scan directory and return updated files
-async fn scan_library(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+async fn scan_library(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     let library = match state.libraries.get(&id) {
         Some(lib) => lib,
         None => {
@@ -373,8 +378,7 @@ async fn scan_library(
         }
     };
 
-    let media_types: Vec<String> =
-        serde_json::from_str(&library.media_types).unwrap_or_default();
+    let media_types: Vec<String> = serde_json::from_str(&library.media_types).unwrap_or_default();
     let library_type = media_types.first().map(|s| s.as_str()).unwrap_or("movies");
 
     let ext_map = build_extension_map(library_type);
@@ -456,10 +460,17 @@ async fn get_categories(State(state): State<AppState>) -> impl IntoResponse {
 
 // --- Library item link handlers ---
 
-fn validate_item(state: &AppState, lib_id: &str, item_id: &str) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+fn validate_item(
+    state: &AppState,
+    lib_id: &str,
+    item_id: &str,
+) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
     match state.library_items.get(item_id) {
         Some(item) if item.library_id == lib_id => Ok(()),
-        _ => Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Library item not found" })))),
+        _ => Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Library item not found" })),
+        )),
     }
 }
 
@@ -478,10 +489,16 @@ async fn link_tmdb(
     Path((lib_id, item_id)): Path<(String, String)>,
     Json(body): Json<LinkTmdbBody>,
 ) -> impl IntoResponse {
-    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) {
+        return e.into_response();
+    }
     state.library_item_links.upsert(
-        &uuid::Uuid::new_v4().to_string(), &item_id, "tmdb",
-        &body.tmdb_id.to_string(), body.season_number, body.episode_number,
+        &uuid::Uuid::new_v4().to_string(),
+        &item_id,
+        "tmdb",
+        &body.tmdb_id.to_string(),
+        body.season_number,
+        body.episode_number,
     );
     Json(serde_json::json!({ "ok": true })).into_response()
 }
@@ -490,7 +507,9 @@ async fn unlink_tmdb(
     State(state): State<AppState>,
     Path((lib_id, item_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) {
+        return e.into_response();
+    }
     state.library_item_links.delete(&item_id, "tmdb");
     Json(serde_json::json!({ "ok": true })).into_response()
 }
@@ -509,7 +528,9 @@ async fn link_torrent(
     Path((lib_id, item_id)): Path<(String, String)>,
     Json(body): Json<LinkTorrentBody>,
 ) -> impl IntoResponse {
-    if let Err(e) = validate_item(&state, &lib_id, &item_id) { return e.into_response(); }
+    if let Err(e) = validate_item(&state, &lib_id, &item_id) {
+        return e.into_response();
+    }
 
     state.library_items.update_path(&item_id, &body.output_path);
 
@@ -591,7 +612,9 @@ fn video_files_in_dir(dir: &str, ext_map: &HashMap<&str, &str>) -> Vec<String> {
     let mut result = Vec::new();
     for entry in entries.flatten() {
         let Ok(ft) = entry.file_type() else { continue };
-        if !ft.is_file() { continue }
+        if !ft.is_file() {
+            continue;
+        }
         let path = entry.path();
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             if ext_map.contains_key(ext.to_lowercase().as_str()) {
@@ -611,9 +634,13 @@ fn subdirs_of(dir: &str) -> Vec<(String, String)> {
     let mut result = Vec::new();
     for entry in entries.flatten() {
         let Ok(ft) = entry.file_type() else { continue };
-        if !ft.is_dir() { continue }
+        if !ft.is_dir() {
+            continue;
+        }
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') { continue }
+        if name.starts_with('.') {
+            continue;
+        }
         result.push((name, entry.path().to_string_lossy().to_string()));
     }
     result.sort_by(|a, b| a.0.cmp(&b.0));
@@ -632,41 +659,62 @@ fn generate_auto_lists(state: &AppState, library_id: &str, library_path: &str, l
         // Each subdir is either a show (has season subdirs with episodes) or a flat show/season.
         for (show_name, show_path) in subdirs_of(library_path) {
             let season_dirs = subdirs_of(&show_path);
-            let has_season_subdirs = season_dirs.iter().any(|(_, season_path)| {
-                !video_files_in_dir(season_path, &ext_map).is_empty()
-            });
+            let has_season_subdirs = season_dirs
+                .iter()
+                .any(|(_, season_path)| !video_files_in_dir(season_path, &ext_map).is_empty());
 
             if has_season_subdirs {
                 // Show with season subdirectories — create show-level list, then season children
                 let show_source_key = format!("{}:show", show_path);
                 active_source_paths.insert(show_source_key.clone());
-                let show_list_id = upsert_auto_list_titled(state, library_id, &show_name, "video", &show_source_key, &mut [], None);
+                let show_list_id = upsert_auto_list_titled(
+                    state,
+                    library_id,
+                    &show_name,
+                    "video",
+                    &show_source_key,
+                    &mut [],
+                    None,
+                );
 
                 for (season_name, season_path) in &season_dirs {
                     let season_files = video_files_in_dir(season_path, &ext_map);
-                    if season_files.is_empty() { continue }
+                    if season_files.is_empty() {
+                        continue;
+                    }
 
                     let source_key = format!("{}:video", season_path);
                     active_source_paths.insert(source_key.clone());
 
-                    let mut season_items: Vec<&crate::db::repo::library_item::LibraryItemRow> = items
-                        .iter()
-                        .filter(|i| {
-                            std::path::Path::new(&i.path)
-                                .parent()
-                                .map(|p| p.to_string_lossy() == season_path.as_str())
-                                .unwrap_or(false)
-                        })
-                        .collect();
+                    let mut season_items: Vec<&crate::db::repo::library_item::LibraryItemRow> =
+                        items
+                            .iter()
+                            .filter(|i| {
+                                std::path::Path::new(&i.path)
+                                    .parent()
+                                    .map(|p| p.to_string_lossy() == season_path.as_str())
+                                    .unwrap_or(false)
+                            })
+                            .collect();
 
                     if !season_items.is_empty() {
-                        upsert_auto_list_titled(state, library_id, season_name, "video", &source_key, &mut season_items, Some(&show_list_id));
+                        upsert_auto_list_titled(
+                            state,
+                            library_id,
+                            season_name,
+                            "video",
+                            &source_key,
+                            &mut season_items,
+                            Some(&show_list_id),
+                        );
                     }
                 }
             } else {
                 // Flat show or standalone season — episodes directly inside show_path
                 let flat_files = video_files_in_dir(&show_path, &ext_map);
-                if flat_files.is_empty() { continue }
+                if flat_files.is_empty() {
+                    continue;
+                }
 
                 let source_key = format!("{}:show", show_path);
                 active_source_paths.insert(source_key.clone());
@@ -682,7 +730,15 @@ fn generate_auto_lists(state: &AppState, library_id: &str, library_path: &str, l
                     .collect();
 
                 if !show_items.is_empty() {
-                    upsert_auto_list_titled(state, library_id, &show_name, "video", &source_key, &mut show_items, None);
+                    upsert_auto_list_titled(
+                        state,
+                        library_id,
+                        &show_name,
+                        "video",
+                        &source_key,
+                        &mut show_items,
+                        None,
+                    );
                 }
             }
         }
@@ -712,7 +768,15 @@ fn generate_auto_lists(state: &AppState, library_id: &str, library_path: &str, l
                     .and_then(|n| n.to_str())
                     .unwrap_or("Untitled")
                     .to_string();
-                upsert_auto_list_titled(state, library_id, &title, "video", &source_key, &mut video_items, None);
+                upsert_auto_list_titled(
+                    state,
+                    library_id,
+                    &title,
+                    "video",
+                    &source_key,
+                    &mut video_items,
+                    None,
+                );
             }
         }
     }
@@ -762,13 +826,7 @@ fn upsert_auto_list_titled(
         let list_items: Vec<(String, String, i64)> = items
             .iter()
             .enumerate()
-            .map(|(i, item)| {
-                (
-                    uuid::Uuid::new_v4().to_string(),
-                    item.id.clone(),
-                    i as i64,
-                )
-            })
+            .map(|(i, item)| (uuid::Uuid::new_v4().to_string(), item.id.clone(), i as i64))
             .collect();
         state.media_list_items.sync_list(&list_id, &list_items);
     }
@@ -776,7 +834,10 @@ fn upsert_auto_list_titled(
     list_id
 }
 
-pub(crate) async fn stream_file(path_str: &str, range_header: Option<&str>) -> axum::response::Response {
+pub(crate) async fn stream_file(
+    path_str: &str,
+    range_header: Option<&str>,
+) -> axum::response::Response {
     let path = std::path::Path::new(path_str);
 
     let file = match tokio::fs::File::open(path).await {

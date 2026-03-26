@@ -108,7 +108,11 @@ mod tests {
         assert_eq!(row.system_prompt, Some("You are helpful.".to_string()));
         assert_eq!(row.messages, "[]");
 
-        repo.update("c1", "Updated Chat", "[{\"role\":\"user\",\"content\":\"hi\"}]");
+        repo.update(
+            "c1",
+            "Updated Chat",
+            "[{\"role\":\"user\",\"content\":\"hi\"}]",
+        );
         let row = repo.get_by_id("c1").unwrap();
         assert_eq!(row.title, "Updated Chat");
 
