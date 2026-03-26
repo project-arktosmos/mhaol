@@ -428,8 +428,12 @@ export interface CatalogCardData {
 	favorited?: boolean;
 	pinned?: boolean;
 	fetched?: boolean;
+	selected?: boolean;
+	dimmed?: boolean;
+	loading?: boolean;
 	torrentProgress?: number;
 	torrentState?: string;
+	fetchCacheSummary?: string;
 }
 
 export interface CatalogBadge {
