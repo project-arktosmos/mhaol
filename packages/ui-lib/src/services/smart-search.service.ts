@@ -18,6 +18,7 @@ import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/typ
 import { parseTorrentName } from 'addons/torrent-search-thepiratebay/parse-torrent-name';
 import { CONSOLE_SEARCH_NAMES } from 'addons/retroachievements/types';
 import { queueService } from 'ui-lib/services/queue.service';
+import { torrentService } from 'ui-lib/services/torrent.service';
 
 const defaultConfigs: SmartSearchAllConfigs = {
 	movies: {
@@ -913,10 +914,7 @@ class SmartSearchService {
 		}
 	}
 
-	async saveGameFetchCache(
-		raGameId: number,
-		candidate: SmartSearchTorrentResult
-	): Promise<void> {
+	async saveGameFetchCache(raGameId: number, candidate: SmartSearchTorrentResult): Promise<void> {
 		try {
 			await fetchRaw('/api/retroachievements/fetch-cache', {
 				method: 'POST',
@@ -971,17 +969,9 @@ class SmartSearchService {
 			const subdir = getSubdir(selection);
 			const downloadPath = `${basePath}/${subdir}`;
 
-			const res = await fetchRaw('/api/torrent/torrents', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					source: candidate.magnetLink,
-					downloadPath
-				})
-			});
-			if (!res.ok) return null;
+			const torrentInfo = await torrentService.addTorrent(candidate.magnetLink, downloadPath);
+			if (!torrentInfo) return null;
 
-			const torrentInfo = await res.json();
 			const infoHash: string = torrentInfo.infoHash ?? candidate.infoHash;
 			const outputPath: string = torrentInfo.outputPath ?? downloadPath;
 
@@ -1008,17 +998,9 @@ class SmartSearchService {
 			const subdir = getSubdir(selection);
 			const downloadPath = `${basePath}/${subdir}`;
 
-			const res = await fetchRaw('/api/torrent/torrents', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					source: candidate.magnetLink,
-					downloadPath
-				})
-			});
-			if (!res.ok) return null;
+			const torrentInfo = await torrentService.addTorrent(candidate.magnetLink, downloadPath);
+			if (!torrentInfo) return null;
 
-			const torrentInfo = await res.json();
 			const infoHash: string = torrentInfo.infoHash ?? candidate.infoHash;
 			const outputPath: string = torrentInfo.outputPath ?? downloadPath;
 

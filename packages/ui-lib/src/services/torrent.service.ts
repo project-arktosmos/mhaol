@@ -145,9 +145,11 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 			outputPath: null
 		};
 
+		this.allTorrents = [placeholder, ...this.allTorrents];
 		this.state.update((s) => ({
 			...s,
-			torrents: [placeholder, ...s.torrents]
+			torrents: [placeholder, ...s.torrents],
+			allTorrents: this.allTorrents
 		}));
 
 		try {
@@ -167,16 +169,20 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 
 			const torrent: TorrentInfo = await res.json();
 
+			this.allTorrents = this.allTorrents.map((t) => (t.infoHash === placeholderId ? torrent : t));
 			this.state.update((s) => ({
 				...s,
-				torrents: s.torrents.map((t) => (t.infoHash === placeholderId ? torrent : t))
+				torrents: s.torrents.map((t) => (t.infoHash === placeholderId ? torrent : t)),
+				allTorrents: this.allTorrents
 			}));
 
 			return torrent;
 		} catch (error) {
+			this.allTorrents = this.allTorrents.filter((t) => t.infoHash !== placeholderId);
 			this.state.update((s) => ({
 				...s,
 				torrents: s.torrents.filter((t) => t.infoHash !== placeholderId),
+				allTorrents: this.allTorrents,
 				error: `Failed to add torrent: ${error instanceof Error ? error.message : String(error)}`
 			}));
 			return null;
