@@ -77,9 +77,17 @@
 		<div class="card bg-base-200 mb-6">
 			<div class="card-body">
 				<div class="flex items-center gap-4">
-					<div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content text-xl font-bold">
-						{detail.profile.username.charAt(0).toUpperCase()}
-					</div>
+					{#if detail.profile.profile_picture_url}
+						<img
+							src={detail.profile.profile_picture_url}
+							alt={detail.profile.username}
+							class="h-14 w-14 shrink-0 rounded-full object-cover"
+						/>
+					{:else}
+						<div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content text-xl font-bold">
+							{detail.profile.username.charAt(0).toUpperCase()}
+						</div>
+					{/if}
 					<div class="min-w-0">
 						<h1 class="text-2xl font-bold">{detail.profile.username}</h1>
 						<code class="break-all text-xs opacity-50">

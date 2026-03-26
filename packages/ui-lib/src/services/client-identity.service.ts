@@ -10,6 +10,8 @@ const STORAGE_KEY = 'client-identity';
 interface StoredIdentity {
 	name: string;
 	privateKey: `0x${string}`;
+	username?: string;
+	profilePictureUrl?: string;
 }
 
 interface ClientIdentityState {
@@ -36,9 +38,9 @@ class ClientIdentityService {
 		this._signalingUrl = signalingUrl;
 
 		try {
-			const { name, privateKey } = this.loadOrCreateStored();
+			const { name, privateKey, username, profilePictureUrl } = this.loadOrCreateStored();
 
-			const identity = await this.buildIdentity(name, privateKey);
+			const identity = await this.buildIdentity(name, privateKey, username, profilePictureUrl);
 			this.state.set({ loading: false, identity, error: null });
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Failed to initialize identity';
@@ -59,17 +61,18 @@ class ClientIdentityService {
 		if (!browser) return;
 		const name = generateRandomUsername();
 		const privateKey = generatePrivateKey();
-		localStorage.setItem(STORAGE_KEY, JSON.stringify({ name, privateKey }));
-		const identity = await this.buildIdentity(name, privateKey);
+		const username = name;
+		localStorage.setItem(STORAGE_KEY, JSON.stringify({ name, privateKey, username }));
+		const identity = await this.buildIdentity(name, privateKey, username);
 		this.state.set({ loading: false, identity, error: null });
 	}
 
 	/** Load or create the stored keypair without full initialization (no signalingUrl needed). */
-	loadLocal(): { name: string; address: string } {
+	loadLocal(): { name: string; address: string; username?: string; profilePictureUrl?: string } {
 		if (!browser) return { name: '', address: '' };
-		const { name, privateKey } = this.loadOrCreateStored();
+		const { name, privateKey, username, profilePictureUrl } = this.loadOrCreateStored();
 		const account = privateKeyToAccount(privateKey);
-		return { name, address: account.address };
+		return { name, address: account.address, username, profilePictureUrl };
 	}
 
 	/** Update the stored display name. */
@@ -80,6 +83,19 @@ class ClientIdentityService {
 		const parsed: StoredIdentity = JSON.parse(stored);
 		parsed.name = newName;
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+	}
+
+	/** Update the profile (username + optional profile picture) and rebuild the passport. */
+	async updateProfile(username: string, profilePictureUrl?: string): Promise<void> {
+		if (!browser) return;
+		const stored = localStorage.getItem(STORAGE_KEY);
+		if (!stored) return;
+		const parsed: StoredIdentity = JSON.parse(stored);
+		parsed.username = username;
+		parsed.profilePictureUrl = profilePictureUrl;
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+		const identity = await this.buildIdentity(parsed.name, parsed.privateKey, username, profilePictureUrl);
+		this.state.set({ loading: false, identity, error: null });
 	}
 
 	private loadOrCreateStored(): StoredIdentity {
@@ -97,15 +113,20 @@ class ClientIdentityService {
 
 	private async buildIdentity(
 		name: string,
-		privateKey: `0x${string}`
+		privateKey: `0x${string}`,
+		username?: string,
+		profilePictureUrl?: string
 	): Promise<{ name: string; address: string; passport: PassportData }> {
 		const account = privateKeyToAccount(privateKey);
-		const raw = JSON.stringify({
+		const payload: Record<string, string> = {
 			name,
 			address: account.address,
 			instanceType: 'client',
 			signalingUrl: this._signalingUrl
-		});
+		};
+		if (username) payload.username = username;
+		if (profilePictureUrl) payload.profilePictureUrl = profilePictureUrl;
+		const raw = JSON.stringify(payload);
 		const signature = await account.signMessage({ message: raw });
 		const hash = hashMessage(raw);
 		return {

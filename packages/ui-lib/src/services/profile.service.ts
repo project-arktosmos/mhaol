@@ -10,7 +10,7 @@ import type {
 import { clientIdentityService } from 'ui-lib/services/client-identity.service';
 import { generateRandomUsername } from 'ui-lib/utils/random-username';
 
-const LOCAL_STORAGE_KEY = 'user-profile-username';
+const OLD_USERNAME_KEY = 'user-profile-username';
 
 const emptyProfile: UserProfile = { username: '', wallet: '' };
 
@@ -30,14 +30,33 @@ class ProfileService {
 		if (!browser || this._initialized) return;
 		this._initialized = true;
 
-		// Clean up stale key from earlier implementation
+		// Clean up stale keys from earlier implementations
 		localStorage.removeItem('user-profile');
 
 		const identity = clientIdentityService.loadLocal();
-		const savedUsername = this.readUsername();
+
+		// Migrate old separate username storage into client identity
+		const oldUsername = localStorage.getItem(OLD_USERNAME_KEY);
+		if (oldUsername && !identity.username) {
+			await clientIdentityService.updateProfile(oldUsername);
+			localStorage.removeItem(OLD_USERNAME_KEY);
+		} else {
+			localStorage.removeItem(OLD_USERNAME_KEY);
+		}
+
+		// Re-read after potential migration
+		const updated = clientIdentityService.loadLocal();
+		const username = updated.username || updated.name || generateRandomUsername();
+
+		// If there was no username stored yet, persist it
+		if (!updated.username) {
+			await clientIdentityService.updateProfile(username);
+		}
+
 		const local: UserProfile = {
-			wallet: identity.address,
-			username: savedUsername || identity.name || generateRandomUsername()
+			wallet: updated.address,
+			username,
+			profilePictureUrl: updated.profilePictureUrl
 		};
 
 		this.state.update((s) => ({ ...s, local }));
@@ -45,10 +64,22 @@ class ProfileService {
 	}
 
 	updateUsername(username: string): void {
-		this.writeUsername(username);
+		clientIdentityService.updateProfile(username);
 		this.state.update((s) => ({
 			...s,
 			local: { ...s.local, username }
+		}));
+	}
+
+	updateProfilePicture(profilePictureUrl: string | undefined): void {
+		let currentUsername = '';
+		this.state.subscribe((s) => {
+			currentUsername = s.local.username;
+		})();
+		clientIdentityService.updateProfile(currentUsername, profilePictureUrl);
+		this.state.update((s) => ({
+			...s,
+			local: { ...s.local, profilePictureUrl }
 		}));
 	}
 
@@ -63,7 +94,11 @@ class ProfileService {
 		await fetchRaw('/api/profiles', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(local)
+			body: JSON.stringify({
+				username: local.username,
+				wallet: local.wallet,
+				profilePictureUrl: local.profilePictureUrl
+			})
 		});
 		await this.refreshRemote();
 	}
@@ -73,7 +108,12 @@ class ProfileService {
 		try {
 			const res = await fetchRaw('/api/profiles');
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const raw: { username: string; wallet: string; added_at: string }[] = await res.json();
+			const raw: {
+				username: string;
+				wallet: string;
+				profile_picture_url?: string;
+				added_at: string;
+			}[] = await res.json();
 
 			const countsPromises = raw.map(async (p) => {
 				try {
@@ -116,20 +156,6 @@ class ProfileService {
 			},
 			favorites: data.favorites
 		};
-	}
-
-	private readUsername(): string {
-		try {
-			const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-			if (raw) return raw;
-		} catch {
-			// ignore
-		}
-		return '';
-	}
-
-	private writeUsername(username: string): void {
-		localStorage.setItem(LOCAL_STORAGE_KEY, username);
 	}
 }
 
