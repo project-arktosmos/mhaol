@@ -243,7 +243,8 @@
 				id: `p2p:${torrent.infoHash}`, type: 'torrent', name: torrent.name,
 				outputPath: torrent.outputPath, mode: 'video', format: null,
 				videoFormat: null, thumbnailUrl: null, durationSeconds: null,
-				size: torrent.size, completedAt: ''
+				size: torrent.size, completedAt: '',
+				infoHash: torrent.infoHash
 			};
 			playerService.play(file, 'inline');
 		}

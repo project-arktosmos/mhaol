@@ -181,7 +181,8 @@ async fn stream_status(State(_state): State<AppState>) -> impl IntoResponse {
 
 #[derive(Deserialize)]
 struct CreateSessionBody {
-    file_path: String,
+    file_path: Option<String>,
+    info_hash: Option<String>,
     stream_url: Option<String>,
     mode: Option<String>,
     video_codec: Option<String>,
@@ -202,14 +203,34 @@ async fn create_session(
             .into_response();
     }
 
-    let resolved = resolve_media_path(&body.file_path);
-    if !std::path::Path::new(&resolved).exists() {
+    let resolved = if let Some(ref info_hash) = body.info_hash {
+        match resolve_torrent_video(&state, info_hash).await {
+            Ok(path) => path,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": e })),
+                )
+                    .into_response()
+            }
+        }
+    } else if let Some(ref file_path) = body.file_path {
+        let r = resolve_media_path(file_path);
+        if !std::path::Path::new(&r).exists() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": format!("File not found: {}", r) })),
+            )
+                .into_response();
+        }
+        r
+    } else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": format!("File not found: {}", resolved) })),
+            Json(serde_json::json!({ "error": "Either file_path or info_hash is required" })),
         )
             .into_response();
-    }
+    };
 
     let session_id = uuid::Uuid::new_v4().to_string();
     let ice_servers = fetch_ice_servers().await;
@@ -266,6 +287,69 @@ async fn delete_session(
 }
 
 pub(crate) const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "wmv", "webm", "flv", "m4v"];
+
+/// Resolve the video file path for a torrent by its info_hash.
+/// Uses the torrent manager's file list to find the largest video file,
+/// then combines it with the download output_path from the DB.
+async fn resolve_torrent_video(state: &AppState, info_hash: &str) -> Result<String, String> {
+    let download = state
+        .downloads
+        .get(info_hash)
+        .ok_or_else(|| format!("No download record for info_hash {}", info_hash))?;
+
+    let output_path = download
+        .output_path
+        .ok_or_else(|| format!("No output_path for torrent {}", info_hash))?;
+
+    let torrent_id = state
+        .torrent_manager
+        .list()
+        .await
+        .map_err(|e| e.to_string())?
+        .iter()
+        .find(|t| t.info_hash.eq_ignore_ascii_case(info_hash))
+        .map(|t| t.id)
+        .ok_or_else(|| format!("Torrent {} not found in manager", info_hash))?;
+
+    let files = state
+        .torrent_manager
+        .list_files(torrent_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Find the largest video file in this torrent's file list
+    let video_file = files
+        .iter()
+        .filter(|f| {
+            let name_lower = f.name.to_lowercase();
+            VIDEO_EXTENSIONS.iter().any(|ext| name_lower.ends_with(&format!(".{}", ext)))
+        })
+        .max_by_key(|f| f.size)
+        .ok_or_else(|| format!("No video files found in torrent {}", info_hash))?;
+
+    // The output_path from the DB is the torrent's root directory.
+    // The file name from rqbit is relative to that root.
+    // But rqbit may extract files directly into the parent directory if there's no
+    // subdirectory in the torrent. Check both locations.
+    let full_path = std::path::Path::new(&output_path).join(&video_file.name);
+    if full_path.exists() {
+        return Ok(full_path.to_string_lossy().to_string());
+    }
+
+    // rqbit sometimes extracts into the parent when the torrent has a single root folder
+    if let Some(parent) = std::path::Path::new(&output_path).parent() {
+        let parent_path = parent.join(&video_file.name);
+        if parent_path.exists() {
+            return Ok(parent_path.to_string_lossy().to_string());
+        }
+    }
+
+    Err(format!(
+        "Video file {} not found at expected path {}",
+        video_file.name,
+        full_path.display()
+    ))
+}
 
 /// Resolve a media path to an actual video file.
 /// - If it's a file, return as-is.
