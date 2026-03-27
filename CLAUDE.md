@@ -25,7 +25,8 @@ mhaol.git/
 │   ├── p2p-stream/                   # Rust P2P streaming library
 │   ├── recommendations/              # Rust TMDB recommendations (queue worker + SQLite storage)
 │   ├── torrent/                      # Rust torrent implementation
-│   └── webrtc/                       # WebRTC contact handshake layer (TypeScript)
+│   ├── webrtc/                       # WebRTC contact handshake layer (TypeScript)
+│   └── websurfx/                     # Rust web search client (wraps websearch crate)
 ├── pnpm-workspace.yaml
 └── package.json                      # Root workspace scripts
 ```
