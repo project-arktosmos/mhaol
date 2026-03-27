@@ -64,7 +64,10 @@ export class WsTransport implements Transport {
 	}
 
 	async fetch(path: string, init?: TransportRequestInit): Promise<TransportResponse> {
-		const id = crypto.randomUUID();
+		const id =
+			typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: Math.random().toString(36).substring(2) + Date.now().toString(36);
 
 		return new Promise<TransportResponse>((resolve, reject) => {
 			const timer = setTimeout(() => {
@@ -98,7 +101,10 @@ export class WsTransport implements Transport {
 	}
 
 	subscribe(path: string, options?: { signal?: AbortSignal }): TransportEventSource {
-		const id = crypto.randomUUID();
+		const id =
+			typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: Math.random().toString(36).substring(2) + Date.now().toString(36);
 		const source = new WsEventSource(() => {
 			const envelope: RpcEnvelope = {
 				channel: 'rpc',

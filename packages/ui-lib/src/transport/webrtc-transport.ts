@@ -53,7 +53,10 @@ export class WebRtcTransport implements Transport {
 	}
 
 	async fetch(path: string, init?: TransportRequestInit): Promise<TransportResponse> {
-		const id = crypto.randomUUID();
+		const id =
+			typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: Math.random().toString(36).substring(2) + Date.now().toString(36);
 		const request: RpcRequest = {
 			id,
 			type: 'request',
@@ -83,7 +86,10 @@ export class WebRtcTransport implements Transport {
 	}
 
 	subscribe(path: string, options?: { signal?: AbortSignal }): TransportEventSource {
-		const id = crypto.randomUUID();
+		const id =
+			typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: Math.random().toString(36).substring(2) + Date.now().toString(36);
 		const source = new WebRtcEventSource(() => {
 			this.sendFn({
 				channel: 'rpc',
