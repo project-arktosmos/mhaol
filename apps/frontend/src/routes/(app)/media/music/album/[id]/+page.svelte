@@ -5,7 +5,7 @@
 	import { base } from '$app/paths';
 	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { releaseGroupsToDisplay, releaseToDisplay } from 'addons/musicbrainz/transform';
-	import type { MusicBrainzReleaseGroup, MusicBrainzRelease } from 'addons/musicbrainz/types';
+	import type { MusicBrainzReleaseGroup, MusicBrainzRelease, MusicBrainzArtistCredit } from 'addons/musicbrainz/types';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { torrentService } from 'ui-lib/services/torrent.service';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
@@ -17,6 +17,7 @@
 	let catalogItem = $state<CatalogAlbum | null>(null);
 	let loading = $state(true);
 	let fetchingId = $state<string | null>(null);
+	let albumArtistCredits = $state<MusicBrainzArtistCredit[]>([]);
 
 	const searchStore = smartSearchService.store;
 	const favState = favoritesService.state;
@@ -64,6 +65,7 @@
 			const rgRes = await fetchRaw(`/api/musicbrainz/release-group/${albumId}`);
 			if (!rgRes.ok) throw new Error('Failed to fetch release group');
 			const rgData = await rgRes.json();
+			albumArtistCredits = (rgData as MusicBrainzReleaseGroup)['artist-credit'] ?? [];
 			const display = releaseGroupsToDisplay([rgData as MusicBrainzReleaseGroup]);
 			const album = display[0];
 			if (!album) throw new Error('No album data');
@@ -139,7 +141,20 @@
 	}
 
 	async function handleToggleFavorite() {
-		if (catalogItem) await favoritesService.toggle('musicbrainz-album', catalogItem.sourceId, catalogItem.title);
+		if (!catalogItem) return;
+		if (isFavorite) {
+			await favoritesService.remove('musicbrainz-album', catalogItem.sourceId);
+		} else {
+			await favoritesService.add('musicbrainz-album', catalogItem.sourceId, catalogItem.title);
+			if (albumArtistCredits.length > 0) {
+				await Promise.all(
+					albumArtistCredits.map((credit) =>
+						favoritesService.addSilent('musicbrainz-artist', credit.artist.id, credit.artist.name)
+					)
+				);
+				await favoritesService.refresh();
+			}
+		}
 	}
 	async function handleTogglePin() {
 		if (catalogItem) await pinsService.toggle('musicbrainz-album', catalogItem.sourceId, catalogItem.title);
