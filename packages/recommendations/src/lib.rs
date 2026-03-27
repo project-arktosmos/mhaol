@@ -1,3 +1,4 @@
+pub mod books;
 pub mod game;
 pub mod music;
 
