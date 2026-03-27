@@ -39,8 +39,7 @@ src/
 │   ├── torrent/              # Torrent management (TorrentProgressOverlay, TorrentSettings, etc.)
 │   ├── videogames/           # Videogame WASM emulator components
 │   ├── youtube/              # YouTube download (queue, settings, preview, RightPanel)
-│   ├── youtube-search/       # YouTube search (input, results, channel cards)
-│   └── websurfx/             # Web search (result cards, search page)
+│   └── youtube-search/       # YouTube search (input, results, channel cards)
 ├── services/                 # State management + API calls (singleton services)
 │   ├── classes/              # Base classes: ArrayServiceClass, ObjectServiceClass
 │   ├── catalog-strategies/   # Per-kind browse strategies (movie, tv, book, album, artist, game, iptv, youtube, photo)

@@ -11,5 +11,4 @@ members = [
     "packages/torrent",
     "packages/p2p-stream",
     "packages/recommendations",
-    "packages/websurfx",
 ]

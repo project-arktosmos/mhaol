@@ -1118,17 +1118,6 @@ fn run_migrations(conn: &Connection) {
                 ON music_torrent_fetch_cache(musicbrainz_id, scope);",
         );
     }
-
-    // Migration: add websurfx_search_cache table
-    if !has_table(conn, "websurfx_search_cache") {
-        let _ = conn.execute_batch(
-            "CREATE TABLE websurfx_search_cache (
-                cache_key TEXT PRIMARY KEY,
-                data TEXT NOT NULL,
-                fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-            );",
-        );
-    }
 }
 
 /// App identifiers used to select which schema features to include.

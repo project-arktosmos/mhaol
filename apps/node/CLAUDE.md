@@ -39,7 +39,6 @@ src/
 │   ├── smart_pair.rs      # Smart pairing: TMDB matching + pinned items
 │   ├── tmdb.rs
 │   ├── torrent.rs        # cfg(not(target_os = "android"))
-│   ├── websurfx.rs       # Web search via websearch crate (DuckDuckGo/Google/Tavily/Brave)
 │   ├── youtube.rs
 │   └── ytdl.rs           # cfg(not(target_os = "android"))
 ├── db/                   # Database layer (rusqlite repos)
@@ -68,7 +67,6 @@ All API handlers receive `AppState` which contains:
 - `MusicRecommendationsRepo` for music recommendation storage (from `mhaol-recommendations::music`)
 - `GameRecommendationsRepo` for game recommendation storage (from `mhaol-recommendations::game`)
 - `RecommendationLabelRepo` for per-user recommendation labels (wallet-scoped, in `db/repo/`)
-- `WebSurfxClient` for web search (from `mhaol-websurfx` crate)
 - `SignalingRoomManager` and `WorkerBridge` (auto-started on server boot)
 
 ## Adding a New API Module
@@ -85,7 +83,6 @@ Always included:
 - `mhaol-identity` — Ethereum identity/wallet management (`packages/identity/`)
 - `mhaol-queue` — Task queue management with SQLite + broadcast (`packages/queue/`)
 - `mhaol-recommendations` — TMDB recommendations storage + queue types (`packages/recommendations/`)
-- `mhaol-websurfx` — Web search client wrapping the websearch crate (`packages/websurfx/`)
 
 Conditionally compiled with `#[cfg(not(target_os = "android"))]`:
 
@@ -113,8 +110,3 @@ cargo check -p mhaol-node
 - `DB_PATH` — SQLite database path (optional, in-memory if unset)
 - `RA_API_USER` — RetroAchievements API username
 - `RA_API_KEY` — RetroAchievements API key
-- `WEBSURFX_PROVIDER` — Web search provider: duckduckgo (default), google, tavily, brave
-- `GOOGLE_API_KEY` — Google Custom Search API key (required if provider is google)
-- `GOOGLE_CX` — Google Custom Search engine ID (required if provider is google)
-- `TAVILY_API_KEY` — Tavily AI search API key (required if provider is tavily)
-- `BRAVE_API_KEY` — Brave Search API key (required if provider is brave)
