@@ -1088,6 +1088,22 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: add game_recommendation_label_assignments table
+    if !has_table(conn, "game_recommendation_label_assignments") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE game_recommendation_label_assignments (
+                id TEXT PRIMARY KEY,
+                wallet TEXT NOT NULL,
+                recommended_game_id INTEGER NOT NULL,
+                label_id TEXT NOT NULL REFERENCES recommendation_labels(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(wallet, recommended_game_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_rec_label_wallet
+                ON game_recommendation_label_assignments(wallet);",
+        );
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(

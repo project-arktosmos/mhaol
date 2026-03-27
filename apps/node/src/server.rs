@@ -102,6 +102,17 @@ async fn main() {
         });
     }
 
+    // Start game recommendations queue worker in the background
+    {
+        let game_recs_state = state.clone();
+        tokio::spawn(async move {
+            mhaol_node::game_recommendations_worker::run_game_recommendations_worker(
+                game_recs_state,
+            )
+            .await;
+        });
+    }
+
     // Ensure dual identities: backend (SIGNALING_WALLET) + frontend (CLIENT_WALLET)
     state.identity_manager.ensure_identity("SIGNALING_WALLET");
     state.identity_manager.ensure_identity("CLIENT_WALLET");
