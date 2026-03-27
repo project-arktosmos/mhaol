@@ -1,19 +1,27 @@
 pub mod api;
+pub mod book_recommendations_worker;
 pub mod db;
 #[cfg(not(target_os = "android"))]
 pub mod llm_worker;
 pub mod modules;
 #[cfg(not(target_os = "android"))]
 pub mod peer_service;
+pub mod game_recommendations_worker;
+pub mod music_recommendations_worker;
+pub mod recommendations_worker;
 pub mod signaling_rooms;
 pub mod worker_bridge;
 
 use db::repo::*;
 use db::DbPool;
 use mhaol_identity::IdentityManager;
-use mhaol_queue::QueueManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_llm::LlmEngine;
+use mhaol_queue::QueueManager;
+use mhaol_recommendations::books::BookRecommendationsRepo;
+use mhaol_recommendations::game::GameRecommendationsRepo;
+use mhaol_recommendations::music::MusicRecommendationsRepo;
+use mhaol_recommendations::RecommendationsRepo;
 #[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
 #[cfg(not(target_os = "android"))]
@@ -21,9 +29,9 @@ use mhaol_yt_dlp::DownloadManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
 use signaling_rooms::SignalingRoomManager;
-use worker_bridge::WorkerBridge;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use worker_bridge::WorkerBridge;
 
 /// Return the default mhaol data directory: `<Documents>/mhaol`.
 /// Creates the directory if it does not exist.
@@ -123,6 +131,11 @@ pub struct AppState {
     pub worker_bridge: Arc<WorkerBridge>,
     pub hub: Arc<api::hub::HubManager>,
     pub queue: Arc<QueueManager>,
+    pub recommendations: RecommendationsRepo,
+    pub music_recommendations: MusicRecommendationsRepo,
+    pub game_recommendations: GameRecommendationsRepo,
+    pub book_recommendations: BookRecommendationsRepo,
+    pub recommendation_labels: RecommendationLabelRepo,
 }
 
 impl AppState {
@@ -133,9 +146,11 @@ impl AppState {
             .ok()
             .map(|d| PathBuf::from(d).join("identities"))
             .unwrap_or_else(mhaol_identity::default_identities_dir);
-        let signaling_url = std::env::var("SIGNALING_URL")
-            .unwrap_or_else(|_| "https://mhaol-signaling.project-arktosmos.partykit.dev".to_string());
-        let identity_manager = IdentityManager::new(identities_dir, "server".to_string(), signaling_url);
+        let signaling_url = std::env::var("SIGNALING_URL").unwrap_or_else(|_| {
+            "https://mhaol-signaling.project-arktosmos.partykit.dev".to_string()
+        });
+        let identity_manager =
+            IdentityManager::new(identities_dir, "server".to_string(), signaling_url);
 
         let data_dir = default_data_dir();
 
@@ -189,6 +204,11 @@ impl AppState {
             worker_bridge: Arc::new(WorkerBridge::new()),
             hub: Arc::new(api::hub::HubManager::new()),
             queue: Arc::new(QueueManager::new(Arc::clone(&db))),
+            recommendations: RecommendationsRepo::new(Arc::clone(&db)),
+            music_recommendations: MusicRecommendationsRepo::new(Arc::clone(&db)),
+            game_recommendations: GameRecommendationsRepo::new(Arc::clone(&db)),
+            book_recommendations: BookRecommendationsRepo::new(Arc::clone(&db)),
+            recommendation_labels: RecommendationLabelRepo::new(Arc::clone(&db)),
             data_dir,
             db,
         })
@@ -199,19 +219,15 @@ impl AppState {
 
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {
-        use modules::{
-            lyrics::LyricsModule,
-            musicbrainz::MusicbrainzModule, retroachievements::RetroachievementsModule,
-            signaling::SignalingModule, tmdb::TmdbModule,
-            torrent_search::TorrentSearchModule,
-            youtube_meta::YoutubeMetaModule,
-        };
         #[cfg(not(target_os = "android"))]
         use modules::{
-            image_tagger::ImageTaggerModule,
-            p2p_stream::P2pStreamModule,
-            torrent::TorrentModule,
+            image_tagger::ImageTaggerModule, p2p_stream::P2pStreamModule, torrent::TorrentModule,
             ytdl::YtdlModule,
+        };
+        use modules::{
+            lyrics::LyricsModule, musicbrainz::MusicbrainzModule,
+            retroachievements::RetroachievementsModule, signaling::SignalingModule,
+            tmdb::TmdbModule, torrent_search::TorrentSearchModule, youtube_meta::YoutubeMetaModule,
         };
 
         let mut registry = self.module_registry.write();
@@ -236,8 +252,6 @@ impl AppState {
                 manager: Arc::clone(&self.image_tagger_manager),
             }));
         }
-
-
 
         // Signaling modules
         registry.register(Box::new(SignalingModule {

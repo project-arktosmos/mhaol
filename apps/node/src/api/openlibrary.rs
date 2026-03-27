@@ -21,7 +21,9 @@ pub fn router() -> Router<AppState> {
         .route("/cover/{id}/{size}", get(proxy_cover))
         .route(
             "/fetch-cache",
-            get(get_fetch_cache).put(put_fetch_cache).delete(delete_fetch_cache),
+            get(get_fetch_cache)
+                .put(put_fetch_cache)
+                .delete(delete_fetch_cache),
         )
 }
 
@@ -64,20 +66,18 @@ async fn search_books(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    state.openlibrary_api_cache.upsert(&cache_key, &data_str);
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                state.openlibrary_api_cache.upsert(&cache_key, &data_str);
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         _ => {
             // Try stale cache
             if let Some((data, _)) = state.openlibrary_api_cache.get(&cache_key) {
@@ -94,10 +94,7 @@ async fn search_books(
     }
 }
 
-async fn get_work(
-    State(state): State<AppState>,
-    Path(key): Path<String>,
-) -> impl IntoResponse {
+async fn get_work(State(state): State<AppState>, Path(key): Path<String>) -> impl IntoResponse {
     let cache_key = format!("work:{}", key);
 
     if let Some((data, is_stale)) = state.openlibrary_api_cache.get(&cache_key) {
@@ -116,20 +113,18 @@ async fn get_work(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    state.openlibrary_api_cache.upsert(&cache_key, &data_str);
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                state.openlibrary_api_cache.upsert(&cache_key, &data_str);
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Work not found" })),
@@ -150,10 +145,7 @@ async fn get_work(
     }
 }
 
-async fn get_author(
-    State(state): State<AppState>,
-    Path(key): Path<String>,
-) -> impl IntoResponse {
+async fn get_author(State(state): State<AppState>, Path(key): Path<String>) -> impl IntoResponse {
     let cache_key = format!("author:{}", key);
 
     if let Some((data, is_stale)) = state.openlibrary_api_cache.get(&cache_key) {
@@ -172,20 +164,18 @@ async fn get_author(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    state.openlibrary_api_cache.upsert(&cache_key, &data_str);
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                state.openlibrary_api_cache.upsert(&cache_key, &data_str);
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Author not found" })),
@@ -242,20 +232,18 @@ async fn get_trending(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    state.openlibrary_api_cache.upsert(&cache_key, &data_str);
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                state.openlibrary_api_cache.upsert(&cache_key, &data_str);
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         _ => {
             if let Some((data, _)) = state.openlibrary_api_cache.get(&cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {

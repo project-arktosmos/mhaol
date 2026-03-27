@@ -117,10 +117,7 @@ async fn queue_download(
     )
 }
 
-async fn get_download(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+async fn get_download(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     match state.ytdl_manager.get_progress(&id) {
         Some(progress) => Json(serde_json::to_value(progress).unwrap()).into_response(),
         None => (
@@ -327,12 +324,16 @@ async fn update_settings(
 
             match storage_key {
                 "poToken" | "visitorData" | "cookies" => {
-                    state.settings.set(&format!("ytdl.{}", storage_key), &str_val);
+                    state
+                        .settings
+                        .set(&format!("ytdl.{}", storage_key), &str_val);
                     let config_update = serde_json::json!({ storage_key: str_val });
                     state.ytdl_manager.update_config(config_update);
                 }
                 _ => {
-                    state.settings.set(&format!("ytdl.{}", storage_key), &str_val);
+                    state
+                        .settings
+                        .set(&format!("ytdl.{}", storage_key), &str_val);
                 }
             }
         }

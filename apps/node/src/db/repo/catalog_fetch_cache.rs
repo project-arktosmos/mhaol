@@ -22,7 +22,12 @@ impl CatalogFetchCacheRepo {
         Self { db }
     }
 
-    pub fn get(&self, catalog_item_id: &str, scope: &str, scope_key: &str) -> Option<CatalogFetchCacheRow> {
+    pub fn get(
+        &self,
+        catalog_item_id: &str,
+        scope: &str,
+        scope_key: &str,
+    ) -> Option<CatalogFetchCacheRow> {
         let conn = self.db.lock();
         conn.query_row(
             "SELECT id, catalog_item_id, scope, scope_key, candidate_json, created_at
@@ -49,7 +54,13 @@ impl CatalogFetchCacheRepo {
             .collect()
     }
 
-    pub fn upsert(&self, catalog_item_id: &str, scope: &str, scope_key: &str, candidate_json: &str) {
+    pub fn upsert(
+        &self,
+        catalog_item_id: &str,
+        scope: &str,
+        scope_key: &str,
+        candidate_json: &str,
+    ) {
         let conn = self.db.lock();
         conn.execute(
             "INSERT INTO catalog_fetch_cache (id, catalog_item_id, scope, scope_key, candidate_json)
@@ -129,8 +140,8 @@ impl CatalogFetchCacheRepo {
 mod tests {
     use super::*;
     use crate::db::open_test_database;
-    use crate::db::repo::CatalogRepo;
     use crate::db::repo::catalog::CatalogItemRow;
+    use crate::db::repo::CatalogRepo;
 
     fn insert_test_item(catalog: &CatalogRepo) {
         catalog.upsert(&CatalogItemRow {
@@ -162,7 +173,12 @@ mod tests {
 
         insert_test_item(&catalog);
 
-        repo.upsert("movie-1", "default", "", r#"{"name":"Test.Torrent","infoHash":"abc123"}"#);
+        repo.upsert(
+            "movie-1",
+            "default",
+            "",
+            r#"{"name":"Test.Torrent","infoHash":"abc123"}"#,
+        );
 
         let found = repo.get("movie-1", "default", "").unwrap();
         assert_eq!(found.catalog_item_id, "movie-1");

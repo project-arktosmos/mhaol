@@ -4462,6 +4462,7 @@ dependencies = [
  "mhaol-llm",
  "mhaol-p2p-stream",
  "mhaol-queue",
+ "mhaol-recommendations",
  "mhaol-torrent",
  "mhaol-yt-dlp",
  "mime_guess",
@@ -4533,6 +4534,16 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "mhaol-recommendations"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "rusqlite",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

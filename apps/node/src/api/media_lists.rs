@@ -16,10 +16,7 @@ use tracing::info;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route(
-            "/{list_id}/tmdb",
-            put(link_tmdb).delete(unlink_tmdb),
-        )
+        .route("/{list_id}/tmdb", put(link_tmdb).delete(unlink_tmdb))
         .route(
             "/{list_id}/musicbrainz",
             put(link_musicbrainz).delete(unlink_musicbrainz),
@@ -168,9 +165,8 @@ struct ParsedFolderName {
 fn parse_folder_name(raw: &str) -> ParsedFolderName {
     static RE_LEADING_TAG: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\[([^\]]*)\]\s*").unwrap());
     // Matches season markers: S01, Season 1, T01 (Spanish), Seasons 1-8, S01-S06, S01-04
-    static RE_SEASON: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"(?i)(?:\b(?:seasons?\s*\d+|s\d{2}|t\d{2})\b)").unwrap()
-    });
+    static RE_SEASON: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?i)(?:\b(?:seasons?\s*\d+|s\d{2}|t\d{2})\b)").unwrap());
     // Matches year in parens: (2009) or (2019)
     static RE_YEAR_PAREN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\((\d{4})\)").unwrap());
     // Matches standalone year preceded by word boundary: "Glee 2009 Season"
@@ -185,7 +181,8 @@ fn parse_folder_name(raw: &str) -> ParsedFolderName {
 
     static RE_BRACKETS: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[[^\]]*\]").unwrap());
     static RE_PAREN_META: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"(?i)\((?:Complete[^)]*|Anime[^)]*|OVA[^)]*|Dual Audio|BD|Movie[^)]*)\)").unwrap()
+        Regex::new(r"(?i)\((?:Complete[^)]*|Anime[^)]*|OVA[^)]*|Dual Audio|BD|Movie[^)]*)\)")
+            .unwrap()
     });
 
     let mut s = raw.to_string();
@@ -194,9 +191,7 @@ fn parse_folder_name(raw: &str) -> ParsedFolderName {
     s = RE_LEADING_TAG.replace(&s, "").to_string();
 
     // 2. Extract year from parens before normalizing
-    let year = RE_YEAR_PAREN
-        .captures(&s)
-        .map(|c| c[1].to_string());
+    let year = RE_YEAR_PAREN.captures(&s).map(|c| c[1].to_string());
 
     // 3. Remove parenthesized year from string
     if year.is_some() {
@@ -233,7 +228,9 @@ fn parse_folder_name(raw: &str) -> ParsedFolderName {
     name = RE_TRAILING_GROUP.replace(&name, "").trim().to_string();
 
     // Remove trailing brackets/parens content
-    name = name.trim_end_matches(|c: char| c == '(' || c == '[' || c == ' ').to_string();
+    name = name
+        .trim_end_matches(|c: char| c == '(' || c == '[' || c == ' ')
+        .to_string();
 
     // If no parenthesized year found, try bare year (but only if it's clearly a year, not part of the title)
     let year = year.or_else(|| {
@@ -260,16 +257,10 @@ fn parse_folder_name(raw: &str) -> ParsedFolderName {
         };
     }
 
-    ParsedFolderName {
-        show_name,
-        year,
-    }
+    ParsedFolderName { show_name, year }
 }
 
-async fn auto_match(
-    State(state): State<AppState>,
-    Json(body): Json<AutoMatchRequest>,
-) -> Response {
+async fn auto_match(State(state): State<AppState>, Json(body): Json<AutoMatchRequest>) -> Response {
     let has_key = state
         .settings
         .get("tmdb.apiKey")

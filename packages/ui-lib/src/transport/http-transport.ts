@@ -5,12 +5,24 @@ import type {
 	TransportResponse,
 	TransportEventSource
 } from './transport.type';
+import type { AuthProvider } from './passport-auth';
 
 export class HttpTransport implements Transport {
+	private authProvider: AuthProvider | null;
+
+	constructor(authProvider?: AuthProvider) {
+		this.authProvider = authProvider ?? null;
+	}
+
 	async fetch(path: string, init?: TransportRequestInit): Promise<TransportResponse> {
+		const authHeaders = this.authProvider ? await this.authProvider.getAuthHeaders() : {};
+
 		const response = await globalThis.fetch(apiUrl(path), {
 			method: init?.method ?? 'GET',
-			headers: init?.headers,
+			headers: {
+				...authHeaders,
+				...init?.headers
+			},
 			body: init?.body,
 			signal: init?.signal
 		});
@@ -27,7 +39,7 @@ export class HttpTransport implements Transport {
 	}
 
 	subscribe(path: string, options?: { signal?: AbortSignal }): TransportEventSource {
-		return new HttpEventSource(apiUrl(path), options?.signal);
+		return new HttpEventSource(apiUrl(path), options?.signal, this.authProvider);
 	}
 
 	resolveUrl(path: string): string {
@@ -40,21 +52,35 @@ export class HttpTransport implements Transport {
 }
 
 class HttpEventSource implements TransportEventSource {
-	private es: EventSource;
+	private es: EventSource | null = null;
 	private listeners = new Map<string, Map<(data: string) => void, (e: MessageEvent) => void>>();
+	private pendingListeners: { type: string; callback: (data: string) => void }[] = [];
 
-	constructor(url: string, signal?: AbortSignal) {
-		this.es = new EventSource(url);
-		signal?.addEventListener('abort', () => this.close());
+	constructor(url: string, signal?: AbortSignal, authProvider?: AuthProvider | null) {
+		if (authProvider) {
+			// EventSource doesn't support custom headers, so we append auth as query params
+			authProvider.getAuthQueryParams().then((params) => {
+				const separator = url.includes('?') ? '&' : '?';
+				this.es = new EventSource(`${url}${separator}${params}`);
+				signal?.addEventListener('abort', () => this.close());
+				// Attach any listeners that were added before the EventSource was ready
+				for (const { type, callback } of this.pendingListeners) {
+					this.addListenerToEs(type, callback);
+				}
+				this.pendingListeners = [];
+			});
+		} else {
+			this.es = new EventSource(url);
+			signal?.addEventListener('abort', () => this.close());
+		}
 	}
 
 	addEventListener(type: string, callback: (data: string) => void): void {
-		const wrapper = (e: MessageEvent) => callback(e.data);
-		if (!this.listeners.has(type)) {
-			this.listeners.set(type, new Map());
+		if (this.es) {
+			this.addListenerToEs(type, callback);
+		} else {
+			this.pendingListeners.push({ type, callback });
 		}
-		this.listeners.get(type)!.set(callback, wrapper);
-		this.es.addEventListener(type, wrapper);
 	}
 
 	removeEventListener(type: string, callback: (data: string) => void): void {
@@ -62,12 +88,21 @@ class HttpEventSource implements TransportEventSource {
 		if (!typeListeners) return;
 		const wrapper = typeListeners.get(callback);
 		if (wrapper) {
-			this.es.removeEventListener(type, wrapper);
+			this.es?.removeEventListener(type, wrapper);
 			typeListeners.delete(callback);
 		}
 	}
 
 	close(): void {
-		this.es.close();
+		this.es?.close();
+	}
+
+	private addListenerToEs(type: string, callback: (data: string) => void): void {
+		const wrapper = (e: MessageEvent) => callback(e.data);
+		if (!this.listeners.has(type)) {
+			this.listeners.set(type, new Map());
+		}
+		this.listeners.get(type)!.set(callback, wrapper);
+		this.es!.addEventListener(type, wrapper);
 	}
 }

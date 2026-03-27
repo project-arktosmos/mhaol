@@ -46,7 +46,12 @@ impl CatalogRepo {
         .ok()
     }
 
-    pub fn get_by_source(&self, source: &str, source_id: &str, kind: &str) -> Option<CatalogItemRow> {
+    pub fn get_by_source(
+        &self,
+        source: &str,
+        source_id: &str,
+        kind: &str,
+    ) -> Option<CatalogItemRow> {
         let conn = self.db.lock();
         conn.query_row(
             "SELECT id, kind, title, sort_title, year, overview, poster_url, backdrop_url,
@@ -103,7 +108,13 @@ impl CatalogRepo {
         .unwrap_or(0)
     }
 
-    pub fn search(&self, query: &str, kind: Option<&str>, limit: i64, offset: i64) -> Vec<CatalogItemRow> {
+    pub fn search(
+        &self,
+        query: &str,
+        kind: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Vec<CatalogItemRow> {
         let conn = self.db.lock();
         let like = format!("%{}%", query.to_lowercase());
         if let Some(k) = kind {

@@ -42,7 +42,14 @@ impl RosterContactRepo {
         .collect()
     }
 
-    pub fn insert(&self, address: &str, name: &str, passport: Option<&str>, instance_type: Option<&str>, endorsement: Option<&str>) {
+    pub fn insert(
+        &self,
+        address: &str,
+        name: &str,
+        passport: Option<&str>,
+        instance_type: Option<&str>,
+        endorsement: Option<&str>,
+    ) {
         let conn = self.db.lock();
         conn.execute(
             "INSERT INTO roster_contacts (address, name, passport, instance_type, endorsement) VALUES (?1, ?2, ?3, ?4, ?5)
@@ -54,9 +61,12 @@ impl RosterContactRepo {
 
     pub fn delete(&self, address: &str) -> bool {
         let conn = self.db.lock();
-        conn.execute("DELETE FROM roster_contacts WHERE address = ?1", params![address])
-            .map(|n| n > 0)
-            .unwrap_or(false)
+        conn.execute(
+            "DELETE FROM roster_contacts WHERE address = ?1",
+            params![address],
+        )
+        .map(|n| n > 0)
+        .unwrap_or(false)
     }
 }
 
@@ -72,7 +82,13 @@ mod tests {
 
         assert!(repo.get_all().is_empty());
 
-        repo.insert("0xabc123", "Alice", Some("{\"raw\":\"test\"}"), Some("client"), None);
+        repo.insert(
+            "0xabc123",
+            "Alice",
+            Some("{\"raw\":\"test\"}"),
+            Some("client"),
+            None,
+        );
         let contacts = repo.get_all();
         assert_eq!(contacts.len(), 1);
         assert_eq!(contacts[0].name, "Alice");
@@ -81,7 +97,13 @@ mod tests {
         assert!(contacts[0].endorsement.is_none());
 
         // Upsert with endorsement
-        repo.insert("0xabc123", "Alice Updated", None, Some("server"), Some("{\"endorserAddress\":\"0x123\"}"));
+        repo.insert(
+            "0xabc123",
+            "Alice Updated",
+            None,
+            Some("server"),
+            Some("{\"endorserAddress\":\"0x123\"}"),
+        );
         let contacts = repo.get_all();
         assert_eq!(contacts.len(), 1);
         assert_eq!(contacts[0].name, "Alice Updated");

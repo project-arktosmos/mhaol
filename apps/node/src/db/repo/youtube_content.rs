@@ -212,7 +212,16 @@ mod tests {
     #[test]
     fn test_upsert_and_get() {
         let repo = make_repo();
-        repo.upsert("vid1", "Title 1", Some("http://thumb.jpg"), Some(120), Some("Channel"), Some("ch1"), None, None);
+        repo.upsert(
+            "vid1",
+            "Title 1",
+            Some("http://thumb.jpg"),
+            Some(120),
+            Some("Channel"),
+            Some("ch1"),
+            None,
+            None,
+        );
 
         let row = repo.get("vid1").unwrap();
         assert_eq!(row.title, "Title 1");
@@ -232,8 +241,26 @@ mod tests {
     #[test]
     fn test_upsert_updates_existing() {
         let repo = make_repo();
-        repo.upsert("vid1", "Title 1", Some("http://thumb.jpg"), Some(120), None, None, None, None);
-        repo.upsert("vid1", "Title Updated", None, None, Some("New Channel"), None, None, None);
+        repo.upsert(
+            "vid1",
+            "Title 1",
+            Some("http://thumb.jpg"),
+            Some(120),
+            None,
+            None,
+            None,
+            None,
+        );
+        repo.upsert(
+            "vid1",
+            "Title Updated",
+            None,
+            None,
+            Some("New Channel"),
+            None,
+            None,
+            None,
+        );
 
         let row = repo.get("vid1").unwrap();
         assert_eq!(row.title, "Title Updated");

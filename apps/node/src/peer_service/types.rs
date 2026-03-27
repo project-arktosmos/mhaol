@@ -18,6 +18,10 @@ pub struct PassportPayload {
     pub address: String,
     pub instance_type: String,
     pub signaling_url: String,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_picture_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +46,9 @@ pub struct DataChannelEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum ContactMessage {
-    ContactRequest { passport: PassportData },
+    ContactRequest {
+        passport: PassportData,
+    },
     ContactAccept {
         passport: PassportData,
         #[serde(skip_serializing_if = "Option::is_none")]

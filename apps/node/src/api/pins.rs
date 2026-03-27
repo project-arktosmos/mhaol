@@ -1,11 +1,5 @@
 use crate::AppState;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use serde::Deserialize;
 
 pub fn router() -> Router<AppState> {
@@ -31,10 +25,7 @@ struct AddPinBody {
     label: String,
 }
 
-async fn add_pin(
-    State(state): State<AppState>,
-    Json(body): Json<AddPinBody>,
-) -> impl IntoResponse {
+async fn add_pin(State(state): State<AppState>, Json(body): Json<AddPinBody>) -> impl IntoResponse {
     state
         .pins
         .insert(&body.service, &body.service_id, &body.label);

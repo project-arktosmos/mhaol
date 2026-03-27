@@ -19,6 +19,11 @@
 	let copiedAddress = $state<string | null>(null);
 	let copiedPassport = $state<string | null>(null);
 
+	let editingProfile = $state<string | null>(null);
+	let editUsername = $state('');
+	let editProfilePicture = $state('');
+	let savingProfile = $state(false);
+
 	onMount(() => {
 		loadIdentities();
 	});
@@ -132,6 +137,37 @@
 		URL.revokeObjectURL(url);
 	}
 
+	function startEditProfile(identity: Identity) {
+		editingProfile = identity.name;
+		editUsername = identity.username ?? '';
+		editProfilePicture = identity.profilePictureUrl ?? '';
+	}
+
+	async function saveProfile() {
+		if (!editingProfile) return;
+		savingProfile = true;
+		error = null;
+		try {
+			const body: Record<string, string> = { username: editUsername };
+			if (editProfilePicture) body.profilePictureUrl = editProfilePicture;
+			const res = await fetch(
+				apiUrl(`/api/identities/${encodeURIComponent(editingProfile)}/profile`),
+				{
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(body)
+				}
+			);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			editingProfile = null;
+			await loadIdentities();
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		} finally {
+			savingProfile = false;
+		}
+	}
+
 	async function copyPassport(passport: string) {
 		try {
 			const text = prettyJson(passport);
@@ -215,6 +251,9 @@
 					<div class="flex items-center gap-4">
 						<div class="min-w-0 flex-1">
 							<div class="font-mono text-sm font-semibold">{identity.name}</div>
+							{#if identity.username}
+								<div class="text-xs opacity-60">{identity.username}</div>
+							{/if}
 							<div class="mt-1 flex items-center gap-2">
 								<code class="text-xs break-all opacity-70">
 									{identity.address}
@@ -229,6 +268,9 @@
 							</div>
 						</div>
 						<div class="flex gap-1">
+							<button class="btn btn-ghost btn-xs" onclick={() => startEditProfile(identity)}>
+								Profile
+							</button>
 							<button
 								class="btn btn-ghost btn-xs"
 								onclick={() => (confirmTarget = { name: identity.name, action: 'regenerate' })}
@@ -243,6 +285,39 @@
 							</button>
 						</div>
 					</div>
+
+					{#if editingProfile === identity.name}
+						<div class="flex flex-col gap-2 rounded-lg bg-base-300 p-3">
+							<input
+								type="text"
+								class="input-bordered input input-sm w-full"
+								placeholder="Username"
+								bind:value={editUsername}
+							/>
+							<input
+								type="url"
+								class="input-bordered input input-sm w-full"
+								placeholder="Profile picture URL"
+								bind:value={editProfilePicture}
+							/>
+							<div class="flex justify-end gap-1">
+								<button class="btn btn-ghost btn-xs" onclick={() => (editingProfile = null)}
+									>Cancel</button
+								>
+								<button
+									class={classNames('btn btn-xs btn-primary', { loading: savingProfile })}
+									disabled={savingProfile || !editUsername.trim()}
+									onclick={saveProfile}
+								>
+									{#if savingProfile}
+										<span class="loading loading-xs loading-spinner"></span>
+									{:else}
+										Save
+									{/if}
+								</button>
+							</div>
+						</div>
+					{/if}
 
 					<div>
 						<div class="flex items-center justify-between">

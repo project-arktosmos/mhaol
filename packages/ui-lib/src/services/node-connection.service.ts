@@ -5,6 +5,8 @@ import { setApiBase } from 'ui-lib/lib/api-base';
 import { setTransport } from 'ui-lib/transport/transport-context';
 import { HttpTransport } from 'ui-lib/transport/http-transport';
 import { WebRtcTransport } from 'ui-lib/transport/webrtc-transport';
+import { WsTransport } from 'ui-lib/transport/ws-transport';
+import { PassportAuthProvider } from 'ui-lib/transport/passport-auth';
 import { signalingChatService } from 'ui-lib/services/signaling-chat.service';
 import { clientIdentityService } from 'ui-lib/services/client-identity.service';
 import { contactHandshakeService } from 'webrtc/service';
@@ -19,6 +21,7 @@ export type NodeConnectionPhase =
 	| 'peer-discovery'
 	| 'webrtc'
 	| 'handshake'
+	| 'authenticating'
 	| 'ready'
 	| 'error';
 
@@ -36,6 +39,7 @@ class NodeConnectionService {
 	state: Writable<NodeConnectionState> = writable(initialState);
 
 	private webRtcTransport: WebRtcTransport | null = null;
+	private wsTransport: WsTransport | null = null;
 	private unsubscribers: (() => void)[] = [];
 
 	async connectHttp(config: ConnectionConfig): Promise<void> {
@@ -43,13 +47,87 @@ class NodeConnectionService {
 
 		try {
 			setApiBase(config.serverUrl);
-			setTransport(new HttpTransport());
 
-			// Verify connectivity with a simple health check
+			// Verify connectivity with a simple health check (no auth required)
 			const response = await globalThis.fetch(`${config.serverUrl}/api/health`);
 			if (!response.ok) {
 				throw new Error(`Server returned HTTP ${response.status}`);
 			}
+
+			// Initialize identity for per-request auth
+			this.state.set({ phase: 'authenticating', error: null });
+			await clientIdentityService.initialize(config.signalingUrl);
+			const identityState = get(clientIdentityService.state);
+			if (!identityState.identity) {
+				throw new Error(identityState.error ?? 'Failed to initialize identity');
+			}
+
+			const { identity } = identityState;
+			const authProvider = new PassportAuthProvider(identity.address, (m) =>
+				clientIdentityService.signMessage(m)
+			);
+			setTransport(new HttpTransport(authProvider));
+
+			this.state.set({ phase: 'ready', error: null });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Connection failed';
+			this.state.set({ phase: 'error', error: message });
+			throw err;
+		}
+	}
+
+	async connectWs(config: ConnectionConfig): Promise<void> {
+		if (!browser) return;
+
+		this.state.set({ phase: 'connecting', error: null });
+
+		try {
+			// Initialize identity for WS auth
+			await clientIdentityService.initialize(config.signalingUrl);
+			const identityState = get(clientIdentityService.state);
+			if (!identityState.identity) {
+				throw new Error(identityState.error ?? 'Failed to initialize identity');
+			}
+
+			const { identity } = identityState;
+
+			// Build auth params for WS upgrade
+			this.state.set({ phase: 'authenticating', error: null });
+			const timestamp = String(Date.now());
+			const message = `mhaol-rpc-auth:${timestamp}`;
+			const signature = await clientIdentityService.signMessage(message);
+
+			const params = new URLSearchParams({
+				address: identity.address,
+				signature,
+				timestamp
+			});
+
+			// Convert HTTP URL to WS URL
+			const wsUrl = config.serverUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+
+			const ws = new WebSocket(`${wsUrl}/api/rpc?${params.toString()}`);
+
+			await new Promise<void>((resolve, reject) => {
+				const timeout = setTimeout(() => {
+					ws.close();
+					reject(new Error('WebSocket connection timed out'));
+				}, 30_000);
+
+				ws.onopen = () => {
+					clearTimeout(timeout);
+					resolve();
+				};
+				ws.onerror = () => {
+					clearTimeout(timeout);
+					reject(new Error('WebSocket connection failed'));
+				};
+			});
+
+			setApiBase(config.serverUrl);
+			const transport = new WsTransport(ws, config.serverUrl);
+			this.wsTransport = transport;
+			setTransport(transport);
 
 			this.state.set({ phase: 'ready', error: null });
 		} catch (err) {
@@ -163,6 +241,11 @@ class NodeConnectionService {
 		if (this.webRtcTransport) {
 			this.webRtcTransport.destroy();
 			this.webRtcTransport = null;
+		}
+
+		if (this.wsTransport) {
+			this.wsTransport.destroy();
+			this.wsTransport = null;
 		}
 
 		signalingChatService.onRpcMessage = null;

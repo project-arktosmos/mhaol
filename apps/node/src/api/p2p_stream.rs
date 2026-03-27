@@ -1,11 +1,5 @@
 use crate::AppState;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

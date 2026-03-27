@@ -95,8 +95,7 @@ export const movieStrategy: CatalogKindStrategy = {
 		);
 		return results
 			.filter(
-				(r): r is PromiseFulfilledResult<TMDBMovie> =>
-					r.status === 'fulfilled' && r.value != null
+				(r): r is PromiseFulfilledResult<TMDBMovie> => r.status === 'fulfilled' && r.value != null
 			)
 			.flatMap((r) => toMovieCatalogItems([r.value]));
 	}

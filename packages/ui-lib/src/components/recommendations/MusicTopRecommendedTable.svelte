@@ -1,0 +1,83 @@
+<script lang="ts">
+	import type { TopRecommendedArtist } from 'ui-lib/types/music-recommendations.type';
+	import { musicRecommendationsService } from 'ui-lib/services/music-recommendations.service';
+	import classNames from 'classnames';
+
+	interface Props {
+		selectedIndex?: number | null;
+		labelMap?: Map<string, string>;
+		onrowclick?: (index: number, artist: TopRecommendedArtist) => void;
+	}
+
+	let { selectedIndex = null, labelMap, onrowclick }: Props = $props();
+
+	let artists = $state<TopRecommendedArtist[]>([]);
+	let loading = $state(false);
+
+	export async function refresh() {
+		loading = true;
+		try {
+			artists = await musicRecommendationsService.getTop();
+		} catch {
+			/* best-effort */
+		} finally {
+			loading = false;
+		}
+	}
+
+	export function isLoading(): boolean {
+		return loading;
+	}
+</script>
+
+{#if loading && artists.length === 0}
+	<div class="flex justify-center py-4">
+		<span class="loading loading-sm loading-spinner"></span>
+	</div>
+{:else if artists.length === 0}
+	<p class="py-4 text-center text-xs text-base-content/50">No data yet</p>
+{:else}
+	{@const lvls = artists[0]?.levels ?? []}
+	<table class="table table-xs">
+		<thead>
+			<tr>
+				<th>#</th>
+				<th>Artist</th>
+				{#if labelMap}
+					<th class="text-center"></th>
+				{/if}
+				{#each lvls as lvl}
+					<th class="text-center" colspan="2">L{lvl}</th>
+				{/each}
+				<th class="text-center">Score</th>
+			</tr>
+		</thead>
+		<tbody>
+			{#each artists as artist, i (artist.mbid)}
+				<tr
+					class={classNames({
+						'cursor-pointer': !!onrowclick,
+						'bg-primary/20': selectedIndex === i,
+						'hover:bg-base-200': selectedIndex !== i && !!onrowclick
+					})}
+					onclick={() => onrowclick?.(i, artist)}
+				>
+					<td class="text-base-content/40">{i + 1}</td>
+					<td class="max-w-48 truncate">{artist.name ?? '—'}</td>
+					{#if labelMap}
+						<td class="text-center">{labelMap.get(`${artist.mbid}:${artist.type}`) ?? ''}</td>
+					{/if}
+					{#each lvls as lvl}
+						{@const cnt = artist.levelCounts[lvl] ?? 0}
+						{@const pct = artist.levelPercentages[lvl] ?? 0}
+						<td class="text-center">{cnt || ''}</td>
+						<td class="text-center text-base-content/40">
+							{cnt ? `${pct}%` : ''}
+						</td>
+					{/each}
+					<td class="text-center font-semibold">{artist.score}</td>
+				</tr>
+			{/each}
+		</tbody>
+	</table>
+{/if}

@@ -40,10 +40,7 @@ fn serve_file(path: &str, file: &rust_embed::EmbeddedFile) -> Response {
 
     // Immutable assets get long cache headers (SvelteKit hashes filenames)
     if path.contains("/immutable/") {
-        builder = builder.header(
-            header::CACHE_CONTROL,
-            "public, max-age=31536000, immutable",
-        );
+        builder = builder.header(header::CACHE_CONTROL, "public, max-age=31536000, immutable");
     } else {
         builder = builder.header(header::CACHE_CONTROL, "public, max-age=60");
     }

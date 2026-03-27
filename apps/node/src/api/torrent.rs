@@ -28,12 +28,27 @@ pub fn router() -> Router<AppState> {
         .route("/torrents/{info_hash}/files", get(list_torrent_files))
         .route("/fetch-cache/hashes", get(list_fetch_cache_hashes))
         .route("/fetch-cache/summaries", get(list_fetch_cache_summaries))
-        .route("/fetch-cache/{tmdb_id}", get(get_fetch_cache).delete(delete_fetch_cache))
-        .route("/fetch-cache", get(list_fetch_cache_ids).post(save_fetch_cache))
-        .route("/tv-fetch-cache/{tmdb_id}", get(get_tv_fetch_cache).delete(delete_tv_fetch_cache))
+        .route(
+            "/fetch-cache/{tmdb_id}",
+            get(get_fetch_cache).delete(delete_fetch_cache),
+        )
+        .route(
+            "/fetch-cache",
+            get(list_fetch_cache_ids).post(save_fetch_cache),
+        )
+        .route(
+            "/tv-fetch-cache/{tmdb_id}",
+            get(get_tv_fetch_cache).delete(delete_tv_fetch_cache),
+        )
         .route("/tv-fetch-cache", post(save_tv_fetch_cache))
-        .route("/music-fetch-cache/hashes", get(list_music_fetch_cache_hashes))
-        .route("/music-fetch-cache/{musicbrainz_id}", get(get_music_fetch_cache).delete(delete_music_fetch_cache))
+        .route(
+            "/music-fetch-cache/hashes",
+            get(list_music_fetch_cache_hashes),
+        )
+        .route(
+            "/music-fetch-cache/{musicbrainz_id}",
+            get(get_music_fetch_cache).delete(delete_music_fetch_cache),
+        )
         .route("/music-fetch-cache", post(save_music_fetch_cache))
 }
 
@@ -210,13 +225,15 @@ async fn remove_torrent(
     Query(query): Query<RemoveQuery>,
 ) -> impl IntoResponse {
     // Grab output_path before removing, so we can delete files if requested
-    let output_path = state.downloads.get(&info_hash).and_then(|row| {
-        match (&row.output_path, &row.name) {
-            (Some(p), name) if !name.is_empty() => Some(format!("{}/{}", p, name)),
-            (Some(p), _) => Some(p.clone()),
-            _ => None,
-        }
-    });
+    let output_path =
+        state
+            .downloads
+            .get(&info_hash)
+            .and_then(|row| match (&row.output_path, &row.name) {
+                (Some(p), name) if !name.is_empty() => Some(format!("{}/{}", p, name)),
+                (Some(p), _) => Some(p.clone()),
+                _ => None,
+            });
 
     match state.torrent_manager.list().await {
         Ok(torrents) => {
@@ -469,9 +486,7 @@ struct SearchResult {
     magnet_uri: String,
 }
 
-async fn search_torrents(
-    Query(query): Query<SearchQuery>,
-) -> impl IntoResponse {
+async fn search_torrents(Query(query): Query<SearchQuery>) -> impl IntoResponse {
     let q = match &query.q {
         Some(q) if !q.is_empty() => q,
         _ => {
@@ -600,9 +615,7 @@ async fn list_fetch_cache_hashes(State(state): State<AppState>) -> impl IntoResp
         .torrent_fetch_cache
         .get_all_info_hashes()
         .into_iter()
-        .map(|(tmdb_id, info_hash)| {
-            serde_json::json!({ "tmdbId": tmdb_id, "infoHash": info_hash })
-        })
+        .map(|(tmdb_id, info_hash)| serde_json::json!({ "tmdbId": tmdb_id, "infoHash": info_hash }))
         .collect();
     Json(entries)
 }
@@ -754,11 +767,9 @@ async fn save_music_fetch_cache(
     Json(body): Json<SaveMusicFetchCacheBody>,
 ) -> impl IntoResponse {
     let candidate_json = serde_json::to_string(&body.candidate).unwrap_or_default();
-    state.music_torrent_fetch_cache.upsert(
-        &body.musicbrainz_id,
-        &body.scope,
-        &candidate_json,
-    );
+    state
+        .music_torrent_fetch_cache
+        .upsert(&body.musicbrainz_id, &body.scope, &candidate_json);
     StatusCode::CREATED
 }
 
@@ -766,7 +777,9 @@ async fn delete_music_fetch_cache(
     State(state): State<AppState>,
     Path(musicbrainz_id): Path<String>,
 ) -> impl IntoResponse {
-    state.music_torrent_fetch_cache.delete_for_id(&musicbrainz_id);
+    state
+        .music_torrent_fetch_cache
+        .delete_for_id(&musicbrainz_id);
     StatusCode::NO_CONTENT
 }
 

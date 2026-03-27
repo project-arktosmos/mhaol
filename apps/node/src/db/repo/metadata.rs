@@ -147,17 +147,11 @@ mod tests {
             repo.get_value("name"),
             Some(serde_json::Value::String("test".to_string()))
         );
-        assert_eq!(
-            repo.get_value("count"),
-            Some(serde_json::Value::from(42.0))
-        );
+        assert_eq!(repo.get_value("count"), Some(serde_json::Value::from(42.0)));
         assert_eq!(
             repo.get_value("enabled"),
             Some(serde_json::Value::Bool(true))
         );
-        assert_eq!(
-            repo.get_value("config"),
-            Some(serde_json::json!({"a": 1}))
-        );
+        assert_eq!(repo.get_value("config"), Some(serde_json::json!({"a": 1})));
     }
 }

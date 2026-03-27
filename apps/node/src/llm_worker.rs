@@ -1,8 +1,11 @@
 use crate::AppState;
 use futures_util::StreamExt;
-use mhaol_llm::{build_chat_prompt, list_models, load_model_blocking, run_inference_blocking, ChatMessage, LlmTokenEvent};
+use mhaol_llm::{
+    build_chat_prompt, list_models, load_model_blocking, run_inference_blocking, ChatMessage,
+    LlmTokenEvent,
+};
 use tokio::io::AsyncWriteExt;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 const DEFAULT_MODEL_REPO: &str = "Qwen/Qwen2.5-1.5B-Instruct-GGUF";
 const DEFAULT_MODEL_FILE: &str = "qwen2.5-1.5b-instruct-q4_k_m.gguf";
@@ -30,7 +33,10 @@ async fn download_default_model(state: &AppState) -> Result<String, String> {
     let temp_path = downloads_dir.join(DEFAULT_MODEL_FILE);
 
     let client = reqwest::Client::new();
-    let response = client.get(&url).send().await
+    let response = client
+        .get(&url)
+        .send()
+        .await
         .map_err(|e| format!("Download request failed: {}", e))?;
 
     if !response.status().is_success() {
@@ -44,7 +50,8 @@ async fn download_default_model(state: &AppState) -> Result<String, String> {
         total_bytes as f64 / 1_048_576.0
     );
 
-    let mut file = tokio::fs::File::create(&temp_path).await
+    let mut file = tokio::fs::File::create(&temp_path)
+        .await
         .map_err(|e| format!("Failed to create temp file: {}", e))?;
 
     let mut byte_stream = response.bytes_stream();
@@ -53,7 +60,8 @@ async fn download_default_model(state: &AppState) -> Result<String, String> {
 
     while let Some(chunk_result) = byte_stream.next().await {
         let chunk = chunk_result.map_err(|e| format!("Download stream error: {}", e))?;
-        file.write_all(&chunk).await
+        file.write_all(&chunk)
+            .await
             .map_err(|e| format!("Failed to write chunk: {}", e))?;
         downloaded += chunk.len() as u64;
 
@@ -63,12 +71,18 @@ async fn download_default_model(state: &AppState) -> Result<String, String> {
             } else {
                 0.0
             };
-            info!("[llm-worker] Download progress: {:.1}% ({:.1} MB)", pct, downloaded as f64 / 1_048_576.0);
+            info!(
+                "[llm-worker] Download progress: {:.1}% ({:.1} MB)",
+                pct,
+                downloaded as f64 / 1_048_576.0
+            );
             last_log = std::time::Instant::now();
         }
     }
 
-    file.flush().await.map_err(|e| format!("Flush failed: {}", e))?;
+    file.flush()
+        .await
+        .map_err(|e| format!("Flush failed: {}", e))?;
 
     std::fs::rename(&temp_path, &dest_path)
         .map_err(|e| format!("Failed to move downloaded model: {}", e))?;
@@ -109,7 +123,9 @@ async fn ensure_model_loaded(state: &AppState) {
 
     match tokio::task::spawn_blocking(move || load_model_blocking(model_path)).await {
         Ok(Ok(model)) => {
-            state.llm_engine.set_model(std::sync::Arc::new(model), file_name.clone());
+            state
+                .llm_engine
+                .set_model(std::sync::Arc::new(model), file_name.clone());
             info!("[llm-worker] Model {} loaded", file_name);
         }
         Ok(Err(e)) => warn!("[llm-worker] Failed to load model: {}", e),
@@ -131,13 +147,18 @@ pub async fn run_llm_worker(state: AppState) {
                 // Try to load a model if one appeared since last check (e.g. user downloaded one)
                 ensure_model_loaded(&state).await;
 
-                info!("[llm-worker] Processing task {} ({})", task.id, task.task_type);
+                info!(
+                    "[llm-worker] Processing task {} ({})",
+                    task.id, task.task_type
+                );
                 match task.task_type.as_str() {
                     "llm:analyze-torrent" => process_analyze_torrent(&state, &task).await,
                     "llm:extract-show-info" => process_extract_show_info(&state, &task).await,
                     other => {
                         warn!("[llm-worker] Unknown task type: {}", other);
-                        state.queue.fail(&task.id, &format!("Unknown task type: {}", other));
+                        state
+                            .queue
+                            .fail(&task.id, &format!("Unknown task type: {}", other));
                     }
                 }
             }
@@ -159,7 +180,9 @@ async fn process_analyze_torrent(state: &AppState, task: &mhaol_queue::QueueTask
     let prompt_template = payload["promptTemplate"].as_str().unwrap_or("");
 
     if torrent_name.is_empty() || media_title.is_empty() {
-        state.queue.fail(&task.id, "Missing torrentName or mediaTitle in payload");
+        state
+            .queue
+            .fail(&task.id, "Missing torrentName or mediaTitle in payload");
         return;
     }
 
@@ -200,7 +223,9 @@ async fn process_analyze_torrent(state: &AppState, task: &mhaol_queue::QueueTask
     let model = match state.llm_engine.get_model() {
         Ok(m) => m,
         Err(e) => {
-            state.queue.fail(&task.id, &format!("Failed to get model: {}", e));
+            state
+                .queue
+                .fail(&task.id, &format!("Failed to get model: {}", e));
             return;
         }
     };
@@ -236,7 +261,10 @@ async fn process_analyze_torrent(state: &AppState, task: &mhaol_queue::QueueTask
             state.queue.complete(&task.id, parsed);
         }
         None => {
-            warn!("[llm-worker] Task {} — could not parse JSON from LLM output", task.id);
+            warn!(
+                "[llm-worker] Task {} — could not parse JSON from LLM output",
+                task.id
+            );
             state.queue.complete(
                 &task.id,
                 serde_json::json!({
@@ -279,13 +307,16 @@ async fn process_extract_show_info(state: &AppState, task: &mhaol_queue::QueueTa
         content: prompt_text,
     }];
 
-    let system_prompt = "You extract structured metadata from media folder names. Respond in JSON only.";
+    let system_prompt =
+        "You extract structured metadata from media folder names. Respond in JSON only.";
     let prompt = build_chat_prompt(&messages, system_prompt);
 
     let model = match state.llm_engine.get_model() {
         Ok(m) => m,
         Err(e) => {
-            state.queue.fail(&task.id, &format!("Failed to get model: {}", e));
+            state
+                .queue
+                .fail(&task.id, &format!("Failed to get model: {}", e));
             return;
         }
     };
@@ -320,11 +351,17 @@ async fn process_extract_show_info(state: &AppState, task: &mhaol_queue::QueueTa
 
     match json_result {
         Some(parsed) if parsed.get("showName").and_then(|v| v.as_str()).is_some() => {
-            info!("[llm-worker] Task {} completed: extracted {:?}", task.id, parsed);
+            info!(
+                "[llm-worker] Task {} completed: extracted {:?}",
+                task.id, parsed
+            );
             state.queue.complete(&task.id, parsed);
         }
         _ => {
-            warn!("[llm-worker] Task {} — could not parse show info, using raw name", task.id);
+            warn!(
+                "[llm-worker] Task {} — could not parse show info, using raw name",
+                task.id
+            );
             state.queue.complete(
                 &task.id,
                 serde_json::json!({ "showName": folder_name, "year": null, "season": null }),

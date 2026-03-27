@@ -1,34 +1,41 @@
 <script lang="ts">
-	import { onMount, type Snippet } from 'svelte';
+	import { onMount, tick, type Snippet } from 'svelte';
 	import { get } from 'svelte/store';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import { nodeConnectionService } from 'ui-lib/services/node-connection.service';
-	import { parseConnectUrl, clearConnectParams } from 'ui-lib/services/connect-url.service';
 	import SetupModalContent from './SetupModalContent.svelte';
 
 	let {
-		children
+		children,
+		onready
 	}: {
 		children?: Snippet;
+		onready?: () => void | Promise<void>;
 	} = $props();
 
 	const configStore = connectionConfigService.store;
 	let configured = $derived($configStore !== null);
 
-	let reconnecting = $state(false);
+	let reconnecting = $state(connectionConfigService.isConfigured());
 	let reconnectError = $state<string | null>(null);
-
 	function connectWith(config: import('ui-lib/types/connection-config.type').ConnectionConfig) {
 		reconnecting = true;
-		const promise =
-			config.transportMode === 'http'
-				? nodeConnectionService.connectHttp(config)
-				: nodeConnectionService.connectWebRtc(config);
+		let promise: Promise<void>;
+
+		if (config.transportMode === 'ws') {
+			promise = nodeConnectionService.connectWs(config);
+		} else if (config.transportMode === 'webrtc') {
+			promise = nodeConnectionService.connectWebRtc(config);
+		} else {
+			promise = nodeConnectionService.connectHttp(config);
+		}
 
 		promise
-			.then(() => {
+			.then(async () => {
 				reconnecting = false;
 				connectionConfigService.save(config);
+				await tick();
+				await onready?.();
 			})
 			.catch((err) => {
 				reconnecting = false;
@@ -38,22 +45,16 @@
 	}
 
 	onMount(() => {
-		// URL params take priority over saved config
-		const urlConfig = parseConnectUrl();
-		if (urlConfig) {
-			clearConnectParams();
-			connectWith(urlConfig);
-			return;
-		}
-
 		const config = get(configStore);
 		if (config) {
 			connectWith(config);
 		}
 	});
 
-	function handleConnected() {
-		// Config is saved by SetupModalContent — children will now render
+	async function handleConnected() {
+		// Config is saved by SetupModalContent — wait for children to render, then re-fetch with auth
+		await tick();
+		await onready?.();
 	}
 </script>
 

@@ -50,7 +50,11 @@ async fn channel_subscribe(
 ) -> impl IntoResponse {
     use crate::db::repo::youtube_channel::YouTubeChannelRow;
     if payload.id.is_empty() || payload.handle.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "id and handle are required"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "id and handle are required"})),
+        )
+            .into_response();
     }
     let row = YouTubeChannelRow {
         id: payload.id,
@@ -68,10 +72,7 @@ async fn channel_subscribe(
 
 /// Fetch YouTube oEmbed data for a video ID, using the cache if available.
 /// On cache miss, fetches from YouTube and caches the result.
-pub async fn fetch_and_cache_oembed(
-    db: &DbPool,
-    video_id: &str,
-) -> Option<serde_json::Value> {
+pub async fn fetch_and_cache_oembed(db: &DbPool, video_id: &str) -> Option<serde_json::Value> {
     // Check cache
     {
         let conn = db.lock();
@@ -283,9 +284,7 @@ fn parse_channel_browse(
     } else {
         // Initial: contents.twoColumnBrowseResultsRenderer.tabs[].tabRenderer.content
         //          .richGridRenderer.contents
-        let tabs = data.pointer(
-            "/contents/twoColumnBrowseResultsRenderer/tabs",
-        );
+        let tabs = data.pointer("/contents/twoColumnBrowseResultsRenderer/tabs");
         tabs.and_then(|t| t.as_array())
             .and_then(|tabs| {
                 tabs.iter().find(|tab| {
@@ -311,8 +310,8 @@ fn parse_channel_browse(
         }
 
         // Continuation token
-        if let Some(token) = item
-            .pointer("/continuationItemRenderer/continuationEndpoint/continuationCommand/token")
+        if let Some(token) =
+            item.pointer("/continuationItemRenderer/continuationEndpoint/continuationCommand/token")
         {
             continuation = token.as_str().map(String::from);
         }
@@ -562,7 +561,13 @@ async fn fetch_channel_data_from_page(handle: &str) -> Result<(String, String, S
         .map_err(|e| format!("Failed to read channel page: {}", e))?;
 
     let avatar = extract_og_meta(&html, "og:image")
-        .map(|s| if s.starts_with("//") { format!("https:{}", s) } else { s })
+        .map(|s| {
+            if s.starts_with("//") {
+                format!("https:{}", s)
+            } else {
+                s
+            }
+        })
         .unwrap_or_default();
 
     let channel_id = extract_channel_id_from_html(&html).unwrap_or_default();
@@ -572,8 +577,16 @@ async fn fetch_channel_data_from_page(handle: &str) -> Result<(String, String, S
         "[channel-page] handle={} id={} avatar={} subscribers={}",
         handle,
         channel_id,
-        if avatar.is_empty() { "<empty>" } else { &avatar },
-        if subscriber_text.is_empty() { "<empty>" } else { &subscriber_text }
+        if avatar.is_empty() {
+            "<empty>"
+        } else {
+            &avatar
+        },
+        if subscriber_text.is_empty() {
+            "<empty>"
+        } else {
+            &subscriber_text
+        }
     );
 
     Ok((channel_id, avatar, subscriber_text))
@@ -587,14 +600,21 @@ fn extract_og_meta(html: &str, property: &str) -> Option<String> {
     let val = &rest[c..];
     let end = val.find('"')?;
     let s = &val[..end];
-    if s.is_empty() { None } else { Some(s.to_string()) }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.to_string())
+    }
 }
 
 fn extract_channel_id_from_html(html: &str) -> Option<String> {
     // RSS feed link: feeds/videos.xml?channel_id=UCxxxxxx
     if let Some(start) = html.find("feeds/videos.xml?channel_id=UC") {
         let after = &html[start + "feeds/videos.xml?channel_id=".len()..];
-        let id: String = after.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '-').collect();
+        let id: String = after
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+            .collect();
         if id.len() >= 20 {
             return Some(id);
         }
@@ -602,7 +622,10 @@ fn extract_channel_id_from_html(html: &str) -> Option<String> {
     // ytInitialData externalId
     if let Some(start) = html.find("\"externalId\":\"UC") {
         let after = &html[start + "\"externalId\":\"".len()..];
-        let id: String = after.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '-').collect();
+        let id: String = after
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+            .collect();
         if id.len() >= 20 {
             return Some(id);
         }
@@ -696,7 +719,9 @@ async fn channel_meta(
                 .into_response();
             }
             // Partial cache: enrich from channel page, fall back to what we have
-            if let Ok((new_id, new_avatar, new_sub)) = fetch_channel_data_from_page(&query.handle).await {
+            if let Ok((new_id, new_avatar, new_sub)) =
+                fetch_channel_data_from_page(&query.handle).await
+            {
                 if !new_id.is_empty() || !new_avatar.is_empty() || !new_sub.is_empty() {
                     let conn = state.db.lock();
                     let _ = conn.execute(
@@ -706,7 +731,11 @@ async fn channel_meta(
                         rusqlite::params![new_id, new_avatar, new_sub, query.handle],
                     );
                     drop(conn);
-                    let final_id = if !new_id.is_empty() { new_id } else { channel_id.clone() };
+                    let final_id = if !new_id.is_empty() {
+                        new_id
+                    } else {
+                        channel_id.clone()
+                    };
                     return Json(ChannelMeta {
                         channel_id: final_id,
                         avatar: new_avatar,
@@ -728,16 +757,17 @@ async fn channel_meta(
     }
 
     // Not in DB at all — fetch from YouTube channel page
-    let (channel_id, avatar, subscriber_text) = match fetch_channel_data_from_page(&query.handle).await {
-        Ok(d) => d,
-        Err(e) => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(serde_json::json!({ "error": e })),
-            )
-                .into_response()
-        }
-    };
+    let (channel_id, avatar, subscriber_text) =
+        match fetch_channel_data_from_page(&query.handle).await {
+            Ok(d) => d,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(serde_json::json!({ "error": e })),
+                )
+                    .into_response()
+            }
+        };
 
     let description = String::new();
 
@@ -825,7 +855,11 @@ fn parse_rss_feed(xml: &str) -> (String, Vec<RssVideo>) {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
                 let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                let local = tag_name.split(':').next_back().unwrap_or(&tag_name).to_string();
+                let local = tag_name
+                    .split(':')
+                    .next_back()
+                    .unwrap_or(&tag_name)
+                    .to_string();
 
                 if local == "entry" {
                     in_entry = true;
@@ -843,9 +877,8 @@ fn parse_rss_feed(xml: &str) -> (String, Vec<RssVideo>) {
                         "statistics" => {
                             for attr in e.attributes().flatten() {
                                 if attr.key.as_ref() == b"views" {
-                                    views = String::from_utf8_lossy(&attr.value)
-                                        .parse()
-                                        .unwrap_or(0);
+                                    views =
+                                        String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
                                 }
                             }
                         }
@@ -873,10 +906,8 @@ fn parse_rss_feed(xml: &str) -> (String, Vec<RssVideo>) {
 
                 if local == "entry" && in_entry {
                     if !video_id.is_empty() {
-                        let thumbnail = format!(
-                            "https://i.ytimg.com/vi/{}/mqdefault.jpg",
-                            video_id
-                        );
+                        let thumbnail =
+                            format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", video_id);
                         let published_text = format_relative_date(&published);
                         let views_text = format_view_count(views);
 
@@ -1165,11 +1196,9 @@ async fn stream_content_subtitle(
     };
 
     match tokio::fs::read_to_string(&path).await {
-        Ok(content) => (
-            [(header::CONTENT_TYPE, "text/vtt; charset=utf-8")],
-            content,
-        )
-            .into_response(),
+        Ok(content) => {
+            ([(header::CONTENT_TYPE, "text/vtt; charset=utf-8")], content).into_response()
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -1188,20 +1217,15 @@ async fn fetch_content_subtitles(
     Json(body): Json<FetchSubtitlesBody>,
 ) -> impl IntoResponse {
     // Use content path if available, otherwise ytdl config output path
-    let dir_from_content = state
-        .youtube_content
-        .get(&youtube_id)
-        .and_then(|row| {
-            row.video_path
-                .as_deref()
-                .or(row.audio_path.as_deref())
-                .and_then(|p| std::path::Path::new(p).parent())
-                .map(|p| p.to_string_lossy().to_string())
-        });
-
-    let dir = dir_from_content.unwrap_or_else(|| {
-        state.ytdl_manager.get_config().output_path
+    let dir_from_content = state.youtube_content.get(&youtube_id).and_then(|row| {
+        row.video_path
+            .as_deref()
+            .or(row.audio_path.as_deref())
+            .and_then(|p| std::path::Path::new(p).parent())
+            .map(|p| p.to_string_lossy().to_string())
     });
+
+    let dir = dir_from_content.unwrap_or_else(|| state.ytdl_manager.get_config().output_path);
 
     match state
         .ytdl_manager

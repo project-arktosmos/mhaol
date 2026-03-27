@@ -71,8 +71,16 @@ async fn get_downloads(State(state): State<AppState>) -> impl IntoResponse {
                 error: row.error,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
-                download_speed: if is_torrent { Some(row.download_speed) } else { None },
-                upload_speed: if is_torrent { Some(row.upload_speed) } else { None },
+                download_speed: if is_torrent {
+                    Some(row.download_speed)
+                } else {
+                    None
+                },
+                upload_speed: if is_torrent {
+                    Some(row.upload_speed)
+                } else {
+                    None
+                },
                 peers: if is_torrent { Some(row.peers) } else { None },
                 seeds: if is_torrent { Some(row.seeds) } else { None },
                 eta: if is_torrent { row.eta } else { None },

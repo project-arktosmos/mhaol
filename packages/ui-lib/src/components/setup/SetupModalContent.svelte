@@ -10,7 +10,13 @@
 	} from 'ui-lib/services/node-connection.service';
 	import { generateRandomUsername } from 'ui-lib/utils/random-username';
 	import { toastService } from 'ui-lib/services/toast.service';
-	import { buildConnectUrl } from 'ui-lib/services/connect-url.service';
+	import {
+		buildInvite,
+		parseInvite,
+		extractInviteFromUrl,
+		clearInviteFromUrl
+	} from 'ui-lib/services/connect-invite.service';
+	import { blo } from 'blo';
 	import type { TransportMode } from 'ui-lib/types/connection-config.type';
 
 	let {
@@ -21,6 +27,9 @@
 		ondisconnect?: () => void;
 	} = $props();
 
+	const urlInvite = extractInviteFromUrl();
+	if (urlInvite) clearInviteFromUrl();
+
 	const defaults = connectionConfigService.defaults();
 	const existingConfig = connectionConfigService.get();
 
@@ -28,10 +37,14 @@
 	let displayName = $state(localIdentity.name);
 	let clientAddress = localIdentity.address;
 
+	type ConnectionTab = 'invite' | TransportMode;
+	let activeTab = $state<ConnectionTab>('invite');
 	let transportMode = $state<TransportMode>(existingConfig?.transportMode ?? 'http');
 	let serverUrl = $state(existingConfig?.serverUrl ?? defaults.serverUrl);
 	let serverAddress = $state(existingConfig?.serverAddress ?? defaults.serverAddress);
 	let signalingUrl = $state(existingConfig?.signalingUrl ?? defaults.signalingUrl);
+
+	let inviteInput = $state(urlInvite ?? '');
 
 	function handleNameChange(value: string) {
 		displayName = value;
@@ -86,10 +99,31 @@
 	}
 
 	let canConnect = $derived(
-		transportMode === 'http'
+		transportMode === 'http' || transportMode === 'ws'
 			? serverUrl.trim().length > 0
 			: serverAddress.trim().length > 0 && signalingUrl.trim().length > 0
 	);
+
+	let parsedInvite = $derived(inviteInput.trim() ? parseInvite(inviteInput.trim()) : null);
+	let canConnectInvite = $derived(parsedInvite !== null);
+
+	async function handleConnectInvite() {
+		if (!parsedInvite) return;
+
+		try {
+			if (parsedInvite.transportMode === 'http') {
+				await nodeConnectionService.connectHttp(parsedInvite);
+			} else if (parsedInvite.transportMode === 'ws') {
+				await nodeConnectionService.connectWs(parsedInvite);
+			} else {
+				await nodeConnectionService.connectWebRtc(parsedInvite);
+			}
+			connectionConfigService.save(parsedInvite);
+			onconnected();
+		} catch {
+			// Error is already in connState
+		}
+	}
 
 	async function handleConnect() {
 		const config = {
@@ -102,6 +136,8 @@
 		try {
 			if (transportMode === 'http') {
 				await nodeConnectionService.connectHttp(config);
+			} else if (transportMode === 'ws') {
+				await nodeConnectionService.connectWs(config);
 			} else {
 				await nodeConnectionService.connectWebRtc(config);
 			}
@@ -118,11 +154,22 @@
 		ondisconnect?.();
 	}
 
-	async function handleShare() {
+	let inviteBase64 = $derived(existingConfig ? btoa(buildInvite(existingConfig)) : '');
+
+	async function handleCopyInvite() {
 		if (!existingConfig) return;
-		const url = buildConnectUrl(existingConfig);
-		await navigator.clipboard.writeText(url);
-		toastService.success('Connection URL copied to clipboard');
+		const json = buildInvite(existingConfig);
+		await navigator.clipboard.writeText(json);
+		toastService.success('Invite copied to clipboard');
+	}
+
+	async function handleCopyInviteLink() {
+		if (!existingConfig) return;
+		const url = new URL(window.location.href);
+		url.search = '';
+		url.searchParams.set('invite', inviteBase64);
+		await navigator.clipboard.writeText(url.toString());
+		toastService.success('Invite link copied to clipboard');
 	}
 </script>
 
@@ -134,18 +181,30 @@
 
 	<!-- Connected status view -->
 	{#if connected && existingConfig}
-		<div class="flex items-center gap-2">
-			<span class="badge gap-1 badge-success">
-				<span class="h-2 w-2 rounded-full bg-success-content"></span>
-				Connected
-			</span>
-			<span class="badge badge-outline badge-sm">
-				{existingConfig.transportMode.toUpperCase()}
-			</span>
+		<div class="flex items-center gap-3 rounded-lg bg-base-200 p-3">
+			{#if clientAddress}
+				<img
+					src={blo(clientAddress as `0x${string}`)}
+					alt="identicon"
+					class="h-10 w-10 rounded-full"
+				/>
+			{/if}
+			<div class="min-w-0">
+				<div class="flex items-center gap-2">
+					<span class="badge gap-1 badge-sm badge-success">
+						<span class="h-1.5 w-1.5 rounded-full bg-success-content"></span>
+						Connected
+					</span>
+					<span class="badge badge-outline badge-sm">
+						{existingConfig.transportMode.toUpperCase()}
+					</span>
+				</div>
+				<p class="mt-1 truncate font-mono text-xs">{clientAddress}</p>
+			</div>
 		</div>
 
 		<div class="rounded-lg bg-base-200 p-3">
-			{#if existingConfig.transportMode === 'http'}
+			{#if existingConfig.transportMode === 'http' || existingConfig.transportMode === 'ws'}
 				<div class="text-sm">
 					<span class="text-base-content/60">Server URL</span>
 					<p class="mt-0.5 truncate font-mono">{existingConfig.serverUrl}</p>
@@ -164,16 +223,54 @@
 			{/if}
 		</div>
 
+		<div class="form-control">
+			<label class="label" for="invite-output">
+				<span class="label-text text-base-content/60">Invite</span>
+			</label>
+			<textarea
+				id="invite-output"
+				class="textarea-bordered textarea w-full font-mono text-xs"
+				readonly
+				rows="2"
+				value={buildInvite(existingConfig)}
+			></textarea>
+		</div>
+
+		<div class="form-control">
+			<label class="label" for="invite-base64-output">
+				<span class="label-text text-base-content/60">Invite (Base64)</span>
+			</label>
+			<textarea
+				id="invite-base64-output"
+				class="textarea-bordered textarea w-full font-mono text-xs"
+				readonly
+				rows="2"
+				value={inviteBase64}
+			></textarea>
+		</div>
+
 		<div class="flex gap-2">
 			<button class="btn flex-1 btn-outline btn-error" onclick={handleDisconnect}>
 				Disconnect
 			</button>
-			<button class="btn flex-1 btn-outline btn-primary" onclick={handleShare}> Share </button>
+			<button class="btn flex-1 btn-outline btn-primary" onclick={handleCopyInvite}>
+				Copy Invite
+			</button>
+			<button class="btn flex-1 btn-outline btn-primary" onclick={handleCopyInviteLink}>
+				Copy Link
+			</button>
 		</div>
 	{:else}
 		<!-- Client identity -->
-		<div class="rounded-lg bg-base-200 p-3">
-			<div class="text-sm">
+		<div class="flex items-center gap-3 rounded-lg bg-base-200 p-3">
+			{#if clientAddress}
+				<img
+					src={blo(clientAddress as `0x${string}`)}
+					alt="identicon"
+					class="h-10 w-10 rounded-full"
+				/>
+			{/if}
+			<div class="min-w-0 text-sm">
 				<span class="text-base-content/60">Your Address</span>
 				<p class="mt-0.5 truncate font-mono text-xs">{clientAddress}</p>
 			</div>
@@ -204,32 +301,48 @@
 			</div>
 		</div>
 
-		<!-- Transport mode selector -->
-		<div class="flex gap-2">
-			<button
-				class={classNames('btn flex-1 btn-sm', {
-					'btn-primary': transportMode === 'http',
-					'btn-ghost': transportMode !== 'http'
-				})}
-				disabled={connecting}
-				onclick={() => (transportMode = 'http')}
-			>
-				HTTP
-			</button>
-			<button
-				class={classNames('btn flex-1 btn-sm', {
-					'btn-primary': transportMode === 'webrtc',
-					'btn-ghost': transportMode !== 'webrtc'
-				})}
-				disabled={connecting}
-				onclick={() => (transportMode = 'webrtc')}
-			>
-				WebRTC
-			</button>
+		<!-- Connection mode tabs -->
+		<div class="flex flex-wrap gap-1">
+			{#each [{ id: 'invite', label: 'Paste Invite' }, { id: 'http', label: 'HTTP' }, { id: 'ws', label: 'WebSocket' }, { id: 'webrtc', label: 'WebRTC' }] as tab (tab.id)}
+				<button
+					class={classNames('btn btn-sm', {
+						'btn-primary': activeTab === tab.id,
+						'btn-ghost': activeTab !== tab.id
+					})}
+					disabled={connecting}
+					onclick={() => {
+						activeTab = tab.id as ConnectionTab;
+						if (tab.id !== 'invite') transportMode = tab.id as TransportMode;
+					}}
+				>
+					{tab.label}
+				</button>
+			{/each}
 		</div>
 
-		<!-- HTTP fields -->
-		{#if transportMode === 'http'}
+		<!-- Invite paste tab -->
+		{#if activeTab === 'invite'}
+			<div class="form-control">
+				<textarea
+					id="invite-input"
+					class={classNames('textarea-bordered textarea w-full font-mono text-xs', {
+						'textarea-error': inviteInput.trim() && !parsedInvite
+					})}
+					placeholder={'{"transport":"ws","serverUrl":"http://192.168.1.5:1530"}'}
+					rows="3"
+					bind:value={inviteInput}
+					disabled={connecting}
+				></textarea>
+				{#if inviteInput.trim() && !parsedInvite}
+					<label class="label">
+						<span class="label-text-alt text-error">Invalid invite JSON</span>
+					</label>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- HTTP / WS fields -->
+		{#if activeTab === 'http' || activeTab === 'ws'}
 			<div class="form-control">
 				<label class="label" for="server-url">
 					<span class="label-text">Server URL</span>
@@ -246,7 +359,7 @@
 		{/if}
 
 		<!-- WebRTC fields -->
-		{#if transportMode === 'webrtc'}
+		{#if activeTab === 'webrtc'}
 			<div class="form-control">
 				<label class="label" for="server-address">
 					<span class="label-text">Server Ethereum Address</span>
@@ -276,7 +389,7 @@
 		{/if}
 
 		<!-- WebRTC connection progress -->
-		{#if transportMode === 'webrtc' && $connState.phase !== 'idle'}
+		{#if activeTab === 'webrtc' && $connState.phase !== 'idle'}
 			<ul class="steps steps-vertical text-sm">
 				{#each WEBRTC_STEPS as step (step.phase)}
 					{@const status = stepStatus(step.phase, $connState.phase)}
@@ -306,13 +419,28 @@
 		{/if}
 
 		<!-- Connect button -->
-		<button class="btn btn-primary" disabled={!canConnect || connecting} onclick={handleConnect}>
-			{#if connecting}
-				<span class="loading loading-sm loading-spinner"></span>
-				Connecting...
-			{:else}
-				Connect
-			{/if}
-		</button>
+		{#if activeTab === 'invite'}
+			<button
+				class="btn btn-primary"
+				disabled={!canConnectInvite || connecting}
+				onclick={handleConnectInvite}
+			>
+				{#if connecting}
+					<span class="loading loading-sm loading-spinner"></span>
+					Connecting...
+				{:else}
+					Connect
+				{/if}
+			</button>
+		{:else}
+			<button class="btn btn-primary" disabled={!canConnect || connecting} onclick={handleConnect}>
+				{#if connecting}
+					<span class="loading loading-sm loading-spinner"></span>
+					Connecting...
+				{:else}
+					Connect
+				{/if}
+			</button>
+		{/if}
 	{/if}
 </div>

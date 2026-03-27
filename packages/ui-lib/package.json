@@ -14,6 +14,7 @@
 	},
 	"dependencies": {
 		"addons": "workspace:*",
+		"blo": "^2.0.0",
 		"classnames": "^2.5.1",
 		"fflate": "^0.8.2",
 		"html5-qrcode": "^2.3.8",

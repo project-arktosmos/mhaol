@@ -204,10 +204,7 @@ impl PeerServiceManager {
                 peer_rooms.remove(&peer_id);
             }
 
-            SignalingServerMessage::Offer {
-                from_peer_id,
-                sdp,
-            } => {
+            SignalingServerMessage::Offer { from_peer_id, sdp } => {
                 debug!(room_id = %room_id, from = %from_peer_id, "Received SDP offer");
                 peer_rooms.insert(from_peer_id.clone(), room_id.to_string());
                 if let Err(e) = peer_manager.handle_offer(&from_peer_id, &sdp).await {
@@ -286,9 +283,12 @@ impl PeerServiceManager {
                     personal_client,
                     personal_room,
                 );
-                if let Err(e) =
-                    client.send_ice_candidate(&peer_id, &candidate, sdp_mline_index, sdp_mid.as_deref())
-                {
+                if let Err(e) = client.send_ice_candidate(
+                    &peer_id,
+                    &candidate,
+                    sdp_mline_index,
+                    sdp_mid.as_deref(),
+                ) {
                     debug!(peer_id = %peer_id, "Failed to send ICE candidate: {e}");
                 }
             }
@@ -337,10 +337,11 @@ impl PeerServiceManager {
                                         return;
                                     }
 
-                                    // Save to roster
+                                    // Save to roster, preferring username from profile
+                                    let display_name = payload.username.as_deref().unwrap_or(&payload.name);
                                     self.state.roster_contacts.insert(
                                         &payload.address,
-                                        &payload.name,
+                                        display_name,
                                         Some(&passport.raw),
                                         Some(&payload.instance_type),
                                         None,
@@ -380,8 +381,13 @@ impl PeerServiceManager {
             }
 
             "rpc" => {
-                if let Ok(incoming) = serde_json::from_value::<rpc_types::RpcIncoming>(envelope.payload.clone()) {
-                    let responses = self.rpc_handler.handle_message(incoming).await;
+                if let Ok(incoming) =
+                    serde_json::from_value::<rpc_types::RpcIncoming>(envelope.payload.clone())
+                {
+                    let responses = self
+                        .rpc_handler
+                        .handle_message(incoming, Some(peer_id))
+                        .await;
                     for resp in responses {
                         if let Err(e) = peer_manager.send_to_peer(peer_id, &resp).await {
                             error!(peer_id = %peer_id, "Failed to send RPC response: {e}");

@@ -240,7 +240,11 @@ fn parse_synced_lyrics(lrc: &str) -> Vec<SyncedLine> {
             }
         }
     }
-    lines.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+    lines.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     lines
 }
 

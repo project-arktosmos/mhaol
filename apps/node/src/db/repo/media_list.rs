@@ -42,7 +42,10 @@ impl MediaListRepo {
     pub fn get_all(&self) -> Vec<MediaListRow> {
         let conn = self.db.lock();
         let mut stmt = conn
-            .prepare(&format!("SELECT {} FROM media_lists ORDER BY title ASC", SELECT_COLS))
+            .prepare(&format!(
+                "SELECT {} FROM media_lists ORDER BY title ASC",
+                SELECT_COLS
+            ))
             .unwrap();
         stmt.query_map([], Self::row_mapper)
             .unwrap()
@@ -53,7 +56,10 @@ impl MediaListRepo {
     pub fn get_by_library(&self, library_id: &str) -> Vec<MediaListRow> {
         let conn = self.db.lock();
         let mut stmt = conn
-            .prepare(&format!("SELECT {} FROM media_lists WHERE library_id = ?1 ORDER BY title ASC", SELECT_COLS))
+            .prepare(&format!(
+                "SELECT {} FROM media_lists WHERE library_id = ?1 ORDER BY title ASC",
+                SELECT_COLS
+            ))
             .unwrap();
         stmt.query_map(params![library_id], Self::row_mapper)
             .unwrap()
@@ -75,7 +81,10 @@ impl MediaListRepo {
     pub fn get_by_source_path(&self, source_path: &str) -> Option<MediaListRow> {
         let conn = self.db.lock();
         conn.query_row(
-            &format!("SELECT {} FROM media_lists WHERE source_path = ?1", SELECT_COLS),
+            &format!(
+                "SELECT {} FROM media_lists WHERE source_path = ?1",
+                SELECT_COLS
+            ),
             params![source_path],
             Self::row_mapper,
         )
@@ -153,7 +162,17 @@ mod tests {
     fn test_media_list_crud() {
         let (_lib_repo, repo) = setup();
 
-        repo.insert("list1", "lib1", "My TV Show", None, None, "video", "auto", Some("/tmp/show:video"), None);
+        repo.insert(
+            "list1",
+            "lib1",
+            "My TV Show",
+            None,
+            None,
+            "video",
+            "auto",
+            Some("/tmp/show:video"),
+            None,
+        );
 
         let all = repo.get_all();
         assert_eq!(all.len(), 1);
@@ -175,8 +194,28 @@ mod tests {
     fn test_media_list_parent_child() {
         let (_lib_repo, repo) = setup();
 
-        repo.insert("show1", "lib1", "Breaking Bad", None, None, "video", "auto", Some("/tmp/bb:show"), None);
-        repo.insert("season1", "lib1", "Season 1", None, None, "video", "auto", Some("/tmp/bb/s1:video"), Some("show1"));
+        repo.insert(
+            "show1",
+            "lib1",
+            "Breaking Bad",
+            None,
+            None,
+            "video",
+            "auto",
+            Some("/tmp/bb:show"),
+            None,
+        );
+        repo.insert(
+            "season1",
+            "lib1",
+            "Season 1",
+            None,
+            None,
+            "video",
+            "auto",
+            Some("/tmp/bb/s1:video"),
+            Some("show1"),
+        );
 
         let season = repo.get_by_id("season1").unwrap();
         assert_eq!(season.parent_list_id.as_deref(), Some("show1"));

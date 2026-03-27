@@ -260,5 +260,4 @@
 			</div>
 		{/if}
 	{/snippet}
-
 </DetailPageLayout>

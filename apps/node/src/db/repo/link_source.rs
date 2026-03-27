@@ -67,7 +67,14 @@ impl LinkSourceRepo {
              ON CONFLICT(service, media_type_id, category_id) DO UPDATE SET
                 plugin = excluded.plugin,
                 label = excluded.label",
-            params![row.id, row.plugin, row.service, row.label, row.media_type_id, row.category_id],
+            params![
+                row.id,
+                row.plugin,
+                row.service,
+                row.label,
+                row.media_type_id,
+                row.category_id
+            ],
         )
         .unwrap();
     }

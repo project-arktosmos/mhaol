@@ -78,6 +78,14 @@ class FavoritesService {
 		await this.refresh();
 	}
 
+	async addSilent(service: string, serviceId: string, label: string): Promise<void> {
+		await fetchRaw('/api/favorites', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ wallet: this._wallet, service, serviceId, label })
+		});
+	}
+
 	async remove(service: string, serviceId: string): Promise<void> {
 		this.state.update((s) => {
 			const items = s.items.filter((f) => !(f.service === service && f.serviceId === serviceId));

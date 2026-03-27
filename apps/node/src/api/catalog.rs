@@ -81,20 +81,14 @@ async fn search_items(
     Json(serde_json::json!({ "items": [], "total": 0 }))
 }
 
-async fn get_item(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+async fn get_item(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     match state.catalog.get_by_id(&id) {
         Some(item) => Json(to_json(&item)).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-async fn get_children(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+async fn get_children(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     let children = state.catalog.get_children(&id);
     Json(children.iter().map(to_json).collect::<Vec<_>>())
 }
@@ -122,9 +116,7 @@ async fn upsert_item(
     State(state): State<AppState>,
     Json(body): Json<UpsertItemBody>,
 ) -> impl IntoResponse {
-    let id = body
-        .id
-        .unwrap_or_else(|| format!("{:032x}", rand_id()));
+    let id = body.id.unwrap_or_else(|| format!("{:032x}", rand_id()));
     let sort_title = body.title.to_lowercase();
     let metadata = body
         .metadata
@@ -157,10 +149,7 @@ async fn upsert_item(
     (StatusCode::CREATED, Json(saved.map(|i| to_json(&i))))
 }
 
-async fn delete_item(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+async fn delete_item(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     if state.catalog.delete(&id) {
         StatusCode::NO_CONTENT
     } else {
@@ -230,9 +219,7 @@ async fn list_fetch_cache_hashes(State(state): State<AppState>) -> impl IntoResp
     let hashes = state.catalog_fetch_cache.get_all_info_hashes();
     let result: Vec<serde_json::Value> = hashes
         .into_iter()
-        .map(|(item_id, hash)| {
-            serde_json::json!({ "catalogItemId": item_id, "infoHash": hash })
-        })
+        .map(|(item_id, hash)| serde_json::json!({ "catalogItemId": item_id, "infoHash": hash }))
         .collect();
     Json(result)
 }
@@ -288,9 +275,8 @@ fn to_json(row: &CatalogItemRow) -> CatalogItemJson {
         position: row.position,
         source: row.source.clone(),
         source_id: row.source_id.clone(),
-        metadata: serde_json::from_str(&row.metadata).unwrap_or(serde_json::Value::Object(
-            serde_json::Map::new(),
-        )),
+        metadata: serde_json::from_str(&row.metadata)
+            .unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
         created_at: row.created_at.clone(),
         updated_at: row.updated_at.clone(),
     }
@@ -301,10 +287,12 @@ fn rand_id() -> u128 {
     use std::hash::{BuildHasher, Hasher};
     let s = RandomState::new();
     let mut h = s.build_hasher();
-    h.write_u64(std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos() as u64);
+    h.write_u64(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64,
+    );
     (h.finish() as u128) << 64 | {
         let s2 = RandomState::new();
         s2.build_hasher().finish() as u128

@@ -15,13 +15,14 @@ pub struct RpcHandler {
 
 impl RpcHandler {
     pub fn new(state: AppState) -> Self {
-        let router = crate::api::build_router(state);
+        let router = crate::api::build_app_router(state);
         Self { router }
     }
 
     pub async fn handle_message(
         &self,
         incoming: RpcIncoming,
+        verified_address: Option<&str>,
     ) -> Vec<DataChannelEnvelope> {
         match incoming {
             RpcIncoming::Request {
@@ -30,7 +31,17 @@ impl RpcHandler {
                 path,
                 headers,
                 body,
-            } => self.handle_request(&id, &method, &path, headers.as_ref(), body.as_deref()).await,
+            } => {
+                self.handle_request(
+                    &id,
+                    &method,
+                    &path,
+                    headers.as_ref(),
+                    body.as_deref(),
+                    verified_address,
+                )
+                .await
+            }
             RpcIncoming::Subscribe { id, path } => {
                 // SSE subscriptions handled separately via spawned task
                 tracing::debug!(id = %id, path = %path, "RPC subscribe not yet implemented inline");
@@ -50,6 +61,7 @@ impl RpcHandler {
         path: &str,
         headers: Option<&serde_json::Value>,
         body: Option<&str>,
+        verified_address: Option<&str>,
     ) -> Vec<DataChannelEnvelope> {
         let method = method.parse::<Method>().unwrap_or(Method::GET);
         let mut req_builder = Request::builder().method(method).uri(path);
@@ -62,6 +74,11 @@ impl RpcHandler {
                     }
                 }
             }
+        }
+
+        // Inject pre-verified address so the auth middleware trusts this request
+        if let Some(addr) = verified_address {
+            req_builder = req_builder.header("x-verified-address", addr);
         }
 
         let body = match body {
@@ -100,10 +117,7 @@ impl RpcHandler {
         };
 
         let status = response.status();
-        let status_text = status
-            .canonical_reason()
-            .unwrap_or("Unknown")
-            .to_string();
+        let status_text = status.canonical_reason().unwrap_or("Unknown").to_string();
         let status_code = status.as_u16();
 
         let content_type = response

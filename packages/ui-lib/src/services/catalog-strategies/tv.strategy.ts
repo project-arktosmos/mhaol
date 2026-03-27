@@ -95,8 +95,7 @@ export const tvStrategy: CatalogKindStrategy = {
 		);
 		return results
 			.filter(
-				(r): r is PromiseFulfilledResult<TMDBTvShow> =>
-					r.status === 'fulfilled' && r.value != null
+				(r): r is PromiseFulfilledResult<TMDBTvShow> => r.status === 'fulfilled' && r.value != null
 			)
 			.flatMap((r) => toTvCatalogItems([r.value]));
 	}

@@ -143,7 +143,9 @@ class ContactHandshakeService {
 			address: request.address,
 			passport: request.passport,
 			acceptedAt: new Date().toISOString(),
-			endorsement
+			endorsement,
+			username: request.username,
+			profilePictureUrl: request.profilePictureUrl
 		};
 
 		this.state.update((s) => {
@@ -233,6 +235,8 @@ class ContactHandshakeService {
 				passport,
 				name: payload.name,
 				address: payload.address,
+				username: payload.username,
+				profilePictureUrl: payload.profilePictureUrl,
 				receivedAt: new Date().toISOString()
 			};
 
@@ -264,7 +268,9 @@ class ContactHandshakeService {
 				address: payload.address,
 				passport,
 				acceptedAt: new Date().toISOString(),
-				endorsement
+				endorsement,
+				username: payload.username,
+				profilePictureUrl: payload.profilePictureUrl
 			};
 
 			const alreadyKnown = this.isKnownContact(payload.address);

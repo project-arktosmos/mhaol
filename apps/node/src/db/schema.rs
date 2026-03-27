@@ -280,6 +280,7 @@ const PROFILES_SQL: &str = "
 CREATE TABLE IF NOT EXISTS profiles (
     wallet TEXT PRIMARY KEY,
     username TEXT NOT NULL,
+    profile_picture_url TEXT,
     added_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 ";
@@ -309,7 +310,7 @@ CREATE TABLE IF NOT EXISTS pins (
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '35', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '37', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -438,7 +439,6 @@ CREATE TABLE IF NOT EXISTS tmdb_image_overrides (
     PRIMARY KEY (tmdb_id, media_type, role)
 );
 ";
-
 
 pub const OPENLIBRARY_SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS openlibrary_api_cache (
@@ -642,8 +642,7 @@ fn run_migrations(conn: &Connection) {
     // Migration: add season_number to media_list_links (db_version 18)
     if has_table(conn, "media_list_links") && !has_column(conn, "media_list_links", "season_number")
     {
-        let _ =
-            conn.execute_batch("ALTER TABLE media_list_links ADD COLUMN season_number INTEGER");
+        let _ = conn.execute_batch("ALTER TABLE media_list_links ADD COLUMN season_number INTEGER");
     }
 
     // Migration: add signaling_servers table (db_version 19)
@@ -881,9 +880,7 @@ fn run_migrations(conn: &Connection) {
             .prepare("SELECT endorsement FROM roster_contacts LIMIT 0")
             .is_ok();
         if !has_col {
-            let _ = conn.execute_batch(
-                "ALTER TABLE roster_contacts ADD COLUMN endorsement TEXT;",
-            );
+            let _ = conn.execute_batch("ALTER TABLE roster_contacts ADD COLUMN endorsement TEXT;");
         }
     }
 
@@ -970,9 +967,7 @@ fn run_migrations(conn: &Connection) {
 
     // Migration: pins are now per-node, not per-wallet (db_version 35)
     {
-        let has_wallet_col = conn
-            .prepare("SELECT wallet FROM pins LIMIT 0")
-            .is_ok();
+        let has_wallet_col = conn.prepare("SELECT wallet FROM pins LIMIT 0").is_ok();
         if has_wallet_col {
             let _ = conn.execute_batch(
                 "DROP TABLE pins;
@@ -1015,6 +1010,98 @@ fn run_migrations(conn: &Connection) {
                  FROM youtube_channels"
             );
         }
+    }
+
+    // Migration: add tmdb_recommendations table (db_version 36)
+    if !has_table(conn, "tmdb_recommendations") {
+        let _ = conn.execute_batch(mhaol_recommendations::RECOMMENDATIONS_SCHEMA_SQL);
+    }
+
+    // Migration: add genres column to tmdb_recommendations
+    if has_table(conn, "tmdb_recommendations")
+        && !has_column(conn, "tmdb_recommendations", "genres")
+    {
+        let _ = conn.execute_batch("ALTER TABLE tmdb_recommendations ADD COLUMN genres TEXT");
+    }
+
+    // Migration: add level column to tmdb_recommendations
+    if has_table(conn, "tmdb_recommendations")
+        && !has_column(conn, "tmdb_recommendations", "level")
+    {
+        let _ = conn.execute_batch(
+            "ALTER TABLE tmdb_recommendations ADD COLUMN level INTEGER NOT NULL DEFAULT 1",
+        );
+    }
+
+    // Migration: add profile_picture_url to profiles table (db_version 37)
+    if has_table(conn, "profiles") && !has_column(conn, "profiles", "profile_picture_url") {
+        let _ = conn.execute_batch("ALTER TABLE profiles ADD COLUMN profile_picture_url TEXT");
+    }
+
+    // Migration: add recommendation_labels definitions table
+    if !has_table(conn, "recommendation_labels") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE recommendation_labels (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                emoji TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT OR IGNORE INTO recommendation_labels (id, name, emoji, sort_order) VALUES ('thumbs-up', 'thumbs_up', '👍', 1);
+            INSERT OR IGNORE INTO recommendation_labels (id, name, emoji, sort_order) VALUES ('thumbs-down', 'thumbs_down', '👎', 2);
+            INSERT OR IGNORE INTO recommendation_labels (id, name, emoji, sort_order) VALUES ('love', 'love', '❤️', 3);
+            INSERT OR IGNORE INTO recommendation_labels (id, name, emoji, sort_order) VALUES ('hate', 'hate', '💀', 4);",
+        );
+    }
+
+    // Migration: add recommendation_label_assignments table (per-user)
+    if !has_table(conn, "recommendation_label_assignments") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE recommendation_label_assignments (
+                id TEXT PRIMARY KEY,
+                wallet TEXT NOT NULL REFERENCES profiles(wallet) ON DELETE CASCADE,
+                recommended_tmdb_id INTEGER NOT NULL,
+                recommended_media_type TEXT NOT NULL CHECK (recommended_media_type IN ('movie', 'tv')),
+                label_id TEXT NOT NULL REFERENCES recommendation_labels(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(wallet, recommended_tmdb_id, recommended_media_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rec_label_assign_wallet
+                ON recommendation_label_assignments(wallet);",
+        );
+    }
+
+    // Migration: add music_recommendation_label_assignments table
+    if !has_table(conn, "music_recommendation_label_assignments") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE music_recommendation_label_assignments (
+                id TEXT PRIMARY KEY,
+                wallet TEXT NOT NULL,
+                recommended_mbid TEXT NOT NULL,
+                recommended_type TEXT NOT NULL CHECK (recommended_type IN ('artist')),
+                label_id TEXT NOT NULL REFERENCES recommendation_labels(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(wallet, recommended_mbid, recommended_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_music_rec_label_wallet
+                ON music_recommendation_label_assignments(wallet);",
+        );
+    }
+
+    // Migration: add game_recommendation_label_assignments table
+    if !has_table(conn, "game_recommendation_label_assignments") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE game_recommendation_label_assignments (
+                id TEXT PRIMARY KEY,
+                wallet TEXT NOT NULL,
+                recommended_game_id INTEGER NOT NULL,
+                label_id TEXT NOT NULL REFERENCES recommendation_labels(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(wallet, recommended_game_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_rec_label_wallet
+                ON game_recommendation_label_assignments(wallet);",
+        );
     }
 
     // Migration: add music_torrent_fetch_cache table
@@ -1117,6 +1204,7 @@ mod tests {
         assert!(has_table(&conn, "tv_torrent_fetch_cache"));
         assert!(has_table(&conn, "book_torrent_fetch_cache"));
         assert!(has_table(&conn, "queue_tasks"));
+        assert!(has_table(&conn, "tmdb_recommendations"));
 
         // Verify seed data
         let count: i64 = conn

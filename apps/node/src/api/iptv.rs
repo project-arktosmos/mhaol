@@ -100,8 +100,13 @@ struct CachedStream {
 
 #[derive(Clone)]
 enum GuideSource {
-    Mjh { xml_path: String, xml_channel_id: String },
-    Tvtv { site_id: String },
+    Mjh {
+        xml_path: String,
+        xml_channel_id: String,
+    },
+    Tvtv {
+        site_id: String,
+    },
 }
 
 struct IptvCache {
@@ -423,12 +428,7 @@ async fn list_channels(
                 return false;
             }
             if let Some(ref cat) = query.category {
-                if !cat.is_empty()
-                    && !ch
-                        .categories
-                        .iter()
-                        .any(|c| c.eq_ignore_ascii_case(cat))
-                {
+                if !cat.is_empty() && !ch.categories.iter().any(|c| c.eq_ignore_ascii_case(cat)) {
                     return false;
                 }
             }
@@ -618,9 +618,7 @@ async fn proxy_stream(
                 || final_url.ends_with(".m3u8")
                 || final_url.ends_with(".m3u");
 
-            let cors_headers = [
-                (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".to_string()),
-            ];
+            let cors_headers = [(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".to_string())];
 
             if is_manifest {
                 // Rewrite URLs in the manifest to route through the proxy
@@ -647,7 +645,13 @@ async fn proxy_stream(
                     .into_response()
             } else {
                 let body = Body::from_stream(resp.bytes_stream());
-                (status, cors_headers, [(header::CONTENT_TYPE, content_type)], body).into_response()
+                (
+                    status,
+                    cors_headers,
+                    [(header::CONTENT_TYPE, content_type)],
+                    body,
+                )
+                    .into_response()
             }
         }
         Err(e) => (
@@ -670,7 +674,9 @@ fn proxy_token_map() -> &'static RwLock<std::collections::HashMap<String, String
 }
 
 fn store_proxy_url(url: &str) -> String {
-    let token = PROXY_TOKEN_COUNTER.fetch_add(1, Ordering::Relaxed).to_string();
+    let token = PROXY_TOKEN_COUNTER
+        .fetch_add(1, Ordering::Relaxed)
+        .to_string();
     proxy_token_map()
         .write()
         .insert(token.clone(), url.to_string());
@@ -866,7 +872,9 @@ async fn get_epg(
         GuideSource::Mjh {
             xml_path,
             xml_channel_id,
-        } => fetch_mjh_epg(&xml_path, &xml_channel_id).await.into_response(),
+        } => fetch_mjh_epg(&xml_path, &xml_channel_id)
+            .await
+            .into_response(),
         GuideSource::Tvtv { site_id } => fetch_tvtv_epg(&site_id).await.into_response(),
     }
 }
@@ -896,12 +904,22 @@ async fn fetch_mjh_epg(xml_path: &str, xml_channel_id: &str) -> Json<EpgResponse
     let client = reqwest::Client::new();
     let resp = match client.get(&url).send().await {
         Ok(r) if r.status().is_success() => r,
-        _ => return Json(EpgResponse { available: false, programs: vec![] }),
+        _ => {
+            return Json(EpgResponse {
+                available: false,
+                programs: vec![],
+            })
+        }
     };
 
     let xml_text = match resp.text().await {
         Ok(t) => t,
-        Err(_) => return Json(EpgResponse { available: false, programs: vec![] }),
+        Err(_) => {
+            return Json(EpgResponse {
+                available: false,
+                programs: vec![],
+            })
+        }
     };
 
     let all_programs = parse_xmltv(&xml_text);
@@ -938,11 +956,7 @@ async fn fetch_tvtv_epg(site_id: &str) -> Json<EpgResponse> {
         let epg_guard = epg_cache_lock().read();
         if let Some(entry) = epg_guard.get(&cache_key) {
             if entry.fetched_at.elapsed().as_secs() < EPG_CACHE_TTL_SECS {
-                let programs = entry
-                    .programs
-                    .get(site_id)
-                    .cloned()
-                    .unwrap_or_default();
+                let programs = entry.programs.get(site_id).cloned().unwrap_or_default();
                 return Json(EpgResponse {
                     available: true,
                     programs: filter_current_programs(&programs),
@@ -963,19 +977,24 @@ async fn fetch_tvtv_epg(site_id: &str) -> Json<EpgResponse> {
     );
 
     let client = reqwest::Client::new();
-    let resp = match client
-        .get(&url)
-        .header("User-Agent", TVTV_UA)
-        .send()
-        .await
-    {
+    let resp = match client.get(&url).header("User-Agent", TVTV_UA).send().await {
         Ok(r) if r.status().is_success() => r,
-        _ => return Json(EpgResponse { available: false, programs: vec![] }),
+        _ => {
+            return Json(EpgResponse {
+                available: false,
+                programs: vec![],
+            })
+        }
     };
 
     let body: serde_json::Value = match resp.json().await {
         Ok(v) => v,
-        Err(_) => return Json(EpgResponse { available: false, programs: vec![] }),
+        Err(_) => {
+            return Json(EpgResponse {
+                available: false,
+                programs: vec![],
+            })
+        }
     };
 
     let programs = parse_tvtv_response(&body);
@@ -1028,14 +1047,8 @@ fn parse_tvtv_response(body: &serde_json::Value) -> Vec<EpgProgram> {
                 .get("subtitle")
                 .and_then(|v| v.as_str())
                 .map(String::from);
-            let start_time = item
-                .get("startTime")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let duration_mins = item
-                .get("duration")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(60);
+            let start_time = item.get("startTime").and_then(|v| v.as_str()).unwrap_or("");
+            let duration_mins = item.get("duration").and_then(|v| v.as_i64()).unwrap_or(60);
 
             // Convert ISO startTime to XMLTV format for consistency
             let start = iso_to_xmltv(start_time);
@@ -1138,16 +1151,13 @@ fn parse_xmltv(xml: &str) -> std::collections::HashMap<String, Vec<EpgProgram>> 
                     for attr in e.attributes().flatten() {
                         match attr.key.as_ref() {
                             b"channel" => {
-                                current_channel =
-                                    String::from_utf8_lossy(&attr.value).to_string();
+                                current_channel = String::from_utf8_lossy(&attr.value).to_string();
                             }
                             b"start" => {
-                                current_start =
-                                    String::from_utf8_lossy(&attr.value).to_string();
+                                current_start = String::from_utf8_lossy(&attr.value).to_string();
                             }
                             b"stop" => {
-                                current_stop =
-                                    String::from_utf8_lossy(&attr.value).to_string();
+                                current_stop = String::from_utf8_lossy(&attr.value).to_string();
                             }
                             _ => {}
                         }
@@ -1156,9 +1166,7 @@ fn parse_xmltv(xml: &str) -> std::collections::HashMap<String, Vec<EpgProgram>> 
                     current_tag = name.clone();
                     if name == "episode-num" {
                         for attr in e.attributes().flatten() {
-                            if attr.key.as_ref() == b"system"
-                                && &*attr.value == b"onscreen"
-                            {
+                            if attr.key.as_ref() == b"system" && &*attr.value == b"onscreen" {
                                 current_tag = "episode-onscreen".to_string();
                             }
                         }

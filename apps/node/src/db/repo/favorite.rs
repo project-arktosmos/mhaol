@@ -90,7 +90,7 @@ mod tests {
         let repo = FavoriteRepo::new(db);
 
         // Create a profile first (FK constraint)
-        profiles.upsert("Alice", "0xabc123");
+        profiles.upsert("Alice", "0xabc123", None);
 
         assert!(repo.get_by_wallet("0xabc123").is_empty());
         assert_eq!(repo.count_by_wallet("0xabc123"), 0);

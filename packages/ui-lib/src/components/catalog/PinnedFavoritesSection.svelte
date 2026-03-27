@@ -23,15 +23,11 @@
 	let favoritesLoading = $state(false);
 
 	let pinnedIds = $derived(
-		$pinState.items
-			.filter((p) => p.service === strategy.pinService)
-			.map((p) => p.serviceId)
+		$pinState.items.filter((p) => p.service === strategy.pinService).map((p) => p.serviceId)
 	);
 
 	let favoriteIds = $derived(
-		$favState.items
-			.filter((f) => f.service === strategy.pinService)
-			.map((f) => f.serviceId)
+		$favState.items.filter((f) => f.service === strategy.pinService).map((f) => f.serviceId)
 	);
 
 	$effect(() => {
@@ -41,12 +37,15 @@
 			return;
 		}
 		pinnedLoading = true;
-		strategy.resolveByIds(ids).then((items) => {
-			pinnedItems = items;
-			pinnedLoading = false;
-		}).catch(() => {
-			pinnedLoading = false;
-		});
+		strategy
+			.resolveByIds(ids)
+			.then((items) => {
+				pinnedItems = items;
+				pinnedLoading = false;
+			})
+			.catch(() => {
+				pinnedLoading = false;
+			});
 	});
 
 	$effect(() => {
@@ -56,12 +55,15 @@
 			return;
 		}
 		favoritesLoading = true;
-		strategy.resolveByIds(ids).then((items) => {
-			favoriteItems = items;
-			favoritesLoading = false;
-		}).catch(() => {
-			favoritesLoading = false;
-		});
+		strategy
+			.resolveByIds(ids)
+			.then((items) => {
+				favoriteItems = items;
+				favoritesLoading = false;
+			})
+			.catch(() => {
+				favoritesLoading = false;
+			});
 	});
 
 	function cardDataFor(item: CatalogItem): CatalogCardData {
@@ -81,7 +83,9 @@
 				<span class="loading loading-sm loading-spinner"></span>
 			</div>
 		{:else}
-			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+			<div
+				class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+			>
 				{#each pinnedItems as item (item.id)}
 					<CatalogCard card={cardDataFor(item)} onclick={() => onselectitem(item)} />
 				{/each}
@@ -98,7 +102,9 @@
 				<span class="loading loading-sm loading-spinner"></span>
 			</div>
 		{:else}
-			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+			<div
+				class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+			>
 				{#each favoriteItems as item (item.id)}
 					<CatalogCard card={cardDataFor(item)} onclick={() => onselectitem(item)} />
 				{/each}

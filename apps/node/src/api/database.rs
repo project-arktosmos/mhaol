@@ -187,7 +187,9 @@ async fn reset_database(State(state): State<AppState>) -> impl IntoResponse {
 
     let tables: Vec<String> = {
         let mut stmt = conn
-            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+            )
             .unwrap();
         stmt.query_map([], |row| row.get(0))
             .unwrap()
@@ -205,7 +207,11 @@ async fn reset_database(State(state): State<AppState>) -> impl IntoResponse {
     crate::db::schema::initialize_module_schemas(&conn).unwrap();
 
     // Re-seed default library
-    let downloads_path = state.data_dir.join("downloads").to_string_lossy().to_string();
+    let downloads_path = state
+        .data_dir
+        .join("downloads")
+        .to_string_lossy()
+        .to_string();
     let library_id = uuid::Uuid::new_v4().to_string();
 
     conn.execute(
@@ -217,16 +223,20 @@ async fn reset_database(State(state): State<AppState>) -> impl IntoResponse {
         "INSERT INTO metadata (key, value, type) VALUES ('youtube.libraryId', ?1, 'string')
          ON CONFLICT(key) DO UPDATE SET value = ?1",
         params![library_id],
-    ).unwrap();
+    )
+    .unwrap();
     conn.execute(
         "INSERT INTO metadata (key, value, type) VALUES ('torrent.libraryId', ?1, 'string')
          ON CONFLICT(key) DO UPDATE SET value = ?1",
         params![library_id],
-    ).unwrap();
+    )
+    .unwrap();
 
     let new_tables: Vec<String> = {
         let mut stmt = conn
-            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+            )
             .unwrap();
         stmt.query_map([], |row| row.get(0))
             .unwrap()

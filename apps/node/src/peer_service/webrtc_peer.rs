@@ -68,12 +68,7 @@ impl WebRtcPeer {
         let data_channel: Arc<Mutex<Option<Arc<RTCDataChannel>>>> = Arc::new(Mutex::new(None));
 
         // Set up event handlers
-        setup_connection_handlers(
-            &connection,
-            &peer_id,
-            &event_tx,
-            Arc::clone(&data_channel),
-        );
+        setup_connection_handlers(&connection, &peer_id, &event_tx, Arc::clone(&data_channel));
 
         // Set remote description (the offer from the browser peer)
         let offer = RTCSessionDescription::offer(offer_sdp.to_string())
@@ -289,11 +284,7 @@ impl PeerManager {
     }
 
     /// Handle an incoming SDP offer: create a peer and answer it.
-    pub async fn handle_offer(
-        &mut self,
-        peer_id: &str,
-        sdp: &str,
-    ) -> Result<(), String> {
+    pub async fn handle_offer(&mut self, peer_id: &str, sdp: &str) -> Result<(), String> {
         // Remove any existing peer connection for this peer
         if let Some(old) = self.peers.remove(peer_id) {
             old.close().await;

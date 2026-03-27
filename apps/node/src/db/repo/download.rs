@@ -404,7 +404,17 @@ mod tests {
         let repo = make_repo();
         insert_torrent(&repo, "hash1", "downloading");
 
-        repo.update_torrent_state("hash1", 1.0, "completed", 0, 0, 0, 0, None, Some("/done.mkv"));
+        repo.update_torrent_state(
+            "hash1",
+            1.0,
+            "completed",
+            0,
+            0,
+            0,
+            0,
+            None,
+            Some("/done.mkv"),
+        );
         let row = repo.get("hash1").unwrap();
         assert_eq!(row.state, "completed");
         assert_eq!(row.progress, 1.0);

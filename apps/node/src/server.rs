@@ -38,7 +38,11 @@ async fn main() {
     let db_path = std::env::var("DB_PATH")
         .ok()
         .map(PathBuf::from)
-        .or_else(|| std::env::var("DATA_DIR").ok().map(|d| PathBuf::from(d).join("mhaol.db")))
+        .or_else(|| {
+            std::env::var("DATA_DIR")
+                .ok()
+                .map(|d| PathBuf::from(d).join("mhaol.db"))
+        })
         .unwrap_or_else(|| {
             // Default: packages/database/mhaol.db relative to the workspace root.
             // The server binary lives at apps/server/backend/, so go up three levels.
@@ -59,8 +63,7 @@ async fn main() {
         std::fs::create_dir_all(parent).ok();
     }
 
-    let state = AppState::new(Some(db_path.as_path()))
-        .expect("Failed to initialize database");
+    let state = AppState::new(Some(db_path.as_path())).expect("Failed to initialize database");
 
     state.seed_default_libraries();
     state.initialize_modules();
@@ -80,9 +83,61 @@ async fn main() {
         });
     }
 
+    // Start recommendations queue worker in the background
+    {
+        let recs_state = state.clone();
+        tokio::spawn(async move {
+            mhaol_node::recommendations_worker::run_recommendations_worker(recs_state).await;
+        });
+    }
+
+    // Start music recommendations queue worker in the background
+    {
+        let music_recs_state = state.clone();
+        tokio::spawn(async move {
+            mhaol_node::music_recommendations_worker::run_music_recommendations_worker(
+                music_recs_state,
+            )
+            .await;
+        });
+    }
+
+    // Start game recommendations queue worker in the background
+    {
+        let game_recs_state = state.clone();
+        tokio::spawn(async move {
+            mhaol_node::game_recommendations_worker::run_game_recommendations_worker(
+                game_recs_state,
+            )
+            .await;
+        });
+    }
+
+    // Start book recommendations queue worker in the background
+    {
+        let book_recs_state = state.clone();
+        tokio::spawn(async move {
+            mhaol_node::book_recommendations_worker::run_book_recommendations_worker(
+                book_recs_state,
+            )
+            .await;
+        });
+    }
+
     // Ensure dual identities: backend (SIGNALING_WALLET) + frontend (CLIENT_WALLET)
     state.identity_manager.ensure_identity("SIGNALING_WALLET");
     state.identity_manager.ensure_identity("CLIENT_WALLET");
+
+    // Bootstrap default profile for SIGNALING_WALLET if none exists
+    if state.identity_manager.get_profile("SIGNALING_WALLET").is_none() {
+        state.identity_manager.set_profile(
+            "SIGNALING_WALLET",
+            &mhaol_identity::Profile {
+                username: "Node".to_string(),
+                profile_picture_url: None,
+            },
+        );
+    }
 
     // Write node-defaults.json for the frontend setup modal
     {
@@ -106,7 +161,8 @@ async fn main() {
             .and_then(|p| p.parent())
             .map(|root| root.join("apps/frontend/static/node-defaults.json"));
         if let Some(path) = json_path {
-            if let Err(e) = std::fs::write(&path, serde_json::to_string_pretty(&defaults).unwrap()) {
+            if let Err(e) = std::fs::write(&path, serde_json::to_string_pretty(&defaults).unwrap())
+            {
                 tracing::warn!("Failed to write node-defaults.json: {}", e);
             } else {
                 tracing::info!("Wrote node defaults to {}", path.display());
@@ -164,7 +220,5 @@ async fn main() {
         });
     }
 
-    axum::serve(listener, app)
-        .await
-        .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }

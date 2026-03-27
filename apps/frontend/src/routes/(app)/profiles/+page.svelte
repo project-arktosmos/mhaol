@@ -9,6 +9,11 @@
 		profileService.updateUsername(value);
 	}
 
+	function handleProfilePictureInput(e: Event) {
+		const value = (e.target as HTMLInputElement).value;
+		profileService.updateProfilePicture(value || undefined);
+	}
+
 	async function handleShare() {
 		await profileService.shareWithNode();
 	}
@@ -36,6 +41,16 @@
 						placeholder="Enter username"
 						value={$store.local.username}
 						oninput={handleUsernameInput}
+					/>
+				</label>
+				<label class="form-control w-full">
+					<div class="label"><span class="label-text">Profile Picture URL</span></div>
+					<input
+						type="url"
+						class="input input-bordered w-full"
+						placeholder="https://example.com/avatar.png"
+						value={$store.local.profilePictureUrl ?? ''}
+						oninput={handleProfilePictureInput}
 					/>
 				</label>
 				<div class="form-control w-full">
@@ -103,9 +118,17 @@
 			{#each $store.remoteProfiles as profile (profile.wallet)}
 				<a href="/profiles/{profile.wallet}" class="card bg-base-200 transition-colors hover:bg-base-300">
 					<div class="card-body flex-row items-center gap-3 p-4">
-						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content font-bold">
-							{profile.username.charAt(0).toUpperCase()}
-						</div>
+						{#if profile.profile_picture_url}
+							<img
+								src={profile.profile_picture_url}
+								alt={profile.username}
+								class="h-10 w-10 shrink-0 rounded-full object-cover"
+							/>
+						{:else}
+							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content font-bold">
+								{profile.username.charAt(0).toUpperCase()}
+							</div>
+						{/if}
 						<div class="min-w-0 flex-1">
 							<span class="font-semibold">{profile.username}</span>
 							<code class="block break-all text-xs opacity-50">

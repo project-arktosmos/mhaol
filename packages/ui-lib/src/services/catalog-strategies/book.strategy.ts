@@ -1,5 +1,9 @@
 import { fetchJson } from 'ui-lib/transport/fetch-helpers';
-import { searchDocsToDisplay, subjectWorksToDisplay, getCoverUrl } from 'addons/openlibrary/transform';
+import {
+	searchDocsToDisplay,
+	subjectWorksToDisplay,
+	getCoverUrl
+} from 'addons/openlibrary/transform';
 import type {
 	OpenLibrarySearchResponse,
 	OpenLibrarySubjectResponse,

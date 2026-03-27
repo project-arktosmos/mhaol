@@ -57,7 +57,9 @@ async fn get_game_list(
         None => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": "RetroAchievements credentials not configured" })),
+                Json(
+                    serde_json::json!({ "error": "RetroAchievements credentials not configured" }),
+                ),
             )
                 .into_response();
         }
@@ -78,25 +80,23 @@ async fn get_game_list(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
                         "INSERT INTO ra_game_list_cache (console_id, data) VALUES (?1, ?2)
                          ON CONFLICT(console_id) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
                         rusqlite::params![console_id, data_str],
                     );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         _ => {
             // Try stale cache
             let conn = state.db.lock();
@@ -118,10 +118,7 @@ async fn get_game_list(
     }
 }
 
-async fn get_game_details(
-    State(state): State<AppState>,
-    Path(id): Path<u32>,
-) -> impl IntoResponse {
+async fn get_game_details(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     // Check cache
     {
         let conn = state.db.lock();
@@ -141,7 +138,9 @@ async fn get_game_details(
         None => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": "RetroAchievements credentials not configured" })),
+                Json(
+                    serde_json::json!({ "error": "RetroAchievements credentials not configured" }),
+                ),
             )
                 .into_response();
         }
@@ -162,25 +161,23 @@ async fn get_game_details(
         .send()
         .await
     {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                let conn = state.db.lock();
+                let _ = conn.execute(
                         "INSERT INTO ra_game_details_cache (game_id, data) VALUES (?1, ?2)
                          ON CONFLICT(game_id) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
                         rusqlite::params![id, data_str],
                     );
-                    Json(data).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+                Json(data).into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        },
         Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Game not found" })),

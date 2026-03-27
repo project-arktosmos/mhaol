@@ -50,10 +50,7 @@ impl YouTubeChannelRepo {
     pub fn get(&self, id: &str) -> Option<YouTubeChannelRow> {
         let conn = self.db.lock();
         conn.query_row(
-            &format!(
-                "SELECT {} FROM youtube_channels WHERE id = ?1",
-                SELECT_COLS
-            ),
+            &format!("SELECT {} FROM youtube_channels WHERE id = ?1", SELECT_COLS),
             params![id],
             row_to_channel,
         )
@@ -204,11 +201,14 @@ mod tests {
         let repo = make_repo();
         repo.insert(&sample_channel("ch1", "OldName"));
 
-        let updated = repo.update("ch1", &YouTubeChannelUpdate {
-            name: Some("NewName".to_string()),
-            subscriber_text: Some("2M subscribers".to_string()),
-            image_url: None,
-        });
+        let updated = repo.update(
+            "ch1",
+            &YouTubeChannelUpdate {
+                name: Some("NewName".to_string()),
+                subscriber_text: Some("2M subscribers".to_string()),
+                image_url: None,
+            },
+        );
         assert!(updated);
 
         let row = repo.get("ch1").unwrap();
@@ -221,11 +221,14 @@ mod tests {
         let repo = make_repo();
         repo.insert(&sample_channel("ch1", "Name"));
 
-        let updated = repo.update("ch1", &YouTubeChannelUpdate {
-            name: None,
-            subscriber_text: None,
-            image_url: None,
-        });
+        let updated = repo.update(
+            "ch1",
+            &YouTubeChannelUpdate {
+                name: None,
+                subscriber_text: None,
+                image_url: None,
+            },
+        );
         assert!(!updated);
     }
 

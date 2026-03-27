@@ -49,14 +49,12 @@ async fn ws_handler(
 
     // Verify EIP-191 signature
     let message = format!("partykit-auth:{}:{}", room_id, params.timestamp);
-    let recovered =
-        match mhaol_identity::eip191_recover(&message, &params.signature) {
-            Ok(addr) => addr,
-            Err(_) => {
-                return (StatusCode::UNAUTHORIZED, "Signature verification failed")
-                    .into_response()
-            }
-        };
+    let recovered = match mhaol_identity::eip191_recover(&message, &params.signature) {
+        Ok(addr) => addr,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, "Signature verification failed").into_response()
+        }
+    };
 
     if recovered.to_lowercase() != params.address.to_lowercase() {
         return (StatusCode::UNAUTHORIZED, "Signature mismatch").into_response();

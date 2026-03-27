@@ -80,11 +80,7 @@ pub fn handle_contact_request(
         "Auto-accepting contact request"
     );
 
-    let endorsement = create_endorsement(
-        &request_passport.raw,
-        server_private_key,
-        server_address,
-    );
+    let endorsement = create_endorsement(&request_passport.raw, server_private_key, server_address);
 
     let envelope = build_accept_envelope(server_passport, Some(endorsement));
 
@@ -105,8 +101,7 @@ mod tests {
 
     #[test]
     fn test_verify_passport_roundtrip() {
-        let tmp_dir =
-            std::env::temp_dir().join(format!("test_handshake_{}", uuid::Uuid::new_v4()));
+        let tmp_dir = std::env::temp_dir().join(format!("test_handshake_{}", uuid::Uuid::new_v4()));
         let mgr = mhaol_identity::IdentityManager::new(
             tmp_dir.clone(),
             "client".to_string(),

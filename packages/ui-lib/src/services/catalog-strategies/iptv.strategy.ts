@@ -95,8 +95,7 @@ export const iptvStrategy: CatalogKindStrategy = {
 		);
 		return results
 			.filter(
-				(r): r is PromiseFulfilledResult<IptvChannel> =>
-					r.status === 'fulfilled' && r.value != null
+				(r): r is PromiseFulfilledResult<IptvChannel> => r.status === 'fulfilled' && r.value != null
 			)
 			.flatMap((r) => toIptvCatalogItems([r.value]));
 	}

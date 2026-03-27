@@ -193,10 +193,7 @@ async fn check_health(
     Json(HealthResult { name, status })
 }
 
-async fn start_app(
-    State(state): State<AppState>,
-    Path(name): Path<String>,
-) -> Json<ActionResult> {
+async fn start_app(State(state): State<AppState>, Path(name): Path<String>) -> Json<ActionResult> {
     let entry = match APPS.iter().find(|e| e.name == name) {
         Some(e) => e,
         None => {
@@ -215,11 +212,15 @@ async fn start_app(
                 AppStatus::Starting | AppStatus::Running => {
                     return Json(ActionResult {
                         success: false,
-                        message: format!("{} is already {}", name, match s {
-                            AppStatus::Starting => "starting",
-                            AppStatus::Running => "running",
-                            _ => "busy",
-                        }),
+                        message: format!(
+                            "{} is already {}",
+                            name,
+                            match s {
+                                AppStatus::Starting => "starting",
+                                AppStatus::Running => "running",
+                                _ => "busy",
+                            }
+                        ),
                     });
                 }
                 _ => {
@@ -244,7 +245,8 @@ async fn start_app(
     let status = std::sync::Arc::new(Mutex::new(AppStatus::Starting));
 
     // Insert a placeholder immediately so status/logs are visible
-    let placeholder = Command::new("sleep").arg("999999")
+    let placeholder = Command::new("sleep")
+        .arg("999999")
         .kill_on_drop(true)
         .spawn()
         .expect("failed to spawn placeholder");
@@ -294,8 +296,7 @@ async fn start_app(
             });
         }
 
-        match cmd.spawn()
-        {
+        match cmd.spawn() {
             Ok(mut child) => {
                 let ready_pattern = format!("http://localhost:{}", app_port);
                 let health_url = format!("http://localhost:{}/api/health", app_port);
@@ -311,10 +312,9 @@ async fn start_app(
                         let mut lines = reader.lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             println!("[{}] {}", name_clone, line);
-                            if line.contains(&pattern)
-                                && verify_health(&url).await {
-                                    *status_clone.lock().await = AppStatus::Running;
-                                }
+                            if line.contains(&pattern) && verify_health(&url).await {
+                                *status_clone.lock().await = AppStatus::Running;
+                            }
                             let mut buf = logs_clone.lock().await;
                             push_log(&mut buf, line);
                         }
@@ -332,10 +332,9 @@ async fn start_app(
                         let mut lines = reader.lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             eprintln!("[{}] {}", name_clone, line);
-                            if line.contains(&pattern)
-                                && verify_health(&url).await {
-                                    *status_clone.lock().await = AppStatus::Running;
-                                }
+                            if line.contains(&pattern) && verify_health(&url).await {
+                                *status_clone.lock().await = AppStatus::Running;
+                            }
                             let mut buf = logs_clone.lock().await;
                             push_log(&mut buf, line);
                         }
@@ -368,10 +367,7 @@ async fn start_app(
     })
 }
 
-async fn stop_app(
-    State(state): State<AppState>,
-    Path(name): Path<String>,
-) -> Json<ActionResult> {
+async fn stop_app(State(state): State<AppState>, Path(name): Path<String>) -> Json<ActionResult> {
     let entry = match APPS.iter().find(|e| e.name == name) {
         Some(e) => e,
         None => {
@@ -448,14 +444,18 @@ async fn kill_port(port: u16) -> bool {
 
             for pid in &pids {
                 tracing::info!("Killing PID {} on port {}", pid, port);
-                unsafe { libc::kill(*pid, libc::SIGTERM); }
+                unsafe {
+                    libc::kill(*pid, libc::SIGTERM);
+                }
             }
 
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
             // Force kill any survivors
             for pid in &pids {
-                unsafe { libc::kill(*pid, libc::SIGKILL); }
+                unsafe {
+                    libc::kill(*pid, libc::SIGKILL);
+                }
             }
 
             return true;
@@ -476,10 +476,7 @@ async fn kill_port(port: u16) -> bool {
     }
 }
 
-async fn get_logs(
-    State(state): State<AppState>,
-    Path(name): Path<String>,
-) -> Json<LogsResult> {
+async fn get_logs(State(state): State<AppState>, Path(name): Path<String>) -> Json<LogsResult> {
     let procs = state.hub.processes.lock().await;
     let logs = match procs.get(name.as_str()) {
         Some(proc) => {
