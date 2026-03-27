@@ -31,13 +31,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Determine base path
-        id: base
-        run: echo "path=/$(echo '${{ github.repository }}' | cut -d'/' -f2)" >> "$GITHUB_OUTPUT"
-
       - name: Build frontend
-        env:
-          BASE_PATH: ${{ steps.base.outputs.path }}
         run: pnpm --filter frontend build
 
       - name: Copy index.html to 404.html for SPA routing
