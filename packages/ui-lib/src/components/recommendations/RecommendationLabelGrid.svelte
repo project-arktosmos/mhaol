@@ -15,8 +15,8 @@
 <div class="grid grid-cols-4 gap-2">
 	{#each labels as label (label.id)}
 		<button
-			class={classNames('btn btn-sm w-full', {
-				'btn-primary btn-outline': activeLabelId === label.id,
+			class={classNames('btn w-full btn-sm', {
+				'btn-outline btn-primary': activeLabelId === label.id,
 				'btn-outline': activeLabelId !== label.id,
 				'btn-disabled': loading
 			})}
