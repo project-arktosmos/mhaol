@@ -34,6 +34,7 @@ tracing = "0.1"
 mhaol-identity = { path = "../../packages/identity" }
 mhaol-queue = { path = "../../packages/queue" }
 mhaol-recommendations = { path = "../../packages/recommendations" }
+mhaol-websurfx = { path = "../../packages/websurfx" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2.0"
 parking_lot = "0.12"

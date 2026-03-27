@@ -42,6 +42,7 @@ pub mod smart_search;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
+pub mod websurfx;
 pub mod ws_rpc;
 pub mod youtube;
 pub mod youtube_search;
@@ -99,7 +100,8 @@ pub fn build_app_router(state: AppState) -> Router {
         .nest("/api/music-recommendations", music_recommendations::router())
         .nest("/api/game-recommendations", game_recommendations::router())
         .nest("/api/book-recommendations", book_recommendations::router())
-        .nest("/api/recommendation-labels", recommendation_labels::router());
+        .nest("/api/recommendation-labels", recommendation_labels::router())
+        .nest("/api/websurfx", websurfx::router());
 
     #[cfg(not(target_os = "android"))]
     let protected = protected.nest("/api/ytdl", ytdl::router());

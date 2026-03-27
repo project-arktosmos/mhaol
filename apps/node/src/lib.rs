@@ -136,6 +136,7 @@ pub struct AppState {
     pub game_recommendations: GameRecommendationsRepo,
     pub book_recommendations: BookRecommendationsRepo,
     pub recommendation_labels: RecommendationLabelRepo,
+    pub websurfx: mhaol_websurfx::WebSurfxClient,
 }
 
 impl AppState {
@@ -209,6 +210,7 @@ impl AppState {
             game_recommendations: GameRecommendationsRepo::new(Arc::clone(&db)),
             book_recommendations: BookRecommendationsRepo::new(Arc::clone(&db)),
             recommendation_labels: RecommendationLabelRepo::new(Arc::clone(&db)),
+            websurfx: mhaol_websurfx::WebSurfxClient::from_env(),
             data_dir,
             db,
         })
