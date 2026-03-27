@@ -1,19 +1,33 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import classNames from 'classnames';
 	import CatalogBrowsePage from 'ui-lib/components/catalog/CatalogBrowsePage.svelte';
+	import Portal from 'ui-lib/components/core/Portal.svelte';
+	import Modal from 'ui-lib/components/core/Modal.svelte';
+	import BookRecommendationsModalContent from 'ui-lib/components/recommendations/BookRecommendationsModalContent.svelte';
 	import { catalogService } from 'ui-lib/services/catalog.service';
 	import { bookStrategy } from 'ui-lib/services/catalog-strategies/book.strategy';
 	import type { CatalogItem } from 'ui-lib/types/catalog.type';
 	import { isBook } from 'ui-lib/types/catalog.type';
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
+	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
 
+	const mediaBar = getContext<MediaBarContext>(MEDIA_BAR_KEY);
 	const browseState = catalogService.state;
 	const favs = favoritesService.state;
 	const pins = pinsService.state;
+
+	let recsModalOpen = $state(false);
+
+	let pinnedBookKeys = $derived(
+		$pins.items.filter((p) => p.service === 'openlibrary').map((p) => p.serviceId)
+	);
+	let favoritedBookKeys = $derived(
+		$favs.items.filter((f) => f.service === 'openlibrary').map((f) => f.serviceId)
+	);
 
 	onMount(() => {
 		catalogService.registerStrategy(bookStrategy);
@@ -37,6 +51,10 @@
 		};
 	}
 </script>
+
+<Portal target={mediaBar.controlsTarget}>
+	<button class="btn btn-ghost btn-sm" onclick={() => (recsModalOpen = true)}>Recs</button>
+</Portal>
 
 <CatalogBrowsePage
 	browseState={$browseState}
@@ -66,3 +84,11 @@
 		{/if}
 	{/snippet}
 </CatalogBrowsePage>
+
+<Modal open={recsModalOpen} maxWidth="max-w-[90vw]" onclose={() => (recsModalOpen = false)}>
+	{#if recsModalOpen}
+		<div class="p-4">
+			<BookRecommendationsModalContent {pinnedBookKeys} {favoritedBookKeys} />
+		</div>
+	{/if}
+</Modal>
