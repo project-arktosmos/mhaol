@@ -57,7 +57,10 @@ class FavoritesService {
 
 	async add(service: string, serviceId: string, label: string): Promise<void> {
 		const tempItem: Favorite = {
-			id: crypto.randomUUID(),
+			id:
+				typeof crypto.randomUUID === 'function'
+					? crypto.randomUUID()
+					: Math.random().toString(36).substring(2) + Date.now().toString(36),
 			wallet: this._wallet,
 			service,
 			serviceId,
