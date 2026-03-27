@@ -376,10 +376,8 @@ struct RelatedTorrentDownload {
 
 #[derive(Serialize)]
 struct RelatedFetchCache {
-    #[serde(rename = "tmdbId")]
-    tmdb_id: i64,
-    #[serde(rename = "mediaType")]
-    media_type: String,
+    #[serde(rename = "catalogItemId")]
+    catalog_item_id: String,
     candidate: serde_json::Value,
     #[serde(rename = "createdAt")]
     created_at: String,
@@ -448,17 +446,32 @@ async fn get_library_item_related(
         .find(|l| l.service == "tmdb")
         .and_then(|l| l.service_id.parse().ok());
 
-    // Fetch cache (by TMDB ID)
-    let fetch_cache = tmdb_id.and_then(|tid| {
-        state.torrent_fetch_cache.get(tid).map(|fc| {
-            let candidate: serde_json::Value =
-                serde_json::from_str(&fc.candidate_json).unwrap_or(serde_json::Value::Null);
-            RelatedFetchCache {
-                tmdb_id: fc.tmdb_id,
-                media_type: fc.media_type,
-                candidate,
-                created_at: fc.created_at,
-            }
+    // Fetch cache (via catalog: look up by TMDB source + kind, then fetch cache by catalog item id)
+    let tmdb_service_id: Option<String> = links
+        .iter()
+        .find(|l| l.service == "tmdb")
+        .map(|l| l.service_id.clone());
+    let catalog_kind = if item
+        .category_id
+        .as_deref()
+        .map(|c| c.contains("tv"))
+        .unwrap_or(false)
+    {
+        "tv_show"
+    } else {
+        "movie"
+    };
+    let fetch_cache = tmdb_service_id.as_deref().and_then(|sid| {
+        let catalog_item = state.catalog.get_by_source("tmdb", sid, catalog_kind)?;
+        let fc = state
+            .catalog_fetch_cache
+            .get(&catalog_item.id, "default", "")?;
+        let candidate: serde_json::Value =
+            serde_json::from_str(&fc.candidate_json).unwrap_or(serde_json::Value::Null);
+        Some(RelatedFetchCache {
+            catalog_item_id: fc.catalog_item_id,
+            candidate,
+            created_at: fc.created_at,
         })
     });
 

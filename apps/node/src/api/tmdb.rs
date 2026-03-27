@@ -123,7 +123,7 @@ pub(crate) async fn tmdb_fetch_json(
     let cache_key = build_cache_key(path, extra_params);
 
     // Check cache
-    if let Some((data, is_stale)) = state.tmdb_api_cache.get(&cache_key) {
+    if let Some((data, is_stale)) = state.api_cache.get("tmdb", &cache_key, 24.0) {
         if !is_stale {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Ok(parsed);
@@ -145,14 +145,14 @@ pub(crate) async fn tmdb_fetch_json(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                state.tmdb_api_cache.upsert(&cache_key, &data_str);
+                state.api_cache.upsert("tmdb", &cache_key, &data_str);
                 Ok(data)
             }
             Err(e) => Err(e.to_string()),
         },
         _ => {
             // Graceful degradation: return stale cache on error
-            if let Some((data, _)) = state.tmdb_api_cache.get(&cache_key) {
+            if let Some(data) = state.api_cache.get_any("tmdb", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Ok(parsed);
                 }
@@ -322,14 +322,11 @@ async fn get_movie(
 
     let refresh = query.refresh.as_deref() == Some("true");
 
+    let cache_key = format!("movie:{}", tmdb_id);
+
     // Check cache
     if !refresh {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM tmdb_movies WHERE tmdb_id = ?1",
-            rusqlite::params![tmdb_id],
-            |row| row.get::<_, String>(0),
-        ) {
+        if let Some(data) = state.api_cache.get_any("tmdb", &cache_key) {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
             }
@@ -356,14 +353,8 @@ async fn get_movie(
         Ok(resp) if resp.status().is_success() => {
             match resp.json::<serde_json::Value>().await {
                 Ok(data) => {
-                    // Cache result
                     let data_str = serde_json::to_string(&data).unwrap_or_default();
-                    let conn = state.db.lock();
-                    let _ = conn.execute(
-                        "INSERT INTO tmdb_movies (tmdb_id, data) VALUES (?1, ?2)
-                         ON CONFLICT(tmdb_id) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![tmdb_id, data_str],
-                    );
+                    state.api_cache.upsert("tmdb", &cache_key, &data_str);
                     Json(data).into_response()
                 }
                 Err(e) => (
@@ -380,12 +371,7 @@ async fn get_movie(
             .into_response(),
         _ => {
             // Try stale cache on error
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM tmdb_movies WHERE tmdb_id = ?1",
-                rusqlite::params![tmdb_id],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("tmdb", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -417,13 +403,10 @@ async fn get_tv_season(
 
     let refresh = query.refresh.as_deref() == Some("true");
 
+    let cache_key = format!("tv:{}:season:{}", tmdb_id, season);
+
     if !refresh {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM tmdb_seasons WHERE tmdb_id = ?1 AND season_number = ?2",
-            rusqlite::params![tmdb_id, season],
-            |row| row.get::<_, String>(0),
-        ) {
+        if let Some(data) = state.api_cache.get_any("tmdb", &cache_key) {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
             }
@@ -450,12 +433,7 @@ async fn get_tv_season(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                        "INSERT INTO tmdb_seasons (tmdb_id, season_number, data) VALUES (?1, ?2, ?3)
-                         ON CONFLICT(tmdb_id, season_number) DO UPDATE SET data = ?3, fetched_at = datetime('now')",
-                        rusqlite::params![tmdb_id, season, data_str],
-                    );
+                state.api_cache.upsert("tmdb", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -470,12 +448,7 @@ async fn get_tv_season(
         )
             .into_response(),
         _ => {
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM tmdb_seasons WHERE tmdb_id = ?1 AND season_number = ?2",
-                rusqlite::params![tmdb_id, season],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("tmdb", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -507,14 +480,11 @@ async fn get_tv(
 
     let refresh = query.refresh.as_deref() == Some("true");
 
+    let cache_key = format!("tv:{}", tmdb_id);
+
     // Check cache
     if !refresh {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM tmdb_tv_shows WHERE tmdb_id = ?1",
-            rusqlite::params![tmdb_id],
-            |row| row.get::<_, String>(0),
-        ) {
+        if let Some(data) = state.api_cache.get_any("tmdb", &cache_key) {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
             }
@@ -541,12 +511,7 @@ async fn get_tv(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                        "INSERT INTO tmdb_tv_shows (tmdb_id, data) VALUES (?1, ?2)
-                         ON CONFLICT(tmdb_id) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![tmdb_id, data_str],
-                    );
+                state.api_cache.upsert("tmdb", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -561,12 +526,7 @@ async fn get_tv(
         )
             .into_response(),
         _ => {
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM tmdb_tv_shows WHERE tmdb_id = ?1",
-                rusqlite::params![tmdb_id],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("tmdb", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }

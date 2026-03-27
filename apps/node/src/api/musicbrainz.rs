@@ -55,15 +55,11 @@ async fn get_recording(
     }
 
     let refresh = query.refresh.as_deref() == Some("true");
+    let cache_key = format!("recording:{}", id);
 
     // Check cache
     if !refresh {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM musicbrainz_recordings WHERE mbid = ?1",
-            rusqlite::params![id],
-            |row| row.get::<_, String>(0),
-        ) {
+        if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
             }
@@ -85,12 +81,7 @@ async fn get_recording(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                    "INSERT INTO musicbrainz_recordings (mbid, data) VALUES (?1, ?2)
-                         ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                    rusqlite::params![id, data_str],
-                );
+                state.api_cache.upsert("musicbrainz", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -106,12 +97,7 @@ async fn get_recording(
             .into_response(),
         _ => {
             // Try stale cache
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM musicbrainz_recordings WHERE mbid = ?1",
-                rusqlite::params![id],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -139,14 +125,10 @@ async fn get_release_group(
     }
 
     let refresh = query.refresh.as_deref() == Some("true");
+    let cache_key = format!("release-group:{}", id);
 
     if !refresh {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM musicbrainz_release_groups WHERE mbid = ?1",
-            rusqlite::params![id],
-            |row| row.get::<_, String>(0),
-        ) {
+        if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
             }
@@ -168,12 +150,7 @@ async fn get_release_group(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                    "INSERT INTO musicbrainz_release_groups (mbid, data) VALUES (?1, ?2)
-                         ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                    rusqlite::params![id, data_str],
-                );
+                state.api_cache.upsert("musicbrainz", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -188,12 +165,7 @@ async fn get_release_group(
         )
             .into_response(),
         _ => {
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM musicbrainz_release_groups WHERE mbid = ?1",
-                rusqlite::params![id],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -221,14 +193,10 @@ async fn get_release(
     }
 
     let refresh = query.refresh.as_deref() == Some("true");
+    let cache_key = format!("release:{}", id);
 
     if !refresh {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM musicbrainz_releases WHERE mbid = ?1",
-            rusqlite::params![id],
-            |row| row.get::<_, String>(0),
-        ) {
+        if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
             }
@@ -250,12 +218,7 @@ async fn get_release(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                    "INSERT INTO musicbrainz_releases (mbid, data) VALUES (?1, ?2)
-                         ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                    rusqlite::params![id, data_str],
-                );
+                state.api_cache.upsert("musicbrainz", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -270,12 +233,7 @@ async fn get_release(
         )
             .into_response(),
         _ => {
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM musicbrainz_releases WHERE mbid = ?1",
-                rusqlite::params![id],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -303,14 +261,10 @@ async fn get_artist(
     }
 
     let refresh = query.refresh.as_deref() == Some("true");
+    let cache_key = format!("artist:{}", id);
 
     if !refresh {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM musicbrainz_artists WHERE mbid = ?1",
-            rusqlite::params![id],
-            |row| row.get::<_, String>(0),
-        ) {
+        if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
             }
@@ -329,12 +283,7 @@ async fn get_artist(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                    "INSERT INTO musicbrainz_artists (mbid, data) VALUES (?1, ?2)
-                         ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                    rusqlite::params![id, data_str],
-                );
+                state.api_cache.upsert("musicbrainz", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -349,12 +298,7 @@ async fn get_artist(
         )
             .into_response(),
         _ => {
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM musicbrainz_artists WHERE mbid = ?1",
-                rusqlite::params![id],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -403,17 +347,12 @@ async fn get_popular(
             .into_response();
     }
 
+    let cache_key = format!("popular:{}", genre_lower);
+
     // Check cache (valid for 24 hours)
-    {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM musicbrainz_popular_cache WHERE genre = ?1 AND fetched_at > datetime('now', '-24 hours')",
-            rusqlite::params![genre_lower],
-            |row| row.get::<_, String>(0),
-        ) {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-                return Json(parsed).into_response();
-            }
+    if let Some(data) = state.api_cache.get_fresh("musicbrainz", &cache_key, 24) {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+            return Json(parsed).into_response();
         }
     }
 
@@ -437,12 +376,7 @@ async fn get_popular(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                    "INSERT INTO musicbrainz_popular_cache (genre, data) VALUES (?1, ?2)
-                         ON CONFLICT(genre) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                    rusqlite::params![genre_lower, data_str],
-                );
+                state.api_cache.upsert("musicbrainz", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -453,12 +387,7 @@ async fn get_popular(
         },
         _ => {
             // Try stale cache
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM musicbrainz_popular_cache WHERE genre = ?1",
-                rusqlite::params![genre_lower],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -487,17 +416,12 @@ async fn get_popular_artists(
             .into_response();
     }
 
+    let cache_key = format!("popular-artists:{}", genre_lower);
+
     // Check cache (valid for 24 hours)
-    {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM musicbrainz_popular_artists_cache WHERE genre = ?1 AND fetched_at > datetime('now', '-24 hours')",
-            rusqlite::params![genre_lower],
-            |row| row.get::<_, String>(0),
-        ) {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-                return Json(parsed).into_response();
-            }
+    if let Some(data) = state.api_cache.get_fresh("musicbrainz", &cache_key, 24) {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+            return Json(parsed).into_response();
         }
     }
 
@@ -518,12 +442,7 @@ async fn get_popular_artists(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                    "INSERT INTO musicbrainz_popular_artists_cache (genre, data) VALUES (?1, ?2)
-                         ON CONFLICT(genre) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                    rusqlite::params![genre_lower, data_str],
-                );
+                state.api_cache.upsert("musicbrainz", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -533,12 +452,7 @@ async fn get_popular_artists(
                 .into_response(),
         },
         _ => {
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM musicbrainz_popular_artists_cache WHERE genre = ?1",
-                rusqlite::params![genre_lower],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -567,19 +481,12 @@ async fn search_artists(
         }
     };
     let limit = query.limit.unwrap_or(20).min(100);
-    let cache_key = format!("artist:{}", q.to_lowercase());
+    let cache_key = format!("search:artist:{}", q.to_lowercase());
 
     // Check cache (1 hour TTL)
-    {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM musicbrainz_search_cache WHERE query_key = ?1 AND fetched_at > datetime('now', '-1 hours')",
-            rusqlite::params![cache_key],
-            |row| row.get::<_, String>(0),
-        ) {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-                return Json(parsed).into_response();
-            }
+    if let Some(data) = state.api_cache.get_fresh("musicbrainz", &cache_key, 1) {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+            return Json(parsed).into_response();
         }
     }
 
@@ -600,12 +507,7 @@ async fn search_artists(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                        "INSERT INTO musicbrainz_search_cache (query_key, data) VALUES (?1, ?2)
-                         ON CONFLICT(query_key) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![cache_key, data_str],
-                    );
+                state.api_cache.upsert("musicbrainz", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -615,12 +517,7 @@ async fn search_artists(
                 .into_response(),
         },
         _ => {
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM musicbrainz_search_cache WHERE query_key = ?1",
-                rusqlite::params![cache_key],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -649,19 +546,12 @@ async fn search_release_groups(
         }
     };
     let limit = query.limit.unwrap_or(20).min(100);
-    let cache_key = format!("release-group:{}", q.to_lowercase());
+    let cache_key = format!("search:release-group:{}", q.to_lowercase());
 
     // Check cache (1 hour TTL)
-    {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM musicbrainz_search_cache WHERE query_key = ?1 AND fetched_at > datetime('now', '-1 hours')",
-            rusqlite::params![cache_key],
-            |row| row.get::<_, String>(0),
-        ) {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-                return Json(parsed).into_response();
-            }
+    if let Some(data) = state.api_cache.get_fresh("musicbrainz", &cache_key, 1) {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+            return Json(parsed).into_response();
         }
     }
 
@@ -682,12 +572,7 @@ async fn search_release_groups(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                        "INSERT INTO musicbrainz_search_cache (query_key, data) VALUES (?1, ?2)
-                         ON CONFLICT(query_key) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![cache_key, data_str],
-                    );
+                state.api_cache.upsert("musicbrainz", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -697,12 +582,7 @@ async fn search_release_groups(
                 .into_response(),
         },
         _ => {
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM musicbrainz_search_cache WHERE query_key = ?1",
-                rusqlite::params![cache_key],
-                |row| row.get::<_, String>(0),
-            ) {
+            if let Some(data) = state.api_cache.get_any("musicbrainz", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -768,16 +648,11 @@ async fn serve_artist_image(
     };
 
     // Try to get artist data from cache first
-    let artist_data = {
-        let conn = state.db.lock();
-        conn.query_row(
-            "SELECT data FROM musicbrainz_artists WHERE mbid = ?1",
-            rusqlite::params![id],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-    };
+    let artist_cache_key = format!("artist:{}", id);
+    let artist_data = state
+        .api_cache
+        .get_any("musicbrainz", &artist_cache_key)
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
 
     // If not cached, fetch from MusicBrainz
     let artist_data = match artist_data {
@@ -795,12 +670,9 @@ async fn serve_artist_image(
                     match resp.json::<serde_json::Value>().await {
                         Ok(data) => {
                             let data_str = serde_json::to_string(&data).unwrap_or_default();
-                            let conn = state.db.lock();
-                            let _ = conn.execute(
-                                "INSERT INTO musicbrainz_artists (mbid, data) VALUES (?1, ?2)
-                                 ON CONFLICT(mbid) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                                rusqlite::params![id, data_str],
-                            );
+                            state
+                                .api_cache
+                                .upsert("musicbrainz", &artist_cache_key, &data_str);
                             data
                         }
                         Err(_) => {

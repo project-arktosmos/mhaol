@@ -22,6 +22,12 @@ pub fn router() -> Router<AppState> {
         )
         .route("/fetch-cache/hashes", get(list_fetch_cache_hashes))
         .route("/fetch-cache/summaries", get(list_fetch_cache_summaries))
+        .route(
+            "/fetch-cache-by-source",
+            get(get_fetch_cache_by_source)
+                .post(save_fetch_cache_by_source)
+                .delete(delete_fetch_cache_by_source),
+        )
 }
 
 // === Catalog Items ===
@@ -233,6 +239,94 @@ async fn list_fetch_cache_summaries(State(state): State<AppState>) -> impl IntoR
         })
         .collect();
     Json(result)
+}
+
+// === Fetch Cache by Source (convenience layer) ===
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FetchCacheBySourceQuery {
+    source: String,
+    source_id: String,
+    kind: String,
+    scope: Option<String>,
+    scope_key: Option<String>,
+}
+
+async fn get_fetch_cache_by_source(
+    State(state): State<AppState>,
+    Query(query): Query<FetchCacheBySourceQuery>,
+) -> impl IntoResponse {
+    let item = match state.catalog.get_by_source(&query.source, &query.source_id, &query.kind) {
+        Some(item) => item,
+        None => return StatusCode::NOT_FOUND.into_response(),
+    };
+    if let Some(scope) = &query.scope {
+        let scope_key = query.scope_key.as_deref().unwrap_or("");
+        match state.catalog_fetch_cache.get(&item.id, scope, scope_key) {
+            Some(row) => Json(serde_json::json!(row)).into_response(),
+            None => StatusCode::NOT_FOUND.into_response(),
+        }
+    } else {
+        let rows = state.catalog_fetch_cache.get_by_item(&item.id);
+        Json(rows).into_response()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveFetchCacheBySourceBody {
+    source: String,
+    source_id: String,
+    kind: String,
+    scope: String,
+    scope_key: Option<String>,
+    candidate: serde_json::Value,
+}
+
+async fn save_fetch_cache_by_source(
+    State(state): State<AppState>,
+    Json(body): Json<SaveFetchCacheBySourceBody>,
+) -> impl IntoResponse {
+    let item = match state.catalog.get_by_source(&body.source, &body.source_id, &body.kind) {
+        Some(item) => item,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Catalog item not found" })),
+            )
+                .into_response()
+        }
+    };
+    let scope_key = body.scope_key.as_deref().unwrap_or("");
+    let candidate_json = body.candidate.to_string();
+    state
+        .catalog_fetch_cache
+        .upsert(&item.id, &body.scope, scope_key, &candidate_json);
+    StatusCode::CREATED.into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteFetchCacheBySourceQuery {
+    source: String,
+    source_id: String,
+    kind: String,
+}
+
+async fn delete_fetch_cache_by_source(
+    State(state): State<AppState>,
+    Query(query): Query<DeleteFetchCacheBySourceQuery>,
+) -> impl IntoResponse {
+    let item = match state.catalog.get_by_source(&query.source, &query.source_id, &query.kind) {
+        Some(item) => item,
+        None => return StatusCode::NOT_FOUND,
+    };
+    if state.catalog_fetch_cache.delete_by_item(&item.id) {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::NOT_FOUND
+    }
 }
 
 // === Helpers ===

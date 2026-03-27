@@ -39,8 +39,9 @@ async fn get_assignments(
 #[serde(rename_all = "camelCase")]
 struct SetAssignmentBody {
     wallet: String,
-    recommended_tmdb_id: i64,
-    recommended_media_type: String,
+    source: String,
+    source_id: String,
+    source_type: String,
     label_id: String,
 }
 
@@ -50,8 +51,9 @@ async fn set_assignment(
 ) -> impl IntoResponse {
     if state.recommendation_labels.upsert(
         &body.wallet,
-        body.recommended_tmdb_id,
-        &body.recommended_media_type,
+        &body.source,
+        &body.source_id,
+        &body.source_type,
         &body.label_id,
     ) {
         StatusCode::OK
@@ -64,8 +66,9 @@ async fn set_assignment(
 #[serde(rename_all = "camelCase")]
 struct RemoveAssignmentBody {
     wallet: String,
-    recommended_tmdb_id: i64,
-    recommended_media_type: String,
+    source: String,
+    source_id: String,
+    source_type: String,
 }
 
 async fn remove_assignment(
@@ -74,8 +77,9 @@ async fn remove_assignment(
 ) -> impl IntoResponse {
     if state.recommendation_labels.delete(
         &body.wallet,
-        body.recommended_tmdb_id,
-        &body.recommended_media_type,
+        &body.source,
+        &body.source_id,
+        &body.source_type,
     ) {
         StatusCode::NO_CONTENT
     } else {

@@ -229,29 +229,16 @@ async fn get_label_assignments(
     State(state): State<AppState>,
     Query(q): Query<WalletQuery>,
 ) -> impl IntoResponse {
-    let conn = state.db.lock();
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, wallet, recommended_mbid, recommended_type, label_id, created_at
-             FROM music_recommendation_label_assignments
-             WHERE wallet = ?1",
-        )
-        .unwrap();
-    let rows: Vec<serde_json::Value> = stmt
-        .query_map(rusqlite::params![q.wallet], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>(0)?,
-                "wallet": row.get::<_, String>(1)?,
-                "recommendedMbid": row.get::<_, String>(2)?,
-                "recommendedType": row.get::<_, String>(3)?,
-                "labelId": row.get::<_, String>(4)?,
-                "createdAt": row.get::<_, String>(5)?,
-            }))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
-    Json(serde_json::json!(rows))
+    let rows = state.recommendation_labels.get_assignments_by_wallet_and_source(&q.wallet, "musicbrainz");
+    let mapped: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+        "id": r.id,
+        "wallet": r.wallet,
+        "recommendedMbid": r.source_id,
+        "recommendedType": r.source_type,
+        "labelId": r.label_id,
+        "createdAt": r.created_at,
+    })).collect();
+    Json(serde_json::json!(mapped))
 }
 
 #[derive(Deserialize)]
@@ -267,17 +254,11 @@ async fn set_label(
     State(state): State<AppState>,
     Json(body): Json<SetLabelBody>,
 ) -> impl IntoResponse {
-    let conn = state.db.lock();
-    let result = conn.execute(
-        "INSERT INTO music_recommendation_label_assignments (id, wallet, recommended_mbid, recommended_type, label_id)
-         VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3, ?4)
-         ON CONFLICT(wallet, recommended_mbid, recommended_type)
-         DO UPDATE SET label_id = ?4",
-        rusqlite::params![body.wallet, body.recommended_mbid, body.recommended_type, body.label_id],
-    );
-    match result {
-        Ok(_) => StatusCode::OK,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    let ok = state.recommendation_labels.upsert(&body.wallet, "musicbrainz", &body.recommended_mbid, &body.recommended_type, &body.label_id);
+    if ok {
+        StatusCode::OK
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
     }
 }
 
@@ -293,15 +274,8 @@ async fn remove_label(
     State(state): State<AppState>,
     Json(body): Json<RemoveLabelBody>,
 ) -> impl IntoResponse {
-    let conn = state.db.lock();
-    let affected = conn
-        .execute(
-            "DELETE FROM music_recommendation_label_assignments
-             WHERE wallet = ?1 AND recommended_mbid = ?2 AND recommended_type = ?3",
-            rusqlite::params![body.wallet, body.recommended_mbid, body.recommended_type],
-        )
-        .unwrap_or(0);
-    if affected > 0 {
+    let deleted = state.recommendation_labels.delete(&body.wallet, "musicbrainz", &body.recommended_mbid, &body.recommended_type);
+    if deleted {
         StatusCode::NO_CONTENT
     } else {
         StatusCode::NOT_FOUND

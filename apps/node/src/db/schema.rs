@@ -310,7 +310,7 @@ CREATE TABLE IF NOT EXISTS pins (
 ";
 
 const SEED_SQL: &str = "
-INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '37', 'number');
+INSERT OR REPLACE INTO metadata (key, value, type) VALUES ('db_version', '38', 'number');
 INSERT OR IGNORE INTO metadata (key, value, type) VALUES ('created_at', datetime('now'), 'string');
 
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
@@ -328,56 +328,14 @@ INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-movi
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-tv', 'video', 'Pinned TV');
 ";
 
-/// YouTube video metadata cache (module schema).
-pub const YOUTUBE_SCHEMA_SQL: &str = "
-CREATE TABLE IF NOT EXISTS youtube_videos (
-    video_id TEXT PRIMARY KEY,
+/// Unified API response cache for all external services.
+pub const API_CACHE_SCHEMA_SQL: &str = "
+CREATE TABLE IF NOT EXISTS api_cache (
+    source TEXT NOT NULL,
+    cache_key TEXT NOT NULL,
     data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-";
-
-pub const MUSICBRAINZ_SCHEMA_SQL: &str = "
-CREATE TABLE IF NOT EXISTS musicbrainz_artists (
-    mbid TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS musicbrainz_release_groups (
-    mbid TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS musicbrainz_releases (
-    mbid TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS musicbrainz_recordings (
-    mbid TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS musicbrainz_popular_cache (
-    genre TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS musicbrainz_popular_artists_cache (
-    genre TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS musicbrainz_search_cache (
-    query_key TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (source, cache_key)
 );
 ";
 
@@ -404,32 +362,6 @@ CREATE TABLE IF NOT EXISTS lrclib_lookups (
 
 /// Module SQL schemas for addon tables
 pub const TMDB_SCHEMA_SQL: &str = "
-CREATE TABLE IF NOT EXISTS tmdb_movies (
-    tmdb_id INTEGER PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS tmdb_tv_shows (
-    tmdb_id INTEGER PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS tmdb_seasons (
-    tmdb_id INTEGER NOT NULL,
-    season_number INTEGER NOT NULL,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (tmdb_id, season_number)
-);
-
-CREATE TABLE IF NOT EXISTS tmdb_api_cache (
-    cache_key TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
 CREATE TABLE IF NOT EXISTS tmdb_image_overrides (
     tmdb_id INTEGER NOT NULL,
     media_type TEXT NOT NULL CHECK (media_type IN ('movie', 'tv')),
@@ -437,14 +369,6 @@ CREATE TABLE IF NOT EXISTS tmdb_image_overrides (
     file_path TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (tmdb_id, media_type, role)
-);
-";
-
-pub const OPENLIBRARY_SCHEMA_SQL: &str = "
-CREATE TABLE IF NOT EXISTS openlibrary_api_cache (
-    cache_key TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 ";
 
@@ -1118,6 +1042,219 @@ fn run_migrations(conn: &Connection) {
                 ON music_torrent_fetch_cache(musicbrainz_id, scope);",
         );
     }
+
+    // Migration: unify all metadata cache tables into api_cache
+    if has_table(conn, "tmdb_api_cache") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'tmdb', cache_key, data, fetched_at FROM tmdb_api_cache;
+             DROP TABLE tmdb_api_cache;",
+        );
+    }
+    if has_table(conn, "tmdb_movies") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'tmdb', 'movie:' || CAST(tmdb_id AS TEXT), data, fetched_at FROM tmdb_movies;
+             DROP TABLE tmdb_movies;",
+        );
+    }
+    if has_table(conn, "tmdb_tv_shows") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'tmdb', 'tv:' || CAST(tmdb_id AS TEXT), data, fetched_at FROM tmdb_tv_shows;
+             DROP TABLE tmdb_tv_shows;",
+        );
+    }
+    if has_table(conn, "tmdb_seasons") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'tmdb', 'tv:' || CAST(tmdb_id AS TEXT) || ':season:' || CAST(season_number AS TEXT), data, fetched_at FROM tmdb_seasons;
+             DROP TABLE tmdb_seasons;",
+        );
+    }
+    if has_table(conn, "musicbrainz_artists") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'musicbrainz', 'artist:' || mbid, data, fetched_at FROM musicbrainz_artists;
+             DROP TABLE musicbrainz_artists;",
+        );
+    }
+    if has_table(conn, "musicbrainz_release_groups") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'musicbrainz', 'release-group:' || mbid, data, fetched_at FROM musicbrainz_release_groups;
+             DROP TABLE musicbrainz_release_groups;",
+        );
+    }
+    if has_table(conn, "musicbrainz_releases") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'musicbrainz', 'release:' || mbid, data, fetched_at FROM musicbrainz_releases;
+             DROP TABLE musicbrainz_releases;",
+        );
+    }
+    if has_table(conn, "musicbrainz_recordings") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'musicbrainz', 'recording:' || mbid, data, fetched_at FROM musicbrainz_recordings;
+             DROP TABLE musicbrainz_recordings;",
+        );
+    }
+    if has_table(conn, "musicbrainz_popular_cache") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'musicbrainz', 'popular:' || genre, data, fetched_at FROM musicbrainz_popular_cache;
+             DROP TABLE musicbrainz_popular_cache;",
+        );
+    }
+    if has_table(conn, "musicbrainz_popular_artists_cache") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'musicbrainz', 'popular-artists:' || genre, data, fetched_at FROM musicbrainz_popular_artists_cache;
+             DROP TABLE musicbrainz_popular_artists_cache;",
+        );
+    }
+    if has_table(conn, "musicbrainz_search_cache") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'musicbrainz', 'search:' || query_key, data, fetched_at FROM musicbrainz_search_cache;
+             DROP TABLE musicbrainz_search_cache;",
+        );
+    }
+    if has_table(conn, "ra_game_list_cache") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'retroachievements', 'game-list:' || CAST(console_id AS TEXT), data, fetched_at FROM ra_game_list_cache;
+             DROP TABLE ra_game_list_cache;",
+        );
+    }
+    if has_table(conn, "ra_game_details_cache") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'retroachievements', 'game-details:' || CAST(game_id AS TEXT), data, fetched_at FROM ra_game_details_cache;
+             DROP TABLE ra_game_details_cache;",
+        );
+    }
+    if has_table(conn, "openlibrary_api_cache") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'openlibrary', cache_key, data, fetched_at FROM openlibrary_api_cache;
+             DROP TABLE openlibrary_api_cache;",
+        );
+    }
+    if has_table(conn, "youtube_videos") && has_table(conn, "api_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO api_cache (source, cache_key, data, fetched_at)
+             SELECT 'youtube', 'video:' || video_id, data, fetched_at FROM youtube_videos;
+             DROP TABLE youtube_videos;",
+        );
+    }
+
+    // Migration: unify torrent fetch caches into catalog_fetch_cache
+    if has_table(conn, "torrent_fetch_cache") && has_table(conn, "catalog_fetch_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO catalog_fetch_cache (id, catalog_item_id, scope, scope_key, candidate_json, created_at)
+             SELECT lower(hex(randomblob(16))), c.id, 'default', '', t.candidate_json, t.created_at
+             FROM torrent_fetch_cache t
+             JOIN catalog_items c ON c.source = 'tmdb' AND c.source_id = CAST(t.tmdb_id AS TEXT) AND c.kind = t.media_type;
+             DROP TABLE torrent_fetch_cache;",
+        );
+    }
+    if has_table(conn, "tv_torrent_fetch_cache") && has_table(conn, "catalog_fetch_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO catalog_fetch_cache (id, catalog_item_id, scope, scope_key, candidate_json, created_at)
+             SELECT lower(hex(randomblob(16))), c.id, t.scope,
+                CASE t.scope
+                    WHEN 'complete' THEN ''
+                    WHEN 'season' THEN CAST(t.season_number AS TEXT)
+                    WHEN 'episode' THEN CAST(t.season_number AS TEXT) || ':' || CAST(t.episode_number AS TEXT)
+                    ELSE ''
+                END,
+                t.candidate_json, t.created_at
+             FROM tv_torrent_fetch_cache t
+             JOIN catalog_items c ON c.source = 'tmdb' AND c.source_id = CAST(t.tmdb_id AS TEXT) AND c.kind IN ('tv_show', 'tv');
+             DROP TABLE tv_torrent_fetch_cache;",
+        );
+    }
+    if has_table(conn, "music_torrent_fetch_cache") && has_table(conn, "catalog_fetch_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO catalog_fetch_cache (id, catalog_item_id, scope, scope_key, candidate_json, created_at)
+             SELECT lower(hex(randomblob(16))), c.id, t.scope, '', t.candidate_json, t.created_at
+             FROM music_torrent_fetch_cache t
+             JOIN catalog_items c ON c.source = 'musicbrainz' AND c.source_id = t.musicbrainz_id;
+             DROP TABLE music_torrent_fetch_cache;",
+        );
+    }
+    if has_table(conn, "book_torrent_fetch_cache") && has_table(conn, "catalog_fetch_cache") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO catalog_fetch_cache (id, catalog_item_id, scope, scope_key, candidate_json, created_at)
+             SELECT lower(hex(randomblob(16))), c.id, 'default', '', t.candidate_json, t.created_at
+             FROM book_torrent_fetch_cache t
+             JOIN catalog_items c ON c.source = 'openlibrary' AND c.source_id = t.openlibrary_key;
+             DROP TABLE book_torrent_fetch_cache;",
+        );
+    }
+
+    // Migration: unify recommendation label assignments into one table
+    if has_table(conn, "recommendation_label_assignments")
+        && has_column(conn, "recommendation_label_assignments", "recommended_tmdb_id")
+    {
+        let _ = conn.execute_batch(
+            "CREATE TABLE recommendation_label_assignments_v2 (
+                id TEXT PRIMARY KEY,
+                wallet TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                label_id TEXT NOT NULL REFERENCES recommendation_labels(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(wallet, source, source_id, source_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rec_label_assign_wallet_v2
+                ON recommendation_label_assignments_v2(wallet);
+            CREATE INDEX IF NOT EXISTS idx_rec_label_assign_source_v2
+                ON recommendation_label_assignments_v2(source, source_id);
+
+            INSERT OR IGNORE INTO recommendation_label_assignments_v2
+                (id, wallet, source, source_id, source_type, label_id, created_at)
+            SELECT id, wallet, 'tmdb', CAST(recommended_tmdb_id AS TEXT),
+                recommended_media_type, label_id, created_at
+            FROM recommendation_label_assignments;
+
+            DROP TABLE recommendation_label_assignments;
+            ALTER TABLE recommendation_label_assignments_v2 RENAME TO recommendation_label_assignments;",
+        );
+    }
+    if has_table(conn, "music_recommendation_label_assignments") && has_table(conn, "recommendation_label_assignments") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO recommendation_label_assignments
+                (id, wallet, source, source_id, source_type, label_id, created_at)
+            SELECT id, wallet, 'musicbrainz', recommended_mbid,
+                recommended_type, label_id, created_at
+            FROM music_recommendation_label_assignments;
+            DROP TABLE music_recommendation_label_assignments;",
+        );
+    }
+    if has_table(conn, "game_recommendation_label_assignments") && has_table(conn, "recommendation_label_assignments") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO recommendation_label_assignments
+                (id, wallet, source, source_id, source_type, label_id, created_at)
+            SELECT id, wallet, 'retroachievements', CAST(recommended_game_id AS TEXT),
+                'game', label_id, created_at
+            FROM game_recommendation_label_assignments;
+            DROP TABLE game_recommendation_label_assignments;",
+        );
+    }
+    if has_table(conn, "book_recommendation_label_assignments") && has_table(conn, "recommendation_label_assignments") {
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO recommendation_label_assignments
+                (id, wallet, source, source_id, source_type, label_id, created_at)
+            SELECT id, wallet, 'openlibrary', recommended_key,
+                'book', label_id, created_at
+            FROM book_recommendation_label_assignments;
+            DROP TABLE book_recommendation_label_assignments;",
+        );
+    }
 }
 
 /// App identifiers used to select which schema features to include.
@@ -1155,13 +1292,13 @@ pub fn initialize_module_schemas(conn: &Connection) -> Result<(), rusqlite::Erro
     let app = app_id();
     let is_server = app.as_deref() == Some("server");
 
-    // TMDB is used by server and other apps
+    // Unified API cache for all external service responses
+    conn.execute_batch(API_CACHE_SCHEMA_SQL)?;
+
+    // TMDB image overrides (user config, not a cache)
     conn.execute_batch(TMDB_SCHEMA_SQL)?;
 
-    conn.execute_batch(YOUTUBE_SCHEMA_SQL)?;
-    conn.execute_batch(OPENLIBRARY_SCHEMA_SQL)?;
     if !is_server {
-        conn.execute_batch(MUSICBRAINZ_SCHEMA_SQL)?;
         conn.execute_batch(LYRICS_SCHEMA_SQL)?;
     }
 
@@ -1196,13 +1333,10 @@ mod tests {
         assert!(has_table(&conn, "media_list_links"));
         assert!(has_table(&conn, "signaling_servers"));
         assert!(has_table(&conn, "llm_conversations"));
-        assert!(has_table(&conn, "torrent_fetch_cache"));
         assert!(has_table(&conn, "roster_contacts"));
         assert!(has_table(&conn, "profiles"));
         assert!(has_table(&conn, "favorites"));
         assert!(has_table(&conn, "pins"));
-        assert!(has_table(&conn, "tv_torrent_fetch_cache"));
-        assert!(has_table(&conn, "book_torrent_fetch_cache"));
         assert!(has_table(&conn, "queue_tasks"));
         assert!(has_table(&conn, "tmdb_recommendations"));
 
@@ -1224,11 +1358,11 @@ mod tests {
         initialize_schema(&conn).unwrap();
         initialize_module_schemas(&conn).unwrap();
 
-        assert!(has_table(&conn, "youtube_videos"));
-        assert!(has_table(&conn, "tmdb_movies"));
-        assert!(has_table(&conn, "tmdb_tv_shows"));
-        assert!(has_table(&conn, "tmdb_seasons"));
+        assert!(has_table(&conn, "api_cache"));
         assert!(has_table(&conn, "tmdb_image_overrides"));
-        assert!(has_table(&conn, "openlibrary_api_cache"));
+        // Old tables should not exist on fresh installs
+        assert!(!has_table(&conn, "youtube_videos"));
+        assert!(!has_table(&conn, "tmdb_movies"));
+        assert!(!has_table(&conn, "openlibrary_api_cache"));
     }
 }

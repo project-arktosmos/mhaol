@@ -230,28 +230,15 @@ async fn get_label_assignments(
     State(state): State<AppState>,
     Query(q): Query<WalletQuery>,
 ) -> impl IntoResponse {
-    let conn = state.db.lock();
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, wallet, recommended_game_id, label_id, created_at
-             FROM game_recommendation_label_assignments
-             WHERE wallet = ?1",
-        )
-        .unwrap();
-    let rows: Vec<serde_json::Value> = stmt
-        .query_map(rusqlite::params![q.wallet], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>(0)?,
-                "wallet": row.get::<_, String>(1)?,
-                "recommendedGameId": row.get::<_, i64>(2)?,
-                "labelId": row.get::<_, String>(3)?,
-                "createdAt": row.get::<_, String>(4)?,
-            }))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
-    Json(serde_json::json!(rows))
+    let rows = state.recommendation_labels.get_assignments_by_wallet_and_source(&q.wallet, "retroachievements");
+    let mapped: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+        "id": r.id,
+        "wallet": r.wallet,
+        "recommendedGameId": r.source_id.parse::<i64>().unwrap_or(0),
+        "labelId": r.label_id,
+        "createdAt": r.created_at,
+    })).collect();
+    Json(serde_json::json!(mapped))
 }
 
 #[derive(Deserialize)]
@@ -266,17 +253,11 @@ async fn set_label(
     State(state): State<AppState>,
     Json(body): Json<SetLabelBody>,
 ) -> impl IntoResponse {
-    let conn = state.db.lock();
-    let result = conn.execute(
-        "INSERT INTO game_recommendation_label_assignments (id, wallet, recommended_game_id, label_id)
-         VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3)
-         ON CONFLICT(wallet, recommended_game_id)
-         DO UPDATE SET label_id = ?3",
-        rusqlite::params![body.wallet, body.recommended_game_id, body.label_id],
-    );
-    match result {
-        Ok(_) => StatusCode::OK,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    let ok = state.recommendation_labels.upsert(&body.wallet, "retroachievements", &body.recommended_game_id.to_string(), "game", &body.label_id);
+    if ok {
+        StatusCode::OK
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
     }
 }
 
@@ -291,15 +272,8 @@ async fn remove_label(
     State(state): State<AppState>,
     Json(body): Json<RemoveLabelBody>,
 ) -> impl IntoResponse {
-    let conn = state.db.lock();
-    let affected = conn
-        .execute(
-            "DELETE FROM game_recommendation_label_assignments
-             WHERE wallet = ?1 AND recommended_game_id = ?2",
-            rusqlite::params![body.wallet, body.recommended_game_id],
-        )
-        .unwrap_or(0);
-    if affected > 0 {
+    let deleted = state.recommendation_labels.delete(&body.wallet, "retroachievements", &body.recommended_game_id.to_string(), "game");
+    if deleted {
         StatusCode::NO_CONTENT
     } else {
         StatusCode::NOT_FOUND

@@ -748,14 +748,17 @@ class SmartSearchService {
 		musicbrainzId: string
 	): Promise<Array<{ scope: string; candidate: SmartSearchTorrentResult }> | null> {
 		try {
-			const res = await fetchRaw(`/api/torrent/music-fetch-cache/${musicbrainzId}`);
+			const res = await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=musicbrainz&sourceId=${musicbrainzId}&kind=artist`
+			);
 			if (!res.ok) return null;
-			const data: Array<{ scope: string; candidate: SmartSearchTorrentResult }> = await res.json();
-			if (data.length === 0) return null;
-			for (const entry of data) {
-				entry.candidate.uploadedAt = new Date(entry.candidate.uploadedAt);
-			}
-			return data;
+			const rows: Array<{ scope: string; candidateJson: string }> = await res.json();
+			if (rows.length === 0) return null;
+			return rows.map((row) => {
+				const candidate = JSON.parse(row.candidateJson) as SmartSearchTorrentResult;
+				candidate.uploadedAt = new Date(candidate.uploadedAt);
+				return { scope: row.scope, candidate };
+			});
 		} catch {
 			return null;
 		}
@@ -767,10 +770,10 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetchRaw('/api/torrent/music-fetch-cache', {
+			await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ musicbrainzId, scope, candidate })
+				body: JSON.stringify({ source: 'musicbrainz', sourceId: musicbrainzId, kind: 'artist', scope, scopeKey: '', candidate })
 			});
 		} catch {
 			// best-effort
@@ -784,19 +787,24 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult;
 	}> | null> {
 		try {
-			const res = await fetchRaw(`/api/torrent/tv-fetch-cache/${tmdbId}`);
+			const res = await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=tmdb&sourceId=${tmdbId}&kind=tv_show`
+			);
 			if (!res.ok) return null;
-			const data: Array<{
-				scope: string;
-				seasonNumber: number | null;
-				episodeNumber: number | null;
-				candidate: SmartSearchTorrentResult;
-			}> = await res.json();
-			if (data.length === 0) return null;
-			for (const entry of data) {
-				entry.candidate.uploadedAt = new Date(entry.candidate.uploadedAt);
-			}
-			return data;
+			const rows: Array<{ scope: string; scopeKey: string; candidateJson: string }> = await res.json();
+			if (rows.length === 0) return null;
+			return rows.map((row) => {
+				const candidate = JSON.parse(row.candidateJson) as SmartSearchTorrentResult;
+				candidate.uploadedAt = new Date(candidate.uploadedAt);
+				let seasonNumber: number | null = null;
+				let episodeNumber: number | null = null;
+				if (row.scopeKey) {
+					const parts = row.scopeKey.split(':');
+					seasonNumber = parts[0] ? Number(parts[0]) : null;
+					episodeNumber = parts[1] ? Number(parts[1]) : null;
+				}
+				return { scope: row.scope, seasonNumber, episodeNumber, candidate };
+			});
 		} catch {
 			return null;
 		}
@@ -809,11 +817,19 @@ class SmartSearchService {
 		episodeNumber: number | null,
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
+		let scopeKey: string;
+		if (scope === 'complete') {
+			scopeKey = '';
+		} else if (scope === 'season') {
+			scopeKey = String(seasonNumber);
+		} else {
+			scopeKey = `${seasonNumber}:${episodeNumber}`;
+		}
 		try {
-			await fetchRaw('/api/torrent/tv-fetch-cache', {
+			await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ tmdbId, scope, seasonNumber, episodeNumber, candidate })
+				body: JSON.stringify({ source: 'tmdb', sourceId: String(tmdbId), kind: 'tv_show', scope, scopeKey, candidate })
 			});
 		} catch {
 			// best-effort
@@ -873,10 +889,12 @@ class SmartSearchService {
 
 	async checkFetchCache(tmdbId: number): Promise<SmartSearchTorrentResult | null> {
 		try {
-			const res = await fetchRaw(`/api/torrent/fetch-cache/${tmdbId}`);
+			const res = await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=tmdb&sourceId=${tmdbId}&kind=movie&scope=default&scopeKey=`
+			);
 			if (!res.ok) return null;
 			const data = await res.json();
-			const candidate = data.candidate as SmartSearchTorrentResult;
+			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
 			candidate.uploadedAt = new Date(candidate.uploadedAt);
 			return candidate;
 		} catch {
@@ -890,10 +908,10 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetchRaw('/api/torrent/fetch-cache', {
+			await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ tmdbId, mediaType, candidate })
+				body: JSON.stringify({ source: 'tmdb', sourceId: String(tmdbId), kind: mediaType, scope: 'default', scopeKey: '', candidate })
 			});
 		} catch {
 			// best-effort
@@ -903,10 +921,11 @@ class SmartSearchService {
 	async checkBookFetchCache(openlibraryKey: string): Promise<SmartSearchTorrentResult | null> {
 		try {
 			const res = await fetchRaw(
-				`/api/openlibrary/fetch-cache?key=${encodeURIComponent(openlibraryKey)}`
+				`/api/catalog/fetch-cache-by-source?source=openlibrary&sourceId=${encodeURIComponent(openlibraryKey)}&kind=book&scope=default&scopeKey=`
 			);
 			if (!res.ok) return null;
-			const candidate = (await res.json()) as SmartSearchTorrentResult;
+			const data = await res.json();
+			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
 			candidate.uploadedAt = new Date(candidate.uploadedAt);
 			return candidate;
 		} catch {
@@ -919,10 +938,10 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetchRaw('/api/openlibrary/fetch-cache', {
-				method: 'PUT',
+			await fetchRaw('/api/catalog/fetch-cache-by-source', {
+				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ key: openlibraryKey, candidate })
+				body: JSON.stringify({ source: 'openlibrary', sourceId: openlibraryKey, kind: 'book', scope: 'default', scopeKey: '', candidate })
 			});
 		} catch {
 			// best-effort
