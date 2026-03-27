@@ -259,7 +259,14 @@ async fn get_fetch_cache_by_source(
 ) -> impl IntoResponse {
     let item = match state.catalog.get_by_source(&query.source, &query.source_id, &query.kind) {
         Some(item) => item,
-        None => return StatusCode::NOT_FOUND.into_response(),
+        None => {
+            // No catalog item yet — no cache exists, return empty/not-found gracefully
+            if query.scope.is_some() {
+                return StatusCode::NOT_FOUND.into_response();
+            } else {
+                return Json(serde_json::json!([])).into_response();
+            }
+        }
     };
     if let Some(scope) = &query.scope {
         let scope_key = query.scope_key.as_deref().unwrap_or("");
@@ -288,14 +295,47 @@ async fn save_fetch_cache_by_source(
     State(state): State<AppState>,
     Json(body): Json<SaveFetchCacheBySourceBody>,
 ) -> impl IntoResponse {
+    // Find existing catalog item, or auto-create a placeholder
     let item = match state.catalog.get_by_source(&body.source, &body.source_id, &body.kind) {
         Some(item) => item,
         None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({ "error": "Catalog item not found" })),
-            )
-                .into_response()
+            let id = format!("{:032x}", rand_id());
+            let title = body
+                .candidate
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown")
+                .to_string();
+            let row = CatalogItemRow {
+                id: id.clone(),
+                kind: body.kind.clone(),
+                title: title.clone(),
+                sort_title: title.to_lowercase(),
+                year: None,
+                overview: None,
+                poster_url: None,
+                backdrop_url: None,
+                vote_average: None,
+                vote_count: None,
+                parent_id: None,
+                position: None,
+                source: body.source.clone(),
+                source_id: body.source_id.clone(),
+                metadata: "{}".to_string(),
+                created_at: String::new(),
+                updated_at: String::new(),
+            };
+            state.catalog.upsert(&row);
+            match state.catalog.get_by_id(&id) {
+                Some(item) => item,
+                None => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({ "error": "Failed to create catalog item" })),
+                    )
+                        .into_response()
+                }
+            }
         }
     };
     let scope_key = body.scope_key.as_deref().unwrap_or("");
