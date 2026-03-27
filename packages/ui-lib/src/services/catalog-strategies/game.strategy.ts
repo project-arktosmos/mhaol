@@ -2,10 +2,32 @@ import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import { gameListItemToDisplay, gameExtendedToDisplay } from 'addons/retroachievements/transform';
 import { RA_CONSOLES } from 'addons/retroachievements/types';
 import type { RaGameListItem, RaGameExtended } from 'addons/retroachievements/types';
-import type { CatalogItem, CatalogFilterOption } from 'ui-lib/types/catalog.type';
+import type { CatalogItem, CatalogFilterOption, CatalogTab } from 'ui-lib/types/catalog.type';
 import type { CatalogKindStrategy } from 'ui-lib/services/catalog.service';
 
 const ITEMS_PER_PAGE = 20;
+
+function gameTag(title: string): string {
+	if (title.startsWith('~')) {
+		const end = title.indexOf('~', 1);
+		if (end > 1) return title.substring(1, end);
+	}
+	return 'Originals';
+}
+
+function deriveCategoryTabs(games: RaGameListItem[]): CatalogTab[] {
+	const counts = new Map<string, number>();
+	for (const g of games) {
+		const tag = gameTag(g.Title);
+		counts.set(tag, (counts.get(tag) ?? 0) + 1);
+	}
+	const tabs: CatalogTab[] = [];
+	if (counts.has('Originals')) tabs.push({ id: 'Originals', label: 'Originals' });
+	for (const tag of [...counts.keys()].sort()) {
+		if (tag !== 'Originals') tabs.push({ id: tag, label: tag });
+	}
+	return tabs;
+}
 
 function toGameCatalogItems(games: RaGameListItem[], consoleName: string): CatalogItem[] {
 	return games.map((g) => {
@@ -90,7 +112,7 @@ function gameDetailToCatalogItem(detail: RaGameExtended): CatalogItem {
 export const gameStrategy: CatalogKindStrategy = {
 	kind: 'game',
 	pinService: 'retroachievements',
-	tabs: [{ id: 'browse', label: 'Browse' }],
+	tabs: [{ id: 'Originals', label: 'Originals' }],
 	filterDefinitions: {
 		console: {
 			label: 'Console',
@@ -115,11 +137,12 @@ export const gameStrategy: CatalogKindStrategy = {
 		const offset = (page - 1) * ITEMS_PER_PAGE;
 		return {
 			items: toGameCatalogItems(filtered.slice(offset, offset + ITEMS_PER_PAGE), consoleName),
-			totalPages
+			totalPages,
+			tabs: deriveCategoryTabs(games)
 		};
 	},
 
-	async loadTab(_tabId, page, filters) {
+	async loadTab(tabId, page, filters) {
 		const consoleId = Number(filters.console) || RA_CONSOLES[0]?.id;
 		if (!consoleId) return { items: [], totalPages: 1 };
 		const consoleName = RA_CONSOLES.find((c) => c.id === consoleId)?.name ?? '';
@@ -130,11 +153,15 @@ export const gameStrategy: CatalogKindStrategy = {
 				[];
 			cachedGames.set(consoleId, games);
 		}
-		const totalPages = Math.ceil(games.length / ITEMS_PER_PAGE);
+		const tabs = deriveCategoryTabs(games);
+		const category = tabId && tabs.some((t) => t.id === tabId) ? tabId : tabs[0]?.id ?? 'Originals';
+		const filtered = games.filter((g) => gameTag(g.Title) === category);
+		const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
 		const offset = (page - 1) * ITEMS_PER_PAGE;
 		return {
-			items: toGameCatalogItems(games.slice(offset, offset + ITEMS_PER_PAGE), consoleName),
-			totalPages
+			items: toGameCatalogItems(filtered.slice(offset, offset + ITEMS_PER_PAGE), consoleName),
+			totalPages,
+			tabs
 		};
 	},
 
