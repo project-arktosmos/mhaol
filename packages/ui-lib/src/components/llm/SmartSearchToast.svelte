@@ -5,7 +5,7 @@
 	import MusicSmartSearchSection from './MusicSmartSearchSection.svelte';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
 	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 
 	let {
 		onlibrarychange,
@@ -112,7 +112,7 @@
 		if (!bestCandidate || !selection) return;
 		addingCandidate = true;
 		try {
-			const configRes = await fetch(apiUrl('/api/torrent/config'));
+			const configRes = await fetchRaw('/api/torrent/config');
 			if (!configRes.ok) return;
 			const config = await configRes.json();
 			const basePath: string = config.downloadPath ?? '';
@@ -138,7 +138,7 @@
 			}
 			const downloadPath = `${basePath}/${subdir}`;
 
-			const res = await fetch(apiUrl('/api/torrent/torrents'), {
+			const res = await fetchRaw('/api/torrent/torrents', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({

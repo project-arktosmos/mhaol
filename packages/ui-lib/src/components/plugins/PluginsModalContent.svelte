@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 
 	interface PluginProcess {
 		id: string;
@@ -50,7 +50,7 @@
 		loading = true;
 		error = null;
 		try {
-			const res = await fetch(apiUrl('/api/plugins'));
+			const res = await fetchRaw('/api/plugins');
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const all: Plugin[] = await res.json();
 			plugins = all
@@ -87,7 +87,7 @@
 	async function saveSetting(pluginName: string, key: string) {
 		saving = true;
 		try {
-			const res = await fetch(apiUrl('/api/plugins/settings'), {
+			const res = await fetchRaw('/api/plugins/settings', {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ plugin: pluginName, key, value: editValue })

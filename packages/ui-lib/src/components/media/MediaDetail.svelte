@@ -4,7 +4,7 @@
 	import { getThumbnailUrl } from 'addons/youtube/helpers';
 	import TagPill from 'ui-lib/components/images/TagPill.svelte';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { resolveApiUrl } from 'ui-lib/transport/fetch-helpers';
 	import { lyricsService } from 'ui-lib/services/lyrics.service';
 	import { playerService } from 'ui-lib/services/player.service';
 	import type { MediaDetailSelection } from 'ui-lib/types/media-detail.type';
@@ -49,7 +49,7 @@
 			return musicbrainzMetadata?.coverArtUrl ?? null;
 		}
 		if (cardType === 'image') {
-			return apiUrl(`/api/images/serve?path=${encodeURIComponent(item.path)}`);
+			return resolveApiUrl(`/api/images/serve?path=${encodeURIComponent(item.path)}`);
 		}
 		return null;
 	});

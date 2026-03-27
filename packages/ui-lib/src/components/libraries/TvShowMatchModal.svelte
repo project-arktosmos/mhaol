@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { TMDBTvShow } from 'addons/tmdb/types';
 	import { getPosterUrl, extractYear } from 'addons/tmdb/transform';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 
 	interface Props {
 		showName: string;
@@ -25,7 +25,7 @@
 
 		try {
 			const params = new URLSearchParams({ q: query.trim() });
-			const res = await fetch(apiUrl(`/api/tmdb/search/tv?${params}`));
+			const res = await fetchRaw(`/api/tmdb/search/tv?${params}`);
 			const data = await res.json();
 			if (!res.ok) {
 				error = data.error ?? 'Search failed';

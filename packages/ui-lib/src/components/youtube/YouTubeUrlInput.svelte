@@ -7,7 +7,7 @@
 		extractPlaylistId,
 		type YouTubeOEmbedData
 	} from 'ui-lib/types/youtube.type';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 
 	let { initialUrl = '' }: { initialUrl?: string } = $props();
 
@@ -93,7 +93,7 @@
 		oembedLoading = true;
 		oembedData = null;
 		try {
-			const response = await fetch(apiUrl(`/api/youtube/oembed?videoId=${id}`));
+			const response = await fetchRaw(`/api/youtube/oembed?videoId=${id}`);
 			if (response.ok) {
 				oembedData = await response.json();
 			}

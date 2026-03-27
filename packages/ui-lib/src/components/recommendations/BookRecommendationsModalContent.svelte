@@ -82,9 +82,7 @@
 		return result;
 	});
 
-	let selectedDetail = $derived(
-		selectedBook ? (detailMap.get(selectedBook.key) ?? null) : null
-	);
+	let selectedDetail = $derived(selectedBook ? (detailMap.get(selectedBook.key) ?? null) : null);
 
 	// === Queue functions ===
 	async function loadStatus() {
@@ -449,9 +447,7 @@
 		<!-- Col 3: Selected book detail -->
 		<div class="flex min-h-0 flex-col overflow-y-auto pr-1">
 			{#if !selectedBook}
-				<p class="py-12 text-center text-sm text-base-content/50">
-					Select a book to see details
-				</p>
+				<p class="py-12 text-center text-sm text-base-content/50">Select a book to see details</p>
 			{:else if detailLoading && !selectedDetail}
 				<div class="flex justify-center py-12">
 					<span class="loading loading-lg loading-spinner"></span>

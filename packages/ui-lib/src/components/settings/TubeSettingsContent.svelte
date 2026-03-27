@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
 
@@ -11,7 +11,7 @@
 		error = null;
 
 		try {
-			const res = await fetch(apiUrl('/api/database/reset'), { method: 'POST' });
+			const res = await fetchRaw('/api/database/reset', { method: 'POST' });
 			if (!res.ok) {
 				const body = await res.json().catch(() => ({}));
 				throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);

@@ -544,7 +544,9 @@
 
 		<!-- Col 2: Top Recommended table -->
 		<div class="flex min-h-0 flex-col gap-2 overflow-y-auto">
-			<h3 class="text-sm font-semibold">Top Recommended {label === 'Movie' ? 'Movies' : 'TV Shows'}</h3>
+			<h3 class="text-sm font-semibold">
+				Top Recommended {label === 'Movie' ? 'Movies' : 'TV Shows'}
+			</h3>
 			<TopRecommendedTable
 				bind:this={topTable}
 				{mediaType}
@@ -557,7 +559,9 @@
 		<!-- Col 3: Selected movie detail -->
 		<div class="flex min-h-0 flex-col overflow-y-auto pr-1">
 			{#if !selectedMovie}
-				<p class="py-12 text-center text-sm text-base-content/50">Select a {label === 'Movie' ? 'movie' : 'TV show'} to see details</p>
+				<p class="py-12 text-center text-sm text-base-content/50">
+					Select a {label === 'Movie' ? 'movie' : 'TV show'} to see details
+				</p>
 			{:else if detailLoading && !selectedDetail}
 				<div class="flex justify-center py-12">
 					<span class="loading loading-lg loading-spinner"></span>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { resolveApiUrl } from 'ui-lib/transport/fetch-helpers';
 	import type { YouTubeSearchChannelItem } from 'ui-lib/types/youtube-search.type';
 
 	let {
@@ -32,7 +32,7 @@
 	>
 		{#if channel.thumbnail}
 			<img
-				src={apiUrl(`/api/youtube/image-proxy?url=${encodeURIComponent(channel.thumbnail)}`)}
+				src={resolveApiUrl(`/api/youtube/image-proxy?url=${encodeURIComponent(channel.thumbnail)}`)}
 				alt={channel.name}
 				class="h-12 w-12 shrink-0 rounded-full object-cover"
 				loading="lazy"
