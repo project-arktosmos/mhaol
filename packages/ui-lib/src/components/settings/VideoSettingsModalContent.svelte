@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { p2pStreamService } from 'ui-lib/services/p2p-stream.service';
 	import { P2P_VIDEO_CODEC_OPTIONS, P2P_VIDEO_QUALITY_OPTIONS } from 'ui-lib/types/p2p-stream.type';
 	import type { P2pVideoCodec, P2pVideoQuality, P2pStreamMode } from 'ui-lib/types/p2p-stream.type';
@@ -34,7 +34,7 @@
 		error = null;
 
 		try {
-			const res = await fetch(apiUrl('/api/database/reset'), { method: 'POST' });
+			const res = await fetchRaw('/api/database/reset', { method: 'POST' });
 			if (!res.ok) {
 				const body = await res.json().catch(() => ({}));
 				throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);

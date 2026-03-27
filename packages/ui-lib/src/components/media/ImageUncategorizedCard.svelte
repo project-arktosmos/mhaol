@@ -1,7 +1,7 @@
 <script lang="ts">
 	import MediaCardBase from './MediaCardBase.svelte';
 	import TagPill from 'ui-lib/components/images/TagPill.svelte';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { resolveApiUrl } from 'ui-lib/transport/fetch-helpers';
 	import type { MediaItem } from 'ui-lib/types/media-card.type';
 	import type { ImageTag } from 'ui-lib/types/image-tagger.type';
 
@@ -15,7 +15,7 @@
 
 	let { item, tags = [], tagging = false, selected = false, onselect }: Props = $props();
 
-	let imageUrl = $derived(apiUrl(`/api/images/serve?path=${encodeURIComponent(item.path)}`));
+	let imageUrl = $derived(resolveApiUrl(`/api/images/serve?path=${encodeURIComponent(item.path)}`));
 </script>
 
 <MediaCardBase {item} {imageUrl} imageAlt={item.name} {selected} onclick={() => onselect?.(item)}>

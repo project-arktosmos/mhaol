@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 
 	interface AddonSetting {
 		key: string;
@@ -40,7 +40,7 @@
 		loading = true;
 		error = null;
 		try {
-			const res = await fetch(apiUrl('/api/addons'));
+			const res = await fetchRaw('/api/addons');
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			addons = await res.json();
 		} catch (e) {
@@ -63,7 +63,7 @@
 	async function saveSetting(addonName: string, key: string) {
 		saving = true;
 		try {
-			const res = await fetch(apiUrl('/api/addons/settings'), {
+			const res = await fetchRaw('/api/addons/settings', {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ addon: addonName, key, value: editValue })

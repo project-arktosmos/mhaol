@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import type { Identity } from 'ui-lib/types/identity.type';
 	import { identityService } from 'ui-lib/services/identity.service';
 	import Modal from 'ui-lib/components/core/Modal.svelte';
@@ -32,7 +32,7 @@
 		loading = true;
 		error = null;
 		try {
-			const res = await fetch(apiUrl('/api/identities'));
+			const res = await fetchRaw('/api/identities');
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			identities = await res.json();
 			await identityService.refresh();
@@ -48,7 +48,7 @@
 		creating = true;
 		error = null;
 		try {
-			const res = await fetch(apiUrl('/api/identities'), {
+			const res = await fetchRaw('/api/identities', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ name: newName.trim() })
@@ -74,12 +74,12 @@
 		const { name, action } = confirmTarget;
 		try {
 			if (action === 'regenerate') {
-				const res = await fetch(apiUrl(`/api/identities/${encodeURIComponent(name)}`), {
+				const res = await fetchRaw(`/api/identities/${encodeURIComponent(name)}`, {
 					method: 'PUT'
 				});
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			} else {
-				const res = await fetch(apiUrl(`/api/identities/${encodeURIComponent(name)}`), {
+				const res = await fetchRaw(`/api/identities/${encodeURIComponent(name)}`, {
 					method: 'DELETE'
 				});
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -150,14 +150,11 @@
 		try {
 			const body: Record<string, string> = { username: editUsername };
 			if (editProfilePicture) body.profilePictureUrl = editProfilePicture;
-			const res = await fetch(
-				apiUrl(`/api/identities/${encodeURIComponent(editingProfile)}/profile`),
-				{
-					method: 'PATCH',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(body)
-				}
-			);
+			const res = await fetchRaw(`/api/identities/${encodeURIComponent(editingProfile)}/profile`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			editingProfile = null;
 			await loadIdentities();

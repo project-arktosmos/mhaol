@@ -6,7 +6,7 @@
 	import { mediaModeService } from 'ui-lib/services/media-mode.service';
 	import { getStateLabel, getStateColor } from 'ui-lib/types/youtube.type';
 	import type { YouTubeChannelMeta, SubtitleTrack } from 'ui-lib/types/youtube.type';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw, resolveApiUrl } from 'ui-lib/transport/fetch-helpers';
 	import MediaPlayer from 'ui-lib/components/player/MediaPlayer.svelte';
 	import YouTubeChannelCard from 'ui-lib/components/youtube-search/YouTubeChannelCard.svelte';
 	import type { YouTubeSearchChannelItem } from 'ui-lib/types/youtube-search.type';
@@ -85,10 +85,8 @@
 		if (!v) return;
 
 		// Fetch available tracks from YouTube via VideoInfo (direct API call to avoid side effects)
-		fetch(
-			apiUrl(
-				`/api/ytdl/info/video?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${v.videoId}`)}`
-			)
+		fetchRaw(
+			`/api/ytdl/info/video?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${v.videoId}`)}`
 		)
 			.then((res) => (res.ok ? res.json() : null))
 			.then((info: { subtitleTracks?: SubtitleTrack[] } | null) => {
@@ -184,7 +182,7 @@
 		const handle = url.split('/').pop();
 		if (!handle) return;
 
-		fetch(apiUrl(`/api/youtube/channel-meta?handle=${handle}`))
+		fetchRaw(`/api/youtube/channel-meta?handle=${handle}`)
 			.then((res) => (res.ok ? res.json() : null))
 			.then((data: YouTubeChannelMeta | null) => {
 				channelMeta = data;

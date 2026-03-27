@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import QRCode from 'qrcode';
 
 	let shareUrl = $state('');
@@ -10,7 +10,7 @@
 
 	onMount(async () => {
 		try {
-			const res = await fetch(apiUrl('/api/network/info'));
+			const res = await fetchRaw('/api/network/info');
 			const data: { local_ip: string | null } = await res.json();
 
 			if (data.local_ip) {

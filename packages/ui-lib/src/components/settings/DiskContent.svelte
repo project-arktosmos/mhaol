@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import type { LibraryFs, LibraryFsEntry } from 'ui-lib/types/library.type';
 	import type { YouTubeContent } from 'ui-lib/types/youtube.type';
 
@@ -42,8 +42,8 @@
 	onMount(async () => {
 		try {
 			const [fsRes, mediaRes] = await Promise.all([
-				fetch(apiUrl('/api/libraries/fs')),
-				fetch(apiUrl('/api/media'))
+				fetchRaw('/api/libraries/fs'),
+				fetchRaw('/api/media')
 			]);
 			if (!fsRes.ok) {
 				const body = await fsRes.json().catch(() => ({}));

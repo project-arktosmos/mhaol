@@ -2,7 +2,7 @@
 	import type { LibraryFile } from 'ui-lib/types/library.type';
 	import type { YouTubeOEmbedResponse } from 'addons/youtube/types';
 	import { getThumbnailUrl } from 'addons/youtube/helpers';
-	import { apiUrl } from 'ui-lib/lib/api-base';
+	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 
 	interface Props {
 		file: LibraryFile;
@@ -30,7 +30,7 @@
 		metadata = null;
 
 		try {
-			const res = await fetch(apiUrl(`/api/youtube/oembed?videoId=${encodeURIComponent(id)}`));
+			const res = await fetchRaw(`/api/youtube/oembed?videoId=${encodeURIComponent(id)}`);
 			if (res.ok) {
 				metadata = await res.json();
 			} else {
