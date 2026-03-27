@@ -124,6 +124,59 @@ impl CatalogFetchCacheRepo {
         .collect()
     }
 
+    /// Returns (source, source_id, infoHash) for all fetch cache entries joined with catalog_items.
+    pub fn get_all_info_hashes_with_source(&self) -> Vec<(String, String, String)> {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT c.source, c.source_id, f.candidate_json
+                 FROM catalog_fetch_cache f
+                 JOIN catalog_items c ON c.id = f.catalog_item_id",
+            )
+            .unwrap();
+        stmt.query_map([], |row| {
+            let source: String = row.get(0)?;
+            let source_id: String = row.get(1)?;
+            let json: String = row.get(2)?;
+            Ok((source, source_id, json))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .filter_map(|(source, source_id, json)| {
+            let v: serde_json::Value = serde_json::from_str(&json).ok()?;
+            let hash = v.get("infoHash")?.as_str()?.to_lowercase();
+            Some((source, source_id, hash))
+        })
+        .collect()
+    }
+
+    /// Returns (source, source_id, scope, name) for all fetch cache entries joined with catalog_items.
+    pub fn get_all_summaries_with_source(&self) -> Vec<(String, String, String, String)> {
+        let conn = self.db.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT c.source, c.source_id, f.scope, f.candidate_json
+                 FROM catalog_fetch_cache f
+                 JOIN catalog_items c ON c.id = f.catalog_item_id",
+            )
+            .unwrap();
+        stmt.query_map([], |row| {
+            let source: String = row.get(0)?;
+            let source_id: String = row.get(1)?;
+            let scope: String = row.get(2)?;
+            let json: String = row.get(3)?;
+            Ok((source, source_id, scope, json))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .filter_map(|(source, source_id, scope, json)| {
+            let v: serde_json::Value = serde_json::from_str(&json).ok()?;
+            let name = v.get("name")?.as_str()?.to_string();
+            Some((source, source_id, scope, name))
+        })
+        .collect()
+    }
+
     fn row_mapper(row: &rusqlite::Row<'_>) -> rusqlite::Result<CatalogFetchCacheRow> {
         Ok(CatalogFetchCacheRow {
             id: row.get(0)?,

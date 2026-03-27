@@ -222,20 +222,22 @@ async fn delete_fetch_cache(
 }
 
 async fn list_fetch_cache_hashes(State(state): State<AppState>) -> impl IntoResponse {
-    let hashes = state.catalog_fetch_cache.get_all_info_hashes();
+    let hashes = state.catalog_fetch_cache.get_all_info_hashes_with_source();
     let result: Vec<serde_json::Value> = hashes
         .into_iter()
-        .map(|(item_id, hash)| serde_json::json!({ "catalogItemId": item_id, "infoHash": hash }))
+        .map(|(source, source_id, hash)| {
+            serde_json::json!({ "source": source, "sourceId": source_id, "infoHash": hash })
+        })
         .collect();
     Json(result)
 }
 
 async fn list_fetch_cache_summaries(State(state): State<AppState>) -> impl IntoResponse {
-    let summaries = state.catalog_fetch_cache.get_all_summaries();
+    let summaries = state.catalog_fetch_cache.get_all_summaries_with_source();
     let result: Vec<serde_json::Value> = summaries
         .into_iter()
-        .map(|(item_id, scope, name)| {
-            serde_json::json!({ "catalogItemId": item_id, "scope": scope, "name": name })
+        .map(|(source, source_id, scope, name)| {
+            serde_json::json!({ "source": source, "sourceId": source_id, "scope": scope, "name": name })
         })
         .collect();
     Json(result)
