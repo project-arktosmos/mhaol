@@ -502,43 +502,23 @@ async fn get_library_item_related(
             })
     });
 
-    // TMDB cache
+    // TMDB cache (from unified api_cache)
     let tmdb_cache = tmdb_id.and_then(|tid| {
-        let conn = state.db.lock();
-        // Try movies first, then TV shows
-        conn.query_row(
-            "SELECT tmdb_id, data, fetched_at FROM tmdb_movies WHERE tmdb_id = ?1",
-            rusqlite::params![tid],
-            |row| {
-                let tmdb_id: i64 = row.get(0)?;
-                let data_str: String = row.get(1)?;
-                let fetched_at: String = row.get(2)?;
-                Ok((tmdb_id, data_str, fetched_at))
-            },
-        )
-        .ok()
-        .or_else(|| {
-            conn.query_row(
-                "SELECT tmdb_id, data, fetched_at FROM tmdb_tv_shows WHERE tmdb_id = ?1",
-                rusqlite::params![tid],
-                |row| {
-                    let tmdb_id: i64 = row.get(0)?;
-                    let data_str: String = row.get(1)?;
-                    let fetched_at: String = row.get(2)?;
-                    Ok((tmdb_id, data_str, fetched_at))
-                },
-            )
-            .ok()
-        })
-        .map(|(tmdb_id, data_str, fetched_at)| {
-            let data: serde_json::Value =
-                serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
-            RelatedTmdbCache {
-                tmdb_id,
-                data,
-                fetched_at,
-            }
-        })
+        let movie_key = format!("movie:{}", tid);
+        let tv_key = format!("tv:{}", tid);
+        state
+            .api_cache
+            .get_any_with_timestamp("tmdb", &movie_key)
+            .or_else(|| state.api_cache.get_any_with_timestamp("tmdb", &tv_key))
+            .map(|(data_str, fetched_at)| {
+                let data: serde_json::Value =
+                    serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
+                RelatedTmdbCache {
+                    tmdb_id: tid,
+                    data,
+                    fetched_at,
+                }
+            })
     });
 
     Json(LibraryItemRelatedResponse {

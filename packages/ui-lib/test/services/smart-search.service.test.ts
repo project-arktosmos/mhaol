@@ -168,10 +168,10 @@ describe('SmartSearchService', () => {
 		await smartSearchService.saveFetchCache(123, 'movie', candidate as never);
 
 		expect(mock).toHaveBeenCalledWith(
-			expect.stringContaining('/api/torrent/fetch-cache'),
+			expect.stringContaining('/api/catalog/fetch-cache-by-source'),
 			expect.objectContaining({
 				method: 'POST',
-				body: expect.stringContaining('"tmdbId":123')
+				body: expect.stringContaining('"sourceId":"123"')
 			})
 		);
 	});

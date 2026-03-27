@@ -199,29 +199,61 @@
 	}
 
 	// === Fetch cache loading ===
+
+	// Map catalog item IDs to TMDB IDs for fetch cache lookups
+	let catalogToTmdbId: Map<string, number> = $state(new Map());
+
 	async function loadFetchCacheIds() {
 		try {
-			const res = await fetchRaw('/api/torrent/fetch-cache');
-			if (res.ok) fetchCachedTmdbIds = new Set(await res.json());
+			// Load summaries to get catalog item IDs, then resolve TMDB IDs via catalog items
+			const res = await fetchRaw('/api/catalog/fetch-cache/summaries');
+			if (res.ok) {
+				const entries: Array<{ catalogItemId: string; scope: string; name: string }> = await res.json();
+				const catalogItemIds = [...new Set(entries.map((e) => e.catalogItemId))];
+				// Resolve catalog item IDs to TMDB IDs
+				const tmdbIds = new Set<number>();
+				for (const itemId of catalogItemIds) {
+					const itemRes = await fetchRaw(`/api/catalog/items/${itemId}`);
+					if (itemRes.ok) {
+						const item = await itemRes.json();
+						if (item.source === 'tmdb' && (item.kind === 'movie' || item.kind === 'tv_show')) {
+							const tmdbId = Number(item.sourceId);
+							tmdbIds.add(tmdbId);
+							catalogToTmdbId.set(itemId, tmdbId);
+						}
+					}
+				}
+				fetchCachedTmdbIds = tmdbIds;
+			}
 		} catch { /* best-effort */ }
 	}
 
 	async function loadFetchCacheSummaries() {
 		try {
-			const res = await fetchRaw('/api/torrent/fetch-cache/summaries');
+			const res = await fetchRaw('/api/catalog/fetch-cache/summaries');
 			if (res.ok) {
-				const entries: Array<{ tmdbId: number; name: string }> = await res.json();
-				fetchCacheSummaries = new Map(entries.map((e) => [e.tmdbId, e.name]));
+				const entries: Array<{ catalogItemId: string; scope: string; name: string }> = await res.json();
+				const map = new Map<number, string>();
+				for (const e of entries) {
+					const tmdbId = catalogToTmdbId.get(e.catalogItemId);
+					if (tmdbId !== undefined) map.set(tmdbId, e.name);
+				}
+				fetchCacheSummaries = map;
 			}
 		} catch { /* best-effort */ }
 	}
 
 	async function loadFetchCacheHashes() {
 		try {
-			const res = await fetchRaw('/api/torrent/fetch-cache/hashes');
+			const res = await fetchRaw('/api/catalog/fetch-cache/hashes');
 			if (res.ok) {
-				const entries: Array<{ tmdbId: number; infoHash: string }> = await res.json();
-				fetchCacheHashes = new Map(entries.map((e) => [e.tmdbId, e.infoHash]));
+				const entries: Array<{ catalogItemId: string; infoHash: string }> = await res.json();
+				const map = new Map<number, string>();
+				for (const e of entries) {
+					const tmdbId = catalogToTmdbId.get(e.catalogItemId);
+					if (tmdbId !== undefined) map.set(tmdbId, e.infoHash);
+				}
+				fetchCacheHashes = map;
 			}
 		} catch { /* best-effort */ }
 	}
