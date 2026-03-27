@@ -1,3 +1,5 @@
+pub mod music;
+
 use parking_lot::Mutex;
 use rusqlite::{params, Connection};
 use serde::Serialize;

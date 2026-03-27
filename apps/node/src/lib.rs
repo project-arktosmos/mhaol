@@ -5,6 +5,7 @@ pub mod llm_worker;
 pub mod modules;
 #[cfg(not(target_os = "android"))]
 pub mod peer_service;
+pub mod music_recommendations_worker;
 pub mod recommendations_worker;
 pub mod signaling_rooms;
 pub mod worker_bridge;
@@ -15,6 +16,7 @@ use mhaol_identity::IdentityManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_llm::LlmEngine;
 use mhaol_queue::QueueManager;
+use mhaol_recommendations::music::MusicRecommendationsRepo;
 use mhaol_recommendations::RecommendationsRepo;
 #[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
@@ -126,6 +128,7 @@ pub struct AppState {
     pub hub: Arc<api::hub::HubManager>,
     pub queue: Arc<QueueManager>,
     pub recommendations: RecommendationsRepo,
+    pub music_recommendations: MusicRecommendationsRepo,
     pub recommendation_labels: RecommendationLabelRepo,
 }
 
@@ -196,6 +199,7 @@ impl AppState {
             hub: Arc::new(api::hub::HubManager::new()),
             queue: Arc::new(QueueManager::new(Arc::clone(&db))),
             recommendations: RecommendationsRepo::new(Arc::clone(&db)),
+            music_recommendations: MusicRecommendationsRepo::new(Arc::clone(&db)),
             recommendation_labels: RecommendationLabelRepo::new(Arc::clone(&db)),
             data_dir,
             db,

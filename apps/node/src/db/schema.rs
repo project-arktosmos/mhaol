@@ -1071,6 +1071,23 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
+    // Migration: add music_recommendation_label_assignments table
+    if !has_table(conn, "music_recommendation_label_assignments") {
+        let _ = conn.execute_batch(
+            "CREATE TABLE music_recommendation_label_assignments (
+                id TEXT PRIMARY KEY,
+                wallet TEXT NOT NULL,
+                recommended_mbid TEXT NOT NULL,
+                recommended_type TEXT NOT NULL CHECK (recommended_type IN ('artist')),
+                label_id TEXT NOT NULL REFERENCES recommendation_labels(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(wallet, recommended_mbid, recommended_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_music_rec_label_wallet
+                ON music_recommendation_label_assignments(wallet);",
+        );
+    }
+
     // Migration: add music_torrent_fetch_cache table
     if !has_table(conn, "music_torrent_fetch_cache") {
         let _ = conn.execute_batch(

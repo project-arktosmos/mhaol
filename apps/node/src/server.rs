@@ -91,6 +91,17 @@ async fn main() {
         });
     }
 
+    // Start music recommendations queue worker in the background
+    {
+        let music_recs_state = state.clone();
+        tokio::spawn(async move {
+            mhaol_node::music_recommendations_worker::run_music_recommendations_worker(
+                music_recs_state,
+            )
+            .await;
+        });
+    }
+
     // Ensure dual identities: backend (SIGNALING_WALLET) + frontend (CLIENT_WALLET)
     state.identity_manager.ensure_identity("SIGNALING_WALLET");
     state.identity_manager.ensure_identity("CLIENT_WALLET");
