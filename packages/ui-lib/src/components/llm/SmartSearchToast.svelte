@@ -71,14 +71,17 @@
 				const sePct = Math.round((r.seeders / maxSE) * 100);
 				const lePct = Math.round((r.leechers / maxLE) * 100);
 				const relPct = r.analysis?.relevance ?? 0;
+				const langStr = String(r.analysis?.languages ?? '');
+				const qualStr = String(r.analysis?.quality ?? '');
+				const reasonStr = String(r.analysis?.reason ?? '');
 				const langBonus =
-					prefLang && r.analysis && r.analysis.languages.toLowerCase().includes(prefLang) ? 100 : 0;
+					prefLang && langStr.toLowerCase().includes(prefLang) ? 100 : 0;
 				const qualityBonus =
-					prefQuality && r.analysis && r.analysis.quality.toLowerCase().includes(prefQuality)
+					prefQuality && qualStr.toLowerCase().includes(prefQuality)
 						? 100
 						: 0;
 				const consoleBonus =
-					prefConsole && r.analysis && r.analysis.reason.toLowerCase().includes('console matches')
+					prefConsole && reasonStr.toLowerCase().includes('console matches')
 						? 100
 						: 0;
 				return { r, score: sePct + lePct + relPct + langBonus + qualityBonus + consoleBonus };
