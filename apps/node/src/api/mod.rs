@@ -19,6 +19,7 @@ pub mod iptv;
 pub mod llm;
 pub mod media;
 pub mod media_lists;
+pub mod book_recommendations;
 pub mod game_recommendations;
 pub mod music_recommendations;
 pub mod musicbrainz;
@@ -97,6 +98,7 @@ pub fn build_app_router(state: AppState) -> Router {
         .nest("/api/recommendations", recommendations::router())
         .nest("/api/music-recommendations", music_recommendations::router())
         .nest("/api/game-recommendations", game_recommendations::router())
+        .nest("/api/book-recommendations", book_recommendations::router())
         .nest("/api/recommendation-labels", recommendation_labels::router());
 
     #[cfg(not(target_os = "android"))]

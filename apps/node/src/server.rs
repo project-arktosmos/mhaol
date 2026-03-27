@@ -113,6 +113,17 @@ async fn main() {
         });
     }
 
+    // Start book recommendations queue worker in the background
+    {
+        let book_recs_state = state.clone();
+        tokio::spawn(async move {
+            mhaol_node::book_recommendations_worker::run_book_recommendations_worker(
+                book_recs_state,
+            )
+            .await;
+        });
+    }
+
     // Ensure dual identities: backend (SIGNALING_WALLET) + frontend (CLIENT_WALLET)
     state.identity_manager.ensure_identity("SIGNALING_WALLET");
     state.identity_manager.ensure_identity("CLIENT_WALLET");

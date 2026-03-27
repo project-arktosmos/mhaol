@@ -1,4 +1,5 @@
 pub mod api;
+pub mod book_recommendations_worker;
 pub mod db;
 #[cfg(not(target_os = "android"))]
 pub mod llm_worker;
@@ -17,6 +18,7 @@ use mhaol_identity::IdentityManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_llm::LlmEngine;
 use mhaol_queue::QueueManager;
+use mhaol_recommendations::books::BookRecommendationsRepo;
 use mhaol_recommendations::game::GameRecommendationsRepo;
 use mhaol_recommendations::music::MusicRecommendationsRepo;
 use mhaol_recommendations::RecommendationsRepo;
@@ -132,6 +134,7 @@ pub struct AppState {
     pub recommendations: RecommendationsRepo,
     pub music_recommendations: MusicRecommendationsRepo,
     pub game_recommendations: GameRecommendationsRepo,
+    pub book_recommendations: BookRecommendationsRepo,
     pub recommendation_labels: RecommendationLabelRepo,
 }
 
@@ -204,6 +207,7 @@ impl AppState {
             recommendations: RecommendationsRepo::new(Arc::clone(&db)),
             music_recommendations: MusicRecommendationsRepo::new(Arc::clone(&db)),
             game_recommendations: GameRecommendationsRepo::new(Arc::clone(&db)),
+            book_recommendations: BookRecommendationsRepo::new(Arc::clone(&db)),
             recommendation_labels: RecommendationLabelRepo::new(Arc::clone(&db)),
             data_dir,
             db,
