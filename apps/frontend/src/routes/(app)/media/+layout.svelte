@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { setContext } from 'svelte';
-	import { page } from '$app/stores';
 	import classNames from 'classnames';
 	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
 
@@ -10,18 +9,6 @@
 	let controlsTarget: HTMLDivElement | undefined = $state();
 	let tabsTarget: HTMLDivElement | undefined = $state();
 	let filterBarTarget: HTMLDivElement | undefined = $state();
-
-	let prevUrl = $state($page.url.pathname);
-
-	$effect(() => {
-		const current = $page.url.pathname;
-		if (current !== prevUrl) {
-			prevUrl = current;
-			title = '';
-			count = null;
-			countLabel = 'items';
-		}
-	});
 
 	setContext<MediaBarContext>(MEDIA_BAR_KEY, {
 		configure(config) {
