@@ -54,6 +54,7 @@
 				</a>
 			</li>
 			<li><a href="{base}/media/iptv">IPTV</a></li>
+			<li><a href="{base}/media/search">Search</a></li>
 			<li><a href="{base}/profiles">Profiles</a></li>
 			<li><a href="{base}/import">Import</a></li>
 			<li><a href="{base}/queue">Queue</a></li>
@@ -83,6 +84,7 @@
 						{/if}
 					</a>
 					<a href="{base}/media/iptv" class="btn btn-outline btn-sm">IPTV</a>
+					<a href="{base}/media/search" class="btn btn-outline btn-sm">Search</a>
 				</div>
 			{/snippet}
 			{#snippet end()}
