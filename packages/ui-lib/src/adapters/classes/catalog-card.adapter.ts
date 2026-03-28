@@ -1,23 +1,24 @@
 import type { CatalogItem, CatalogCardData, CatalogBadge } from 'ui-lib/types/catalog.type';
+import { formatAuthors } from 'ui-lib/types/catalog.type';
 
 function getSubtitle(item: CatalogItem): string | null {
 	switch (item.kind) {
 		case 'movie':
-			return item.metadata.director;
+			return formatAuthors(item.metadata.authors, 'director') || null;
 		case 'tv_show':
 			return item.metadata.status;
 		case 'album':
-			return item.metadata.artistCredits;
+			return formatAuthors(item.metadata.authors, 'artist') || null;
 		case 'artist':
 			return item.metadata.country;
 		case 'track':
-			return item.metadata.artistCredits;
+			return formatAuthors(item.metadata.authors, 'artist') || null;
 		case 'book':
-			return item.metadata.authors.join(', ') || null;
+			return formatAuthors(item.metadata.authors, 'author') || null;
 		case 'game':
 			return item.metadata.consoleName;
 		case 'youtube_video':
-			return item.metadata.channelName;
+			return item.metadata.authors.find((a) => a.role === 'channel')?.name ?? null;
 		case 'youtube_channel':
 			return item.metadata.subscriberText;
 		case 'iptv_channel':

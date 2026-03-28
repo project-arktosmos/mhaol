@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { CatalogGame } from 'ui-lib/types/catalog.type';
+	import { authorsByRole } from 'ui-lib/types/catalog.type';
+	import AuthorList from './AuthorList.svelte';
 
 	interface Props {
 		item: CatalogGame;
@@ -8,8 +10,8 @@
 	let { item }: Props = $props();
 
 	let consoleName = $derived(item.metadata.consoleName);
-	let developer = $derived(item.metadata.developer);
-	let publisher = $derived(item.metadata.publisher);
+	let developers = $derived(authorsByRole(item.metadata.authors, 'developer'));
+	let publishers = $derived(authorsByRole(item.metadata.authors, 'publisher'));
 	let genre = $derived(item.metadata.genre);
 	let released = $derived(item.metadata.released);
 	let numAchievements = $derived(item.metadata.numAchievements);
@@ -26,17 +28,11 @@
 			<span class="opacity-50">Console:</span>
 			<span class="font-medium">{consoleName}</span>
 		</div>
-		{#if developer}
-			<div>
-				<span class="opacity-50">Developer:</span>
-				<span class="font-medium">{developer}</span>
-			</div>
+		{#if developers.length > 0}
+			<AuthorList authors={developers} layout="labeled" label="Developer" />
 		{/if}
-		{#if publisher}
-			<div>
-				<span class="opacity-50">Publisher:</span>
-				<span class="font-medium">{publisher}</span>
-			</div>
+		{#if publishers.length > 0}
+			<AuthorList authors={publishers} layout="labeled" label="Publisher" />
 		{/if}
 		{#if genre}
 			<div>

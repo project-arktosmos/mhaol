@@ -139,7 +139,10 @@
           musicbrainzId: a.id,
           primaryType: a.primaryType,
           secondaryTypes: a.secondaryTypes,
-          artistCredits: a.artistCredits,
+          authors: a.rawArtistCredits.map((c: import('addons/musicbrainz/types').MusicBrainzArtistCredit) => ({
+            id: c.artist.id, name: c.name, role: 'artist' as const, source: 'musicbrainz' as const,
+            imageUrl: null, joinPhrase: c.joinphrase || undefined
+          })),
           firstReleaseYear: a.firstReleaseYear,
           coverArtUrl: a.coverArtUrl,
           releases: [],

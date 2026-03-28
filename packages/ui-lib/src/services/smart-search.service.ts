@@ -16,6 +16,7 @@ import type {
 } from 'ui-lib/types/smart-search.type';
 import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/types';
 import type { CatalogItem } from 'ui-lib/types/catalog.type';
+import { formatAuthors } from 'ui-lib/types/catalog.type';
 import { parseTorrentName } from 'addons/torrent-search-thepiratebay/parse-torrent-name';
 import { queueService } from 'ui-lib/services/queue.service';
 
@@ -1266,7 +1267,7 @@ class SmartSearchService {
 					musicbrainzId: item.metadata.musicbrainzId,
 					title: item.title,
 					year: item.year ?? '',
-					artist: item.metadata.artistCredits,
+					artist: formatAuthors(item.metadata.authors, 'artist'),
 					mode
 				};
 				break;
@@ -1286,7 +1287,7 @@ class SmartSearchService {
 					openlibraryKey: item.metadata.openlibraryKey,
 					title: item.title,
 					year: item.year ?? '',
-					author: item.metadata.authors[0] ?? '',
+					author: item.metadata.authors[0]?.name ?? '',
 					mode
 				};
 				break;

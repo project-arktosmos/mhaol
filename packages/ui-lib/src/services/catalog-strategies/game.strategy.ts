@@ -2,7 +2,14 @@ import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import { gameListItemToDisplay, gameExtendedToDisplay } from 'addons/retroachievements/transform';
 import { RA_CONSOLES } from 'addons/retroachievements/types';
 import type { RaGameListItem, RaGameExtended } from 'addons/retroachievements/types';
-import type { CatalogItem, CatalogFilterOption, CatalogTab } from 'ui-lib/types/catalog.type';
+import type { CatalogItem, CatalogAuthor, CatalogFilterOption, CatalogTab } from 'ui-lib/types/catalog.type';
+
+function gameAuthors(developer: string | undefined | null, publisher: string | undefined | null): CatalogAuthor[] {
+	const authors: CatalogAuthor[] = [];
+	if (developer) authors.push({ id: developer, name: developer, role: 'developer', source: 'retroachievements', imageUrl: null });
+	if (publisher) authors.push({ id: publisher, name: publisher, role: 'publisher', source: 'retroachievements', imageUrl: null });
+	return authors;
+}
 import type { CatalogKindStrategy } from 'ui-lib/services/catalog.service';
 
 const ITEMS_PER_PAGE = 20;
@@ -56,8 +63,7 @@ function toGameCatalogItems(games: RaGameListItem[], consoleName: string): Catal
 				imageIconUrl: display.imageIconUrl,
 				numAchievements: display.numAchievements,
 				points: display.points,
-				developer: display.developer ?? null,
-				publisher: display.publisher ?? null,
+				authors: gameAuthors(display.developer, display.publisher),
 				genre: display.genre ?? null,
 				released: display.released ?? null,
 				imageTitleUrl: display.imageTitleUrl ?? null,
@@ -97,8 +103,7 @@ function gameDetailToCatalogItem(detail: RaGameExtended): CatalogItem {
 			imageIconUrl: display.imageIconUrl,
 			numAchievements: display.numAchievements,
 			points: display.points,
-			developer: display.developer ?? null,
-			publisher: display.publisher ?? null,
+			authors: gameAuthors(display.developer, display.publisher),
 			genre: display.genre ?? null,
 			released: display.released ?? null,
 			imageTitleUrl: display.imageTitleUrl ?? null,

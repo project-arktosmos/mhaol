@@ -13,11 +13,13 @@
 	import type { MediaTypeConfig } from 'ui-lib/data/media-registry';
 	import type {
 		CatalogItem,
+		CatalogAuthor,
 		CatalogBook,
 		CatalogGame,
 		CatalogMovie,
 		CatalogTvShow
 	} from 'ui-lib/types/catalog.type';
+	import { formatAuthors } from 'ui-lib/types/catalog.type';
 	import type { IptvChannel, IptvStream, IptvEpgProgram } from 'ui-lib/types/iptv.type';
 	import type { MediaItem } from 'ui-lib/types/media-card.type';
 	import type { MediaList } from 'ui-lib/types/media-list.type';
@@ -45,9 +47,12 @@
 		tvShowDetailsToDisplay,
 		seasonDetailsToDisplay,
 		getPosterUrl,
-		getBackdropUrl
+		getBackdropUrl,
+		getProfileUrl
 	} from 'addons/tmdb/transform';
 	import type {
+		TMDBMovieDetails,
+		TMDBTvShowDetails,
 		DisplayTMDBMovieDetails,
 		DisplayTMDBSeasonDetails
 	} from 'addons/tmdb/types';
@@ -139,7 +144,7 @@
 			const work: OpenLibraryWork = await workRes.json();
 			const coverId = work.covers?.[0] ?? null;
 			const authorKeys = work.authors?.map((a) => a.author.key.replace('/authors/', '')) ?? [];
-			const authors = await Promise.all(
+			const authorDisplays = await Promise.all(
 				authorKeys.slice(0, 3).map(async (key) => {
 					try {
 						const res = await fetchRaw(`/api/openlibrary/authors/${key}`);
@@ -148,7 +153,12 @@
 					return { key, name: 'Unknown', birthDate: null, deathDate: null, bio: null, photoUrl: null };
 				})
 			);
-			const details = workToDisplayDetails(work, authors, {
+			const bookAuthors: CatalogAuthor[] = authorDisplays.map((a) => ({
+				id: a.key, name: a.name, role: 'author' as const, source: 'openlibrary' as const,
+				imageUrl: a.photoUrl ?? null,
+				bio: a.bio ?? undefined, birthDate: a.birthDate ?? undefined, deathDate: a.deathDate ?? undefined
+			}));
+			const details = workToDisplayDetails(work, authorDisplays, {
 				key: bookKey, title: work.title, authors: authorKeys, authorKeys,
 				firstPublishYear: work.first_publish_date?.split('-')[0] ?? '',
 				coverId, coverUrl: getCoverUrl(coverId, 'M'),
@@ -166,13 +176,13 @@
 				source: 'openlibrary', sourceId: bookKey,
 				createdAt: '', updatedAt: '',
 				metadata: {
-					openlibraryKey: bookKey, authors: authors.map((a) => a.name), authorKeys,
+					openlibraryKey: bookKey, authors: bookAuthors,
 					firstPublishYear: work.first_publish_date?.split('-')[0] ?? '',
 					coverId, coverUrl: getCoverUrl(coverId, 'M'),
 					subjects: (work.subjects ?? []).slice(0, 10), publishers: [],
 					pageCount: null, editionCount: 0, isbn: null,
 					ratingsAverage: null, ratingsCount: 0,
-					description: details?.description ?? null, authorDetails: authors
+					description: details?.description ?? null
 				}
 			};
 			const cached = await smartSearchService.checkBookFetchCache(bookKey);
@@ -181,7 +191,7 @@
 				const sel = {
 					title: work.title, year: catalogItem.year ?? '',
 					type: 'book' as const, openlibraryKey: bookKey,
-					author: authors[0]?.name ?? 'Unknown', mode: 'fetch' as const
+					author: bookAuthors[0]?.name ?? 'Unknown', mode: 'fetch' as const
 				};
 				smartSearchService.setSelection(sel);
 				smartSearchService.setFetchedCandidate(cached);
@@ -211,7 +221,10 @@
 					retroachievementsId: detail.id, consoleId: detail.consoleId,
 					consoleName: detail.consoleName, imageIconUrl: detail.imageIconUrl,
 					numAchievements: detail.numAchievements, points: detail.points,
-					developer: detail.developer ?? null, publisher: detail.publisher ?? null,
+					authors: [
+						...(detail.developer ? [{ id: detail.developer, name: detail.developer, role: 'developer' as const, source: 'retroachievements' as const, imageUrl: null }] : []),
+						...(detail.publisher ? [{ id: detail.publisher, name: detail.publisher, role: 'publisher' as const, source: 'retroachievements' as const, imageUrl: null }] : [])
+					] satisfies CatalogAuthor[],
 					genre: detail.genre ?? null, released: detail.released ?? null,
 					imageTitleUrl: detail.imageTitleUrl ?? null,
 					imageIngameUrl: detail.imageIngameUrl ?? null,
@@ -248,13 +261,36 @@
 
 	// === Movie fetch ===
 
+	function tmdbMovieAuthors(raw: TMDBMovieDetails): CatalogAuthor[] {
+		const authors: CatalogAuthor[] = [];
+		const director = raw.credits?.crew.find((c) => c.job === 'Director');
+		if (director) authors.push({ id: String(director.id), name: director.name, role: 'director', source: 'tmdb', imageUrl: getProfileUrl(director.profile_path) });
+		for (const c of (raw.credits?.cast ?? []).slice(0, 10)) {
+			authors.push({ id: String(c.id), name: c.name, role: 'actor', source: 'tmdb', imageUrl: getProfileUrl(c.profile_path), character: c.character });
+		}
+		return authors;
+	}
+
+	function tmdbTvAuthors(raw: TMDBTvShowDetails): CatalogAuthor[] {
+		const authors: CatalogAuthor[] = [];
+		for (const c of raw.created_by ?? []) {
+			authors.push({ id: String(c.id), name: c.name, role: 'creator', source: 'tmdb', imageUrl: getProfileUrl(c.profile_path) });
+		}
+		for (const c of (raw.credits?.cast ?? []).slice(0, 10)) {
+			authors.push({ id: String(c.id), name: c.name, role: 'actor', source: 'tmdb', imageUrl: getProfileUrl(c.profile_path), character: c.character });
+		}
+		return authors;
+	}
+
 	async function fetchMovie(tmdbId: number) {
 		loading = true;
 		smartSearchService.clear();
 		try {
 			const res = await fetchRaw(`/api/tmdb/movies/${tmdbId}`);
 			if (res.ok) {
-				const details = movieDetailsToDisplay(await res.json());
+				const rawMovie: TMDBMovieDetails = await res.json();
+				const details = movieDetailsToDisplay(rawMovie);
+				const movieAuthors = tmdbMovieAuthors(rawMovie);
 				// Fetch image overrides
 				try {
 					const ovRes = await fetchRaw(`/api/tmdb/image-overrides/movie/${tmdbId}`);
@@ -292,8 +328,8 @@
 					createdAt: '', updatedAt: '',
 					metadata: {
 						tmdbId: details.id, originalTitle: details.originalTitle,
-						runtime: details.runtime, director: details.director,
-						cast: details.cast.map((c) => ({ id: c.id, name: c.name, character: c.character, profileUrl: c.profileUrl })),
+						runtime: details.runtime,
+						authors: movieAuthors,
 						genres: details.genres, tagline: details.tagline,
 						budget: details.budget, revenue: details.revenue,
 						imdbId: details.imdbId,
@@ -368,7 +404,9 @@
 		try {
 			const res = await fetchRaw(`/api/tmdb/tv/${showId}`);
 			if (res.ok) {
-				const details = tvShowDetailsToDisplay(await res.json());
+				const rawTv: TMDBTvShowDetails = await res.json();
+				const details = tvShowDetailsToDisplay(rawTv);
+				const tvAuthors = tmdbTvAuthors(rawTv);
 				let seasonDetailsList: DisplayTMDBSeasonDetails[] = [];
 				if (details?.seasons) {
 					const results = await Promise.all(
@@ -398,8 +436,8 @@
 					metadata: {
 						tmdbId: details.id, originalName: details.originalName,
 						lastAirYear: details.lastAirYear, status: details.status,
-						networks: details.networks, createdBy: details.createdBy,
-						cast: details.cast.map((c) => ({ id: c.id, name: c.name, character: c.character, profileUrl: c.profileUrl })),
+						networks: details.networks,
+						authors: tvAuthors,
 						genres: details.genres, tagline: details.tagline,
 						numberOfSeasons: details.numberOfSeasons, numberOfEpisodes: details.numberOfEpisodes,
 						seasons: (details.seasons ?? []).map((s) => ({ id: s.id, name: s.name, overview: s.overview, airDate: s.airDate, episodeCount: s.episodeCount, posterUrl: s.posterUrl, seasonNumber: s.seasonNumber })),
@@ -472,7 +510,7 @@
 			smartSearchService.select({
 				title: book.title, year: book.year ?? '', type: 'book',
 				openlibraryKey: book.sourceId,
-				author: book.metadata.authors[0] ?? 'Unknown', mode: 'fetch'
+				author: book.metadata.authors[0]?.name ?? 'Unknown', mode: 'fetch'
 			});
 		} else if (catalogItem.kind === 'game') {
 			const game = catalogItem as CatalogGame;

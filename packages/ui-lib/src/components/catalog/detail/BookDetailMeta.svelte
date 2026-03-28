@@ -2,6 +2,8 @@
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
 	import type { CatalogBook } from 'ui-lib/types/catalog.type';
+	import { authorsByRole } from 'ui-lib/types/catalog.type';
+	import AuthorList from './AuthorList.svelte';
 
 	interface Props {
 		item: CatalogBook;
@@ -13,7 +15,7 @@
 	let renderedDescription = $derived(
 		description ? DOMPurify.sanitize(marked.parse(description, { async: false }) as string) : null
 	);
-	let authors = $derived(item.metadata.authors);
+	let authors = $derived(authorsByRole(item.metadata.authors, 'author'));
 	let subjects = $derived(item.metadata.subjects);
 	let publishers = $derived(item.metadata.publishers);
 	let pageCount = $derived(item.metadata.pageCount);
@@ -32,14 +34,7 @@
 	{/if}
 
 	{#if authors.length > 0}
-		<div>
-			<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Authors</h3>
-			<div class="flex flex-wrap gap-1">
-				{#each authors as author}
-					<span class="badge badge-ghost">{author}</span>
-				{/each}
-			</div>
-		</div>
+		<AuthorList {authors} layout="badges" label="Authors" />
 	{/if}
 
 	{#if subjects.length > 0}

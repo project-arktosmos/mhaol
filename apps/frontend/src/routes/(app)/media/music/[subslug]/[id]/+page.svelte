@@ -20,7 +20,15 @@
 	import { favoritesService } from 'ui-lib/services/favorites.service';
 	import { pinsService } from 'ui-lib/services/pins.service';
 	import { getMusicConfig } from 'ui-lib/data/media-registry';
-	import type { CatalogAlbum, CatalogArtist, CatalogItem } from 'ui-lib/types/catalog.type';
+	import type { CatalogAlbum, CatalogAuthor, CatalogArtist, CatalogItem } from 'ui-lib/types/catalog.type';
+	import { formatAuthors } from 'ui-lib/types/catalog.type';
+
+	function mbCreditsToAuthors(credits: MusicBrainzArtistCredit[]): CatalogAuthor[] {
+		return credits.map((c) => ({
+			id: c.artist.id, name: c.name, role: 'artist' as const, source: 'musicbrainz' as const,
+			imageUrl: null, joinPhrase: c.joinphrase || undefined
+		}));
+	}
 	import CatalogDetailPage from 'ui-lib/components/catalog/CatalogDetailPage.svelte';
 	import AlbumDetailMeta from 'ui-lib/components/catalog/detail/AlbumDetailMeta.svelte';
 	import ArtistDetailMeta from 'ui-lib/components/catalog/detail/ArtistDetailMeta.svelte';
@@ -108,33 +116,27 @@
 			const album = display[0];
 			if (!album) throw new Error('No album data');
 
-			let releases: Array<{
-				id: string;
-				title: string;
-				date: string | null;
-				status: string | null;
-				country: string | null;
-				artistCredits: string;
-				trackCount: number;
-				label: string | null;
-				tracks: Array<{
-					id: string;
-					number: string;
-					title: string;
-					duration: string | null;
-					durationMs: number | null;
-					artistCredits: string;
-				}>;
-			}> = [];
+			let catalogReleases: import('ui-lib/types/catalog.type').AlbumRelease[] = [];
 			const rawReleases: MusicBrainzRelease[] = rgData.releases ?? [];
 			if (rawReleases.length > 0) {
 				const official = rawReleases.find((r) => r.status === 'Official') ?? rawReleases[0];
 				const relRes = await fetchRaw(`/api/musicbrainz/release/${official.id}`);
 				if (relRes.ok) {
 					const rel = releaseToDisplay((await relRes.json()) as MusicBrainzRelease);
-					if (rel) releases = [rel];
+					if (rel) catalogReleases = [{
+						id: rel.id, title: rel.title, date: rel.date, status: rel.status,
+						country: rel.country, authors: mbCreditsToAuthors(rel.rawArtistCredits),
+						trackCount: rel.trackCount, label: rel.label,
+						tracks: rel.tracks.map((t) => ({
+							id: t.id, number: t.number, title: t.title,
+							duration: t.duration, durationMs: t.durationMs,
+							authors: mbCreditsToAuthors(t.rawArtistCredits)
+						}))
+					}];
 				}
 			}
+
+			const albumAuthors = mbCreditsToAuthors(albumArtistCredits);
 
 			catalogItem = {
 				id: albumId,
@@ -157,10 +159,10 @@
 					musicbrainzId: albumId,
 					primaryType: album.primaryType,
 					secondaryTypes: album.secondaryTypes,
-					artistCredits: album.artistCredits,
+					authors: albumAuthors,
 					firstReleaseYear: album.firstReleaseYear,
 					coverArtUrl: album.coverArtUrl,
-					releases
+					releases: catalogReleases
 				}
 			};
 
@@ -173,7 +175,7 @@
 					year: album.firstReleaseYear,
 					type: 'music',
 					musicbrainzId: albumId,
-					artist: album.artistCredits,
+					artist: formatAuthors(albumAuthors, 'artist'),
 					mode: 'fetch',
 					musicSearchMode: 'album'
 				});
@@ -254,7 +256,7 @@
 						musicbrainzId: a.id,
 						primaryType: a.primaryType,
 						secondaryTypes: a.secondaryTypes,
-						artistCredits: a.artistCredits,
+						authors: mbCreditsToAuthors(a.rawArtistCredits),
 						firstReleaseYear: a.firstReleaseYear,
 						coverArtUrl: a.coverArtUrl,
 						releases: []
@@ -287,7 +289,7 @@
 		fetchingId = catalogItem.sourceId;
 		const musicSearchMode = isAlbumMode ? 'album' : 'artist';
 		const artistName = isAlbumMode
-			? (catalogItem as CatalogAlbum).metadata.artistCredits
+			? formatAuthors((catalogItem as CatalogAlbum).metadata.authors, 'artist')
 			: catalogItem.title;
 
 		if (!isFetchedForCurrent) {
