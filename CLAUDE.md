@@ -150,7 +150,7 @@ pnpm signaling:dev    # PartyKit local dev
 pnpm signaling:deploy # Deploy PartyKit
 
 # Cleanup
-pnpm clean            # Clean build artifacts + cargo clean
+pnpm clean            # Clean build artifacts, cargo clean, remove SQLite DBs
 ```
 
 Never cd into a package directory to run scripts — use the root workspace scripts above.
