@@ -972,6 +972,43 @@ class SmartSearchService {
 		}
 	}
 
+	async checkGameFetchCache(retroachievementsId: number): Promise<SmartSearchTorrentResult | null> {
+		try {
+			const res = await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=retroachievements&sourceId=${retroachievementsId}&kind=game&scope=default&scopeKey=`
+			);
+			if (!res.ok) return null;
+			const data = await res.json();
+			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
+			candidate.uploadedAt = new Date(candidate.uploadedAt);
+			return candidate;
+		} catch {
+			return null;
+		}
+	}
+
+	async saveGameFetchCache(
+		retroachievementsId: number,
+		candidate: SmartSearchTorrentResult
+	): Promise<void> {
+		try {
+			await fetchRaw('/api/catalog/fetch-cache-by-source', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					source: 'retroachievements',
+					sourceId: String(retroachievementsId),
+					kind: 'game',
+					scope: 'default',
+					scopeKey: '',
+					candidate
+				})
+			});
+		} catch {
+			// best-effort
+		}
+	}
+
 	async startDownload(candidate: SmartSearchTorrentResult): Promise<string | null> {
 		const selection = this.getSelection();
 		if (!selection) return null;

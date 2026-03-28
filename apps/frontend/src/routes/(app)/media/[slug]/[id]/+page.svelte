@@ -586,6 +586,18 @@
 		fetchingId = catalogItem.sourceId;
 		if (catalogItem.kind === 'book') {
 			const book = catalogItem as CatalogBook;
+			if (!isFetchedForCurrent) {
+				const cached = await smartSearchService.checkBookFetchCache(book.sourceId);
+				if (cached) {
+					smartSearchService.setSelection({
+						title: book.title, year: book.year ?? '', type: 'book',
+						openlibraryKey: book.sourceId,
+						author: book.metadata.authors[0]?.name ?? 'Unknown', mode: 'fetch'
+					});
+					smartSearchService.setFetchedCandidate(cached);
+					return;
+				}
+			}
 			smartSearchService.select({
 				title: book.title, year: book.year ?? '', type: 'book',
 				openlibraryKey: book.sourceId,
@@ -593,6 +605,18 @@
 			});
 		} else if (catalogItem.kind === 'game') {
 			const game = catalogItem as CatalogGame;
+			if (!isFetchedForCurrent) {
+				const cached = await smartSearchService.checkGameFetchCache(game.metadata.retroachievementsId);
+				if (cached) {
+					smartSearchService.setSelection({
+						title: game.title, year: '', type: 'game',
+						retroachievementsId: game.metadata.retroachievementsId,
+						consoleName: game.metadata.consoleName, mode: 'fetch'
+					});
+					smartSearchService.setFetchedCandidate(cached);
+					return;
+				}
+			}
 			smartSearchService.select({
 				title: game.title, year: '', type: 'game',
 				retroachievementsId: game.metadata.retroachievementsId,
@@ -709,6 +733,8 @@
 		} else if (config.kind === 'album') {
 			const scope = candidate.analysis?.isDiscography ? 'discography' : 'album';
 			smartSearchService.saveMusicFetchCache(fetchingId, scope, candidate);
+		} else if (config.kind === 'game') {
+			smartSearchService.saveGameFetchCache(Number(fetchingId), candidate);
 		}
 	});
 
