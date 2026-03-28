@@ -94,6 +94,11 @@
 		};
 	});
 	let matchedTorrent = $derived.by(() => {
+		// Check library-related torrent first (movies with existing library items)
+		if (relatedData?.torrentDownload?.infoHash) {
+			const t = torrentService.findByHash(relatedData.torrentDownload.infoHash);
+			if (t) return t;
+		}
 		const candidate = $searchStore.fetchedCandidate;
 		if (candidate?.infoHash) {
 			const t = torrentService.findByHash(candidate.infoHash);
@@ -594,7 +599,7 @@
 			{togglingFavorite}
 			{isPinned}
 			{togglingPin}
-			onback={() => goto(`${base}/media/iptv`)}
+			onback={() => goto(`${base}/media/${slug}`)}
 			onstreamselect={() => { iptvStreamUrl = iptvService.getStreamUrl(iptvChannel?.id ?? id); }}
 			ontogglefavorite={handleToggleFavorite}
 			ontogglepin={handleTogglePin}
@@ -604,7 +609,7 @@
 	{:else}
 		<div class="flex flex-1 flex-col items-center justify-center gap-2">
 			<p class="text-sm opacity-60">Channel not found</p>
-			<button class="btn btn-ghost btn-sm" onclick={() => goto(`${base}/media/iptv`)}>Back</button>
+			<button class="btn btn-ghost btn-sm" onclick={() => goto(`${base}/media/${slug}`)}>Back</button>
 		</div>
 	{/if}
 {:else if catalogItem}

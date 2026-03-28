@@ -178,10 +178,42 @@
 	}
 
 	async function handleBatchSmartSearch() {
-		// Batch search pinned movies that haven't been fetched yet
-		// This reads from the PinnedFavoritesSection's resolved items
-		// For now this is a no-op until we wire up resolved pinned items
+		if (config.kind !== 'movie') return;
+		const strategy = getStrategy(config.kind);
+		if (!strategy?.resolveByIds) return;
+		const ids = [...pinnedTmdbIds].map(String);
+		const resolved = await strategy.resolveByIds(ids);
+		const unsearched = resolved.filter((item) => !$fetchCacheState.cachedIds.has(Number(item.sourceId)));
+		if (unsearched.length === 0) return;
+		batchSearching = true;
+		batchProgress = { current: 0, total: unsearched.length };
+		for (const item of unsearched) {
+			batchProgress = { current: batchProgress.current + 1, total: batchProgress.total };
+			smartSearchingId = Number(item.sourceId);
+			try {
+				await smartSearchService.selectAndWaitForBest({
+					title: item.title,
+					year: item.year ?? '',
+					type: 'movie',
+					tmdbId: Number(item.sourceId),
+					mode: 'fetch'
+				});
+				await fetchCacheService.refresh();
+			} catch { /* continue */ }
+		}
+		smartSearchingId = null;
+		batchSearching = false;
 	}
+
+	// Library TMDB IDs for recommendations (movies)
+	let libraryTmdbIds = $derived.by(() => {
+		if (!config.features.libraryItems || !data.mediaData?.itemsByType) return [];
+		const allItems = Object.values(data.mediaData.itemsByType).flat() as MediaItem[];
+		return allItems
+			.map((item) => item.links?.tmdb?.serviceId)
+			.filter((id): id is string => id != null)
+			.map(Number);
+	});
 
 	// TV library data
 	let tvLists = $derived((data.mediaData?.lists ?? []) as MediaList[]);
@@ -215,6 +247,20 @@
 	onselectitem={handleSelectItem}
 >
 	{#snippet extraControls()}
+		{#if config.features.batchSmartSearch}
+			<button
+				class="btn btn-outline btn-sm"
+				onclick={handleBatchSmartSearch}
+				disabled={batchSearching}
+			>
+				{#if batchSearching}
+					<span class="loading loading-xs loading-spinner"></span>
+					{batchProgress.current}/{batchProgress.total}
+				{:else}
+					Smart Search All
+				{/if}
+			</button>
+		{/if}
 		{#if config.hasRecs}
 			<button class="btn btn-ghost btn-sm" onclick={() => (recsModalOpen = true)}>Recs</button>
 		{/if}
@@ -250,7 +296,7 @@
 				{smartSearchingId}
 				{favoritedTmdbIds}
 				{pinnedTmdbIds}
-				onnavigate={(tmdbId) => goto(`${base}/media/movies/${tmdbId}`)}
+				onnavigate={(tmdbId) => goto(`${base}/media/${config.slug}/${tmdbId}`)}
 				onsmartsearch={handleSmartSearch}
 			/>
 		{:else if config.features.libraryItems === 'tv' && data.mediaData}
@@ -259,7 +305,7 @@
 				libraries={tvLibraries}
 				{favoritedTmdbTvIds}
 				{pinnedTmdbTvIds}
-				onnavigate={(tmdbId) => goto(`${base}/media/tv/${tmdbId}`)}
+				onnavigate={(tmdbId) => goto(`${base}/media/${config.slug}/${tmdbId}`)}
 			/>
 		{/if}
 	{/snippet}
@@ -274,7 +320,7 @@
 						mediaType={config.recsMediaType}
 						pinnedIds={pinnedIds.map(Number)}
 						favoritedIds={favoritedIds.map(Number)}
-						libraryTmdbIds={[]}
+						{libraryTmdbIds}
 					/>
 				{:else if config.recsMediaType === 'book'}
 					<BookRecommendationsModalContent
