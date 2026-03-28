@@ -17,11 +17,13 @@
 	import { bookStrategy } from 'ui-lib/services/catalog-strategies/book.strategy';
 	import { gameStrategy } from 'ui-lib/services/catalog-strategies/game.strategy';
 	import { iptvStrategy } from 'ui-lib/services/catalog-strategies/iptv.strategy';
+	import { albumStrategy } from 'ui-lib/services/catalog-strategies/album.strategy';
 
 	// Recommendations
 	import RecommendationsModalContent from 'ui-lib/components/recommendations/RecommendationsModalContent.svelte';
 	import BookRecommendationsModalContent from 'ui-lib/components/recommendations/BookRecommendationsModalContent.svelte';
 	import GameRecommendationsModalContent from 'ui-lib/components/recommendations/GameRecommendationsModalContent.svelte';
+	import MusicRecommendationsModalContent from 'ui-lib/components/recommendations/MusicRecommendationsModalContent.svelte';
 
 	// Console selector data (for videogames)
 	import { RA_CONSOLES, CONSOLE_WASM_STATUS } from 'addons/retroachievements/types';
@@ -78,7 +80,8 @@
 		tv_show: tvStrategy,
 		book: bookStrategy,
 		game: gameStrategy,
-		iptv_channel: iptvStrategy
+		iptv_channel: iptvStrategy,
+		album: albumStrategy
 	};
 
 	function getStrategy(kind: CatalogKind): CatalogKindStrategy {
@@ -92,6 +95,9 @@
 		catalogService.activate(config.kind);
 		if (config.kind === 'game') {
 			catalogService.setFilter('console', String(selectedConsoleId));
+		}
+		if (config.kind === 'album') {
+			catalogService.setFilter('genre', 'rock');
 		}
 		if (config.features.fetchCache) {
 			fetchCacheService.load(config.pinService === 'tmdb' ? 'tmdb' : config.pinService);
@@ -331,6 +337,11 @@
 					<GameRecommendationsModalContent
 						pinnedGameIds={pinnedIds.map(Number)}
 						favoritedGameIds={favoritedIds.map(Number)}
+					/>
+				{:else if config.recsMediaType === 'music'}
+					<MusicRecommendationsModalContent
+						pinnedAlbumIds={pinnedIds}
+						favoritedAlbumIds={favoritedIds}
 					/>
 				{/if}
 			</div>

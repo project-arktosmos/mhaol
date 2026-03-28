@@ -14,10 +14,12 @@
 	import type {
 		CatalogItem,
 		CatalogAuthor,
+		CatalogAlbum,
 		CatalogBook,
 		CatalogGame,
 		CatalogMovie,
-		CatalogTvShow
+		CatalogTvShow,
+		AlbumRelease
 	} from 'ui-lib/types/catalog.type';
 	import { formatAuthors } from 'ui-lib/types/catalog.type';
 	import type { IptvChannel, IptvStream, IptvEpgProgram } from 'ui-lib/types/iptv.type';
@@ -30,6 +32,7 @@
 
 	// Detail components
 	import CatalogDetailPage from 'ui-lib/components/catalog/CatalogDetailPage.svelte';
+	import AlbumDetailMeta from 'ui-lib/components/catalog/detail/AlbumDetailMeta.svelte';
 	import BookDetailMeta from 'ui-lib/components/catalog/detail/BookDetailMeta.svelte';
 	import GameDetailMeta from 'ui-lib/components/catalog/detail/GameDetailMeta.svelte';
 	import MovieDetailMeta from 'ui-lib/components/catalog/detail/MovieDetailMeta.svelte';
@@ -57,6 +60,15 @@
 		DisplayTMDBSeasonDetails
 	} from 'addons/tmdb/types';
 	import { iptvService } from 'ui-lib/services/iptv.service';
+	import { releaseGroupsToDisplay, releaseToDisplay } from 'addons/musicbrainz/transform';
+	import type { MusicBrainzReleaseGroup, MusicBrainzRelease, MusicBrainzArtistCredit } from 'addons/musicbrainz/types';
+
+	function mbCreditsToAuthors(credits: MusicBrainzArtistCredit[]): CatalogAuthor[] {
+		return credits.map((c) => ({
+			id: c.artist.id, name: c.name, role: 'artist' as const, source: 'musicbrainz' as const,
+			imageUrl: null, joinPhrase: c.joinphrase || undefined
+		}));
+	}
 
 	let slug = $derived($page.params.slug ?? '');
 	let id = $derived($page.params.id ?? '');
@@ -237,6 +249,73 @@
 					}))
 				}
 			};
+		} catch { catalogItem = null; }
+		loading = false;
+	}
+
+	async function fetchAlbum(albumId: string) {
+		loading = true;
+		smartSearchService.clear();
+		try {
+			const rgRes = await fetchRaw(`/api/musicbrainz/release-group/${albumId}`);
+			if (!rgRes.ok) throw new Error('Failed to fetch');
+			const rgData = await rgRes.json();
+			const display = releaseGroupsToDisplay([rgData as MusicBrainzReleaseGroup]);
+			const album = display[0];
+			if (!album) throw new Error('No album data');
+
+			let catalogReleases: AlbumRelease[] = [];
+			const rawReleases: MusicBrainzRelease[] = rgData.releases ?? [];
+			if (rawReleases.length > 0) {
+				const official = rawReleases.find((r) => r.status === 'Official') ?? rawReleases[0];
+				const relRes = await fetchRaw(`/api/musicbrainz/release/${official.id}`);
+				if (relRes.ok) {
+					const rel = releaseToDisplay((await relRes.json()) as MusicBrainzRelease);
+					if (rel) catalogReleases = [{
+						id: rel.id, title: rel.title, date: rel.date, status: rel.status,
+						country: rel.country, authors: mbCreditsToAuthors(rel.rawArtistCredits),
+						trackCount: rel.trackCount, label: rel.label,
+						tracks: rel.tracks.map((t) => ({
+							id: t.id, number: t.number, title: t.title,
+							duration: t.duration, durationMs: t.durationMs,
+							authors: mbCreditsToAuthors(t.rawArtistCredits)
+						}))
+					}];
+				}
+			}
+
+			const albumCredits: MusicBrainzArtistCredit[] = (rgData as MusicBrainzReleaseGroup)['artist-credit'] ?? [];
+			const albumAuthors = mbCreditsToAuthors(albumCredits);
+
+			catalogItem = {
+				id: albumId, kind: 'album',
+				title: album.title, sortTitle: album.title.toLowerCase(),
+				year: album.firstReleaseYear || null, overview: null,
+				posterUrl: album.coverArtUrl, backdropUrl: null,
+				voteAverage: null, voteCount: null,
+				parentId: null, position: null,
+				source: 'musicbrainz', sourceId: albumId,
+				createdAt: '', updatedAt: '',
+				metadata: {
+					musicbrainzId: albumId, primaryType: album.primaryType,
+					secondaryTypes: album.secondaryTypes, authors: albumAuthors,
+					firstReleaseYear: album.firstReleaseYear,
+					coverArtUrl: album.coverArtUrl, releases: catalogReleases
+				}
+			};
+
+			const cached = await smartSearchService.checkMusicFetchCache(albumId);
+			if (cached && cached.length > 0) {
+				fetchingId = albumId;
+				const bestEntry = cached.find((e) => e.scope === 'album') ?? cached[0];
+				smartSearchService.setSelection({
+					title: album.title, year: album.firstReleaseYear,
+					type: 'music', musicbrainzId: albumId,
+					artist: formatAuthors(albumAuthors, 'artist'),
+					mode: 'fetch', musicSearchMode: 'album'
+				});
+				smartSearchService.setFetchedCandidate(bestEntry.candidate);
+			}
 		} catch { catalogItem = null; }
 		loading = false;
 	}
@@ -552,6 +631,27 @@
 				}
 			}
 			smartSearchService.select({ title: catalogItem.title, year: catalogItem.year ?? '', type: 'tv', tmdbId: Number(catalogItem.sourceId), mode: 'fetch', seasons: tvSeasonsMeta });
+		} else if (catalogItem.kind === 'album') {
+			const album = catalogItem as CatalogAlbum;
+			const artistName = formatAuthors(album.metadata.authors, 'artist');
+			if (!isFetchedForCurrent) {
+				const cached = await smartSearchService.checkMusicFetchCache(album.sourceId);
+				if (cached && cached.length > 0) {
+					const bestEntry = cached.find((e) => e.scope === 'album') ?? cached[0];
+					smartSearchService.setSelection({
+						title: album.title, year: album.year ?? '', type: 'music',
+						musicbrainzId: album.sourceId, artist: artistName,
+						mode: 'fetch', musicSearchMode: 'album'
+					});
+					smartSearchService.setFetchedCandidate(bestEntry.candidate);
+					return;
+				}
+			}
+			smartSearchService.select({
+				title: album.title, year: album.year ?? '', type: 'music',
+				musicbrainzId: album.sourceId, artist: artistName,
+				mode: 'fetch', musicSearchMode: 'album'
+			});
 		}
 	}
 
@@ -606,6 +706,9 @@
 				}
 			}
 			smartSearchService.saveTvFetchCache(Number(fetchingId), scope, seasonNumber, episodeNumber, candidate);
+		} else if (config.kind === 'album') {
+			const scope = candidate.analysis?.isDiscography ? 'discography' : 'album';
+			smartSearchService.saveMusicFetchCache(fetchingId, scope, candidate);
 		}
 	});
 
@@ -615,6 +718,7 @@
 		if (config.kind === 'book') fetchBook(id);
 		else if (config.kind === 'game') fetchGame(id);
 		else if (config.kind === 'iptv_channel') fetchIptv(id);
+		else if (config.kind === 'album') fetchAlbum(id);
 		else if (config.kind === 'movie') fetchMovie(Number(id));
 		else if (config.kind === 'tv_show') fetchTvShow(Number(id));
 	});
@@ -664,7 +768,9 @@
 		onstream={(config?.kind === 'movie' || config?.kind === 'tv_show') ? handleP2pStream : undefined}
 	>
 		{#snippet extra()}
-			{#if catalogItem?.kind === 'book'}
+			{#if catalogItem?.kind === 'album'}
+				<AlbumDetailMeta item={catalogItem} />
+			{:else if catalogItem?.kind === 'book'}
 				<BookDetailMeta item={catalogItem} />
 			{:else if catalogItem?.kind === 'game'}
 				<GameDetailMeta item={catalogItem} />

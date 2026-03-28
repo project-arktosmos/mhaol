@@ -611,17 +611,11 @@ class SmartSearchService {
 		signal: AbortSignal
 	) {
 		const { artist, title } = selection;
-		const mode = selection.musicSearchMode ?? 'album';
 		const cat = 100;
 
 		const queries: string[] = [];
-		if (mode === 'album') {
-			queries.push(`${artist} ${title}`);
-			queries.push(`${artist} discography`);
-		} else {
-			queries.push(`${artist} discography`);
-			queries.push(`${artist} complete discography`);
-		}
+		queries.push(`${artist} ${title}`);
+		queries.push(`${artist} discography`);
 
 		this.store.update((s) => ({ ...s, searching: true, searchError: null }));
 

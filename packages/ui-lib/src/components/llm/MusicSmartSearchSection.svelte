@@ -23,20 +23,16 @@
 	let musicResults = $derived($searchStore.musicResults);
 	let activeMusicTab = $derived($searchStore.activeMusicTab);
 
-	let isArtistMode = $derived(musicSelection?.musicSearchMode === 'artist');
-
 	let tabs = $derived.by(() => {
 		const t: Array<{ id: 'album' | 'discography'; label: string }> = [];
-		if (!isArtistMode) {
-			t.push({ id: 'album', label: 'Album' });
-		}
+		t.push({ id: 'album', label: 'Album' });
 		t.push({ id: 'discography', label: 'Discography' });
 		return t;
 	});
 
 	let activeResults = $derived.by((): SmartSearchTorrentResult[] => {
 		if (!musicResults) return [];
-		if (activeMusicTab === 'album' && !isArtistMode) return musicResults.album;
+		if (activeMusicTab === 'album') return musicResults.album;
 		return musicResults.discography;
 	});
 

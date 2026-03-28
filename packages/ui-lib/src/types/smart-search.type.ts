@@ -57,7 +57,7 @@ export interface SmartSearchMusicSelection extends SmartSearchBaseSelection {
 	type: 'music';
 	musicbrainzId: string;
 	artist: string;
-	musicSearchMode?: 'album' | 'artist';
+	musicSearchMode?: 'album';
 }
 
 export interface SmartSearchGameSelection extends SmartSearchBaseSelection {

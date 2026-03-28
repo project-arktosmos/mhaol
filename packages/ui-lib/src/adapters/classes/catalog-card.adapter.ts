@@ -9,8 +9,6 @@ function getSubtitle(item: CatalogItem): string | null {
 			return item.metadata.status;
 		case 'album':
 			return formatAuthors(item.metadata.authors, 'artist') || null;
-		case 'artist':
-			return item.metadata.country;
 		case 'track':
 			return formatAuthors(item.metadata.authors, 'artist') || null;
 		case 'book':
@@ -38,7 +36,6 @@ function getAspectRatio(item: CatalogItem): 'poster' | 'square' | 'landscape' {
 		case 'book':
 			return 'poster';
 		case 'album':
-		case 'artist':
 		case 'game':
 		case 'photo':
 			return 'square';
@@ -65,11 +62,6 @@ function getBadges(item: CatalogItem): CatalogBadge[] {
 		case 'album':
 			if (item.metadata.primaryType) {
 				badges.push({ label: item.metadata.primaryType, variant: 'ghost' });
-			}
-			break;
-		case 'artist':
-			if (item.metadata.type) {
-				badges.push({ label: item.metadata.type, variant: 'info' });
 			}
 			break;
 		case 'game':

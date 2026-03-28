@@ -5,7 +5,6 @@ export type CatalogKind =
 	| 'tv_show'
 	| 'tv_season'
 	| 'tv_episode'
-	| 'artist'
 	| 'album'
 	| 'track'
 	| 'book'
@@ -179,24 +178,6 @@ export interface TvEpisodeMetadata {
 	airDate: string | null;
 	runtime: number | null;
 	stillUrl: string | null;
-}
-
-export interface CatalogArtist extends CatalogItemBase {
-	kind: 'artist';
-	metadata: ArtistMetadata;
-}
-
-export interface ArtistMetadata {
-	musicbrainzId: string;
-	sortName: string;
-	type: string | null;
-	country: string | null;
-	disambiguation: string | null;
-	beginYear: string | null;
-	endYear: string | null;
-	ended: boolean;
-	tags: string[];
-	imageUrl: string | null;
 }
 
 export interface CatalogAlbum extends CatalogItemBase {
@@ -384,7 +365,6 @@ export type CatalogItem =
 	| CatalogTvShow
 	| CatalogTvSeason
 	| CatalogTvEpisode
-	| CatalogArtist
 	| CatalogAlbum
 	| CatalogTrack
 	| CatalogBook
@@ -407,9 +387,6 @@ export function isTvSeason(item: CatalogItem): item is CatalogTvSeason {
 }
 export function isTvEpisode(item: CatalogItem): item is CatalogTvEpisode {
 	return item.kind === 'tv_episode';
-}
-export function isArtist(item: CatalogItem): item is CatalogArtist {
-	return item.kind === 'artist';
 }
 export function isAlbum(item: CatalogItem): item is CatalogAlbum {
 	return item.kind === 'album';
@@ -507,7 +484,6 @@ export const BROWSE_KINDS: CatalogKind[] = [
 	'movie',
 	'tv_show',
 	'album',
-	'artist',
 	'book',
 	'game',
 	'youtube_video',
