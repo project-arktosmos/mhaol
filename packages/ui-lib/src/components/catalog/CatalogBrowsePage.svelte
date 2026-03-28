@@ -21,6 +21,8 @@
 		onpagechange: (page: number) => void;
 		onselectitem: (item: CatalogItem) => void;
 		filterBar?: Snippet;
+		extraControls?: Snippet;
+		extraSections?: Snippet;
 	}
 
 	let {
@@ -32,7 +34,9 @@
 		ontabchange,
 		onpagechange,
 		onselectitem,
-		filterBar
+		filterBar,
+		extraControls,
+		extraSections
 	}: Props = $props();
 
 	const mediaBar: MediaBarContext | null = hasContext(MEDIA_BAR_KEY)
@@ -112,6 +116,9 @@
 	{#if mediaBar}
 		<Portal target={mediaBar.controlsTarget}>
 			{@render searchControls()}
+			{#if extraControls}
+				{@render extraControls()}
+			{/if}
 		</Portal>
 		{#if browseState.tabs.length > 0}
 			<Portal target={mediaBar.tabsTarget}>
@@ -146,6 +153,10 @@
 
 	{#if strategy?.resolveByIds}
 		<PinnedFavoritesSection {strategy} {cardOverlays} {onselectitem} />
+	{/if}
+
+	{#if extraSections}
+		{@render extraSections()}
 	{/if}
 
 	<BrowseGrid

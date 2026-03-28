@@ -773,7 +773,14 @@ class SmartSearchService {
 			await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ source: 'musicbrainz', sourceId: musicbrainzId, kind: 'artist', scope, scopeKey: '', candidate })
+				body: JSON.stringify({
+					source: 'musicbrainz',
+					sourceId: musicbrainzId,
+					kind: 'artist',
+					scope,
+					scopeKey: '',
+					candidate
+				})
 			});
 		} catch {
 			// best-effort
@@ -791,7 +798,8 @@ class SmartSearchService {
 				`/api/catalog/fetch-cache-by-source?source=tmdb&sourceId=${tmdbId}&kind=tv_show`
 			);
 			if (!res.ok) return null;
-			const rows: Array<{ scope: string; scopeKey: string; candidateJson: string }> = await res.json();
+			const rows: Array<{ scope: string; scopeKey: string; candidateJson: string }> =
+				await res.json();
 			if (rows.length === 0) return null;
 			return rows.map((row) => {
 				const candidate = JSON.parse(row.candidateJson) as SmartSearchTorrentResult;
@@ -829,7 +837,14 @@ class SmartSearchService {
 			await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ source: 'tmdb', sourceId: String(tmdbId), kind: 'tv_show', scope, scopeKey, candidate })
+				body: JSON.stringify({
+					source: 'tmdb',
+					sourceId: String(tmdbId),
+					kind: 'tv_show',
+					scope,
+					scopeKey,
+					candidate
+				})
 			});
 		} catch {
 			// best-effort
@@ -911,7 +926,14 @@ class SmartSearchService {
 			await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ source: 'tmdb', sourceId: String(tmdbId), kind: mediaType, scope: 'default', scopeKey: '', candidate })
+				body: JSON.stringify({
+					source: 'tmdb',
+					sourceId: String(tmdbId),
+					kind: mediaType,
+					scope: 'default',
+					scopeKey: '',
+					candidate
+				})
 			});
 		} catch {
 			// best-effort
@@ -941,7 +963,14 @@ class SmartSearchService {
 			await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ source: 'openlibrary', sourceId: openlibraryKey, kind: 'book', scope: 'default', scopeKey: '', candidate })
+				body: JSON.stringify({
+					source: 'openlibrary',
+					sourceId: openlibraryKey,
+					kind: 'book',
+					scope: 'default',
+					scopeKey: '',
+					candidate
+				})
 			});
 		} catch {
 			// best-effort

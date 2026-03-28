@@ -154,7 +154,8 @@ export const gameStrategy: CatalogKindStrategy = {
 			cachedGames.set(consoleId, games);
 		}
 		const tabs = deriveCategoryTabs(games);
-		const category = tabId && tabs.some((t) => t.id === tabId) ? tabId : tabs[0]?.id ?? 'Originals';
+		const category =
+			tabId && tabs.some((t) => t.id === tabId) ? tabId : (tabs[0]?.id ?? 'Originals');
 		const filtered = games.filter((g) => gameTag(g.Title) === category);
 		const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
 		const offset = (page - 1) * ITEMS_PER_PAGE;

@@ -47,7 +47,7 @@ function toMovieCatalogItems(movies: TMDBMovie[]): CatalogItem[] {
 
 async function loadGenres(): Promise<CatalogFilterOption[]> {
 	const data = await fetchJson<{ genres: { id: number; name: string }[] }>(
-		'/api/tmdb/genres/movies'
+		'/api/tmdb/genres/movie'
 	);
 	return (data?.genres ?? []).map((g) => ({ id: String(g.id), label: g.name }));
 }
@@ -65,7 +65,7 @@ export const movieStrategy: CatalogKindStrategy = {
 
 	async search(query, page, _filters) {
 		const data = await fetchJson<TmdbPagedResponse>(
-			`/api/tmdb/search/movies?query=${encodeURIComponent(query)}&page=${page}`
+			`/api/tmdb/search/movies?q=${encodeURIComponent(query)}&page=${page}`
 		);
 		return {
 			items: toMovieCatalogItems(data?.results ?? []),
@@ -80,7 +80,7 @@ export const movieStrategy: CatalogKindStrategy = {
 		} else if (tabId === 'discover') {
 			url = `/api/tmdb/discover/movies?page=${page}`;
 		} else {
-			url = `/api/tmdb/movies/popular?page=${page}`;
+			url = `/api/tmdb/popular/movies?page=${page}`;
 		}
 		const data = await fetchJson<TmdbPagedResponse>(url);
 		return {

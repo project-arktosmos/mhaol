@@ -74,16 +74,10 @@
 				const langStr = String(r.analysis?.languages ?? '');
 				const qualStr = String(r.analysis?.quality ?? '');
 				const reasonStr = String(r.analysis?.reason ?? '');
-				const langBonus =
-					prefLang && langStr.toLowerCase().includes(prefLang) ? 100 : 0;
-				const qualityBonus =
-					prefQuality && qualStr.toLowerCase().includes(prefQuality)
-						? 100
-						: 0;
+				const langBonus = prefLang && langStr.toLowerCase().includes(prefLang) ? 100 : 0;
+				const qualityBonus = prefQuality && qualStr.toLowerCase().includes(prefQuality) ? 100 : 0;
 				const consoleBonus =
-					prefConsole && reasonStr.toLowerCase().includes('console matches')
-						? 100
-						: 0;
+					prefConsole && reasonStr.toLowerCase().includes('console matches') ? 100 : 0;
 				return { r, score: sePct + lePct + relPct + langBonus + qualityBonus + consoleBonus };
 			})
 			.sort((a, b) => b.score - a.score);
