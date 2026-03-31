@@ -108,7 +108,7 @@ pub(crate) fn extract_year(date_str: &str) -> String {
     date_str.split('-').next().unwrap_or("").to_string()
 }
 
-fn parse_movie_candidate(result: &serde_json::Value) -> Option<TmdbCandidate> {
+pub(crate) fn parse_movie_candidate(result: &serde_json::Value) -> Option<TmdbCandidate> {
     Some(TmdbCandidate {
         id: result.get("id")?.as_i64()?,
         title: result.get("title")?.as_str()?.to_string(),

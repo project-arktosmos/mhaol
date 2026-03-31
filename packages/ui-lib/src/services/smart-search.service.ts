@@ -918,7 +918,8 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetchRaw('/api/catalog/fetch-cache-by-source', {
+			console.log('[fetch-cache] saving movie cache', { tmdbId, mediaType, name: candidate.name });
+			const res = await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -930,8 +931,9 @@ class SmartSearchService {
 					candidate
 				})
 			});
-		} catch {
-			// best-effort
+			console.log('[fetch-cache] save response', res.status, res.statusText);
+		} catch (err) {
+			console.error('[fetch-cache] save failed', err);
 		}
 	}
 

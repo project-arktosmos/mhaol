@@ -23,6 +23,12 @@
 	import TmdbLinkModal from 'ui-lib/components/libraries/TmdbLinkModal.svelte';
 	import type { MediaDetailCardType } from 'ui-lib/types/media-detail.type';
 
+	export interface MatchAllApi {
+		matchAll: () => void;
+		unlinkedCount: number;
+		matchAllState: { total: number; completed: number; matched: number } | null;
+	}
+
 	interface Props {
 		mediaData: {
 			itemsByType: Record<string, MediaItem[]>;
@@ -37,6 +43,7 @@
 		pinnedTmdbIds: Set<number>;
 		onnavigate: (tmdbId: string) => void;
 		onsmartsearch?: (movie: DisplayTMDBMovie) => void;
+		matchAllApi?: MatchAllApi;
 	}
 
 	let {
@@ -49,12 +56,15 @@
 		favoritedTmdbIds,
 		pinnedTmdbIds,
 		onnavigate,
-		onsmartsearch
+		onsmartsearch,
+		matchAllApi = $bindable({ matchAll: () => {}, unlinkedCount: 0, matchAllState: null })
 	}: Props = $props();
 
 	const torrentState = torrentService.state;
 	const playerState = playerService.state;
 	const mediaDetailStore = mediaDetailService.store;
+	let movieMatchAllState: { total: number; completed: number; matched: number } | null =
+		$state(null);
 
 	let linkOverrides: Record<string, Record<string, MediaItemLink | null>> = $state({});
 	let categoryOverrides: Record<string, string> = $state({});
@@ -100,6 +110,80 @@
 			};
 		})
 	);
+
+	let unlinkedMovieItems = $derived(itemsWithOverrides.filter((i) => !getItemLinks(i).tmdb));
+
+	async function handleMatchAllMovies() {
+		if (unlinkedMovieItems.length === 0) return;
+		movieMatchAllState = { total: unlinkedMovieItems.length, completed: 0, matched: 0 };
+		try {
+			const res = await fetchRaw('/api/libraries/auto-match', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					items: unlinkedMovieItems.map((i) => ({
+						itemId: i.id,
+						libraryId: i.libraryId,
+						title: i.name
+					}))
+				})
+			});
+			if (!res.ok) {
+				movieMatchAllState = null;
+				return;
+			}
+			const reader = res.body?.getReader();
+			if (!reader) {
+				movieMatchAllState = null;
+				return;
+			}
+			const decoder = new TextDecoder();
+			let buffer = '';
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n');
+				buffer = lines.pop() ?? '';
+				for (const line of lines) {
+					if (!line.trim()) continue;
+					try {
+						const result = JSON.parse(line);
+						movieMatchAllState = {
+							total: movieMatchAllState!.total,
+							completed: movieMatchAllState!.completed + 1,
+							matched: movieMatchAllState!.matched + (result.matched ? 1 : 0)
+						};
+						if (result.matched && result.tmdbId) {
+							updateItemLinks(result.itemId, 'tmdb', {
+								serviceId: String(result.tmdbId),
+								seasonNumber: null,
+								episodeNumber: null
+							});
+							categoryOverrides = {
+								...categoryOverrides,
+								[result.itemId]: 'movies'
+							};
+						}
+					} catch {
+						/* skip */
+					}
+				}
+			}
+		} finally {
+			setTimeout(() => {
+				movieMatchAllState = null;
+			}, 3000);
+		}
+	}
+
+	$effect(() => {
+		matchAllApi = {
+			matchAll: handleMatchAllMovies,
+			unlinkedCount: unlinkedMovieItems.length,
+			matchAllState: movieMatchAllState
+		};
+	});
 
 	function stableNumericId(str: string): number {
 		let hash = 0;
@@ -183,7 +267,12 @@
 		const item = libraryItemsByMovieId.get(movie.id);
 		if (!item) return;
 		const tmdbLink = getItemLinks(item).tmdb;
-		if (tmdbLink) onnavigate(tmdbLink.serviceId);
+		if (tmdbLink) {
+			onnavigate(tmdbLink.serviceId);
+		} else {
+			linkModalItem = item;
+			linkModalService = 'tmdb-movie';
+		}
 	}
 
 	// TMDB metadata resolution

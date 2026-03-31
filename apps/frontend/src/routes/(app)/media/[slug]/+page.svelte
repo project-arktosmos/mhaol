@@ -31,7 +31,9 @@
 
 	// Movie/TV library sections
 	import MovieLibrarySection from 'ui-lib/components/catalog/MovieLibrarySection.svelte';
+	import type { MatchAllApi as MovieMatchAllApi } from 'ui-lib/components/catalog/MovieLibrarySection.svelte';
 	import TvLibrarySection from 'ui-lib/components/catalog/TvLibrarySection.svelte';
+	import type { MatchAllApi as TvMatchAllApi } from 'ui-lib/components/catalog/TvLibrarySection.svelte';
 	import BrowseViewToggle from 'ui-lib/components/browse/BrowseViewToggle.svelte';
 	import { fetchCacheService } from 'ui-lib/services/fetch-cache.service';
 	import { imageOverridesService } from 'ui-lib/services/image-overrides.service';
@@ -240,6 +242,25 @@
 				.map((p) => Number(p.serviceId))
 		)
 	);
+
+	let movieMatchAllApi: MovieMatchAllApi = $state({
+		matchAll: () => {},
+		unlinkedCount: 0,
+		matchAllState: null
+	});
+	let tvMatchAllApi: TvMatchAllApi = $state({
+		matchAll: () => {},
+		unlinkedCount: 0,
+		matchAllState: null
+	});
+
+	let activeMatchAllApi = $derived(
+		config.features.libraryItems === 'movie'
+			? movieMatchAllApi
+			: config.features.libraryItems === 'tv'
+				? tvMatchAllApi
+				: null
+	);
 </script>
 
 <CatalogBrowsePage
@@ -253,6 +274,23 @@
 	onselectitem={handleSelectItem}
 >
 	{#snippet extraControls()}
+		{#if activeMatchAllApi && activeMatchAllApi.unlinkedCount > 0}
+			{@const api = activeMatchAllApi}
+			{#if api.matchAllState}
+				<span class="text-sm opacity-70">
+					{#if api.matchAllState.completed < api.matchAllState.total}
+						<span class="loading loading-xs loading-spinner"></span>
+						Matching {api.matchAllState.completed}/{api.matchAllState.total}
+					{:else}
+						Matched {api.matchAllState.matched}/{api.matchAllState.total}
+					{/if}
+				</span>
+			{:else}
+				<button class="btn btn-outline btn-sm" onclick={api.matchAll}>
+					Match All ({api.unlinkedCount})
+				</button>
+			{/if}
+		{/if}
 		{#if config.features.batchSmartSearch}
 			<button
 				class="btn btn-outline btn-sm"
@@ -304,6 +342,7 @@
 				{pinnedTmdbIds}
 				onnavigate={(tmdbId) => goto(`${base}/media/${config.slug}/${tmdbId}`)}
 				onsmartsearch={handleSmartSearch}
+				bind:matchAllApi={movieMatchAllApi}
 			/>
 		{:else if config.features.libraryItems === 'tv' && data.mediaData}
 			<TvLibrarySection
@@ -312,6 +351,7 @@
 				{favoritedTmdbTvIds}
 				{pinnedTmdbTvIds}
 				onnavigate={(tmdbId) => goto(`${base}/media/${config.slug}/${tmdbId}`)}
+				bind:matchAllApi={tvMatchAllApi}
 			/>
 		{/if}
 	{/snippet}

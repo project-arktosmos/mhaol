@@ -1,3 +1,8 @@
+use crate::api::media_lists::parse_folder_name;
+use crate::api::smart_pair::{
+    determine_confidence, parse_movie_candidate, score_match,
+};
+use crate::api::tmdb::tmdb_fetch_json;
 use crate::AppState;
 use axum::{
     body::Body,
@@ -11,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
+use tracing::info;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -35,6 +41,7 @@ pub fn router() -> Router<AppState> {
         .route("/browse", get(browse_directory))
         .route("/media-types", get(get_media_types))
         .route("/categories", get(get_categories))
+        .route("/auto-match", post(auto_match_items))
 }
 
 // --- Response types matching frontend expectations ---
@@ -916,6 +923,161 @@ pub(crate) async fn stream_file(
         .header(header::CONTENT_TYPE, content_type)
         .header(header::CONTENT_LENGTH, file_size.to_string())
         .header(header::ACCEPT_RANGES, "bytes")
+        .body(Body::from_stream(stream))
+        .unwrap()
+}
+
+// --- Auto-match library items to TMDB ---
+
+#[derive(Deserialize)]
+struct AutoMatchItemsRequest {
+    items: Vec<AutoMatchItemEntry>,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct AutoMatchItemEntry {
+    #[serde(rename = "itemId")]
+    item_id: String,
+    #[serde(rename = "libraryId")]
+    library_id: String,
+    title: String,
+}
+
+#[derive(Serialize)]
+struct AutoMatchItemResult {
+    #[serde(rename = "itemId")]
+    item_id: String,
+    matched: bool,
+    #[serde(rename = "tmdbId")]
+    tmdb_id: Option<i64>,
+    #[serde(rename = "tmdbTitle")]
+    tmdb_title: Option<String>,
+    #[serde(rename = "tmdbYear")]
+    tmdb_year: Option<String>,
+    #[serde(rename = "tmdbPosterPath")]
+    tmdb_poster_path: Option<String>,
+    confidence: String,
+}
+
+async fn auto_match_items(
+    State(state): State<AppState>,
+    Json(body): Json<AutoMatchItemsRequest>,
+) -> axum::response::Response {
+    let has_key = state
+        .settings
+        .get("tmdb.apiKey")
+        .map(|k| !k.is_empty())
+        .unwrap_or(false);
+    if !has_key {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": "TMDB API key not configured" })),
+        )
+            .into_response();
+    }
+
+    let total = body.items.len();
+    info!("[auto-match-items] Matching {} library items", total);
+
+    let stream = async_stream::stream! {
+        for (idx, item) in body.items.iter().enumerate() {
+            let parsed = parse_folder_name(&item.title);
+            let (search_query, year_filter) = (parsed.show_name, parsed.year);
+            let match_title = search_query.clone();
+
+            let mut params: Vec<(&str, &str)> = vec![("query", &search_query), ("page", "1")];
+            let yf_owned;
+            if let Some(ref y) = year_filter {
+                yf_owned = y.clone();
+                params.push(("year", &yf_owned));
+            }
+
+            let res = tmdb_fetch_json(&state, "/search/movie", &params).await;
+
+            let mut best = None;
+            let mut best_score: f64 = 0.0;
+
+            if let Ok(data) = &res {
+                if let Some(results_arr) = data.get("results").and_then(|r| r.as_array()) {
+                    for r in results_arr.iter().take(3) {
+                        if let Some(candidate) = parse_movie_candidate(r) {
+                            let s = score_match(&match_title, &candidate.title, candidate.popularity, candidate.vote_count);
+                            if s > best_score {
+                                best_score = s;
+                                best = Some(candidate);
+                            }
+                        }
+                    }
+                }
+            }
+
+            let result = match &best {
+                Some(c) => {
+                    let confidence = determine_confidence(&match_title, &c.title, c.vote_count);
+                    let should_link = confidence == "high" || confidence == "medium";
+
+                    if should_link {
+                        info!(
+                            "[auto-match-items] ({}/{}) \"{}\" (cleaned: \"{}\") -> {} (id={}, confidence={})",
+                            idx + 1, total, item.title, match_title, c.title, c.id, confidence
+                        );
+                        state.library_item_links.upsert(
+                            &uuid::Uuid::new_v4().to_string(),
+                            &item.item_id,
+                            "tmdb",
+                            &c.id.to_string(),
+                            None,
+                            None,
+                        );
+                    } else {
+                        info!(
+                            "[auto-match-items] ({}/{}) \"{}\" (cleaned: \"{}\") -> {} (id={}, confidence={}, skipped)",
+                            idx + 1, total, item.title, match_title, c.title, c.id, confidence
+                        );
+                    }
+
+                    AutoMatchItemResult {
+                        item_id: item.item_id.clone(),
+                        matched: should_link,
+                        tmdb_id: Some(c.id),
+                        tmdb_title: Some(c.title.clone()),
+                        tmdb_year: Some(c.year.clone()),
+                        tmdb_poster_path: c.poster_path.clone(),
+                        confidence,
+                    }
+                }
+                None => {
+                    info!(
+                        "[auto-match-items] ({}/{}) \"{}\" (cleaned: \"{}\") -> no match",
+                        idx + 1, total, item.title, match_title
+                    );
+                    AutoMatchItemResult {
+                        item_id: item.item_id.clone(),
+                        matched: false,
+                        tmdb_id: None,
+                        tmdb_title: None,
+                        tmdb_year: None,
+                        tmdb_poster_path: None,
+                        confidence: "none".to_string(),
+                    }
+                }
+            };
+
+            let mut line = serde_json::to_string(&result).unwrap_or_default();
+            line.push('\n');
+            yield Ok::<_, std::convert::Infallible>(line);
+
+            if (idx + 1) % 15 == 0 {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        }
+
+        info!("[auto-match-items] Done matching {} items", total);
+    };
+
+    axum::response::Response::builder()
+        .header(header::CONTENT_TYPE, "application/x-ndjson")
         .body(Body::from_stream(stream))
         .unwrap()
 }

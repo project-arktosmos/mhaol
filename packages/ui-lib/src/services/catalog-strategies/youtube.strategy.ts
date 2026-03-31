@@ -24,7 +24,15 @@ function toYoutubeCatalogItems(items: YouTubeContent[]): CatalogItem[] {
 		metadata: {
 			youtubeId: v.youtubeId,
 			authors: v.channelId
-				? [{ id: v.channelId, name: v.channelName ?? '', role: 'channel' as const, source: 'youtube' as const, imageUrl: null }]
+				? [
+						{
+							id: v.channelId,
+							name: v.channelName ?? '',
+							role: 'channel' as const,
+							source: 'youtube' as const,
+							imageUrl: null
+						}
+					]
 				: [],
 			durationSeconds: v.durationSeconds,
 			videoPath: v.hasVideo ? 'exists' : null,

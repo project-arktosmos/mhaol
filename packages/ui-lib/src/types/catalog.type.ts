@@ -60,7 +60,14 @@ export function authorsByRole(authors: CatalogAuthor[], role: AuthorRole): Catal
 }
 
 export function primaryAuthor(authors: CatalogAuthor[]): CatalogAuthor | null {
-	const priority: AuthorRole[] = ['director', 'creator', 'author', 'artist', 'developer', 'channel'];
+	const priority: AuthorRole[] = [
+		'director',
+		'creator',
+		'author',
+		'artist',
+		'developer',
+		'channel'
+	];
 	for (const role of priority) {
 		const found = authors.find((a) => a.role === role);
 		if (found) return found;

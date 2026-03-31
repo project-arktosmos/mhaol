@@ -19,15 +19,29 @@
 		confidence: string;
 	}
 
+	export interface MatchAllApi {
+		matchAll: () => void;
+		unlinkedCount: number;
+		matchAllState: { total: number; completed: number; matched: number } | null;
+	}
+
 	interface Props {
 		lists: MediaList[];
 		libraries: Record<string, { name: string; type: string }>;
 		favoritedTmdbTvIds: Set<number>;
 		pinnedTmdbTvIds: Set<number>;
 		onnavigate: (tmdbId: string) => void;
+		matchAllApi?: MatchAllApi;
 	}
 
-	let { lists, libraries, favoritedTmdbTvIds, pinnedTmdbTvIds, onnavigate }: Props = $props();
+	let {
+		lists,
+		libraries,
+		favoritedTmdbTvIds,
+		pinnedTmdbTvIds,
+		onnavigate,
+		matchAllApi = $bindable({ matchAll: () => {}, unlinkedCount: 0, matchAllState: null })
+	}: Props = $props();
 
 	let matchModalList: MediaList | null = $state(null);
 	let tmdbMetadataMap = $state(new Map<string, DisplayTMDBTvShow>());
@@ -77,6 +91,67 @@
 			if (!list.links?.tmdb) counts.set(list.libraryId, (counts.get(list.libraryId) ?? 0) + 1);
 		}
 		return counts;
+	});
+
+	let totalUnlinked = $derived(tvShowLists.filter((l) => !l.links?.tmdb).length);
+
+	async function handleMatchAllGlobal() {
+		const unlinked = tvShowLists.filter((l) => !l.links?.tmdb);
+		if (unlinked.length === 0) return;
+		matchAllState = { total: unlinked.length, completed: 0, matched: 0 };
+		try {
+			const res = await fetchRaw('/api/media-lists/auto-match', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					lists: unlinked.map((l) => ({ listId: l.id, title: l.title }))
+				})
+			});
+			if (!res.ok) {
+				matchAllState = null;
+				return;
+			}
+			const reader = res.body?.getReader();
+			if (!reader) {
+				matchAllState = null;
+				return;
+			}
+			const decoder = new TextDecoder();
+			let buffer = '';
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n');
+				buffer = lines.pop() ?? '';
+				for (const line of lines) {
+					if (!line.trim()) continue;
+					try {
+						const result = JSON.parse(line);
+						matchAllState = {
+							total: matchAllState!.total,
+							completed: matchAllState!.completed + 1,
+							matched: matchAllState!.matched + (result.matched ? 1 : 0)
+						};
+					} catch {
+						/* skip */
+					}
+				}
+			}
+			await fetchTmdbMetadataForLists();
+		} finally {
+			setTimeout(() => {
+				matchAllState = null;
+			}, 3000);
+		}
+	}
+
+	$effect(() => {
+		matchAllApi = {
+			matchAll: handleMatchAllGlobal,
+			unlinkedCount: totalUnlinked,
+			matchAllState
+		};
 	});
 
 	function listToDisplayTvShow(list: MediaList): DisplayTMDBTvShow {

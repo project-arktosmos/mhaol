@@ -150,9 +150,9 @@ struct AutoMatchResult {
     confidence: String,
 }
 
-struct ParsedFolderName {
-    show_name: String,
-    year: Option<String>,
+pub(crate) struct ParsedFolderName {
+    pub(crate) show_name: String,
+    pub(crate) year: Option<String>,
 }
 
 /// Regex-based extraction of show name and year from torrent/folder names.
@@ -162,7 +162,7 @@ struct ParsedFolderName {
 ///   "[Anime Time] Attack On Titan (Complete Series) ..."
 ///   "Glee 2009 Season 1 Complete TVRip x264 [i_c]"
 ///   "evangelion_renewal_hd"
-fn parse_folder_name(raw: &str) -> ParsedFolderName {
+pub(crate) fn parse_folder_name(raw: &str) -> ParsedFolderName {
     static RE_LEADING_TAG: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\[([^\]]*)\]\s*").unwrap());
     // Matches season markers: S01, Season 1, T01 (Spanish), Seasons 1-8, S01-S06, S01-04
     static RE_SEASON: Lazy<Regex> =

@@ -711,6 +711,7 @@
 	// Fetch cache auto-save
 	$effect(() => {
 		const candidate = $searchStore.fetchedCandidate;
+		console.log('[fetch-cache-effect]', { candidate: candidate?.name ?? null, fetchingId, configKind: config?.kind ?? null });
 		if (!candidate || !fetchingId || !config) return;
 		if (config.kind === 'book') {
 			smartSearchService.saveBookFetchCache(fetchingId, candidate);

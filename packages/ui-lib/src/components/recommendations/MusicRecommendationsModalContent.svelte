@@ -329,7 +329,9 @@
 			]);
 			pinnedArtistMbids = pinned;
 			favoritedArtistMbids = favorited;
-		} catch { /* best-effort */ }
+		} catch {
+			/* best-effort */
+		}
 		resolvingArtists = false;
 	});
 
