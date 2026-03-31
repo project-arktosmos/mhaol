@@ -372,42 +372,73 @@ async fn get_library_files(
     .into_response()
 }
 
-/// POST/GET /api/libraries/{id}/scan — scan directory and return updated files
-async fn scan_library(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    let library = match state.libraries.get(&id) {
-        Some(lib) => lib,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({ "error": "Library not found" })),
-            )
-                .into_response();
-        }
-    };
+/// Scan a single library directory and sync discovered files to the database.
+pub fn perform_library_scan(state: &AppState, library_id: &str) -> Result<String, String> {
+    let library = state
+        .libraries
+        .get(library_id)
+        .ok_or_else(|| format!("Library not found: {}", library_id))?;
 
     let media_types: Vec<String> = serde_json::from_str(&library.media_types).unwrap_or_default();
     let library_type = media_types.first().map(|s| s.as_str()).unwrap_or("movies");
 
     let ext_map = build_extension_map(library_type);
     let mut scanned_files = Vec::new();
-    scan_dir(&library.path, &id, &ext_map, &mut scanned_files);
-    if let Err(e) = state.library_items.sync_library(&id, &scanned_files) {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": format!("Failed to sync library: {}", e) })),
-        )
-            .into_response();
+    scan_dir(&library.path, library_id, &ext_map, &mut scanned_files);
+
+    state
+        .library_items
+        .sync_library(library_id, &scanned_files)
+        .map_err(|e| format!("Failed to sync library: {}", e))?;
+
+    generate_auto_lists(state, library_id, &library.path, library_type);
+
+    tracing::info!(
+        "[scan] Library '{}' ({}): {} files",
+        library.name,
+        library_id,
+        scanned_files.len()
+    );
+
+    Ok(library.path)
+}
+
+/// Scan all registered libraries. Returns the count of libraries scanned.
+pub fn scan_all_libraries(state: &AppState) -> usize {
+    let libraries = state.libraries.get_all();
+    let mut count = 0;
+    for lib in &libraries {
+        match perform_library_scan(state, &lib.id) {
+            Ok(_) => count += 1,
+            Err(e) => tracing::warn!("[scan] Failed to scan library '{}': {}", lib.name, e),
+        }
     }
+    count
+}
 
-    generate_auto_lists(&state, &id, &library.path, library_type);
-
-    let files = map_library_files(&state, &id);
-    Json(LibraryFilesResponse {
-        library_id: id,
-        library_path: library.path,
-        files,
-    })
-    .into_response()
+/// POST/GET /api/libraries/{id}/scan — scan directory and return updated files
+async fn scan_library(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
+    match perform_library_scan(&state, &id) {
+        Ok(library_path) => {
+            let files = map_library_files(&state, &id);
+            Json(LibraryFilesResponse {
+                library_id: id,
+                library_path,
+                files,
+            })
+            .into_response()
+        }
+        Err(e) if e.starts_with("Library not found") => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": e })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e })),
+        )
+            .into_response(),
+    }
 }
 
 #[derive(Deserialize)]
@@ -564,6 +595,38 @@ fn build_extension_map(library_type: &str) -> HashMap<&'static str, &'static str
                 map.insert(*ext, "video");
             }
         }
+        "music" | "audio" => {
+            for ext in &["mp3", "flac", "wav", "ogg", "m4a", "opus", "aac", "wma", "alac"] {
+                map.insert(*ext, "audio");
+            }
+        }
+        "youtube" => {
+            for ext in &["mp4", "mkv", "webm", "m4v"] {
+                map.insert(*ext, "video");
+            }
+            for ext in &["mp3", "flac", "wav", "ogg", "m4a", "opus", "aac"] {
+                map.insert(*ext, "audio");
+            }
+        }
+        "image" => {
+            for ext in &["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "svg", "heic"] {
+                map.insert(*ext, "image");
+            }
+        }
+        "document" | "books" => {
+            for ext in &["pdf", "epub", "mobi", "djvu", "cbz", "cbr"] {
+                map.insert(*ext, "document");
+            }
+        }
+        "games" => {
+            for ext in &[
+                "nes", "snes", "sfc", "gba", "gbc", "gb", "nds", "n64", "z64",
+                "smd", "gen", "iso", "cue", "bin", "chd", "3ds", "cia",
+                "xci", "nsp", "vpk", "pbp", "cso",
+            ] {
+                map.insert(*ext, "game");
+            }
+        }
         _ => {}
     }
     map
@@ -589,7 +652,8 @@ fn scan_dir(
 
         if file_type.is_dir() {
             let name = entry.file_name();
-            if !name.to_string_lossy().starts_with('.') {
+            let name_str = name.to_string_lossy();
+            if !name_str.starts_with('.') || name_str == ".cache" {
                 scan_dir(&path.to_string_lossy(), library_id, ext_map, files);
             }
         } else if file_type.is_file() {
@@ -645,7 +709,7 @@ fn subdirs_of(dir: &str) -> Vec<(String, String)> {
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
+        if name.starts_with('.') && name != ".cache" {
             continue;
         }
         result.push((name, entry.path().to_string_lossy().to_string()));

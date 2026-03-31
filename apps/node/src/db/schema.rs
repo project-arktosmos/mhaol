@@ -317,6 +317,7 @@ INSERT OR IGNORE INTO media_types (id, label) VALUES ('video', 'Video');
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('audio', 'Audio');
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('image', 'Image');
 INSERT OR IGNORE INTO media_types (id, label) VALUES ('document', 'Document');
+INSERT OR IGNORE INTO media_types (id, label) VALUES ('game', 'Game');
 
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('tv', 'video', 'TV');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('movies', 'video', 'Movies');
@@ -324,6 +325,7 @@ INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('video-uncat
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('audio-uncategorized', 'audio', 'Uncategorized');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('image-uncategorized', 'image', 'Uncategorized');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('books', 'document', 'Books');
+INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('game-uncategorized', 'game', 'Uncategorized');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-movies', 'video', 'Pinned Movies');
 INSERT OR IGNORE INTO categories (id, media_type_id, label) VALUES ('pinned-tv', 'video', 'Pinned TV');
 ";
@@ -1344,12 +1346,12 @@ mod tests {
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM media_types", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 4);
+        assert_eq!(count, 5);
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 8);
+        assert_eq!(count, 9);
     }
 
     #[test]

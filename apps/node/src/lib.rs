@@ -204,9 +204,6 @@ impl AppState {
         })
     }
 
-    /// The fixed ID for the single default library.
-    pub const DEFAULT_LIBRARY_ID: &'static str = "default";
-
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {
         #[cfg(not(target_os = "android"))]
