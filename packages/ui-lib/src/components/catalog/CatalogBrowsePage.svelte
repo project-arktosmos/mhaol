@@ -16,6 +16,7 @@
 		title: string;
 		strategy?: CatalogKindStrategy;
 		cardOverlays?: (item: CatalogItem) => Partial<CatalogCardData>;
+		itemHref?: (item: CatalogItem) => string;
 		onsearch: (query: string) => void;
 		ontabchange: (tabId: string) => void;
 		onpagechange: (page: number) => void;
@@ -30,6 +31,7 @@
 		title,
 		strategy,
 		cardOverlays,
+		itemHref,
 		onsearch,
 		ontabchange,
 		onpagechange,
@@ -152,7 +154,7 @@
 	{/if}
 
 	{#if strategy?.resolveByIds}
-		<PinnedFavoritesSection {strategy} {cardOverlays} {onselectitem} />
+		<PinnedFavoritesSection {strategy} {cardOverlays} {itemHref} {onselectitem} />
 	{/if}
 
 	{#if extraSections}
@@ -169,7 +171,7 @@
 	>
 		{#snippet card(item, _index)}
 			{@const catalogItem = item as CatalogItem}
-			<CatalogCard card={cardDataFor(catalogItem)} onclick={() => onselectitem(catalogItem)} />
+			<CatalogCard card={cardDataFor(catalogItem)} href={itemHref?.(catalogItem)} onclick={() => onselectitem(catalogItem)} />
 		{/snippet}
 	</BrowseGrid>
 </div>

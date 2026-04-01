@@ -146,8 +146,12 @@
 		}
 	}
 
+	function getYoutubeItemHref(item: LibraryCardItem): string {
+		return `${base}/media/youtube/${item.videoId}`;
+	}
+
 	function handleFeedVideoClick(video: LibraryCardItem) {
-		goto(`${base}/media/youtube/${video.videoId}`);
+		goto(getYoutubeItemHref(video));
 	}
 
 	$effect(() => {
@@ -225,7 +229,7 @@
 	});
 
 	function handleItemClick(item: LibraryCardItem) {
-		goto(`${base}/media/youtube/${item.videoId}`);
+		goto(getYoutubeItemHref(item));
 	}
 
 	function handleSearch(query: string) {
@@ -233,7 +237,7 @@
 	}
 
 	function handleSearchItemClick(cardItem: LibraryCardItem) {
-		goto(`${base}/media/youtube/${cardItem.videoId}`);
+		goto(getYoutubeItemHref(cardItem));
 	}
 
 	function handleLoadMore() {
@@ -298,6 +302,7 @@
 				title="In your library"
 				items={localSearchResults}
 				{activeDownloadMap}
+				itemHref={getYoutubeItemHref}
 				onitemclick={handleItemClick}
 				classes="mb-6"
 			/>
@@ -317,6 +322,7 @@
 				title="YouTube videos"
 				items={youtubeSearchCardItems}
 				{activeDownloadMap}
+				itemHref={getYoutubeItemHref}
 				onitemclick={handleSearchItemClick}
 				onloadmore={$searchState.continuation ? handleLoadMore : undefined}
 				loadingMore={$searchState.loadingMore}
@@ -372,6 +378,7 @@
 				{activeDownloadMap}
 				favoritedIds={favoritedYtIds}
 				pinnedIds={pinnedYtIds}
+				itemHref={getYoutubeItemHref}
 				onitemclick={handleItemClick}
 			/>
 		{/if}
@@ -383,6 +390,7 @@
 				{activeDownloadMap}
 				favoritedIds={favoritedYtIds}
 				pinnedIds={pinnedYtIds}
+				itemHref={getYoutubeItemHref}
 				onitemclick={handleItemClick}
 			/>
 		{/if}
@@ -473,6 +481,7 @@
 					title={feed.channel.name}
 					items={feed.videos}
 					{activeDownloadMap}
+					itemHref={getYoutubeItemHref}
 					onitemclick={handleFeedVideoClick}
 				/>
 			{:else}
@@ -492,6 +501,7 @@
 				{activeDownloadMap}
 				favoritedIds={favoritedYtIds}
 				pinnedIds={pinnedYtIds}
+				itemHref={getYoutubeItemHref}
 				onitemclick={handleItemClick}
 			/>
 		{/if}
@@ -503,6 +513,7 @@
 				{activeDownloadMap}
 				favoritedIds={favoritedYtIds}
 				pinnedIds={pinnedYtIds}
+				itemHref={getYoutubeItemHref}
 				onitemclick={handleItemClick}
 			/>
 		{/if}
@@ -513,7 +524,8 @@
 			{activeDownloadMap}
 			favoritedIds={favoritedYtIds}
 			pinnedIds={pinnedYtIds}
-			onitemclick={handleItemClick}
+			itemHref={getYoutubeItemHref}
+				onitemclick={handleItemClick}
 		/>
 	{/if}
 </div>

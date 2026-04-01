@@ -9,10 +9,11 @@
 	interface Props {
 		strategy: CatalogKindStrategy;
 		cardOverlays?: (item: CatalogItem) => Partial<CatalogCardData>;
+		itemHref?: (item: CatalogItem) => string;
 		onselectitem: (item: CatalogItem) => void;
 	}
 
-	let { strategy, cardOverlays, onselectitem }: Props = $props();
+	let { strategy, cardOverlays, itemHref, onselectitem }: Props = $props();
 
 	const pinState = pinsService.state;
 	const favState = favoritesService.state;
@@ -87,7 +88,7 @@
 				class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 			>
 				{#each pinnedItems as item (item.id)}
-					<CatalogCard card={cardDataFor(item)} onclick={() => onselectitem(item)} />
+					<CatalogCard card={cardDataFor(item)} href={itemHref?.(item)} onclick={() => onselectitem(item)} />
 				{/each}
 			</div>
 		{/if}
@@ -106,7 +107,7 @@
 				class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 			>
 				{#each favoriteItems as item (item.id)}
-					<CatalogCard card={cardDataFor(item)} onclick={() => onselectitem(item)} />
+					<CatalogCard card={cardDataFor(item)} href={itemHref?.(item)} onclick={() => onselectitem(item)} />
 				{/each}
 			</div>
 		{/if}

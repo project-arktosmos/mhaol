@@ -8,19 +8,19 @@
 		download,
 		favorited = false,
 		pinned = false,
+		href,
 		onclick
 	}: {
 		item: LibraryCardItem;
 		download?: YouTubeDownloadProgress;
 		favorited?: boolean;
 		pinned?: boolean;
-		onclick: () => void;
+		href?: string;
+		onclick?: () => void;
 	} = $props();
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="card cursor-pointer bg-base-100 shadow-sm transition-shadow hover:shadow-md" {onclick}>
+{#snippet cardBody()}
 	<figure class="relative aspect-video bg-base-300">
 		{#if item.thumbnailUrl}
 			<img
@@ -103,4 +103,16 @@
 			{/if}
 		</div>
 	</div>
-</div>
+{/snippet}
+
+{#if href}
+	<a {href} class="card cursor-pointer bg-base-100 shadow-sm transition-shadow hover:shadow-md no-underline text-inherit">
+		{@render cardBody()}
+	</a>
+{:else}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="card cursor-pointer bg-base-100 shadow-sm transition-shadow hover:shadow-md" {onclick}>
+		{@render cardBody()}
+	</div>
+{/if}
