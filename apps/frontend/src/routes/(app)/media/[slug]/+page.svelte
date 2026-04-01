@@ -109,10 +109,14 @@
 		}
 	});
 
-	function handleSelectItem(item: CatalogItem) {
+	function getItemHref(item: CatalogItem): string {
 		const id = config.selectItemId(item);
 		const encodedId = config.encodeId ? encodeURIComponent(id) : id;
-		goto(`${base}/media/${config.slug}/${encodedId}`);
+		return `${base}/media/${config.slug}/${encodedId}`;
+	}
+
+	function handleSelectItem(item: CatalogItem) {
+		goto(getItemHref(item));
 	}
 
 	function cardOverlays(item: CatalogItem) {
@@ -268,6 +272,7 @@
 	title={config.label}
 	strategy={getStrategy(config.kind)}
 	{cardOverlays}
+	itemHref={getItemHref}
 	onsearch={(q) => catalogService.search(q)}
 	ontabchange={(tab) => catalogService.loadTab(tab)}
 	onpagechange={(p) => catalogService.loadPage(p)}

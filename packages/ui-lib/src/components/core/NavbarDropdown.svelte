@@ -26,7 +26,7 @@
 <div class={dropdownClasses}>
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 	<div tabindex="0" role="button" class={buttonClasses}>
-		<a href={route.path}>{route.label}</a>
+		<span>{route.label}</span>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			fill="none"

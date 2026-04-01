@@ -12,6 +12,7 @@
 		tmdbMetadata?: DisplayTMDBTvShowDetails | null;
 		mbMetadata?: DisplayMusicBrainzReleaseGroup | null;
 		seasonCount?: number;
+		href?: string;
 		onselect?: (list: MediaList) => void;
 	}
 
@@ -21,6 +22,7 @@
 		tmdbMetadata = null,
 		mbMetadata = null,
 		seasonCount,
+		href,
 		onselect
 	}: Props = $props();
 
@@ -45,23 +47,7 @@
 	});
 </script>
 
-<div
-	class={classNames(
-		'card-compact card cursor-pointer bg-base-200 shadow-sm transition-shadow hover:shadow-md',
-		{
-			'ring-2 ring-primary': selected
-		}
-	)}
-	onclick={() => onselect?.(list)}
-	role="button"
-	tabindex={0}
-	onkeydown={(e) => {
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			onselect?.(list);
-		}
-	}}
->
+{#snippet cardBody()}
 	<figure class="relative h-48 overflow-hidden bg-base-300">
 		{#if coverUrl}
 			<img src={coverUrl} alt={list.title} class="h-full w-full object-cover" loading="lazy" />
@@ -101,4 +87,38 @@
 			<span class="badge badge-ghost badge-xs">{list.itemCount} items</span>
 		</div>
 	</div>
-</div>
+{/snippet}
+
+{#if href}
+	<a
+		{href}
+		class={classNames(
+			'card-compact card cursor-pointer bg-base-200 shadow-sm transition-shadow hover:shadow-md no-underline text-inherit',
+			{
+				'ring-2 ring-primary': selected
+			}
+		)}
+	>
+		{@render cardBody()}
+	</a>
+{:else}
+	<div
+		class={classNames(
+			'card-compact card cursor-pointer bg-base-200 shadow-sm transition-shadow hover:shadow-md',
+			{
+				'ring-2 ring-primary': selected
+			}
+		)}
+		onclick={() => onselect?.(list)}
+		role="button"
+		tabindex={0}
+		onkeydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				onselect?.(list);
+			}
+		}}
+	>
+		{@render cardBody()}
+	</div>
+{/if}

@@ -18,6 +18,7 @@
 		torrentState?: TorrentState | null;
 		torrentSpeed?: number | null;
 		torrentEta?: number | null;
+		href?: string;
 		onclick?: () => void;
 		children?: Snippet;
 	}
@@ -33,6 +34,7 @@
 		torrentState = null,
 		torrentSpeed = null,
 		torrentEta = null,
+		href,
 		onclick,
 		children
 	}: Props = $props();
@@ -42,27 +44,7 @@
 	);
 </script>
 
-<div
-	class={classNames(
-		'card-compact card bg-base-200 shadow-sm',
-		{
-			'ring-2 ring-primary': selected,
-			'cursor-pointer transition-shadow hover:shadow-md': !!onclick
-		},
-		classes
-	)}
-	{onclick}
-	role={onclick ? 'button' : undefined}
-	tabindex={onclick ? 0 : undefined}
-	onkeydown={onclick
-		? (e) => {
-				if (e.key === 'Enter' || e.key === ' ') {
-					e.preventDefault();
-					onclick?.();
-				}
-			}
-		: undefined}
->
+{#snippet cardBody()}
 	<figure class="relative h-48 overflow-hidden bg-base-300">
 		{#if loading}
 			<div class="flex h-full w-full items-center justify-center">
@@ -119,4 +101,44 @@
 			{@render children()}
 		{/if}
 	</div>
-</div>
+{/snippet}
+
+{#if href}
+	<a
+		{href}
+		class={classNames(
+			'card-compact card bg-base-200 shadow-sm no-underline text-inherit',
+			{
+				'ring-2 ring-primary': selected,
+				'cursor-pointer transition-shadow hover:shadow-md': true
+			},
+			classes
+		)}
+	>
+		{@render cardBody()}
+	</a>
+{:else}
+	<div
+		class={classNames(
+			'card-compact card bg-base-200 shadow-sm',
+			{
+				'ring-2 ring-primary': selected,
+				'cursor-pointer transition-shadow hover:shadow-md': !!onclick
+			},
+			classes
+		)}
+		{onclick}
+		role={onclick ? 'button' : undefined}
+		tabindex={onclick ? 0 : undefined}
+		onkeydown={onclick
+			? (e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						onclick?.();
+					}
+				}
+			: undefined}
+	>
+		{@render cardBody()}
+	</div>
+{/if}

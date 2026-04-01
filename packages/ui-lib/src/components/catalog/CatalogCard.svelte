@@ -4,10 +4,11 @@
 
 	interface Props {
 		card: CatalogCardData;
+		href?: string;
 		onclick?: () => void;
 	}
 
-	let { card, onclick }: Props = $props();
+	let { card, href, onclick }: Props = $props();
 
 	let aspectClass = $derived(
 		card.aspectRatio === 'poster'
@@ -62,13 +63,7 @@
 	});
 </script>
 
-<div
-	class={containerClasses}
-	role="button"
-	tabindex="0"
-	{onclick}
-	onkeydown={(e) => e.key === 'Enter' && onclick?.()}
->
+{#snippet cardContent()}
 	<figure class={classNames('relative overflow-hidden', aspectClass)}>
 		{#if card.imageUrl}
 			<img src={card.imageUrl} alt={card.title} class="h-full w-full object-cover" loading="lazy" />
@@ -136,4 +131,20 @@
 			{/each}
 		</div>
 	</div>
-</div>
+{/snippet}
+
+{#if href}
+	<a {href} class={classNames(containerClasses, 'no-underline text-inherit')}>
+		{@render cardContent()}
+	</a>
+{:else}
+	<div
+		class={containerClasses}
+		role="button"
+		tabindex="0"
+		{onclick}
+		onkeydown={(e) => e.key === 'Enter' && onclick?.()}
+	>
+		{@render cardContent()}
+	</div>
+{/if}
