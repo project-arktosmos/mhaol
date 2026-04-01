@@ -66,6 +66,7 @@ export function recordingToDisplay(recording: MusicBrainzRecording): DisplayMusi
 		duration: formatDuration(recording.length),
 		durationMs: recording.length || null,
 		artistCredits: formatArtistCredits(recording['artist-credit']),
+		rawArtistCredits: recording['artist-credit'] ?? [],
 		disambiguation: recording.disambiguation || null,
 		coverArtUrl: releaseGroupId ? getCoverArtUrl(releaseGroupId) : null,
 		firstReleaseTitle: recording.releases?.[0]?.title ?? null,
@@ -109,6 +110,7 @@ export function releaseGroupToDisplay(rg: MusicBrainzReleaseGroup): DisplayMusic
 		secondaryTypes: rg['secondary-types'] || [],
 		firstReleaseYear: extractYear(rg['first-release-date']),
 		artistCredits: formatArtistCredits(rg['artist-credit']),
+		rawArtistCredits: rg['artist-credit'] ?? [],
 		coverArtUrl: getCoverArtUrl(rg.id),
 		score: rg.score || 0
 	};
@@ -127,7 +129,8 @@ export function trackToDisplay(track: MusicBrainzTrack): DisplayMusicBrainzTrack
 		title: track.title,
 		duration: formatDuration(track.length),
 		durationMs: track.length || null,
-		artistCredits: formatArtistCredits(track['artist-credit'])
+		artistCredits: formatArtistCredits(track['artist-credit']),
+		rawArtistCredits: track['artist-credit'] ?? []
 	};
 }
 
@@ -148,6 +151,7 @@ export function releaseToDisplay(release: MusicBrainzRelease): DisplayMusicBrain
 		status: release.status ?? null,
 		country: release.country ?? null,
 		artistCredits: formatArtistCredits(release['artist-credit']),
+		rawArtistCredits: release['artist-credit'] ?? [],
 		trackCount: trackCount || release['track-count'] || 0,
 		label: labelInfo?.label?.name ?? null,
 		tracks

@@ -1,3 +1,8 @@
+use crate::api::media_lists::parse_folder_name;
+use crate::api::smart_pair::{
+    determine_confidence, parse_movie_candidate, score_match,
+};
+use crate::api::tmdb::tmdb_fetch_json;
 use crate::AppState;
 use axum::{
     body::Body,
@@ -11,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
+use tracing::info;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -35,6 +41,7 @@ pub fn router() -> Router<AppState> {
         .route("/browse", get(browse_directory))
         .route("/media-types", get(get_media_types))
         .route("/categories", get(get_categories))
+        .route("/auto-match", post(auto_match_items))
 }
 
 // --- Response types matching frontend expectations ---
@@ -365,42 +372,73 @@ async fn get_library_files(
     .into_response()
 }
 
-/// POST/GET /api/libraries/{id}/scan — scan directory and return updated files
-async fn scan_library(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    let library = match state.libraries.get(&id) {
-        Some(lib) => lib,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({ "error": "Library not found" })),
-            )
-                .into_response();
-        }
-    };
+/// Scan a single library directory and sync discovered files to the database.
+pub fn perform_library_scan(state: &AppState, library_id: &str) -> Result<String, String> {
+    let library = state
+        .libraries
+        .get(library_id)
+        .ok_or_else(|| format!("Library not found: {}", library_id))?;
 
     let media_types: Vec<String> = serde_json::from_str(&library.media_types).unwrap_or_default();
     let library_type = media_types.first().map(|s| s.as_str()).unwrap_or("movies");
 
     let ext_map = build_extension_map(library_type);
     let mut scanned_files = Vec::new();
-    scan_dir(&library.path, &id, &ext_map, &mut scanned_files);
-    if let Err(e) = state.library_items.sync_library(&id, &scanned_files) {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": format!("Failed to sync library: {}", e) })),
-        )
-            .into_response();
+    scan_dir(&library.path, library_id, &ext_map, &mut scanned_files);
+
+    state
+        .library_items
+        .sync_library(library_id, &scanned_files)
+        .map_err(|e| format!("Failed to sync library: {}", e))?;
+
+    generate_auto_lists(state, library_id, &library.path, library_type);
+
+    tracing::info!(
+        "[scan] Library '{}' ({}): {} files",
+        library.name,
+        library_id,
+        scanned_files.len()
+    );
+
+    Ok(library.path)
+}
+
+/// Scan all registered libraries. Returns the count of libraries scanned.
+pub fn scan_all_libraries(state: &AppState) -> usize {
+    let libraries = state.libraries.get_all();
+    let mut count = 0;
+    for lib in &libraries {
+        match perform_library_scan(state, &lib.id) {
+            Ok(_) => count += 1,
+            Err(e) => tracing::warn!("[scan] Failed to scan library '{}': {}", lib.name, e),
+        }
     }
+    count
+}
 
-    generate_auto_lists(&state, &id, &library.path, library_type);
-
-    let files = map_library_files(&state, &id);
-    Json(LibraryFilesResponse {
-        library_id: id,
-        library_path: library.path,
-        files,
-    })
-    .into_response()
+/// POST/GET /api/libraries/{id}/scan — scan directory and return updated files
+async fn scan_library(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
+    match perform_library_scan(&state, &id) {
+        Ok(library_path) => {
+            let files = map_library_files(&state, &id);
+            Json(LibraryFilesResponse {
+                library_id: id,
+                library_path,
+                files,
+            })
+            .into_response()
+        }
+        Err(e) if e.starts_with("Library not found") => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": e })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e })),
+        )
+            .into_response(),
+    }
 }
 
 #[derive(Deserialize)]
@@ -557,6 +595,38 @@ fn build_extension_map(library_type: &str) -> HashMap<&'static str, &'static str
                 map.insert(*ext, "video");
             }
         }
+        "music" | "audio" => {
+            for ext in &["mp3", "flac", "wav", "ogg", "m4a", "opus", "aac", "wma", "alac"] {
+                map.insert(*ext, "audio");
+            }
+        }
+        "youtube" => {
+            for ext in &["mp4", "mkv", "webm", "m4v"] {
+                map.insert(*ext, "video");
+            }
+            for ext in &["mp3", "flac", "wav", "ogg", "m4a", "opus", "aac"] {
+                map.insert(*ext, "audio");
+            }
+        }
+        "image" => {
+            for ext in &["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "svg", "heic"] {
+                map.insert(*ext, "image");
+            }
+        }
+        "document" | "books" => {
+            for ext in &["pdf", "epub", "mobi", "djvu", "cbz", "cbr"] {
+                map.insert(*ext, "document");
+            }
+        }
+        "games" => {
+            for ext in &[
+                "nes", "snes", "sfc", "gba", "gbc", "gb", "nds", "n64", "z64",
+                "smd", "gen", "iso", "cue", "bin", "chd", "3ds", "cia",
+                "xci", "nsp", "vpk", "pbp", "cso",
+            ] {
+                map.insert(*ext, "game");
+            }
+        }
         _ => {}
     }
     map
@@ -582,7 +652,8 @@ fn scan_dir(
 
         if file_type.is_dir() {
             let name = entry.file_name();
-            if !name.to_string_lossy().starts_with('.') {
+            let name_str = name.to_string_lossy();
+            if !name_str.starts_with('.') || name_str == ".cache" {
                 scan_dir(&path.to_string_lossy(), library_id, ext_map, files);
             }
         } else if file_type.is_file() {
@@ -638,7 +709,7 @@ fn subdirs_of(dir: &str) -> Vec<(String, String)> {
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
+        if name.starts_with('.') && name != ".cache" {
             continue;
         }
         result.push((name, entry.path().to_string_lossy().to_string()));
@@ -916,6 +987,161 @@ pub(crate) async fn stream_file(
         .header(header::CONTENT_TYPE, content_type)
         .header(header::CONTENT_LENGTH, file_size.to_string())
         .header(header::ACCEPT_RANGES, "bytes")
+        .body(Body::from_stream(stream))
+        .unwrap()
+}
+
+// --- Auto-match library items to TMDB ---
+
+#[derive(Deserialize)]
+struct AutoMatchItemsRequest {
+    items: Vec<AutoMatchItemEntry>,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct AutoMatchItemEntry {
+    #[serde(rename = "itemId")]
+    item_id: String,
+    #[serde(rename = "libraryId")]
+    library_id: String,
+    title: String,
+}
+
+#[derive(Serialize)]
+struct AutoMatchItemResult {
+    #[serde(rename = "itemId")]
+    item_id: String,
+    matched: bool,
+    #[serde(rename = "tmdbId")]
+    tmdb_id: Option<i64>,
+    #[serde(rename = "tmdbTitle")]
+    tmdb_title: Option<String>,
+    #[serde(rename = "tmdbYear")]
+    tmdb_year: Option<String>,
+    #[serde(rename = "tmdbPosterPath")]
+    tmdb_poster_path: Option<String>,
+    confidence: String,
+}
+
+async fn auto_match_items(
+    State(state): State<AppState>,
+    Json(body): Json<AutoMatchItemsRequest>,
+) -> axum::response::Response {
+    let has_key = state
+        .settings
+        .get("tmdb.apiKey")
+        .map(|k| !k.is_empty())
+        .unwrap_or(false);
+    if !has_key {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": "TMDB API key not configured" })),
+        )
+            .into_response();
+    }
+
+    let total = body.items.len();
+    info!("[auto-match-items] Matching {} library items", total);
+
+    let stream = async_stream::stream! {
+        for (idx, item) in body.items.iter().enumerate() {
+            let parsed = parse_folder_name(&item.title);
+            let (search_query, year_filter) = (parsed.show_name, parsed.year);
+            let match_title = search_query.clone();
+
+            let mut params: Vec<(&str, &str)> = vec![("query", &search_query), ("page", "1")];
+            let yf_owned;
+            if let Some(ref y) = year_filter {
+                yf_owned = y.clone();
+                params.push(("year", &yf_owned));
+            }
+
+            let res = tmdb_fetch_json(&state, "/search/movie", &params).await;
+
+            let mut best = None;
+            let mut best_score: f64 = 0.0;
+
+            if let Ok(data) = &res {
+                if let Some(results_arr) = data.get("results").and_then(|r| r.as_array()) {
+                    for r in results_arr.iter().take(3) {
+                        if let Some(candidate) = parse_movie_candidate(r) {
+                            let s = score_match(&match_title, &candidate.title, candidate.popularity, candidate.vote_count);
+                            if s > best_score {
+                                best_score = s;
+                                best = Some(candidate);
+                            }
+                        }
+                    }
+                }
+            }
+
+            let result = match &best {
+                Some(c) => {
+                    let confidence = determine_confidence(&match_title, &c.title, c.vote_count);
+                    let should_link = confidence == "high" || confidence == "medium";
+
+                    if should_link {
+                        info!(
+                            "[auto-match-items] ({}/{}) \"{}\" (cleaned: \"{}\") -> {} (id={}, confidence={})",
+                            idx + 1, total, item.title, match_title, c.title, c.id, confidence
+                        );
+                        state.library_item_links.upsert(
+                            &uuid::Uuid::new_v4().to_string(),
+                            &item.item_id,
+                            "tmdb",
+                            &c.id.to_string(),
+                            None,
+                            None,
+                        );
+                    } else {
+                        info!(
+                            "[auto-match-items] ({}/{}) \"{}\" (cleaned: \"{}\") -> {} (id={}, confidence={}, skipped)",
+                            idx + 1, total, item.title, match_title, c.title, c.id, confidence
+                        );
+                    }
+
+                    AutoMatchItemResult {
+                        item_id: item.item_id.clone(),
+                        matched: should_link,
+                        tmdb_id: Some(c.id),
+                        tmdb_title: Some(c.title.clone()),
+                        tmdb_year: Some(c.year.clone()),
+                        tmdb_poster_path: c.poster_path.clone(),
+                        confidence,
+                    }
+                }
+                None => {
+                    info!(
+                        "[auto-match-items] ({}/{}) \"{}\" (cleaned: \"{}\") -> no match",
+                        idx + 1, total, item.title, match_title
+                    );
+                    AutoMatchItemResult {
+                        item_id: item.item_id.clone(),
+                        matched: false,
+                        tmdb_id: None,
+                        tmdb_title: None,
+                        tmdb_year: None,
+                        tmdb_poster_path: None,
+                        confidence: "none".to_string(),
+                    }
+                }
+            };
+
+            let mut line = serde_json::to_string(&result).unwrap_or_default();
+            line.push('\n');
+            yield Ok::<_, std::convert::Infallible>(line);
+
+            if (idx + 1) % 15 == 0 {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        }
+
+        info!("[auto-match-items] Done matching {} items", total);
+    };
+
+    axum::response::Response::builder()
+        .header(header::CONTENT_TYPE, "application/x-ndjson")
         .body(Body::from_stream(stream))
         .unwrap()
 }

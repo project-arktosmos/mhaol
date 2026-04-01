@@ -1,5 +1,5 @@
 use super::{Module, ModuleCompatibility, ModuleLinkSource, ModuleManifest};
-use crate::db::schema::YOUTUBE_SCHEMA_SQL;
+use crate::db::schema::API_CACHE_SCHEMA_SQL;
 
 pub struct YoutubeMetaModule;
 
@@ -21,7 +21,7 @@ impl Module for YoutubeMetaModule {
                 media_type_id: "video".to_string(),
                 category_id: None,
             }],
-            schema_sql: Some(YOUTUBE_SCHEMA_SQL.to_string()),
+            schema_sql: Some(API_CACHE_SCHEMA_SQL.to_string()),
         }
     }
 }

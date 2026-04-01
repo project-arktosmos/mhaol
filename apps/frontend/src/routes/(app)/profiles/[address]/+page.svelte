@@ -13,7 +13,6 @@
 		tmdb: 'Movie',
 		'tmdb-tv': 'TV Show',
 		'musicbrainz-album': 'Album',
-		'musicbrainz-artist': 'Artist',
 		retroachievements: 'Game',
 		youtube: 'YouTube',
 		iptv: 'IPTV'
@@ -22,8 +21,7 @@
 	const SERVICE_ROUTES: Record<string, string> = {
 		tmdb: 'movies',
 		'tmdb-tv': 'tv',
-		'musicbrainz-album': 'music/album',
-		'musicbrainz-artist': 'music/artist',
+		'musicbrainz-album': 'music',
 		retroachievements: 'videogames',
 		youtube: 'youtube',
 		iptv: 'iptv'

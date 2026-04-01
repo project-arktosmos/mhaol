@@ -34,8 +34,7 @@ export interface RelatedTorrentDownload {
 }
 
 export interface RelatedFetchCache {
-	tmdbId: number;
-	mediaType: string;
+	catalogItemId: string;
 	candidate: Record<string, unknown>;
 	createdAt: string;
 }

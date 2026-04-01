@@ -19,12 +19,6 @@ pub fn router() -> Router<AppState> {
         .route("/authors/{key}", get(get_author))
         .route("/trending/{subject}", get(get_trending))
         .route("/cover/{id}/{size}", get(proxy_cover))
-        .route(
-            "/fetch-cache",
-            get(get_fetch_cache)
-                .put(put_fetch_cache)
-                .delete(delete_fetch_cache),
-        )
 }
 
 #[derive(Deserialize)]
@@ -42,8 +36,8 @@ async fn search_books(
     let limit = query.limit.unwrap_or(20);
     let cache_key = format!("search:{}:{}", query.q, page);
 
-    // Check cache (valid for 1 hour for search results)
-    if let Some((data, is_stale)) = state.openlibrary_api_cache.get(&cache_key) {
+    // Check cache (valid for 24 hours for search results)
+    if let Some((data, is_stale)) = state.api_cache.get("openlibrary", &cache_key, 24.0) {
         if !is_stale {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
@@ -69,7 +63,7 @@ async fn search_books(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                state.openlibrary_api_cache.upsert(&cache_key, &data_str);
+                state.api_cache.upsert("openlibrary", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -80,7 +74,7 @@ async fn search_books(
         },
         _ => {
             // Try stale cache
-            if let Some((data, _)) = state.openlibrary_api_cache.get(&cache_key) {
+            if let Some(data) = state.api_cache.get_any("openlibrary", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -97,7 +91,7 @@ async fn search_books(
 async fn get_work(State(state): State<AppState>, Path(key): Path<String>) -> impl IntoResponse {
     let cache_key = format!("work:{}", key);
 
-    if let Some((data, is_stale)) = state.openlibrary_api_cache.get(&cache_key) {
+    if let Some((data, is_stale)) = state.api_cache.get("openlibrary", &cache_key, 24.0) {
         if !is_stale {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
@@ -116,7 +110,7 @@ async fn get_work(State(state): State<AppState>, Path(key): Path<String>) -> imp
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                state.openlibrary_api_cache.upsert(&cache_key, &data_str);
+                state.api_cache.upsert("openlibrary", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -131,7 +125,7 @@ async fn get_work(State(state): State<AppState>, Path(key): Path<String>) -> imp
         )
             .into_response(),
         _ => {
-            if let Some((data, _)) = state.openlibrary_api_cache.get(&cache_key) {
+            if let Some(data) = state.api_cache.get_any("openlibrary", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -148,7 +142,7 @@ async fn get_work(State(state): State<AppState>, Path(key): Path<String>) -> imp
 async fn get_author(State(state): State<AppState>, Path(key): Path<String>) -> impl IntoResponse {
     let cache_key = format!("author:{}", key);
 
-    if let Some((data, is_stale)) = state.openlibrary_api_cache.get(&cache_key) {
+    if let Some((data, is_stale)) = state.api_cache.get("openlibrary", &cache_key, 24.0) {
         if !is_stale {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
@@ -167,7 +161,7 @@ async fn get_author(State(state): State<AppState>, Path(key): Path<String>) -> i
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                state.openlibrary_api_cache.upsert(&cache_key, &data_str);
+                state.api_cache.upsert("openlibrary", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -182,7 +176,7 @@ async fn get_author(State(state): State<AppState>, Path(key): Path<String>) -> i
         )
             .into_response(),
         _ => {
-            if let Some((data, _)) = state.openlibrary_api_cache.get(&cache_key) {
+            if let Some(data) = state.api_cache.get_any("openlibrary", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -212,7 +206,7 @@ async fn get_trending(
     let offset = (page - 1) * limit;
     let cache_key = format!("subject:{}:{}:{}", subject, limit, offset);
 
-    if let Some((data, is_stale)) = state.openlibrary_api_cache.get(&cache_key) {
+    if let Some((data, is_stale)) = state.api_cache.get("openlibrary", &cache_key, 24.0) {
         if !is_stale {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
@@ -235,7 +229,7 @@ async fn get_trending(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                state.openlibrary_api_cache.upsert(&cache_key, &data_str);
+                state.api_cache.upsert("openlibrary", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -245,7 +239,7 @@ async fn get_trending(
                 .into_response(),
         },
         _ => {
-            if let Some((data, _)) = state.openlibrary_api_cache.get(&cache_key) {
+            if let Some(data) = state.api_cache.get_any("openlibrary", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -282,46 +276,3 @@ async fn proxy_cover(
     .await
 }
 
-#[derive(Deserialize)]
-struct FetchCacheQuery {
-    key: String,
-}
-
-async fn get_fetch_cache(
-    State(state): State<AppState>,
-    Query(query): Query<FetchCacheQuery>,
-) -> impl IntoResponse {
-    match state.book_torrent_fetch_cache.get(&query.key) {
-        Some(row) => {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&row.candidate_json) {
-                Json(parsed).into_response()
-            } else {
-                StatusCode::NOT_FOUND.into_response()
-            }
-        }
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
-#[derive(Deserialize)]
-struct PutFetchCacheBody {
-    key: String,
-    candidate: serde_json::Value,
-}
-
-async fn put_fetch_cache(
-    State(state): State<AppState>,
-    Json(body): Json<PutFetchCacheBody>,
-) -> impl IntoResponse {
-    let json = serde_json::to_string(&body.candidate).unwrap_or_default();
-    state.book_torrent_fetch_cache.upsert(&body.key, &json);
-    StatusCode::OK
-}
-
-async fn delete_fetch_cache(
-    State(state): State<AppState>,
-    Query(query): Query<FetchCacheQuery>,
-) -> impl IntoResponse {
-    state.book_torrent_fetch_cache.delete(&query.key);
-    StatusCode::OK
-}

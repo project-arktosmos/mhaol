@@ -1,4 +1,3 @@
-use crate::db::DbPool;
 use crate::AppState;
 use axum::{
     extract::{Path, Query, State},
@@ -72,18 +71,11 @@ async fn channel_subscribe(
 
 /// Fetch YouTube oEmbed data for a video ID, using the cache if available.
 /// On cache miss, fetches from YouTube and caches the result.
-pub async fn fetch_and_cache_oembed(db: &DbPool, video_id: &str) -> Option<serde_json::Value> {
+pub async fn fetch_and_cache_oembed(api_cache: &crate::db::repo::ApiCacheRepo, video_id: &str) -> Option<serde_json::Value> {
     // Check cache
-    {
-        let conn = db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM youtube_videos WHERE video_id = ?1",
-            rusqlite::params![video_id],
-            |row| row.get::<_, String>(0),
-        ) {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-                return Some(parsed);
-            }
+    if let Some(data) = api_cache.get_any("youtube", &format!("video:{}", video_id)) {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+            return Some(parsed);
         }
     }
 
@@ -99,12 +91,7 @@ pub async fn fetch_and_cache_oembed(db: &DbPool, video_id: &str) -> Option<serde
 
     let data = resp.json::<serde_json::Value>().await.ok()?;
     let data_str = serde_json::to_string(&data).unwrap_or_default();
-    let conn = db.lock();
-    let _ = conn.execute(
-        "INSERT INTO youtube_videos (video_id, data) VALUES (?1, ?2)
-         ON CONFLICT(video_id) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-        rusqlite::params![video_id, data_str],
-    );
+    api_cache.upsert("youtube", &format!("video:{}", video_id), &data_str);
 
     Some(data)
 }
@@ -130,7 +117,7 @@ async fn oembed(
         }
     };
 
-    match fetch_and_cache_oembed(&state.db, video_id).await {
+    match fetch_and_cache_oembed(&state.api_cache, video_id).await {
         Some(data) => Json(data).into_response(),
         None => (
             StatusCode::BAD_GATEWAY,
@@ -1108,7 +1095,7 @@ async fn fill_durations(State(state): State<AppState>) -> impl IntoResponse {
     let filled: Vec<serde_json::Value> = Vec::new();
 
     for video_id in &missing {
-        if let Some(data) = fetch_and_cache_oembed(&state.db, video_id).await {
+        if let Some(data) = fetch_and_cache_oembed(&state.api_cache, video_id).await {
             // oEmbed doesn't include duration, but we cache the metadata.
             // Duration is typically set during download via yt-dlp.
             // For now, skip — the frontend handles missing durations gracefully.

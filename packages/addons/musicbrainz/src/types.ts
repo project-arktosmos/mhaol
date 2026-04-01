@@ -74,6 +74,7 @@ export interface DisplayMusicBrainzRecording {
 	duration: string | null;
 	durationMs: number | null;
 	artistCredits: string;
+	rawArtistCredits: MusicBrainzArtistCredit[];
 	disambiguation: string | null;
 	coverArtUrl: string | null;
 	firstReleaseTitle: string | null;
@@ -107,6 +108,7 @@ export interface DisplayMusicBrainzReleaseGroup {
 	secondaryTypes: string[];
 	firstReleaseYear: string;
 	artistCredits: string;
+	rawArtistCredits: MusicBrainzArtistCredit[];
 	coverArtUrl: string | null;
 	score: number;
 }
@@ -150,6 +152,7 @@ export interface DisplayMusicBrainzRelease {
 	status: string | null;
 	country: string | null;
 	artistCredits: string;
+	rawArtistCredits: MusicBrainzArtistCredit[];
 	trackCount: number;
 	label: string | null;
 	tracks: DisplayMusicBrainzTrack[];
@@ -162,4 +165,5 @@ export interface DisplayMusicBrainzTrack {
 	duration: string | null;
 	durationMs: number | null;
 	artistCredits: string;
+	rawArtistCredits: MusicBrainzArtistCredit[];
 }

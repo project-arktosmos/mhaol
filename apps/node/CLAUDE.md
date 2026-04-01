@@ -56,6 +56,9 @@ src/
 All API handlers receive `AppState` which contains:
 
 - Database repositories (settings, metadata, libraries, library_items, etc.)
+- `ApiCacheRepo` for unified external API response caching (TMDB, MusicBrainz, RetroAchievements, OpenLibrary, YouTube)
+- `CatalogFetchCacheRepo` for unified torrent fetch candidate caching (movies, TV, music, books)
+- `RecommendationLabelRepo` for unified per-user recommendation labels (wallet-scoped, all sources)
 - `IdentityManager` for identity/wallet operations (from `mhaol-identity` crate)
 - `ModuleRegistry` for plugin modules
 - `DownloadManager` (yt-dlp, desktop only)
@@ -66,7 +69,6 @@ All API handlers receive `AppState` which contains:
 - `RecommendationsRepo` for TMDB recommendation storage (from `mhaol-recommendations` crate)
 - `MusicRecommendationsRepo` for music recommendation storage (from `mhaol-recommendations::music`)
 - `GameRecommendationsRepo` for game recommendation storage (from `mhaol-recommendations::game`)
-- `RecommendationLabelRepo` for per-user recommendation labels (wallet-scoped, in `db/repo/`)
 - `SignalingRoomManager` and `WorkerBridge` (auto-started on server boot)
 
 ## Adding a New API Module
@@ -107,6 +109,6 @@ cargo check -p mhaol-node
 
 - `PORT` — Server port (default: 1530)
 - `HOST` — Bind address (default: 0.0.0.0)
-- `DB_PATH` — SQLite database path (optional, in-memory if unset)
+- `DB_PATH` — SQLite database path (default: `apps/node/mhaol.db`)
 - `RA_API_USER` — RetroAchievements API username
 - `RA_API_KEY` — RetroAchievements API key

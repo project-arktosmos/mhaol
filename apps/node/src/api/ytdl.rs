@@ -60,23 +60,31 @@ async fn list_downloads(State(state): State<AppState>) -> impl IntoResponse {
     Json(serde_json::to_value(state.ytdl_manager.get_all_progress()).unwrap())
 }
 
-/// Resolve the library cache directories for video and audio output.
+/// Resolve the library directories for video and audio output.
+/// Looks up libraries by media type: music/audio for audio, youtube/movies for video.
 pub fn resolve_output_dirs(state: &AppState) -> (Option<String>, Option<String>) {
-    let lib = state.libraries.get(crate::AppState::DEFAULT_LIBRARY_ID);
-    match lib {
-        Some(lib) => {
-            let base = std::path::Path::new(&lib.path);
-            let video_dir = base.join("video").join(".cache");
-            let audio_dir = base.join("audio").join(".cache");
-            std::fs::create_dir_all(&video_dir).ok();
-            std::fs::create_dir_all(&audio_dir).ok();
-            (
-                Some(video_dir.to_string_lossy().to_string()),
-                Some(audio_dir.to_string_lossy().to_string()),
-            )
-        }
-        None => (None, None),
-    }
+    let video_lib = state
+        .libraries
+        .find_by_media_type("youtube")
+        .or_else(|| state.libraries.find_by_media_type("movies"));
+    let video_dir = video_lib.map(|lib| {
+        let dir = std::path::Path::new(&lib.path).join("video");
+        std::fs::create_dir_all(&dir).ok();
+        dir.to_string_lossy().to_string()
+    });
+
+    let audio_lib = state
+        .libraries
+        .find_by_media_type("music")
+        .or_else(|| state.libraries.find_by_media_type("audio"))
+        .or_else(|| state.libraries.find_by_media_type("youtube"));
+    let audio_dir = audio_lib.map(|lib| {
+        let dir = std::path::Path::new(&lib.path).join("audio");
+        std::fs::create_dir_all(&dir).ok();
+        dir.to_string_lossy().to_string()
+    });
+
+    (video_dir, audio_dir)
 }
 
 async fn queue_download(

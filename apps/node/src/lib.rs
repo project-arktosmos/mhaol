@@ -114,17 +114,12 @@ pub struct AppState {
     pub image_tagger_manager: Arc<modules::image_tagger::ImageTaggerManager>,
     pub data_dir: PathBuf,
     pub llm_conversations: LlmConversationRepo,
-    pub torrent_fetch_cache: TorrentFetchCacheRepo,
-    pub tv_torrent_fetch_cache: TvTorrentFetchCacheRepo,
-    pub tmdb_api_cache: TmdbApiCacheRepo,
+    pub api_cache: ApiCacheRepo,
     pub tmdb_image_overrides: TmdbImageOverrideRepo,
     pub profiles: ProfileRepo,
     pub favorites: FavoriteRepo,
     pub pins: PinRepo,
     pub roster_contacts: RosterContactRepo,
-    pub openlibrary_api_cache: OpenLibraryApiCacheRepo,
-    pub book_torrent_fetch_cache: BookTorrentFetchCacheRepo,
-    pub music_torrent_fetch_cache: MusicTorrentFetchCacheRepo,
     pub catalog: CatalogRepo,
     pub catalog_fetch_cache: CatalogFetchCacheRepo,
     pub signaling_rooms: Arc<SignalingRoomManager>,
@@ -187,17 +182,12 @@ impl AppState {
             #[cfg(not(target_os = "android"))]
             image_tagger_manager: Arc::new(modules::image_tagger::ImageTaggerManager::new()),
             llm_conversations: LlmConversationRepo::new(Arc::clone(&db)),
-            torrent_fetch_cache: TorrentFetchCacheRepo::new(Arc::clone(&db)),
-            tv_torrent_fetch_cache: TvTorrentFetchCacheRepo::new(Arc::clone(&db)),
-            tmdb_api_cache: TmdbApiCacheRepo::new(Arc::clone(&db)),
+            api_cache: ApiCacheRepo::new(Arc::clone(&db)),
             tmdb_image_overrides: TmdbImageOverrideRepo::new(Arc::clone(&db)),
             profiles: ProfileRepo::new(Arc::clone(&db)),
             favorites: FavoriteRepo::new(Arc::clone(&db)),
             pins: PinRepo::new(Arc::clone(&db)),
             roster_contacts: RosterContactRepo::new(Arc::clone(&db)),
-            openlibrary_api_cache: OpenLibraryApiCacheRepo::new(Arc::clone(&db)),
-            book_torrent_fetch_cache: BookTorrentFetchCacheRepo::new(Arc::clone(&db)),
-            music_torrent_fetch_cache: MusicTorrentFetchCacheRepo::new(Arc::clone(&db)),
             catalog: CatalogRepo::new(Arc::clone(&db)),
             catalog_fetch_cache: CatalogFetchCacheRepo::new(Arc::clone(&db)),
             signaling_rooms: Arc::new(SignalingRoomManager::new()),
@@ -213,9 +203,6 @@ impl AppState {
             db,
         })
     }
-
-    /// The fixed ID for the single default library.
-    pub const DEFAULT_LIBRARY_ID: &'static str = "default";
 
     /// Register and initialize all built-in modules (addons + core modules).
     pub fn initialize_modules(&self) {

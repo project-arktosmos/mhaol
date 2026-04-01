@@ -15,15 +15,39 @@
 		TopRecommendedArtistDetail
 	} from 'ui-lib/types/music-recommendations.type';
 	import type { RecommendationLabel } from 'ui-lib/types/recommendation-label.type';
+	import { albumStrategy } from 'ui-lib/services/catalog-strategies/album.strategy';
+	import { isAlbum } from 'ui-lib/types/catalog.type';
 	import MusicTopRecommendedTable from './MusicTopRecommendedTable.svelte';
 	import RecommendationLabelGrid from './RecommendationLabelGrid.svelte';
 
 	interface Props {
-		pinnedArtistIds: string[];
-		favoritedArtistIds: string[];
+		pinnedAlbumIds: string[];
+		favoritedAlbumIds: string[];
 	}
 
-	let { pinnedArtistIds, favoritedArtistIds }: Props = $props();
+	let { pinnedAlbumIds, favoritedAlbumIds }: Props = $props();
+
+	// === Resolved artist MBIDs from albums ===
+	let pinnedArtistMbids = $state<string[]>([]);
+	let favoritedArtistMbids = $state<string[]>([]);
+	let resolvingArtists = $state(false);
+
+	async function resolveArtistsFromAlbums(albumIds: string[]): Promise<string[]> {
+		if (albumIds.length === 0) return [];
+		if (!albumStrategy.resolveByIds) return [];
+		const items = await albumStrategy.resolveByIds(albumIds);
+		const mbids = new Set<string>();
+		for (const item of items) {
+			if (isAlbum(item)) {
+				for (const author of item.metadata.authors) {
+					if (author.source === 'musicbrainz' && author.role === 'artist') {
+						mbids.add(author.id);
+					}
+				}
+			}
+		}
+		return [...mbids];
+	}
 
 	// === Queue state ===
 	let status = $state<MusicRecommendationsStatus | null>(null);
@@ -43,8 +67,8 @@
 
 	let allMbids = $derived(() => {
 		const ids = new Set<string>();
-		for (const id of pinnedArtistIds) ids.add(id);
-		for (const id of favoritedArtistIds) ids.add(id);
+		for (const id of pinnedArtistMbids) ids.add(id);
+		for (const id of favoritedArtistMbids) ids.add(id);
 		return ids;
 	});
 
@@ -125,11 +149,11 @@
 	}
 
 	function enqueuePinned() {
-		enqueueAndRefresh(pinnedArtistIds);
+		enqueueAndRefresh(pinnedArtistMbids);
 	}
 
 	function enqueueFavorited() {
-		enqueueAndRefresh(favoritedArtistIds);
+		enqueueAndRefresh(favoritedArtistMbids);
 	}
 
 	async function toggleExpand(task: QueueTask) {
@@ -288,7 +312,7 @@
 	}
 
 	// === Lifecycle ===
-	onMount(() => {
+	onMount(async () => {
 		loadStatus();
 		topTable?.refresh();
 		loadDetails();
@@ -296,6 +320,19 @@
 		loadAssignments();
 		queueService.fetchTasks(undefined, 'music-recommendations:fetch');
 		queueService.subscribe();
+		// Resolve artist MBIDs from pinned/favorited albums
+		resolvingArtists = true;
+		try {
+			const [pinned, favorited] = await Promise.all([
+				resolveArtistsFromAlbums(pinnedAlbumIds),
+				resolveArtistsFromAlbums(favoritedAlbumIds)
+			]);
+			pinnedArtistMbids = pinned;
+			favoritedArtistMbids = favorited;
+		} catch {
+			/* best-effort */
+		}
+		resolvingArtists = false;
 	});
 
 	onDestroy(() => {
@@ -329,27 +366,27 @@
 	<div class="flex flex-wrap gap-2">
 		<button
 			class="btn btn-sm btn-primary"
-			disabled={enqueueing || allMbids().size === 0}
+			disabled={enqueueing || resolvingArtists || allMbids().size === 0}
 			onclick={enqueueAll}
 		>
-			{#if enqueueing}
+			{#if enqueueing || resolvingArtists}
 				<span class="loading loading-xs loading-spinner"></span>
 			{/if}
 			Enqueue All ({allMbids().size})
 		</button>
 		<button
 			class="btn btn-outline btn-sm"
-			disabled={enqueueing || pinnedArtistIds.length === 0}
+			disabled={enqueueing || resolvingArtists || pinnedArtistMbids.length === 0}
 			onclick={enqueuePinned}
 		>
-			Pinned ({pinnedArtistIds.length})
+			Pinned ({pinnedArtistMbids.length})
 		</button>
 		<button
 			class="btn btn-outline btn-sm"
-			disabled={enqueueing || favoritedArtistIds.length === 0}
+			disabled={enqueueing || resolvingArtists || favoritedArtistMbids.length === 0}
 			onclick={enqueueFavorited}
 		>
-			Favorites ({favoritedArtistIds.length})
+			Favorites ({favoritedArtistMbids.length})
 		</button>
 	</div>
 
@@ -573,7 +610,7 @@
 							<div class="grid grid-cols-3 gap-2">
 								{#each discography as album (album.id)}
 									<a
-										href="/media/music/album/{album.id}"
+										href="/media/music/{album.id}"
 										class="flex flex-col gap-1 rounded-lg bg-base-200 p-2 transition-colors hover:bg-base-300"
 									>
 										{#if album.coverUrl}

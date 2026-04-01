@@ -8,17 +8,6 @@ use axum::{
 };
 use serde::Deserialize;
 
-const LABEL_TABLE_SCHEMA: &str = "
-CREATE TABLE IF NOT EXISTS book_recommendation_label_assignments (
-    id TEXT PRIMARY KEY,
-    wallet TEXT NOT NULL,
-    recommended_key TEXT NOT NULL,
-    label_id TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(wallet, recommended_key)
-);
-";
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FilterQuery {
@@ -235,11 +224,6 @@ async fn top_books_detail(
 
 // --- Book recommendation label endpoints ---
 
-fn ensure_label_table(state: &AppState) {
-    let conn = state.db.lock();
-    conn.execute_batch(LABEL_TABLE_SCHEMA).unwrap();
-}
-
 #[derive(Deserialize)]
 struct WalletQuery {
     wallet: String,
@@ -249,29 +233,15 @@ async fn get_label_assignments(
     State(state): State<AppState>,
     Query(q): Query<WalletQuery>,
 ) -> impl IntoResponse {
-    ensure_label_table(&state);
-    let conn = state.db.lock();
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, wallet, recommended_key, label_id, created_at
-             FROM book_recommendation_label_assignments
-             WHERE wallet = ?1",
-        )
-        .unwrap();
-    let rows: Vec<serde_json::Value> = stmt
-        .query_map(rusqlite::params![q.wallet], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>(0)?,
-                "wallet": row.get::<_, String>(1)?,
-                "recommendedKey": row.get::<_, String>(2)?,
-                "labelId": row.get::<_, String>(3)?,
-                "createdAt": row.get::<_, String>(4)?,
-            }))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
-    Json(serde_json::json!(rows))
+    let rows = state.recommendation_labels.get_assignments_by_wallet_and_source(&q.wallet, "openlibrary");
+    let mapped: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+        "id": r.id,
+        "wallet": r.wallet,
+        "recommendedKey": r.source_id,
+        "labelId": r.label_id,
+        "createdAt": r.created_at,
+    })).collect();
+    Json(serde_json::json!(mapped))
 }
 
 #[derive(Deserialize)]
@@ -286,18 +256,11 @@ async fn set_label(
     State(state): State<AppState>,
     Json(body): Json<SetLabelBody>,
 ) -> impl IntoResponse {
-    ensure_label_table(&state);
-    let conn = state.db.lock();
-    let result = conn.execute(
-        "INSERT INTO book_recommendation_label_assignments (id, wallet, recommended_key, label_id)
-         VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3)
-         ON CONFLICT(wallet, recommended_key)
-         DO UPDATE SET label_id = ?3",
-        rusqlite::params![body.wallet, body.recommended_key, body.label_id],
-    );
-    match result {
-        Ok(_) => StatusCode::OK,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    let ok = state.recommendation_labels.upsert(&body.wallet, "openlibrary", &body.recommended_key, "book", &body.label_id);
+    if ok {
+        StatusCode::OK
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
     }
 }
 
@@ -312,16 +275,8 @@ async fn remove_label(
     State(state): State<AppState>,
     Json(body): Json<RemoveLabelBody>,
 ) -> impl IntoResponse {
-    ensure_label_table(&state);
-    let conn = state.db.lock();
-    let affected = conn
-        .execute(
-            "DELETE FROM book_recommendation_label_assignments
-             WHERE wallet = ?1 AND recommended_key = ?2",
-            rusqlite::params![body.wallet, body.recommended_key],
-        )
-        .unwrap_or(0);
-    if affected > 0 {
+    let deleted = state.recommendation_labels.delete(&body.wallet, "openlibrary", &body.recommended_key, "book");
+    if deleted {
         StatusCode::NO_CONTENT
     } else {
         StatusCode::NOT_FOUND

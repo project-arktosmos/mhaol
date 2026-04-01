@@ -50,16 +50,10 @@ async fn process_fetch_game_recommendations(state: &AppState, task: &mhaol_queue
     let level = payload["level"].as_i64().unwrap_or(1);
 
     // Fetch source game details from cache
-    let source_detail = {
-        let conn = state.db.lock();
-        conn.query_row(
-            "SELECT data FROM ra_game_details_cache WHERE game_id = ?1",
-            rusqlite::params![game_id],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-    };
+    let source_detail = state
+        .api_cache
+        .get_any("retroachievements", &format!("game-details:{}", game_id))
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
 
     let source_detail = match source_detail {
         Some(d) => d,
@@ -103,25 +97,18 @@ async fn process_fetch_game_recommendations(state: &AppState, task: &mhaol_queue
         .collect();
 
     // Load all cached game lists
-    let game_lists: Vec<(i64, serde_json::Value)> = {
-        let conn = state.db.lock();
-        let mut stmt = conn
-            .prepare("SELECT console_id, data FROM ra_game_list_cache")
-            .unwrap();
-        stmt.query_map([], |row| {
-            let cid: i64 = row.get(0)?;
-            let data_str: String = row.get(1)?;
-            Ok((cid, data_str))
+    let game_lists: Vec<(i64, serde_json::Value)> = state
+        .api_cache
+        .get_all_for_prefix("retroachievements", "game-list:")
+        .into_iter()
+        .filter_map(|(key, data_str)| {
+            let cid = key
+                .strip_prefix("game-list:")
+                .and_then(|s| s.parse::<i64>().ok())?;
+            let v = serde_json::from_str::<serde_json::Value>(&data_str).ok()?;
+            Some((cid, v))
         })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .filter_map(|(cid, data_str)| {
-            serde_json::from_str::<serde_json::Value>(&data_str)
-                .ok()
-                .map(|v| (cid, v))
-        })
-        .collect()
-    };
+        .collect();
 
     // Collect all candidate games from game lists
     struct Candidate {
@@ -182,16 +169,10 @@ async fn process_fetch_game_recommendations(state: &AppState, task: &mhaol_queue
         let mut match_score: f64 = 0.0;
 
         // Try to get detail from cache for genre/developer/publisher matching
-        let detail = {
-            let conn = state.db.lock();
-            conn.query_row(
-                "SELECT data FROM ra_game_details_cache WHERE game_id = ?1",
-                rusqlite::params![candidate.id],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        };
+        let detail = state
+            .api_cache
+            .get_any("retroachievements", &format!("game-details:{}", candidate.id))
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
 
         let candidate_genre;
         let candidate_developer;

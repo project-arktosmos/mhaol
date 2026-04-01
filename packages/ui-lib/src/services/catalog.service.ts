@@ -20,12 +20,12 @@ export interface CatalogKindStrategy {
 		query: string,
 		page: number,
 		filters: Record<string, string>
-	): Promise<{ items: CatalogItem[]; totalPages: number }>;
+	): Promise<{ items: CatalogItem[]; totalPages: number; tabs?: CatalogTab[] }>;
 	loadTab(
 		tabId: string,
 		page: number,
 		filters: Record<string, string>
-	): Promise<{ items: CatalogItem[]; totalPages: number }>;
+	): Promise<{ items: CatalogItem[]; totalPages: number; tabs?: CatalogTab[] }>;
 	resolveByIds?(ids: string[]): Promise<CatalogItem[]>;
 }
 
@@ -95,6 +95,7 @@ class CatalogService {
 				...s,
 				items: result.items,
 				totalPages: result.totalPages,
+				...(result.tabs ? { tabs: result.tabs } : {}),
 				loading: false
 			}));
 		} catch (error) {
@@ -125,6 +126,7 @@ class CatalogService {
 				...s,
 				items: result.items,
 				totalPages: result.totalPages,
+				...(result.tabs ? { tabs: result.tabs } : {}),
 				loading: false
 			}));
 		} catch (error) {

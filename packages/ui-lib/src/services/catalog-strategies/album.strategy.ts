@@ -1,8 +1,19 @@
 import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import { releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
-import type { MusicBrainzReleaseGroup } from 'addons/musicbrainz/types';
-import type { CatalogItem, CatalogFilterOption } from 'ui-lib/types/catalog.type';
+import type { MusicBrainzArtistCredit, MusicBrainzReleaseGroup } from 'addons/musicbrainz/types';
+import type { CatalogItem, CatalogAuthor, CatalogFilterOption } from 'ui-lib/types/catalog.type';
 import type { CatalogKindStrategy } from 'ui-lib/services/catalog.service';
+
+function mbCreditsToAuthors(credits: MusicBrainzArtistCredit[]): CatalogAuthor[] {
+	return credits.map((c) => ({
+		id: c.artist.id,
+		name: c.name,
+		role: 'artist' as const,
+		source: 'musicbrainz' as const,
+		imageUrl: null,
+		joinPhrase: c.joinphrase || undefined
+	}));
+}
 
 const GENRES: CatalogFilterOption[] = [
 	'rock',
@@ -45,7 +56,7 @@ function toAlbumCatalogItems(albums: ReturnType<typeof releaseGroupsToDisplay>):
 			musicbrainzId: a.id,
 			primaryType: a.primaryType,
 			secondaryTypes: a.secondaryTypes,
-			artistCredits: a.artistCredits,
+			authors: mbCreditsToAuthors(a.rawArtistCredits),
 			firstReleaseYear: a.firstReleaseYear,
 			coverArtUrl: a.coverArtUrl,
 			releases: []

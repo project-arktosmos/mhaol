@@ -87,6 +87,28 @@ impl LibraryRepo {
         conn.execute("DELETE FROM libraries WHERE id = ?1", params![id])
             .unwrap();
     }
+
+    /// Find the first library whose media_types JSON array contains the given type.
+    pub fn find_by_media_type(&self, media_type: &str) -> Option<LibraryRow> {
+        let conn = self.db.lock();
+        let pattern = format!("\"{}\"", media_type);
+        conn.query_row(
+            "SELECT id, name, path, media_types, date_added, created_at, updated_at FROM libraries WHERE media_types LIKE '%' || ?1 || '%' LIMIT 1",
+            params![pattern],
+            |row| {
+                Ok(LibraryRow {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    path: row.get(2)?,
+                    media_types: row.get(3)?,
+                    date_added: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
+            },
+        )
+        .ok()
+    }
 }
 
 #[cfg(test)]
@@ -112,5 +134,22 @@ mod tests {
 
         repo.delete("lib1");
         assert!(repo.get("lib1").is_none());
+    }
+
+    #[test]
+    fn test_find_by_media_type() {
+        let db = open_test_database();
+        let repo = LibraryRepo::new(db);
+
+        repo.insert("lib-m", "Movies", "/tmp/movies", "[\"movies\"]", 1000);
+        repo.insert("lib-a", "Music", "/tmp/music", "[\"audio\"]", 1001);
+
+        let found = repo.find_by_media_type("audio").unwrap();
+        assert_eq!(found.id, "lib-a");
+
+        let found = repo.find_by_media_type("movies").unwrap();
+        assert_eq!(found.id, "lib-m");
+
+        assert!(repo.find_by_media_type("nonexistent").is_none());
     }
 }

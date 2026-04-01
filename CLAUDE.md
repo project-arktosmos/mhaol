@@ -119,6 +119,36 @@ Every app's `src/css/app.css` scans ui-lib for Tailwind classes:
 @import 'ui-lib/css/themes.css';
 ```
 
+### Media Route Architecture
+
+Media routes use slug-based routing with a data-driven registry:
+
+```
+(app)/media/
+├── +layout.svelte              # Media bar (title, controls, tabs, filters)
+├── [slug]/                     # movies, tv, books, videogames, iptv
+│   ├── +page.ts               # Validates slug against MEDIA_REGISTRY
+│   ├── +page.svelte           # CatalogBrowsePage + per-type extras
+│   └── [id]/+page.svelte      # CatalogDetailPage + per-type meta
+├── music/                      # Music hub + nested sub-slugs
+│   ├── +page.svelte           # Hub (pinned, favorites, popular preview)
+│   ├── [subslug]/             # album, artist
+│   │   ├── +page.ts           # Validates subslug against MUSIC_REGISTRY
+│   │   ├── +page.svelte       # CatalogBrowsePage with strategy
+│   │   └── [id]/+page.svelte  # CatalogDetailPage + meta
+├── youtube/                    # Explicit (custom UI: channels, RSS, downloads)
+└── photos/                     # Explicit (custom UI: gallery, tagging)
+```
+
+**Key files:**
+- `packages/ui-lib/src/data/media-registry.ts` — `MEDIA_REGISTRY` and `MUSIC_REGISTRY` mapping slugs to config (kind, label, services, features)
+- `packages/ui-lib/src/components/catalog/CatalogBrowsePage.svelte` — Unified browse with search, tabs, filters, pinned/favorites, grid
+- `packages/ui-lib/src/components/catalog/filters/CatalogFilterBar.svelte` — Switch component rendering the right filter UI per kind
+- `packages/ui-lib/src/services/catalog.service.ts` — Strategy-pattern service (`CatalogKindStrategy` interface)
+- `packages/ui-lib/src/services/catalog-strategies/` — Per-kind strategies (movie, tv, book, album, artist, game, iptv)
+
+**Adding a new media type:** Add an entry to `MEDIA_REGISTRY` (or `MUSIC_REGISTRY`), create a catalog strategy, a detail meta component, and add filter handling if needed. The slug routes handle everything else.
+
 ---
 
 ## Workspace Scripts
@@ -150,7 +180,7 @@ pnpm signaling:dev    # PartyKit local dev
 pnpm signaling:deploy # Deploy PartyKit
 
 # Cleanup
-pnpm clean            # Clean build artifacts + cargo clean
+pnpm clean            # Clean build artifacts, cargo clean, remove SQLite DBs
 ```
 
 Never cd into a package directory to run scripts — use the root workspace scripts above.

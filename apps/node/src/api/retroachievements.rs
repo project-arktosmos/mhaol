@@ -40,12 +40,8 @@ async fn get_game_list(
 
     // Check cache (valid for 24 hours)
     {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM ra_game_list_cache WHERE console_id = ?1 AND fetched_at > datetime('now', '-24 hours')",
-            rusqlite::params![console_id],
-            |row| row.get::<_, String>(0),
-        ) {
+        let cache_key = format!("game-list:{}", console_id);
+        if let Some(data) = state.api_cache.get_fresh("retroachievements", &cache_key, 24) {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
             }
@@ -83,12 +79,8 @@ async fn get_game_list(
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                        "INSERT INTO ra_game_list_cache (console_id, data) VALUES (?1, ?2)
-                         ON CONFLICT(console_id) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![console_id, data_str],
-                    );
+                let cache_key = format!("game-list:{}", console_id);
+                state.api_cache.upsert("retroachievements", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -99,12 +91,8 @@ async fn get_game_list(
         },
         _ => {
             // Try stale cache
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM ra_game_list_cache WHERE console_id = ?1",
-                rusqlite::params![console_id],
-                |row| row.get::<_, String>(0),
-            ) {
+            let cache_key = format!("game-list:{}", console_id);
+            if let Some(data) = state.api_cache.get_any("retroachievements", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }
@@ -121,12 +109,8 @@ async fn get_game_list(
 async fn get_game_details(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     // Check cache
     {
-        let conn = state.db.lock();
-        if let Ok(data) = conn.query_row(
-            "SELECT data FROM ra_game_details_cache WHERE game_id = ?1",
-            rusqlite::params![id],
-            |row| row.get::<_, String>(0),
-        ) {
+        let cache_key = format!("game-details:{}", id);
+        if let Some(data) = state.api_cache.get_any("retroachievements", &cache_key) {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                 return Json(parsed).into_response();
             }
@@ -164,12 +148,8 @@ async fn get_game_details(State(state): State<AppState>, Path(id): Path<u32>) ->
         Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
             Ok(data) => {
                 let data_str = serde_json::to_string(&data).unwrap_or_default();
-                let conn = state.db.lock();
-                let _ = conn.execute(
-                        "INSERT INTO ra_game_details_cache (game_id, data) VALUES (?1, ?2)
-                         ON CONFLICT(game_id) DO UPDATE SET data = ?2, fetched_at = datetime('now')",
-                        rusqlite::params![id, data_str],
-                    );
+                let cache_key = format!("game-details:{}", id);
+                state.api_cache.upsert("retroachievements", &cache_key, &data_str);
                 Json(data).into_response()
             }
             Err(e) => (
@@ -184,12 +164,8 @@ async fn get_game_details(State(state): State<AppState>, Path(id): Path<u32>) ->
         )
             .into_response(),
         _ => {
-            let conn = state.db.lock();
-            if let Ok(data) = conn.query_row(
-                "SELECT data FROM ra_game_details_cache WHERE game_id = ?1",
-                rusqlite::params![id],
-                |row| row.get::<_, String>(0),
-            ) {
+            let cache_key = format!("game-details:{}", id);
+            if let Some(data) = state.api_cache.get_any("retroachievements", &cache_key) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
                     return Json(parsed).into_response();
                 }

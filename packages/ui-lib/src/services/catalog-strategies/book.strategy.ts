@@ -49,8 +49,13 @@ function toBookCatalogItems(
 		updatedAt: '',
 		metadata: {
 			openlibraryKey: b.key,
-			authors: b.authors,
-			authorKeys: 'authorKeys' in b ? b.authorKeys : [],
+			authors: (b.authors ?? []).map((name: string, i: number) => ({
+				id: 'authorKeys' in b && b.authorKeys[i] ? b.authorKeys[i] : name,
+				name,
+				role: 'author' as const,
+				source: 'openlibrary' as const,
+				imageUrl: null
+			})),
 			firstPublishYear: b.firstPublishYear,
 			coverId: 'coverId' in b ? b.coverId : null,
 			coverUrl: b.coverUrl,
@@ -61,8 +66,7 @@ function toBookCatalogItems(
 			isbn: 'isbn' in b ? b.isbn : null,
 			ratingsAverage: 'ratingsAverage' in b ? (b.ratingsAverage ?? null) : null,
 			ratingsCount: 'ratingsCount' in b ? (b.ratingsCount ?? 0) : 0,
-			description: null,
-			authorDetails: []
+			description: null
 		}
 	}));
 }
@@ -93,8 +97,13 @@ function workToCatalogItem(work: OpenLibraryWork): CatalogItem {
 		updatedAt: '',
 		metadata: {
 			openlibraryKey: key,
-			authors: [],
-			authorKeys: work.authors?.map((a) => a.author.key.replace(/^\/authors\//, '')) ?? [],
+			authors: (work.authors ?? []).map((a) => ({
+				id: a.author.key.replace(/^\/authors\//, ''),
+				name: '',
+				role: 'author' as const,
+				source: 'openlibrary' as const,
+				imageUrl: null
+			})),
 			firstPublishYear: work.first_publish_date?.split('-')[0] ?? '',
 			coverId,
 			coverUrl: getCoverUrl(coverId, 'M'),
@@ -105,8 +114,7 @@ function workToCatalogItem(work: OpenLibraryWork): CatalogItem {
 			isbn: null,
 			ratingsAverage: null,
 			ratingsCount: 0,
-			description: null,
-			authorDetails: []
+			description: null
 		}
 	};
 }

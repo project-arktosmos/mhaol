@@ -44,18 +44,13 @@ async fn main() {
                 .map(|d| PathBuf::from(d).join("mhaol.db"))
         })
         .unwrap_or_else(|| {
-            // Default: packages/database/mhaol.db relative to the workspace root.
-            // The server binary lives at apps/server/backend/, so go up three levels.
-            // If the workspace path doesn't exist (e.g. distributed binary), use ./mhaol.db.
-            let manifest_dir = env!("CARGO_MANIFEST_DIR");
-            let candidate = PathBuf::from(manifest_dir)
-                .parent() // apps/server/
-                .and_then(|p| p.parent()) // apps/
-                .and_then(|p| p.parent()) // workspace root
-                .map(|root| root.join("packages/database/mhaol.db"));
-            match candidate {
-                Some(p) if p.parent().is_some_and(|d| d.exists()) => p,
-                _ => PathBuf::from("mhaol.db"),
+            // Default: mhaol.db inside the node app directory (apps/node/).
+            // For distributed binaries, fall back to the data dir (~Documents/mhaol/).
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            if manifest_dir.exists() {
+                manifest_dir.join("mhaol.db")
+            } else {
+                mhaol_node::default_data_dir().join("mhaol.db")
             }
         });
 
@@ -67,6 +62,15 @@ async fn main() {
 
     state.seed_default_libraries();
     state.initialize_modules();
+
+    // Auto-scan all libraries in the background
+    {
+        let scan_state = state.clone();
+        tokio::task::spawn_blocking(move || {
+            let count = mhaol_node::api::libraries::scan_all_libraries(&scan_state);
+            tracing::info!("[startup] Auto-scanned {} libraries", count);
+        });
+    }
 
     // Start p2p-stream worker in the background
     let worker_bridge = state.worker_bridge.clone();

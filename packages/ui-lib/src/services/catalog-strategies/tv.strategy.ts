@@ -34,8 +34,7 @@ function toTvCatalogItems(shows: TMDBTvShow[]): CatalogItem[] {
 			lastAirYear: s.lastAirYear,
 			status: null,
 			networks: [],
-			createdBy: [],
-			cast: [],
+			authors: [],
 			genres: s.genres,
 			tagline: null,
 			numberOfSeasons: s.numberOfSeasons,
@@ -65,7 +64,7 @@ export const tvStrategy: CatalogKindStrategy = {
 
 	async search(query, page, _filters) {
 		const data = await fetchJson<TmdbPagedResponse>(
-			`/api/tmdb/search/tv?query=${encodeURIComponent(query)}&page=${page}`
+			`/api/tmdb/search/tv?q=${encodeURIComponent(query)}&page=${page}`
 		);
 		return {
 			items: toTvCatalogItems(data?.results ?? []),
@@ -80,7 +79,7 @@ export const tvStrategy: CatalogKindStrategy = {
 		} else if (tabId === 'discover') {
 			url = `/api/tmdb/discover/tv?page=${page}`;
 		} else {
-			url = `/api/tmdb/tv/popular?page=${page}`;
+			url = `/api/tmdb/popular/tv?page=${page}`;
 		}
 		const data = await fetchJson<TmdbPagedResponse>(url);
 		return {

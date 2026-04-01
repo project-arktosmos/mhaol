@@ -5,7 +5,6 @@ export type CatalogKind =
 	| 'tv_show'
 	| 'tv_season'
 	| 'tv_episode'
-	| 'artist'
 	| 'album'
 	| 'track'
 	| 'book'
@@ -23,6 +22,58 @@ export type CatalogSource =
 	| 'youtube'
 	| 'iptv'
 	| 'local';
+
+// === Authors ===
+
+export type AuthorRole =
+	| 'director'
+	| 'actor'
+	| 'writer'
+	| 'creator'
+	| 'producer'
+	| 'artist'
+	| 'author'
+	| 'developer'
+	| 'publisher'
+	| 'channel';
+
+export interface CatalogAuthor {
+	id: string;
+	name: string;
+	role: AuthorRole;
+	source: CatalogSource;
+	imageUrl: string | null;
+	character?: string;
+	joinPhrase?: string;
+	bio?: string;
+	birthDate?: string;
+	deathDate?: string;
+}
+
+export function formatAuthors(authors: CatalogAuthor[], role?: AuthorRole): string {
+	const filtered = role ? authors.filter((a) => a.role === role) : authors;
+	return filtered.map((a) => a.name + (a.joinPhrase ?? '')).join('') || '';
+}
+
+export function authorsByRole(authors: CatalogAuthor[], role: AuthorRole): CatalogAuthor[] {
+	return authors.filter((a) => a.role === role);
+}
+
+export function primaryAuthor(authors: CatalogAuthor[]): CatalogAuthor | null {
+	const priority: AuthorRole[] = [
+		'director',
+		'creator',
+		'author',
+		'artist',
+		'developer',
+		'channel'
+	];
+	for (const role of priority) {
+		const found = authors.find((a) => a.role === role);
+		if (found) return found;
+	}
+	return authors[0] ?? null;
+}
 
 // === Base ===
 
@@ -56,8 +107,7 @@ export interface MovieMetadata {
 	tmdbId: number;
 	originalTitle: string;
 	runtime: string | null;
-	director: string | null;
-	cast: CatalogCastMember[];
+	authors: CatalogAuthor[];
 	genres: string[];
 	tagline: string | null;
 	budget: string | null;
@@ -78,8 +128,7 @@ export interface TvShowMetadata {
 	lastAirYear: string | null;
 	status: string | null;
 	networks: string[];
-	createdBy: string[];
-	cast: CatalogCastMember[];
+	authors: CatalogAuthor[];
 	genres: string[];
 	tagline: string | null;
 	numberOfSeasons: number | null;
@@ -138,24 +187,6 @@ export interface TvEpisodeMetadata {
 	stillUrl: string | null;
 }
 
-export interface CatalogArtist extends CatalogItemBase {
-	kind: 'artist';
-	metadata: ArtistMetadata;
-}
-
-export interface ArtistMetadata {
-	musicbrainzId: string;
-	sortName: string;
-	type: string | null;
-	country: string | null;
-	disambiguation: string | null;
-	beginYear: string | null;
-	endYear: string | null;
-	ended: boolean;
-	tags: string[];
-	imageUrl: string | null;
-}
-
 export interface CatalogAlbum extends CatalogItemBase {
 	kind: 'album';
 	metadata: AlbumMetadata;
@@ -165,7 +196,7 @@ export interface AlbumMetadata {
 	musicbrainzId: string;
 	primaryType: string | null;
 	secondaryTypes: string[];
-	artistCredits: string;
+	authors: CatalogAuthor[];
 	firstReleaseYear: string;
 	coverArtUrl: string | null;
 	releases: AlbumRelease[];
@@ -177,7 +208,7 @@ export interface AlbumRelease {
 	date: string | null;
 	status: string | null;
 	country: string | null;
-	artistCredits: string;
+	authors: CatalogAuthor[];
 	trackCount: number;
 	label: string | null;
 	tracks: AlbumTrack[];
@@ -189,7 +220,7 @@ export interface AlbumTrack {
 	title: string;
 	duration: string | null;
 	durationMs: number | null;
-	artistCredits: string;
+	authors: CatalogAuthor[];
 }
 
 export interface CatalogTrack extends CatalogItemBase {
@@ -202,7 +233,7 @@ export interface TrackMetadata {
 	number: string;
 	duration: string | null;
 	durationMs: number | null;
-	artistCredits: string;
+	authors: CatalogAuthor[];
 	disambiguation: string | null;
 }
 
@@ -213,8 +244,7 @@ export interface CatalogBook extends CatalogItemBase {
 
 export interface BookMetadata {
 	openlibraryKey: string;
-	authors: string[];
-	authorKeys: string[];
+	authors: CatalogAuthor[];
 	firstPublishYear: string;
 	coverId: number | null;
 	coverUrl: string | null;
@@ -226,16 +256,6 @@ export interface BookMetadata {
 	ratingsAverage: number | null;
 	ratingsCount: number;
 	description: string | null;
-	authorDetails: BookAuthorDetail[];
-}
-
-export interface BookAuthorDetail {
-	key: string;
-	name: string;
-	birthDate: string | null;
-	deathDate: string | null;
-	bio: string | null;
-	photoUrl: string | null;
 }
 
 export interface CatalogGame extends CatalogItemBase {
@@ -250,8 +270,7 @@ export interface GameMetadata {
 	imageIconUrl: string;
 	numAchievements: number;
 	points: number;
-	developer: string | null;
-	publisher: string | null;
+	authors: CatalogAuthor[];
 	genre: string | null;
 	released: string | null;
 	imageTitleUrl: string | null;
@@ -279,8 +298,7 @@ export interface CatalogYoutubeVideo extends CatalogItemBase {
 
 export interface YoutubeVideoMetadata {
 	youtubeId: string;
-	channelId: string | null;
-	channelName: string | null;
+	authors: CatalogAuthor[];
 	durationSeconds: number | null;
 	videoPath: string | null;
 	audioPath: string | null;
@@ -338,13 +356,6 @@ export interface PhotoTag {
 
 // === Shared sub-types ===
 
-export interface CatalogCastMember {
-	id: number;
-	name: string;
-	character: string;
-	profileUrl: string | null;
-}
-
 export interface CatalogImage {
 	thumbnailUrl: string;
 	fullUrl: string;
@@ -361,7 +372,6 @@ export type CatalogItem =
 	| CatalogTvShow
 	| CatalogTvSeason
 	| CatalogTvEpisode
-	| CatalogArtist
 	| CatalogAlbum
 	| CatalogTrack
 	| CatalogBook
@@ -384,9 +394,6 @@ export function isTvSeason(item: CatalogItem): item is CatalogTvSeason {
 }
 export function isTvEpisode(item: CatalogItem): item is CatalogTvEpisode {
 	return item.kind === 'tv_episode';
-}
-export function isArtist(item: CatalogItem): item is CatalogArtist {
-	return item.kind === 'artist';
 }
 export function isAlbum(item: CatalogItem): item is CatalogAlbum {
 	return item.kind === 'album';
@@ -484,7 +491,6 @@ export const BROWSE_KINDS: CatalogKind[] = [
 	'movie',
 	'tv_show',
 	'album',
-	'artist',
 	'book',
 	'game',
 	'youtube_video',

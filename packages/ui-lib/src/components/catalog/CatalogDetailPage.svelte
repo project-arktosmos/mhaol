@@ -37,6 +37,7 @@
 		loading?: boolean;
 		fetching?: boolean;
 		fetched?: boolean;
+		streaming?: boolean;
 		fetchSteps?: FetchSteps | null;
 		torrentStatus?: TorrentStatus | null;
 		fetchedTorrent?: { name: string; quality: string; languages: string } | null;
@@ -51,7 +52,7 @@
 		ontogglepin?: () => void;
 		sidebar?: Snippet;
 		extra?: Snippet;
-		cellB?: Snippet;
+		rightPanel?: Snippet;
 	}
 
 	let {
@@ -59,6 +60,7 @@
 		loading = false,
 		fetching = false,
 		fetched = false,
+		streaming = false,
 		fetchSteps = null,
 		torrentStatus = null,
 		fetchedTorrent = null,
@@ -73,7 +75,7 @@
 		ontogglepin,
 		sidebar,
 		extra,
-		cellB
+		rightPanel
 	}: Props = $props();
 
 	let supportsTorrent = $derived(TORRENT_KINDS.includes(item.kind));
@@ -89,7 +91,7 @@
 	let dlPercent = $derived(Math.round(dlProgress * 100));
 </script>
 
-<DetailPageLayout {cellB}>
+<DetailPageLayout>
 	<button class="btn self-start btn-ghost btn-sm" onclick={onback}>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -124,14 +126,48 @@
 			</div>
 		{:else}
 			<div class="flex flex-col gap-3">
-				{#if item.backdropUrl}
-					<img
-						src={item.backdropUrl}
-						alt="{item.title} backdrop"
-						class="w-full rounded-lg object-cover"
-						loading="lazy"
-					/>
-				{/if}
+				<div class="relative">
+					{#if rightPanel}
+						{@render rightPanel()}
+					{:else if item.backdropUrl}
+						<img
+							src={item.backdropUrl}
+							alt="{item.title} backdrop"
+							class="w-full rounded-lg object-cover"
+							loading="lazy"
+						/>
+					{/if}
+
+					{#if supportsTorrent && !streaming}
+						<div class="absolute inset-0 flex items-center justify-center">
+							<div class="flex flex-wrap justify-center gap-2">
+								{#if onfetch}
+									<button class="btn btn-sm btn-primary shadow-lg" disabled={fetching} onclick={onfetch}>
+										{#if fetching}
+											<span class="loading loading-xs loading-spinner"></span>
+										{/if}
+										{fetched ? 'Re-fetch' : 'Fetch'}
+									</button>
+								{/if}
+								{#if ondownload}
+									<button
+										class="btn btn-sm btn-secondary shadow-lg"
+										disabled={!fetched || isDownloading || isDownloaded}
+										onclick={ondownload}
+									>
+										Download
+									</button>
+								{/if}
+								{#if onstream}
+									<button class="btn btn-sm btn-accent shadow-lg" onclick={onstream}> Stream </button>
+								{/if}
+								{#if onshowsearch}
+									<button class="btn btn-ghost btn-sm shadow-lg" onclick={onshowsearch}> Manual Search </button>
+								{/if}
+							</div>
+						</div>
+					{/if}
+				</div>
 
 				<h1 class="text-2xl font-bold">{item.title}</h1>
 
@@ -174,90 +210,66 @@
 				{#if item.overview}
 					<p class="text-sm leading-relaxed opacity-80">{item.overview}</p>
 				{/if}
-
-				{#if supportsTorrent}
-					<div class="flex flex-wrap gap-2">
-						{#if onfetch}
-							<button class="btn btn-sm btn-primary" disabled={fetching} onclick={onfetch}>
-								{#if fetching}
-									<span class="loading loading-xs loading-spinner"></span>
-								{/if}
-								{fetched ? 'Re-fetch' : 'Fetch'}
-							</button>
-						{/if}
-						{#if ondownload}
-							<button
-								class="btn btn-sm btn-secondary"
-								disabled={!fetched || isDownloading || isDownloaded}
-								onclick={ondownload}
-							>
-								Download
-							</button>
-						{/if}
-						{#if onstream}
-							<button class="btn btn-sm btn-accent" onclick={onstream}> Stream </button>
-						{/if}
-						{#if onshowsearch}
-							<button class="btn btn-ghost btn-sm" onclick={onshowsearch}> Manual Search </button>
-						{/if}
-					</div>
-				{/if}
-
-				{#if fetchSteps}
-					<div class="flex items-center gap-2 text-xs opacity-60">
-						<span class={classNames({ 'text-success': fetchSteps.terms })}>Terms</span>
-						<span>→</span>
-						<span class={classNames({ 'text-success': fetchSteps.search })}>
-							{fetchSteps.searching ? 'Searching...' : 'Search'}
-						</span>
-						<span>→</span>
-						<span class={classNames({ 'text-success': fetchSteps.eval })}>Eval</span>
-						<span>→</span>
-						<span class={classNames({ 'text-success': fetchSteps.done })}>Done</span>
-					</div>
-				{/if}
-
-				{#if fetchedTorrent}
-					<div class="rounded-lg bg-base-200 p-3 text-sm">
-						<p class="font-medium">{fetchedTorrent.name}</p>
-						<div class="mt-1 flex gap-2 text-xs opacity-60">
-							<span>{fetchedTorrent.quality}</span>
-							<span>{fetchedTorrent.languages}</span>
-						</div>
-					</div>
-				{/if}
-
-				{#if torrentStatus && isDownloading}
-					<div class="rounded-lg bg-base-200 p-3">
-						<div class="flex items-center justify-between text-sm">
-							<span class={getStateColor(torrentStatus.state)}>
-								{getStateLabel(torrentStatus.state)}
-							</span>
-							<span class="font-mono">{dlPercent}%</span>
-						</div>
-						<progress class="progress mt-1 w-full progress-primary" value={dlProgress} max="1"
-						></progress>
-						<div class="mt-1 flex gap-3 text-xs opacity-60">
-							<span>↓ {formatSpeed(torrentStatus.downloadSpeed)}</span>
-							<span>↑ {formatSpeed(torrentStatus.uploadSpeed)}</span>
-							<span>{formatBytes(torrentStatus.size)}</span>
-							{#if torrentStatus.eta}
-								<span>ETA {formatEta(torrentStatus.eta)}</span>
-							{/if}
-						</div>
-					</div>
-				{/if}
-
-				{#if isDownloaded}
-					<div class="rounded-lg bg-success/10 p-3 text-sm text-success">
-						Downloaded — {formatBytes(torrentStatus?.size ?? 0)}
-					</div>
-				{/if}
-
-				{#if extra}
-					{@render extra()}
-				{/if}
 			</div>
+		{/if}
+	{/snippet}
+
+	{#snippet cellB()}
+		{#if !loading}
+			{#if fetchSteps}
+				<div class="flex items-center gap-2 text-xs opacity-60">
+					<span class={classNames({ 'text-success': fetchSteps.terms })}>Terms</span>
+					<span>→</span>
+					<span class={classNames({ 'text-success': fetchSteps.search })}>
+						{fetchSteps.searching ? 'Searching...' : 'Search'}
+					</span>
+					<span>→</span>
+					<span class={classNames({ 'text-success': fetchSteps.eval })}>Eval</span>
+					<span>→</span>
+					<span class={classNames({ 'text-success': fetchSteps.done })}>Done</span>
+				</div>
+			{/if}
+
+			{#if fetchedTorrent}
+				<div class="rounded-lg bg-base-200 p-3 text-sm">
+					<p class="font-medium">{fetchedTorrent.name}</p>
+					<div class="mt-1 flex gap-2 text-xs opacity-60">
+						<span>{fetchedTorrent.quality}</span>
+						<span>{fetchedTorrent.languages}</span>
+					</div>
+				</div>
+			{/if}
+
+			{#if torrentStatus && isDownloading}
+				<div class="rounded-lg bg-base-200 p-3">
+					<div class="flex items-center justify-between text-sm">
+						<span class={getStateColor(torrentStatus.state)}>
+							{getStateLabel(torrentStatus.state)}
+						</span>
+						<span class="font-mono">{dlPercent}%</span>
+					</div>
+					<progress class="progress mt-1 w-full progress-primary" value={dlProgress} max="1"
+					></progress>
+					<div class="mt-1 flex gap-3 text-xs opacity-60">
+						<span>↓ {formatSpeed(torrentStatus.downloadSpeed)}</span>
+						<span>↑ {formatSpeed(torrentStatus.uploadSpeed)}</span>
+						<span>{formatBytes(torrentStatus.size)}</span>
+						{#if torrentStatus.eta}
+							<span>ETA {formatEta(torrentStatus.eta)}</span>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			{#if isDownloaded}
+				<div class="rounded-lg bg-success/10 p-3 text-sm text-success">
+					Downloaded — {formatBytes(torrentStatus?.size ?? 0)}
+				</div>
+			{/if}
+
+			{#if extra}
+				{@render extra()}
+			{/if}
 		{/if}
 	{/snippet}
 </DetailPageLayout>

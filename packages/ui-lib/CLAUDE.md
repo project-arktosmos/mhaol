@@ -13,7 +13,7 @@ src/
 ├── components/               # UI components organized by feature
 │   ├── addons/               # Addon management
 │   ├── browse/               # Generic browse primitives (BrowseGrid, BrowseHeader, BrowseViewToggle)
-│   ├── catalog/              # Unified media catalog (CatalogCard, CatalogBrowsePage, CatalogDetailPage, PinnedFavoritesSection, TmdbCatalogGrid, detail/, filters/)
+│   ├── catalog/              # Unified media catalog (CatalogCard, CatalogBrowsePage, CatalogDetailPage, PinnedFavoritesSection, TmdbCatalogGrid, MovieLibrarySection, TvLibrarySection, detail/, filters/)
 │   ├── core/                 # Shared reusable (Button, Modal, Navbar, ModalOutlet, ThemeToggle, ConnectionStatus, etc.)
 │   ├── downloads/            # Download management
 │   ├── hub/                  # Hub dashboard (app management)
@@ -45,6 +45,8 @@ src/
 │   ├── catalog-strategies/   # Per-kind browse strategies (movie, tv, book, album, artist, game, iptv, youtube, photo)
 │   ├── i18n/                 # svelte-i18n locales (en.json, qq.json)
 │   ├── catalog.service.ts    # Unified catalog browse service with strategy pattern
+│   ├── fetch-cache.service.ts # Fetch cache for torrent download tracking on browse pages
+│   ├── image-overrides.service.ts # TMDB image override management
 │   └── *.service.ts          # Feature services
 ├── adapters/                 # Data transformation logic
 │   └── classes/              # Adapter singletons (player, signaling, library-file, etc.)
@@ -55,7 +57,7 @@ src/
 ├── lib/                      # Platform detection + API base URL
 │   ├── platform.ts           # isTauri, isMobile detection
 │   └── api-base.ts           # apiUrl() helper with Tauri fallback
-├── data/                     # Static data (releases.json, recommended-models.ts)
+├── data/                     # Static data (releases.json, recommended-models.ts, media-registry.ts)
 ├── app-shims/                # SvelteKit virtual module shims ($app/environment)
 └── css/                      # Styling
     ├── app.css               # Base Tailwind + DaisyUI

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { CatalogAlbum } from 'ui-lib/types/catalog.type';
+	import { authorsByRole } from 'ui-lib/types/catalog.type';
+	import AuthorList from './AuthorList.svelte';
 
 	interface Props {
 		item: CatalogAlbum;
@@ -7,7 +9,7 @@
 
 	let { item }: Props = $props();
 
-	let artistCredits = $derived(item.metadata.artistCredits);
+	let artists = $derived(authorsByRole(item.metadata.authors, 'artist'));
 	let primaryType = $derived(item.metadata.primaryType);
 	let releases = $derived(item.metadata.releases);
 	let firstRelease = $derived(releases[0] ?? null);
@@ -15,10 +17,9 @@
 </script>
 
 <div class="flex flex-col gap-3">
-	<div class="text-sm">
-		<span class="opacity-50">Artist:</span>
-		<span class="font-medium">{artistCredits}</span>
-	</div>
+	{#if artists.length > 0}
+		<AuthorList authors={artists} layout="inline" label="Artist" />
+	{/if}
 
 	{#if primaryType}
 		<div class="text-sm">

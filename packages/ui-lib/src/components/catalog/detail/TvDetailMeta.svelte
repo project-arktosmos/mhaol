@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { CatalogTvShow } from 'ui-lib/types/catalog.type';
+	import { authorsByRole } from 'ui-lib/types/catalog.type';
+	import AuthorList from './AuthorList.svelte';
 
 	interface Props {
 		item: CatalogTvShow;
@@ -9,10 +11,11 @@
 	let { item, onseasonselect }: Props = $props();
 
 	let genres = $derived(item.metadata.genres);
-	let cast = $derived(item.metadata.cast);
+	let authors = $derived(item.metadata.authors);
+	let creators = $derived(authorsByRole(authors, 'creator'));
+	let cast = $derived(authorsByRole(authors, 'actor'));
 	let status = $derived(item.metadata.status);
 	let networks = $derived(item.metadata.networks);
-	let createdBy = $derived(item.metadata.createdBy);
 	let seasons = $derived(item.metadata.seasons);
 	let tagline = $derived(item.metadata.tagline);
 	let numberOfSeasons = $derived(item.metadata.numberOfSeasons);
@@ -57,11 +60,8 @@
 				<span class="font-medium">{networks.join(', ')}</span>
 			</div>
 		{/if}
-		{#if createdBy.length > 0}
-			<div>
-				<span class="opacity-50">Created by:</span>
-				<span class="font-medium">{createdBy.join(', ')}</span>
-			</div>
+		{#if creators.length > 0}
+			<AuthorList authors={creators} layout="labeled" label="Created by" />
 		{/if}
 	</div>
 
@@ -95,32 +95,6 @@
 	{/if}
 
 	{#if cast.length > 0}
-		<div>
-			<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Cast</h3>
-			<div class="grid grid-cols-2 gap-1 text-sm">
-				{#each cast.slice(0, 10) as member}
-					<div class="flex items-center gap-2">
-						{#if member.profileUrl}
-							<img
-								src={member.profileUrl}
-								alt={member.name}
-								class="h-8 w-8 rounded-full object-cover"
-								loading="lazy"
-							/>
-						{:else}
-							<div
-								class="flex h-8 w-8 items-center justify-center rounded-full bg-base-300 text-xs"
-							>
-								{member.name[0]}
-							</div>
-						{/if}
-						<div>
-							<p class="text-xs font-medium">{member.name}</p>
-							<p class="text-xs opacity-50">{member.character}</p>
-						</div>
-					</div>
-				{/each}
-			</div>
-		</div>
+		<AuthorList authors={cast} layout="grid" label="Cast" maxItems={10} />
 	{/if}
 </div>

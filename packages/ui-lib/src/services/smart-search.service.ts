@@ -16,6 +16,7 @@ import type {
 } from 'ui-lib/types/smart-search.type';
 import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/types';
 import type { CatalogItem } from 'ui-lib/types/catalog.type';
+import { formatAuthors } from 'ui-lib/types/catalog.type';
 import { parseTorrentName } from 'addons/torrent-search-thepiratebay/parse-torrent-name';
 import { queueService } from 'ui-lib/services/queue.service';
 
@@ -91,6 +92,22 @@ function getSubdir(selection: SmartSearchSelection): string {
 			return 'games';
 		case 'book':
 			return 'books';
+	}
+}
+
+/** Map selection type to the libraryType values returned by the API. */
+function getLibraryTypes(selectionType: SmartSearchSelection['type']): string[] {
+	switch (selectionType) {
+		case 'movie':
+			return ['movies'];
+		case 'tv':
+			return ['tv'];
+		case 'music':
+			return ['audio', 'music'];
+		case 'game':
+			return ['games'];
+		case 'book':
+			return ['books', 'document'];
 	}
 }
 
@@ -610,17 +627,11 @@ class SmartSearchService {
 		signal: AbortSignal
 	) {
 		const { artist, title } = selection;
-		const mode = selection.musicSearchMode ?? 'album';
 		const cat = 100;
 
 		const queries: string[] = [];
-		if (mode === 'album') {
-			queries.push(`${artist} ${title}`);
-			queries.push(`${artist} discography`);
-		} else {
-			queries.push(`${artist} discography`);
-			queries.push(`${artist} complete discography`);
-		}
+		queries.push(`${artist} ${title}`);
+		queries.push(`${artist} discography`);
 
 		this.store.update((s) => ({ ...s, searching: true, searchError: null }));
 
@@ -748,14 +759,17 @@ class SmartSearchService {
 		musicbrainzId: string
 	): Promise<Array<{ scope: string; candidate: SmartSearchTorrentResult }> | null> {
 		try {
-			const res = await fetchRaw(`/api/torrent/music-fetch-cache/${musicbrainzId}`);
+			const res = await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=musicbrainz&sourceId=${musicbrainzId}&kind=artist`
+			);
 			if (!res.ok) return null;
-			const data: Array<{ scope: string; candidate: SmartSearchTorrentResult }> = await res.json();
-			if (data.length === 0) return null;
-			for (const entry of data) {
-				entry.candidate.uploadedAt = new Date(entry.candidate.uploadedAt);
-			}
-			return data;
+			const rows: Array<{ scope: string; candidateJson: string }> = await res.json();
+			if (rows.length === 0) return null;
+			return rows.map((row) => {
+				const candidate = JSON.parse(row.candidateJson) as SmartSearchTorrentResult;
+				candidate.uploadedAt = new Date(candidate.uploadedAt);
+				return { scope: row.scope, candidate };
+			});
 		} catch {
 			return null;
 		}
@@ -767,10 +781,17 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetchRaw('/api/torrent/music-fetch-cache', {
+			await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ musicbrainzId, scope, candidate })
+				body: JSON.stringify({
+					source: 'musicbrainz',
+					sourceId: musicbrainzId,
+					kind: 'artist',
+					scope,
+					scopeKey: '',
+					candidate
+				})
 			});
 		} catch {
 			// best-effort
@@ -784,19 +805,25 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult;
 	}> | null> {
 		try {
-			const res = await fetchRaw(`/api/torrent/tv-fetch-cache/${tmdbId}`);
+			const res = await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=tmdb&sourceId=${tmdbId}&kind=tv_show`
+			);
 			if (!res.ok) return null;
-			const data: Array<{
-				scope: string;
-				seasonNumber: number | null;
-				episodeNumber: number | null;
-				candidate: SmartSearchTorrentResult;
-			}> = await res.json();
-			if (data.length === 0) return null;
-			for (const entry of data) {
-				entry.candidate.uploadedAt = new Date(entry.candidate.uploadedAt);
-			}
-			return data;
+			const rows: Array<{ scope: string; scopeKey: string; candidateJson: string }> =
+				await res.json();
+			if (rows.length === 0) return null;
+			return rows.map((row) => {
+				const candidate = JSON.parse(row.candidateJson) as SmartSearchTorrentResult;
+				candidate.uploadedAt = new Date(candidate.uploadedAt);
+				let seasonNumber: number | null = null;
+				let episodeNumber: number | null = null;
+				if (row.scopeKey) {
+					const parts = row.scopeKey.split(':');
+					seasonNumber = parts[0] ? Number(parts[0]) : null;
+					episodeNumber = parts[1] ? Number(parts[1]) : null;
+				}
+				return { scope: row.scope, seasonNumber, episodeNumber, candidate };
+			});
 		} catch {
 			return null;
 		}
@@ -809,11 +836,26 @@ class SmartSearchService {
 		episodeNumber: number | null,
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
+		let scopeKey: string;
+		if (scope === 'complete') {
+			scopeKey = '';
+		} else if (scope === 'season') {
+			scopeKey = String(seasonNumber);
+		} else {
+			scopeKey = `${seasonNumber}:${episodeNumber}`;
+		}
 		try {
-			await fetchRaw('/api/torrent/tv-fetch-cache', {
+			await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ tmdbId, scope, seasonNumber, episodeNumber, candidate })
+				body: JSON.stringify({
+					source: 'tmdb',
+					sourceId: String(tmdbId),
+					kind: 'tv_show',
+					scope,
+					scopeKey,
+					candidate
+				})
 			});
 		} catch {
 			// best-effort
@@ -873,10 +915,12 @@ class SmartSearchService {
 
 	async checkFetchCache(tmdbId: number): Promise<SmartSearchTorrentResult | null> {
 		try {
-			const res = await fetchRaw(`/api/torrent/fetch-cache/${tmdbId}`);
+			const res = await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=tmdb&sourceId=${tmdbId}&kind=movie&scope=default&scopeKey=`
+			);
 			if (!res.ok) return null;
 			const data = await res.json();
-			const candidate = data.candidate as SmartSearchTorrentResult;
+			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
 			candidate.uploadedAt = new Date(candidate.uploadedAt);
 			return candidate;
 		} catch {
@@ -890,23 +934,33 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetchRaw('/api/torrent/fetch-cache', {
+			console.log('[fetch-cache] saving movie cache', { tmdbId, mediaType, name: candidate.name });
+			const res = await fetchRaw('/api/catalog/fetch-cache-by-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ tmdbId, mediaType, candidate })
+				body: JSON.stringify({
+					source: 'tmdb',
+					sourceId: String(tmdbId),
+					kind: mediaType,
+					scope: 'default',
+					scopeKey: '',
+					candidate
+				})
 			});
-		} catch {
-			// best-effort
+			console.log('[fetch-cache] save response', res.status, res.statusText);
+		} catch (err) {
+			console.error('[fetch-cache] save failed', err);
 		}
 	}
 
 	async checkBookFetchCache(openlibraryKey: string): Promise<SmartSearchTorrentResult | null> {
 		try {
 			const res = await fetchRaw(
-				`/api/openlibrary/fetch-cache?key=${encodeURIComponent(openlibraryKey)}`
+				`/api/catalog/fetch-cache-by-source?source=openlibrary&sourceId=${encodeURIComponent(openlibraryKey)}&kind=book&scope=default&scopeKey=`
 			);
 			if (!res.ok) return null;
-			const candidate = (await res.json()) as SmartSearchTorrentResult;
+			const data = await res.json();
+			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
 			candidate.uploadedAt = new Date(candidate.uploadedAt);
 			return candidate;
 		} catch {
@@ -919,10 +973,54 @@ class SmartSearchService {
 		candidate: SmartSearchTorrentResult
 	): Promise<void> {
 		try {
-			await fetchRaw('/api/openlibrary/fetch-cache', {
-				method: 'PUT',
+			await fetchRaw('/api/catalog/fetch-cache-by-source', {
+				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ key: openlibraryKey, candidate })
+				body: JSON.stringify({
+					source: 'openlibrary',
+					sourceId: openlibraryKey,
+					kind: 'book',
+					scope: 'default',
+					scopeKey: '',
+					candidate
+				})
+			});
+		} catch {
+			// best-effort
+		}
+	}
+
+	async checkGameFetchCache(retroachievementsId: number): Promise<SmartSearchTorrentResult | null> {
+		try {
+			const res = await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=retroachievements&sourceId=${retroachievementsId}&kind=game&scope=default&scopeKey=`
+			);
+			if (!res.ok) return null;
+			const data = await res.json();
+			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
+			candidate.uploadedAt = new Date(candidate.uploadedAt);
+			return candidate;
+		} catch {
+			return null;
+		}
+	}
+
+	async saveGameFetchCache(
+		retroachievementsId: number,
+		candidate: SmartSearchTorrentResult
+	): Promise<void> {
+		try {
+			await fetchRaw('/api/catalog/fetch-cache-by-source', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					source: 'retroachievements',
+					sourceId: String(retroachievementsId),
+					kind: 'game',
+					scope: 'default',
+					scopeKey: '',
+					candidate
+				})
 			});
 		} catch {
 			// best-effort
@@ -934,14 +1032,8 @@ class SmartSearchService {
 		if (!selection) return null;
 
 		try {
-			const configRes = await fetchRaw('/api/torrent/config');
-			if (!configRes.ok) return null;
-			const config = await configRes.json();
-			const basePath: string = config.downloadPath ?? '';
-			if (!basePath) return null;
-
-			const subdir = getSubdir(selection);
-			const downloadPath = `${basePath}/${subdir}`;
+			const downloadPath = await this.resolveDownloadPath(selection);
+			if (!downloadPath) return null;
 
 			const res = await fetchRaw('/api/torrent/torrents', {
 				method: 'POST',
@@ -971,14 +1063,8 @@ class SmartSearchService {
 		if (!selection) return null;
 
 		try {
-			const configRes = await fetchRaw('/api/torrent/config');
-			if (!configRes.ok) return null;
-			const config = await configRes.json();
-			const basePath: string = config.downloadPath ?? '';
-			if (!basePath) return null;
-
-			const subdir = getSubdir(selection);
-			const downloadPath = `${basePath}/${subdir}`;
+			const downloadPath = await this.resolveDownloadPath(selection);
+			if (!downloadPath) return null;
 
 			const res = await fetchRaw('/api/torrent/torrents', {
 				method: 'POST',
@@ -1053,6 +1139,28 @@ class SmartSearchService {
 		return this.getState().selection;
 	}
 
+	/** Resolve the correct download path for the given selection by looking up the library. */
+	private async resolveDownloadPath(selection: SmartSearchSelection): Promise<string | null> {
+		try {
+			const libRes = await fetchRaw('/api/libraries');
+			if (!libRes.ok) return null;
+			const libraries: Array<{ id: string; path: string; libraryType: string }> =
+				await libRes.json();
+			const types = getLibraryTypes(selection.type);
+			const library = libraries.find((l) => types.includes(l.libraryType));
+			if (library) return library.path;
+
+			// Fallback: torrent config path + subdir
+			const configRes = await fetchRaw('/api/torrent/config');
+			if (!configRes.ok) return null;
+			const config = await configRes.json();
+			const basePath: string = config.downloadPath ?? '';
+			return basePath || null;
+		} catch {
+			return null;
+		}
+	}
+
 	private async createPendingItem(selection: SmartSearchSelection) {
 		// If the item already exists in the library, skip creation
 		if (
@@ -1069,21 +1177,21 @@ class SmartSearchService {
 		}
 
 		try {
-			const configRes = await fetchRaw('/api/torrent/config');
-			if (!configRes.ok) return;
-			const config = await configRes.json();
-			const basePath: string = config.downloadPath ?? '';
-			if (!basePath) return;
-
-			const subdir = getSubdir(selection);
-			const targetPath = `${basePath}/${subdir}`;
-
 			const libRes = await fetchRaw('/api/libraries');
 			if (!libRes.ok) return;
-			const libraries: Array<{ id: string; path: string }> = await libRes.json();
-			let library = libraries.find((l) => l.path === targetPath);
+			const libraries: Array<{ id: string; path: string; libraryType: string }> =
+				await libRes.json();
 
+			const types = getLibraryTypes(selection.type);
+			let library = libraries.find((l) => types.includes(l.libraryType));
 			if (!library) {
+				// Derive the library path from an existing library's parent directory
+				const anyLib = libraries[0];
+				if (!anyLib) return;
+				const parentPath = anyLib.path.replace(/\/[^/]+\/?$/, '');
+				const subdir = getSubdir(selection);
+				const newPath = `${parentPath}/${subdir}`;
+
 				let libName: string;
 				switch (selection.type) {
 					case 'music':
@@ -1107,7 +1215,7 @@ class SmartSearchService {
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						name: libName,
-						path: targetPath,
+						path: newPath,
 						libraryType: subdir
 					})
 				});
@@ -1139,11 +1247,11 @@ class SmartSearchService {
 				default:
 					pendingName = selection.title;
 					mediaType = 'video';
-					categoryId = subdir === 'movies' ? 'movies' : 'tv';
+					categoryId = selection.type === 'movie' ? 'movies' : 'tv';
 					break;
 			}
 
-			const pendingPath = `${targetPath}/${pendingName}`;
+			const pendingPath = `${library.path}/${pendingName}`;
 
 			const itemBody: Record<string, unknown> = {
 				name: pendingName,
@@ -1218,7 +1326,7 @@ class SmartSearchService {
 					musicbrainzId: item.metadata.musicbrainzId,
 					title: item.title,
 					year: item.year ?? '',
-					artist: item.metadata.artistCredits,
+					artist: formatAuthors(item.metadata.authors, 'artist'),
 					mode
 				};
 				break;
@@ -1238,7 +1346,7 @@ class SmartSearchService {
 					openlibraryKey: item.metadata.openlibraryKey,
 					title: item.title,
 					year: item.year ?? '',
-					author: item.metadata.authors[0] ?? '',
+					author: item.metadata.authors[0]?.name ?? '',
 					mode
 				};
 				break;
