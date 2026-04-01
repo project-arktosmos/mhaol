@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -138,7 +138,7 @@
 	let relatedData = $state<LibraryItemRelated | null>(null);
 	let movieImageOverrides = $state<Record<string, string> | null>(null);
 	const playerState = playerService.state;
-	const playerDisplayMode = playerService.displayMode;
+
 
 	// TV-specific state
 	let tvSeasonsMeta = $state<TvSeasonMeta[]>([]);
@@ -304,7 +304,12 @@
 				}
 			};
 
-			const cached = await smartSearchService.checkMusicFetchCache(albumId);
+			let cached = await smartSearchService.checkMusicFetchCache(albumId);
+			// If no album-level cache, check the parent artist's fetch cache
+			if (!cached || cached.length === 0) {
+				const artistId = albumAuthors[0]?.id;
+				if (artistId) cached = await smartSearchService.checkMusicFetchCache(artistId);
+			}
 			if (cached && cached.length > 0) {
 				fetchingId = albumId;
 				const bestEntry = cached.find((e) => e.scope === 'album') ?? cached[0];
@@ -564,6 +569,16 @@
 		}
 	}
 
+	function handleStreamOrPlay() {
+		if (libraryItem) {
+			handlePlayFile({ name: libraryItem.name, path: libraryItem.path });
+		} else {
+			handleP2pStream();
+		}
+	}
+
+	let hasLibraryItem = $derived(libraryItem !== null);
+
 	async function handleResync() {
 		if (!config || config.kind !== 'tv_show') return;
 		resyncing = true;
@@ -659,7 +674,11 @@
 			const album = catalogItem as CatalogAlbum;
 			const artistName = formatAuthors(album.metadata.authors, 'artist');
 			if (!isFetchedForCurrent) {
-				const cached = await smartSearchService.checkMusicFetchCache(album.sourceId);
+				let cached = await smartSearchService.checkMusicFetchCache(album.sourceId);
+				if (!cached || cached.length === 0) {
+					const artistId = album.metadata.authors?.[0]?.id;
+					if (artistId) cached = await smartSearchService.checkMusicFetchCache(artistId);
+				}
 				if (cached && cached.length > 0) {
 					const bestEntry = cached.find((e) => e.scope === 'album') ?? cached[0];
 					smartSearchService.setSelection({
@@ -749,6 +768,10 @@
 		else if (config.kind === 'movie') fetchMovie(Number(id));
 		else if (config.kind === 'tv_show') fetchTvShow(Number(id));
 	});
+
+	onDestroy(() => {
+		playerService.stop();
+	});
 </script>
 
 {#if !config}
@@ -784,15 +807,19 @@
 {:else if catalogItem}
 	<CatalogDetailPage
 		item={catalogItem} {loading}
-		fetching={isFetching} fetched={isFetchedForCurrent}
-		fetchSteps={currentFetchSteps} torrentStatus={matchedTorrent}
-		fetchedTorrent={$searchStore.fetchedCandidate ? { name: $searchStore.fetchedCandidate.name, quality: $searchStore.fetchedCandidate.analysis?.quality ?? '', languages: $searchStore.fetchedCandidate.analysis?.languages ?? '' } : null}
+		fetching={hasLibraryItem ? false : isFetching}
+		fetched={hasLibraryItem ? false : isFetchedForCurrent}
+		fetchSteps={hasLibraryItem ? null : currentFetchSteps}
+		torrentStatus={hasLibraryItem ? null : matchedTorrent}
+		fetchedTorrent={hasLibraryItem ? null : ($searchStore.fetchedCandidate ? { name: $searchStore.fetchedCandidate.name, quality: $searchStore.fetchedCandidate.analysis?.quality ?? '', languages: $searchStore.fetchedCandidate.analysis?.languages ?? '' } : null)}
 		{isFavorite} {isPinned}
-		onfetch={handleFetch} ondownload={handleDownload}
-		onshowsearch={() => smartSearchService.show()}
+		onfetch={hasLibraryItem ? undefined : handleFetch}
+		ondownload={hasLibraryItem ? undefined : handleDownload}
+		onshowsearch={hasLibraryItem ? undefined : () => smartSearchService.show()}
 		onback={() => goto(`${base}/media/${config.slug}`)}
 		ontogglefavorite={handleToggleFavorite} ontogglepin={handleTogglePin}
-		onstream={(config?.kind === 'movie' || config?.kind === 'tv_show') ? handleP2pStream : undefined}
+		onstream={(config?.kind === 'movie' || config?.kind === 'tv_show') ? handleStreamOrPlay : undefined}
+		streaming={$playerState.connectionState !== 'idle'}
 	>
 		{#snippet extra()}
 			{#if catalogItem?.kind === 'album'}
@@ -803,6 +830,17 @@
 				<GameDetailMeta item={catalogItem} />
 			{:else if catalogItem?.kind === 'movie'}
 				<MovieDetailMeta item={catalogItem} />
+				{#if libraryItem}
+					<div>
+						<h3 class="text-xs font-semibold tracking-wide uppercase opacity-50">Library File</h3>
+						<button
+							class="mt-1 flex w-full items-center gap-2 rounded p-1.5 text-left text-sm hover:bg-base-200"
+							onclick={() => handlePlayFile({ name: libraryItem!.name, path: libraryItem!.path })}
+						>
+							<span class="truncate">{libraryItem.name}</span>
+						</button>
+					</div>
+				{/if}
 			{:else if catalogItem?.kind === 'tv_show'}
 				<TvDetailMeta item={catalogItem} />
 				{#if libraryFiles.length > 0}
@@ -828,20 +866,16 @@
 				{/if}
 			{/if}
 		{/snippet}
-		{#snippet cellB()}
-			{#if (config?.kind === 'movie' || config?.kind === 'tv_show') && $playerState.currentFile && $playerDisplayMode === 'inline'}
+		{#snippet rightPanel()}
+			{#if config?.kind === 'movie' || config?.kind === 'tv_show'}
 				<div class="flex flex-col gap-2">
-					<div class="flex items-center justify-between">
-						<h2 class="text-sm font-semibold tracking-wide uppercase text-base-content/50">Now Playing</h2>
-						<button class="btn btn-square btn-ghost btn-xs" onclick={() => playerService.stop()} aria-label="Close player">&times;</button>
-					</div>
-					<p class="truncate text-xs opacity-60" title={$playerState.currentFile.name}>{$playerState.currentFile.name}</p>
 					<PlayerVideo
 						file={$playerState.currentFile}
 						connectionState={$playerState.connectionState}
 						positionSecs={$playerState.positionSecs}
 						durationSecs={$playerState.durationSecs}
 						buffering={$playerState.buffering}
+						poster={catalogItem?.backdropUrl ?? catalogItem?.posterUrl}
 					/>
 				</div>
 			{/if}

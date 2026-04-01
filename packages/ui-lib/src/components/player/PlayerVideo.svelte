@@ -14,7 +14,8 @@
 		positionSecs = 0,
 		durationSecs = null,
 		buffering = false,
-		fullscreen = false
+		fullscreen = false,
+		poster = null
 	}: {
 		file?: PlayableFile | null;
 		connectionState?: PlayerConnectionState;
@@ -22,6 +23,7 @@
 		durationSecs?: number | null;
 		buffering?: boolean;
 		fullscreen?: boolean;
+		poster?: string | null;
 	} = $props();
 
 	let videoElement = $state<HTMLVideoElement | null>(null);
@@ -46,6 +48,15 @@
 	$effect(() => {
 		if (connectionState === 'idle') {
 			streamAttached = false;
+			if (videoElement) {
+				videoElement.srcObject = null;
+				videoElement.removeAttribute('src');
+				videoElement.load();
+			}
+			if (audioElement) {
+				audioElement.srcObject = null;
+				audioElement.removeAttribute('src');
+			}
 		}
 	});
 
@@ -141,6 +152,7 @@
 					? 'h-full w-full cursor-pointer bg-black object-contain'
 					: 'w-full cursor-pointer rounded-lg bg-black'}
 				playsinline
+				poster={poster ?? undefined}
 				onclick={handleVideoClick}
 				onwaiting={handleWaiting}
 				onplaying={handlePlaying}

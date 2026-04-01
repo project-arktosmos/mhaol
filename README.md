@@ -114,7 +114,7 @@ pnpm dev:node
 ```
 
 Starts the Rust Axum server on port **1530**. On first run, it:
-1. Creates a SQLite database (`mhaol.db` in the repo root)
+1. Creates a SQLite database (`apps/node/mhaol.db`)
 2. Seeds default libraries (Movies, TV, Music, Games, YouTube) under `~/Documents/mhaol/downloads/`
 3. Initializes addon modules (TMDB, MusicBrainz, RetroAchievements, etc.)
 4. Starts background workers (P2P streaming, LLM queue)
@@ -126,7 +126,7 @@ Starts the Rust Axum server on port **1530**. On first run, it:
 |----------|---------|-------------|
 | `PORT` | `1530` | HTTP server port |
 | `HOST` | `0.0.0.0` | Bind address |
-| `DB_PATH` | `./mhaol.db` | SQLite database path |
+| `DB_PATH` | `apps/node/mhaol.db` | SQLite database path |
 | `DATA_DIR` | `~/Documents/mhaol` | Media storage directory |
 | `SIGNALING_URL` | PartyKit hosted | Signaling server URL |
 

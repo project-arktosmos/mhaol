@@ -109,6 +109,6 @@ cargo check -p mhaol-node
 
 - `PORT` — Server port (default: 1530)
 - `HOST` — Bind address (default: 0.0.0.0)
-- `DB_PATH` — SQLite database path (optional, in-memory if unset)
+- `DB_PATH` — SQLite database path (default: `apps/node/mhaol.db`)
 - `RA_API_USER` — RetroAchievements API username
 - `RA_API_KEY` — RetroAchievements API key

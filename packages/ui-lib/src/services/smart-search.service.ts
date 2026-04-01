@@ -95,6 +95,22 @@ function getSubdir(selection: SmartSearchSelection): string {
 	}
 }
 
+/** Map selection type to the libraryType values returned by the API. */
+function getLibraryTypes(selectionType: SmartSearchSelection['type']): string[] {
+	switch (selectionType) {
+		case 'movie':
+			return ['movies'];
+		case 'tv':
+			return ['tv'];
+		case 'music':
+			return ['audio', 'music'];
+		case 'game':
+			return ['games'];
+		case 'book':
+			return ['books', 'document'];
+	}
+}
+
 class SmartSearchService {
 	public store = writable(initialState);
 	public configStore = writable<SmartSearchAllConfigs>(defaultConfigs);
@@ -1016,14 +1032,8 @@ class SmartSearchService {
 		if (!selection) return null;
 
 		try {
-			const configRes = await fetchRaw('/api/torrent/config');
-			if (!configRes.ok) return null;
-			const config = await configRes.json();
-			const basePath: string = config.downloadPath ?? '';
-			if (!basePath) return null;
-
-			const subdir = getSubdir(selection);
-			const downloadPath = `${basePath}/${subdir}`;
+			const downloadPath = await this.resolveDownloadPath(selection);
+			if (!downloadPath) return null;
 
 			const res = await fetchRaw('/api/torrent/torrents', {
 				method: 'POST',
@@ -1053,14 +1063,8 @@ class SmartSearchService {
 		if (!selection) return null;
 
 		try {
-			const configRes = await fetchRaw('/api/torrent/config');
-			if (!configRes.ok) return null;
-			const config = await configRes.json();
-			const basePath: string = config.downloadPath ?? '';
-			if (!basePath) return null;
-
-			const subdir = getSubdir(selection);
-			const downloadPath = `${basePath}/${subdir}`;
+			const downloadPath = await this.resolveDownloadPath(selection);
+			if (!downloadPath) return null;
 
 			const res = await fetchRaw('/api/torrent/torrents', {
 				method: 'POST',
@@ -1135,6 +1139,28 @@ class SmartSearchService {
 		return this.getState().selection;
 	}
 
+	/** Resolve the correct download path for the given selection by looking up the library. */
+	private async resolveDownloadPath(selection: SmartSearchSelection): Promise<string | null> {
+		try {
+			const libRes = await fetchRaw('/api/libraries');
+			if (!libRes.ok) return null;
+			const libraries: Array<{ id: string; path: string; libraryType: string }> =
+				await libRes.json();
+			const types = getLibraryTypes(selection.type);
+			const library = libraries.find((l) => types.includes(l.libraryType));
+			if (library) return library.path;
+
+			// Fallback: torrent config path + subdir
+			const configRes = await fetchRaw('/api/torrent/config');
+			if (!configRes.ok) return null;
+			const config = await configRes.json();
+			const basePath: string = config.downloadPath ?? '';
+			return basePath || null;
+		} catch {
+			return null;
+		}
+	}
+
 	private async createPendingItem(selection: SmartSearchSelection) {
 		// If the item already exists in the library, skip creation
 		if (
@@ -1151,21 +1177,21 @@ class SmartSearchService {
 		}
 
 		try {
-			const configRes = await fetchRaw('/api/torrent/config');
-			if (!configRes.ok) return;
-			const config = await configRes.json();
-			const basePath: string = config.downloadPath ?? '';
-			if (!basePath) return;
-
-			const subdir = getSubdir(selection);
-			const targetPath = `${basePath}/${subdir}`;
-
 			const libRes = await fetchRaw('/api/libraries');
 			if (!libRes.ok) return;
-			const libraries: Array<{ id: string; path: string }> = await libRes.json();
-			let library = libraries.find((l) => l.path === targetPath);
+			const libraries: Array<{ id: string; path: string; libraryType: string }> =
+				await libRes.json();
 
+			const types = getLibraryTypes(selection.type);
+			let library = libraries.find((l) => types.includes(l.libraryType));
 			if (!library) {
+				// Derive the library path from an existing library's parent directory
+				const anyLib = libraries[0];
+				if (!anyLib) return;
+				const parentPath = anyLib.path.replace(/\/[^/]+\/?$/, '');
+				const subdir = getSubdir(selection);
+				const newPath = `${parentPath}/${subdir}`;
+
 				let libName: string;
 				switch (selection.type) {
 					case 'music':
@@ -1189,7 +1215,7 @@ class SmartSearchService {
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						name: libName,
-						path: targetPath,
+						path: newPath,
 						libraryType: subdir
 					})
 				});
@@ -1221,11 +1247,11 @@ class SmartSearchService {
 				default:
 					pendingName = selection.title;
 					mediaType = 'video';
-					categoryId = subdir === 'movies' ? 'movies' : 'tv';
+					categoryId = selection.type === 'movie' ? 'movies' : 'tv';
 					break;
 			}
 
-			const pendingPath = `${targetPath}/${pendingName}`;
+			const pendingPath = `${library.path}/${pendingName}`;
 
 			const itemBody: Record<string, unknown> = {
 				name: pendingName,
