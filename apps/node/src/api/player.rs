@@ -219,10 +219,7 @@ async fn create_session(
             } else if let Some(found) = std::path::Path::new(file_path)
                 .file_name()
                 .and_then(|n| n.to_str())
-                .and_then(|name| {
-                    let base = state.torrent_manager.download_path();
-                    walk_for_file_by_name(&base, name, 4)
-                })
+                .and_then(|name| walk_known_roots(&state, name))
             {
                 found
             } else if let Some(info_hash) = info_hash {
@@ -381,12 +378,12 @@ async fn resolve_torrent_video(state: &AppState, info_hash: &str) -> Result<Stri
         }
     }
 
-    // Final fallback: rqbit may have stored the file under the configured base
-    // download directory rather than at the DB's recorded output_path (config
-    // changes, manual moves, library-vs-default-path mismatches). Walk the base
-    // tree once looking for a file with this exact name.
-    let base = state.torrent_manager.download_path();
-    if let Some(found) = walk_for_file_by_name(&base, &video_file.name, 4) {
+    // Final fallback: rqbit may have stored the file under any of the
+    // configured library directories rather than at the DB's recorded
+    // output_path (config changes, manual moves, library-vs-default-path
+    // mismatches). Walk every known library root looking for a file with
+    // this exact name.
+    if let Some(found) = walk_known_roots(state, &video_file.name) {
         return Ok(found);
     }
 
@@ -395,6 +392,29 @@ async fn resolve_torrent_video(state: &AppState, info_hash: &str) -> Result<Stri
         video_file.name,
         full_path.display()
     ))
+}
+
+/// Walk all known torrent download / library roots (current torrent download
+/// path + every library's path) for a file with this basename. Stops at the
+/// first match.
+fn walk_known_roots(state: &AppState, file_name: &str) -> Option<String> {
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    let torrent_root = state.torrent_manager.download_path();
+    if !torrent_root.as_os_str().is_empty() {
+        roots.push(torrent_root);
+    }
+    for lib in state.libraries.get_all() {
+        let p = std::path::PathBuf::from(&lib.path);
+        if !roots.iter().any(|r| r == &p) {
+            roots.push(p);
+        }
+    }
+    for root in &roots {
+        if let Some(found) = walk_for_file_by_name(root, file_name, 4) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 /// Walk a directory tree (up to `max_depth` levels deep) looking for a file
