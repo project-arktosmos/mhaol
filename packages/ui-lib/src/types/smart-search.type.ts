@@ -110,6 +110,11 @@ export interface TvSmartSearchResults {
 	seasons: Record<number, TvSeasonResults>;
 }
 
+export interface TvFetchedCandidates {
+	complete: SmartSearchTorrentResult | null;
+	seasons: Record<number, SmartSearchTorrentResult | null>;
+}
+
 export interface SmartSearchState {
 	selection: SmartSearchSelection | null;
 	visible: boolean;
@@ -123,6 +128,7 @@ export interface SmartSearchState {
 	pendingLibraryId: string | null;
 	downloadedHash: string | null;
 	fetchedCandidate: SmartSearchTorrentResult | null;
+	fetchedTvCandidates: TvFetchedCandidates | null;
 	tvResults: TvSmartSearchResults | null;
 	tvSeasonsMeta: TvSeasonMeta[] | null;
 	activeTvTab: 'complete' | number;

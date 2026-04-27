@@ -12,6 +12,7 @@ import type {
 	SmartSearchAllConfigs,
 	TvSmartSearchResults,
 	TvSeasonMeta,
+	TvFetchedCandidates,
 	MusicSmartSearchResults
 } from 'ui-lib/types/smart-search.type';
 import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/types';
@@ -58,6 +59,7 @@ const initialState: SmartSearchState = {
 	pendingLibraryId: null,
 	downloadedHash: null,
 	fetchedCandidate: null,
+	fetchedTvCandidates: null,
 	tvResults: null,
 	tvSeasonsMeta: null,
 	activeTvTab: 'complete',
@@ -208,6 +210,7 @@ class SmartSearchService {
 			pendingLibraryId: null,
 			downloadedHash: null,
 			fetchedCandidate: null,
+			fetchedTvCandidates: null,
 			tvResults: null,
 			tvSeasonsMeta: selection.type === 'tv' ? (selection.seasons ?? null) : null,
 			activeTvTab: 'complete',
@@ -224,7 +227,11 @@ class SmartSearchService {
 		this.createPendingItem(selection);
 
 		if (selection.mode === 'fetch') {
-			this.autoPickOnSearchComplete();
+			if (selection.type === 'tv') {
+				this.autoPickTvOnSearchComplete();
+			} else {
+				this.autoPickOnSearchComplete();
+			}
 		}
 	}
 
@@ -241,6 +248,31 @@ class SmartSearchService {
 		});
 	}
 
+	private autoPickTvOnSearchComplete() {
+		let started = false;
+		const unsubscribe = this.store.subscribe((state) => {
+			if (state.searching) started = true;
+			if (started && !state.searching) {
+				unsubscribe();
+				if (state.searchError) return;
+				const candidates = this.pickBestTvCandidates();
+				this.setFetchedTvCandidates(candidates);
+			}
+		});
+	}
+
+	private pickBestTvCandidates(): TvFetchedCandidates {
+		const tvResults = this.getState().tvResults;
+		if (!tvResults) return { complete: null, seasons: {} };
+		const complete = this.pickBestFromList(tvResults.complete);
+		const seasons: Record<number, SmartSearchTorrentResult | null> = {};
+		for (const [snStr, packs] of Object.entries(tvResults.seasons)) {
+			const sn = Number(snStr);
+			seasons[sn] = this.pickBestFromList(packs.seasonPacks);
+		}
+		return { complete, seasons };
+	}
+
 	clear() {
 		if (this.abortController) {
 			this.abortController.abort();
@@ -255,6 +287,7 @@ class SmartSearchService {
 			pendingItemId: null,
 			pendingLibraryId: null,
 			fetchedCandidate: null,
+			fetchedTvCandidates: null,
 			tvResults: null,
 			tvSeasonsMeta: null,
 			activeTvTab: 'complete',
@@ -864,6 +897,19 @@ class SmartSearchService {
 
 	setFetchedCandidate(candidate: SmartSearchTorrentResult) {
 		this.store.update((s) => ({ ...s, fetchedCandidate: candidate }));
+	}
+
+	setFetchedTvCandidates(candidates: TvFetchedCandidates) {
+		const seasonValues = Object.entries(candidates.seasons)
+			.sort(([a], [b]) => Number(a) - Number(b))
+			.map(([, c]) => c)
+			.filter((c): c is SmartSearchTorrentResult => c !== null);
+		const primary = candidates.complete ?? seasonValues[0] ?? null;
+		this.store.update((s) => ({
+			...s,
+			fetchedTvCandidates: candidates,
+			fetchedCandidate: primary
+		}));
 	}
 
 	async selectAndWaitForBest(

@@ -22,7 +22,13 @@ const initialState = {
 	pendingItemId: null,
 	pendingLibraryId: null,
 	downloadedHash: null,
-	fetchedCandidate: null
+	fetchedCandidate: null,
+	fetchedTvCandidates: null,
+	tvResults: null,
+	tvSeasonsMeta: null,
+	activeTvTab: 'complete' as const,
+	musicResults: null,
+	activeMusicTab: 'album' as const
 };
 
 describe('SmartSearchService', () => {

@@ -27,7 +27,7 @@
 	import type { MediaList } from 'ui-lib/types/media-list.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
-	import type { TvSeasonMeta } from 'ui-lib/types/smart-search.type';
+	import type { TvSeasonMeta, TvFetchedCandidates, SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
 	import { playerService } from 'ui-lib/services/player.service';
 
 	// Detail components
@@ -144,6 +144,33 @@
 	let tvSeasonsMeta = $state<TvSeasonMeta[]>([]);
 	let libraryFiles = $state<Array<{ seasonNumber: number; episodeNumber: number; name: string; path: string }>>([]);
 	let resyncing = $state(false);
+
+	let tvFetchedTorrents = $derived.by(() => {
+		if (config?.kind !== 'tv_show') return null;
+		const tvc = $searchStore.fetchedTvCandidates;
+		if (!tvc) return null;
+		const list: Array<{ label: string; name: string; quality: string; languages: string }> = [];
+		if (tvc.complete) {
+			list.push({
+				label: 'Complete series',
+				name: tvc.complete.name,
+				quality: tvc.complete.analysis?.quality ?? '',
+				languages: tvc.complete.analysis?.languages ?? ''
+			});
+		}
+		const seasonNums = Object.keys(tvc.seasons).map(Number).sort((a, b) => a - b);
+		for (const sn of seasonNums) {
+			const c = tvc.seasons[sn];
+			if (!c) continue;
+			list.push({
+				label: `Season ${sn}`,
+				name: c.name,
+				quality: c.analysis?.quality ?? '',
+				languages: c.analysis?.languages ?? ''
+			});
+		}
+		return list.length > 0 ? list : null;
+	});
 
 	// === Per-type fetch functions ===
 
@@ -444,6 +471,20 @@
 		return match ? { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) } : null;
 	}
 
+	function buildTvCandidatesFromCache(
+		rows: Array<{ scope: string; seasonNumber: number | null; candidate: SmartSearchTorrentResult }>
+	): TvFetchedCandidates {
+		const candidates: TvFetchedCandidates = { complete: null, seasons: {} };
+		for (const row of rows) {
+			if (row.scope === 'complete') {
+				candidates.complete = row.candidate;
+			} else if (row.scope === 'season' && row.seasonNumber != null) {
+				candidates.seasons[row.seasonNumber] = row.candidate;
+			}
+		}
+		return candidates;
+	}
+
 	function parseSeasonFromTitle(title: string): number | null {
 		const match = title.match(/[Ss]eason\s*(\d+)/i);
 		if (match) return parseInt(match[1], 10);
@@ -534,10 +575,9 @@
 					const cached = await smartSearchService.checkTvFetchCache(showId);
 					if (cached && cached.length > 0) {
 						fetchingId = String(showId);
-						const bestEntry = cached.find((e) => e.scope === 'complete') ?? cached[0];
 						const sel = { title: details.name, year: details.firstAirYear ?? '', type: 'tv' as const, tmdbId: showId, mode: 'fetch' as const, seasons: tvSeasonsMeta };
 						smartSearchService.setSelection(sel);
-						smartSearchService.setFetchedCandidate(bestEntry.candidate);
+						smartSearchService.setFetchedTvCandidates(buildTvCandidatesFromCache(cached));
 						smartSearchService.ensurePendingItem(sel);
 					}
 				}
@@ -661,10 +701,9 @@
 			if (!isFetchedForCurrent) {
 				const cached = await smartSearchService.checkTvFetchCache(tid);
 				if (cached && cached.length > 0) {
-					const bestEntry = cached.find((e) => e.scope === 'complete') ?? cached[0];
 					const sel = { title: catalogItem.title, year: catalogItem.year ?? '', type: 'tv' as const, tmdbId: tid, mode: 'fetch' as const, seasons: tvSeasonsMeta };
 					smartSearchService.setSelection(sel);
-					smartSearchService.setFetchedCandidate(bestEntry.candidate);
+					smartSearchService.setFetchedTvCandidates(buildTvCandidatesFromCache(cached));
 					smartSearchService.ensurePendingItem(sel);
 					return;
 				}
@@ -727,34 +766,43 @@
 		}
 	}
 
-	// Fetch cache auto-save
+	// Fetch cache auto-save (non-TV)
 	$effect(() => {
 		const candidate = $searchStore.fetchedCandidate;
-		console.log('[fetch-cache-effect]', { candidate: candidate?.name ?? null, fetchingId, configKind: config?.kind ?? null });
 		if (!candidate || !fetchingId || !config) return;
 		if (config.kind === 'book') {
 			smartSearchService.saveBookFetchCache(fetchingId, candidate);
 		} else if (config.kind === 'movie') {
 			smartSearchService.saveFetchCache(Number(fetchingId), 'movie', candidate);
-		} else if (config.kind === 'tv_show') {
-			const analysis = candidate.analysis;
-			let scope = 'complete';
-			let seasonNumber: number | null = null;
-			let episodeNumber: number | null = null;
-			if (analysis) {
-				if (analysis.isCompleteSeries) scope = 'complete';
-				else if (analysis.seasonNumber != null && analysis.episodeNumber != null) {
-					scope = 'episode'; seasonNumber = analysis.seasonNumber; episodeNumber = analysis.episodeNumber;
-				} else if (analysis.seasonNumber != null) {
-					scope = 'season'; seasonNumber = analysis.seasonNumber;
-				}
-			}
-			smartSearchService.saveTvFetchCache(Number(fetchingId), scope, seasonNumber, episodeNumber, candidate);
 		} else if (config.kind === 'album') {
 			const scope = candidate.analysis?.isDiscography ? 'discography' : 'album';
 			smartSearchService.saveMusicFetchCache(fetchingId, scope, candidate);
 		} else if (config.kind === 'game') {
 			smartSearchService.saveGameFetchCache(Number(fetchingId), candidate);
+		}
+	});
+
+	// TV fetch cache auto-save (per-scope)
+	const savedTvHashes = new Set<string>();
+	$effect(() => {
+		const candidates = $searchStore.fetchedTvCandidates;
+		if (!candidates || !fetchingId || config?.kind !== 'tv_show') return;
+		const tid = Number(fetchingId);
+		if (candidates.complete) {
+			const key = `complete:${candidates.complete.infoHash}`;
+			if (!savedTvHashes.has(key)) {
+				savedTvHashes.add(key);
+				smartSearchService.saveTvFetchCache(tid, 'complete', null, null, candidates.complete);
+			}
+		}
+		for (const [snStr, c] of Object.entries(candidates.seasons)) {
+			if (!c) continue;
+			const sn = Number(snStr);
+			const key = `season:${sn}:${c.infoHash}`;
+			if (!savedTvHashes.has(key)) {
+				savedTvHashes.add(key);
+				smartSearchService.saveTvFetchCache(tid, 'season', sn, null, c);
+			}
 		}
 	});
 
@@ -811,7 +859,8 @@
 		fetched={hasLibraryItem ? false : isFetchedForCurrent}
 		fetchSteps={hasLibraryItem ? null : currentFetchSteps}
 		torrentStatus={hasLibraryItem ? null : matchedTorrent}
-		fetchedTorrent={hasLibraryItem ? null : ($searchStore.fetchedCandidate ? { name: $searchStore.fetchedCandidate.name, quality: $searchStore.fetchedCandidate.analysis?.quality ?? '', languages: $searchStore.fetchedCandidate.analysis?.languages ?? '' } : null)}
+		fetchedTorrent={hasLibraryItem || config?.kind === 'tv_show' ? null : ($searchStore.fetchedCandidate ? { name: $searchStore.fetchedCandidate.name, quality: $searchStore.fetchedCandidate.analysis?.quality ?? '', languages: $searchStore.fetchedCandidate.analysis?.languages ?? '' } : null)}
+		fetchedTorrents={hasLibraryItem ? null : tvFetchedTorrents}
 		{isFavorite} {isPinned}
 		onfetch={hasLibraryItem ? undefined : handleFetch}
 		ondownload={hasLibraryItem ? undefined : handleDownload}
@@ -842,7 +891,11 @@
 					</div>
 				{/if}
 			{:else if catalogItem?.kind === 'tv_show'}
-				<TvDetailMeta item={catalogItem} />
+				<TvDetailMeta
+					item={catalogItem}
+					completeCandidate={$searchStore.fetchedTvCandidates?.complete ?? null}
+					seasonCandidates={$searchStore.fetchedTvCandidates?.seasons ?? {}}
+				/>
 				{#if libraryFiles.length > 0}
 					<div>
 						<div class="flex items-center justify-between">
