@@ -548,10 +548,12 @@ class SmartSearchService {
 			}
 
 			if (signal.aborted) return;
-			this.store.update((s) => ({ ...s, searching: false }));
 
-			// Analyze all results (not just top 5 per query) for TV since we need season/episode info
+			// Analyze all results (not just top 5 per query) for TV since we need season/episode info.
+			// Run heuristic analysis + tvResults rebuild synchronously BEFORE flipping `searching: false`,
+			// so the auto-pick subscription sees a populated `tvResults`.
 			this.analyzeTvResults(selection, analyzeHashes);
+			this.store.update((s) => ({ ...s, searching: false }));
 		} catch (error) {
 			if (signal.aborted) return;
 			this.store.update((s) => ({
@@ -859,6 +861,17 @@ class SmartSearchService {
 			});
 		} catch {
 			return null;
+		}
+	}
+
+	async clearTvFetchCache(tmdbId: number): Promise<void> {
+		try {
+			await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=tmdb&sourceId=${tmdbId}&kind=tv_show`,
+				{ method: 'DELETE' }
+			);
+		} catch {
+			// best-effort
 		}
 	}
 

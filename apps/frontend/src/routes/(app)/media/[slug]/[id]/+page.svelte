@@ -144,6 +144,7 @@
 	let tvSeasonsMeta = $state<TvSeasonMeta[]>([]);
 	let libraryFiles = $state<Array<{ seasonNumber: number; episodeNumber: number; name: string; path: string }>>([]);
 	let resyncing = $state(false);
+	const savedTvHashes = new Set<string>();
 
 	let tvFetchedTorrents = $derived.by(() => {
 		if (config?.kind !== 'tv_show') return null;
@@ -478,8 +479,10 @@
 		for (const row of rows) {
 			if (row.scope === 'complete') {
 				candidates.complete = row.candidate;
+				savedTvHashes.add(`complete:${row.candidate.infoHash}`);
 			} else if (row.scope === 'season' && row.seasonNumber != null) {
 				candidates.seasons[row.seasonNumber] = row.candidate;
+				savedTvHashes.add(`season:${row.seasonNumber}:${row.candidate.infoHash}`);
 			}
 		}
 		return candidates;
@@ -708,6 +711,9 @@
 					return;
 				}
 			}
+			// Re-fetch path: drop stale per-scope rows so the next save can repopulate cleanly
+			await smartSearchService.clearTvFetchCache(tid);
+			savedTvHashes.clear();
 			smartSearchService.select({ title: catalogItem.title, year: catalogItem.year ?? '', type: 'tv', tmdbId: Number(catalogItem.sourceId), mode: 'fetch', seasons: tvSeasonsMeta });
 		} else if (catalogItem.kind === 'album') {
 			const album = catalogItem as CatalogAlbum;
@@ -783,7 +789,6 @@
 	});
 
 	// TV fetch cache auto-save (per-scope)
-	const savedTvHashes = new Set<string>();
 	$effect(() => {
 		const candidates = $searchStore.fetchedTvCandidates;
 		if (!candidates || !fetchingId || config?.kind !== 'tv_show') return;
