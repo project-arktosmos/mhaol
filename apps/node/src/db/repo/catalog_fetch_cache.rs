@@ -3,6 +3,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CatalogFetchCacheRow {
     pub id: String,
     pub catalog_item_id: String,
