@@ -82,6 +82,7 @@
 	const searchStore = smartSearchService.store;
 	const favState = favoritesService.state;
 	const pinState = pinsService.state;
+	const torrentState = torrentService.state;
 
 	let isFavorite = $derived(
 		config ? $favState.items.some((f) => f.service === config.favService && f.serviceId === id) : false
@@ -171,6 +172,40 @@
 			});
 		}
 		return list.length > 0 ? list : null;
+	});
+
+	let tvSeasonEpisodes = $derived.by(() => {
+		const map: Record<number, typeof tvSeasonsMeta[number]['episodes']> = {};
+		for (const s of tvSeasonsMeta) map[s.seasonNumber] = s.episodes;
+		return map;
+	});
+
+	let torrentByHash = $derived.by(() => {
+		const map: Record<string, import('ui-lib/types/torrent.type').TorrentInfo> = {};
+		for (const t of $torrentState.allTorrents) map[t.infoHash] = t;
+		return map;
+	});
+
+	// Auto-start downloads for each per-scope TV candidate (idempotent: backend dedupes by infoHash)
+	const autoStartedHashes = new Set<string>();
+	$effect(() => {
+		if (config?.kind !== 'tv_show') return;
+		const tvc = $searchStore.fetchedTvCandidates;
+		if (!tvc) return;
+		const candidates = [tvc.complete, ...Object.values(tvc.seasons)].filter(
+			(c): c is NonNullable<typeof c> => c !== null
+		);
+		for (const c of candidates) {
+			if (autoStartedHashes.has(c.infoHash)) continue;
+			if (torrentByHash[c.infoHash]) {
+				autoStartedHashes.add(c.infoHash);
+				continue;
+			}
+			autoStartedHashes.add(c.infoHash);
+			smartSearchService.startDownload(c).catch(() => {
+				autoStartedHashes.delete(c.infoHash);
+			});
+		}
 	});
 
 	// === Per-type fetch functions ===
@@ -868,7 +903,7 @@
 		fetchedTorrents={hasLibraryItem ? null : tvFetchedTorrents}
 		{isFavorite} {isPinned}
 		onfetch={hasLibraryItem ? undefined : handleFetch}
-		ondownload={hasLibraryItem ? undefined : handleDownload}
+		ondownload={hasLibraryItem || config?.kind === 'tv_show' ? undefined : handleDownload}
 		onshowsearch={hasLibraryItem ? undefined : () => smartSearchService.show()}
 		onback={() => goto(`${base}/media/${config.slug}`)}
 		ontogglefavorite={handleToggleFavorite} ontogglepin={handleTogglePin}
@@ -900,6 +935,8 @@
 					item={catalogItem}
 					completeCandidate={$searchStore.fetchedTvCandidates?.complete ?? null}
 					seasonCandidates={$searchStore.fetchedTvCandidates?.seasons ?? {}}
+					seasonEpisodes={tvSeasonEpisodes}
+					{torrentByHash}
 				/>
 				{#if libraryFiles.length > 0}
 					<div>

@@ -1,17 +1,32 @@
 <script lang="ts">
 	import type { CatalogTvShow } from 'ui-lib/types/catalog.type';
 	import { authorsByRole } from 'ui-lib/types/catalog.type';
-	import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
+	import type { SmartSearchTorrentResult, TvEpisodeMeta } from 'ui-lib/types/smart-search.type';
+	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
+	import {
+		formatBytes,
+		formatSpeed,
+		formatEta,
+		getStateLabel,
+		getStateColor
+	} from 'ui-lib/types/torrent.type';
 	import AuthorList from './AuthorList.svelte';
 
 	interface Props {
 		item: CatalogTvShow;
-		onseasonselect?: (seasonNumber: number) => void;
 		completeCandidate?: SmartSearchTorrentResult | null;
 		seasonCandidates?: Record<number, SmartSearchTorrentResult | null>;
+		seasonEpisodes?: Record<number, TvEpisodeMeta[]>;
+		torrentByHash?: Record<string, TorrentInfo>;
 	}
 
-	let { item, onseasonselect, completeCandidate = null, seasonCandidates = {} }: Props = $props();
+	let {
+		item,
+		completeCandidate = null,
+		seasonCandidates = {},
+		seasonEpisodes = {},
+		torrentByHash = {}
+	}: Props = $props();
 
 	let genres = $derived(item.metadata.genres);
 	let authors = $derived(item.metadata.authors);
@@ -24,6 +39,24 @@
 	let numberOfSeasons = $derived(item.metadata.numberOfSeasons);
 	let numberOfEpisodes = $derived(item.metadata.numberOfEpisodes);
 </script>
+
+{#snippet torrentProgress(torrent: TorrentInfo)}
+	{@const percent = Math.round(torrent.progress * 100)}
+	<div class="flex flex-col gap-1">
+		<div class="flex items-center justify-between text-xs">
+			<span class={getStateColor(torrent.state)}>{getStateLabel(torrent.state)}</span>
+			<span class="font-mono">{percent}%</span>
+		</div>
+		<progress class="progress w-full progress-primary" value={torrent.progress} max="1"
+		></progress>
+		<div class="flex flex-wrap gap-3 text-xs opacity-60">
+			<span>↓ {formatSpeed(torrent.downloadSpeed)}</span>
+			<span>↑ {formatSpeed(torrent.uploadSpeed)}</span>
+			<span>{formatBytes(torrent.size)}</span>
+			{#if torrent.eta}<span>ETA {formatEta(torrent.eta)}</span>{/if}
+		</div>
+	</div>
+{/snippet}
 
 <div class="flex flex-col gap-3">
 	{#if tagline}
@@ -68,17 +101,35 @@
 		{/if}
 	</div>
 
+	{#if completeCandidate}
+		{@const completeTorrent = torrentByHash[completeCandidate.infoHash]}
+		<div class="rounded-lg border border-base-300 p-2">
+			<div class="flex items-center gap-2">
+				<span class="badge badge-xs badge-primary">Complete series</span>
+				<p class="flex-1 truncate text-xs">{completeCandidate.name}</p>
+			</div>
+			{#if completeTorrent}
+				<div class="mt-2">
+					{@render torrentProgress(completeTorrent)}
+				</div>
+			{:else}
+				<p class="mt-1 text-xs opacity-50">Queued…</p>
+			{/if}
+		</div>
+	{/if}
+
 	{#if seasons.length > 0}
 		<div>
 			<h3 class="mb-1 text-xs font-semibold tracking-wide uppercase opacity-50">Seasons</h3>
-			<div class="flex flex-col gap-1">
+			<div class="flex flex-col gap-2">
 				{#each seasons as season}
 					{@const seasonMatch = seasonCandidates?.[season.seasonNumber] ?? null}
 					{@const coveredByComplete = completeCandidate !== null && season.seasonNumber > 0}
-					<button
-						class="flex flex-col gap-1 rounded-lg p-2 text-left text-sm hover:bg-base-200"
-						onclick={() => onseasonselect?.(season.seasonNumber)}
-					>
+					{@const seasonTorrent = seasonMatch
+						? torrentByHash[seasonMatch.infoHash]
+						: undefined}
+					{@const episodes = seasonEpisodes?.[season.seasonNumber] ?? []}
+					<div class="rounded-lg border border-base-300 p-2">
 						<div class="flex items-center gap-2">
 							{#if season.posterUrl}
 								<img
@@ -103,14 +154,34 @@
 							</div>
 						</div>
 						{#if seasonMatch}
-							<p class="truncate pl-10 text-xs opacity-60">
-								{seasonMatch.name}
-								{#if seasonMatch.analysis?.quality}
-									<span class="ml-1 opacity-50">· {seasonMatch.analysis.quality}</span>
-								{/if}
-							</p>
+							<p class="mt-2 truncate text-xs opacity-60">{seasonMatch.name}</p>
+							{#if seasonTorrent}
+								<div class="mt-2">
+									{@render torrentProgress(seasonTorrent)}
+								</div>
+							{:else}
+								<p class="mt-1 text-xs opacity-50">Queued…</p>
+							{/if}
 						{/if}
-					</button>
+						{#if episodes.length > 0}
+							<div class="mt-2 flex flex-col">
+								{#each episodes as ep}
+									<div
+										class="flex items-center justify-between border-b border-base-200 py-1 text-xs last:border-0"
+									>
+										<span class="flex items-center gap-2">
+											<span class="w-10 font-mono opacity-50"
+												>S{String(ep.seasonNumber).padStart(2, '0')}E{String(
+													ep.episodeNumber
+												).padStart(2, '0')}</span
+											>
+											<span class="truncate">{ep.name}</span>
+										</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
 				{/each}
 			</div>
 		</div>
