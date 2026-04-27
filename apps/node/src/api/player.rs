@@ -204,17 +204,28 @@ async fn create_session(
             .into_response();
     }
 
-    // Resolution order:
-    // 1. file_path pointing to an actual file → use it directly (specific episode in a season pack).
-    // 2. info_hash → fall back to "largest video file in torrent" resolution.
-    // 3. file_path pointing to a directory or missing path → error.
+    // Resolution order for finding the actual on-disk file to stream:
+    // 1. file_path points to an existing file → use it directly (specific episode click).
+    // 2. file_path's basename can be located under the torrent download base → use it
+    //    (handles cases where rqbit stored files at a different path than the DB recorded).
+    // 3. info_hash → "largest video file" resolution (which itself walks the base as final fallback).
+    // 4. file_path points to a directory or missing path with no info_hash → error.
     let resolved = match (body.file_path.as_ref(), body.info_hash.as_ref()) {
-        (Some(file_path), _) => {
+        (Some(file_path), info_hash) => {
             let r = resolve_media_path(file_path);
             let p = std::path::Path::new(&r);
             if p.is_file() {
                 r
-            } else if let Some(info_hash) = body.info_hash.as_ref() {
+            } else if let Some(found) = std::path::Path::new(file_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|name| {
+                    let base = state.torrent_manager.download_path();
+                    walk_for_file_by_name(&base, name, 4)
+                })
+            {
+                found
+            } else if let Some(info_hash) = info_hash {
                 match resolve_torrent_video(&state, info_hash).await {
                     Ok(path) => path,
                     Err(e) => {
@@ -370,11 +381,64 @@ async fn resolve_torrent_video(state: &AppState, info_hash: &str) -> Result<Stri
         }
     }
 
+    // Final fallback: rqbit may have stored the file under the configured base
+    // download directory rather than at the DB's recorded output_path (config
+    // changes, manual moves, library-vs-default-path mismatches). Walk the base
+    // tree once looking for a file with this exact name.
+    let base = state.torrent_manager.download_path();
+    if let Some(found) = walk_for_file_by_name(&base, &video_file.name, 4) {
+        return Ok(found);
+    }
+
     Err(format!(
         "Video file {} not found at expected path {}",
         video_file.name,
         full_path.display()
     ))
+}
+
+/// Walk a directory tree (up to `max_depth` levels deep) looking for a file
+/// whose basename exactly matches `file_name`. Returns the absolute path of
+/// the first match, or None if none found.
+fn walk_for_file_by_name(
+    root: &std::path::Path,
+    file_name: &str,
+    max_depth: usize,
+) -> Option<String> {
+    walk_for_file_inner(root, file_name, max_depth, 0)
+}
+
+fn walk_for_file_inner(
+    dir: &std::path::Path,
+    file_name: &str,
+    max_depth: usize,
+    depth: usize,
+) -> Option<String> {
+    if !dir.is_dir() {
+        return None;
+    }
+    let entries = std::fs::read_dir(dir).ok()?;
+    let mut subdirs: Vec<std::path::PathBuf> = Vec::new();
+    for entry in entries.flatten() {
+        let p = entry.path();
+        let ft = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(_) => continue,
+        };
+        if ft.is_file() {
+            if p.file_name().and_then(|n| n.to_str()) == Some(file_name) {
+                return Some(p.to_string_lossy().to_string());
+            }
+        } else if ft.is_dir() && depth < max_depth {
+            subdirs.push(p);
+        }
+    }
+    for sub in subdirs {
+        if let Some(found) = walk_for_file_inner(&sub, file_name, max_depth, depth + 1) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 /// Resolve a media path to an actual video file.
