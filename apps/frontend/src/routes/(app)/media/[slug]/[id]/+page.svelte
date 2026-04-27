@@ -180,9 +180,11 @@
 		return map;
 	});
 
+	// Keyed by lowercase infoHash because the backend lowercases magnet hashes,
+	// while TPB returns uppercase — strict-equality lookup would always miss.
 	let torrentByHash = $derived.by(() => {
 		const map: Record<string, import('ui-lib/types/torrent.type').TorrentInfo> = {};
-		for (const t of $torrentState.allTorrents) map[t.infoHash] = t;
+		for (const t of $torrentState.allTorrents) map[t.infoHash.toLowerCase()] = t;
 		return map;
 	});
 
@@ -196,14 +198,15 @@
 			(c): c is NonNullable<typeof c> => c !== null
 		);
 		for (const c of candidates) {
-			if (autoStartedHashes.has(c.infoHash)) continue;
-			if (torrentByHash[c.infoHash]) {
-				autoStartedHashes.add(c.infoHash);
+			const key = c.infoHash.toLowerCase();
+			if (autoStartedHashes.has(key)) continue;
+			if (torrentByHash[key]) {
+				autoStartedHashes.add(key);
 				continue;
 			}
-			autoStartedHashes.add(c.infoHash);
+			autoStartedHashes.add(key);
 			smartSearchService.startDownload(c).catch(() => {
-				autoStartedHashes.delete(c.infoHash);
+				autoStartedHashes.delete(key);
 			});
 		}
 	});

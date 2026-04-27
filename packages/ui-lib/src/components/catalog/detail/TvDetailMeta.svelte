@@ -102,7 +102,7 @@
 	</div>
 
 	{#if completeCandidate}
-		{@const completeTorrent = torrentByHash[completeCandidate.infoHash]}
+		{@const completeTorrent = torrentByHash[completeCandidate.infoHash.toLowerCase()]}
 		<div class="rounded-lg border border-base-300 p-2">
 			<div class="flex items-center gap-2">
 				<span class="badge badge-xs badge-primary">Complete series</span>
@@ -126,7 +126,7 @@
 					{@const seasonMatch = seasonCandidates?.[season.seasonNumber] ?? null}
 					{@const coveredByComplete = completeCandidate !== null && season.seasonNumber > 0}
 					{@const seasonTorrent = seasonMatch
-						? torrentByHash[seasonMatch.infoHash]
+						? torrentByHash[seasonMatch.infoHash.toLowerCase()]
 						: undefined}
 					{@const episodes = seasonEpisodes?.[season.seasonNumber] ?? []}
 					<div class="rounded-lg border border-base-300 p-2">

@@ -119,9 +119,10 @@ class TorrentService extends ObjectServiceClass<TorrentSettings> {
 		}, this.reconnectDelay);
 	}
 
-	/** Find a torrent by hash across ALL torrents (ignores app-name filtering). */
+	/** Find a torrent by hash across ALL torrents (ignores app-name filtering). Case-insensitive. */
 	findByHash(infoHash: string): TorrentInfo | undefined {
-		return this.allTorrents.find((t) => t.infoHash === infoHash);
+		const target = infoHash.toLowerCase();
+		return this.allTorrents.find((t) => t.infoHash.toLowerCase() === target);
 	}
 
 	// ===== Torrent Operations =====
