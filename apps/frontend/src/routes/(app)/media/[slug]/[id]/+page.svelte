@@ -180,6 +180,79 @@
 		return map;
 	});
 
+	// Per-torrent file lists, keyed by lowercase infoHash. Populated lazily when a torrent completes.
+	type TorrentFile = { id: number; name: string; size: number };
+	let torrentFilesByHash = $state<Record<string, TorrentFile[]>>({});
+	const fetchedFilesHashes = new Set<string>();
+
+	$effect(() => {
+		if (config?.kind !== 'tv_show') return;
+		for (const t of $torrentState.allTorrents) {
+			const completed = t.state === 'seeding' || t.progress >= 1.0;
+			const key = t.infoHash.toLowerCase();
+			if (!completed || fetchedFilesHashes.has(key)) continue;
+			fetchedFilesHashes.add(key);
+			fetchRaw(`/api/torrent/torrents/${t.infoHash}/files`)
+				.then((res) => (res.ok ? res.json() : null))
+				.then((files: TorrentFile[] | null) => {
+					if (!files) return;
+					torrentFilesByHash = { ...torrentFilesByHash, [key]: files };
+				})
+				.catch(() => {
+					fetchedFilesHashes.delete(key);
+				});
+		}
+	});
+
+	// Map TMDB (season, episode) to the on-disk file path inside the matched torrent.
+	let tvEpisodeFiles = $derived.by(() => {
+		if (config?.kind !== 'tv_show') return {};
+		const out: Record<number, Record<number, { path: string; name: string; infoHash: string }>> = {};
+		const tvc = $searchStore.fetchedTvCandidates;
+		if (!tvc) return out;
+		const candidates = [tvc.complete, ...Object.values(tvc.seasons)].filter(
+			(c): c is NonNullable<typeof c> => c !== null
+		);
+		for (const c of candidates) {
+			const key = c.infoHash.toLowerCase();
+			const torrent = torrentByHash[key];
+			const files = torrentFilesByHash[key];
+			if (!torrent?.outputPath || !files) continue;
+			for (const f of files) {
+				const m = f.name.match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
+				if (!m) continue;
+				const sn = parseInt(m[1], 10);
+				const en = parseInt(m[2], 10);
+				if (!out[sn]) out[sn] = {};
+				if (out[sn][en]) continue; // first match wins (per-season pack preferred over complete)
+				out[sn][en] = {
+					path: `${torrent.outputPath}/${f.name}`,
+					name: f.name,
+					infoHash: torrent.infoHash
+				};
+			}
+		}
+		return out;
+	});
+
+	function handlePlayEpisode(path: string, name: string, infoHash: string) {
+		const file: PlayableFile = {
+			id: `torrent:${infoHash}:${path}`,
+			type: 'torrent',
+			name,
+			outputPath: path,
+			mode: 'video',
+			format: null,
+			videoFormat: null,
+			thumbnailUrl: null,
+			durationSeconds: null,
+			size: 0,
+			completedAt: '',
+			infoHash
+		};
+		playerService.play(file, 'inline');
+	}
+
 	// Keyed by lowercase infoHash because the backend lowercases magnet hashes,
 	// while TPB returns uppercase — strict-equality lookup would always miss.
 	let torrentByHash = $derived.by(() => {
@@ -939,7 +1012,9 @@
 					completeCandidate={$searchStore.fetchedTvCandidates?.complete ?? null}
 					seasonCandidates={$searchStore.fetchedTvCandidates?.seasons ?? {}}
 					seasonEpisodes={tvSeasonEpisodes}
+					episodeFiles={tvEpisodeFiles}
 					{torrentByHash}
+					onplayepisode={handlePlayEpisode}
 				/>
 				{#if libraryFiles.length > 0}
 					<div>

@@ -12,12 +12,20 @@
 	} from 'ui-lib/types/torrent.type';
 	import AuthorList from './AuthorList.svelte';
 
+	interface EpisodeFile {
+		path: string;
+		name: string;
+		infoHash: string;
+	}
+
 	interface Props {
 		item: CatalogTvShow;
 		completeCandidate?: SmartSearchTorrentResult | null;
 		seasonCandidates?: Record<number, SmartSearchTorrentResult | null>;
 		seasonEpisodes?: Record<number, TvEpisodeMeta[]>;
 		torrentByHash?: Record<string, TorrentInfo>;
+		episodeFiles?: Record<number, Record<number, EpisodeFile>>;
+		onplayepisode?: (path: string, name: string, infoHash: string) => void;
 	}
 
 	let {
@@ -25,7 +33,9 @@
 		completeCandidate = null,
 		seasonCandidates = {},
 		seasonEpisodes = {},
-		torrentByHash = {}
+		torrentByHash = {},
+		episodeFiles = {},
+		onplayepisode
 	}: Props = $props();
 
 	let genres = $derived(item.metadata.genres);
@@ -166,10 +176,11 @@
 						{#if episodes.length > 0}
 							<div class="mt-2 flex flex-col">
 								{#each episodes as ep}
+									{@const file = episodeFiles?.[ep.seasonNumber]?.[ep.episodeNumber]}
 									<div
-										class="flex items-center justify-between border-b border-base-200 py-1 text-xs last:border-0"
+										class="flex items-center justify-between gap-2 border-b border-base-200 py-1 text-xs last:border-0"
 									>
-										<span class="flex items-center gap-2">
+										<span class="flex min-w-0 items-center gap-2">
 											<span class="w-10 font-mono opacity-50"
 												>S{String(ep.seasonNumber).padStart(2, '0')}E{String(
 													ep.episodeNumber
@@ -177,6 +188,14 @@
 											>
 											<span class="truncate">{ep.name}</span>
 										</span>
+										{#if file && onplayepisode}
+											<button
+												class="btn btn-xs btn-primary"
+												onclick={() => onplayepisode(file.path, file.name, file.infoHash)}
+											>
+												Play
+											</button>
+										{/if}
 									</div>
 								{/each}
 							</div>
