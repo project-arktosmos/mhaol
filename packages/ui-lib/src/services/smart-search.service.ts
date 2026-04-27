@@ -564,8 +564,11 @@ class SmartSearchService {
 		}
 	}
 
-	private async analyzeTvResults(selection: SmartSearchSelection, analyzeHashes: Set<string>) {
-		// Step 1: Immediate heuristic analysis — completes synchronously
+	private analyzeTvResults(selection: SmartSearchSelection, analyzeHashes: Set<string>) {
+		// Heuristic analysis only — completes synchronously.
+		// LLM enhancement is intentionally skipped for TV: picks are heuristic-driven and
+		// per-scope, so kicking off ~30+ LLM tasks would be wasted compute (the results
+		// aren't shown in fetch mode and the picks don't re-rank on LLM completion).
 		this.store.update((s) => {
 			const results = s.searchResults.map((r) => {
 				if (!analyzeHashes.has(r.infoHash)) return r;
@@ -574,12 +577,7 @@ class SmartSearchService {
 			});
 			return { ...s, searchResults: results, analyzing: false };
 		});
-
-		// Step 2: Build initial TV structure from heuristic results
 		this.rebuildTvResults();
-
-		// Step 3: Fire off LLM tasks in background to enhance heuristic results
-		this.enhanceWithLlm(selection, analyzeHashes, undefined, undefined);
 	}
 
 	private rebuildTvResults() {
