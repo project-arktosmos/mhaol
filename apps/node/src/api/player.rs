@@ -204,8 +204,36 @@ async fn create_session(
             .into_response();
     }
 
-    let resolved = if let Some(ref info_hash) = body.info_hash {
-        match resolve_torrent_video(&state, info_hash).await {
+    // Resolution order:
+    // 1. file_path pointing to an actual file → use it directly (specific episode in a season pack).
+    // 2. info_hash → fall back to "largest video file in torrent" resolution.
+    // 3. file_path pointing to a directory or missing path → error.
+    let resolved = match (body.file_path.as_ref(), body.info_hash.as_ref()) {
+        (Some(file_path), _) => {
+            let r = resolve_media_path(file_path);
+            let p = std::path::Path::new(&r);
+            if p.is_file() {
+                r
+            } else if let Some(info_hash) = body.info_hash.as_ref() {
+                match resolve_torrent_video(&state, info_hash).await {
+                    Ok(path) => path,
+                    Err(e) => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(serde_json::json!({ "error": e })),
+                        )
+                            .into_response()
+                    }
+                }
+            } else {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": format!("File not found: {}", r) })),
+                )
+                    .into_response();
+            }
+        }
+        (None, Some(info_hash)) => match resolve_torrent_video(&state, info_hash).await {
             Ok(path) => path,
             Err(e) => {
                 return (
@@ -214,23 +242,14 @@ async fn create_session(
                 )
                     .into_response()
             }
-        }
-    } else if let Some(ref file_path) = body.file_path {
-        let r = resolve_media_path(file_path);
-        if !std::path::Path::new(&r).exists() {
+        },
+        (None, None) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "error": format!("File not found: {}", r) })),
+                Json(serde_json::json!({ "error": "Either file_path or info_hash is required" })),
             )
                 .into_response();
         }
-        r
-    } else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": "Either file_path or info_hash is required" })),
-        )
-            .into_response();
     };
 
     let session_id = uuid::Uuid::new_v4().to_string();

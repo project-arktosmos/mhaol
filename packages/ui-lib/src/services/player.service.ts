@@ -148,10 +148,14 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				video_codec: streamConfig.video_codec,
 				video_quality: streamConfig.video_quality
 			};
+			// Always send file_path when present so the backend can play a specific file
+			// (e.g. an individual episode in a season pack). info_hash is also sent so the
+			// backend can fall back to "largest video" resolution if file_path is a directory.
+			if (file.outputPath) {
+				sessionBody.file_path = file.outputPath;
+			}
 			if (file.infoHash) {
 				sessionBody.info_hash = file.infoHash;
-			} else {
-				sessionBody.file_path = file.outputPath;
 			}
 
 			const session = await fetchJson<{
