@@ -5,6 +5,8 @@ export interface TransportRequestInit {
 	headers?: Record<string, string>;
 	body?: string;
 	signal?: AbortSignal;
+	/** Keep the request in-flight across page unload (HTTP transport only). */
+	keepalive?: boolean;
 }
 
 export interface TransportResponse {

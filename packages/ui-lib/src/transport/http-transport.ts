@@ -24,7 +24,8 @@ export class HttpTransport implements Transport {
 				...init?.headers
 			},
 			body: init?.body,
-			signal: init?.signal
+			signal: init?.signal,
+			keepalive: init?.keepalive
 		});
 
 		return {

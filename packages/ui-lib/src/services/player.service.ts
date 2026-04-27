@@ -84,6 +84,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			}));
 
 			this._initialized = true;
+
+			// Belt-and-suspenders: hard tab/window close doesn't reliably fire onDestroy,
+			// so kill any active session here too. The DELETE uses keepalive so it
+			// survives the unload.
+			window.addEventListener('pagehide', this.handlePageHide);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
@@ -93,6 +98,15 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			}));
 		}
 	}
+
+	private handlePageHide = (): void => {
+		const sessionId = get(this.state).sessionId;
+		if (!sessionId) return;
+		fetchRaw(`/api/player/sessions/${sessionId}`, {
+			method: 'DELETE',
+			keepalive: true
+		}).catch(() => {});
+	};
 
 	// ===== Refresh files =====
 
@@ -638,8 +652,12 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 		if (currentState.sessionId) {
 			try {
+				// keepalive: the browser will keep this DELETE in-flight even if the
+				// page is unloading (tab close, navigation), so the worker actually
+				// gets the kill command.
 				await fetchRaw(`/api/player/sessions/${currentState.sessionId}`, {
-					method: 'DELETE'
+					method: 'DELETE',
+					keepalive: true
 				});
 			} catch {
 				// Ignore cleanup errors
@@ -672,8 +690,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	// ===== Lifecycle =====
 
-	destroy(): void {
-		this.stop();
+	async destroy(): Promise<void> {
+		if (browser) {
+			window.removeEventListener('pagehide', this.handlePageHide);
+		}
+		await this.stop();
 	}
 }
 

@@ -31,7 +31,8 @@ export async function fetchRaw(path: string, init?: RequestInit): Promise<Transp
 		method: (init?.method as TransportRequestInit['method']) ?? 'GET',
 		headers: init?.headers as Record<string, string>,
 		body: init?.body as string,
-		signal: init?.signal ?? undefined
+		signal: init?.signal ?? undefined,
+		keepalive: init?.keepalive
 	});
 }
 
