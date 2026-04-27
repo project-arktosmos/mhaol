@@ -45,9 +45,20 @@
 		? getContext<MediaBarContext>(MEDIA_BAR_KEY)
 		: null;
 
+	const LIBRARY_TAB_ID = '__library__';
+	let hasLibrary = $derived(!!extraSections);
+	let viewMode = $state<'library' | 'browse'>('library');
+
+	$effect(() => {
+		if (!hasLibrary && viewMode === 'library') {
+			viewMode = 'browse';
+		}
+	});
+
 	$effect(() => {
 		if (mediaBar) {
-			mediaBar.configure({ title, count: browseState.items.length });
+			const count = viewMode === 'library' ? null : browseState.items.length;
+			mediaBar.configure({ title, count });
 		}
 	});
 
@@ -60,18 +71,34 @@
 		if (searchTimer) clearTimeout(searchTimer);
 		searchTimer = setTimeout(() => {
 			if (value.trim()) {
+				viewMode = 'browse';
 				onsearch(value.trim());
 			} else if (browseState.tabs.length > 0) {
-				ontabchange(browseState.tabs[0].id);
+				if (hasLibrary) {
+					viewMode = 'library';
+				} else {
+					ontabchange(browseState.tabs[0].id);
+				}
 			}
 		}, 400);
 	}
 
 	function handleSearchClear() {
 		searchInput = '';
-		if (browseState.tabs.length > 0) {
+		if (hasLibrary) {
+			viewMode = 'library';
+		} else if (browseState.tabs.length > 0) {
 			ontabchange(browseState.tabs[0].id);
 		}
+	}
+
+	function handleTabClick(tabId: string) {
+		if (tabId === LIBRARY_TAB_ID) {
+			viewMode = 'library';
+			return;
+		}
+		viewMode = 'browse';
+		ontabchange(tabId);
 	}
 
 	function cardDataFor(item: CatalogItem): CatalogCardData {
@@ -81,6 +108,8 @@
 		}
 		return base;
 	}
+
+	let activeTabId = $derived(viewMode === 'library' ? LIBRARY_TAB_ID : browseState.activeTab);
 </script>
 
 {#snippet searchControls()}
@@ -104,63 +133,70 @@
 {/snippet}
 
 {#snippet tabsList()}
+	{#if hasLibrary}
+		<button
+			class="btn btn-xs {activeTabId === LIBRARY_TAB_ID ? 'btn-primary' : 'btn-ghost'}"
+			onclick={() => handleTabClick(LIBRARY_TAB_ID)}
+		>
+			Library
+		</button>
+	{/if}
 	{#each browseState.tabs as tab}
 		<button
-			class="btn btn-xs {browseState.activeTab === tab.id ? 'btn-primary' : 'btn-ghost'}"
-			onclick={() => ontabchange(tab.id)}
+			class="btn btn-xs {activeTabId === tab.id ? 'btn-primary' : 'btn-ghost'}"
+			onclick={() => handleTabClick(tab.id)}
 		>
 			{tab.label}
 		</button>
 	{/each}
 {/snippet}
 
-<div class="flex h-full flex-col">
-	{#if mediaBar}
-		<Portal target={mediaBar.controlsTarget}>
-			{@render searchControls()}
-			{#if extraControls}
-				{@render extraControls()}
-			{/if}
-		</Portal>
-		{#if browseState.tabs.length > 0}
-			<Portal target={mediaBar.tabsTarget}>
-				<div class="flex flex-wrap gap-1.5 border-b border-base-300 px-4 py-2">
-					{@render tabsList()}
-				</div>
-			</Portal>
+{#if mediaBar}
+	<Portal target={mediaBar.controlsTarget}>
+		{@render searchControls()}
+		{#if extraControls}
+			{@render extraControls()}
 		{/if}
-		{#if filterBar}
-			<Portal target={mediaBar.filterBarTarget}>
-				<div class="border-b border-base-300 px-4 py-2">
-					{@render filterBar()}
-				</div>
-			</Portal>
-		{/if}
-	{:else}
-		<BrowseHeader {title} count={browseState.items.length}>
-			{#snippet controls()}
-				{@render searchControls()}
-			{/snippet}
-			{#snippet tabs()}
+	</Portal>
+	{#if browseState.tabs.length > 0 || hasLibrary}
+		<Portal target={mediaBar.tabsTarget}>
+			<div class="flex flex-wrap gap-1.5 border-b border-base-300 px-4 py-2">
 				{@render tabsList()}
-			{/snippet}
-		</BrowseHeader>
-
-		{#if filterBar}
+			</div>
+		</Portal>
+	{/if}
+	{#if filterBar && viewMode === 'browse'}
+		<Portal target={mediaBar.filterBarTarget}>
 			<div class="border-b border-base-300 px-4 py-2">
 				{@render filterBar()}
 			</div>
-		{/if}
+		</Portal>
 	{/if}
+{:else}
+	<BrowseHeader {title} count={viewMode === 'library' ? null : browseState.items.length}>
+		{#snippet controls()}
+			{@render searchControls()}
+		{/snippet}
+		{#snippet tabs()}
+			{@render tabsList()}
+		{/snippet}
+	</BrowseHeader>
 
+	{#if filterBar && viewMode === 'browse'}
+		<div class="border-b border-base-300 px-4 py-2">
+			{@render filterBar()}
+		</div>
+	{/if}
+{/if}
+
+{#if viewMode === 'library'}
 	{#if strategy?.resolveByIds}
 		<PinnedFavoritesSection {strategy} {cardOverlays} {itemHref} {onselectitem} />
 	{/if}
-
 	{#if extraSections}
 		{@render extraSections()}
 	{/if}
-
+{:else}
 	<BrowseGrid
 		items={browseState.items}
 		loading={browseState.loading}
@@ -171,7 +207,11 @@
 	>
 		{#snippet card(item, _index)}
 			{@const catalogItem = item as CatalogItem}
-			<CatalogCard card={cardDataFor(catalogItem)} href={itemHref?.(catalogItem)} onclick={() => onselectitem(catalogItem)} />
+			<CatalogCard
+				card={cardDataFor(catalogItem)}
+				href={itemHref?.(catalogItem)}
+				onclick={() => onselectitem(catalogItem)}
+			/>
 		{/snippet}
 	</BrowseGrid>
-</div>
+{/if}
