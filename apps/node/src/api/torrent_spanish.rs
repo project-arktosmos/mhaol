@@ -75,6 +75,102 @@ pub const SPANISH_INDEXERS: &[SpanishIndexer] = &[
 /// indexers like PirateBay.
 pub const SPANISH_QUERY_HINTS: &[&str] = &["castellano", "español", "latino"];
 
+/// Whole-word Spanish-language tokens. A torrent name matches if any of these
+/// appear as a standalone word/code (case-insensitive). Used to gate Spanish
+/// results — there is no English fallback when the user selected Spanish.
+const SPANISH_TOKENS: &[&str] = &[
+    "castellano",
+    "castelhano",
+    "español",
+    "espanol",
+    "spanish",
+    "latino",
+    "latinoamericano",
+    "latinoamericana",
+    "latam",
+    "spa",
+    "esp",
+    "cast", // common shorthand on Spanish releases ("[CAST]", "DUAL.CAST")
+    "es-es",
+    "es-mx",
+    "es-la",
+    "es-ar",
+    "es-cl",
+    "es-419",
+];
+
+/// True when `name` contains a Spanish-language indicator as a whole word.
+/// Word boundaries are computed on the lowercased name treating any
+/// non-alphanumeric character (and `-` for locale codes) as a delimiter.
+pub fn is_spanish_release(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    let bytes = lower.as_bytes();
+    for token in SPANISH_TOKENS {
+        let tlen = token.len();
+        let mut start = 0;
+        while let Some(idx) = lower[start..].find(token) {
+            let abs = start + idx;
+            let prev_ok = abs == 0 || !is_word_char(bytes[abs - 1], token);
+            let end = abs + tlen;
+            let next_ok = end == bytes.len() || !is_word_char(bytes[end], token);
+            if prev_ok && next_ok {
+                return true;
+            }
+            start = abs + 1;
+        }
+    }
+    false
+}
+
+/// Word-character predicate. Locale-code tokens (`es-mx`, etc.) include `-`
+/// inside themselves, so for those we treat `-` as part of the word boundary
+/// instead of an internal separator.
+fn is_word_char(b: u8, token: &str) -> bool {
+    if b.is_ascii_alphanumeric() {
+        return true;
+    }
+    // For plain alpha tokens like "spanish", "-" is a delimiter (good).
+    // For locale-code tokens like "es-mx", the "-" lives inside the token
+    // and the surrounding boundary check uses the chars on either side of the
+    // whole token, never inside it.
+    let _ = token;
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_spanish_release;
+
+    #[test]
+    fn detects_common_spanish_markers() {
+        assert!(is_spanish_release("Barbie.2023.1080p.BluRay.x264.SPANISH"));
+        assert!(is_spanish_release("Barbie (2023) [Castellano]"));
+        assert!(is_spanish_release("Barbie 2023 español latino"));
+        assert!(is_spanish_release("Barbie.2023.1080p.WEB-DL.DUAL.CAST"));
+        assert!(is_spanish_release("Barbie.2023.[ESP][1080p]"));
+        assert!(is_spanish_release("Barbie.2023.es-MX.1080p.WEBRip"));
+        assert!(is_spanish_release("Barbie.2023.LATAM.1080p"));
+    }
+
+    #[test]
+    fn rejects_english_releases() {
+        assert!(!is_spanish_release("Barbie.2023.1080p.BluRay.x264.ENGLISH"));
+        assert!(!is_spanish_release("Barbie 2023 1080p WEB-DL"));
+        assert!(!is_spanish_release("Barbie.2023.MULTI"));
+    }
+
+    #[test]
+    fn does_not_match_substrings() {
+        // "spa" must be a standalone token — it should NOT match "spawn" or "spanker"
+        assert!(!is_spanish_release("Spawn.1997.1080p"));
+        // "cast" must not match "Castle" or "broadcast"
+        assert!(!is_spanish_release("Castle.S01.1080p"));
+        assert!(!is_spanish_release("Broadcast.News.1987.1080p"));
+        // "esp" must not match "espionage"
+        assert!(!is_spanish_release("Espionage.2020.1080p"));
+    }
+}
+
 /// Build the full set of PirateBay queries to issue for a Spanish search:
 /// the original query plus one variant per Spanish-language hint.
 pub fn build_piratebay_queries(query: &str) -> Vec<String> {

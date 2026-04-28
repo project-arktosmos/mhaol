@@ -605,6 +605,16 @@ async fn search_torrents(Query(query): Query<SearchQuery>) -> impl IntoResponse 
                 .collect();
             merge_dedup(&mut aggregated, converted);
         }
+
+        // Strict language gate: when the user picks Spanish we never fall
+        // back to English releases. Results from a Spanish-only indexer are
+        // kept unconditionally; PirateBay results must carry an explicit
+        // Spanish marker in the torrent name.
+        aggregated.retain(|r| match r.indexer.as_deref() {
+            Some(idx) if idx != "piratebay" => true,
+            _ => super::torrent_spanish::is_spanish_release(&r.name),
+        });
+
         aggregated.sort_by(|a, b| b.seeders.cmp(&a.seeders));
         return Json(serde_json::to_value(aggregated).unwrap()).into_response();
     }
