@@ -35,7 +35,7 @@ use crate::peer::{
     OP_HELLO, OP_HELLOANSWER, OP_OUTOFPARTREQS, OP_QUEUERANK, OP_QUEUERANKING,
     OP_REQFILENAMEANSWER, OP_REQUESTFILENAME, OP_REQUESTPARTS,
     OP_REQUESTPARTS_I64, OP_SENDINGPART, OP_SENDINGPART_I64, OP_SETREQFILEID,
-    OP_STARTUPLOADREQ,
+    OP_STARTUPLOADREQ, PROTO_EDONKEY, PROTO_EMULE,
 };
 use crate::types::Ed2kState;
 use crate::util::{hex_to_md4, part_count, part_range, ED2K_PART_SIZE};
@@ -485,14 +485,20 @@ async fn run_peer_worker(
             break;
         }
         let frame = conn.recv_frame(PEER_IDLE_TIMEOUT).await?;
-        match frame.opcode {
-            OP_HELLO => {
+        // Same opcode value can mean different things on PROTO_EDONKEY vs.
+        // PROTO_EMULE (e.g., 0x01 = HELLO on 0xE3 but EMULEINFO on 0xC5;
+        // the I64 part-transfer variants live on 0xC5 only). Route on
+        // (proto, opcode) so we can't misidentify an extended frame as a
+        // standard one. Frames whose proto byte we don't recognise are
+        // surfaced by `read_frame` with `opcode == 0` and dropped here.
+        match (frame.proto, frame.opcode) {
+            (PROTO_EDONKEY, OP_HELLO) => {
                 // Peer initiated as well; reply with HELLOANSWER.
                 let body =
                     crate::peer::encode_hello(&hello, /*include_marker=*/ false);
                 conn.write_frame(OP_HELLOANSWER, &body).await?;
             }
-            OP_HELLOANSWER => {
+            (PROTO_EDONKEY, OP_HELLOANSWER) => {
                 got_hello_answer = true;
                 // Send the filename and file-id queries so the peer puts us
                 // in its slot logic.
@@ -504,14 +510,14 @@ async fn run_peer_worker(
                 }
                 conn.write_frame(OP_STARTUPLOADREQ, &hash).await?;
             }
-            OP_REQFILENAMEANSWER => {
+            (PROTO_EDONKEY, OP_REQFILENAMEANSWER) => {
                 if let Ok((h, _name)) = decode_filename_answer(&frame.payload) {
                     if h == spec.file_hash {
                         have_filename_ok = true;
                     }
                 }
             }
-            OP_FILESTATUS => {
+            (PROTO_EDONKEY, OP_FILESTATUS) => {
                 if let Ok(FileStatus::Status { hash, .. }) =
                     decode_file_status(&frame.payload)
                 {
@@ -520,7 +526,7 @@ async fn run_peer_worker(
                     }
                 }
             }
-            OP_HASHSETANSWER => {
+            (PROTO_EDONKEY, OP_HASHSETANSWER) => {
                 if let Ok((h, parts)) = decode_hashset_answer(&frame.payload) {
                     if h == spec.file_hash && parts.len() == part_count(spec.size) as usize {
                         // Cache hashset for later verifications and finalize.
@@ -530,23 +536,23 @@ async fn run_peer_worker(
                     }
                 }
             }
-            OP_FILEREQANSNOFIL => {
+            (PROTO_EDONKEY, OP_FILEREQANSNOFIL) => {
                 // Peer doesn't have the file (or we lost a race). Drop them.
                 return Ok(());
             }
-            OP_QUEUERANK | OP_QUEUERANKING => {
+            (PROTO_EDONKEY, OP_QUEUERANK) | (PROTO_EMULE, OP_QUEUERANKING) => {
                 // Just keep waiting; the receiver helper already updated
                 // last_queue_rank.
             }
-            OP_ACCEPTUPLOADREQ => {
+            (PROTO_EDONKEY, OP_ACCEPTUPLOADREQ) => {
                 accepted = true;
             }
-            OP_OUTOFPARTREQS => {
+            (PROTO_EDONKEY, OP_OUTOFPARTREQS) => {
                 // Peer says we asked for stuff they don't have. Wait — they
                 // may send us back to the queue.
                 accepted = false;
             }
-            OP_SENDINGPART => {
+            (PROTO_EDONKEY, OP_SENDINGPART) => {
                 if let Ok(part) = decode_sending_part_32(&frame.payload) {
                     if part.hash == spec.file_hash {
                         let len = part.data.len() as u64;
@@ -559,7 +565,7 @@ async fn run_peer_worker(
                     }
                 }
             }
-            OP_SENDINGPART_I64 => {
+            (PROTO_EMULE, OP_SENDINGPART_I64) => {
                 if let Ok(part) = decode_sending_part_64(&frame.payload) {
                     if part.hash == spec.file_hash {
                         let len = part.data.len() as u64;
@@ -572,32 +578,31 @@ async fn run_peer_worker(
                     }
                 }
             }
-            OP_END_OF_DOWNLOAD | OP_CANCELTRANSFER => {
+            (PROTO_EDONKEY, OP_END_OF_DOWNLOAD)
+            | (PROTO_EDONKEY, OP_CANCELTRANSFER) => {
                 // Peer closing this transfer. We may have been served a full
                 // part. Loop back and let the driver pick a new peer.
                 return Ok(());
             }
             _ => {
-                // Ignore unknown opcodes; they're either eMule extensions
-                // we don't support or chatty status updates.
+                // Ignore unknown opcodes / unsupported extensions
+                // (compressed parts, source-exchange, etc.).
             }
         }
 
         // If we were accepted, drive the request pipeline forward whenever
-        // we have nothing in flight.
+        // we have nothing in flight. amule sends REQUESTPARTS on
+        // PROTO_EDONKEY but the I64 variant on PROTO_EMULE
+        // (`DownloadClient.cpp::SendBlockRequests`), so we must too.
         if accepted && have_filename_ok && have_status_ok {
             if let Some(req) = next_request(&spec, &pf).await {
-                let body = if wants_64bit {
-                    encode_request_parts_64(&spec.file_hash, &req)
+                if wants_64bit {
+                    let body = encode_request_parts_64(&spec.file_hash, &req);
+                    conn.write_frame_ext(OP_REQUESTPARTS_I64, &body).await?;
                 } else {
-                    encode_request_parts_32(&spec.file_hash, &req)
-                };
-                let opcode = if wants_64bit {
-                    OP_REQUESTPARTS_I64
-                } else {
-                    OP_REQUESTPARTS
-                };
-                conn.write_frame(opcode, &body).await?;
+                    let body = encode_request_parts_32(&spec.file_hash, &req);
+                    conn.write_frame(OP_REQUESTPARTS, &body).await?;
+                }
             } else {
                 // Nothing left to ask for: gracefully end.
                 let _ = conn.write_frame(OP_END_OF_DOWNLOAD, &[]).await;

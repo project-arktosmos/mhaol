@@ -1,16 +1,21 @@
 //! eDonkey client-to-client (CC) protocol.
 //!
-//! This module implements just enough of the peer protocol to let us pull
-//! file blocks from another ed2k client. It does NOT implement upload —
-//! incoming requests for our slots are answered with `OutOfPartReqs`.
+//! Mirrors the wire layout amule uses in
+//! `include/protocol/ed2k/Client2Client/TCP.h`. Frames have two protocol
+//! flavours that share the same `<proto u8><total u32 LE><opcode u8><body>`
+//! framing but differ in opcode namespace:
 //!
-//! Wire format mirrors the server protocol: `proto byte (0xE3) | total len
-//! u32 LE | opcode u8 | body`. Compressed (`0xC5`) and emule-extended
-//! (`0xD4`) frames are received but currently dropped — we ask peers for
-//! uncompressed parts and most respect that.
+//!   * `OP_EDONKEYPROT  = 0xE3` — standard ED2K (HELLO, REQUESTPARTS,
+//!     SENDINGPART, FILESTATUS, HASHSET*, etc.)
+//!   * `OP_EMULEPROT    = 0xC5` — eMule extension (EMULEINFO,
+//!     QUEUERANKING, COMPRESSEDPART, the `_I64` large-file variants of
+//!     SENDINGPART/REQUESTPARTS/COMPRESSEDPART).
+//!   * `OP_PACKEDPROT   = 0xD4` — zlib-compressed body (rare in C2C).
 //!
-//! TODO: support compressed parts (OP_COMPRESSEDPART = 0x40 / 0xA2). For
-//! v1 we drop them; the peer reschedules the missing range on its own.
+//! We do NOT implement uploads or zlib decompression — incoming
+//! `OP_STARTUPLOADREQ` is answered with `OP_OUTOFPARTREQS`, and
+//! compressed/packed frames are dropped. Peers reschedule the missing
+//! range on their own.
 
 use anyhow::{bail, Context, Result};
 use std::net::SocketAddr;
@@ -21,14 +26,23 @@ use tokio::time::timeout;
 
 use crate::util::ED2K_BLOCK_SIZE;
 
-const PROTO_EDONKEY: u8 = 0xE3;
+// ─── protocol bytes ─────────────────────────────────────────────────────
+/// `OP_EDONKEYPROT` from amule `include/protocol/Protocols.h`.
+pub const PROTO_EDONKEY: u8 = 0xE3;
+/// `OP_EMULEPROT` from amule `include/protocol/Protocols.h`. Used for the
+/// 64-bit-offset variants of part transfer and for QUEUERANKING/EMULEINFO.
+pub const PROTO_EMULE: u8 = 0xC5;
+/// `OP_PACKEDPROT` from amule. Body is zlib-compressed.
+pub const PROTO_PACKED: u8 = 0xD4;
 
-// ─── opcodes ─────────────────────────────────────────────────────────────
+// ─── standard-protocol (0xE3) opcodes ────────────────────────────────────
+// `include/protocol/ed2k/Client2Client/TCP.h::ED2KStandardClientTCP`.
 pub const OP_HELLO: u8 = 0x01;
-pub const OP_HELLOANSWER: u8 = 0x4C;
-pub const OP_REQUESTFILENAME: u8 = 0x58;
-pub const OP_REQFILENAMEANSWER: u8 = 0x59;
+pub const OP_SENDINGPART: u8 = 0x46;
+pub const OP_REQUESTPARTS: u8 = 0x47;
 pub const OP_FILEREQANSNOFIL: u8 = 0x48;
+pub const OP_END_OF_DOWNLOAD: u8 = 0x49;
+pub const OP_HELLOANSWER: u8 = 0x4C;
 pub const OP_SETREQFILEID: u8 = 0x4F;
 pub const OP_FILESTATUS: u8 = 0x50;
 pub const OP_HASHSETREQUEST: u8 = 0x51;
@@ -37,33 +51,47 @@ pub const OP_STARTUPLOADREQ: u8 = 0x54;
 pub const OP_ACCEPTUPLOADREQ: u8 = 0x55;
 pub const OP_CANCELTRANSFER: u8 = 0x56;
 pub const OP_OUTOFPARTREQS: u8 = 0x57;
+pub const OP_REQUESTFILENAME: u8 = 0x58;
+pub const OP_REQFILENAMEANSWER: u8 = 0x59;
 pub const OP_QUEUERANK: u8 = 0x5C;
-pub const OP_QUEUERANKING: u8 = 0x60;
-pub const OP_REQUESTPARTS: u8 = 0x47;
-pub const OP_REQUESTPARTS_I64: u8 = 0xA1;
-pub const OP_SENDINGPART: u8 = 0x46;
-pub const OP_SENDINGPART_I64: u8 = 0xA0;
-pub const OP_END_OF_DOWNLOAD: u8 = 0x49;
-pub const OP_COMPRESSEDPART: u8 = 0x40;
-pub const OP_COMPRESSEDPART_I64: u8 = 0xA2;
 
-// Tag types (mirrored from client.rs — duplicated here to keep this module
-// self-contained for testing).
+// ─── extended-protocol (0xC5) opcodes ────────────────────────────────────
+// `include/protocol/ed2k/Client2Client/TCP.h::ED2KExtendedClientTCP`.
+pub const OP_EMULEINFO: u8 = 0x01;
+pub const OP_EMULEINFOANSWER: u8 = 0x02;
+pub const OP_COMPRESSEDPART: u8 = 0x40;
+pub const OP_QUEUERANKING: u8 = 0x60;
+pub const OP_COMPRESSEDPART_I64: u8 = 0xA1;
+pub const OP_SENDINGPART_I64: u8 = 0xA2;
+pub const OP_REQUESTPARTS_I64: u8 = 0xA3;
+
+// Tag types — `include/tags/TagTypes.h`.
 const TAG_STRING: u8 = 0x02;
 const TAG_UINT32: u8 = 0x03;
 
-// Common tag names used in HELLO bodies.
+// Client tag names — `include/tags/ClientTags.h`.
 const CT_NAME: u8 = 0x01;
-const CT_PORT: u8 = 0x0F;
 const CT_VERSION: u8 = 0x11;
-const CT_MULEVERSION: u8 = 0xFB;
+const CT_EMULE_UDPPORTS: u8 = 0xF9;
+const CT_EMULE_VERSION: u8 = 0xFB;
+const CT_EMULE_MISCOPTIONS1: u8 = 0xFA;
+const CT_EMULE_MISCOPTIONS2: u8 = 0xFE;
 
+/// `EDONKEYVERSION` from amule `include/common/ClientVersion.h`.
 const ED2K_VERSION: u32 = 0x3C;
-const MULE_VERSION: u32 = 0x40;
+/// `(SO_AMULE<<24) | make_full_ed2k_version(2,4,0)` — see client.rs for derivation.
+const ED2K_EMULE_VERSION: u32 = (3 << 24) | ((2 << 17) | (4 << 10));
 
 /// One peer-to-peer frame.
+///
+/// `proto` is the leading protocol byte (see [`PROTO_EDONKEY`],
+/// [`PROTO_EMULE`], [`PROTO_PACKED`]). Same opcode value can mean
+/// different things across protocols (e.g. opcode `0x01` is OP_HELLO on
+/// 0xE3 but OP_EMULEINFO on 0xC5; opcode `0x60` is unused on 0xE3 but
+/// OP_QUEUERANKING on 0xC5), so callers must route on `(proto, opcode)`.
 #[derive(Debug, Clone)]
 pub struct Frame {
+    pub proto: u8,
     pub opcode: u8,
     pub payload: Vec<u8>,
 }
@@ -95,13 +123,19 @@ pub struct SendingPart {
 }
 
 /// File status reply: either "no file" or a part-availability bitmap.
+///
+/// Mirrors amule `CPartFile::WritePartStatus`: writes a uint16 part count
+/// followed by `(part_count + 7) / 8` bytes of bitmap, with bit `i`
+/// (LSB-first within a byte) set when the peer holds part `i`. A peer
+/// with the COMPLETE file sends `part_count == GetED2KPartCount()` and a
+/// bitmap with all bits set — NOT `part_count == 0`. Zero means the peer
+/// has no parts at all (the protocol still requires a bitmap of length 0).
 #[derive(Debug, Clone)]
 pub enum FileStatus {
     NoFile,
     Status {
         hash: [u8; 16],
-        /// Number of parts according to the peer. Zero means the peer claims
-        /// to have all parts (no bitmap follows on the wire).
+        /// Number of parts according to the peer.
         part_count: u16,
         /// Bitmap, LSB-first per byte. Empty if `part_count == 0`.
         bitmap: Vec<u8>,
@@ -139,17 +173,29 @@ impl PeerConnection {
         let frame = timeout(idle_timeout, read_frame(&mut self.stream))
             .await
             .with_context(|| "ed2k peer read timeout")??;
-        if frame.opcode == OP_QUEUERANK || frame.opcode == OP_QUEUERANKING {
-            if frame.payload.len() >= 2 {
-                self.last_queue_rank =
-                    Some(u16::from_le_bytes([frame.payload[0], frame.payload[1]]));
-            }
+        // QUEUERANK is on 0xE3, QUEUERANKING is on 0xC5 — both carry a
+        // uint16 rank in the body. Track whichever shape arrives.
+        let is_rank = (frame.proto == PROTO_EDONKEY && frame.opcode == OP_QUEUERANK)
+            || (frame.proto == PROTO_EMULE && frame.opcode == OP_QUEUERANKING);
+        if is_rank && frame.payload.len() >= 2 {
+            self.last_queue_rank =
+                Some(u16::from_le_bytes([frame.payload[0], frame.payload[1]]));
         }
         Ok(frame)
     }
 
+    /// Send a frame on the standard ED2K protocol (`OP_EDONKEYPROT = 0xE3`).
     pub async fn write_frame(&mut self, opcode: u8, payload: &[u8]) -> Result<()> {
-        write_frame(&mut self.stream, opcode, payload).await
+        write_frame(&mut self.stream, PROTO_EDONKEY, opcode, payload).await
+    }
+
+    /// Send a frame on the eMule extended protocol (`OP_EMULEPROT = 0xC5`).
+    /// Required for the `_I64` part-transfer variants and for
+    /// QUEUERANKING/EMULEINFO. amule `DownloadClient.cpp::SendBlockRequests`
+    /// flips between OP_EDONKEYPROT and OP_EMULEPROT based on whether any
+    /// pending block has a 64-bit offset.
+    pub async fn write_frame_ext(&mut self, opcode: u8, payload: &[u8]) -> Result<()> {
+        write_frame(&mut self.stream, PROTO_EMULE, opcode, payload).await
     }
 
     pub async fn shutdown(&mut self) {
@@ -161,12 +207,13 @@ impl PeerConnection {
 
 async fn write_frame<W: AsyncWriteExt + Unpin>(
     w: &mut W,
+    proto: u8,
     opcode: u8,
     payload: &[u8],
 ) -> Result<()> {
     let total = (payload.len() + 1) as u32;
     let mut hdr = [0u8; 6];
-    hdr[0] = PROTO_EDONKEY;
+    hdr[0] = proto;
     hdr[1..5].copy_from_slice(&total.to_le_bytes());
     hdr[5] = opcode;
     w.write_all(&hdr).await?;
@@ -179,6 +226,7 @@ async fn write_frame<W: AsyncWriteExt + Unpin>(
 async fn read_frame<R: AsyncReadExt + Unpin>(r: &mut R) -> Result<Frame> {
     let mut hdr = [0u8; 6];
     r.read_exact(&mut hdr).await?;
+    let proto = hdr[0];
     let total = u32::from_le_bytes(hdr[1..5].try_into().unwrap()) as usize;
     if total == 0 {
         bail!("ed2k peer: empty frame");
@@ -192,24 +240,36 @@ async fn read_frame<R: AsyncReadExt + Unpin>(r: &mut R) -> Result<Frame> {
     if body_len > 0 {
         r.read_exact(&mut payload).await?;
     }
-    if hdr[0] != PROTO_EDONKEY {
-        // Compressed / extended frame — surface as a special opcode the
-        // caller can ignore. Returning an error would force the connection
-        // closed even when the peer is just sending a chatty extension.
+    // Preserve all three known proto bytes. PROTO_PACKED bodies are zlib-
+    // compressed and unreadable to us, but we still surface the frame so
+    // the caller can log/skip without de-syncing the stream. Any other
+    // proto byte is an unknown extension.
+    if proto != PROTO_EDONKEY && proto != PROTO_EMULE && proto != PROTO_PACKED {
         return Ok(Frame {
+            proto,
             opcode: 0,
             payload: Vec::new(),
         });
     }
-    Ok(Frame { opcode, payload })
+    Ok(Frame {
+        proto,
+        opcode,
+        payload,
+    })
 }
 
 // ─── encoders ────────────────────────────────────────────────────────────
 
-/// Encode a HELLO or HELLOANSWER body. The HELLO frame has a leading
-/// hash-length marker byte (0x10); HELLOANSWER skips it.
+/// Encode a HELLO or HELLOANSWER body, mirroring amule
+/// `CUpDownClient::SendHelloTypePacket` (`BaseClient.cpp`).
+///
+/// Body layout:
+///   * `[0x10]?` — hash-size marker (HELLO only, omitted on HELLOANSWER)
+///   * `<user_hash 16> <client_id 4> <tcp_port 2>`
+///   * `<tag_count 4> <tags...>`
+///   * `<server_ip 4> <server_port 2>` — last connected server, zero if none
 pub fn encode_hello(h: &HelloBody, include_hash_marker: bool) -> Vec<u8> {
-    let mut out = Vec::with_capacity(64);
+    let mut out = Vec::with_capacity(96);
     if include_hash_marker {
         out.push(0x10);
     }
@@ -217,24 +277,77 @@ pub fn encode_hello(h: &HelloBody, include_hash_marker: bool) -> Vec<u8> {
     out.extend_from_slice(&h.client_id.to_le_bytes());
     out.extend_from_slice(&h.port.to_le_bytes());
 
-    // Tags: NAME (string), VERSION (uint32), PORT (uint32), MULEVERSION
-    // (uint32). 4 tags total.
+    // Tags. amule sends six base tags plus optional buddy tags; we
+    // include the six that real peers expect, leaving buddy/captcha
+    // bits zeroed since we are never firewalled-via-buddy.
     let mut tags = Vec::new();
     let mut tag_count = 0u32;
 
+    // CT_NAME (string)
     write_short_tag_string(&mut tags, CT_NAME, "mhaol");
     tag_count += 1;
+    // CT_VERSION (uint32) — eDonkey protocol version.
     write_short_tag_u32(&mut tags, CT_VERSION, ED2K_VERSION);
     tag_count += 1;
-    write_short_tag_u32(&mut tags, CT_PORT, h.port as u32);
+    // CT_EMULE_UDPPORTS — `(kad_udp << 16) | client_udp`. We don't run
+    // UDP, so both halves stay zero. amule still sends this tag.
+    write_short_tag_u32(&mut tags, CT_EMULE_UDPPORTS, 0);
     tag_count += 1;
-    write_short_tag_u32(&mut tags, CT_MULEVERSION, MULE_VERSION);
+    // CT_EMULE_VERSION — `(SO_AMULE<<24) | make_full_ed2k_version(2,4,0)`.
+    write_short_tag_u32(&mut tags, CT_EMULE_VERSION, ED2K_EMULE_VERSION);
+    tag_count += 1;
+    // CT_EMULE_MISCOPTIONS1 — capability bitfield (see
+    // `BaseClient.cpp::SendHelloTypePacket`). Mirror amule's defaults
+    // for an aMule client without source-exchange / preview / peer-cache:
+    //   nAICHVer=1, uUnicodeSupport=1, uUdpVer=4, uDataCompVer=1,
+    //   uSupportSecIdent=0, uSourceExchangeVer=3, uExtendedRequestsVer=2,
+    //   uAcceptCommentVer=1, uPeerCache=0, uNoViewSharedFiles=0,
+    //   uMultiPacket=1, uSupportPreview=0.
+    let n_aich_ver: u32 = 1;
+    let u_unicode_support: u32 = 1;
+    let u_udp_ver: u32 = 4;
+    let u_data_comp_ver: u32 = 1;
+    let u_support_sec_ident: u32 = 0;
+    let u_source_exchange_ver: u32 = 3;
+    let u_extended_requests_ver: u32 = 2;
+    let u_accept_comment_ver: u32 = 1;
+    let u_peer_cache: u32 = 0;
+    let u_no_view_shared_files: u32 = 0;
+    let u_multi_packet: u32 = 1;
+    let u_support_preview: u32 = 0;
+    let misc1 = (n_aich_ver << ((4 * 7) + 1))
+        | (u_unicode_support << (4 * 7))
+        | (u_udp_ver << (4 * 6))
+        | (u_data_comp_ver << (4 * 5))
+        | (u_support_sec_ident << (4 * 4))
+        | (u_source_exchange_ver << (4 * 3))
+        | (u_extended_requests_ver << (4 * 2))
+        | (u_accept_comment_ver << (4 * 1))
+        | (u_peer_cache << 3)
+        | (u_no_view_shared_files << 2)
+        | (u_multi_packet << 1)
+        | u_support_preview;
+    write_short_tag_u32(&mut tags, CT_EMULE_MISCOPTIONS1, misc1);
+    tag_count += 1;
+    // CT_EMULE_MISCOPTIONS2 — second capability bitfield. Defaults:
+    //   uSupportLargeFiles=1, uExtMultiPacket=1, uSupportsSourceEx2=1,
+    //   uSupportsCryptLayer=0, uKadVersion=0 (we have no Kad). Captcha
+    //   and direct-UDP-callback are off.
+    let u_kad_version: u32 = 0;
+    let u_support_large_files: u32 = 1;
+    let u_ext_multi_packet: u32 = 1;
+    let u_supports_source_ex2: u32 = 1;
+    let misc2 = (u_supports_source_ex2 << 10)
+        | (u_ext_multi_packet << 5)
+        | (u_support_large_files << 4)
+        | u_kad_version;
+    write_short_tag_u32(&mut tags, CT_EMULE_MISCOPTIONS2, misc2);
     tag_count += 1;
 
     out.extend_from_slice(&tag_count.to_le_bytes());
     out.extend_from_slice(&tags);
 
-    // Server IP + port.
+    // Server IP + port (last connected server, or zero).
     out.extend_from_slice(&h.server_ip.to_le_bytes());
     out.extend_from_slice(&h.server_port.to_le_bytes());
     out
@@ -287,16 +400,25 @@ pub fn encode_request_parts_64(hash: &[u8; 16], ranges: &[BlockRange; 3]) -> Vec
     out
 }
 
-/// Pad an arbitrary slice of `BlockRange` up to 3 entries by repeating the
-/// last entry. Returns `None` if `ranges` is empty.
+/// Pad an arbitrary slice of `BlockRange` up to 3 entries with zero pairs.
+///
+/// amule's REQUESTPARTS / REQUESTPARTS_I64 always carry exactly three
+/// `<start,end>` pairs on the wire. Where we have fewer than three real
+/// ranges, the unused slots are filled with `(0, 0)` — `UploadClient.cpp
+/// ::ProcessRequestPartsPacket` silently skips entries with `end <=
+/// start`, so zero pairs are inert. (Older versions of this file padded
+/// by repeating the last range; that worked but is not what amule does.)
+///
+/// Returns `None` if `ranges` is empty so callers can short-circuit and
+/// send `OP_END_OF_DOWNLOAD` instead.
 pub fn pad_ranges(ranges: &[BlockRange]) -> Option<[BlockRange; 3]> {
     if ranges.is_empty() {
         return None;
     }
-    let last = *ranges.last().unwrap();
-    let r0 = ranges.first().copied().unwrap_or(last);
-    let r1 = ranges.get(1).copied().unwrap_or(last);
-    let r2 = ranges.get(2).copied().unwrap_or(last);
+    let zero = BlockRange { start: 0, end: 0 };
+    let r0 = ranges.first().copied().unwrap_or(zero);
+    let r1 = ranges.get(1).copied().unwrap_or(zero);
+    let r2 = ranges.get(2).copied().unwrap_or(zero);
     Some([r0, r1, r2])
 }
 
@@ -400,7 +522,7 @@ pub fn decode_file_status(payload: &[u8]) -> Result<FileStatus> {
     hash.copy_from_slice(&hash_bytes);
     let part_count = cur.read_u16_le()?;
     if part_count == 0 {
-        // "Has all parts" — there is no bitmap.
+        // No bitmap follows — the peer claims to hold no parts of the file.
         return Ok(FileStatus::Status {
             hash,
             part_count: 0,
@@ -677,10 +799,13 @@ mod tests {
     }
 
     #[test]
-    fn pad_ranges_repeats_last() {
-        let r = pad_ranges(&[BlockRange { start: 0, end: 5 }]).unwrap();
-        assert_eq!(r[0], r[1]);
-        assert_eq!(r[1], r[2]);
+    fn pad_ranges_pads_with_zero_pairs() {
+        let r = pad_ranges(&[BlockRange { start: 10, end: 50 }]).unwrap();
+        assert_eq!(r[0], BlockRange { start: 10, end: 50 });
+        // amule pads unused slots with zero pairs (start==end), which the
+        // upload-side parser skips silently.
+        assert_eq!(r[1], BlockRange { start: 0, end: 0 });
+        assert_eq!(r[2], BlockRange { start: 0, end: 0 });
         assert!(pad_ranges(&[]).is_none());
     }
 
@@ -725,7 +850,9 @@ mod tests {
     }
 
     #[test]
-    fn decode_file_status_part_count_zero_means_complete() {
+    fn decode_file_status_part_count_zero_has_empty_bitmap() {
+        // amule never sends part_count==0 for a real file, but the wire
+        // shape is still valid: no bitmap bytes follow.
         let mut payload = Vec::new();
         payload.extend_from_slice(&[0xBB; 16]);
         payload.extend_from_slice(&0u16.to_le_bytes());
