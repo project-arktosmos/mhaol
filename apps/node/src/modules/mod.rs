@@ -10,6 +10,7 @@ pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
 pub mod torrent_search;
+pub mod wyzie_subs;
 pub mod youtube_meta;
 #[cfg(not(target_os = "android"))]
 pub mod ytdl;

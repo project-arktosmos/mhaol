@@ -362,6 +362,22 @@ CREATE TABLE IF NOT EXISTS lrclib_lookups (
 );
 ";
 
+pub const SUBTITLES_SCHEMA_SQL: &str = "
+CREATE TABLE IF NOT EXISTS subtitles (
+    id TEXT PRIMARY KEY,
+    media_key TEXT NOT NULL,
+    language_code TEXT NOT NULL,
+    language_name TEXT NOT NULL,
+    source TEXT NOT NULL,
+    source_id TEXT,
+    format TEXT NOT NULL DEFAULT 'vtt',
+    file_path TEXT NOT NULL,
+    hearing_impaired INTEGER NOT NULL DEFAULT 0,
+    downloaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_subtitles_media_key ON subtitles(media_key);
+";
+
 /// Module SQL schemas for addon tables
 pub const TMDB_SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS tmdb_image_overrides (
@@ -1303,6 +1319,9 @@ pub fn initialize_module_schemas(conn: &Connection) -> Result<(), rusqlite::Erro
     if !is_server {
         conn.execute_batch(LYRICS_SCHEMA_SQL)?;
     }
+
+    // Subtitles work for both desktop and server (movies/TV are core).
+    conn.execute_batch(SUBTITLES_SCHEMA_SQL)?;
 
     Ok(())
 }

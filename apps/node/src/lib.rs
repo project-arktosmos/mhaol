@@ -214,7 +214,8 @@ impl AppState {
         use modules::{
             lyrics::LyricsModule, musicbrainz::MusicbrainzModule,
             retroachievements::RetroachievementsModule, signaling::SignalingModule,
-            tmdb::TmdbModule, torrent_search::TorrentSearchModule, youtube_meta::YoutubeMetaModule,
+            tmdb::TmdbModule, torrent_search::TorrentSearchModule,
+            wyzie_subs::WyzieSubsModule, youtube_meta::YoutubeMetaModule,
         };
 
         let mut registry = self.module_registry.write();
@@ -226,6 +227,7 @@ impl AppState {
         registry.register(Box::new(RetroachievementsModule));
         registry.register(Box::new(TmdbModule));
         registry.register(Box::new(TorrentSearchModule));
+        registry.register(Box::new(WyzieSubsModule));
         registry.register(Box::new(YoutubeMetaModule));
 
         // Non-server modules

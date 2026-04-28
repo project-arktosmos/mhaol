@@ -39,6 +39,7 @@ pub mod signaling;
 pub mod signaling_ws;
 pub mod smart_pair;
 pub mod smart_search;
+pub mod subtitles;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
@@ -62,6 +63,7 @@ pub fn build_app_router(state: AppState) -> Router {
     // Public routes — no auth required
     let public = Router::new()
         .nest("/api/health", health::router())
+        .nest("/api/subtitles", subtitles::public_router())
         .merge(signaling_ws::signaling_routes())
         .nest("/api/rpc", ws_rpc::router());
 
@@ -96,6 +98,7 @@ pub fn build_app_router(state: AppState) -> Router {
         .nest("/api/iptv", iptv::router())
         .nest("/api/smart-pair", smart_pair::router())
         .nest("/api/smart-search", smart_search::router())
+        .nest("/api/subtitles", subtitles::router())
         .nest("/api/catalog", catalog::router())
         .nest("/api/recommendations", recommendations::router())
         .nest("/api/music-recommendations", music_recommendations::router())

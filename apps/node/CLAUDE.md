@@ -37,6 +37,7 @@ src/
 │   ├── roster.rs           # Roster contacts CRUD (GET/POST/DELETE /api/roster)
 │   ├── signaling.rs
 │   ├── smart_pair.rs      # Smart pairing: TMDB matching + pinned items
+│   ├── subtitles.rs       # Wyzie subtitles search/download/serve (movies + TV)
 │   ├── tmdb.rs
 │   ├── torrent.rs        # cfg(not(target_os = "android"))
 │   ├── youtube.rs
