@@ -35,6 +35,7 @@ src/
 │   ├── shepperd/             # Shepperd import (ShepperdImportContent, SmartPairResults)
 │   ├── share/                # Share modal
 │   ├── signaling/            # Signaling/WebRTC
+│   ├── subtitles/            # Subtitle search modal (Wyzie subs addon)
 │   ├── tmdb-browse/          # TMDB pagination (TmdbPagination — used by movies/TV pages)
 │   ├── torrent/              # Torrent management (TorrentProgressOverlay, TorrentSettings, etc.)
 │   ├── videogames/           # Videogame WASM emulator components
