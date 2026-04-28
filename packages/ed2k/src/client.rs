@@ -143,7 +143,15 @@ impl Ed2kClient {
             }
             let frame = match timeout(remaining, self.read_frame()).await {
                 Ok(Ok(f)) => f,
-                _ => break,
+                Ok(Err(e)) => {
+                    // An unknown protocol byte (e.g. compressed/extended
+                    // frames we don't support) shows up as a read error.
+                    // Skip it and keep waiting for a frame we can parse,
+                    // rather than abandoning the whole search.
+                    log::debug!("ed2k search: skipping unreadable frame: {}", e);
+                    continue;
+                }
+                Err(_) => break,
             };
             match frame.opcode {
                 OP_SEARCH_RESULT => {
@@ -192,7 +200,11 @@ impl Ed2kClient {
             }
             let frame = match timeout(remaining, self.read_frame()).await {
                 Ok(Ok(f)) => f,
-                _ => return Ok(Vec::new()),
+                Ok(Err(e)) => {
+                    log::debug!("ed2k get_sources: skipping unreadable frame: {}", e);
+                    continue;
+                }
+                Err(_) => return Ok(Vec::new()),
             };
             match frame.opcode {
                 OP_FOUNDSOURCES => {
@@ -250,8 +262,12 @@ impl Ed2kClient {
         // Port tag (uint32).
         write_tag_u8name_uint32(&mut tags, CT_PORT, listen_port as u32);
         tag_count += 1;
-        // Server flags tag (uint32) — request zlib + tag-int-list capability.
-        write_tag_u8name_uint32(&mut tags, CT_SERVER_FLAGS, 0x0001);
+        // Server flags tag (uint32). We deliberately do NOT advertise
+        // SRVCAP_ZLIB (0x0001): we cannot decode zlib-compressed (proto 0xD4)
+        // frames, and many servers compress search results when zlib is
+        // negotiated, which would silently swallow every result. Leaving this
+        // at 0 keeps responses in the plain 0xE3 protocol we can read.
+        write_tag_u8name_uint32(&mut tags, CT_SERVER_FLAGS, 0x0000);
         tag_count += 1;
 
         payload.extend_from_slice(&tag_count.to_le_bytes());
