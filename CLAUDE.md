@@ -14,6 +14,7 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 mhaol.git/
 ├── apps/
 │   ├── frontend/                     # Unified SPA (landing + connect + media, port 1570)
+│   ├── player/                       # Player SPA, mirrors frontend visuals/setup (port 9595)
 │   ├── node/                         # Rust Axum server (standalone, port 1530)
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
@@ -158,9 +159,10 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Frontend (port 1570) + Rust node (port 1530) in parallel
+pnpm dev              # Rust node (port 1530) + frontend (port 1570) + player (port 9595) in parallel
 pnpm dev:node         # Rust node server only (PORT=1530)
 pnpm dev:frontend     # Frontend dev server only (port 1570)
+pnpm dev:player       # Player dev server only (port 9595)
 
 # Building
 pnpm build            # Frontend build
