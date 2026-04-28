@@ -13,6 +13,22 @@
 		return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 	}
 
+	function formatSpeed(bytesPerSec: number): string {
+		if (bytesPerSec <= 0) return '0 B/s';
+		return `${formatSize(bytesPerSec)}/s`;
+	}
+
+	function formatEta(seconds: number | null | undefined): string {
+		if (!seconds || seconds <= 0 || !Number.isFinite(seconds)) return '—';
+		if (seconds < 60) return `${Math.round(seconds)}s`;
+		if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+		const h = Math.floor(seconds / 3600);
+		const m = Math.floor((seconds % 3600) / 60);
+		if (h < 24) return `${h}h ${m}m`;
+		const d = Math.floor(h / 24);
+		return `${d}d ${h % 24}h`;
+	}
+
 	function handlePause(hash: string) {
 		ed2kService.pauseFile(hash);
 	}
@@ -45,6 +61,8 @@
 			<div class="flex flex-col gap-2">
 				{#each $state.files as file (file.fileHash)}
 					{@const color = ed2kStateColor(file.state)}
+					{@const pct = Math.max(0, Math.min(100, (file.progress ?? 0) * 100))}
+					{@const downloaded = Math.floor((file.progress ?? 0) * file.size)}
 					<div class="rounded-lg bg-base-100 p-3">
 						<div class="flex items-start justify-between gap-3">
 							<div class="flex-1 overflow-hidden">
@@ -91,6 +109,28 @@
 									title="Remove">Remove</button
 								>
 							</div>
+						</div>
+
+						<div class="mt-2 flex items-center gap-2">
+							<progress
+								class={classNames('progress h-2 flex-1', {
+									'progress-info': color === 'info',
+									'progress-primary': color === 'primary',
+									'progress-success': color === 'success',
+									'progress-warning': color === 'warning',
+									'progress-error': color === 'error'
+								})}
+								value={pct}
+								max="100"
+							></progress>
+							<span class="w-12 text-right font-mono text-xs tabular-nums">{pct.toFixed(1)}%</span>
+						</div>
+
+						<div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/60">
+							<span>{formatSize(downloaded)} / {formatSize(file.size)}</span>
+							<span>{formatSpeed(file.downloadSpeed)}</span>
+							<span>ETA {formatEta(file.eta)}</span>
+							<span>{file.peers} peers · {file.seeds} seeds</span>
 						</div>
 					</div>
 				{/each}
