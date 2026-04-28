@@ -126,15 +126,15 @@
 			mono
 		/>
 		<HealthCard
-			label="Libraries"
-			value={$state.status?.library_count ?? '—'}
-			hint="Configured media libraries"
-		/>
-		<HealthCard
-			label="Queue depth"
-			value={$state.status?.queue_depth ?? '—'}
-			tone={($state.status?.queue_depth ?? 0) > 50 ? 'warning' : 'neutral'}
-			hint="Tasks tracked by mhaol-queue"
+			label="Database"
+			value={$state.status?.db.engine ?? '—'}
+			tone={$state.status?.db.connected === false ? 'error' : 'success'}
+			hint={$state.status
+				? `${$state.status.db.namespace}/${$state.status.db.database}${
+						$state.status.db.version ? ` · ${$state.status.db.version}` : ''
+					}`
+				: null}
+			mono
 		/>
 		<HealthCard
 			label="Signaling wallet"

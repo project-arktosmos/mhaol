@@ -1,7 +1,11 @@
 mod cloud_status;
+mod db;
 mod frontend;
+mod state;
 
-use mhaol_node::{api, load_env, AppState};
+use axum::Router;
+use mhaol_identity::IdentityManager;
+use state::CloudState;
 use std::path::PathBuf;
 use tokio::net::TcpListener;
 
@@ -25,7 +29,7 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,mhaol_cloud=debug,mhaol_node=debug,mhaol_torrent=debug,mhaol_p2p_stream=debug,librqbit=info".into()),
+                .unwrap_or_else(|_| "info,mhaol_cloud=debug,surrealdb=info".into()),
         )
         .init();
 
@@ -42,81 +46,33 @@ async fn main() {
         .or_else(|| {
             std::env::var("DATA_DIR")
                 .ok()
-                .map(|d| PathBuf::from(d).join("mhaol.db"))
+                .map(|d| PathBuf::from(d).join("cloud-surrealkv"))
         })
         .unwrap_or_else(|| {
             let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            if manifest_dir.exists() {
-                manifest_dir.join("mhaol.db")
-            } else {
-                mhaol_node::default_data_dir().join("mhaol.db")
-            }
+            manifest_dir.join("cloud-surrealkv")
         });
 
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
+    tracing::info!("Opening SurrealDB store at {}", db_path.display());
+    let surreal = db::open(&db_path)
+        .await
+        .expect("Failed to initialize SurrealDB");
 
-    let state = AppState::new(Some(db_path.as_path())).expect("Failed to initialize database");
-
-    state.seed_default_libraries();
-    state.initialize_modules();
-
-    {
-        let scan_state = state.clone();
-        tokio::task::spawn_blocking(move || {
-            let count = mhaol_node::api::libraries::scan_all_libraries(&scan_state);
-            tracing::info!("[startup] Auto-scanned {} libraries", count);
-        });
-    }
-
-    let worker_bridge = state.worker_bridge.clone();
-    tokio::spawn(async move {
-        worker_bridge.start().await;
+    let identities_dir = std::env::var("DATA_DIR")
+        .ok()
+        .map(|d| PathBuf::from(d).join("identities"))
+        .unwrap_or_else(mhaol_identity::default_identities_dir);
+    let signaling_url = std::env::var("SIGNALING_URL").unwrap_or_else(|_| {
+        "https://mhaol-signaling.project-arktosmos.partykit.dev".to_string()
     });
+    let identity_manager =
+        IdentityManager::new(identities_dir, "cloud".to_string(), signaling_url);
 
-    {
-        let recs_state = state.clone();
-        tokio::spawn(async move {
-            mhaol_node::recommendations_worker::run_recommendations_worker(recs_state).await;
-        });
-    }
+    identity_manager.ensure_identity("SIGNALING_WALLET");
+    identity_manager.ensure_identity("CLIENT_WALLET");
 
-    {
-        let music_recs_state = state.clone();
-        tokio::spawn(async move {
-            mhaol_node::music_recommendations_worker::run_music_recommendations_worker(
-                music_recs_state,
-            )
-            .await;
-        });
-    }
-
-    {
-        let game_recs_state = state.clone();
-        tokio::spawn(async move {
-            mhaol_node::game_recommendations_worker::run_game_recommendations_worker(
-                game_recs_state,
-            )
-            .await;
-        });
-    }
-
-    {
-        let book_recs_state = state.clone();
-        tokio::spawn(async move {
-            mhaol_node::book_recommendations_worker::run_book_recommendations_worker(
-                book_recs_state,
-            )
-            .await;
-        });
-    }
-
-    state.identity_manager.ensure_identity("SIGNALING_WALLET");
-    state.identity_manager.ensure_identity("CLIENT_WALLET");
-
-    if state.identity_manager.get_profile("SIGNALING_WALLET").is_none() {
-        state.identity_manager.set_profile(
+    if identity_manager.get_profile("SIGNALING_WALLET").is_none() {
+        identity_manager.set_profile(
             "SIGNALING_WALLET",
             &mhaol_identity::Profile {
                 username: "Cloud".to_string(),
@@ -125,37 +81,52 @@ async fn main() {
         );
     }
 
-    #[cfg(not(target_os = "android"))]
-    {
-        let peer_state = state.clone();
-        tokio::spawn(async move {
-            match mhaol_node::peer_service::PeerServiceManager::new(peer_state) {
-                Ok(mut manager) => {
-                    if let Err(e) = manager.start().await {
-                        tracing::error!("[peer-service] Event loop error: {}", e);
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("[peer-service] Failed to initialize: {}", e);
-                }
-            }
-        });
-    }
+    let state = CloudState::new(surreal, identity_manager);
 
-    let cloud_router = axum::Router::new()
+    let app = Router::new()
         .nest("/api/cloud", cloud_status::router())
-        .with_state(state.clone());
-
-    let app = api::build_router(state)
-        .merge(cloud_router)
-        .fallback(frontend::serve_frontend);
+        .fallback(frontend::serve_frontend)
+        .with_state(state);
 
     let addr = format!("{}:{}", host, port);
     let listener = TcpListener::bind(&addr)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind to {}: {}", addr, e));
 
-    tracing::info!("Cloud server (API + web UI) listening on {}", addr);
+    tracing::info!("Cloud server (SurrealDB + web UI) listening on {}", addr);
 
     axum::serve(listener, app).await.expect("Server error");
+}
+
+/// Load .env from the workspace root into process environment variables.
+/// Only sets variables that are not already present in the environment.
+fn load_env() {
+    let mut dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let env_path = loop {
+        if dir.join("pnpm-workspace.yaml").exists() {
+            break dir.join(".env");
+        }
+        if !dir.pop() {
+            break PathBuf::from(".env");
+        }
+    };
+
+    let content = match std::fs::read_to_string(&env_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(eq_idx) = trimmed.find('=') {
+            let key = trimmed[..eq_idx].trim();
+            let value = trimmed[eq_idx + 1..].trim();
+            if !key.is_empty() && std::env::var(key).is_err() {
+                std::env::set_var(key, value);
+            }
+        }
+    }
 }

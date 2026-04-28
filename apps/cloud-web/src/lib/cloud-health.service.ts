@@ -1,5 +1,13 @@
 import { writable, type Writable } from 'svelte/store';
 
+export interface CloudDbStatus {
+	engine: string;
+	namespace: string;
+	database: string;
+	connected: boolean;
+	version: string | null;
+}
+
 export interface CloudStatus {
 	status: string;
 	version: string;
@@ -11,8 +19,7 @@ export interface CloudStatus {
 	local_ip: string | null;
 	signaling_address: string | null;
 	client_address: string | null;
-	library_count: number;
-	queue_depth: number;
+	db: CloudDbStatus;
 }
 
 export interface CloudHealthState {
