@@ -7,24 +7,44 @@ pub struct Ed2kServer {
     pub port: u16,
 }
 
-/// A small set of historically well-known eDonkey servers. Servers come and
+/// A small set of currently-reachable eDonkey servers. Servers come and
 /// go; the client tries them in order and falls back gracefully when none
 /// are reachable.
 pub const DEFAULT_SERVERS: &[Ed2kServer] = &[
     Ed2kServer {
-        name: "eMule Security No1",
-        host: "176.103.48.36",
-        port: 4184,
+        name: "eMule Sunrise",
+        host: "176.123.5.89",
+        port: 4725,
     },
     Ed2kServer {
-        name: "PEERATES.NET",
-        host: "104.221.142.86",
+        name: "!! Sharing-Devils No.4 !!",
+        host: "91.208.162.87",
         port: 4232,
     },
     Ed2kServer {
-        name: "GrupoTS Server",
-        host: "37.187.95.220",
-        port: 4244,
+        name: "eMule Security",
+        host: "45.82.80.155",
+        port: 5687,
+    },
+    Ed2kServer {
+        name: "Astra-5 Server",
+        host: "213.252.245.239",
+        port: 33333,
+    },
+    Ed2kServer {
+        name: "Astra-3 Server",
+        host: "213.252.245.239",
+        port: 43333,
+    },
+    Ed2kServer {
+        name: "Gaal Server",
+        host: "185.237.185.226",
+        port: 31031,
+    },
+    Ed2kServer {
+        name: "Akteon Server",
+        host: "185.25.48.89",
+        port: 18357,
     },
 ];
 
