@@ -335,6 +335,24 @@
 		}
 	});
 
+	// Auto-start the download for a fetched movie candidate, mirroring TV.
+	// Idempotent: skip if the hash already started or the torrent is live.
+	$effect(() => {
+		if (config?.kind !== 'movie' || libraryItem !== null) return;
+		const candidate = $searchStore.fetchedCandidate;
+		if (!candidate) return;
+		const key = candidate.infoHash.toLowerCase();
+		if (autoStartedHashes.has(key)) return;
+		if (torrentByHash[key]) {
+			autoStartedHashes.add(key);
+			return;
+		}
+		autoStartedHashes.add(key);
+		smartSearchService.startDownload(candidate).catch(() => {
+			autoStartedHashes.delete(key);
+		});
+	});
+
 	// === Per-type fetch functions ===
 
 	async function fetchBook(bookKey: string) {
@@ -1041,7 +1059,7 @@
 		searchLang={config?.kind === 'movie' && !hasLibraryItem ? movieSearchLang : null}
 		onsearchlangchange={config?.kind === 'movie' && !hasLibraryItem ? (lang) => (movieSearchLang = lang) : undefined}
 		onfetch={hasLibraryItem ? undefined : handleFetch}
-		ondownload={hasLibraryItem || config?.kind === 'tv_show' ? undefined : handleDownload}
+		ondownload={hasLibraryItem || config?.kind === 'tv_show' || config?.kind === 'movie' ? undefined : handleDownload}
 		onshowsearch={hasLibraryItem ? undefined : () => smartSearchService.show()}
 		onback={() => goto(`${base}/media/${config.slug}`)}
 		ontogglefavorite={handleToggleFavorite} ontogglepin={handleTogglePin}
