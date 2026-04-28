@@ -107,10 +107,27 @@ impl Ed2kClient {
 
         client.send_login(listen_port, user_name).await?;
 
-        // Drain the initial server frames for ~2 seconds — we don't need a
-        // strict handshake, just whatever metadata the server volunteers.
-        let _ = timeout(Duration::from_secs(2), client.read_until_id_change())
-            .await;
+        // Wait for the server to actually identify us. If we never receive
+        // OP_ID_CHANGE (or at minimum OP_SERVER_STATUS) within the window,
+        // the TCP socket is up but the session is dead — usually an ISP
+        // filter silently dropping ed2k payloads, or a server that closed
+        // on us. Surface that as a real connect failure instead of pretending
+        // we're connected.
+        let handshake = timeout(Duration::from_secs(8), client.read_until_id_change()).await;
+        match handshake {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                return Err(anyhow!("ed2k handshake with {} failed: {}", addr, e));
+            }
+            Err(_) => {
+                if client.info.assigned_id.is_none() && client.info.user_count == 0 {
+                    return Err(anyhow!(
+                        "ed2k handshake with {} timed out (TCP up, no protocol reply — likely ISP filtering or dead server)",
+                        addr
+                    ));
+                }
+            }
+        }
 
         Ok(client)
     }
