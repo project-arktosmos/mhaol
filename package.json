@@ -15,6 +15,7 @@
 		"format": "pnpm -r run format",
 		"check": "pnpm -r run check && cargo check -p mhaol-node",
 		"clean": "pnpm -r run clean && cargo clean && rm -f mhaol.db mhaol.db-wal mhaol.db-shm apps/node/mhaol.db apps/node/mhaol.db-wal apps/node/mhaol.db-shm",
+		"reset": "rm -rf \"${DATA_DIR:-$HOME/Documents/mhaol}\"",
 		"signaling:dev": "dotenv -- pnpm --filter signaling dev",
 		"signaling:deploy": "dotenv -- pnpm --filter signaling run deploy",
 		"signaling:serve": "cargo run -p mhaol-signaling -- serve",
