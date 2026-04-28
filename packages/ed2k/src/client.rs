@@ -16,55 +16,71 @@ use crate::config::Ed2kServer;
 use crate::types::Ed2kSearchResult;
 use crate::util::build_ed2k_file_uri;
 
-/// eDonkey "standard" protocol byte.
+/// eDonkey "standard" protocol byte (`OP_EDONKEYPROT`, see amule
+/// `include/protocol/Protocols.h`).
 const PROTO_EDONKEY: u8 = 0xE3;
 
-/// Login opcode.
-const OP_LOGIN: u8 = 0x01;
-/// Server message (text broadcast).
-const OP_SERVER_MESSAGE: u8 = 0x38;
-/// Server status (active users / files).
-const OP_SERVER_STATUS: u8 = 0x34;
-/// Server identification.
-const OP_SERVER_IDENT: u8 = 0x41;
-/// Set ID (login response with assigned client ID).
-const OP_ID_CHANGE: u8 = 0x40;
-/// Search request.
-const OP_SEARCH_REQUEST: u8 = 0x16;
-/// Search result.
-const OP_SEARCH_RESULT: u8 = 0x33;
-/// Reject (server refused us).
+// Opcodes — values mirror amule
+// `include/protocol/ed2k/Client2Server/TCP.h::OP_ClientToServerTCP`.
+const OP_LOGIN: u8 = 0x01; // OP_LOGINREQUEST
 const OP_REJECT: u8 = 0x05;
-/// Offer files (announce we are a source).
-const OP_OFFER_FILES: u8 = 0x15;
-/// Get sources for a known file (32-bit size).
-const OP_GETSOURCES: u8 = 0x9A;
-/// Get sources for a known file (64-bit size, files > 4 GB).
-const OP_GETSOURCES_OBFU: u8 = 0x9E;
-/// Server reply with a source list.
+const OP_OFFER_FILES: u8 = 0x15; // OP_OFFERFILES
+const OP_SEARCH_REQUEST: u8 = 0x16;
+const OP_GETSOURCES: u8 = 0x19;
+const OP_GETSOURCES_OBFU: u8 = 0x23;
+const OP_SEARCH_RESULT: u8 = 0x33; // OP_SEARCHRESULT
+const OP_SERVER_STATUS: u8 = 0x34; // OP_SERVERSTATUS
+const OP_SERVER_MESSAGE: u8 = 0x38; // OP_SERVERMESSAGE
+const OP_ID_CHANGE: u8 = 0x40; // OP_IDCHANGE
+const OP_SERVER_IDENT: u8 = 0x41; // OP_SERVERIDENT
 const OP_FOUNDSOURCES: u8 = 0x42;
 
-/// Tag types.
-const TAG_HASH: u8 = 0x01;
-const TAG_STRING: u8 = 0x02;
-const TAG_UINT32: u8 = 0x03;
-const TAG_UINT16: u8 = 0x08;
-const TAG_UINT8: u8 = 0x09;
-const TAG_UINT64: u8 = 0x0B;
+// Tag types — `include/tags/TagTypes.h::Tag_Types`.
+const TAG_HASH: u8 = 0x01; // TAGTYPE_HASH16
+const TAG_STRING: u8 = 0x02; // TAGTYPE_STRING
+const TAG_UINT32: u8 = 0x03; // TAGTYPE_UINT32
+const TAG_UINT16: u8 = 0x08; // TAGTYPE_UINT16
+const TAG_UINT8: u8 = 0x09; // TAGTYPE_UINT8
+const TAG_UINT64: u8 = 0x0B; // TAGTYPE_UINT64
 
-/// Common tag names.
+// Common tag names — `include/tags/ClientTags.h::client_tags`.
 const CT_NAME: u8 = 0x01;
-const CT_PORT: u8 = 0x0F;
 const CT_VERSION: u8 = 0x11;
 const CT_SERVER_FLAGS: u8 = 0x20;
+const CT_EMULE_VERSION: u8 = 0xFB;
+
+// File tag names — `include/tags/FileTags.h`.
 const FT_FILENAME: u8 = 0x01;
 const FT_FILESIZE: u8 = 0x02;
 const FT_FILETYPE: u8 = 0x03;
 const FT_SOURCES: u8 = 0x15;
 const FT_COMPLETE_SOURCES: u8 = 0x30;
+/// High 32 bits of file size for files > 4 GB on the server protocol.
+const FT_FILESIZE_HI: u8 = 0x3A;
 
-/// eMule client version tag value (eMule 0.50a == 60 == 0x3C).
+/// `EDONKEYVERSION` from amule `include/common/ClientVersion.h` (0x3C).
 const ED2K_VERSION: u32 = 0x3C;
+
+// CT_SERVER_FLAGS bits — `include/tags/ClientTags.h::ServerCapabilites`.
+const SRVCAP_ZLIB: u32 = 0x0001;
+const SRVCAP_IP_IN_LOGIN: u32 = 0x0002;
+const SRVCAP_AUXPORT: u32 = 0x0004;
+const SRVCAP_NEWTAGS: u32 = 0x0008;
+const SRVCAP_UNICODE: u32 = 0x0010;
+const SRVCAP_LARGEFILES: u32 = 0x0100;
+
+/// Software ID for aMule — `include/protocol/ed2k/ClientSoftware.h::SO_AMULE = 3`.
+const SO_AMULE: u32 = 3;
+
+/// `make_full_ed2k_version(a,b,c) = (a<<17) | (b<<10) | (c<<7)` from
+/// `OtherFunctions.h`. We mirror amule 2.4.0 = (2,4,0).
+const fn make_full_ed2k_version(a: u32, b: u32, c: u32) -> u32 {
+    (a << 17) | (b << 10) | (c << 7)
+}
+
+/// CT_EMULE_VERSION value sent on login: `(SO_AMULE<<24) | make_full_ed2k_version(2,4,0)`.
+const ED2K_EMULE_VERSION: u32 =
+    (SO_AMULE << 24) | make_full_ed2k_version(2, 4, 0);
 
 /// Information returned by the server right after a successful login.
 #[derive(Debug, Default, Clone)]
@@ -257,34 +273,41 @@ impl Ed2kClient {
     }
 
     async fn send_login(&mut self, listen_port: u16, user_name: &str) -> Result<()> {
+        // Mirror of amule `CServerConnect::ConnectToServer` login frame
+        // construction (`ServerConnect.cpp` in `OnConnect`):
+        //   <user_hash 16><client_id 4><port 2><tag_count 4><tags>
+        // with exactly 4 tags: CT_NAME, CT_VERSION, CT_SERVER_FLAGS,
+        // CT_EMULE_VERSION (no CT_PORT — the port is in the fixed header).
         let mut payload = Vec::with_capacity(64);
-        // 16-byte user hash. Public servers don't validate it, so we use a
-        // stable per-process random hash.
         payload.extend_from_slice(&user_hash_bytes(user_name));
-        // 4-byte client ID (0 — server assigns one back).
         payload.extend_from_slice(&0u32.to_le_bytes());
-        // 2-byte advertised TCP port.
         payload.extend_from_slice(&listen_port.to_le_bytes());
 
-        // Tag block.
         let mut tags = Vec::new();
         let mut tag_count = 0u32;
 
-        // Name tag (string).
         write_tag_u8name_string(&mut tags, CT_NAME, user_name);
         tag_count += 1;
-        // Version tag (uint32).
         write_tag_u8name_uint32(&mut tags, CT_VERSION, ED2K_VERSION);
         tag_count += 1;
-        // Port tag (uint32).
-        write_tag_u8name_uint32(&mut tags, CT_PORT, listen_port as u32);
+        // CT_SERVER_FLAGS — match what amule advertises minus SRVCAP_ZLIB.
+        // We deliberately omit SRVCAP_ZLIB because we cannot decode
+        // zlib-compressed (proto 0xD4) frames; advertising it would cause
+        // most servers to compress search results, which we would then
+        // silently drop. Everything else (NEWTAGS, UNICODE, LARGEFILES,
+        // AUXPORT, IP_IN_LOGIN) is what amule sends and what modern
+        // servers expect.
+        let flags = SRVCAP_IP_IN_LOGIN
+            | SRVCAP_AUXPORT
+            | SRVCAP_NEWTAGS
+            | SRVCAP_UNICODE
+            | SRVCAP_LARGEFILES;
+        let _ = SRVCAP_ZLIB; // referenced in the comment above
+        write_tag_u8name_uint32(&mut tags, CT_SERVER_FLAGS, flags);
         tag_count += 1;
-        // Server flags tag (uint32). We deliberately do NOT advertise
-        // SRVCAP_ZLIB (0x0001): we cannot decode zlib-compressed (proto 0xD4)
-        // frames, and many servers compress search results when zlib is
-        // negotiated, which would silently swallow every result. Leaving this
-        // at 0 keeps responses in the plain 0xE3 protocol we can read.
-        write_tag_u8name_uint32(&mut tags, CT_SERVER_FLAGS, 0x0000);
+        // CT_EMULE_VERSION — amule sends this so LowID callbacks can
+        // identify us even before we get the chance to send a peer Hello.
+        write_tag_u8name_uint32(&mut tags, CT_EMULE_VERSION, ED2K_EMULE_VERSION);
         tag_count += 1;
 
         payload.extend_from_slice(&tag_count.to_le_bytes());
@@ -400,6 +423,9 @@ fn write_tag_u8name_uint32(buf: &mut Vec<u8>, name: u8, value: u32) {
     write_u32_le(buf, value);
 }
 
+/// Write a uint64 tag. Used for the client-to-client OFFER_FILES form;
+/// the server form uses FT_FILESIZE (low u32) + FT_FILESIZE_HI (high u32).
+#[allow(dead_code)]
 fn write_tag_u8name_uint64(buf: &mut Vec<u8>, name: u8, value: u64) {
     buf.push(TAG_UINT64 | 0x80);
     buf.push(name);
@@ -417,11 +443,16 @@ pub struct OfferedFile {
     pub file_type: Option<String>,
 }
 
-/// Encode a GetSources request body. Layout: 16-byte hash + 4 or 8 byte size.
+/// Encode a GetSources request body. Layout mirrors amule
+/// `CDownloadQueue::ProcessLocalRequests` (`DownloadQueue.cpp`):
+///   * regular file: `<HASH 16><FILESIZE 4>`
+///   * large file:   `<HASH 16><FILESIZE 4(=0)><FILESIZE 8>` — eserver 17.9+
+///     wants a 32-bit zero followed by the real 64-bit size.
 fn encode_get_sources(hash: &[u8; 16], size: u64) -> Vec<u8> {
-    let mut out = Vec::with_capacity(24);
+    let mut out = Vec::with_capacity(28);
     out.extend_from_slice(hash);
     if size > u32::MAX as u64 {
+        out.extend_from_slice(&0u32.to_le_bytes());
         out.extend_from_slice(&size.to_le_bytes());
     } else {
         out.extend_from_slice(&(size as u32).to_le_bytes());
@@ -446,11 +477,19 @@ fn encode_offer_files(files: &[OfferedFile], listen_port: u16) -> Vec<u8> {
         write_tag_u8name_string(&mut tags, FT_FILENAME, &f.name);
         tag_count += 1;
         if f.size > u32::MAX as u64 {
-            write_tag_u8name_uint64(&mut tags, FT_FILESIZE, f.size);
+            // Mirror amule `CKnownFile::CreateOfferedFilePacket`: when sending
+            // an offered-file announcement to a SERVER, the size is split
+            // into two uint32 tags (FT_FILESIZE = low, FT_FILESIZE_HI = high)
+            // rather than a single uint64. The single-uint64 form is only
+            // used for offered files sent to other CLIENTS.
+            write_tag_u8name_uint32(&mut tags, FT_FILESIZE, f.size as u32);
+            tag_count += 1;
+            write_tag_u8name_uint32(&mut tags, FT_FILESIZE_HI, (f.size >> 32) as u32);
+            tag_count += 1;
         } else {
             write_tag_u8name_uint32(&mut tags, FT_FILESIZE, f.size as u32);
+            tag_count += 1;
         }
-        tag_count += 1;
         if let Some(ref t) = f.file_type {
             write_tag_u8name_string(&mut tags, FT_FILETYPE, t);
             tag_count += 1;
@@ -528,7 +567,9 @@ fn parse_search_results(payload: &[u8]) -> Result<Vec<Ed2kSearchResult>> {
         let tag_count = cursor.read_u32_le()? as usize;
 
         let mut name = String::new();
-        let mut size: u64 = 0;
+        let mut size_lo: Option<u64> = None;
+        let mut size_hi: Option<u64> = None;
+        let mut size_64: Option<u64> = None;
         let mut sources: u32 = 0;
         let mut complete: u32 = 0;
         let mut media_type: Option<String> = None;
@@ -542,10 +583,17 @@ fn parse_search_results(payload: &[u8]) -> Result<Vec<Ed2kSearchResult>> {
                     }
                 }
                 Some(FT_FILESIZE) => match tag.value {
-                    TagValue::U32(v) => size = v as u64,
-                    TagValue::U64(v) => size = v,
+                    TagValue::U8(v) => size_lo = Some(v as u64),
+                    TagValue::U16(v) => size_lo = Some(v as u64),
+                    TagValue::U32(v) => size_lo = Some(v as u64),
+                    TagValue::U64(v) => size_64 = Some(v),
                     _ => {}
                 },
+                Some(FT_FILESIZE_HI) => {
+                    if let TagValue::U32(v) = tag.value {
+                        size_hi = Some(v as u64);
+                    }
+                }
                 Some(FT_FILETYPE) => {
                     if let TagValue::String(s) = tag.value {
                         media_type = Some(s);
@@ -568,6 +616,15 @@ fn parse_search_results(payload: &[u8]) -> Result<Vec<Ed2kSearchResult>> {
         if name.is_empty() {
             continue;
         }
+        // Reassemble file size: prefer a true uint64 tag, otherwise combine
+        // FT_FILESIZE (low 32) + FT_FILESIZE_HI (high 32) — same logic
+        // amule uses to handle eserver replies for files > 4 GB.
+        let size = match (size_64, size_lo, size_hi) {
+            (Some(v), _, _) => v,
+            (None, Some(lo), Some(hi)) => (hi << 32) | lo,
+            (None, Some(lo), None) => lo,
+            _ => 0,
+        };
         let file_hash = hex::encode(&hash);
         let ed2k_link = build_ed2k_file_uri(&name, size, &file_hash);
         out.push(Ed2kSearchResult {
@@ -836,11 +893,14 @@ mod tests {
 
     #[test]
     fn encode_get_sources_huge_size() {
+        // Mirror amule eserver-17.9 large-file format:
+        //   <hash 16> <FILESIZE 4 = 0> <FILESIZE 8>
         let hash = [0xBB; 16];
         let big = (u32::MAX as u64) + 17;
         let body = encode_get_sources(&hash, big);
-        assert_eq!(body.len(), 16 + 8);
-        assert_eq!(&body[16..24], &big.to_le_bytes());
+        assert_eq!(body.len(), 16 + 4 + 8);
+        assert_eq!(&body[16..20], &0u32.to_le_bytes());
+        assert_eq!(&body[20..28], &big.to_le_bytes());
     }
 
     #[test]
@@ -900,6 +960,71 @@ mod tests {
         // Body should contain the filename bytes
         assert!(body.windows(b"movie.mkv".len())
             .any(|w| w == b"movie.mkv"));
+    }
+
+    #[test]
+    fn encode_offer_files_large_file_uses_split_size_tags() {
+        // For files > 4 GB sent to a SERVER, amule writes
+        // FT_FILESIZE (low u32) + FT_FILESIZE_HI (high u32) instead of a
+        // single uint64 — `CKnownFile::CreateOfferedFilePacket`.
+        let big = (1u64 << 33) + 7; // > 4 GB
+        let f = OfferedFile {
+            hash: [0xCC; 16],
+            name: "big.iso".to_string(),
+            size: big,
+            file_type: None,
+        };
+        let body = encode_offer_files(&[f], 4662);
+        // tag count = 2 (filename + filesize-low + filesize-hi) = 3
+        assert_eq!(&body[26..30], &3u32.to_le_bytes());
+        // The body must contain a low-u32 filesize tag (uint32) AND a
+        // high-u32 FT_FILESIZE_HI tag (name 0x3A). Both are encoded with a
+        // 1-byte short-name marker.
+        let low = (big as u32).to_le_bytes();
+        let hi = ((big >> 32) as u32).to_le_bytes();
+        assert!(body
+            .windows(2 + 4)
+            .any(|w| w[0] == (TAG_UINT32 | 0x80) && w[1] == FT_FILESIZE && w[2..6] == low));
+        assert!(body
+            .windows(2 + 4)
+            .any(|w| w[0] == (TAG_UINT32 | 0x80) && w[1] == FT_FILESIZE_HI && w[2..6] == hi));
+        // No raw uint64 size tag should be present.
+        assert!(!body
+            .windows(2)
+            .any(|w| w[0] == (TAG_UINT64 | 0x80) && w[1] == FT_FILESIZE));
+    }
+
+    #[test]
+    fn parse_search_results_combines_split_filesize_tags() {
+        // amule eservers return large-file sizes split across FT_FILESIZE
+        // (low u32) and FT_FILESIZE_HI (high u32). Verify we reassemble.
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&1u32.to_le_bytes()); // count
+        payload.extend_from_slice(&[0x77; 16]); // hash
+        payload.extend_from_slice(&0u32.to_le_bytes()); // client id
+        payload.extend_from_slice(&0u16.to_le_bytes()); // port
+        payload.extend_from_slice(&3u32.to_le_bytes()); // 3 tags
+
+        // filename
+        payload.push(TAG_STRING | 0x80);
+        payload.push(FT_FILENAME);
+        let name = b"big.iso";
+        payload.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        payload.extend_from_slice(name);
+
+        let big = (1u64 << 33) + 5;
+        // FT_FILESIZE (low)
+        payload.push(TAG_UINT32 | 0x80);
+        payload.push(FT_FILESIZE);
+        payload.extend_from_slice(&(big as u32).to_le_bytes());
+        // FT_FILESIZE_HI (high)
+        payload.push(TAG_UINT32 | 0x80);
+        payload.push(FT_FILESIZE_HI);
+        payload.extend_from_slice(&((big >> 32) as u32).to_le_bytes());
+
+        let parsed = parse_search_results(&payload).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].size, big);
     }
 
     #[test]
