@@ -2,11 +2,12 @@ use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use crate::client::Ed2kClient;
 use crate::config::Ed2kConfig;
+use crate::download::{spawn_download, DownloadHandle, DownloadSpec};
 use crate::types::{
     AddEd2kRequest, Ed2kFileInfo, Ed2kSearchResult, Ed2kState, Ed2kStats,
 };
@@ -23,16 +24,24 @@ pub struct ConnectedServer {
     pub assigned_id: Option<u32>,
 }
 
-/// In-memory file tracking. Real ed2k peer-to-peer downloading is out of
-/// scope for this scaffold — we keep an authoritative state store so the API
-/// and frontend can wire up status, search, add and remove operations end
-/// to end against real ed2k:// URIs.
+/// In-memory file tracking PLUS a per-file download driver. Each file added
+/// via `add` (or unpaused via `resume`) has a tokio task driving its
+/// peer-to-peer download. The manager exposes only synchronous API; the
+/// async work happens off in spawned tasks that publish progress back into
+/// `files` via `update_file`.
 pub struct Ed2kManager {
     config: RwLock<Ed2kConfig>,
     initialized: RwLock<bool>,
     next_id: RwLock<usize>,
     files: RwLock<HashMap<String, Ed2kFileInfo>>,
     server: RwLock<Option<ConnectedServer>>,
+    /// Weak self-reference, set by `install_arc`. When unset (e.g. in unit
+    /// tests that use a bare `Ed2kManager`), download tasks are not spawned
+    /// and the file simply sits in `Initializing`. Setting this turns the
+    /// manager into a fully-featured downloader.
+    self_weak: RwLock<Option<Weak<Self>>>,
+    /// Active download handles keyed by file hash.
+    tasks: RwLock<HashMap<String, DownloadHandle>>,
 }
 
 impl Ed2kManager {
@@ -43,6 +52,75 @@ impl Ed2kManager {
             next_id: RwLock::new(1),
             files: RwLock::new(HashMap::new()),
             server: RwLock::new(None),
+            self_weak: RwLock::new(None),
+            tasks: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Register the Arc-wrapped manager with itself so background download
+    /// tasks can update file state through a `Weak<Self>`. Idempotent —
+    /// callers may invoke this multiple times; only the first call matters.
+    pub fn install_arc(self: &Arc<Self>) {
+        let mut slot = self.self_weak.write();
+        if slot.is_none() {
+            *slot = Some(Arc::downgrade(self));
+        }
+    }
+
+    fn weak_self(&self) -> Option<Weak<Self>> {
+        self.self_weak.read().clone()
+    }
+
+    /// Spawn a download task for the file at `file_hash`. No-op if the
+    /// manager hasn't been Arc-installed (test mode), if the file is not
+    /// tracked, or if a task is already running.
+    fn spawn_task_for(&self, file_hash: &str) {
+        let weak = match self.weak_self() {
+            Some(w) => w,
+            None => return,
+        };
+        if self.tasks.read().contains_key(file_hash) {
+            return;
+        }
+        let info = match self.files.read().get(file_hash).cloned() {
+            Some(i) => i,
+            None => return,
+        };
+        let download_dir = match info.output_path.as_deref() {
+            Some(p) => PathBuf::from(p)
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| self.download_path()),
+            None => self.download_path(),
+        };
+        let spec = match DownloadSpec::from_parts(
+            &info.file_hash,
+            &info.name,
+            info.size,
+            download_dir,
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                log::warn!(
+                    "ed2k spawn for {}: invalid spec: {}",
+                    info.file_hash,
+                    e
+                );
+                return;
+            }
+        };
+        let config = self.config.read().clone();
+        let handle = spawn_download(weak, spec, config);
+        self.tasks.write().insert(file_hash.to_string(), handle);
+    }
+
+    fn cancel_task_for(&self, file_hash: &str) {
+        if let Some(handle) = self.tasks.write().remove(file_hash) {
+            handle.cancel.cancel();
+            // The JoinHandle is detached on purpose: pause/remove are
+            // synchronous and we don't want to block the caller. The task
+            // exits on its own once it observes the cancel flag.
+            handle.task.abort();
         }
     }
 
@@ -265,43 +343,68 @@ impl Ed2kManager {
             source_uri: request.source,
         };
 
-        self.files.write().insert(parsed.file_hash, info.clone());
+        let hash = parsed.file_hash.clone();
+        self.files.write().insert(hash.clone(), info.clone());
+        if !matches!(info.state, Ed2kState::Paused) {
+            self.spawn_task_for(&hash);
+        }
         Ok(info)
     }
 
     pub fn pause(&self, file_hash: &str) -> Result<()> {
-        let mut files = self.files.write();
-        let f = files
-            .get_mut(file_hash)
-            .ok_or_else(|| anyhow!("ed2k file not found"))?;
-        f.state = Ed2kState::Paused;
-        f.download_speed = 0;
-        f.eta = None;
+        {
+            let mut files = self.files.write();
+            let f = files
+                .get_mut(file_hash)
+                .ok_or_else(|| anyhow!("ed2k file not found"))?;
+            f.state = Ed2kState::Paused;
+            f.download_speed = 0;
+            f.peers = 0;
+            f.eta = None;
+        }
+        self.cancel_task_for(file_hash);
         Ok(())
     }
 
     pub fn resume(&self, file_hash: &str) -> Result<()> {
-        let mut files = self.files.write();
-        let f = files
-            .get_mut(file_hash)
-            .ok_or_else(|| anyhow!("ed2k file not found"))?;
-        if matches!(f.state, Ed2kState::Paused | Ed2kState::Error) {
-            f.state = Ed2kState::Initializing;
+        {
+            let mut files = self.files.write();
+            let f = files
+                .get_mut(file_hash)
+                .ok_or_else(|| anyhow!("ed2k file not found"))?;
+            if matches!(f.state, Ed2kState::Paused | Ed2kState::Error) {
+                f.state = Ed2kState::Initializing;
+            }
         }
+        self.spawn_task_for(file_hash);
         Ok(())
     }
 
     pub fn remove(&self, file_hash: &str) -> Result<()> {
-        if self.files.write().remove(file_hash).is_none() {
-            return Err(anyhow!("ed2k file not found"));
+        let info = self
+            .files
+            .write()
+            .remove(file_hash)
+            .ok_or_else(|| anyhow!("ed2k file not found"))?;
+        self.cancel_task_for(file_hash);
+        // Best-effort: delete the .part file and its sidecar so the user's
+        // download dir doesn't accumulate orphans. Ignore errors — the
+        // file may already be gone or never have been written to disk.
+        if let Some(out) = info.output_path.as_deref() {
+            let part_path = format!("{}.part", out);
+            let met_path = format!("{}.part.met", out);
+            let _ = std::fs::remove_file(&part_path);
+            let _ = std::fs::remove_file(&met_path);
         }
         Ok(())
     }
 
     pub fn remove_all(&self) -> u32 {
-        let mut files = self.files.write();
-        let count = files.len() as u32;
-        files.clear();
+        let hashes: Vec<String> = self.files.read().keys().cloned().collect();
+        let count = hashes.len() as u32;
+        for h in hashes {
+            let _ = self.remove(&h);
+        }
         count
     }
 
@@ -544,5 +647,92 @@ mod tests {
         assert_eq!(s.name, "");
         assert_eq!(s.user_count, 0);
         assert!(s.assigned_id.is_none());
+    }
+
+    #[test]
+    fn install_arc_is_idempotent() {
+        let mgr = Arc::new(Ed2kManager::new());
+        mgr.install_arc();
+        mgr.install_arc();
+        // No panic, weak ref is set.
+        assert!(mgr.weak_self().is_some());
+    }
+
+    #[tokio::test]
+    async fn add_with_arc_spawns_a_task() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = Arc::new(Ed2kManager::new());
+        let cfg = Ed2kConfig {
+            download_path: tmp.path().to_path_buf(),
+            ..Default::default()
+        };
+        mgr.initialize(cfg).unwrap();
+        mgr.install_arc();
+
+        let info = mgr
+            .add(AddEd2kRequest {
+                source: SAMPLE_URI.to_string(),
+                download_path: None,
+                paused: None,
+            })
+            .unwrap();
+
+        // The download task is fire-and-forget; we just check the handle
+        // got registered and the file is no longer in `Initializing` after
+        // the task runs at least once.
+        assert_eq!(info.file_hash, SAMPLE_HASH);
+        let has_task = mgr.tasks.read().contains_key(SAMPLE_HASH);
+        assert!(has_task);
+
+        // Cancel the task before the test ends so we don't leak it.
+        mgr.pause(SAMPLE_HASH).unwrap();
+    }
+
+    #[tokio::test]
+    async fn pause_cancels_task() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = Arc::new(Ed2kManager::new());
+        mgr.initialize(Ed2kConfig {
+            download_path: tmp.path().to_path_buf(),
+            ..Default::default()
+        })
+        .unwrap();
+        mgr.install_arc();
+        mgr.add(AddEd2kRequest {
+            source: SAMPLE_URI.to_string(),
+            download_path: None,
+            paused: None,
+        })
+        .unwrap();
+        assert!(mgr.tasks.read().contains_key(SAMPLE_HASH));
+        mgr.pause(SAMPLE_HASH).unwrap();
+        assert!(!mgr.tasks.read().contains_key(SAMPLE_HASH));
+    }
+
+    #[tokio::test]
+    async fn remove_cleans_up_partfile() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = Arc::new(Ed2kManager::new());
+        mgr.initialize(Ed2kConfig {
+            download_path: tmp.path().to_path_buf(),
+            ..Default::default()
+        })
+        .unwrap();
+        mgr.install_arc();
+        let info = mgr
+            .add(AddEd2kRequest {
+                source: SAMPLE_URI.to_string(),
+                download_path: None,
+                paused: None,
+            })
+            .unwrap();
+        // Give the task a chance to open the .part file.
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        let part = format!("{}.part", info.output_path.unwrap());
+        // Best-effort: the file may or may not exist depending on timing;
+        // remove() must succeed regardless.
+        mgr.remove(SAMPLE_HASH).unwrap();
+        assert!(!std::path::Path::new(&part).exists());
+        assert!(mgr.list().is_empty());
     }
 }

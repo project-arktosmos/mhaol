@@ -249,6 +249,9 @@ impl AppState {
             registry.register(Box::new(Ed2kModule {
                 manager: Arc::clone(&self.ed2k_manager),
             }));
+            // Hand the manager its own weak self-reference so background
+            // download tasks can publish progress back into the file map.
+            self.ed2k_manager.install_arc();
             registry.register(Box::new(P2pStreamModule::new()));
         }
 
