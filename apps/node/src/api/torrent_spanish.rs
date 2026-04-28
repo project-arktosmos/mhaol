@@ -71,41 +71,66 @@ pub const SPANISH_INDEXERS: &[SpanishIndexer] = &[
     },
 ];
 
-/// Query variants used to surface Spanish-dub releases on language-agnostic
-/// indexers like PirateBay.
-pub const SPANISH_QUERY_HINTS: &[&str] = &["castellano", "español", "latino"];
+/// Query variants used to surface Castilian-dub releases on language-agnostic
+/// indexers like PirateBay. Note: `latino` is intentionally excluded — Latin
+/// American Spanish is a distinct dub from Castilian and "Spanish" in the UI
+/// means Castilian only.
+pub const SPANISH_QUERY_HINTS: &[&str] = &["castellano", "español"];
 
-/// Whole-word Spanish-language tokens. A torrent name matches if any of these
-/// appear as a standalone word/code (case-insensitive). Used to gate Spanish
-/// results — there is no English fallback when the user selected Spanish.
+/// Whole-word Castilian Spanish markers. Latin American Spanish (`latino`,
+/// `latam`, `es-MX`, etc.) is explicitly excluded via `LATINO_TOKENS` below
+/// and a name matching any of those is rejected even when a Castilian marker
+/// also appears (the latino marker wins).
 const SPANISH_TOKENS: &[&str] = &[
     "castellano",
     "castelhano",
     "español",
     "espanol",
     "spanish",
-    "latino",
-    "latinoamericano",
-    "latinoamericana",
-    "latam",
     "spa",
     "esp",
-    "cast", // common shorthand on Spanish releases ("[CAST]", "DUAL.CAST")
+    "cast", // common shorthand on Castilian releases ("[CAST]", "DUAL.CAST")
     "es-es",
+];
+
+/// Whole-word markers for Latin American Spanish releases. A name containing
+/// any of these is rejected outright when the user selected Castilian Spanish.
+const LATINO_TOKENS: &[&str] = &[
+    "latino",
+    "latina",
+    "latinoamericano",
+    "latinoamericana",
+    "latinoamerica",
+    "latam",
+    "lat",
     "es-mx",
     "es-la",
     "es-ar",
     "es-cl",
     "es-419",
+    "mexicano",
+    "mexicana",
 ];
 
-/// True when `name` contains a Spanish-language indicator as a whole word.
-/// Word boundaries are computed on the lowercased name treating any
-/// non-alphanumeric character (and `-` for locale codes) as a delimiter.
+/// True when `name` contains a Castilian Spanish marker AND no Latin American
+/// marker. The latino check wins regardless of other markers in the name —
+/// e.g. "español latino" is rejected because `latino` is present.
+///
+/// Word boundaries treat any non-alphanumeric character (including `-` for
+/// non-locale tokens) as a delimiter; locale-code tokens like `es-mx` carry
+/// their internal `-` and the boundary check only looks at the surrounding
+/// characters.
 pub fn is_spanish_release(name: &str) -> bool {
     let lower = name.to_lowercase();
+    if contains_token(&lower, LATINO_TOKENS) {
+        return false;
+    }
+    contains_token(&lower, SPANISH_TOKENS)
+}
+
+fn contains_token(lower: &str, tokens: &[&str]) -> bool {
     let bytes = lower.as_bytes();
-    for token in SPANISH_TOKENS {
+    for token in tokens {
         let tlen = token.len();
         let mut start = 0;
         while let Some(idx) = lower[start..].find(token) {
@@ -142,14 +167,29 @@ mod tests {
     use super::is_spanish_release;
 
     #[test]
-    fn detects_common_spanish_markers() {
+    fn detects_castilian_markers() {
         assert!(is_spanish_release("Barbie.2023.1080p.BluRay.x264.SPANISH"));
         assert!(is_spanish_release("Barbie (2023) [Castellano]"));
-        assert!(is_spanish_release("Barbie 2023 español latino"));
         assert!(is_spanish_release("Barbie.2023.1080p.WEB-DL.DUAL.CAST"));
         assert!(is_spanish_release("Barbie.2023.[ESP][1080p]"));
-        assert!(is_spanish_release("Barbie.2023.es-MX.1080p.WEBRip"));
-        assert!(is_spanish_release("Barbie.2023.LATAM.1080p"));
+        assert!(is_spanish_release("Barbie 2023 español"));
+        assert!(is_spanish_release("Barbie.2023.es-ES.1080p.WEBRip"));
+    }
+
+    #[test]
+    fn rejects_latin_american_releases() {
+        // Plain latino markers
+        assert!(!is_spanish_release("Barbie.2023.LATAM.1080p"));
+        assert!(!is_spanish_release("Barbie.2023.Latino.1080p"));
+        assert!(!is_spanish_release("Barbie.2023.Latinoamericano.1080p"));
+        // Latin American locale codes
+        assert!(!is_spanish_release("Barbie.2023.es-MX.1080p.WEBRip"));
+        assert!(!is_spanish_release("Barbie.2023.es-AR.1080p"));
+        assert!(!is_spanish_release("Barbie.2023.es-419.1080p"));
+        // Latino marker beats a Castilian one — "español latino" is Latin American
+        assert!(!is_spanish_release("Barbie 2023 español latino"));
+        assert!(!is_spanish_release("Barbie.2023.[ESP][LATAM]"));
+        assert!(!is_spanish_release("Barbie.2023.Castellano.Latino.1080p"));
     }
 
     #[test]
@@ -161,13 +201,16 @@ mod tests {
 
     #[test]
     fn does_not_match_substrings() {
-        // "spa" must be a standalone token — it should NOT match "spawn" or "spanker"
+        // "spa" must be a standalone token — it should NOT match "spawn"
         assert!(!is_spanish_release("Spawn.1997.1080p"));
         // "cast" must not match "Castle" or "broadcast"
         assert!(!is_spanish_release("Castle.S01.1080p"));
         assert!(!is_spanish_release("Broadcast.News.1987.1080p"));
         // "esp" must not match "espionage"
         assert!(!is_spanish_release("Espionage.2020.1080p"));
+        // "lat" must not match "Late" or "platform"
+        assert!(!is_spanish_release("Late.Night.2019.1080p"));
+        assert!(!is_spanish_release("The.Platform.2019.1080p"));
     }
 }
 
