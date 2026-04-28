@@ -43,7 +43,6 @@
 	let subsModalOpen = $state(false);
 	let audioTrackTick = $state(0);
 	let activeSubUrl = $state<string | null>(null);
-	let activeSubText = $state('');
 
 	interface SubCue {
 		start: number;
@@ -51,6 +50,15 @@
 		text: string;
 	}
 	let subCues = $state<SubCue[]>([]);
+	// Drive subtitle display from `positionSecs` (the WebRTC stream's true source
+	// timestamp). `videoElement.currentTime` is meaningless here — for a MediaStream-fed
+	// element it's wall-clock since stream attach, not the position inside the source video.
+	let activeSubText = $derived.by(() => {
+		if (subCues.length === 0) return '';
+		const t = positionSecs;
+		const cue = subCues.find((c) => t >= c.start && t <= c.end);
+		return cue?.text ?? '';
+	});
 
 	const subsState = subtitlesService.state;
 
@@ -204,7 +212,6 @@
 	$effect(() => {
 		const url = activeSubUrl;
 		subCues = [];
-		activeSubText = '';
 		if (!url) return;
 		let cancelled = false;
 		fetch(url)
@@ -240,16 +247,6 @@
 			}
 		}
 		return cues;
-	}
-
-	function handleTimeUpdate(): void {
-		if (!videoElement || subCues.length === 0) {
-			activeSubText = '';
-			return;
-		}
-		const t = videoElement.currentTime;
-		const cue = subCues.find((c) => t >= c.start && t <= c.end);
-		activeSubText = cue?.text ?? '';
 	}
 
 	async function tryAttachStream(): Promise<void> {
@@ -363,7 +360,6 @@
 				onclick={handleVideoClick}
 				onwaiting={handleWaiting}
 				onplaying={handlePlaying}
-				ontimeupdate={handleTimeUpdate}
 			></video>
 
 			{#if activeSubText}
