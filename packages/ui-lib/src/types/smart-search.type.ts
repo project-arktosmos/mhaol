@@ -25,11 +25,19 @@ interface SmartSearchBaseSelection {
 	mode: SmartSearchMode;
 }
 
+/**
+ * Language hint that drives indexer selection for a search:
+ *  - `en` (default): PirateBay only
+ *  - `es`: PirateBay + Spanish-enriched queries + Spanish-language indexers
+ */
+export type SmartSearchLang = 'en' | 'es';
+
 export interface SmartSearchMovieSelection extends SmartSearchBaseSelection {
 	type: 'movie';
 	tmdbId: number;
 	existingItemId?: string;
 	existingLibraryId?: string;
+	searchLang?: SmartSearchLang;
 }
 
 export interface TvSeasonMeta {

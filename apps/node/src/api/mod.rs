@@ -42,6 +42,8 @@ pub mod smart_search;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
+#[cfg(not(target_os = "android"))]
+pub mod torrent_spanish;
 pub mod ws_rpc;
 pub mod youtube;
 pub mod youtube_search;

@@ -440,9 +440,13 @@ const TRACKERS: &[&str] = &[
 struct SearchQuery {
     q: Option<String>,
     cat: Option<String>,
+    /// Language hint: `en` (default) hits PirateBay only; `es` additionally
+    /// runs Spanish-enriched PirateBay queries and the configured Spanish
+    /// indexers in parallel.
+    lang: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct SearchResult {
     id: String,
     name: String,
@@ -460,11 +464,95 @@ struct SearchResult {
     category: String,
     #[serde(rename = "magnetLink")]
     magnet_uri: String,
+    /// Source identifier — `piratebay` or one of the Spanish indexer ids.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    indexer: Option<String>,
+}
+
+fn build_magnet(info_hash: &str, name: &str) -> String {
+    let trackers: String = TRACKERS
+        .iter()
+        .map(|t| format!("&tr={}", urlencoding::encode(t)))
+        .collect();
+    format!(
+        "magnet:?xt=urn:btih:{}&dn={}{}",
+        info_hash,
+        urlencoding::encode(name),
+        trackers
+    )
+}
+
+async fn search_piratebay(query: &str, cat: &str) -> Result<Vec<SearchResult>, String> {
+    let url = format!(
+        "https://apibay.org/q.php?q={}&cat={}",
+        urlencoding::encode(query),
+        cat
+    );
+
+    let resp = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("PirateBay API returned {}", resp.status()));
+    }
+
+    let results: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
+
+    // PirateBay returns a single sentinel row when there are no matches.
+    if results.len() == 1 {
+        if let Some(name) = results[0]["name"].as_str() {
+            if name == "No results returned" {
+                return Ok(Vec::new());
+            }
+        }
+    }
+
+    let parsed: Vec<SearchResult> = results
+        .iter()
+        .filter_map(|r| {
+            let info_hash = r["info_hash"].as_str()?.to_string();
+            let name = r["name"].as_str()?.to_string();
+            let magnet_uri = build_magnet(&info_hash, &name);
+            Some(SearchResult {
+                id: r["id"].as_str().unwrap_or("0").to_string(),
+                name,
+                info_hash,
+                seeders: r["seeders"].as_str()?.parse().ok()?,
+                leechers: r["leechers"].as_str()?.parse().ok()?,
+                size: r["size"].as_str()?.parse().ok()?,
+                file_count: r["num_files"].as_str()?.parse().unwrap_or(0),
+                uploaded_by: r["username"].as_str().unwrap_or("").to_string(),
+                uploaded_at: r["added"].as_str()?.parse().ok()?,
+                category: r["category"].as_str().unwrap_or("0").to_string(),
+                magnet_uri,
+                indexer: Some("piratebay".to_string()),
+            })
+        })
+        .collect();
+
+    Ok(parsed)
+}
+
+/// Merge the second list into the first, keeping the highest-seeder copy
+/// when an `info_hash` collides across indexers.
+fn merge_dedup(into: &mut Vec<SearchResult>, more: Vec<SearchResult>) {
+    use std::collections::HashMap;
+    let mut by_hash: HashMap<String, SearchResult> = into
+        .drain(..)
+        .map(|r| (r.info_hash.clone(), r))
+        .collect();
+    for r in more {
+        match by_hash.get(&r.info_hash) {
+            Some(existing) if existing.seeders >= r.seeders => continue,
+            _ => {
+                by_hash.insert(r.info_hash.clone(), r);
+            }
+        }
+    }
+    *into = by_hash.into_values().collect();
 }
 
 async fn search_torrents(Query(query): Query<SearchQuery>) -> impl IntoResponse {
     let q = match &query.q {
-        Some(q) if !q.is_empty() => q,
+        Some(q) if !q.is_empty() => q.clone(),
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -474,72 +562,58 @@ async fn search_torrents(Query(query): Query<SearchQuery>) -> impl IntoResponse 
         }
     };
 
-    let cat = query.cat.as_deref().unwrap_or("0");
-    let url = format!(
-        "https://apibay.org/q.php?q={}&cat={}",
-        urlencoding::encode(q),
-        cat
-    );
+    let cat = query.cat.as_deref().unwrap_or("0").to_string();
+    let lang = query.lang.as_deref().unwrap_or("en");
 
-    match reqwest::get(&url).await {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<Vec<serde_json::Value>>().await {
-                Ok(results) => {
-                    // Check for "no results" response
-                    if results.len() == 1 {
-                        if let Some(name) = results[0]["name"].as_str() {
-                            if name == "No results returned" {
-                                return Json(serde_json::json!([])).into_response();
-                            }
-                        }
-                    }
+    if lang == "es" {
+        let queries = super::torrent_spanish::build_piratebay_queries(&q);
+        let pb_handles: Vec<_> = queries
+            .into_iter()
+            .map(|qv| {
+                let cat = cat.clone();
+                tokio::spawn(async move { search_piratebay(&qv, &cat).await })
+            })
+            .collect();
 
-                    let search_results: Vec<SearchResult> = results
-                        .iter()
-                        .filter_map(|r| {
-                            let info_hash = r["info_hash"].as_str()?.to_string();
-                            let name = r["name"].as_str()?.to_string();
+        let q_for_indexers = q.clone();
+        let spanish_handle =
+            tokio::spawn(async move { super::torrent_spanish::search_all(&q_for_indexers).await });
 
-                            // Build magnet URI
-                            let trackers: String = TRACKERS
-                                .iter()
-                                .map(|t| format!("&tr={}", urlencoding::encode(t)))
-                                .collect();
-                            let magnet_uri = format!(
-                                "magnet:?xt=urn:btih:{}&dn={}{}",
-                                info_hash,
-                                urlencoding::encode(&name),
-                                trackers
-                            );
-
-                            Some(SearchResult {
-                                id: r["id"].as_str().unwrap_or("0").to_string(),
-                                name,
-                                info_hash,
-                                seeders: r["seeders"].as_str()?.parse().ok()?,
-                                leechers: r["leechers"].as_str()?.parse().ok()?,
-                                size: r["size"].as_str()?.parse().ok()?,
-                                file_count: r["num_files"].as_str()?.parse().unwrap_or(0),
-                                uploaded_by: r["username"].as_str().unwrap_or("").to_string(),
-                                uploaded_at: r["added"].as_str()?.parse().ok()?,
-                                category: r["category"].as_str().unwrap_or("0").to_string(),
-                                magnet_uri,
-                            })
-                        })
-                        .collect();
-
-                    Json(serde_json::to_value(search_results).unwrap()).into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                )
-                    .into_response(),
+        let mut aggregated: Vec<SearchResult> = Vec::new();
+        for h in pb_handles {
+            if let Ok(Ok(rows)) = h.await {
+                merge_dedup(&mut aggregated, rows);
             }
         }
-        _ => (
+        if let Ok(spanish_rows) = spanish_handle.await {
+            let converted: Vec<SearchResult> = spanish_rows
+                .into_iter()
+                .map(|r| SearchResult {
+                    id: r.id,
+                    name: r.name,
+                    info_hash: r.info_hash,
+                    seeders: r.seeders,
+                    leechers: r.leechers,
+                    size: r.size,
+                    file_count: 0,
+                    uploaded_by: String::new(),
+                    uploaded_at: r.uploaded_at,
+                    category: r.category,
+                    magnet_uri: r.magnet_uri,
+                    indexer: Some(r.indexer),
+                })
+                .collect();
+            merge_dedup(&mut aggregated, converted);
+        }
+        aggregated.sort_by(|a, b| b.seeders.cmp(&a.seeders));
+        return Json(serde_json::to_value(aggregated).unwrap()).into_response();
+    }
+
+    match search_piratebay(&q, &cat).await {
+        Ok(results) => Json(serde_json::to_value(results).unwrap()).into_response(),
+        Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": "PirateBay API unavailable" })),
+            Json(serde_json::json!({ "error": e })),
         )
             .into_response(),
     }

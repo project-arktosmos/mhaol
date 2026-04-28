@@ -17,6 +17,9 @@
 		"torrent-search-thepiratebay": {
 			"source": "addon"
 		},
+		"torrent-search-spanish": {
+			"source": "addon"
+		},
 		"musicbrainz": {
 			"source": "addon"
 		},
@@ -42,6 +45,8 @@
 		"./torrent-search-thepiratebay/types": "./torrent-search-thepiratebay/src/types.ts",
 		"./torrent-search-thepiratebay/format": "./torrent-search-thepiratebay/src/format.ts",
 		"./torrent-search-thepiratebay/parse-torrent-name": "./torrent-search-thepiratebay/src/parse-torrent-name.ts",
+		"./torrent-search-spanish": "./torrent-search-spanish/src/index.ts",
+		"./torrent-search-spanish/types": "./torrent-search-spanish/src/types.ts",
 		"./musicbrainz": "./musicbrainz/src/index.ts",
 		"./musicbrainz/types": "./musicbrainz/src/types.ts",
 		"./musicbrainz/transform": "./musicbrainz/src/transform.ts",

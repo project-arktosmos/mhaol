@@ -39,6 +39,8 @@
 		languages: string;
 	}
 
+	type SearchLang = 'en' | 'es';
+
 	interface Props {
 		item: CatalogItem;
 		loading?: boolean;
@@ -51,6 +53,7 @@
 		fetchedTorrents?: FetchedTorrentEntry[] | null;
 		isFavorite?: boolean;
 		isPinned?: boolean;
+		searchLang?: SearchLang | null;
 		onfetch?: () => void;
 		ondownload?: () => void;
 		onstream?: () => void;
@@ -58,6 +61,7 @@
 		onback: () => void;
 		ontogglefavorite?: () => void;
 		ontogglepin?: () => void;
+		onsearchlangchange?: (lang: SearchLang) => void;
 		sidebar?: Snippet;
 		extra?: Snippet;
 		rightPanel?: Snippet;
@@ -75,6 +79,7 @@
 		fetchedTorrents = null,
 		isFavorite = false,
 		isPinned = false,
+		searchLang = null,
 		onfetch,
 		ondownload,
 		onstream,
@@ -82,6 +87,7 @@
 		onback,
 		ontogglefavorite,
 		ontogglepin,
+		onsearchlangchange,
 		sidebar,
 		extra,
 		rightPanel
@@ -149,7 +155,20 @@
 
 					{#if supportsTorrent && !streaming}
 						<div class="absolute inset-0 flex items-center justify-center">
-							<div class="flex flex-wrap justify-center gap-2">
+							<div class="flex flex-wrap items-center justify-center gap-2">
+								{#if searchLang && onsearchlangchange}
+									<select
+										class="select shadow-lg select-bordered select-sm"
+										value={searchLang}
+										onchange={(e) =>
+											onsearchlangchange(
+												(e.currentTarget as HTMLSelectElement).value as SearchLang
+											)}
+									>
+										<option value="en">English</option>
+										<option value="es">Spanish</option>
+									</select>
+								{/if}
 								{#if onfetch}
 									<button
 										class="btn shadow-lg btn-sm btn-primary"

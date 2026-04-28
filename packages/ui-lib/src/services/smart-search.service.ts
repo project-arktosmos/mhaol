@@ -325,6 +325,9 @@ class SmartSearchService {
 				break;
 		}
 
+		const langParam =
+			selection.type === 'movie' && selection.searchLang === 'es' ? '&lang=es' : '';
+
 		this.store.update((s) => ({ ...s, searching: true, searchError: null }));
 
 		try {
@@ -336,7 +339,7 @@ class SmartSearchService {
 
 				try {
 					const res = await fetchRaw(
-						`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`,
+						`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}${langParam}`,
 						{ signal }
 					);
 					if (!res.ok) continue;

@@ -27,7 +27,7 @@
 	import type { MediaList } from 'ui-lib/types/media-list.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
-	import type { TvSeasonMeta, TvFetchedCandidates, SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
+	import type { TvSeasonMeta, TvFetchedCandidates, SmartSearchTorrentResult, SmartSearchLang } from 'ui-lib/types/smart-search.type';
 	import { playerService } from 'ui-lib/services/player.service';
 
 	// Detail components
@@ -138,6 +138,7 @@
 	let libraryItem = $state<MediaItem | null>(null);
 	let relatedData = $state<LibraryItemRelated | null>(null);
 	let movieImageOverrides = $state<Record<string, string> | null>(null);
+	let movieSearchLang = $state<SmartSearchLang>('en');
 	const playerState = playerService.state;
 
 
@@ -251,6 +252,55 @@
 			infoHash
 		};
 		playerService.play(file, 'inline');
+	}
+
+	// Unified, ordered list of episodes that have a playable source.
+	// Library files take precedence over torrent files when both exist for the same (season, episode).
+	let playableEpisodesList = $derived.by(() => {
+		if (config?.kind !== 'tv_show') return [];
+		const map: Record<string, { season: number; episode: number; path: string; play: () => void }> = {};
+		for (const lf of libraryFiles) {
+			const key = `${lf.seasonNumber}:${lf.episodeNumber}`;
+			if (!map[key]) {
+				map[key] = {
+					season: lf.seasonNumber,
+					episode: lf.episodeNumber,
+					path: lf.path,
+					play: () => handlePlayFile(lf)
+				};
+			}
+		}
+		for (const [snStr, episodes] of Object.entries(tvEpisodeFiles)) {
+			const sn = Number(snStr);
+			for (const [enStr, f] of Object.entries(episodes)) {
+				const key = `${sn}:${enStr}`;
+				if (!map[key]) {
+					map[key] = {
+						season: sn,
+						episode: Number(enStr),
+						path: f.path,
+						play: () => handlePlayEpisode(f.path, f.name, f.infoHash)
+					};
+				}
+			}
+		}
+		return Object.values(map).sort((a, b) => a.season - b.season || a.episode - b.episode);
+	});
+
+	let currentEpisodeIndex = $derived.by(() => {
+		const path = $playerState.currentFile?.outputPath;
+		if (!path) return -1;
+		return playableEpisodesList.findIndex((e) => e.path === path);
+	});
+
+	function handleNextEpisode() {
+		const next = playableEpisodesList[currentEpisodeIndex + 1];
+		if (next) next.play();
+	}
+
+	function handlePrevEpisode() {
+		if (currentEpisodeIndex <= 0) return;
+		playableEpisodesList[currentEpisodeIndex - 1].play();
 	}
 
 	// Keyed by lowercase infoHash because the backend lowercases magnet hashes,
@@ -799,7 +849,8 @@
 					smartSearchService.setSelection({
 						title: catalogItem.title, year: catalogItem.year ?? '', type: 'movie',
 						tmdbId: tid, mode: 'fetch',
-						existingItemId: libraryItem?.id, existingLibraryId: libraryItem?.libraryId
+						existingItemId: libraryItem?.id, existingLibraryId: libraryItem?.libraryId,
+						searchLang: movieSearchLang
 					});
 					smartSearchService.setFetchedCandidate(cached);
 					return;
@@ -808,7 +859,8 @@
 			smartSearchService.select({
 				title: catalogItem.title, year: catalogItem.year ?? '', type: 'movie',
 				tmdbId: tid, mode: 'fetch',
-				existingItemId: libraryItem?.id, existingLibraryId: libraryItem?.libraryId
+				existingItemId: libraryItem?.id, existingLibraryId: libraryItem?.libraryId,
+				searchLang: movieSearchLang
 			});
 		} else if (catalogItem.kind === 'tv_show') {
 			const tid = Number(catalogItem.sourceId);
@@ -978,6 +1030,8 @@
 		fetchedTorrent={hasLibraryItem || config?.kind === 'tv_show' ? null : ($searchStore.fetchedCandidate ? { name: $searchStore.fetchedCandidate.name, quality: $searchStore.fetchedCandidate.analysis?.quality ?? '', languages: $searchStore.fetchedCandidate.analysis?.languages ?? '' } : null)}
 		fetchedTorrents={hasLibraryItem ? null : tvFetchedTorrents}
 		{isFavorite} {isPinned}
+		searchLang={config?.kind === 'movie' && !hasLibraryItem ? movieSearchLang : null}
+		onsearchlangchange={config?.kind === 'movie' && !hasLibraryItem ? (lang) => (movieSearchLang = lang) : undefined}
 		onfetch={hasLibraryItem ? undefined : handleFetch}
 		ondownload={hasLibraryItem || config?.kind === 'tv_show' ? undefined : handleDownload}
 		onshowsearch={hasLibraryItem ? undefined : () => smartSearchService.show()}
@@ -1049,6 +1103,8 @@
 						durationSecs={$playerState.durationSecs}
 						buffering={$playerState.buffering}
 						poster={catalogItem?.backdropUrl ?? catalogItem?.posterUrl}
+						onprev={config?.kind === 'tv_show' && currentEpisodeIndex > 0 ? handlePrevEpisode : undefined}
+						onnext={config?.kind === 'tv_show' && currentEpisodeIndex >= 0 && currentEpisodeIndex < playableEpisodesList.length - 1 ? handleNextEpisode : undefined}
 					/>
 				</div>
 			{/if}
