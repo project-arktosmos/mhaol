@@ -38,6 +38,7 @@ src/
 │   ├── subtitles/            # Subtitle search modal (Wyzie subs addon)
 │   ├── tmdb-browse/          # TMDB pagination (TmdbPagination — used by movies/TV pages)
 │   ├── torrent/              # Torrent management (TorrentProgressOverlay, TorrentSettings, etc.)
+│   ├── ed2k/                 # ed2k/eDonkey client UI (Ed2kModalContent, Ed2kSearch, Ed2kFileList, Ed2kStatusBar)
 │   ├── videogames/           # Videogame WASM emulator components
 │   ├── youtube/              # YouTube download (queue, settings, preview, RightPanel)
 │   └── youtube-search/       # YouTube search (input, results, channel cards)

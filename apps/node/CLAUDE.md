@@ -40,6 +40,7 @@ src/
 │   ├── subtitles.rs       # Wyzie subtitles search/download/serve (movies + TV)
 │   ├── tmdb.rs
 │   ├── torrent.rs        # cfg(not(target_os = "android"))
+│   ├── ed2k.rs           # eDonkey/ed2k network — cfg(not(target_os = "android"))
 │   ├── youtube.rs
 │   └── ytdl.rs           # cfg(not(target_os = "android"))
 ├── db/                   # Database layer (rusqlite repos)
@@ -64,6 +65,7 @@ All API handlers receive `AppState` which contains:
 - `ModuleRegistry` for plugin modules
 - `DownloadManager` (yt-dlp, desktop only)
 - `TorrentManager` (desktop only)
+- `Ed2kManager` (desktop only) — eDonkey/ed2k search and file tracking from `mhaol-ed2k`
 - `ImageTaggerManager` (ONNX/ML, desktop only)
 - `HubManager` for app process management (start/stop headless apps)
 - `QueueManager` for task queue management (from `mhaol-queue` crate)
@@ -92,6 +94,7 @@ Conditionally compiled with `#[cfg(not(target_os = "android"))]`:
 - `mhaol-p2p-stream` — P2P streaming (`packages/p2p-stream/`)
 - `mhaol-yt-dlp` — YouTube downloading (`packages/yt-dlp/`)
 - `mhaol-torrent` — Torrent management (`packages/torrent/`)
+- `mhaol-ed2k` — eDonkey/ed2k network client (`packages/ed2k/`)
 - `ort` + `tokenizers` + `image` — ML image tagging (ONNX runtime)
 
 ## Running
