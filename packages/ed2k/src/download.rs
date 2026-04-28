@@ -364,13 +364,21 @@ fn is_unroutable(addr: &SocketAddr) -> bool {
     match addr {
         SocketAddr::V4(a) => {
             let o = a.ip().octets();
-            // Drop obviously invalid stuff. ed2k servers can occasionally hand
-            // back zero-padded entries when their source list is rotating.
+            // ed2k client IDs travel as 32-bit LE ints. HighID clients have
+            // their public IP in those four bytes; LowID clients have ID
+            // < 0x01000000, which on the wire is `[X, 0, 0, 0]` and decodes
+            // here to `X.0.0.0`. We can't connect directly to LowIDs (they
+            // need a server callback we don't perform), so drop them along
+            // with the obvious garbage.
+            let is_lowid = o[1] == 0 && o[2] == 0 && o[3] == 0;
             a.port() == 0
                 || a.ip().is_unspecified()
                 || a.ip().is_broadcast()
+                || a.ip().is_loopback()
+                || a.ip().is_private()
+                || a.ip().is_link_local()
                 || (o[0] == 0)
-                || (o[0] == 127)
+                || is_lowid
         }
         SocketAddr::V6(_) => true,
     }
