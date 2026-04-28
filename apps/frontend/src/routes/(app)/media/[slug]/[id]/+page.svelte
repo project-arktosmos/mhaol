@@ -26,6 +26,7 @@
 	import type { MediaItem } from 'ui-lib/types/media-card.type';
 	import type { MediaList } from 'ui-lib/types/media-list.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';
+	import type { SubtitleSearchContext } from 'ui-lib/types/subtitles.type';
 	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
 	import type { TvSeasonMeta, TvFetchedCandidates, SmartSearchTorrentResult, SmartSearchLang } from 'ui-lib/types/smart-search.type';
 	import { isCastilianRelease } from 'addons/torrent-search-spanish/is-castilian';
@@ -808,6 +809,22 @@
 
 	let hasLibraryItem = $derived(libraryItem !== null);
 
+	let subtitleSearchContext = $derived.by<SubtitleSearchContext | null>(() => {
+		if (!$playerState.currentFile) return null;
+		if (config?.kind === 'movie') {
+			return { type: 'movie', tmdbId: id };
+		}
+		if (config?.kind === 'tv_show') {
+			const path = $playerState.currentFile.outputPath;
+			const found = libraryFiles.find((f) => f.path === path);
+			if (found) {
+				return { type: 'tv', tmdbId: id, season: found.seasonNumber, episode: found.episodeNumber };
+			}
+			return null;
+		}
+		return null;
+	});
+
 	async function handleResync() {
 		if (!config || config.kind !== 'tv_show') return;
 		resyncing = true;
@@ -1129,6 +1146,7 @@
 						durationSecs={$playerState.durationSecs}
 						buffering={$playerState.buffering}
 						poster={catalogItem?.backdropUrl ?? catalogItem?.posterUrl}
+						{subtitleSearchContext}
 						onprev={config?.kind === 'tv_show' && currentEpisodeIndex > 0 ? handlePrevEpisode : undefined}
 						onnext={config?.kind === 'tv_show' && currentEpisodeIndex >= 0 && currentEpisodeIndex < playableEpisodesList.length - 1 ? handleNextEpisode : undefined}
 					/>
