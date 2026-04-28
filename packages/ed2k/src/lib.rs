@@ -5,6 +5,7 @@ pub mod manager;
 pub mod types;
 pub mod util;
 
+pub use client::OfferedFile;
 pub use config::{Ed2kConfig, Ed2kServer, DEFAULT_SERVERS};
 pub use manager::Ed2kManager;
 pub use types::{

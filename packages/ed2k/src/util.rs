@@ -56,6 +56,41 @@ pub fn build_ed2k_file_uri(name: &str, size: u64, file_hash: &str) -> String {
     )
 }
 
+/// Decode a 32-char hex string into a 16-byte MD4 hash array.
+pub fn hex_to_md4(s: &str) -> anyhow::Result<[u8; 16]> {
+    if s.len() != 32 {
+        anyhow::bail!("ed2k hex hash must be 32 chars, got {}", s.len());
+    }
+    let bytes = hex::decode(s).map_err(|e| anyhow::anyhow!("invalid hex hash: {}", e))?;
+    let mut out = [0u8; 16];
+    out.copy_from_slice(&bytes);
+    Ok(out)
+}
+
+/// One ed2k file part (chunk) is exactly 9.28 × 10^6 bytes.
+pub const ED2K_PART_SIZE: u64 = 9_728_000;
+
+/// One block (sub-range requested in a single REQUESTPARTS frame) is at most
+/// 180 KB.
+pub const ED2K_BLOCK_SIZE: u64 = 180 * 1024;
+
+/// Number of parts a file of `size` bytes is divided into. A file of size 0
+/// would have 0 parts; we always return at least 1 for non-empty files.
+pub fn part_count(size: u64) -> u32 {
+    if size == 0 {
+        0
+    } else {
+        ((size + ED2K_PART_SIZE - 1) / ED2K_PART_SIZE) as u32
+    }
+}
+
+/// Byte range `[start, end)` for the part at `index`, given `size`.
+pub fn part_range(size: u64, index: u32) -> (u64, u64) {
+    let start = (index as u64) * ED2K_PART_SIZE;
+    let end = (start + ED2K_PART_SIZE).min(size);
+    (start, end)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,6 +158,46 @@ mod tests {
     fn parse_empty_name_rejected() {
         let uri = "ed2k://|file||10|aabbccdd11223344aabbccdd11223344|/";
         assert!(parse_ed2k_file_uri(uri).is_none());
+    }
+
+    #[test]
+    fn hex_to_md4_round_trip() {
+        let h = "00112233445566778899aabbccddeeff";
+        let arr = hex_to_md4(h).unwrap();
+        assert_eq!(arr[0], 0x00);
+        assert_eq!(arr[1], 0x11);
+        assert_eq!(arr[15], 0xff);
+        assert_eq!(hex::encode(arr), h);
+    }
+
+    #[test]
+    fn hex_to_md4_rejects_bad_input() {
+        assert!(hex_to_md4("deadbeef").is_err());
+        assert!(hex_to_md4("zz112233445566778899aabbccddeeff").is_err());
+    }
+
+    #[test]
+    fn part_count_examples() {
+        assert_eq!(part_count(0), 0);
+        assert_eq!(part_count(1), 1);
+        assert_eq!(part_count(ED2K_PART_SIZE), 1);
+        assert_eq!(part_count(ED2K_PART_SIZE + 1), 2);
+        assert_eq!(part_count(2 * ED2K_PART_SIZE), 2);
+        assert_eq!(part_count(2 * ED2K_PART_SIZE + 7), 3);
+    }
+
+    #[test]
+    fn part_range_examples() {
+        let size = ED2K_PART_SIZE * 2 + 100;
+        assert_eq!(part_range(size, 0), (0, ED2K_PART_SIZE));
+        assert_eq!(
+            part_range(size, 1),
+            (ED2K_PART_SIZE, 2 * ED2K_PART_SIZE)
+        );
+        assert_eq!(
+            part_range(size, 2),
+            (2 * ED2K_PART_SIZE, 2 * ED2K_PART_SIZE + 100)
+        );
     }
 
     #[test]

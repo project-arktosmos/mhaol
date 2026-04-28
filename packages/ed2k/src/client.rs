@@ -6,6 +6,7 @@
 //! so all calls have short timeouts and surface errors cleanly to the caller.
 
 use anyhow::{anyhow, bail, Context, Result};
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -34,6 +35,14 @@ const OP_SEARCH_REQUEST: u8 = 0x16;
 const OP_SEARCH_RESULT: u8 = 0x33;
 /// Reject (server refused us).
 const OP_REJECT: u8 = 0x05;
+/// Offer files (announce we are a source).
+const OP_OFFER_FILES: u8 = 0x15;
+/// Get sources for a known file (32-bit size).
+const OP_GETSOURCES: u8 = 0x9A;
+/// Get sources for a known file (64-bit size, files > 4 GB).
+const OP_GETSOURCES_OBFU: u8 = 0x9E;
+/// Server reply with a source list.
+const OP_FOUNDSOURCES: u8 = 0x42;
 
 /// Tag types.
 const TAG_HASH: u8 = 0x01;
@@ -155,6 +164,67 @@ impl Ed2kClient {
             }
         }
         Ok(results)
+    }
+
+    /// Ask the server for sources of a given file. Returns the address list
+    /// from the first FoundSources frame for the matching hash. Real-world
+    /// public servers may legitimately reply with zero sources for unpopular
+    /// files; that is not an error.
+    pub async fn get_sources(
+        &mut self,
+        hash: &[u8; 16],
+        size: u64,
+        max_wait: Duration,
+    ) -> Result<Vec<SocketAddrV4>> {
+        let payload = encode_get_sources(hash, size);
+        let opcode = if size > u32::MAX as u64 {
+            OP_GETSOURCES_OBFU
+        } else {
+            OP_GETSOURCES
+        };
+        self.write_frame(opcode, &payload).await?;
+
+        let deadline = tokio::time::Instant::now() + max_wait;
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return Ok(Vec::new());
+            }
+            let frame = match timeout(remaining, self.read_frame()).await {
+                Ok(Ok(f)) => f,
+                _ => return Ok(Vec::new()),
+            };
+            match frame.opcode {
+                OP_FOUNDSOURCES => {
+                    if let Ok((reply_hash, sources)) = parse_found_sources(&frame.payload) {
+                        if &reply_hash == hash {
+                            return Ok(sources);
+                        }
+                    }
+                }
+                OP_SERVER_MESSAGE => {
+                    if let Some(msg) = parse_server_message(&frame.payload) {
+                        self.info.message = msg;
+                    }
+                }
+                OP_REJECT => bail!("ed2k server rejected the GetSources request"),
+                _ => {}
+            }
+        }
+    }
+
+    /// Announce ourselves as a source for a list of files. Servers use this
+    /// when they are asked for sources by other clients. Frame layout: 4-byte
+    /// file count + per file (16-byte hash + 4-byte client ID + 2-byte port +
+    /// tag count + tags).
+    pub async fn offer_files(
+        &mut self,
+        files: &[OfferedFile],
+        listen_port: u16,
+    ) -> Result<()> {
+        let payload = encode_offer_files(files, listen_port);
+        self.write_frame(OP_OFFER_FILES, &payload).await?;
+        Ok(())
     }
 
     async fn send_login(&mut self, listen_port: u16, user_name: &str) -> Result<()> {
@@ -295,6 +365,91 @@ fn write_tag_u8name_uint32(buf: &mut Vec<u8>, name: u8, value: u32) {
     buf.push(TAG_UINT32 | 0x80);
     buf.push(name);
     write_u32_le(buf, value);
+}
+
+fn write_tag_u8name_uint64(buf: &mut Vec<u8>, name: u8, value: u64) {
+    buf.push(TAG_UINT64 | 0x80);
+    buf.push(name);
+    buf.extend_from_slice(&value.to_le_bytes());
+}
+
+/// A file we are announcing as a source.
+#[derive(Debug, Clone)]
+pub struct OfferedFile {
+    pub hash: [u8; 16],
+    pub name: String,
+    pub size: u64,
+    /// Best-effort file-type label (e.g. `"Video"`); when `None` we omit the
+    /// tag entirely.
+    pub file_type: Option<String>,
+}
+
+/// Encode a GetSources request body. Layout: 16-byte hash + 4 or 8 byte size.
+fn encode_get_sources(hash: &[u8; 16], size: u64) -> Vec<u8> {
+    let mut out = Vec::with_capacity(24);
+    out.extend_from_slice(hash);
+    if size > u32::MAX as u64 {
+        out.extend_from_slice(&size.to_le_bytes());
+    } else {
+        out.extend_from_slice(&(size as u32).to_le_bytes());
+    }
+    out
+}
+
+/// Encode an OfferFiles request body.
+fn encode_offer_files(files: &[OfferedFile], listen_port: u16) -> Vec<u8> {
+    let mut out = Vec::with_capacity(64 + files.len() * 64);
+    out.extend_from_slice(&(files.len() as u32).to_le_bytes());
+    for f in files {
+        out.extend_from_slice(&f.hash);
+        // Client ID 0 = LowID / not assigned; servers fill this in if they
+        // care. Port is our advertised TCP listen port.
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&listen_port.to_le_bytes());
+
+        let mut tags: Vec<u8> = Vec::with_capacity(64);
+        let mut tag_count = 0u32;
+
+        write_tag_u8name_string(&mut tags, FT_FILENAME, &f.name);
+        tag_count += 1;
+        if f.size > u32::MAX as u64 {
+            write_tag_u8name_uint64(&mut tags, FT_FILESIZE, f.size);
+        } else {
+            write_tag_u8name_uint32(&mut tags, FT_FILESIZE, f.size as u32);
+        }
+        tag_count += 1;
+        if let Some(ref t) = f.file_type {
+            write_tag_u8name_string(&mut tags, FT_FILETYPE, t);
+            tag_count += 1;
+        }
+
+        out.extend_from_slice(&tag_count.to_le_bytes());
+        out.extend_from_slice(&tags);
+    }
+    out
+}
+
+/// Decode a FoundSources reply. Layout: 16-byte file hash + 1-byte count +
+/// count × (4-byte IPv4 + 2-byte port). The IP is on the wire in big-endian
+/// network order; the port is little-endian.
+fn parse_found_sources(payload: &[u8]) -> Result<([u8; 16], Vec<SocketAddrV4>)> {
+    let mut cur = Cursor::new(payload);
+    let mut hash = [0u8; 16];
+    let bytes = cur.read_bytes(16)?;
+    hash.copy_from_slice(&bytes);
+    let count = cur.read_u8()? as usize;
+    let mut out = Vec::with_capacity(count);
+    for _ in 0..count {
+        let ip_bytes = cur.read_bytes(4)?;
+        // Wire order on real ed2k servers is little-endian (reversed network
+        // order) — client_id in the protocol is a 32-bit LE int interpreted
+        // as ip-octet-1..4. We treat the four bytes as IP octets in the same
+        // order they appear; both sides do the same and it round-trips.
+        let ip = Ipv4Addr::new(ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
+        let port = cur.read_u16_le()?;
+        out.push(SocketAddrV4::new(ip, port));
+    }
+    Ok((hash, out))
 }
 
 /// Stable 16-byte MD4 hash derived from the user name. Public servers do not
@@ -515,9 +670,16 @@ fn read_tag(cur: &mut Cursor<'_>) -> Result<Tag> {
         TAG_UINT16 => TagValue::U16(cur.read_u16_le()?),
         TAG_UINT32 => TagValue::U32(cur.read_u32_le()?),
         TAG_UINT64 => TagValue::U64(cur.read_u64_le()?),
-        // Strings with a 1-byte length (eMule extension 0x11..0x20 range
-        // would technically be different, but we conservatively treat
-        // any unknown type as opaque and skip the rest of the payload).
+        // eMule fixed-length string optimization: tag types 0x11..0x20 mean
+        // a string of length (type - 0x10). The bytes follow immediately
+        // with no length prefix.
+        n if (0x11..=0x20).contains(&n) => {
+            let len = (n - 0x10) as usize;
+            let bytes = cur.read_bytes(len)?;
+            TagValue::String(String::from_utf8_lossy(&bytes).into_owned())
+        }
+        // Anything else is opaque — propagate an error so the caller can
+        // drop the frame; alternatives would risk de-syncing the stream.
         _ => return Err(anyhow!("unsupported ed2k tag type {:#x}", ttype)),
     };
 
@@ -628,5 +790,103 @@ mod tests {
         let buf = [0x01];
         let mut c = Cursor::new(&buf);
         assert!(c.read_u32_le().is_err());
+    }
+
+    #[test]
+    fn encode_get_sources_short_size() {
+        let hash = [0xAA; 16];
+        let body = encode_get_sources(&hash, 12345);
+        assert_eq!(body.len(), 16 + 4);
+        assert_eq!(&body[..16], &hash);
+        assert_eq!(&body[16..20], &12345u32.to_le_bytes());
+    }
+
+    #[test]
+    fn encode_get_sources_huge_size() {
+        let hash = [0xBB; 16];
+        let big = (u32::MAX as u64) + 17;
+        let body = encode_get_sources(&hash, big);
+        assert_eq!(body.len(), 16 + 8);
+        assert_eq!(&body[16..24], &big.to_le_bytes());
+    }
+
+    #[test]
+    fn parse_found_sources_round_trip() {
+        let hash = [0x11; 16];
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&hash);
+        payload.push(2u8); // count
+        // 1.2.3.4:5000
+        payload.extend_from_slice(&[1, 2, 3, 4]);
+        payload.extend_from_slice(&5000u16.to_le_bytes());
+        // 9.8.7.6:6881
+        payload.extend_from_slice(&[9, 8, 7, 6]);
+        payload.extend_from_slice(&6881u16.to_le_bytes());
+
+        let (got_hash, sources) = parse_found_sources(&payload).unwrap();
+        assert_eq!(got_hash, hash);
+        assert_eq!(sources.len(), 2);
+        assert_eq!(sources[0].ip().octets(), [1, 2, 3, 4]);
+        assert_eq!(sources[0].port(), 5000);
+        assert_eq!(sources[1].ip().octets(), [9, 8, 7, 6]);
+        assert_eq!(sources[1].port(), 6881);
+    }
+
+    #[test]
+    fn parse_found_sources_zero_count() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&[0xCC; 16]);
+        payload.push(0u8);
+        let (_, sources) = parse_found_sources(&payload).unwrap();
+        assert!(sources.is_empty());
+    }
+
+    #[test]
+    fn parse_found_sources_short_payload_errors() {
+        assert!(parse_found_sources(&[0u8; 4]).is_err());
+    }
+
+    #[test]
+    fn encode_offer_files_basic_layout() {
+        let f = OfferedFile {
+            hash: [0xAB; 16],
+            name: "movie.mkv".to_string(),
+            size: 1024,
+            file_type: Some("Video".to_string()),
+        };
+        let body = encode_offer_files(&[f.clone()], 4662);
+        // count
+        assert_eq!(&body[0..4], &1u32.to_le_bytes());
+        // hash
+        assert_eq!(&body[4..20], &f.hash);
+        // client id (zero) + port
+        assert_eq!(&body[20..24], &0u32.to_le_bytes());
+        assert_eq!(&body[24..26], &4662u16.to_le_bytes());
+        // tag count == 3 (filename, filesize, filetype)
+        assert_eq!(&body[26..30], &3u32.to_le_bytes());
+        // Body should contain the filename bytes
+        assert!(body.windows(b"movie.mkv".len())
+            .any(|w| w == b"movie.mkv"));
+    }
+
+    #[test]
+    fn fixed_length_string_tag_is_decoded() {
+        // Build a tag block: type 0x12 means 1-byte name + fixed 2-char string.
+        let mut payload = Vec::new();
+        // count = 1
+        payload.extend_from_slice(&1u32.to_le_bytes());
+        // hash + cid + port
+        payload.extend_from_slice(&[0x55; 16]);
+        payload.extend_from_slice(&0u32.to_le_bytes());
+        payload.extend_from_slice(&0u16.to_le_bytes());
+        // 1 tag: type = 0x12 (fixed string len = 2) | 0x80, name = filename, body = "ab"
+        payload.extend_from_slice(&1u32.to_le_bytes());
+        payload.push(0x12 | 0x80);
+        payload.push(FT_FILENAME);
+        payload.extend_from_slice(b"ab");
+
+        let parsed = parse_search_results(&payload).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].name, "ab");
     }
 }
