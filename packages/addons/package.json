@@ -34,6 +34,9 @@
 		},
 		"openlibrary": {
 			"source": "addon"
+		},
+		"wyzie-subs": {
+			"source": "addon"
 		}
 	},
 	"exports": {
@@ -63,6 +66,8 @@
 		"./openlibrary": "./openlibrary/src/index.ts",
 		"./openlibrary/types": "./openlibrary/src/types.ts",
 		"./openlibrary/transform": "./openlibrary/src/transform.ts",
+		"./wyzie-subs": "./wyzie-subs/src/index.ts",
+		"./wyzie-subs/types": "./wyzie-subs/src/types.ts",
 		"./common/rate-limiter": "./common/src/rate-limiter.ts",
 		"./common/utils": "./common/src/utils.ts",
 		"./common/addon-cache": "./common/src/addon-cache.ts"
