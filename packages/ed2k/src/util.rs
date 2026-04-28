@@ -15,8 +15,18 @@ pub struct ParsedEd2kFile {
     pub file_hash: String,
 }
 
+/// `MAX_FILE_SIZE` from amule `include/protocol/ed2k/Constants.h`
+/// (`= 0x4000000000ull == 2^38 == 256 GB`). amule's `CED2KFileLink`
+/// constructor rejects sizes of `0` or above this bound.
+pub const MAX_FILE_SIZE: u64 = 0x40_0000_0000;
+
 /// Parse an `ed2k://|file|<name>|<size>|<hash>|/` URI. The name is URL-decoded
 /// (percent and `+` rules), size is parsed as decimal, hash is lowercased.
+///
+/// Validation matches amule's `CED2KFileLink` constructor: hash must be a
+/// 32-char MD4, size must be in `(0, MAX_FILE_SIZE]`, and any forward
+/// slashes in the name are normalised to underscores so the link cannot
+/// escape the download directory.
 pub fn parse_ed2k_file_uri(uri: &str) -> Option<ParsedEd2kFile> {
     let rest = uri.strip_prefix("ed2k://|file|")?;
     let mut parts = rest.split('|');
@@ -29,10 +39,17 @@ pub fn parse_ed2k_file_uri(uri: &str) -> Option<ParsedEd2kFile> {
     }
 
     let size: u64 = size_raw.parse().ok()?;
+    if size == 0 || size > MAX_FILE_SIZE {
+        return None;
+    }
 
-    let name = urlencoding::decode(name_raw)
+    let mut name = urlencoding::decode(name_raw)
         .map(|c| c.into_owned())
         .unwrap_or_else(|_| name_raw.to_string());
+    // amule: `m_name.Replace("/", "_")` — strip directory separators.
+    if name.contains('/') {
+        name = name.replace('/', "_");
+    }
 
     let file_hash = hash_raw.to_lowercase();
     if file_hash.len() != 32 || !file_hash.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -158,6 +175,34 @@ mod tests {
     fn parse_empty_name_rejected() {
         let uri = "ed2k://|file||10|aabbccdd11223344aabbccdd11223344|/";
         assert!(parse_ed2k_file_uri(uri).is_none());
+    }
+
+    #[test]
+    fn parse_zero_size_rejected() {
+        // amule's CED2KFileLink rejects size == 0 explicitly.
+        let uri = "ed2k://|file|x|0|aabbccdd11223344aabbccdd11223344|/";
+        assert!(parse_ed2k_file_uri(uri).is_none());
+    }
+
+    #[test]
+    fn parse_oversize_rejected() {
+        // Anything above MAX_FILE_SIZE (256 GB) is rejected.
+        let too_big = MAX_FILE_SIZE + 1;
+        let uri = format!(
+            "ed2k://|file|big|{}|aabbccdd11223344aabbccdd11223344|/",
+            too_big
+        );
+        assert!(parse_ed2k_file_uri(&uri).is_none());
+    }
+
+    #[test]
+    fn parse_strips_slash_in_name() {
+        // amule replaces `/` with `_` in the file name so a hostile link
+        // cannot escape the download directory.
+        let uri =
+            "ed2k://|file|sub%2Fpwn.iso|10|aabbccdd11223344aabbccdd11223344|/";
+        let parsed = parse_ed2k_file_uri(uri).unwrap();
+        assert_eq!(parsed.name, "sub_pwn.iso");
     }
 
     #[test]
