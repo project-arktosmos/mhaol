@@ -45,6 +45,8 @@ pub mod tmdb;
 pub mod torrent;
 #[cfg(not(target_os = "android"))]
 pub mod torrent_spanish;
+#[cfg(not(target_os = "android"))]
+pub mod ed2k;
 pub mod ws_rpc;
 pub mod youtube;
 pub mod youtube_search;
@@ -111,6 +113,9 @@ pub fn build_app_router(state: AppState) -> Router {
 
     #[cfg(not(target_os = "android"))]
     let protected = protected.nest("/api/torrent", torrent::router());
+
+    #[cfg(not(target_os = "android"))]
+    let protected = protected.nest("/api/ed2k", ed2k::router());
 
     #[cfg(not(target_os = "android"))]
     let protected = protected.nest("/api/llm", llm::router());

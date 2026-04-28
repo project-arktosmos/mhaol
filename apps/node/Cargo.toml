@@ -52,6 +52,7 @@ mime_guess = { version = "2", optional = true }
 mhaol-yt-dlp = { path = "../../packages/yt-dlp" }
 mhaol-p2p-stream = { path = "../../packages/p2p-stream" }
 mhaol-torrent = { path = "../../packages/torrent" }
+mhaol-ed2k = { path = "../../packages/ed2k" }
 mhaol-llm = { path = "../../packages/llm" }
 ort = { version = "2.0.0-rc.11", features = ["ndarray"] }
 ndarray = "0.17"

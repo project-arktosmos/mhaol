@@ -9,6 +9,8 @@ pub mod signaling;
 pub mod tmdb;
 #[cfg(not(target_os = "android"))]
 pub mod torrent;
+#[cfg(not(target_os = "android"))]
+pub mod ed2k;
 pub mod torrent_search;
 pub mod wyzie_subs;
 pub mod youtube_meta;

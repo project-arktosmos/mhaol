@@ -25,6 +25,8 @@ use mhaol_recommendations::RecommendationsRepo;
 #[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
 #[cfg(not(target_os = "android"))]
+use mhaol_ed2k::Ed2kManager;
+#[cfg(not(target_os = "android"))]
 use mhaol_yt_dlp::DownloadManager;
 use modules::ModuleRegistry;
 use parking_lot::RwLock;
@@ -108,6 +110,8 @@ pub struct AppState {
     #[cfg(not(target_os = "android"))]
     pub torrent_manager: Arc<TorrentManager>,
     #[cfg(not(target_os = "android"))]
+    pub ed2k_manager: Arc<Ed2kManager>,
+    #[cfg(not(target_os = "android"))]
     pub llm_engine: Arc<LlmEngine>,
     pub image_tags: ImageTagRepo,
     #[cfg(not(target_os = "android"))]
@@ -177,6 +181,8 @@ impl AppState {
             #[cfg(not(target_os = "android"))]
             torrent_manager: Arc::new(TorrentManager::new()),
             #[cfg(not(target_os = "android"))]
+            ed2k_manager: Arc::new(Ed2kManager::new()),
+            #[cfg(not(target_os = "android"))]
             llm_engine: Arc::new(LlmEngine::new(llm_models_dir)),
             image_tags: ImageTagRepo::new(Arc::clone(&db)),
             #[cfg(not(target_os = "android"))]
@@ -208,8 +214,8 @@ impl AppState {
     pub fn initialize_modules(&self) {
         #[cfg(not(target_os = "android"))]
         use modules::{
-            image_tagger::ImageTaggerModule, p2p_stream::P2pStreamModule, torrent::TorrentModule,
-            ytdl::YtdlModule,
+            ed2k::Ed2kModule, image_tagger::ImageTaggerModule, p2p_stream::P2pStreamModule,
+            torrent::TorrentModule, ytdl::YtdlModule,
         };
         use modules::{
             lyrics::LyricsModule, musicbrainz::MusicbrainzModule,
@@ -252,6 +258,9 @@ impl AppState {
         {
             registry.register(Box::new(TorrentModule {
                 manager: Arc::clone(&self.torrent_manager),
+            }));
+            registry.register(Box::new(Ed2kModule {
+                manager: Arc::clone(&self.ed2k_manager),
             }));
             registry.register(Box::new(P2pStreamModule::new()));
         }
