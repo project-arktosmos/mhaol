@@ -28,6 +28,7 @@
 	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import type { LibraryItemRelated } from 'ui-lib/types/library-item-related.type';
 	import type { TvSeasonMeta, TvFetchedCandidates, SmartSearchTorrentResult, SmartSearchLang } from 'ui-lib/types/smart-search.type';
+	import { isCastilianRelease } from 'addons/torrent-search-spanish/is-castilian';
 	import { playerService } from 'ui-lib/services/player.service';
 
 	// Detail components
@@ -611,13 +612,19 @@
 					}
 				};
 
-				const cached = await smartSearchService.checkFetchCache(tmdbId);
-				if (cached) {
+				// Skip the cache when the user wants Castilian Spanish — the
+				// cache is keyed by tmdbId only and may hold an English (or
+				// Latino) entry from a previous fetch. Also drop a cache hit
+				// that fails the Castilian check for the same reason.
+				const wantCastilian = movieSearchLang === 'es';
+				const cached = wantCastilian ? null : await smartSearchService.checkFetchCache(tmdbId);
+				if (cached && (!wantCastilian || isCastilianRelease(cached.name))) {
 					fetchingId = String(tmdbId);
 					smartSearchService.setSelection({
 						title: details.title, year: details.releaseYear ?? '', type: 'movie',
 						tmdbId, mode: 'fetch',
-						existingItemId: libraryItem?.id, existingLibraryId: libraryItem?.libraryId
+						existingItemId: libraryItem?.id, existingLibraryId: libraryItem?.libraryId,
+						searchLang: movieSearchLang
 					});
 					smartSearchService.setFetchedCandidate(cached);
 				}
@@ -843,7 +850,8 @@
 			});
 		} else if (catalogItem.kind === 'movie') {
 			const tid = Number(catalogItem.sourceId);
-			if (!isFetchedForCurrent) {
+			const wantCastilian = movieSearchLang === 'es';
+			if (!isFetchedForCurrent && !wantCastilian) {
 				const cached = await smartSearchService.checkFetchCache(tid);
 				if (cached) {
 					smartSearchService.setSelection({

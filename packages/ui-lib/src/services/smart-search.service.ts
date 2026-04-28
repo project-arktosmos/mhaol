@@ -19,6 +19,7 @@ import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/typ
 import type { CatalogItem } from 'ui-lib/types/catalog.type';
 import { formatAuthors } from 'ui-lib/types/catalog.type';
 import { parseTorrentName } from 'addons/torrent-search-thepiratebay/parse-torrent-name';
+import { isCastilianRelease } from 'addons/torrent-search-spanish/is-castilian';
 import { queueService } from 'ui-lib/services/queue.service';
 
 const defaultConfigs: SmartSearchAllConfigs = {
@@ -327,6 +328,7 @@ class SmartSearchService {
 
 		const langParam =
 			selection.type === 'movie' && selection.searchLang === 'es' ? '&lang=es' : '';
+		const castilianOnly = selection.type === 'movie' && selection.searchLang === 'es';
 
 		this.store.update((s) => ({ ...s, searching: true, searchError: null }));
 
@@ -343,7 +345,15 @@ class SmartSearchService {
 						{ signal }
 					);
 					if (!res.ok) continue;
-					const data: TorrentSearchResult[] = await res.json();
+					const raw: TorrentSearchResult[] = await res.json();
+
+					// Defense-in-depth: if the user picked Castilian Spanish,
+					// strip any non-Castilian rows the backend (possibly stale)
+					// might have returned. The latino marker wins over any
+					// other Spanish indicator — see addons/torrent-search-spanish.
+					const data = castilianOnly
+						? raw.filter((r) => isCastilianRelease(r.name))
+						: raw;
 
 					const sorted = [...data].sort((a, b) => {
 						if (b.seeders !== a.seeders) return b.seeders - a.seeders;

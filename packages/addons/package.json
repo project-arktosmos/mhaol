@@ -47,6 +47,7 @@
 		"./torrent-search-thepiratebay/parse-torrent-name": "./torrent-search-thepiratebay/src/parse-torrent-name.ts",
 		"./torrent-search-spanish": "./torrent-search-spanish/src/index.ts",
 		"./torrent-search-spanish/types": "./torrent-search-spanish/src/types.ts",
+		"./torrent-search-spanish/is-castilian": "./torrent-search-spanish/src/is-castilian.ts",
 		"./musicbrainz": "./musicbrainz/src/index.ts",
 		"./musicbrainz/types": "./musicbrainz/src/types.ts",
 		"./musicbrainz/transform": "./musicbrainz/src/transform.ts",
