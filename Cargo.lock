@@ -5256,10 +5256,16 @@ name = "mhaol-cloud"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "mhaol-ed2k",
  "mhaol-identity",
  "mhaol-p2p-stream",
+ "mhaol-queue",
+ "mhaol-torrent",
+ "mhaol-yt-dlp",
  "mime_guess",
  "once_cell",
+ "parking_lot",
+ "rusqlite",
  "rust-embed",
  "serde",
  "serde_json",

@@ -2,9 +2,66 @@
 	import { onDestroy, onMount } from 'svelte';
 	import classNames from 'classnames';
 	import HealthCard from '../components/HealthCard.svelte';
-	import { cloudHealthService } from '../lib/cloud-health.service';
+	import {
+		cloudHealthService,
+		type PackageHealth,
+		type PackageHealthStatus
+	} from '../lib/cloud-health.service';
 
 	const state = cloudHealthService.state;
+
+	const packageTone = (
+		s: PackageHealthStatus | undefined
+	): 'success' | 'warning' | 'error' | 'neutral' => {
+		switch (s) {
+			case 'ok':
+				return 'success';
+			case 'warning':
+				return 'warning';
+			case 'error':
+				return 'error';
+			default:
+				return 'neutral';
+		}
+	};
+
+	const packageValue = (pkg: PackageHealth | undefined): string => {
+		if (!pkg) return '—';
+		switch (pkg.status) {
+			case 'ok':
+				return 'Healthy';
+			case 'warning':
+				return 'Warning';
+			case 'error':
+				return 'Error';
+			default:
+				return 'Unavailable';
+		}
+	};
+
+	const packageHint = (pkg: PackageHealth | undefined): string | null => {
+		if (!pkg) return null;
+		if (pkg.message) return pkg.message;
+		const d = pkg.details ?? {};
+		const parts: string[] = [];
+		if (pkg.name === 'queue') {
+			parts.push(`${d.total ?? 0} tasks`);
+			if (typeof d.running === 'number') parts.push(`${d.running} running`);
+			if (typeof d.failed === 'number' && d.failed > 0) parts.push(`${d.failed} failed`);
+		} else if (pkg.name === 'yt-dlp') {
+			if (d.ytdlpVersion) parts.push(`v${d.ytdlpVersion}`);
+			if (typeof d.active === 'number') parts.push(`${d.active} active`);
+			if (typeof d.queued === 'number' && d.queued > 0) parts.push(`${d.queued} queued`);
+		} else if (pkg.name === 'torrent') {
+			if (typeof d.activeTorrents === 'number') parts.push(`${d.activeTorrents} active`);
+		} else if (pkg.name === 'ed2k') {
+			if (d.serverConnected && d.serverName) parts.push(`server: ${d.serverName}`);
+			if (typeof d.activeFiles === 'number') parts.push(`${d.activeFiles} active`);
+		} else if (pkg.name === 'p2p-stream') {
+			parts.push(d.gstreamerInitialized ? 'GStreamer ready' : 'GStreamer offline');
+		}
+		return parts.length > 0 ? parts.join(' · ') : null;
+	};
 
 	onMount(() => {
 		cloudHealthService.start(5000);
@@ -143,6 +200,22 @@
 			mono
 		/>
 	</section>
+
+	{#if $state.status?.packages}
+		<section class="flex flex-col gap-3">
+			<h2 class="text-lg font-semibold">Packages</h2>
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+				{#each [{ key: 'p2p-stream', pkg: $state.status.packages.p2pStream }, { key: 'queue', pkg: $state.status.packages.queue }, { key: 'yt-dlp', pkg: $state.status.packages.ytDlp }, { key: 'torrent', pkg: $state.status.packages.torrent }, { key: 'ed2k', pkg: $state.status.packages.ed2k }] as { key, pkg } (key)}
+					<HealthCard
+						label={key}
+						value={packageValue(pkg)}
+						tone={packageTone(pkg?.status)}
+						hint={packageHint(pkg)}
+					/>
+				{/each}
+			</div>
+		</section>
+	{/if}
 
 	{#if $state.status?.client_address}
 		<section class="card bg-base-200 p-4">

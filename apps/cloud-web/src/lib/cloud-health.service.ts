@@ -8,6 +8,24 @@ export interface CloudDbStatus {
 	version: string | null;
 }
 
+export type PackageHealthStatus = 'ok' | 'warning' | 'error' | 'unavailable';
+
+export interface PackageHealth {
+	name: string;
+	status: PackageHealthStatus;
+	available: boolean;
+	message?: string;
+	details: Record<string, unknown>;
+}
+
+export interface PackagesHealth {
+	p2pStream: PackageHealth;
+	queue: PackageHealth;
+	ytDlp: PackageHealth;
+	torrent: PackageHealth;
+	ed2k: PackageHealth;
+}
+
 export interface CloudStatus {
 	status: string;
 	version: string;
@@ -20,6 +38,7 @@ export interface CloudStatus {
 	signaling_address: string | null;
 	client_address: string | null;
 	db: CloudDbStatus;
+	packages: PackagesHealth;
 }
 
 export interface CloudHealthState {

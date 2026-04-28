@@ -5,9 +5,20 @@ mod state;
 
 use axum::Router;
 use mhaol_identity::IdentityManager;
+use mhaol_queue::QueueManager;
+use parking_lot::Mutex;
+use rusqlite::Connection;
 use state::CloudState;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::net::TcpListener;
+
+#[cfg(not(target_os = "android"))]
+use mhaol_ed2k::{Ed2kConfig, Ed2kManager};
+#[cfg(not(target_os = "android"))]
+use mhaol_torrent::{TorrentConfig, TorrentManager};
+#[cfg(not(target_os = "android"))]
+use mhaol_yt_dlp::{DownloadManager, YtDownloadConfig};
 
 #[tokio::main]
 async fn main() {
@@ -81,7 +92,54 @@ async fn main() {
         );
     }
 
-    let state = CloudState::new(surreal, identity_manager);
+    let queue = init_queue(&db_path);
+
+    #[cfg(not(target_os = "android"))]
+    let ytdl_manager = Arc::new(DownloadManager::new(YtDownloadConfig::from_env()));
+
+    #[cfg(not(target_os = "android"))]
+    let torrent_manager = {
+        let manager = Arc::new(TorrentManager::new());
+        let manager_clone = Arc::clone(&manager);
+        let download_path = downloads_dir().join("torrents");
+        tokio::spawn(async move {
+            let config = TorrentConfig {
+                download_path,
+                ..TorrentConfig::default()
+            };
+            if let Err(e) = manager_clone.initialize(config).await {
+                tracing::warn!("[torrent] init failed: {}", e);
+            }
+        });
+        manager
+    };
+
+    #[cfg(not(target_os = "android"))]
+    let ed2k_manager = {
+        let manager = Arc::new(Ed2kManager::new());
+        manager.install_arc();
+        let download_path = downloads_dir().join("ed2k");
+        let config = Ed2kConfig {
+            download_path,
+            ..Ed2kConfig::default()
+        };
+        if let Err(e) = manager.initialize(config) {
+            tracing::warn!("[ed2k] init failed: {}", e);
+        }
+        manager
+    };
+
+    let state = CloudState::new(
+        surreal,
+        identity_manager,
+        queue,
+        #[cfg(not(target_os = "android"))]
+        ytdl_manager,
+        #[cfg(not(target_os = "android"))]
+        torrent_manager,
+        #[cfg(not(target_os = "android"))]
+        ed2k_manager,
+    );
 
     let app = Router::new()
         .nest("/api/cloud", cloud_status::router())
@@ -96,6 +154,34 @@ async fn main() {
     tracing::info!("Cloud server (SurrealDB + web UI) listening on {}", addr);
 
     axum::serve(listener, app).await.expect("Server error");
+}
+
+fn init_queue(db_dir: &std::path::Path) -> Arc<QueueManager> {
+    let queue_path = db_dir
+        .parent()
+        .map(|p| p.join("cloud-queue.db"))
+        .unwrap_or_else(|| PathBuf::from("cloud-queue.db"));
+    if let Some(parent) = queue_path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let conn = Connection::open(&queue_path).expect("Failed to open queue SQLite");
+    let pool = Arc::new(Mutex::new(conn));
+    let manager = QueueManager::new(pool);
+    manager.create_table();
+    Arc::new(manager)
+}
+
+#[cfg(not(target_os = "android"))]
+fn downloads_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("DATA_DIR") {
+        let p = PathBuf::from(dir).join("downloads");
+        std::fs::create_dir_all(&p).ok();
+        return p;
+    }
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let p = manifest_dir.join("downloads");
+    std::fs::create_dir_all(&p).ok();
+    p
 }
 
 /// Load .env from the workspace root into process environment variables.
