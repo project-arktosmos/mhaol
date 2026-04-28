@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "apps/frontend/src-tauri",
     "apps/node",
+    "apps/cloud",
     "apps/signaling",
     "packages/identity",
     "packages/queue",

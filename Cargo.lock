@@ -4309,6 +4309,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "mhaol-cloud"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "mhaol-identity",
+ "mhaol-node",
+ "mhaol-p2p-stream",
+ "mime_guess",
+ "once_cell",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "mhaol-ed2k"
 version = "0.1.0"
 dependencies = [
