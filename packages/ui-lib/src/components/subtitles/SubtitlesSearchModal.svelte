@@ -104,7 +104,22 @@
 			</div>
 
 			{#if $subsState.error}
-				<div class="alert py-2 text-xs alert-error">{$subsState.error}</div>
+				<div class="alert flex flex-col items-start gap-1 py-2 text-xs alert-error">
+					<span>{$subsState.error}</span>
+					{#if /401|api key/i.test($subsState.error)}
+						<span class="opacity-90">
+							Wyzie now requires a free API key. Claim one at
+							<a
+								class="link"
+								href="https://sub.wyzie.io/redeem"
+								target="_blank"
+								rel="noreferrer noopener">sub.wyzie.io/redeem</a
+							>
+							and save it under <code>wyzie-subs.apiKey</code> in addon settings (or set
+							<code>WYZIE_API_KEY</code> before starting the node).
+						</span>
+					{/if}
+				</div>
 			{/if}
 
 			{#if $subsState.assigned.length > 0}
