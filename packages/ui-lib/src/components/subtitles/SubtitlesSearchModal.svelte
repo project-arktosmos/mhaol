@@ -18,6 +18,14 @@
 
 	let languageFilter = $state('');
 	let hearingImpaired = $state(false);
+	let userEditedFilter = $state(false);
+
+	// Sync the input with the auto-detected defaults until the user edits it manually.
+	$effect(() => {
+		if (userEditedFilter) return;
+		const next = $subsState.lastLanguages.join(',');
+		if (languageFilter !== next) languageFilter = next;
+	});
 
 	$effect(() => {
 		if (open) {
@@ -26,11 +34,18 @@
 	});
 
 	function handleSearch() {
+		userEditedFilter = true;
 		const langs = languageFilter
 			.split(',')
 			.map((s) => s.trim().toLowerCase())
 			.filter(Boolean);
 		subtitlesService.search(langs.length ? langs : undefined, hearingImpaired || undefined);
+	}
+
+	function handleSearchAll() {
+		userEditedFilter = true;
+		languageFilter = '';
+		subtitlesService.search(undefined, hearingImpaired || undefined);
 	}
 
 	function handleDownload(id: string) {
@@ -58,13 +73,14 @@
 			<div class="flex flex-wrap items-end gap-2">
 				<label class="form-control flex-1">
 					<span class="label-text mb-1 text-xs opacity-70"
-						>Languages (comma separated, e.g. eng,spa)</span
+						>Languages (auto-detected from title)</span
 					>
 					<input
 						type="text"
 						class="input-bordered input input-sm"
 						placeholder="eng,spa,fre"
 						bind:value={languageFilter}
+						oninput={() => (userEditedFilter = true)}
 					/>
 				</label>
 				<label class="label cursor-pointer gap-2">
@@ -77,6 +93,13 @@
 					disabled={$subsState.searching}
 				>
 					{$subsState.searching ? 'Searching...' : 'Search'}
+				</button>
+				<button
+					class="btn btn-ghost btn-sm"
+					onclick={handleSearchAll}
+					disabled={$subsState.searching}
+				>
+					All languages
 				</button>
 			</div>
 

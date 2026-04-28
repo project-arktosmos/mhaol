@@ -141,6 +141,7 @@
 	let relatedData = $state<LibraryItemRelated | null>(null);
 	let movieImageOverrides = $state<Record<string, string> | null>(null);
 	let movieSearchLang = $state<SmartSearchLang>('en');
+	let originalLanguage = $state<string | null>(null);
 	const playerState = playerService.state;
 
 
@@ -582,6 +583,7 @@
 			const res = await fetchRaw(`/api/tmdb/movies/${tmdbId}`);
 			if (res.ok) {
 				const rawMovie: TMDBMovieDetails = await res.json();
+				originalLanguage = rawMovie.original_language ?? null;
 				const details = movieDetailsToDisplay(rawMovie);
 				const movieAuthors = tmdbMovieAuthors(rawMovie);
 				// Fetch image overrides
@@ -720,6 +722,7 @@
 			const res = await fetchRaw(`/api/tmdb/tv/${showId}`);
 			if (res.ok) {
 				const rawTv: TMDBTvShowDetails = await res.json();
+				originalLanguage = rawTv.original_language ?? null;
 				const details = tvShowDetailsToDisplay(rawTv);
 				const tvAuthors = tmdbTvAuthors(rawTv);
 				let seasonDetailsList: DisplayTMDBSeasonDetails[] = [];
@@ -811,14 +814,21 @@
 
 	let subtitleSearchContext = $derived.by<SubtitleSearchContext | null>(() => {
 		if (!$playerState.currentFile) return null;
+		const orig = originalLanguage ?? undefined;
 		if (config?.kind === 'movie') {
-			return { type: 'movie', tmdbId: id };
+			return { type: 'movie', tmdbId: id, originalLanguage: orig };
 		}
 		if (config?.kind === 'tv_show') {
 			const path = $playerState.currentFile.outputPath;
 			const found = libraryFiles.find((f) => f.path === path);
 			if (found) {
-				return { type: 'tv', tmdbId: id, season: found.seasonNumber, episode: found.episodeNumber };
+				return {
+					type: 'tv',
+					tmdbId: id,
+					season: found.seasonNumber,
+					episode: found.episodeNumber,
+					originalLanguage: orig
+				};
 			}
 			return null;
 		}

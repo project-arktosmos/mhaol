@@ -1,4 +1,5 @@
-import { writable, type Writable } from 'svelte/store';
+import { writable, get, type Writable } from 'svelte/store';
+import { locale } from 'svelte-i18n';
 import { fetchJson, resolveApiUrl } from 'ui-lib/transport/fetch-helpers';
 import type {
 	AssignedSubtitle,
@@ -7,6 +8,19 @@ import type {
 } from 'ui-lib/types/subtitles.type';
 import { buildMediaKey } from 'ui-lib/types/subtitles.type';
 
+/// Default search languages for a context: title's original language (from TMDB)
+/// plus the user's current UI locale, deduped, lowercased, 2-letter. Empty array
+/// means "no preference" (search will return all available languages).
+function defaultLanguagesFor(ctx: SubtitleSearchContext): string[] {
+	const out = new Set<string>();
+	const orig = ctx.originalLanguage?.trim().toLowerCase().slice(0, 2);
+	if (orig) out.add(orig);
+	const ui = get(locale);
+	const uiShort = typeof ui === 'string' ? ui.trim().toLowerCase().slice(0, 2) : '';
+	if (uiShort) out.add(uiShort);
+	return Array.from(out);
+}
+
 interface SubtitlesState {
 	context: SubtitleSearchContext | null;
 	searching: boolean;
@@ -14,6 +28,8 @@ interface SubtitlesState {
 	assigned: AssignedSubtitle[];
 	downloading: string | null;
 	error: string | null;
+	/// Languages used for the most recent search.
+	lastLanguages: string[];
 }
 
 const initialState: SubtitlesState = {
@@ -22,18 +38,31 @@ const initialState: SubtitlesState = {
 	results: [],
 	assigned: [],
 	downloading: null,
-	error: null
+	error: null,
+	lastLanguages: []
 };
 
 class SubtitlesService {
 	public state: Writable<SubtitlesState> = writable(initialState);
 
 	setContext(ctx: SubtitleSearchContext | null): void {
+		const prev = get(this.state).context;
+		const sameContext =
+			prev !== null &&
+			ctx !== null &&
+			prev.type === ctx.type &&
+			prev.tmdbId === ctx.tmdbId &&
+			prev.season === ctx.season &&
+			prev.episode === ctx.episode;
+		if (sameContext) return;
 		this.state.update((s) => ({ ...s, context: ctx, results: [], error: null }));
 		if (ctx) {
 			this.refreshAssigned(ctx).catch(() => {});
+			// Kick off an initial search using the title's original language and the user's UI locale.
+			const langs = defaultLanguagesFor(ctx);
+			this.search(langs.length ? langs : undefined).catch(() => {});
 		} else {
-			this.state.update((s) => ({ ...s, assigned: [] }));
+			this.state.update((s) => ({ ...s, assigned: [], lastLanguages: [] }));
 		}
 	}
 
@@ -76,7 +105,12 @@ class SubtitlesService {
 					hearingImpaired
 				})
 			});
-			this.state.update((s) => ({ ...s, searching: false, results }));
+			this.state.update((s) => ({
+				...s,
+				searching: false,
+				results,
+				lastLanguages: languages ?? []
+			}));
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
 			this.state.update((s) => ({ ...s, searching: false, error: msg }));
@@ -134,6 +168,10 @@ class SubtitlesService {
 			const msg = e instanceof Error ? e.message : String(e);
 			this.state.update((s) => ({ ...s, error: msg }));
 		}
+	}
+
+	defaultLanguages(ctx: SubtitleSearchContext): string[] {
+		return defaultLanguagesFor(ctx);
 	}
 
 	private toAbsolute(url: string): string {

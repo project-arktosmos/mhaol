@@ -8,6 +8,8 @@ export interface SubtitleSearchContext {
 	imdbId?: string;
 	season?: number;
 	episode?: number;
+	/** Original language of the title (ISO 639-1, e.g. 'en', 'es'). From TMDB metadata. */
+	originalLanguage?: string;
 }
 
 export type SubtitleSearchResult = WyzieSubtitle;
