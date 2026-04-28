@@ -44,7 +44,6 @@ src/
 │   ├── youtube.rs
 │   └── ytdl.rs           # cfg(not(target_os = "android"))
 ├── db/                   # Database layer (rusqlite repos)
-├── llm_worker.rs         # Background LLM queue worker (processes llm:* tasks)
 ├── game_recommendations_worker.rs  # Background game recommendations worker (metadata-based matching)
 ├── music_recommendations_worker.rs  # Background music recommendations worker (ListenBrainz similar artists)
 ├── recommendations_worker.rs  # Background recommendations queue worker (processes recommendations:* tasks)

@@ -69,13 +69,13 @@
 		}
 	},
 	"smartSearch": {
-		"badge": "AI-Powered",
+		"badge": "Automatic",
 		"heading": "Smart Search",
-		"description": "Select any movie, show, album, or game from your library and Smart Search does the rest. It reads the metadata — title, year, artist, console — searches for torrents, and uses an LLM to analyze each result for relevance, quality, and language, automatically picking the best match.",
+		"description": "Select any movie, show, album, or game from your library and Smart Search does the rest. It reads the metadata — title, year, artist, console — searches for torrents, and ranks each result by relevance, quality, and language, automatically picking the best match.",
 		"step1": "Pick a title from your library — the metadata (title, year, artist, console) is read automatically",
 		"step2": "Torrents are searched using the parsed metadata as the query",
-		"step3": "Each result is analyzed by the LLM for relevance to the exact title and your preferences",
-		"step4": "Results are scored and ranked — the best candidate is auto-selected for you"
+		"step3": "Each result is scored against the exact title and your preferences",
+		"step4": "Results are ranked — the best candidate is auto-selected for you"
 	},
 	"addons": {
 		"heading": "Powered by Addons",

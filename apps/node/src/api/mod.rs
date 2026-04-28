@@ -15,8 +15,6 @@ pub mod lyrics;
 pub mod catalog;
 pub mod favorites;
 pub mod iptv;
-#[cfg(not(target_os = "android"))]
-pub mod llm;
 pub mod media;
 pub mod media_lists;
 pub mod book_recommendations;
@@ -116,9 +114,6 @@ pub fn build_app_router(state: AppState) -> Router {
 
     #[cfg(not(target_os = "android"))]
     let protected = protected.nest("/api/ed2k", ed2k::router());
-
-    #[cfg(not(target_os = "android"))]
-    let protected = protected.nest("/api/llm", llm::router());
 
     let protected = protected.layer(axum::middleware::from_fn(auth::require_auth));
 

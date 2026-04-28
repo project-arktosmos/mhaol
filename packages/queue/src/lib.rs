@@ -370,23 +370,23 @@ mod tests {
     #[test]
     fn test_claim_next() {
         let mgr = setup();
-        mgr.enqueue("llm:analyze", serde_json::json!({}));
+        mgr.enqueue("job:analyze", serde_json::json!({}));
         mgr.enqueue("other:task", serde_json::json!({}));
 
-        let claimed = mgr.claim_next("llm:").unwrap();
-        assert_eq!(claimed.task_type, "llm:analyze");
+        let claimed = mgr.claim_next("job:").unwrap();
+        assert_eq!(claimed.task_type, "job:analyze");
         assert_eq!(claimed.status, QueueTaskStatus::Running);
         assert!(claimed.started_at.is_some());
 
-        // No more llm tasks to claim
-        assert!(mgr.claim_next("llm:").is_none());
+        // No more matching tasks to claim
+        assert!(mgr.claim_next("job:").is_none());
     }
 
     #[test]
     fn test_complete() {
         let mgr = setup();
-        let task = mgr.enqueue("llm:analyze", serde_json::json!({}));
-        mgr.claim_next("llm:").unwrap();
+        let task = mgr.enqueue("job:analyze", serde_json::json!({}));
+        mgr.claim_next("job:").unwrap();
 
         mgr.complete(&task.id, serde_json::json!({ "relevance": 85 }));
 
@@ -399,8 +399,8 @@ mod tests {
     #[test]
     fn test_fail() {
         let mgr = setup();
-        let task = mgr.enqueue("llm:analyze", serde_json::json!({}));
-        mgr.claim_next("llm:").unwrap();
+        let task = mgr.enqueue("job:analyze", serde_json::json!({}));
+        mgr.claim_next("job:").unwrap();
 
         mgr.fail(&task.id, "No model loaded");
 
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn test_cancel() {
         let mgr = setup();
-        let task = mgr.enqueue("llm:analyze", serde_json::json!({}));
+        let task = mgr.enqueue("job:analyze", serde_json::json!({}));
 
         assert!(mgr.cancel(&task.id));
 
@@ -434,8 +434,8 @@ mod tests {
     #[test]
     fn test_list_with_filters() {
         let mgr = setup();
-        mgr.enqueue("llm:a", serde_json::json!({}));
-        mgr.enqueue("llm:b", serde_json::json!({}));
+        mgr.enqueue("job:a", serde_json::json!({}));
+        mgr.enqueue("job:b", serde_json::json!({}));
         mgr.enqueue("other:c", serde_json::json!({}));
 
         let all = mgr.list(None, None);
@@ -444,8 +444,8 @@ mod tests {
         let pending = mgr.list(Some("pending"), None);
         assert_eq!(pending.len(), 3);
 
-        let llm_a = mgr.list(None, Some("llm:a"));
-        assert_eq!(llm_a.len(), 1);
+        let job_a = mgr.list(None, Some("job:a"));
+        assert_eq!(job_a.len(), 1);
     }
 
     #[test]
@@ -470,8 +470,8 @@ mod tests {
     #[test]
     fn test_update_progress() {
         let mgr = setup();
-        let task = mgr.enqueue("llm:analyze", serde_json::json!({}));
-        mgr.claim_next("llm:").unwrap();
+        let task = mgr.enqueue("job:analyze", serde_json::json!({}));
+        mgr.claim_next("job:").unwrap();
 
         mgr.update_progress(&task.id, serde_json::json!({ "tokens": 42 }));
 
@@ -482,10 +482,10 @@ mod tests {
     #[test]
     fn test_claim_respects_order() {
         let mgr = setup();
-        let first = mgr.enqueue("llm:a", serde_json::json!({ "order": 1 }));
-        mgr.enqueue("llm:b", serde_json::json!({ "order": 2 }));
+        let first = mgr.enqueue("job:a", serde_json::json!({ "order": 1 }));
+        mgr.enqueue("job:b", serde_json::json!({ "order": 2 }));
 
-        let claimed = mgr.claim_next("llm:").unwrap();
+        let claimed = mgr.claim_next("job:").unwrap();
         assert_eq!(claimed.id, first.id);
     }
 }

@@ -5,7 +5,6 @@ members = [
     "apps/node",
     "apps/signaling",
     "packages/identity",
-    "packages/llm",
     "packages/queue",
     "packages/yt-dlp",
     "packages/torrent",

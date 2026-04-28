@@ -28,7 +28,7 @@ describe('QueueService', () => {
 	function makeTask(overrides: Record<string, unknown> = {}) {
 		return {
 			id: 'task-1',
-			taskType: 'llm',
+			taskType: 'job',
 			status: 'pending',
 			payload: {},
 			result: null,
@@ -74,9 +74,9 @@ describe('QueueService', () => {
 		const mockFn = mockFetchOk([]);
 		vi.stubGlobal('fetch', mockFn);
 
-		await queueService.fetchTasks(undefined, 'llm');
+		await queueService.fetchTasks(undefined, 'job');
 
-		expect(mockFn).toHaveBeenCalledWith(expect.stringContaining('taskType=llm'));
+		expect(mockFn).toHaveBeenCalledWith(expect.stringContaining('taskType=job'));
 	});
 
 	it('should handle fetchTasks failure silently', async () => {
@@ -111,7 +111,7 @@ describe('QueueService', () => {
 		const newTask = makeTask({ id: 'new-task' });
 		vi.stubGlobal('fetch', mockFetchOk(newTask));
 
-		const result = await queueService.createTask('llm', { prompt: 'hello' });
+		const result = await queueService.createTask('job', { prompt: 'hello' });
 
 		expect(result).not.toBeNull();
 		expect(result!.id).toBe('new-task');
@@ -130,7 +130,7 @@ describe('QueueService', () => {
 		const newTask = makeTask({ id: 'new-task' });
 		vi.stubGlobal('fetch', mockFetchOk(newTask));
 
-		await queueService.createTask('llm', {});
+		await queueService.createTask('job', {});
 
 		const state = get(queueService.store);
 		expect(state.tasks[0].id).toBe('new-task');
@@ -140,7 +140,7 @@ describe('QueueService', () => {
 	it('should return null on createTask failure', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed')));
 
-		const result = await queueService.createTask('llm', {});
+		const result = await queueService.createTask('job', {});
 
 		expect(result).toBeNull();
 	});
@@ -156,7 +156,7 @@ describe('QueueService', () => {
 			})
 		);
 
-		const result = await queueService.createTask('llm', {});
+		const result = await queueService.createTask('job', {});
 
 		expect(result).toBeNull();
 	});

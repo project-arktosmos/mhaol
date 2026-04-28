@@ -147,19 +147,4 @@
 			{/if}
 		</div>
 	</div>
-
-	<div class="space-y-2">
-		<h3 class="text-sm font-semibold">LLM Prompt</h3>
-		<p class="text-xs text-base-content/50">
-			Template used when the LLM analyzes torrent results for
-			<span class="font-medium">{tabs.find((t) => t.id === activeTab)?.label}</span>.
-		</p>
-		<textarea
-			class="textarea-bordered textarea w-full font-mono text-xs leading-relaxed"
-			rows="8"
-			value={currentConfig.smartSearchPrompt}
-			onchange={(e) =>
-				smartSearchService.updateConfig(activeTab, 'smartSearchPrompt', e.currentTarget.value)}
-		></textarea>
-	</div>
 </div>

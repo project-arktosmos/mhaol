@@ -128,22 +128,6 @@ CREATE TRIGGER IF NOT EXISTS downloads_updated_at
 BEGIN
     UPDATE downloads SET updated_at = datetime('now') WHERE id = OLD.id;
 END;
-
-CREATE TABLE IF NOT EXISTS llm_conversations (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    system_prompt TEXT,
-    messages TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TRIGGER IF NOT EXISTS llm_conversations_updated_at
-    AFTER UPDATE ON llm_conversations
-    FOR EACH ROW
-BEGIN
-    UPDATE llm_conversations SET updated_at = datetime('now') WHERE id = OLD.id;
-END;
 ";
 
 /// Media lists and signaling servers (video-cloud, tunes apps).
@@ -636,20 +620,11 @@ fn run_migrations(conn: &Connection) {
         );
     }
 
-    // Migration: add llm_conversations table (db_version 21)
-    if !has_table(conn, "llm_conversations") {
+    // Migration: drop legacy llm_conversations table if present
+    if has_table(conn, "llm_conversations") {
         let _ = conn.execute_batch(
-            "CREATE TABLE llm_conversations (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                system_prompt TEXT,
-                messages TEXT NOT NULL DEFAULT '[]',
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-            CREATE TRIGGER IF NOT EXISTS llm_conversations_updated_at
-                AFTER UPDATE ON llm_conversations FOR EACH ROW
-            BEGIN UPDATE llm_conversations SET updated_at = datetime('now') WHERE id = OLD.id; END;",
+            "DROP TRIGGER IF EXISTS llm_conversations_updated_at;
+             DROP TABLE IF EXISTS llm_conversations;",
         );
     }
 
@@ -1353,7 +1328,6 @@ mod tests {
         assert!(has_table(&conn, "media_list_items"));
         assert!(has_table(&conn, "media_list_links"));
         assert!(has_table(&conn, "signaling_servers"));
-        assert!(has_table(&conn, "llm_conversations"));
         assert!(has_table(&conn, "roster_contacts"));
         assert!(has_table(&conn, "profiles"));
         assert!(has_table(&conn, "favorites"));

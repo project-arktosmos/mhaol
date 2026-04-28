@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
-	import SmartSearchResultsTable from 'ui-lib/components/llm/SmartSearchResultsTable.svelte';
+	import SmartSearchResultsTable from 'ui-lib/components/smart-search/SmartSearchResultsTable.svelte';
 	import {
 		scoreResults,
 		findBestCandidate,

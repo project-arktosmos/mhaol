@@ -279,14 +279,8 @@ async fn auto_match(State(state): State<AppState>, Json(body): Json<AutoMatchReq
 
     let stream = async_stream::stream! {
         for (idx, item) in body.lists.iter().enumerate() {
-            // 1. Regex-based extraction (always available, instant)
             let parsed = parse_folder_name(&item.title);
             let (search_query, year_filter) = (parsed.show_name, parsed.year);
-
-            // NOTE: LLM extraction skipped for batch auto-match — the single-threaded
-            // worker can't keep up with batch sizes (each inference ~2min on CPU),
-            // causing every item to hit the 30s timeout. Regex parsing handles the
-            // vast majority of torrent names correctly.
 
             let match_title = search_query.clone();
             let mut tv_params: Vec<(&str, &str)> = vec![("query", &search_query), ("page", "1")];

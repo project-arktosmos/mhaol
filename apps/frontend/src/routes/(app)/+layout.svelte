@@ -9,7 +9,7 @@
 
 	import { youtubeService } from 'ui-lib/services/youtube.service';
 	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
-	import SmartSearchToast from 'ui-lib/components/llm/SmartSearchToast.svelte';
+	import SmartSearchToast from 'ui-lib/components/smart-search/SmartSearchToast.svelte';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
 	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
 	import { rosterService } from 'ui-lib/services/roster.service';

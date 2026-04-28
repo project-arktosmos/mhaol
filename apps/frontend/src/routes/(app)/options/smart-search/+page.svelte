@@ -1,5 +1,5 @@
 <script lang="ts">
-  import LlmModalContent from "ui-lib/components/llm/LlmModalContent.svelte";
+  import SmartSearchModalContent from "ui-lib/components/smart-search/SmartSearchModalContent.svelte";
 </script>
 
-<LlmModalContent />
+<SmartSearchModalContent />

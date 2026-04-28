@@ -14,7 +14,6 @@ export interface SmartSearchMediaConfig {
 	preferredQuality?: string;
 	preferredConsole?: string;
 	preferredFormat?: string;
-	smartSearchPrompt: string;
 }
 
 export type SmartSearchAllConfigs = Record<SmartSearchMediaType, SmartSearchMediaConfig>;

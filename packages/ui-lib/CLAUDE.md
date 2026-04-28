@@ -21,7 +21,7 @@ src/
 │   ├── images/               # Image tagging
 │   ├── landing/              # Marketing/landing page (Hero, Features, Platforms, Footer, LandingNavbar)
 │   ├── libraries/            # Media libraries (list, files, link modals, LibrarySelector, content grid/card)
-│   ├── llm/                  # LLM model management + smart search config
+│   ├── smart-search/         # Smart search modal, sections (movie/tv/music), results table, toast
 │   ├── queue/                # Queue task monitor (real-time visualization)
 │   ├── media/                # Media cards (Movie, TV, Audio, Image, YouTube, uncategorized)
 │   ├── music/                # Music components (legacy, being replaced by catalog/)

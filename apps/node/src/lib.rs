@@ -1,8 +1,6 @@
 pub mod api;
 pub mod book_recommendations_worker;
 pub mod db;
-#[cfg(not(target_os = "android"))]
-pub mod llm_worker;
 pub mod modules;
 #[cfg(not(target_os = "android"))]
 pub mod peer_service;
@@ -15,8 +13,6 @@ pub mod worker_bridge;
 use db::repo::*;
 use db::DbPool;
 use mhaol_identity::IdentityManager;
-#[cfg(not(target_os = "android"))]
-use mhaol_llm::LlmEngine;
 use mhaol_queue::QueueManager;
 use mhaol_recommendations::books::BookRecommendationsRepo;
 use mhaol_recommendations::game::GameRecommendationsRepo;
@@ -111,13 +107,10 @@ pub struct AppState {
     pub torrent_manager: Arc<TorrentManager>,
     #[cfg(not(target_os = "android"))]
     pub ed2k_manager: Arc<Ed2kManager>,
-    #[cfg(not(target_os = "android"))]
-    pub llm_engine: Arc<LlmEngine>,
     pub image_tags: ImageTagRepo,
     #[cfg(not(target_os = "android"))]
     pub image_tagger_manager: Arc<modules::image_tagger::ImageTaggerManager>,
     pub data_dir: PathBuf,
-    pub llm_conversations: LlmConversationRepo,
     pub api_cache: ApiCacheRepo,
     pub tmdb_image_overrides: TmdbImageOverrideRepo,
     pub profiles: ProfileRepo,
@@ -153,9 +146,6 @@ impl AppState {
 
         let data_dir = default_data_dir();
 
-        #[cfg(not(target_os = "android"))]
-        let llm_models_dir = find_workspace_root().join("models");
-
         Ok(Self {
             settings: SettingsRepo::new(Arc::clone(&db)),
             metadata: MetadataRepo::new(Arc::clone(&db)),
@@ -182,12 +172,9 @@ impl AppState {
             torrent_manager: Arc::new(TorrentManager::new()),
             #[cfg(not(target_os = "android"))]
             ed2k_manager: Arc::new(Ed2kManager::new()),
-            #[cfg(not(target_os = "android"))]
-            llm_engine: Arc::new(LlmEngine::new(llm_models_dir)),
             image_tags: ImageTagRepo::new(Arc::clone(&db)),
             #[cfg(not(target_os = "android"))]
             image_tagger_manager: Arc::new(modules::image_tagger::ImageTaggerManager::new()),
-            llm_conversations: LlmConversationRepo::new(Arc::clone(&db)),
             api_cache: ApiCacheRepo::new(Arc::clone(&db)),
             tmdb_image_overrides: TmdbImageOverrideRepo::new(Arc::clone(&db)),
             profiles: ProfileRepo::new(Arc::clone(&db)),

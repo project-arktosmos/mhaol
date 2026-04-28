@@ -78,15 +78,6 @@ async fn main() {
         worker_bridge.start().await;
     });
 
-    // Start LLM queue worker in the background
-    #[cfg(not(target_os = "android"))]
-    {
-        let llm_state = state.clone();
-        tokio::spawn(async move {
-            mhaol_node::llm_worker::run_llm_worker(llm_state).await;
-        });
-    }
-
     // Start recommendations queue worker in the background
     {
         let recs_state = state.clone();

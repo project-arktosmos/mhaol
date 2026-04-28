@@ -50,7 +50,7 @@
 				<th class="text-right">Size</th>
 				<th class="text-right" title="Seeders normalized to %">SE%</th>
 				<th class="text-right" title="Leechers normalized to %">LE%</th>
-				<th class="text-right" title="LLM relevance %">Rel%</th>
+				<th class="text-right" title="Relevance %">Rel%</th>
 				{#each columns as col (col.key)}
 					<th class="text-right" title={col.title}>{col.label}</th>
 				{/each}
