@@ -190,7 +190,7 @@
 	const fetchedFilesHashes = new Set<string>();
 
 	$effect(() => {
-		if (config?.kind !== 'tv_show') return;
+		if (config?.kind !== 'tv_show' && config?.kind !== 'album') return;
 		for (const t of $torrentState.allTorrents) {
 			const completed = t.state === 'seeding' || t.progress >= 1.0;
 			const key = t.infoHash.toLowerCase();
@@ -304,6 +304,107 @@
 	function handlePrevEpisode() {
 		if (currentEpisodeIndex <= 0) return;
 		playableEpisodesList[currentEpisodeIndex - 1].play();
+	}
+
+	// Album → track file mapping. Files keyed by track number (string) to match AlbumTrack.number.
+	const AUDIO_EXT = /\.(mp3|flac|wav|m4a|aac|ogg|opus|alac|wma|ape)$/i;
+	function parseTrackNumberFromFilename(name: string): number | null {
+		const stem = name.replace(/\.[^.]+$/, '');
+		const dt = stem.match(/^\s*\d{1,2}[-.]\s*(\d{1,3})\b/);
+		if (dt) return parseInt(dt[1], 10);
+		const m = stem.match(/^\s*(\d{1,3})\b/);
+		return m ? parseInt(m[1], 10) : null;
+	}
+
+	let albumTrackFiles = $derived.by(() => {
+		if (config?.kind !== 'album') return {} as Record<string, { path: string; name: string; infoHash: string }>;
+		const out: Record<string, { path: string; name: string; infoHash: string }> = {};
+		const candidate = $searchStore.fetchedCandidate;
+		if (!candidate) return out;
+		const key = candidate.infoHash.toLowerCase();
+		const torrent = torrentByHash[key];
+		const files = torrentFilesByHash[key];
+		if (!torrent?.outputPath || !files) return out;
+		const audioFiles = files.filter((f) => AUDIO_EXT.test(f.name));
+		audioFiles.sort((a, b) => a.name.localeCompare(b.name));
+		for (const f of audioFiles) {
+			const n = parseTrackNumberFromFilename(f.name);
+			if (n == null) continue;
+			const num = String(n);
+			if (out[num]) continue;
+			out[num] = {
+				path: `${torrent.outputPath}/${f.name}`,
+				name: f.name,
+				infoHash: torrent.infoHash
+			};
+		}
+		// Fallback: if fewer than half the tracks parsed, map files positionally onto the track list.
+		if (catalogItem?.kind === 'album') {
+			const tracks = catalogItem.metadata.releases[0]?.tracks ?? [];
+			if (tracks.length > 0 && Object.keys(out).length < tracks.length / 2) {
+				for (let i = 0; i < Math.min(audioFiles.length, tracks.length); i++) {
+					const trackNum = tracks[i].number;
+					if (out[trackNum]) continue;
+					const f = audioFiles[i];
+					out[trackNum] = {
+						path: `${torrent.outputPath}/${f.name}`,
+						name: f.name,
+						infoHash: torrent.infoHash
+					};
+				}
+			}
+		}
+		return out;
+	});
+
+	function handlePlayTrack(path: string, name: string, infoHash: string) {
+		const file: PlayableFile = {
+			id: `torrent:${infoHash}:${path}`,
+			type: 'torrent',
+			name,
+			outputPath: path,
+			mode: 'audio',
+			format: null,
+			videoFormat: null,
+			thumbnailUrl: null,
+			durationSeconds: null,
+			size: 0,
+			completedAt: '',
+			infoHash
+		};
+		playerService.play(file, 'inline');
+	}
+
+	let playableTracksList = $derived.by(() => {
+		if (config?.kind !== 'album' || catalogItem?.kind !== 'album') return [];
+		const tracks = catalogItem.metadata.releases[0]?.tracks ?? [];
+		const out: Array<{ number: string; path: string; play: () => void }> = [];
+		for (const t of tracks) {
+			const file = albumTrackFiles[t.number];
+			if (!file) continue;
+			out.push({
+				number: t.number,
+				path: file.path,
+				play: () => handlePlayTrack(file.path, file.name, file.infoHash)
+			});
+		}
+		return out;
+	});
+
+	let currentTrackIndex = $derived.by(() => {
+		const path = $playerState.currentFile?.outputPath;
+		if (!path) return -1;
+		return playableTracksList.findIndex((t) => t.path === path);
+	});
+
+	function handleNextTrack() {
+		const next = playableTracksList[currentTrackIndex + 1];
+		if (next) next.play();
+	}
+
+	function handlePrevTrack() {
+		if (currentTrackIndex <= 0) return;
+		playableTracksList[currentTrackIndex - 1].play();
 	}
 
 	// Keyed by lowercase infoHash because the backend lowercases magnet hashes,
@@ -1095,7 +1196,13 @@
 	>
 		{#snippet extra()}
 			{#if catalogItem?.kind === 'album'}
-				<AlbumDetailMeta item={catalogItem} />
+				<AlbumDetailMeta
+					item={catalogItem}
+					albumCandidate={$searchStore.fetchedCandidate}
+					{torrentByHash}
+					trackFiles={albumTrackFiles}
+					onplaytrack={handlePlayTrack}
+				/>
 			{:else if catalogItem?.kind === 'book'}
 				<BookDetailMeta item={catalogItem} />
 			{:else if catalogItem?.kind === 'game'}
@@ -1147,7 +1254,7 @@
 			{/if}
 		{/snippet}
 		{#snippet rightPanel()}
-			{#if config?.kind === 'movie' || config?.kind === 'tv_show'}
+			{#if config?.kind === 'movie' || config?.kind === 'tv_show' || config?.kind === 'album'}
 				<div class="flex flex-col gap-2">
 					<PlayerVideo
 						file={$playerState.currentFile}
@@ -1157,8 +1264,16 @@
 						buffering={$playerState.buffering}
 						poster={catalogItem?.backdropUrl ?? catalogItem?.posterUrl}
 						{subtitleSearchContext}
-						onprev={config?.kind === 'tv_show' && currentEpisodeIndex > 0 ? handlePrevEpisode : undefined}
-						onnext={config?.kind === 'tv_show' && currentEpisodeIndex >= 0 && currentEpisodeIndex < playableEpisodesList.length - 1 ? handleNextEpisode : undefined}
+						onprev={config?.kind === 'tv_show' && currentEpisodeIndex > 0
+							? handlePrevEpisode
+							: config?.kind === 'album' && currentTrackIndex > 0
+								? handlePrevTrack
+								: undefined}
+						onnext={config?.kind === 'tv_show' && currentEpisodeIndex >= 0 && currentEpisodeIndex < playableEpisodesList.length - 1
+							? handleNextEpisode
+							: config?.kind === 'album' && currentTrackIndex >= 0 && currentTrackIndex < playableTracksList.length - 1
+								? handleNextTrack
+								: undefined}
 					/>
 				</div>
 			{/if}
