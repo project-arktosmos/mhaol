@@ -178,6 +178,16 @@ impl Ed2kManager {
         self.files.read().values().cloned().collect()
     }
 
+    /// Apply a mutation to a tracked file's `Ed2kFileInfo`. Used by the
+    /// background download task to publish progress, peer counts and state
+    /// transitions. Quietly no-ops if the file has been removed.
+    pub fn update_file<F: FnOnce(&mut Ed2kFileInfo)>(&self, file_hash: &str, f: F) {
+        let mut files = self.files.write();
+        if let Some(info) = files.get_mut(file_hash) {
+            f(info);
+        }
+    }
+
     pub fn stats(&self) -> Ed2kStats {
         let files = self.files.read();
         let mut total_dl = 0u64;

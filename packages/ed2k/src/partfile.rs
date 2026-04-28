@@ -237,10 +237,9 @@ impl PartFile {
     }
 
     /// Atomically rename the .part file to its final destination and remove
-    /// the sidecar. Best-effort: missing sidecar is not an error.
+    /// the sidecar. Best-effort: missing sidecar is not an error. On Unix
+    /// this is safe even with the file handle still open.
     pub fn finalize(self, final_path: &Path) -> Result<()> {
-        // Drop the file handle first — Windows insists on this; on Unix it's
-        // harmless.
         let Self {
             path,
             sidecar_path,
@@ -260,6 +259,32 @@ impl PartFile {
             )
         })?;
         let _ = std::fs::remove_file(&sidecar_path);
+        Ok(())
+    }
+
+    /// In-place finalize that doesn't consume `self`. Used when the part
+    /// file lives behind a `Mutex`/`Arc` and we cannot easily own it. The
+    /// underlying file handle keeps pointing at the renamed inode (Unix
+    /// rename semantics) so reads continue to work.
+    pub fn finalize_in_place(&mut self, final_path: &Path) -> Result<()> {
+        if let Some(parent) = final_path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        std::fs::rename(&self.path, final_path).with_context(|| {
+            format!(
+                "ed2k: finalize rename {} -> {}",
+                self.path.display(),
+                final_path.display()
+            )
+        })?;
+        let _ = std::fs::remove_file(&self.sidecar_path);
+        self.path = final_path.to_path_buf();
+        // Sidecar at the new location won't actually exist — we just
+        // update the path so any further `persist_sidecar` writes go to a
+        // sensible spot. In practice no further writes happen post-finalize.
+        let mut sidecar = final_path.as_os_str().to_owned();
+        sidecar.push(".met");
+        self.sidecar_path = PathBuf::from(sidecar);
         Ok(())
     }
 
@@ -549,6 +574,18 @@ mod tests {
         assert!(final_path.exists());
         assert!(!part_path.exists());
         assert!(!sidecar_path.exists());
+    }
+
+    #[test]
+    fn finalize_in_place_renames_without_consuming() {
+        let tmp = TempDir::new().unwrap();
+        let mut pf =
+            PartFile::open_or_create(tmp.path(), "fp.bin", 10, HASH_HEX).unwrap();
+        pf.write_block(0, &[3u8; 10]).unwrap();
+        let final_path = tmp.path().join("fp.bin");
+        pf.finalize_in_place(&final_path).unwrap();
+        assert!(final_path.exists());
+        assert_eq!(pf.path(), final_path);
     }
 
     #[test]
