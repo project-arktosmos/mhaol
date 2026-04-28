@@ -41,8 +41,16 @@
 	let streamAttached = $state(false);
 	let isFullscreen = $state(false);
 	let subsModalOpen = $state(false);
-	let textTrackTick = $state(0);
 	let audioTrackTick = $state(0);
+	let activeSubUrl = $state<string | null>(null);
+	let activeSubText = $state('');
+
+	interface SubCue {
+		start: number;
+		end: number;
+		text: string;
+	}
+	let subCues = $state<SubCue[]>([]);
 
 	const subsState = subtitlesService.state;
 
@@ -75,22 +83,16 @@
 		};
 	};
 
-	let textTrackOptions = $derived.by(() => {
-		void textTrackTick;
-		const v = videoElement;
-		if (!v) return [] as { index: number; label: string; mode: TextTrackMode }[];
-		const out: { index: number; label: string; mode: TextTrackMode }[] = [];
-		for (let i = 0; i < v.textTracks.length; i++) {
-			const t = v.textTracks[i];
-			out.push({
-				index: i,
-				label: t.label || t.language || `Track ${i + 1}`,
-				mode: t.mode
-			});
-		}
-		return out;
-	});
-	let activeTextTrackIndex = $derived(textTrackOptions.findIndex((t) => t.mode === 'showing'));
+	// Dropdown options come from `combinedSubtitles` directly (URL-keyed).
+	// Native `<track>` rendering is unreliable here: video uses srcObject from a WebRTC
+	// MediaStream, and assigned subs come from a different origin — browsers tend to
+	// silently drop the cues. We fetch + parse VTT manually and overlay the active text.
+	let subtitleOptions = $derived(
+		combinedSubtitles.map((s, i) => ({
+			url: s.url,
+			label: s.languageName || s.languageCode || `Track ${i + 1}`
+		}))
+	);
 
 	let audioTrackOptions = $derived.by(() => {
 		void audioTrackTick;
@@ -158,32 +160,97 @@
 		subtitlesService.setContext(subtitleSearchContext);
 	});
 
-	// Watch for native track list changes so the dropdowns stay in sync.
+	// Watch for native audio track list changes so the dropdown stays in sync.
 	$effect(() => {
 		const v = videoElement as VideoElementWithAudio | null;
 		if (!v) return;
-		const onTextTracks = () => {
-			textTrackTick++;
-		};
 		const onAudioTracks = () => {
 			audioTrackTick++;
 		};
-		v.textTracks.addEventListener('addtrack', onTextTracks);
-		v.textTracks.addEventListener('removetrack', onTextTracks);
-		v.textTracks.addEventListener('change', onTextTracks);
 		const audioTracks = v.audioTracks;
 		audioTracks?.addEventListener('addtrack', onAudioTracks);
 		audioTracks?.addEventListener('removetrack', onAudioTracks);
 		audioTracks?.addEventListener('change', onAudioTracks);
 		return () => {
-			v.textTracks.removeEventListener('addtrack', onTextTracks);
-			v.textTracks.removeEventListener('removetrack', onTextTracks);
-			v.textTracks.removeEventListener('change', onTextTracks);
 			audioTracks?.removeEventListener('addtrack', onAudioTracks);
 			audioTracks?.removeEventListener('removetrack', onAudioTracks);
 			audioTracks?.removeEventListener('change', onAudioTracks);
 		};
 	});
+
+	// Drop selection if the chosen subtitle URL disappears from options.
+	$effect(() => {
+		if (activeSubUrl && !subtitleOptions.some((o) => o.url === activeSubUrl)) {
+			activeSubUrl = null;
+		}
+	});
+
+	// Auto-pick the user's UI locale subtitle the first time options arrive.
+	let autoSelected = $state(false);
+	$effect(() => {
+		if (autoSelected || activeSubUrl) return;
+		if (subtitleOptions.length === 0) return;
+		const ui = (typeof navigator !== 'undefined' ? navigator.language || '' : '')
+			.toLowerCase()
+			.slice(0, 2);
+		const match = combinedSubtitles.find((s) => s.languageCode?.toLowerCase().slice(0, 2) === ui);
+		if (match) {
+			activeSubUrl = match.url;
+			autoSelected = true;
+		}
+	});
+
+	// Fetch + parse VTT whenever the selected subtitle URL changes.
+	$effect(() => {
+		const url = activeSubUrl;
+		subCues = [];
+		activeSubText = '';
+		if (!url) return;
+		let cancelled = false;
+		fetch(url)
+			.then((r) => (r.ok ? r.text() : ''))
+			.then((text) => {
+				if (!cancelled && text) subCues = parseVtt(text);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	function parseVtt(vtt: string): SubCue[] {
+		const cues: SubCue[] = [];
+		const blocks = vtt.split(/\n\n+/);
+		for (const block of blocks) {
+			const lines = block.trim().split('\n');
+			for (let i = 0; i < lines.length; i++) {
+				const m = lines[i].match(
+					/(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})/
+				);
+				if (!m) continue;
+				const start = +m[1] * 3600 + +m[2] * 60 + +m[3] + +m[4] / 1000;
+				const end = +m[5] * 3600 + +m[6] * 60 + +m[7] + +m[8] / 1000;
+				const text = lines
+					.slice(i + 1)
+					.join('\n')
+					.replace(/<[^>]+>/g, '')
+					.trim();
+				if (text) cues.push({ start, end, text });
+				break;
+			}
+		}
+		return cues;
+	}
+
+	function handleTimeUpdate(): void {
+		if (!videoElement || subCues.length === 0) {
+			activeSubText = '';
+			return;
+		}
+		const t = videoElement.currentTime;
+		const cue = subCues.find((c) => t >= c.start && t <= c.end);
+		activeSubText = cue?.text ?? '';
+	}
 
 	async function tryAttachStream(): Promise<void> {
 		// Wait for the DOM to settle after branch switches ({#if isVideo})
@@ -244,15 +311,10 @@
 		playerService.setPaused(false);
 	}
 
-	function handleSelectTextTrack(e: Event): void {
-		const v = videoElement;
-		if (!v) return;
+	function handleSelectSubtitle(e: Event): void {
 		const value = (e.currentTarget as HTMLSelectElement).value;
-		const idx = value === '' ? -1 : parseInt(value, 10);
-		for (let i = 0; i < v.textTracks.length; i++) {
-			v.textTracks[i].mode = i === idx ? 'showing' : 'disabled';
-		}
-		textTrackTick++;
+		activeSubUrl = value === '' ? null : value;
+		autoSelected = true;
 	}
 
 	function handleSelectAudioTrack(e: Event): void {
@@ -301,29 +363,36 @@
 				onclick={handleVideoClick}
 				onwaiting={handleWaiting}
 				onplaying={handlePlaying}
-			>
-				{#each combinedSubtitles as sub}
-					<track
-						kind="subtitles"
-						src={sub.url}
-						srclang={sub.languageCode}
-						label={sub.languageName}
-					/>
-				{/each}
-			</video>
+				ontimeupdate={handleTimeUpdate}
+			></video>
+
+			{#if activeSubText}
+				<div
+					class={classNames(
+						'pointer-events-none absolute inset-x-0 z-10 flex justify-center px-4',
+						effectiveFullscreen ? 'bottom-20' : 'bottom-8'
+					)}
+				>
+					<span
+						class="inline-block max-w-full rounded bg-black/80 px-3 py-1 text-center text-base leading-snug text-white"
+					>
+						{activeSubText}
+					</span>
+				</div>
+			{/if}
 
 			{#if isStreaming}
 				<div class="absolute top-2 right-2 z-10 flex items-center gap-1">
-					{#if textTrackOptions.length > 0}
+					{#if subtitleOptions.length > 0}
 						<select
 							class="select-bordered select bg-black/60 select-xs text-white"
-							value={String(activeTextTrackIndex)}
-							onchange={handleSelectTextTrack}
+							value={activeSubUrl ?? ''}
+							onchange={handleSelectSubtitle}
 							aria-label="Subtitles"
 						>
-							<option value="-1">Subs off</option>
-							{#each textTrackOptions as opt}
-								<option value={String(opt.index)}>{opt.label}</option>
+							<option value="">Subs off</option>
+							{#each subtitleOptions as opt}
+								<option value={opt.url}>{opt.label}</option>
 							{/each}
 						</select>
 					{/if}
