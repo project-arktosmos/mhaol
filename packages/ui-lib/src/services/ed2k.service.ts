@@ -66,6 +66,10 @@ class Ed2kService extends ObjectServiceClass<Ed2kSettings> {
 
 			this._initialized = true;
 			this.connectEvents();
+
+			if (status.initialized && !status.server) {
+				void this.connectServer();
+			}
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
