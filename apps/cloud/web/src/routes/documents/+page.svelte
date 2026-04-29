@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { documentsService, DOCUMENT_TYPES, type DocumentType } from '$lib/documents.service';
+	import {
+		documentsService,
+		DOCUMENT_TYPES,
+		DOCUMENT_SOURCES,
+		type DocumentType,
+		type DocumentSource
+	} from '$lib/documents.service';
 	import { computeCidV1Raw } from '$lib/cid';
 
 	const docsStore = documentsService.state;
@@ -10,6 +16,7 @@
 	let author = $state('');
 	let description = $state('');
 	let type = $state<DocumentType>(DOCUMENT_TYPES[0]);
+	let source = $state<DocumentSource>(DOCUMENT_SOURCES[0]);
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
@@ -20,7 +27,8 @@
 				name: name.trim(),
 				author: author.trim(),
 				description: description.trim(),
-				type
+				type,
+				source
 			},
 			null,
 			2
@@ -68,11 +76,12 @@
 		}
 		creating = true;
 		try {
-			await documentsService.create(trimmedName, trimmedAuthor, description.trim(), type);
+			await documentsService.create(trimmedName, trimmedAuthor, description.trim(), type, source);
 			name = '';
 			author = '';
 			description = '';
 			type = DOCUMENT_TYPES[0];
+			source = DOCUMENT_SOURCES[0];
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -146,6 +155,20 @@
 									disabled={creating}
 								>
 									{#each DOCUMENT_TYPES as option (option)}
+										<option value={option}>{option}</option>
+									{/each}
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th class="w-32 align-middle">Source</th>
+							<td>
+								<select
+									class="select-bordered select w-full select-sm"
+									bind:value={source}
+									disabled={creating}
+								>
+									{#each DOCUMENT_SOURCES as option (option)}
 										<option value={option}>{option}</option>
 									{/each}
 								</select>
@@ -247,6 +270,7 @@
 						<tr>
 							<th>ID</th>
 							<th>Type</th>
+							<th>Source</th>
 							<th>Name</th>
 							<th>Author</th>
 							<th>Description</th>
@@ -259,6 +283,7 @@
 							<tr>
 								<td class="font-mono text-xs text-base-content/70">{doc.id}</td>
 								<td class="text-xs">{doc.type}</td>
+								<td class="text-xs">{doc.source}</td>
 								<td class="font-medium">{doc.name}</td>
 								<td>{doc.author}</td>
 								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"

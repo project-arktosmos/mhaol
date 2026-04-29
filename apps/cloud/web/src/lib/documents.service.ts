@@ -16,12 +16,27 @@ export const DOCUMENT_TYPES = [
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
+export const DOCUMENT_SOURCES = [
+	'tmdb',
+	'torrent-search-thepiratebay',
+	'torrent-search-spanish',
+	'musicbrainz',
+	'retroachievements',
+	'youtube',
+	'lrclib',
+	'openlibrary',
+	'wyzie-subs'
+] as const;
+
+export type DocumentSource = (typeof DOCUMENT_SOURCES)[number];
+
 export interface Document {
 	id: string;
 	name: string;
 	author: string;
 	description: string;
 	type: string;
+	source: string;
 	created_at: string;
 	updated_at: string;
 }
@@ -68,12 +83,13 @@ class DocumentsService {
 		name: string,
 		author: string,
 		description: string,
-		type: DocumentType
+		type: DocumentType,
+		source: DocumentSource
 	): Promise<Document> {
 		const res = await fetch('/api/documents', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ name, author, description, type })
+			body: JSON.stringify({ name, author, description, type, source })
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const created = (await res.json()) as Document;
