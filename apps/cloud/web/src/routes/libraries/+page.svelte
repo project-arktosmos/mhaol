@@ -84,13 +84,47 @@
 		}
 		creating = true;
 		try {
-			await librariesService.create(finalPath);
+			const created = await librariesService.create(finalPath);
 			newSubfolder = '';
+			void scan(created.id);
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
 			creating = false;
 		}
+	}
+
+	const pinPollers = new Map<string, number>();
+
+	function pollPinsUntilStable(id: string) {
+		const existing = pinPollers.get(id);
+		if (existing !== undefined) {
+			window.clearInterval(existing);
+		}
+		let lastCount = libPins[id]?.length ?? 0;
+		let stableTicks = 0;
+		const handle = window.setInterval(async () => {
+			await loadPins(id);
+			const current = libPins[id]?.length ?? 0;
+			if (current === lastCount) {
+				stableTicks++;
+				if (stableTicks >= 3) {
+					window.clearInterval(handle);
+					pinPollers.delete(id);
+				}
+			} else {
+				stableTicks = 0;
+				lastCount = current;
+			}
+		}, 3000);
+		pinPollers.set(id, handle);
+		window.setTimeout(() => {
+			const h = pinPollers.get(id);
+			if (h !== undefined) {
+				window.clearInterval(h);
+				pinPollers.delete(id);
+			}
+		}, 120000);
 	}
 
 	async function scan(id: string) {
@@ -101,6 +135,7 @@
 			const result = await librariesService.scan(id);
 			scanResults = { ...scanResults, [id]: result };
 			await Promise.all([librariesService.refresh(), loadPins(id)]);
+			pollPinsUntilStable(id);
 		} catch (err) {
 			scanErrors = {
 				...scanErrors,
