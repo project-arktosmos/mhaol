@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
+	import { base } from '$app/paths';
 	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
 	import type { CloudDocument } from 'ui-lib/types/document.type';
 	import {
@@ -412,6 +413,12 @@
 					<div class="flex flex-col gap-2">
 						{#if doc}
 							<DocumentCard document={doc as CloudDocument} />
+							<a
+								class="link link-primary text-center text-xs"
+								href="{base}/catalog/{encodeURIComponent(doc.id)}"
+							>
+								View details →
+							</a>
 						{:else}
 							<article class="card bg-base-200 shadow-sm">
 								<header
