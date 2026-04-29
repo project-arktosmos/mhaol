@@ -38,13 +38,20 @@
 		onnext?: () => void;
 	} = $props();
 
+	// Single `<video>` element handles both video and audio modes. The HTML
+	// `<audio>` element is fussier with fragmented MP4 (the shape googlevideo
+	// hands us for audio-only adaptive streams) — modern `<video>` decodes
+	// the same files reliably, and falls back gracefully when the source has
+	// no video track. Switching between two elements also created a small
+	// race window where `bind:this={audioElement}` lagged the
+	// `directStreamUrl` effect, dropping the first play() on the floor.
 	let videoElement = $state<HTMLVideoElement | null>(null);
-	let audioElement = $state<HTMLAudioElement | null>(null);
 	let streamAttached = $state(false);
 	let isFullscreen = $state(false);
 	let subsModalOpen = $state(false);
 	let audioTrackTick = $state(0);
 	let activeSubUrl = $state<string | null>(null);
+	let mediaError = $state<string | null>(null);
 
 	interface SubCue {
 		start: number;
@@ -66,9 +73,7 @@
 
 	let isVideo = $derived(file?.mode !== 'audio');
 	let isStreaming = $derived(connectionState === 'streaming');
-	let activeMediaElement = $derived(
-		(isVideo ? videoElement : audioElement) as HTMLMediaElement | null
-	);
+	let activeMediaElement = $derived(videoElement as HTMLMediaElement | null);
 	// Combine subtitles already attached to the file with any downloaded for the search context.
 	let assignedSubs = $derived(subtitleSearchContext ? $subsState.assigned : []);
 	let combinedSubtitles = $derived<PlayableFileSubtitle[]>([
@@ -143,38 +148,52 @@
 		}
 	});
 
-	// Direct URL playback (yt-dlp): set src= on the active element. Re-runs whenever
-	// the URL or selected element changes.
+	// Direct URL playback (yt-dlp): set src= on the video element. The same
+	// element handles audio-only sources too (the music-icon overlay covers
+	// the empty video frame).
 	$effect(() => {
 		if (!directStreamUrl) return;
-		const element = file?.mode === 'audio' ? audioElement : videoElement;
+		const element = videoElement;
 		if (!element) return;
 		if (element.src === directStreamUrl) return;
+		mediaError = null;
 		element.srcObject = null;
 		element.src = directStreamUrl;
 		element.load();
 		element.play().catch((err: Error) => {
+			console.error('[PlayerVideo] play() rejected for', directStreamUrl, err);
 			if (err.name === 'NotAllowedError') {
-				playerService.state.update((s) => ({
-					...s,
-					error: 'Playback blocked by browser. Click play to start.'
-				}));
+				mediaError = 'Playback blocked by browser. Click Play to start.';
 			} else {
-				playerService.state.update((s) => ({
-					...s,
-					error: `Playback failed: ${err.message}`
-				}));
+				mediaError = `Playback failed: ${err.message}`;
 			}
+			playerService.state.update((s) => ({ ...s, error: mediaError }));
 		});
 		const onError = () => {
 			const mediaErr = element.error;
-			const reason = mediaErr
-				? `code ${mediaErr.code}: ${mediaErr.message || 'media decode error'}`
-				: 'unknown error';
-			playerService.state.update((s) => ({
-				...s,
-				error: `Stream error (${reason})`
-			}));
+			const code = mediaErr?.code ?? 0;
+			// MediaError codes: 1=ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED.
+			const codeLabel =
+				code === 1
+					? 'aborted'
+					: code === 2
+						? 'network'
+						: code === 3
+							? 'decode'
+							: code === 4
+								? 'src not supported'
+								: `code ${code}`;
+			const reason = mediaErr?.message
+				? `${codeLabel}: ${mediaErr.message}`
+				: codeLabel;
+			console.error(
+				'[PlayerVideo] media element error for',
+				directStreamUrl,
+				'reason:',
+				reason
+			);
+			mediaError = `Stream error (${reason})`;
+			playerService.state.update((s) => ({ ...s, error: mediaError }));
 		};
 		element.addEventListener('error', onError);
 		streamAttached = true;
@@ -187,14 +206,11 @@
 		if (connectionState === 'idle') {
 			streamAttached = false;
 			isFullscreen = false;
+			mediaError = null;
 			if (videoElement) {
 				videoElement.srcObject = null;
 				videoElement.removeAttribute('src');
 				videoElement.load();
-			}
-			if (audioElement) {
-				audioElement.srcObject = null;
-				audioElement.removeAttribute('src');
 			}
 		}
 	});
@@ -294,22 +310,19 @@
 	async function tryAttachStream(): Promise<void> {
 		// Direct URL path is handled by its own $effect — skip WebRTC attach.
 		if (directStreamUrl) return;
-		// Wait for the DOM to settle after branch switches ({#if isVideo})
+		// Wait for the DOM to settle.
 		for (let attempt = 0; attempt < 10; attempt++) {
 			await tick();
 			const stream = playerService.getMediaStream();
 			if (!stream) return;
 
-			const element = file?.mode === 'audio' ? audioElement : videoElement;
-			if (element) {
-				element.srcObject = stream;
-				element.play().catch((err: Error) => {
-					console.error('[Player] play() failed:', err);
+			if (videoElement) {
+				videoElement.srcObject = stream;
+				videoElement.play().catch((err: Error) => {
+					console.error('[PlayerVideo] play() failed (WebRTC):', err);
 					if (err.name === 'NotAllowedError') {
-						playerService.state.update((s) => ({
-							...s,
-							error: 'Playback blocked by browser. Click play to start.'
-						}));
+						mediaError = 'Playback blocked by browser. Click Play to start.';
+						playerService.state.update((s) => ({ ...s, error: mediaError }));
 					}
 				});
 				streamAttached = true;
@@ -393,80 +406,25 @@
 	})}
 >
 	<div class={effectiveFullscreen ? 'relative min-h-0 flex-1' : 'relative'}>
-		{#if isVideo}
-			<video
-				bind:this={videoElement}
-				class={effectiveFullscreen
+		<video
+			bind:this={videoElement}
+			class={classNames(
+				effectiveFullscreen
 					? 'h-full w-full cursor-pointer bg-black object-contain'
-					: 'w-full cursor-pointer rounded-lg bg-black'}
-				playsinline
-				poster={poster ?? undefined}
-				onclick={handleVideoClick}
-				onwaiting={handleWaiting}
-				onplaying={handlePlaying}
-			></video>
+					: 'w-full cursor-pointer rounded-lg bg-black',
+				{ 'h-20': !isVideo && !effectiveFullscreen }
+			)}
+			playsinline
+			poster={poster ?? undefined}
+			onclick={handleVideoClick}
+			onwaiting={handleWaiting}
+			onplaying={handlePlaying}
+		></video>
 
-			{#if activeSubText}
-				<div
-					class={classNames(
-						'pointer-events-none absolute inset-x-0 z-10 flex justify-center px-4',
-						effectiveFullscreen ? 'bottom-20' : 'bottom-8'
-					)}
-				>
-					<span
-						class="inline-block max-w-full rounded bg-black/80 px-3 py-1 text-center text-base leading-snug text-white"
-					>
-						{activeSubText}
-					</span>
-				</div>
-			{/if}
-
-			{#if isStreaming}
-				<div class="absolute top-2 right-2 z-10 flex items-center gap-1">
-					{#if subtitleOptions.length > 0}
-						<select
-							class="select-bordered select bg-black/60 select-xs text-white"
-							value={activeSubUrl ?? ''}
-							onchange={handleSelectSubtitle}
-							aria-label="Subtitles"
-						>
-							<option value="">Subs off</option>
-							{#each subtitleOptions as opt}
-								<option value={opt.url}>{opt.label}</option>
-							{/each}
-						</select>
-					{/if}
-					{#if audioTrackOptions.length > 0}
-						<select
-							class="select-bordered select bg-black/60 select-xs text-white"
-							value={String(activeAudioTrackIndex)}
-							onchange={handleSelectAudioTrack}
-							aria-label="Audio track"
-						>
-							{#each audioTrackOptions as opt}
-								<option value={String(opt.index)}>{opt.label}</option>
-							{/each}
-						</select>
-					{/if}
-					{#if subtitleSearchContext}
-						<button
-							class="btn border-none bg-black/60 text-white btn-xs hover:bg-black/80"
-							aria-label="Search subtitles"
-							onclick={() => (subsModalOpen = true)}
-						>
-							CC
-						</button>
-					{/if}
-				</div>
-			{/if}
-
-			{#if buffering}
-				<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
-					<span class="loading loading-lg loading-spinner text-primary"></span>
-				</div>
-			{/if}
-		{:else}
-			<div class="flex h-20 items-center justify-center rounded-lg bg-base-300">
+		{#if !isVideo}
+			<div
+				class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-base-300"
+			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-10 w-10 opacity-30"
@@ -482,12 +440,74 @@
 					/>
 				</svg>
 			</div>
-			<audio
-				bind:this={audioElement}
-				class="absolute h-0 w-0 overflow-hidden"
-				onwaiting={handleWaiting}
-				onplaying={handlePlaying}
-			></audio>
+		{/if}
+
+		{#if isVideo && activeSubText}
+			<div
+				class={classNames(
+					'pointer-events-none absolute inset-x-0 z-10 flex justify-center px-4',
+					effectiveFullscreen ? 'bottom-20' : 'bottom-8'
+				)}
+			>
+				<span
+					class="inline-block max-w-full rounded bg-black/80 px-3 py-1 text-center text-base leading-snug text-white"
+				>
+					{activeSubText}
+				</span>
+			</div>
+		{/if}
+
+		{#if isVideo && isStreaming}
+			<div class="absolute top-2 right-2 z-10 flex items-center gap-1">
+				{#if subtitleOptions.length > 0}
+					<select
+						class="select-bordered select bg-black/60 select-xs text-white"
+						value={activeSubUrl ?? ''}
+						onchange={handleSelectSubtitle}
+						aria-label="Subtitles"
+					>
+						<option value="">Subs off</option>
+						{#each subtitleOptions as opt}
+							<option value={opt.url}>{opt.label}</option>
+						{/each}
+					</select>
+				{/if}
+				{#if audioTrackOptions.length > 0}
+					<select
+						class="select-bordered select bg-black/60 select-xs text-white"
+						value={String(activeAudioTrackIndex)}
+						onchange={handleSelectAudioTrack}
+						aria-label="Audio track"
+					>
+						{#each audioTrackOptions as opt}
+							<option value={String(opt.index)}>{opt.label}</option>
+						{/each}
+					</select>
+				{/if}
+				{#if subtitleSearchContext}
+					<button
+						class="btn border-none bg-black/60 text-white btn-xs hover:bg-black/80"
+						aria-label="Search subtitles"
+						onclick={() => (subsModalOpen = true)}
+					>
+						CC
+					</button>
+				{/if}
+			</div>
+		{/if}
+
+		{#if buffering}
+			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
+				<span class="loading loading-lg loading-spinner text-primary"></span>
+			</div>
+		{/if}
+
+		{#if mediaError}
+			<div
+				class="absolute inset-x-2 bottom-2 z-20 rounded bg-error/90 px-2 py-1 text-xs text-error-content"
+			>
+				{mediaError}
+			</div>
 		{/if}
 
 		{#if !isStreaming && connectionState !== 'idle'}
