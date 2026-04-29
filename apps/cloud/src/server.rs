@@ -19,6 +19,8 @@ use tokio::net::TcpListener;
 #[cfg(not(target_os = "android"))]
 use mhaol_ed2k::{Ed2kConfig, Ed2kManager};
 #[cfg(not(target_os = "android"))]
+use mhaol_ipfs::{IpfsConfig, IpfsManager};
+#[cfg(not(target_os = "android"))]
 use mhaol_torrent::{TorrentConfig, TorrentManager};
 #[cfg(not(target_os = "android"))]
 use mhaol_yt_dlp::{DownloadManager, YtDownloadConfig};
@@ -132,6 +134,23 @@ async fn main() {
         manager
     };
 
+    #[cfg(not(target_os = "android"))]
+    let ipfs_manager = {
+        let manager = Arc::new(IpfsManager::new());
+        let manager_clone = Arc::clone(&manager);
+        let repo_path = downloads_dir().join("ipfs");
+        tokio::spawn(async move {
+            let config = IpfsConfig {
+                repo_path,
+                ..IpfsConfig::default()
+            };
+            if let Err(e) = manager_clone.initialize(config).await {
+                tracing::warn!("[ipfs] init failed: {}", e);
+            }
+        });
+        manager
+    };
+
     let state = CloudState::new(
         surreal,
         identity_manager,
@@ -142,6 +161,8 @@ async fn main() {
         torrent_manager,
         #[cfg(not(target_os = "android"))]
         ed2k_manager,
+        #[cfg(not(target_os = "android"))]
+        ipfs_manager,
     );
 
     let app = Router::new()

@@ -7,6 +7,8 @@ use surrealdb::Surreal;
 #[cfg(not(target_os = "android"))]
 use mhaol_ed2k::Ed2kManager;
 #[cfg(not(target_os = "android"))]
+use mhaol_ipfs::IpfsManager;
+#[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_yt_dlp::DownloadManager;
@@ -26,6 +28,8 @@ pub struct CloudState {
     pub torrent_manager: Arc<TorrentManager>,
     #[cfg(not(target_os = "android"))]
     pub ed2k_manager: Arc<Ed2kManager>,
+    #[cfg(not(target_os = "android"))]
+    pub ipfs_manager: Arc<IpfsManager>,
 }
 
 impl CloudState {
@@ -36,6 +40,7 @@ impl CloudState {
         #[cfg(not(target_os = "android"))] ytdl_manager: Arc<DownloadManager>,
         #[cfg(not(target_os = "android"))] torrent_manager: Arc<TorrentManager>,
         #[cfg(not(target_os = "android"))] ed2k_manager: Arc<Ed2kManager>,
+        #[cfg(not(target_os = "android"))] ipfs_manager: Arc<IpfsManager>,
     ) -> Self {
         Self {
             db,
@@ -47,6 +52,8 @@ impl CloudState {
             torrent_manager,
             #[cfg(not(target_os = "android"))]
             ed2k_manager,
+            #[cfg(not(target_os = "android"))]
+            ipfs_manager,
         }
     }
 }

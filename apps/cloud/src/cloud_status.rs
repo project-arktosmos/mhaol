@@ -44,6 +44,7 @@ struct PackagesHealth {
     yt_dlp: PackageHealth,
     torrent: PackageHealth,
     ed2k: PackageHealth,
+    ipfs: PackageHealth,
 }
 
 #[derive(Serialize)]
@@ -104,6 +105,7 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
         yt_dlp: yt_dlp_health(&state),
         torrent: torrent_health(&state).await,
         ed2k: ed2k_health(&state),
+        ipfs: ipfs_health(&state).await,
     };
 
     Json(CloudStatus {
@@ -284,6 +286,55 @@ async fn torrent_health(state: &CloudState) -> PackageHealth {
     {
         PackageHealth {
             name: "torrent",
+            status: "unavailable",
+            available: false,
+            message: Some("Not built for this target".to_string()),
+            details: serde_json::json!({}),
+        }
+    }
+}
+
+#[cfg_attr(target_os = "android", allow(unused_variables))]
+async fn ipfs_health(state: &CloudState) -> PackageHealth {
+    #[cfg(not(target_os = "android"))]
+    {
+        let stats = state.ipfs_manager.stats().await;
+        let initialized = stats.state == mhaol_ipfs::IpfsState::Running;
+        let (status, message) = match stats.state {
+            mhaol_ipfs::IpfsState::Running => ("ok", None),
+            mhaol_ipfs::IpfsState::Starting => (
+                "warning",
+                Some("IPFS node starting".to_string()),
+            ),
+            mhaol_ipfs::IpfsState::Stopped => (
+                "warning",
+                Some("IPFS node not initialized".to_string()),
+            ),
+            mhaol_ipfs::IpfsState::Error => (
+                "error",
+                Some("IPFS node failed to start".to_string()),
+            ),
+        };
+        return PackageHealth {
+            name: "ipfs",
+            status,
+            available: initialized,
+            message,
+            details: serde_json::json!({
+                "state": stats.state,
+                "peerId": stats.peer_id,
+                "agentVersion": stats.agent_version,
+                "connectedPeers": stats.connected_peers,
+                "pinnedCount": stats.pinned_count,
+                "repoSizeBytes": stats.repo_size_bytes,
+                "listenAddrs": stats.listen_addrs,
+            }),
+        };
+    }
+    #[cfg(target_os = "android")]
+    {
+        PackageHealth {
+            name: "ipfs",
             status: "unavailable",
             available: false,
             message: Some("Not built for this target".to_string()),

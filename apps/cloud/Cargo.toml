@@ -33,3 +33,4 @@ mhaol-p2p-stream = { path = "../../packages/p2p-stream" }
 mhaol-yt-dlp = { path = "../../packages/yt-dlp" }
 mhaol-torrent = { path = "../../packages/torrent" }
 mhaol-ed2k = { path = "../../packages/ed2k" }
+mhaol-ipfs = { path = "../../packages/ipfs" }
