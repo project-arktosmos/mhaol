@@ -21,6 +21,7 @@
 		fullscreen = false,
 		poster = null,
 		subtitleSearchContext = null,
+		directStreamUrl = null,
 		onprev,
 		onnext
 	}: {
@@ -32,6 +33,7 @@
 		fullscreen?: boolean;
 		poster?: string | null;
 		subtitleSearchContext?: SubtitleSearchContext | null;
+		directStreamUrl?: string | null;
 		onprev?: () => void;
 		onnext?: () => void;
 	} = $props();
@@ -139,6 +141,27 @@
 		if (isStreaming && !streamAttached) {
 			tryAttachStream();
 		}
+	});
+
+	// Direct URL playback (yt-dlp): set src= on the active element. Re-runs whenever
+	// the URL or selected element changes.
+	$effect(() => {
+		if (!directStreamUrl) return;
+		const element = file?.mode === 'audio' ? audioElement : videoElement;
+		if (!element) return;
+		if (element.src === directStreamUrl) return;
+		element.srcObject = null;
+		element.src = directStreamUrl;
+		element.load();
+		element.play().catch((err: Error) => {
+			if (err.name === 'NotAllowedError') {
+				playerService.state.update((s) => ({
+					...s,
+					error: 'Playback blocked by browser. Click play to start.'
+				}));
+			}
+		});
+		streamAttached = true;
 	});
 
 	$effect(() => {
@@ -250,6 +273,8 @@
 	}
 
 	async function tryAttachStream(): Promise<void> {
+		// Direct URL path is handled by its own $effect — skip WebRTC attach.
+		if (directStreamUrl) return;
 		// Wait for the DOM to settle after branch switches ({#if isVideo})
 		for (let attempt = 0; attempt < 10; attempt++) {
 			await tick();

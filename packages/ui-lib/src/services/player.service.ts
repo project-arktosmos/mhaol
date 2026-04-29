@@ -35,7 +35,9 @@ const initialState: PlayerState = {
 	durationSecs: null,
 	isSeeking: false,
 	isPaused: true,
-	buffering: false
+	buffering: false,
+	directStreamUrl: null,
+	directStreamMimeType: null
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -221,6 +223,33 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				error: `Failed to start playback: ${errorMsg}`
 			}));
 		}
+	}
+
+	// ===== Direct URL playback (used by yt-dlp streams — bypasses WebRTC entirely) =====
+
+	async playUrl(
+		file: PlayableFile,
+		streamUrl: string,
+		mimeType?: string | null,
+		displayMode?: PlayerDisplayMode
+	): Promise<void> {
+		if (!browser) return;
+
+		await this.stop();
+		this.playGeneration++;
+		if (displayMode) this.displayMode.set(displayMode);
+
+		this.state.update((s) => ({
+			...s,
+			currentFile: file,
+			connectionState: 'streaming',
+			error: null,
+			positionSecs: 0,
+			durationSecs: file.durationSeconds,
+			buffering: false,
+			directStreamUrl: streamUrl,
+			directStreamMimeType: mimeType ?? null
+		}));
 	}
 
 	// ===== Remote playback (session created by remote server, info received via data channel) =====
@@ -703,7 +732,9 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			durationSecs: null,
 			isSeeking: false,
 			isPaused: true,
-			buffering: false
+			buffering: false,
+			directStreamUrl: null,
+			directStreamMimeType: null
 		}));
 		this.displayMode.set('fullscreen');
 	}

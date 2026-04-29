@@ -5,8 +5,12 @@
     YouTubeDownloadProgress,
     YouTubeVideoInfo,
     DownloadMode,
+    YouTubeStreamUrlResult,
+    YouTubeStreamFormat,
   } from "addons/youtube/types";
   import { extractVideoId } from "addons/youtube/types";
+  import { playerService } from "ui-lib/services/player.service";
+  import type { PlayableFile } from "ui-lib/types/player.type";
 
   interface SearchItem {
     videoId: string;
@@ -46,6 +50,8 @@
   let queueing = $state<string | null>(null); // download id being queued
   let queueError = $state<string | null>(null);
   let connected = $state(false);
+  let playing = $state<string | null>(null); // video id being played
+  let playError = $state<string | null>(null);
 
   let sse: EventSource | null = null;
 
@@ -124,6 +130,91 @@
 
   function selectSearchResult(item: SearchItem) {
     fetchInfo(`https://www.youtube.com/watch?v=${item.videoId}`);
+  }
+
+  function pickFormat(
+    result: YouTubeStreamUrlResult,
+    mode: "audio" | "video",
+  ): YouTubeStreamFormat | null {
+    if (mode === "audio") {
+      const audio = result.formats.filter((f) => f.isAudioOnly);
+      if (audio.length === 0) return null;
+      audio.sort((a, b) => b.bitrate - a.bitrate);
+      return audio[0];
+    }
+    const muxed = result.formats.filter((f) => !f.isAudioOnly && !f.isVideoOnly);
+    if (muxed.length === 0) return null;
+    muxed.sort((a, b) => {
+      const heightDiff = (b.height ?? 0) - (a.height ?? 0);
+      if (heightDiff !== 0) return heightDiff;
+      return b.bitrate - a.bitrate;
+    });
+    return muxed[0];
+  }
+
+  async function streamItem(item: SearchItem, mode: "audio" | "video") {
+    const dlUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
+    playing = item.videoId;
+    playError = null;
+    try {
+      const res = await fetch(
+        `/api/ytdl/info/stream-urls?url=${encodeURIComponent(dlUrl)}`,
+      );
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `HTTP ${res.status}`);
+      }
+      const result = (await res.json()) as YouTubeStreamUrlResult;
+      const format = pickFormat(result, mode);
+      if (!format) {
+        throw new Error(
+          mode === "audio"
+            ? "No audio-only format available"
+            : "No muxed format available",
+        );
+      }
+      const file: PlayableFile = {
+        id: `youtube:${item.videoId}:${mode}`,
+        type: "youtube",
+        name: item.title,
+        outputPath: "",
+        mode,
+        format: null,
+        videoFormat: null,
+        thumbnailUrl: item.thumbnail || null,
+        durationSeconds: item.duration || null,
+        size: format.contentLength ?? 0,
+        completedAt: "",
+      };
+      await playerService.playUrl(file, format.url, format.mimeType, "sidebar");
+    } catch (e) {
+      playError = e instanceof Error ? e.message : String(e);
+    } finally {
+      playing = null;
+    }
+  }
+
+  async function streamCurrentInfo(mode: "audio" | "video") {
+    if (!info) return;
+    await streamItem(
+      {
+        videoId: info.videoId,
+        type: "stream",
+        url: `/watch?v=${info.videoId}`,
+        title: info.title,
+        thumbnail: info.thumbnailUrl ?? "",
+        duration: info.duration,
+        durationText: "",
+        views: 0,
+        viewsText: "",
+        uploadedDate: "",
+        uploaderName: info.uploader ?? "",
+        uploaderUrl: "",
+        uploaderAvatar: "",
+        uploaderVerified: false,
+      },
+      mode,
+    );
   }
 
   async function quickQueue(item: SearchItem, mode: DownloadMode) {
@@ -353,6 +444,16 @@
       </div>
     {/if}
 
+    {#if playError && searchResults.length > 0}
+      <div class="alert alert-error mb-4">
+        <span>{playError}</span>
+        <button
+          class="btn btn-ghost btn-sm"
+          onclick={() => (playError = null)}>Dismiss</button
+        >
+      </div>
+    {/if}
+
     {#if searching && searchResults.length === 0}
       <div class="flex justify-center py-8">
         <span class="loading loading-lg loading-spinner"></span>
@@ -392,20 +493,30 @@
                   {#if item.durationText}· {item.durationText}{/if}
                   {#if item.viewsText}· {item.viewsText}{/if}
                 </p>
-                <div class="mt-auto flex gap-1">
+                <div class="mt-auto flex flex-wrap gap-1">
                   <button
                     class="btn btn-xs btn-primary"
-                    disabled={queueing === item.videoId}
-                    onclick={() => quickQueue(item, "video")}
+                    disabled={playing === item.videoId}
+                    onclick={() => streamItem(item, "video")}
+                    title="Stream video in player"
                   >
-                    Video
+                    {playing === item.videoId ? "…" : "Video"}
                   </button>
                   <button
                     class="btn btn-xs btn-secondary"
-                    disabled={queueing === item.videoId}
-                    onclick={() => quickQueue(item, "audio")}
+                    disabled={playing === item.videoId}
+                    onclick={() => streamItem(item, "audio")}
+                    title="Stream audio in player"
                   >
-                    Audio
+                    {playing === item.videoId ? "…" : "Audio"}
+                  </button>
+                  <button
+                    class="btn btn-xs"
+                    disabled={queueing === item.videoId}
+                    onclick={() => quickQueue(item, "video")}
+                    title="Download video"
+                  >
+                    ⇣
                   </button>
                 </div>
               </div>
@@ -445,17 +556,32 @@
           <div class="mt-auto flex flex-wrap gap-2">
             <button
               class="btn btn-sm btn-primary"
-              disabled={queueing !== null}
-              onclick={() => queueDownload("video")}
+              disabled={playing !== null}
+              onclick={() => streamCurrentInfo("video")}
             >
-              {queueing === info.videoId ? "Queueing…" : "Download video"}
+              {playing === info.videoId ? "Loading…" : "Stream video"}
             </button>
             <button
               class="btn btn-sm btn-secondary"
+              disabled={playing !== null}
+              onclick={() => streamCurrentInfo("audio")}
+            >
+              {playing === info.videoId ? "Loading…" : "Stream audio"}
+            </button>
+            <span class="divider divider-horizontal m-0"></span>
+            <button
+              class="btn btn-sm"
+              disabled={queueing !== null}
+              onclick={() => queueDownload("video")}
+            >
+              Download video
+            </button>
+            <button
+              class="btn btn-sm"
               disabled={queueing !== null}
               onclick={() => queueDownload("audio")}
             >
-              {queueing === info.videoId ? "Queueing…" : "Download audio"}
+              Download audio
             </button>
             <button
               class="btn btn-sm"
@@ -467,6 +593,9 @@
           </div>
           {#if queueError}
             <p class="text-sm text-error">{queueError}</p>
+          {/if}
+          {#if playError}
+            <p class="text-sm text-error">{playError}</p>
           {/if}
         </div>
       </div>
