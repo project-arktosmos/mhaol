@@ -10,11 +10,14 @@ mod image_cache;
 mod ipfs_pins;
 mod libraries;
 mod p2p_stream;
+mod player;
 mod search;
 mod state;
 mod torrent;
 mod torrent_completion;
 mod worker_bridge;
+#[cfg(not(target_os = "android"))]
+mod ytdl;
 
 use axum::Router;
 use mhaol_identity::IdentityManager;
@@ -227,7 +230,8 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = Router::new()
+    #[allow(unused_mut)]
+    let mut app = Router::new()
         .nest("/api/health", health::router())
         .nest("/api/cloud", cloud_status::router())
         .nest("/api/libraries", libraries::router())
@@ -240,6 +244,14 @@ async fn main() {
         .nest("/api/catalog", catalog::router())
         .nest("/api/torrent", torrent::router())
         .nest("/api/p2p-stream", p2p_stream::router())
+        .nest("/api/player", player::router());
+
+    #[cfg(not(target_os = "android"))]
+    {
+        app = app.nest_service("/api/ytdl", ytdl::router(Arc::clone(&state.ytdl_manager)));
+    }
+
+    let app = app
         .fallback(frontend::serve_frontend)
         .with_state(state)
         .layer(cors);
