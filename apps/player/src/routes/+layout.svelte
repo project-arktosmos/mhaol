@@ -7,12 +7,14 @@
   import ThemeToggle from "ui-lib/components/core/ThemeToggle.svelte";
   import NodeStatusBadge from "ui-lib/components/core/NodeStatusBadge.svelte";
   import ToastOutlet from "ui-lib/components/core/ToastOutlet.svelte";
+  import PlayerVideo from "ui-lib/components/player/PlayerVideo.svelte";
   import { themeService } from "ui-lib/services/theme.service";
   import { connectionConfigService } from "ui-lib/services/connection-config.service";
   import { nodeConnectionService } from "ui-lib/services/node-connection.service";
+  import { playerService } from "ui-lib/services/player.service";
   import Modal from "ui-lib/components/core/Modal.svelte";
   import SetupModalContent from "ui-lib/components/setup/SetupModalContent.svelte";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { invalidateAll } from "$app/navigation";
   import { base } from "$app/paths";
   import { NAV_ITEMS, type NavItem } from "$lib/generated/nav";
@@ -20,11 +22,14 @@
   let { children } = $props();
   let setupModalOpen = $state(false);
 
+  const playerState = playerService.state;
+
   const triggerClass = (item: NavItem) =>
     classNames("btn btn-outline btn-sm", { "btn-disabled": !item.hasOwnPage });
 
   onMount(() => {
     themeService.initialize("flix");
+    playerService.initialize();
 
     const config = connectionConfigService.get();
     if (!config) return;
@@ -41,6 +46,10 @@
       .catch(() => {
         // Connection is optional; user can retry from the navbar badge or /clouds.
       });
+  });
+
+  onDestroy(() => {
+    playerService.destroy();
   });
 </script>
 
@@ -94,6 +103,20 @@
     <div class="relative flex min-w-0 flex-1 flex-col">
       {@render children?.()}
     </div>
+    {#if $playerState.currentFile}
+      <aside
+        class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
+      >
+        <PlayerVideo
+          file={$playerState.currentFile}
+          connectionState={$playerState.connectionState}
+          positionSecs={$playerState.positionSecs}
+          durationSecs={$playerState.durationSecs}
+          buffering={$playerState.buffering}
+          poster={$playerState.currentFile.thumbnailUrl}
+        />
+      </aside>
+    {/if}
   </main>
 </div>
 
