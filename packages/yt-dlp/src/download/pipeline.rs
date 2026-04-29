@@ -881,23 +881,46 @@ impl DownloadPipeline {
         }
 
         let resolver = self.sig_resolver.lock();
-        for fmt in &mut resolved {
+        let n_function_available = resolver.has_n_function();
+        let mut kept = Vec::with_capacity(resolved.len());
+        for mut fmt in resolved {
+            let url_has_n = url_has_n_param(&fmt.url);
             match signatures::apply_n_param(&fmt.url, &resolver) {
                 Ok(new_url) => {
                     if new_url != fmt.url {
                         log::debug!("n-param transformed for itag {}", fmt.itag);
+                        fmt.url = new_url;
+                        kept.push(fmt);
+                    } else if url_has_n && !n_function_available {
+                        // The URL carries an `n=…` param that we couldn't
+                        // transform because n_function extraction failed for
+                        // this player.js version. Modern WEB streams 403 in
+                        // that state, so drop the format and let the caller
+                        // fall back to the next innertube client.
+                        log::warn!(
+                            "Dropping itag {} \u{2014} URL has untransformed n-param and n_function is unavailable",
+                            fmt.itag
+                        );
                     } else {
-                        log::debug!("n-param unchanged for itag {} (no n param or same value)", fmt.itag);
+                        log::debug!(
+                            "n-param unchanged for itag {} (no n param or no-op transform)",
+                            fmt.itag
+                        );
+                        fmt.url = new_url;
+                        kept.push(fmt);
                     }
-                    fmt.url = new_url;
                 }
                 Err(e) => {
-                    log::warn!("n-param transformation failed for itag {}: {}", fmt.itag, e);
+                    log::warn!(
+                        "n-param transformation failed for itag {} \u{2014} dropping: {}",
+                        fmt.itag,
+                        e
+                    );
                 }
             }
         }
 
-        Ok(resolved)
+        Ok(kept)
     }
 
     async fn resolve_signature_formats(
@@ -1318,5 +1341,15 @@ impl DownloadPipeline {
         }
 
         results
+    }
+}
+
+/// Cheap check: does a googlevideo URL carry an `n=…` query parameter? Used
+/// to decide whether dropping a format is necessary when the n-param
+/// transform function couldn't be extracted from player.js.
+fn url_has_n_param(url: &str) -> bool {
+    match url::Url::parse(url) {
+        Ok(parsed) => parsed.query_pairs().any(|(k, _)| k == "n"),
+        Err(_) => false,
     }
 }

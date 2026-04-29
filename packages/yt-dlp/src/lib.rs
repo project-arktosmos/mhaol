@@ -12,6 +12,7 @@ pub mod util;
 pub use config::YtDownloadConfig;
 pub use download::pipeline::StreamUrlResult;
 pub use error::YtDlpError;
+pub use extractor::player::ResolvedFormat;
 pub use http_server::build_router;
 pub use manager::DownloadManager;
 pub use types::*;

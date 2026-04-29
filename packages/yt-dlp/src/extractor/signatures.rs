@@ -95,6 +95,15 @@ impl SignatureResolver {
         Ok(())
     }
 
+    /// Whether the n-parameter transform function was successfully extracted
+    /// from player.js. When `false`, any URL carrying an `n=…` query param
+    /// will be served untransformed by the CDN — modern WEB-client streams
+    /// reject those with HTTP 403, so callers should drop such formats and
+    /// fall back to a different innertube client.
+    pub fn has_n_function(&self) -> bool {
+        self.n_function.is_some()
+    }
+
     /// Return the signatureTimestamp extracted from player.js, if available.
     pub fn sts(&self) -> Option<u64> {
         self.sts
