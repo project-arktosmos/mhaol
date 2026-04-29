@@ -18,15 +18,31 @@ const TABLE: &str = "document";
 const SHA2_256_CODE: u64 = 0x12;
 const RAW_CODEC: u64 = 0x55;
 
+const ALLOWED_TYPES: &[&str] = &[
+    "movie",
+    "tv season",
+    "tv episode",
+    "tv show",
+    "album",
+    "track",
+    "image",
+    "youtube video",
+    "youtube channel",
+    "book",
+    "game",
+];
+
 #[derive(Serialize)]
 struct DocumentPayloadView<'a> {
     name: &'a str,
     author: &'a str,
     description: &'a str,
+    #[serde(rename = "type")]
+    kind: &'a str,
 }
 
-fn compute_document_cid(name: &str, author: &str, description: &str) -> String {
-    let view = DocumentPayloadView { name, author, description };
+fn compute_document_cid(name: &str, author: &str, description: &str, kind: &str) -> String {
+    let view = DocumentPayloadView { name, author, description, kind };
     let json = serde_json::to_string_pretty(&view)
         .expect("DocumentPayloadView serializes to JSON");
     let digest = Sha256::digest(json.as_bytes());
@@ -41,6 +57,8 @@ pub struct Document {
     pub name: String,
     pub author: String,
     pub description: String,
+    #[serde(rename = "type", default)]
+    pub kind: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -51,6 +69,8 @@ pub struct DocumentDto {
     pub name: String,
     pub author: String,
     pub description: String,
+    #[serde(rename = "type")]
+    pub kind: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -67,6 +87,7 @@ impl From<Document> for DocumentDto {
             name: doc.name,
             author: doc.author,
             description: doc.description,
+            kind: doc.kind,
             created_at: doc.created_at,
             updated_at: doc.updated_at,
         }
@@ -78,6 +99,8 @@ pub struct CreateDocumentRequest {
     pub name: String,
     pub author: String,
     pub description: Option<String>,
+    #[serde(rename = "type")]
+    pub kind: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +108,8 @@ pub struct UpdateDocumentRequest {
     pub name: Option<String>,
     pub author: Option<String>,
     pub description: Option<String>,
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
 }
 
 pub fn router() -> Router<CloudState> {
@@ -149,9 +174,19 @@ async fn create(
         .unwrap_or("")
         .trim()
         .to_string();
+    let kind = req.kind.trim();
+    if kind.is_empty() {
+        return Err(err_response(StatusCode::BAD_REQUEST, "type is required"));
+    }
+    if !ALLOWED_TYPES.contains(&kind) {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            format!("invalid type: {kind}"),
+        ));
+    }
 
     let now = Utc::now();
-    let new_id = compute_document_cid(name, author, &description);
+    let new_id = compute_document_cid(name, author, &description, kind);
 
     let existing: Option<Document> = state
         .db
@@ -167,6 +202,7 @@ async fn create(
         name: name.to_string(),
         author: author.to_string(),
         description,
+        kind: kind.to_string(),
         created_at: now,
         updated_at: now,
     };
@@ -213,6 +249,19 @@ async fn update(
 
     if let Some(description) = req.description.as_ref() {
         current.description = description.trim().to_string();
+    }
+
+    if let Some(kind) = req.kind.as_ref().map(|k| k.trim()) {
+        if kind.is_empty() {
+            return Err(err_response(StatusCode::BAD_REQUEST, "type cannot be empty"));
+        }
+        if !ALLOWED_TYPES.contains(&kind) {
+            return Err(err_response(
+                StatusCode::BAD_REQUEST,
+                format!("invalid type: {kind}"),
+            ));
+        }
+        current.kind = kind.to_string();
     }
 
     current.updated_at = Utc::now();

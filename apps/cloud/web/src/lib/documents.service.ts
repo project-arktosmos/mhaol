@@ -1,10 +1,27 @@
 import { writable, type Writable } from 'svelte/store';
 
+export const DOCUMENT_TYPES = [
+	'movie',
+	'tv season',
+	'tv episode',
+	'tv show',
+	'album',
+	'track',
+	'image',
+	'youtube video',
+	'youtube channel',
+	'book',
+	'game'
+] as const;
+
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+
 export interface Document {
 	id: string;
 	name: string;
 	author: string;
 	description: string;
+	type: string;
 	created_at: string;
 	updated_at: string;
 }
@@ -47,11 +64,16 @@ class DocumentsService {
 		}
 	}
 
-	async create(name: string, author: string, description: string): Promise<Document> {
+	async create(
+		name: string,
+		author: string,
+		description: string,
+		type: DocumentType
+	): Promise<Document> {
 		const res = await fetch('/api/documents', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ name, author, description })
+			body: JSON.stringify({ name, author, description, type })
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const created = (await res.json()) as Document;

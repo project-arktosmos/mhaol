@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { documentsService } from '$lib/documents.service';
+	import { documentsService, DOCUMENT_TYPES, type DocumentType } from '$lib/documents.service';
 	import { computeCidV1Raw } from '$lib/cid';
 
 	const docsStore = documentsService.state;
@@ -9,6 +9,7 @@
 	let name = $state('');
 	let author = $state('');
 	let description = $state('');
+	let type = $state<DocumentType>(DOCUMENT_TYPES[0]);
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
@@ -18,7 +19,8 @@
 			{
 				name: name.trim(),
 				author: author.trim(),
-				description: description.trim()
+				description: description.trim(),
+				type
 			},
 			null,
 			2
@@ -66,10 +68,11 @@
 		}
 		creating = true;
 		try {
-			await documentsService.create(trimmedName, trimmedAuthor, description.trim());
+			await documentsService.create(trimmedName, trimmedAuthor, description.trim(), type);
 			name = '';
 			author = '';
 			description = '';
+			type = DOCUMENT_TYPES[0];
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -135,6 +138,20 @@
 				<table class="table table-sm">
 					<tbody>
 						<tr>
+							<th class="w-32 align-middle">Type</th>
+							<td>
+								<select
+									class="select-bordered select w-full select-sm"
+									bind:value={type}
+									disabled={creating}
+								>
+									{#each DOCUMENT_TYPES as option (option)}
+										<option value={option}>{option}</option>
+									{/each}
+								</select>
+							</td>
+						</tr>
+						<tr>
 							<th class="w-32 align-middle">Name</th>
 							<td>
 								<input
@@ -196,7 +213,7 @@
 		</p>
 		<div class="flex flex-col gap-3">
 			<label class="flex flex-col gap-1">
-				<span class="text-xs font-semibold uppercase text-base-content/60">JSON</span>
+				<span class="text-xs font-semibold text-base-content/60 uppercase">JSON</span>
 				<textarea
 					class="textarea-bordered textarea h-40 w-full font-mono text-xs"
 					readonly
@@ -205,7 +222,7 @@
 				></textarea>
 			</label>
 			<label class="flex flex-col gap-1">
-				<span class="text-xs font-semibold uppercase text-base-content/60">IPFS hash (CIDv1)</span>
+				<span class="text-xs font-semibold text-base-content/60 uppercase">IPFS hash (CIDv1)</span>
 				<input
 					type="text"
 					class="input-bordered input input-sm w-full font-mono text-xs"
@@ -229,6 +246,7 @@
 					<thead>
 						<tr>
 							<th>ID</th>
+							<th>Type</th>
 							<th>Name</th>
 							<th>Author</th>
 							<th>Description</th>
@@ -240,6 +258,7 @@
 						{#each $docsStore.documents as doc (doc.id)}
 							<tr>
 								<td class="font-mono text-xs text-base-content/70">{doc.id}</td>
+								<td class="text-xs">{doc.type}</td>
 								<td class="font-medium">{doc.name}</td>
 								<td>{doc.author}</td>
 								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
