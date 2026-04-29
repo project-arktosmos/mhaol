@@ -153,11 +153,13 @@
 	// element handles audio-only sources too (the music-icon overlay covers
 	// the empty video frame).
 	//
-	// We also pump the element's `timeupdate` and `loadedmetadata` events
-	// back into `playerService.state` so the seek bar and timer move. The
-	// WebRTC path gets these from the worker's `PositionUpdate`/`MediaInfo`
-	// data-channel messages — direct-URL playback has no data channel, so
-	// without this listener `positionSecs` stays at 0 forever.
+	// SPLIT INTO TWO EFFECTS on purpose. Combining them caused the seek bar
+	// to stay stuck at 0: on every re-run the previous run's cleanup tore
+	// down the timeupdate listeners, but the "src already set" early return
+	// at the top of the body meant the new run never re-attached them.
+	// Effect A only owns the imperative `element.src = …; play()` side
+	// effect (and short-circuits when nothing changed). Effect B owns the
+	// event listeners — its cleanup matches its setup on every run.
 	$effect(() => {
 		if (!directStreamUrl) return;
 		const element = videoElement;
@@ -176,6 +178,17 @@
 			}
 			playerService.state.update((s) => ({ ...s, error: mediaError }));
 		});
+		streamAttached = true;
+	});
+
+	// Element event listeners: error reporting + position/duration sync for
+	// the seek bar. The WebRTC path gets position from the worker's data
+	// channel — direct-URL playback has no channel, so without this
+	// listener `positionSecs` stays at 0 and the bar never moves.
+	$effect(() => {
+		if (!directStreamUrl) return;
+		const element = videoElement;
+		if (!element) return;
 		const onError = () => {
 			const mediaErr = element.error;
 			const code = mediaErr?.code ?? 0;
@@ -190,9 +203,7 @@
 							: code === 4
 								? 'src not supported'
 								: `code ${code}`;
-			const reason = mediaErr?.message
-				? `${codeLabel}: ${mediaErr.message}`
-				: codeLabel;
+			const reason = mediaErr?.message ? `${codeLabel}: ${mediaErr.message}` : codeLabel;
 			console.error(
 				'[PlayerVideo] media element error for',
 				directStreamUrl,
@@ -205,17 +216,11 @@
 		const onTimeUpdate = () => {
 			// Don't fight the user while they're dragging the seek bar.
 			if (get(playerService.state).isSeeking) return;
-			playerService.state.update((s) => ({
-				...s,
-				positionSecs: element.currentTime
-			}));
+			playerService.state.update((s) => ({ ...s, positionSecs: element.currentTime }));
 		};
 		const onLoadedMetadata = () => {
 			if (Number.isFinite(element.duration) && element.duration > 0) {
-				playerService.state.update((s) => ({
-					...s,
-					durationSecs: element.duration
-				}));
+				playerService.state.update((s) => ({ ...s, durationSecs: element.duration }));
 			}
 		};
 		const onDurationChange = onLoadedMetadata;
@@ -223,7 +228,14 @@
 		element.addEventListener('timeupdate', onTimeUpdate);
 		element.addEventListener('loadedmetadata', onLoadedMetadata);
 		element.addEventListener('durationchange', onDurationChange);
-		streamAttached = true;
+		// Pump the current values once in case metadata already loaded
+		// before this effect ran (common on hot-reload).
+		if (Number.isFinite(element.duration) && element.duration > 0) {
+			playerService.state.update((s) => ({ ...s, durationSecs: element.duration }));
+		}
+		if (Number.isFinite(element.currentTime) && element.currentTime > 0) {
+			playerService.state.update((s) => ({ ...s, positionSecs: element.currentTime }));
+		}
 		return () => {
 			element.removeEventListener('error', onError);
 			element.removeEventListener('timeupdate', onTimeUpdate);
