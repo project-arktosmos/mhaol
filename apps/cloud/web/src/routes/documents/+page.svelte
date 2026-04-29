@@ -551,6 +551,57 @@
 		{/if}
 	</section>
 
+	{#if searchResults.length > 0}
+		<section class="card border border-base-content/10 bg-base-200 p-4">
+			<h2 class="mb-3 text-lg font-semibold">Covers</h2>
+			<p class="mb-3 text-xs text-base-content/60">
+				One card per addon result, using the same image that will be assigned to the document. Click
+				to fill the form.
+			</p>
+			<div
+				class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8"
+			>
+				{#each searchResults as result, i (result.externalId ?? i)}
+					{@const cover = result.images[0]?.url}
+					<button
+						type="button"
+						class={classNames(
+							'card flex flex-col overflow-hidden rounded-box border text-left transition hover:bg-base-300',
+							{
+								'border-primary bg-base-300': selectedResultIndex === i,
+								'border-base-content/10': selectedResultIndex !== i
+							}
+						)}
+						onclick={() => applyResult(result, i)}
+					>
+						<div class="aspect-[2/3] w-full bg-base-300">
+							{#if cover}
+								<img
+									src={cover}
+									alt={result.title}
+									class="h-full w-full object-cover"
+									loading="lazy"
+								/>
+							{:else}
+								<div
+									class="flex h-full w-full items-center justify-center text-xs text-base-content/40"
+								>
+									No image
+								</div>
+							{/if}
+						</div>
+						<div class="flex flex-col gap-1 p-2">
+							<span class="line-clamp-2 text-sm font-medium">{result.title}</span>
+							{#if result.year}
+								<span class="text-xs text-base-content/60">{result.year}</span>
+							{/if}
+						</div>
+					</button>
+				{/each}
+			</div>
+		</section>
+	{/if}
+
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 		<section class="card border border-base-content/10 bg-base-200 p-4">
 			<h2 class="mb-3 text-lg font-semibold">Search results</h2>
@@ -647,9 +698,7 @@
 									<td class="font-medium">{torrent.parsedTitle}</td>
 									<td class="text-xs">{torrent.year ?? ''}</td>
 									<td class="text-xs">{torrent.quality ?? ''}</td>
-									<td class="max-w-md text-xs break-all text-base-content/70"
-										>{torrent.title}</td
-									>
+									<td class="max-w-md text-xs break-all text-base-content/70">{torrent.title}</td>
 									<td class="text-xs text-base-content/70">{torrent.description}</td>
 									<td class="text-center text-xs"
 										>{addedHashes.has(torrent.magnetLink) ? '✓' : ''}</td
