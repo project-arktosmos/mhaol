@@ -17,6 +17,7 @@ src/
 ├── cloud_status.rs      # GET /api/cloud/status
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir
 ├── documents.rs         # /api/documents CRUD — SurrealDB-backed document records (name, author, description)
+├── database.rs          # /api/database/tables{,/:table} — read-only SurrealDB explorer (lists tables, paginates records)
 ├── fs_browse.rs         # /api/fs/browse — list subdirectories under a path (defaults to home), used by the WebUI directory picker
 └── frontend.rs          # rust-embed wrapper that serves web/dist-static/
 
@@ -102,4 +103,6 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/documents/:id` — fetch one document.
 - `PUT /api/documents/:id` — update `name`, `author`, or `description` (any subset).
 - `DELETE /api/documents/:id` — remove the document record.
+- `GET /api/database/tables` — list every table in the cloud SurrealDB database with its row count. Returns `{ namespace, database, tables: [{ name, record_count }] }`. Used by the embedded `/database` explorer.
+- `GET /api/database/tables/:table?limit=<n>&offset=<n>` — paginate records in a single table. Table names are validated as `[A-Za-z0-9_]{1,64}`. `limit` defaults to 100 (max 1000); `offset` defaults to 0. Returns `{ table, limit, offset, total, records }` where each record is JSON with the SurrealDB `id` flattened to a `<table>:<id>` string.
 - `GET /api/fs/browse?path=<optional>` — list subdirectories under `path` (defaults to the system home directory). Returns `{ path, parent, home, separator, roots, entries }` where `entries` only contains directories (hidden dot-folders are skipped). On Windows, `roots` lists available drive letters.

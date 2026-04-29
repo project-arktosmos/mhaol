@@ -9,5 +9,8 @@ bun.lockb
 /.svelte-kit/
 /dist-static/
 
+# Generated
+/src/lib/generated/
+
 # Miscellaneous
 /static/
