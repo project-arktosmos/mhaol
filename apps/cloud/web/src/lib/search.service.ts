@@ -1,6 +1,7 @@
 import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/musicbrainz';
 import { searchBooks } from 'addons/openlibrary';
 import { search as searchPirateBay } from 'addons/torrent-search-thepiratebay';
+import { TorrentCategory } from 'addons/torrent-search-thepiratebay/types';
 import type {
 	Artist,
 	DocumentSource,
@@ -19,6 +20,14 @@ export interface SearchResultItem {
 	raw: unknown;
 }
 
+export interface TorrentResultItem {
+	title: string;
+	description: string;
+	magnetLink: string;
+	infoHash: string;
+	raw: unknown;
+}
+
 export async function searchSource(
 	source: DocumentSource,
 	type: DocumentType,
@@ -34,11 +43,45 @@ export async function searchSource(
 			return searchMusicBrainz(type, trimmed);
 		case 'openlibrary':
 			return searchOpenLibrary(trimmed);
-		case 'torrent-search-thepiratebay':
-			return searchTpb(trimmed);
 		default:
 			throw new Error(`search not yet supported for source "${source}"`);
 	}
+}
+
+function tpbCategoryFor(type: DocumentType): TorrentCategory {
+	switch (type) {
+		case 'album':
+		case 'track':
+			return TorrentCategory.Audio;
+		case 'movie':
+		case 'tv show':
+		case 'tv season':
+		case 'tv episode':
+		case 'youtube video':
+		case 'youtube channel':
+		case 'image':
+			return TorrentCategory.Video;
+		case 'game':
+			return TorrentCategory.Games;
+		case 'book':
+			return TorrentCategory.Other;
+	}
+}
+
+export async function searchTorrents(
+	type: DocumentType,
+	query: string
+): Promise<TorrentResultItem[]> {
+	const trimmed = query.trim();
+	if (!trimmed) return [];
+	const results = await searchPirateBay(trimmed, { category: tpbCategoryFor(type) });
+	return results.map((r) => ({
+		title: r.name,
+		description: `${r.seeders} seeders · ${r.leechers} leechers · ${r.size} bytes`,
+		magnetLink: r.magnetLink,
+		infoHash: r.infoHash,
+		raw: r
+	}));
 }
 
 async function parseError(res: Response): Promise<string> {
@@ -173,17 +216,4 @@ async function searchOpenLibrary(query: string): Promise<SearchResultItem[]> {
 			raw: doc
 		};
 	});
-}
-
-async function searchTpb(query: string): Promise<SearchResultItem[]> {
-	const results = await searchPirateBay(query);
-	return results.map((r) => ({
-		title: r.name,
-		description: `${r.seeders} seeders · ${r.leechers} leechers · ${r.size} bytes`,
-		artists: r.uploadedBy ? [{ name: r.uploadedBy }] : [],
-		images: [],
-		files: r.magnetLink ? [{ type: 'torrent magnet' as const, value: r.magnetLink }] : [],
-		externalId: r.infoHash,
-		raw: r
-	}));
 }

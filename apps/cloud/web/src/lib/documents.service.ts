@@ -18,8 +18,6 @@ export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 export const DOCUMENT_SOURCES = [
 	'tmdb',
-	'torrent-search-thepiratebay',
-	'torrent-search-spanish',
 	'musicbrainz',
 	'retroachievements',
 	'youtube',
@@ -32,17 +30,6 @@ export type DocumentSource = (typeof DOCUMENT_SOURCES)[number];
 
 export const TYPES_BY_SOURCE: Record<DocumentSource, readonly DocumentType[]> = {
 	tmdb: ['movie', 'tv show', 'tv season', 'tv episode', 'image'],
-	'torrent-search-thepiratebay': [
-		'movie',
-		'tv show',
-		'tv season',
-		'tv episode',
-		'album',
-		'track',
-		'book',
-		'game'
-	],
-	'torrent-search-spanish': ['movie', 'tv show', 'tv season', 'tv episode'],
 	musicbrainz: ['album', 'track'],
 	retroachievements: ['game'],
 	youtube: ['youtube video', 'youtube channel'],

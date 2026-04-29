@@ -34,8 +34,6 @@ const ALLOWED_TYPES: &[&str] = &[
 
 const ALLOWED_SOURCES: &[&str] = &[
     "tmdb",
-    "torrent-search-thepiratebay",
-    "torrent-search-spanish",
     "musicbrainz",
     "retroachievements",
     "youtube",

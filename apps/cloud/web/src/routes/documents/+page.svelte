@@ -12,7 +12,12 @@
 		type FileEntry,
 		type ImageMeta
 	} from '$lib/documents.service';
-	import { searchSource, type SearchResultItem } from '$lib/search.service';
+	import {
+		searchSource,
+		searchTorrents,
+		type SearchResultItem,
+		type TorrentResultItem
+	} from '$lib/search.service';
 	import { computeCidV1Raw } from '$lib/cid';
 
 	const docsStore = documentsService.state;
@@ -38,6 +43,17 @@
 	let searchError = $state<string | null>(null);
 	let searchResults = $state<SearchResultItem[]>([]);
 	let selectedResultIndex = $state<number | null>(null);
+	let torrentResults = $state<TorrentResultItem[]>([]);
+	let torrentError = $state<string | null>(null);
+	const addedHashes = $derived(
+		new Set(files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
+	);
+
+	function addTorrentAsFile(t: TorrentResultItem) {
+		if (!t.magnetLink) return;
+		if (addedHashes.has(t.magnetLink)) return;
+		files = [...files, { type: 'torrent magnet', value: t.magnetLink, title: t.title }];
+	}
 
 	function resetForm() {
 		title = '';
@@ -85,15 +101,27 @@
 		}
 		searching = true;
 		searchError = null;
+		torrentError = null;
 		selectedResultIndex = null;
-		try {
-			searchResults = await searchSource(source, type, trimmed);
-		} catch (err) {
-			searchError = err instanceof Error ? err.message : 'Unknown error';
+		const [sourceOutcome, torrentOutcome] = await Promise.allSettled([
+			searchSource(source, type, trimmed),
+			searchTorrents(type, trimmed)
+		]);
+		if (sourceOutcome.status === 'fulfilled') {
+			searchResults = sourceOutcome.value;
+		} else {
 			searchResults = [];
-		} finally {
-			searching = false;
+			searchError =
+				sourceOutcome.reason instanceof Error ? sourceOutcome.reason.message : 'Unknown error';
 		}
+		if (torrentOutcome.status === 'fulfilled') {
+			torrentResults = torrentOutcome.value;
+		} else {
+			torrentResults = [];
+			torrentError =
+				torrentOutcome.reason instanceof Error ? torrentOutcome.reason.message : 'Unknown error';
+		}
+		searching = false;
 	}
 
 	const payloadJson = $derived(
@@ -474,57 +502,107 @@
 		{/if}
 	</section>
 
-	<section class="card border border-base-content/10 bg-base-200 p-4">
-		<h2 class="mb-3 text-lg font-semibold">Search results</h2>
-		<p class="mb-3 text-xs text-base-content/60">
-			Results from <code>{source}</code> for type <code>{type}</code>.
-		</p>
-		{#if searchError}
-			<div class="mb-3 alert alert-error">
-				<span>{searchError}</span>
-			</div>
-		{/if}
-		{#if searching}
-			<p class="text-sm text-base-content/60">Searching…</p>
-		{:else if searchResults.length === 0}
-			<p class="text-sm text-base-content/60">No results yet — type a title and click Search.</p>
-		{:else}
-			<p class="mb-2 text-xs text-base-content/60">Click a result to fill in the form above.</p>
-			<div class="overflow-x-auto rounded-box border border-base-content/10">
-				<table class="table table-sm">
-					<thead>
-						<tr>
-							<th>Title</th>
-							<th>Artists</th>
-							<th>Images</th>
-							<th>Files</th>
-							<th>Description</th>
-							<th>External ID</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each searchResults as result, i (result.externalId ?? i)}
-							<tr
-								class={classNames('cursor-pointer hover:bg-base-300', {
-									'bg-base-300': selectedResultIndex === i
-								})}
-								onclick={() => applyResult(result, i)}
-							>
-								<td class="font-medium">{result.title}</td>
-								<td class="text-xs">{result.artists.map((a) => a.name).join(', ')}</td>
-								<td class="text-xs">{result.images.length}</td>
-								<td class="text-xs">{result.files.length}</td>
-								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
-									>{result.description}</td
-								>
-								<td class="font-mono text-xs text-base-content/70">{result.externalId ?? ''}</td>
+	<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+		<section class="card border border-base-content/10 bg-base-200 p-4">
+			<h2 class="mb-3 text-lg font-semibold">Search results</h2>
+			<p class="mb-3 text-xs text-base-content/60">
+				Results from <code>{source}</code> for type <code>{type}</code>.
+			</p>
+			{#if searchError}
+				<div class="mb-3 alert alert-error">
+					<span>{searchError}</span>
+				</div>
+			{/if}
+			{#if searching}
+				<p class="text-sm text-base-content/60">Searching…</p>
+			{:else if searchResults.length === 0}
+				<p class="text-sm text-base-content/60">No results yet — type a title and click Search.</p>
+			{:else}
+				<p class="mb-2 text-xs text-base-content/60">Click a result to fill in the form above.</p>
+				<div class="overflow-x-auto rounded-box border border-base-content/10">
+					<table class="table table-sm">
+						<thead>
+							<tr>
+								<th>Title</th>
+								<th>Artists</th>
+								<th>Images</th>
+								<th>Files</th>
+								<th>Description</th>
+								<th>External ID</th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-	</section>
+						</thead>
+						<tbody>
+							{#each searchResults as result, i (result.externalId ?? i)}
+								<tr
+									class={classNames('cursor-pointer hover:bg-base-300', {
+										'bg-base-300': selectedResultIndex === i
+									})}
+									onclick={() => applyResult(result, i)}
+								>
+									<td class="font-medium">{result.title}</td>
+									<td class="text-xs">{result.artists.map((a) => a.name).join(', ')}</td>
+									<td class="text-xs">{result.images.length}</td>
+									<td class="text-xs">{result.files.length}</td>
+									<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
+										>{result.description}</td
+									>
+									<td class="font-mono text-xs text-base-content/70">{result.externalId ?? ''}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
+
+		<section class="card border border-base-content/10 bg-base-200 p-4">
+			<h2 class="mb-3 text-lg font-semibold">Torrents (PirateBay)</h2>
+			<p class="mb-3 text-xs text-base-content/60">
+				Torrents matching the title in the category for <code>{type}</code>.
+			</p>
+			{#if torrentError}
+				<div class="mb-3 alert alert-error">
+					<span>{torrentError}</span>
+				</div>
+			{/if}
+			{#if searching}
+				<p class="text-sm text-base-content/60">Searching…</p>
+			{:else if torrentResults.length === 0}
+				<p class="text-sm text-base-content/60">No torrents yet — hit Search.</p>
+			{:else}
+				<p class="mb-2 text-xs text-base-content/60">
+					Click a torrent to add it as a file to the form above.
+				</p>
+				<div class="overflow-x-auto rounded-box border border-base-content/10">
+					<table class="table table-sm">
+						<thead>
+							<tr>
+								<th>Title</th>
+								<th>Stats</th>
+								<th class="w-16">Added</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each torrentResults as torrent (torrent.infoHash)}
+								<tr
+									class={classNames('cursor-pointer hover:bg-base-300', {
+										'opacity-60': addedHashes.has(torrent.magnetLink)
+									})}
+									onclick={() => addTorrentAsFile(torrent)}
+								>
+									<td class="font-medium">{torrent.title}</td>
+									<td class="text-xs text-base-content/70">{torrent.description}</td>
+									<td class="text-center text-xs"
+										>{addedHashes.has(torrent.magnetLink) ? '✓' : ''}</td
+									>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
+	</div>
 
 	<section class="card border border-base-content/10 bg-base-200 p-4">
 		<h2 class="mb-3 text-lg font-semibold">Create payload preview</h2>
