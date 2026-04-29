@@ -103,20 +103,18 @@
     <div class="relative flex min-w-0 flex-1 flex-col">
       {@render children?.()}
     </div>
-    {#if $playerState.currentFile}
-      <aside
-        class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
-      >
-        <PlayerVideo
-          file={$playerState.currentFile}
-          connectionState={$playerState.connectionState}
-          positionSecs={$playerState.positionSecs}
-          durationSecs={$playerState.durationSecs}
-          buffering={$playerState.buffering}
-          poster={$playerState.currentFile.thumbnailUrl}
-        />
-      </aside>
-    {/if}
+    <aside
+      class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
+    >
+      <PlayerVideo
+        file={$playerState.currentFile}
+        connectionState={$playerState.connectionState}
+        positionSecs={$playerState.positionSecs}
+        durationSecs={$playerState.durationSecs}
+        buffering={$playerState.buffering}
+        poster={$playerState.currentFile?.thumbnailUrl}
+      />
+    </aside>
   </main>
 </div>
 
