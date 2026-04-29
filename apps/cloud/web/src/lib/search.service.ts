@@ -104,6 +104,43 @@ async function searchTmdb(type: DocumentType, query: string): Promise<SearchResu
 	return (await res.json()) as SearchResultItem[];
 }
 
+export async function fetchTmdbEpisodeTitles(showId: string): Promise<string[]> {
+	const res = await fetch('/api/search/tmdb/episodes', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ id: showId })
+	});
+	if (!res.ok) throw new Error(await parseError(res));
+	const data = (await res.json()) as { title: string }[];
+	return data.map((e) => e.title);
+}
+
+export async function fetchAlbumTrackTitles(releaseGroupId: string): Promise<string[]> {
+	const rgRes = await fetch(
+		`https://musicbrainz.org/ws/2/release-group/${encodeURIComponent(releaseGroupId)}?inc=releases&fmt=json`,
+		{ headers: { Accept: 'application/json' } }
+	);
+	if (!rgRes.ok) throw new Error(`MusicBrainz returned ${rgRes.status}`);
+	const rg = (await rgRes.json()) as { releases?: { id: string }[] };
+	const releaseId = rg.releases?.[0]?.id;
+	if (!releaseId) return [];
+	const relRes = await fetch(
+		`https://musicbrainz.org/ws/2/release/${encodeURIComponent(releaseId)}?inc=recordings&fmt=json`,
+		{ headers: { Accept: 'application/json' } }
+	);
+	if (!relRes.ok) throw new Error(`MusicBrainz returned ${relRes.status}`);
+	const rel = (await relRes.json()) as {
+		media?: { tracks?: { title: string; position?: number }[] }[];
+	};
+	const titles: string[] = [];
+	for (const m of rel.media ?? []) {
+		for (const t of m.tracks ?? []) {
+			titles.push(t.title);
+		}
+	}
+	return titles;
+}
+
 async function searchMusicBrainz(type: DocumentType, query: string): Promise<SearchResultItem[]> {
 	if (type === 'track') {
 		const res = await searchRecordings(query);

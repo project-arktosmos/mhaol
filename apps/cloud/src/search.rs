@@ -7,7 +7,9 @@ const TMDB_BASE: &str = "https://api.themoviedb.org/3";
 const TMDB_IMG_BASE: &str = "https://image.tmdb.org/t/p";
 
 pub fn router() -> Router<CloudState> {
-    Router::new().route("/tmdb", post(search_tmdb))
+    Router::new()
+        .route("/tmdb", post(search_tmdb))
+        .route("/tmdb/episodes", post(tmdb_episodes))
 }
 
 #[derive(Debug, Deserialize)]
@@ -139,6 +141,106 @@ fn build_tmdb_item(r: &serde_json::Value) -> SearchResultItem {
         external_id,
         raw: r.clone(),
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EpisodesRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EpisodeView {
+    pub title: String,
+}
+
+async fn tmdb_episodes(
+    State(_state): State<CloudState>,
+    Json(req): Json<EpisodesRequest>,
+) -> Result<Json<Vec<EpisodeView>>, (StatusCode, Json<serde_json::Value>)> {
+    let id = req.id.trim();
+    if id.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+    let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "TMDB_API_KEY env var is not set on the cloud server",
+        ));
+    }
+
+    let client = reqwest::Client::new();
+
+    let detail_url = format!("{}/tv/{}?api_key={}", TMDB_BASE, urlencoding(id), api_key);
+    let detail: serde_json::Value = client
+        .get(&detail_url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("tmdb request failed: {e}")))?
+        .error_for_status()
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("tmdb returned {e}")))?
+        .json()
+        .await
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("tmdb parse failed: {e}")))?;
+
+    let seasons = detail
+        .get("seasons")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut episodes: Vec<EpisodeView> = Vec::new();
+    for season in seasons {
+        let n = season
+            .get("season_number")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let url = format!(
+            "{}/tv/{}/season/{}?api_key={}",
+            TMDB_BASE,
+            urlencoding(id),
+            n,
+            api_key
+        );
+        let payload: serde_json::Value = match client
+            .get(&url)
+            .header("Accept", "application/json")
+            .send()
+            .await
+        {
+            Ok(r) if r.status().is_success() => match r.json().await {
+                Ok(v) => v,
+                Err(_) => continue,
+            },
+            _ => continue,
+        };
+        if let Some(eps) = payload.get("episodes").and_then(|e| e.as_array()) {
+            for ep in eps {
+                let name = ep
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let s = ep
+                    .get("season_number")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(n);
+                let e = ep
+                    .get("episode_number")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let title = if name.is_empty() {
+                    format!("S{:02}E{:02}", s, e)
+                } else {
+                    format!("S{:02}E{:02} – {}", s, e, name)
+                };
+                episodes.push(EpisodeView { title });
+            }
+        }
+    }
+
+    Ok(Json(episodes))
 }
 
 fn urlencoding(s: &str) -> String {

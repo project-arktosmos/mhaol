@@ -13,6 +13,8 @@
 		type ImageMeta
 	} from '$lib/documents.service';
 	import {
+		fetchAlbumTrackTitles,
+		fetchTmdbEpisodeTitles,
 		searchSource,
 		searchTorrents,
 		type SearchResultItem,
@@ -45,6 +47,8 @@
 	let selectedResultIndex = $state<number | null>(null);
 	let torrentResults = $state<TorrentResultItem[]>([]);
 	let torrentError = $state<string | null>(null);
+	let enrichingFiles = $state(false);
+	let enrichError = $state<string | null>(null);
 	const addedHashes = $derived(
 		new Set(files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
 	);
@@ -84,13 +88,33 @@
 		files = files.filter((_, idx) => idx !== i);
 	}
 
-	function applyResult(result: SearchResultItem, index: number) {
+	async function applyResult(result: SearchResultItem, index: number) {
 		selectedResultIndex = index;
 		title = result.title;
 		description = result.description;
 		artists = result.artists.map((a) => ({ ...a }));
 		images = result.images.map((img) => ({ ...img }));
 		files = result.files.map((f) => ({ ...f }));
+		enrichError = null;
+
+		const externalId = result.externalId;
+		if (!externalId) return;
+
+		const wantsEpisodes = source === 'tmdb' && type === 'tv show';
+		const wantsTracks = source === 'musicbrainz' && type === 'album';
+		if (!wantsEpisodes && !wantsTracks) return;
+
+		enrichingFiles = true;
+		try {
+			const titles = wantsEpisodes
+				? await fetchTmdbEpisodeTitles(externalId)
+				: await fetchAlbumTrackTitles(externalId);
+			files = [...files, ...titles.map((t) => ({ type: 'url' as const, value: '', title: t }))];
+		} catch (err) {
+			enrichError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			enrichingFiles = false;
+		}
 	}
 
 	async function runSearch() {
@@ -423,6 +447,12 @@
 							<th class="w-32 align-top">Files</th>
 							<td>
 								<div class="flex flex-col gap-2">
+									{#if enrichingFiles}
+										<p class="text-xs text-base-content/60">Loading episodes/tracks…</p>
+									{/if}
+									{#if enrichError}
+										<p class="text-xs text-error">Could not load episodes/tracks: {enrichError}</p>
+									{/if}
 									{#each files as _, i (i)}
 										<div class="flex flex-wrap items-center gap-2">
 											<select

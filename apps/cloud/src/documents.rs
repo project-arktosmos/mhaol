@@ -308,7 +308,11 @@ async fn create(
     let mut files: Vec<FileEntry> = Vec::with_capacity(req.files.len());
     for f in req.files.into_iter() {
         let value = f.value.trim().to_string();
-        if value.is_empty() {
+        let title = f
+            .title
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
+        if value.is_empty() && title.is_none() {
             continue;
         }
         let kind = f.kind.trim();
@@ -321,10 +325,7 @@ async fn create(
         files.push(FileEntry {
             kind: kind.to_string(),
             value,
-            title: f
-                .title
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty()),
+            title,
         });
     }
 
@@ -424,7 +425,11 @@ async fn update(
         let mut next: Vec<FileEntry> = Vec::with_capacity(files.len());
         for f in files.into_iter() {
             let value = f.value.trim().to_string();
-            if value.is_empty() {
+            let title = f
+                .title
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty());
+            if value.is_empty() && title.is_none() {
                 continue;
             }
             let kind = f.kind.trim();
@@ -437,10 +442,7 @@ async fn update(
             next.push(FileEntry {
                 kind: kind.to_string(),
                 value,
-                title: f
-                    .title
-                    .map(|t| t.trim().to_string())
-                    .filter(|t| !t.is_empty()),
+                title,
             });
         }
         current.files = next;
