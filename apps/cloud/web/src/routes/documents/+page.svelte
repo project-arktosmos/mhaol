@@ -71,6 +71,7 @@
 			await applyResult(result, index);
 		}
 		addTorrentAsFile(torrent);
+		await commitCreate();
 	}
 
 	function resetForm() {
@@ -207,13 +208,12 @@
 		documentsService.refresh();
 	});
 
-	async function submit(event: SubmitEvent) {
-		event.preventDefault();
+	async function commitCreate(): Promise<boolean> {
 		createError = null;
 		const trimmedTitle = title.trim();
 		if (!trimmedTitle) {
 			createError = 'Title is required';
-			return;
+			return false;
 		}
 		creating = true;
 		try {
@@ -229,11 +229,22 @@
 			});
 			resetForm();
 			selectedResultIndex = null;
+			searchResults = [];
+			torrentResults = [];
+			searchError = null;
+			torrentError = null;
+			return true;
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
+			return false;
 		} finally {
 			creating = false;
 		}
+	}
+
+	async function submit(event: SubmitEvent) {
+		event.preventDefault();
+		await commitCreate();
 	}
 
 	async function remove(id: string) {
