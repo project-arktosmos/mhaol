@@ -54,11 +54,19 @@ apps/tauri/
 
 ## Running
 
+`pnpm dev` is the full dev stack: it boots cloud (Rust 9899 + Vite 9898) and player (Vite 9595) in the background, waits for both ports, then launches `pnpm app:tauri`. Tauri's `beforeDevCommand` brings up `tauri-web` (Vite 1571) and the native window with the health UI. Hot reload works for the cloud WebUI, the player, and the Tauri health UI; the cloud Rust binary still needs a manual restart.
+
 ```bash
-# Desktop dev (Tauri opens a webview pointed at the Vite dev server on 1571)
+# Full desktop dev stack (cloud + player + Tauri shell)
+pnpm dev
+
+# Cloud + player only (no Tauri shell — browser-based workflow)
+pnpm dev:apps
+
+# Tauri shell standalone (assumes cloud and player are already running)
 pnpm app:tauri
 
-# Just the web UI (no Tauri shell — useful for quick UI tweaks in a browser)
+# Health UI Vite dev server only (no Tauri shell — quick UI tweaks in a browser)
 pnpm app:tauri:web
 
 # Desktop release build
@@ -69,5 +77,3 @@ pnpm tauri:android:dev
 pnpm tauri:android:build
 pnpm tauri:android:build:apk
 ```
-
-The cloud and player apps must be running (e.g. via `pnpm dev`) for the desktop health panels to report online.

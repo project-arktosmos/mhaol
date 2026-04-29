@@ -194,7 +194,8 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Cloud (Rust on loopback :9899 + Vite WebUI on :9898) + player (port 9595) in parallel
+pnpm dev              # Full desktop stack: cloud (Rust :9899 + Vite WebUI :9898) + player (:9595) + Tauri shell with health UI (:1571 + native window). Closing the Tauri window stops the dev session.
+pnpm dev:apps         # Same as above without the Tauri shell — cloud + player only, browser-based workflow
 pnpm dev:node         # Rust node server only (PORT=1530)
 pnpm dev:cloud        # Rust cloud server only on 127.0.0.1:9899 (loopback) — runs same services as node, no UI
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI (port 9898, proxies /api → 127.0.0.1:9899)
