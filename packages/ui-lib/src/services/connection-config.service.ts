@@ -63,7 +63,7 @@ class ConnectionConfigService {
 		}
 		const host = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
 		return {
-			serverUrl: `http://${host}:1530`,
+			serverUrl: `http://${host}:9898`,
 			serverAddress: '',
 			signalingUrl: DEFAULT_SIGNALING_URL
 		};

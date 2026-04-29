@@ -1,6 +1,1 @@
-{
-  "port": 1530,
-  "serverAddress": "0xdCC0b4d96f094F8A6Fd1D92fDa82D5c409BDAA11",
-  "serverUrl": "http://192.168.1.103:1530",
-  "signalingUrl": "https://mhaol-signaling.project-arktosmos.partykit.dev"
-}
+{}

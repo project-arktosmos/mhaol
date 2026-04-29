@@ -4,6 +4,7 @@ mod db;
 mod documents;
 mod frontend;
 mod fs_browse;
+mod health;
 mod ipfs_pins;
 mod libraries;
 mod search;
@@ -192,6 +193,7 @@ async fn main() {
     );
 
     let app = Router::new()
+        .nest("/api/health", health::router())
         .nest("/api/cloud", cloud_status::router())
         .nest("/api/libraries", libraries::router())
         .nest("/api/documents", documents::router())
