@@ -116,3 +116,24 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/catalog/:addon/genres?type=<>` — returns `[{ id, name }]` for the addon's filter dimension. TMDB requires `type=movie|tv` (queries `/genre/{type}/list` upstream); MusicBrainz/OpenLibrary/RetroAchievements return a static curated list (genres / subjects / console ids).
 - `GET /api/torrent/list` — returns the cloud `TorrentManager`'s current torrents as `TorrentInfo[]` (`{ id, name, infoHash, size, progress, downloadSpeed, uploadSpeed, peers, seeds, state, addedAt, eta, outputPath }`). Returns `[]` while the session is still warming up. Used by the shared `DocumentCard` to render real-time progress.
 - `POST /api/torrent/add` — adds a magnet to the cloud torrent client. Body: `{ magnet }`. Returns the initial `TorrentInfo`. `400` if the URI is not a magnet, `503` until the session has finished initializing.
+
+## Document versioning
+
+Documents are content-addressed: the SurrealDB record `id` is the CIDv1-raw of the document body (title, description, artists, images, files, year, type, source, version, version_hashes). Two new fields participate in this hash:
+
+- `version: u32` — rolling-forward nonce, starts at `0`. Records persisted before this field existed deserialize as `0`.
+- `version_hashes: Vec<String>` — CIDs of every prior version, oldest first. Chain integrity invariant: `version_hashes.len() == version`.
+
+Whenever the document is updated programmatically (currently only the torrent-completion flow), the prior CID is pushed onto `version_hashes`, `version` is incremented, the new CID is computed over the full new body, the old record is deleted, and a new record is created at the new CID. Verifiers walk `version_hashes` backwards to rebuild the chain.
+
+## Torrent → document auto-update
+
+`apps/cloud/src/torrent_completion.rs` runs a background task that polls `TorrentManager::list()` every 5 seconds. When a torrent reaches `Seeding` (or `progress >= 1.0`):
+
+1. Find the document whose `files` includes a `torrent magnet` whose value contains `btih:<info_hash>` (case-insensitive).
+2. Walk the torrent's `output_path` recursively; skip files already represented as `ipfs` entries (matched by `title == relative_path`) so re-runs are idempotent.
+3. For each remaining file: pin to the embedded IPFS node via `IpfsManager::add` and record the pin in `ipfs_pin`.
+4. Append `{ type: "ipfs", value: <cid>, title: <relative_path> }` entries to `document.files`.
+5. Roll the version forward (push old CID onto `version_hashes`, bump `version`), recompute the CID, delete the old record, create the new one at the new CID. `created_at` is preserved; `updated_at` is set to now.
+
+Failures are logged and retried on the next tick; successes (including "no matching document") are remembered in-memory for the lifetime of the process so the same torrent isn't reprocessed.

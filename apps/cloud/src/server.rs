@@ -11,6 +11,7 @@ mod libraries;
 mod search;
 mod state;
 mod torrent;
+mod torrent_completion;
 
 use axum::Router;
 use mhaol_identity::IdentityManager;
@@ -194,6 +195,14 @@ async fn main() {
         #[cfg(not(target_os = "android"))]
         ipfs_manager,
     );
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let watcher_state = state.clone();
+        tokio::spawn(async move {
+            torrent_completion::run(watcher_state).await;
+        });
+    }
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
