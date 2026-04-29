@@ -95,12 +95,15 @@ async fn handle_completion(state: &CloudState, torrent: &TorrentInfo) -> anyhow:
         None => return Ok(false),
     };
     if !output_path.exists() {
-        return Ok(false);
+        // Path may not yet exist if the cached output_path is stale (e.g.
+        // magnet dn vs resolved metadata name). Bubble up so the watcher
+        // retries on the next tick instead of permanently marking processed.
+        anyhow::bail!("output path does not exist yet: {}", output_path.display());
     }
 
     let walked = walk_torrent_files(&output_path);
     if walked.is_empty() {
-        return Ok(false);
+        anyhow::bail!("no files yet under {}", output_path.display());
     }
 
     let existing_titles: HashSet<String> = target
