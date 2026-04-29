@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
+	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
 	import {
 		documentsService,
 		DOCUMENT_SOURCES,
@@ -303,13 +304,6 @@
 		}
 	}
 
-	function formatDate(value: string): string {
-		try {
-			return new Date(value).toLocaleString();
-		} catch {
-			return value;
-		}
-	}
 </script>
 
 <svelte:head>
@@ -874,51 +868,12 @@
 		{:else if $docsStore.documents.length === 0}
 			<p class="text-sm text-base-content/60">No documents yet.</p>
 		{:else}
-			<div class="overflow-x-auto rounded-box border border-base-content/10">
-				<table class="table table-sm">
-					<thead>
-						<tr>
-							<th>ID</th>
-							<th>Type</th>
-							<th>Source</th>
-							<th>Title</th>
-							<th>Year</th>
-							<th>Artists</th>
-							<th>Images</th>
-							<th>Files</th>
-							<th>Description</th>
-							<th>Created</th>
-							<th class="w-24"></th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each $docsStore.documents as doc (doc.id)}
-							<tr>
-								<td class="font-mono text-xs text-base-content/70">{doc.id}</td>
-								<td class="text-xs">{doc.type}</td>
-								<td class="text-xs">{doc.source}</td>
-								<td class="font-medium">{doc.title}</td>
-								<td class="text-xs">{doc.year ?? ''}</td>
-								<td class="text-xs">{(doc.artists ?? []).map((a) => a.name).join(', ')}</td>
-								<td class="text-xs">{(doc.images ?? []).length}</td>
-								<td class="text-xs">{(doc.files ?? []).length}</td>
-								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
-									>{doc.description}</td
-								>
-								<td class="text-xs text-base-content/60">{formatDate(doc.created_at)}</td>
-								<td class="text-right">
-									<button
-										class="btn text-error btn-ghost btn-xs"
-										onclick={() => remove(doc.id)}
-										disabled={deletingId === doc.id}
-									>
-										{deletingId === doc.id ? 'Removing…' : 'Remove'}
-									</button>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+			<div
+				class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+			>
+				{#each $docsStore.documents as doc (doc.id)}
+					<DocumentCard document={doc} onRemove={remove} removing={deletingId === doc.id} />
+				{/each}
 			</div>
 		{/if}
 	</section>
