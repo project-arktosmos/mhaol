@@ -3,7 +3,7 @@
 **Location:** `apps/cloud/`
 **Framework:** Rust — Axum 0.8 + Tokio + SurrealDB (embedded SurrealKV)
 **Crate:** `mhaol-cloud`
-**Binary:** `mhaol-cloud` (default port 1540)
+**Binary:** `mhaol-cloud` (default port 9898)
 
 The cloud server runs an embedded SurrealDB store, an identity manager, the shared `mhaol-queue` task manager (on a separate `cloud-queue.db` SQLite file), and the desktop-only managers from `mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, and `mhaol-ipfs`. It loads `mhaol-p2p-stream` for the GStreamer worker, and serves the Svelte WebUI from the nested `web/` directory. It is **independent** from `mhaol-node` — node still uses its own SQLite layer, cloud has its own state.
 
@@ -55,21 +55,21 @@ The cloud binary used to depend on `mhaol-node` and spawn its recommendation wor
 
 ## WebUI
 
-The Svelte app lives at `apps/cloud/web/` (pnpm package name `cloud`). It is served two different ways:
+The Svelte app lives at `apps/cloud/web/` (pnpm package name `cloud`). The user-facing port is always **9898** in both modes:
 
-- **Dev (debug builds)** — the Rust server (port 1540) issues a 307 redirect for any non-`/api/*` request to the Vite dev server on port **9596** (configurable via `CLOUD_DEV_PROXY`). The Vite server in turn proxies `/api/*` calls back to 1540, so a single browser tab on 9596 gives you the live Svelte app with hot reload plus the real Rust API. `pnpm dev` starts both processes; just hit either port and you'll end up on 9596.
-- **Production (release builds)** — the Rust server embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it directly as the fallback for any non-API path. Build it with `pnpm --filter cloud build` (or `pnpm build:cloud` to build the WebUI and the release binary together).
+- **Dev** — Vite binds `0.0.0.0:9898` and serves the live Svelte app with hot reload. The Rust server binds `127.0.0.1:9899` (loopback only, invisible to the network). Vite proxies `/api/*` to `127.0.0.1:9899`, so the browser only ever talks to 9898.
+- **Production (release builds)** — the Rust server binds `0.0.0.0:9898` and embeds `apps/cloud/web/dist-static/` via `rust-embed`, serving it directly as the fallback for any non-API path. Build it with `pnpm --filter cloud build` (or `pnpm build:cloud` to build the WebUI and the release binary together).
 
 ## Running
 
 ```bash
-# Dev — starts cloud Rust server (1540) + cloud WebUI Vite (9596) + player (9595)
+# Dev — starts cloud (Rust loopback :9899 + Vite WebUI :9898) + player (:9595)
 pnpm dev
 
-# Dev — Rust server only on 1540 (redirects WebUI traffic to CLOUD_DEV_PROXY)
+# Dev — Rust server only on 127.0.0.1:9899 (no UI; for API-only work)
 pnpm dev:cloud
 
-# Dev — WebUI hot-reload on 9596 (proxies /api to :1540)
+# Dev — WebUI hot-reload on 9898 (proxies /api to 127.0.0.1:9899)
 pnpm dev:cloud:web
 
 # Production build (embeds the WebUI)
@@ -78,12 +78,11 @@ pnpm build:cloud
 
 ## Environment Variables
 
-- `PORT` — Server port (default: 1540)
-- `HOST` — Bind address (default: 0.0.0.0)
+- `PORT` — Server port (default: 9898; `pnpm dev:cloud` and `pnpm dev` set it to 9899)
+- `HOST` — Bind address (default: 0.0.0.0; `pnpm dev:cloud` and `pnpm dev` set it to 127.0.0.1)
 - `DB_PATH` — SurrealDB store path (default: `apps/cloud/cloud-surrealkv/`)
 - `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-surrealkv/`
 - `SIGNALING_URL` — PartyKit signaling URL (default: hosted instance)
-- `CLOUD_DEV_PROXY` — Debug-build only. URL the WebUI fallback redirects to (default: `http://localhost:9596`).
 
 ## Worker subcommand
 

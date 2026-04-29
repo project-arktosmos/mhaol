@@ -17,7 +17,7 @@ mhaol.git/
 │   ├── frontend/                     # Unified SPA (landing + connect + media, port 1570)
 │   ├── player/                       # Player SPA, mirrors frontend visuals/setup (port 9595)
 │   ├── node/                         # Rust Axum server (standalone, port 1530)
-│   ├── cloud/                        # Rust Axum server (port 1540) + nested Svelte WebUI under cloud/web/ (dev port 9596) embedded into the binary
+│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI under cloud/web/, single user-facing port 9898 (dev: Vite on 9898 proxies /api → loopback Rust on 9899; prod: Rust on 9898 serves embedded WebUI)
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
@@ -61,7 +61,7 @@ The node is a standalone Rust Axum server at `apps/node/`. Crate name `mhaol-nod
 
 ### Cloud
 
-The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node` library to start the same services (database, identity, queue, recommendations workers, peer service) and additionally hosts a Svelte WebUI that displays node health. Crate name `mhaol-cloud`, binary `mhaol-cloud`, default port 1540.
+The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node` library to start the same services (database, identity, queue, recommendations workers, peer service) and additionally hosts a Svelte WebUI that displays node health. Crate name `mhaol-cloud`, binary `mhaol-cloud`, default port 9898 (in dev, the binary binds 127.0.0.1:9899 and the Vite dev server takes 9898 as the public port).
 
 - `apps/cloud/Cargo.toml` — Crate manifest (depends on `mhaol-node` as a library)
 - `apps/cloud/src/server.rs` — Binary entry point; bootstraps `AppState`, spawns the same workers as `mhaol-node`, and serves the embedded WebUI as a fallback to `/api/*`
@@ -177,10 +177,10 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Rust cloud (port 1540) + player (port 9595) in parallel
+pnpm dev              # Cloud (Rust on loopback :9899 + Vite WebUI on :9898) + player (port 9595) in parallel
 pnpm dev:node         # Rust node server only (PORT=1530)
-pnpm dev:cloud        # Rust cloud server only (PORT=1540) — runs same services as node + serves embedded WebUI
-pnpm dev:cloud:web    # Vite dev server for the cloud WebUI (port 9596, proxies /api → :1540)
+pnpm dev:cloud        # Rust cloud server only on 127.0.0.1:9899 (loopback) — runs same services as node, no UI
+pnpm dev:cloud:web    # Vite dev server for the cloud WebUI (port 9898, proxies /api → 127.0.0.1:9899)
 pnpm dev:frontend     # Frontend dev server only (port 1570)
 pnpm dev:player       # Player dev server only (port 9595)
 

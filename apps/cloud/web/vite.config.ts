@@ -7,19 +7,19 @@ export default defineConfig({
 	plugins: [navPlugin(), tailwindcss(), sveltekit()],
 	server: {
 		host: true,
-		port: parseInt(process.env.PORT || '9596'),
+		port: parseInt(process.env.PORT || '9898'),
 		fs: {
 			allow: ['../../..']
 		},
 		proxy: {
-			'/api': 'http://localhost:1540'
+			'/api': 'http://127.0.0.1:9899'
 		}
 	},
 	preview: {
 		host: true,
-		port: parseInt(process.env.PORT || '9596'),
+		port: parseInt(process.env.PORT || '9898'),
 		proxy: {
-			'/api': 'http://localhost:1540'
+			'/api': 'http://127.0.0.1:9899'
 		}
 	}
 });

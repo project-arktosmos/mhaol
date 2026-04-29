@@ -78,7 +78,7 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|p| p.parse().ok())
-        .unwrap_or(1540);
+        .unwrap_or(9898);
     let local_ip = get_local_ip();
 
     let signaling_address = state

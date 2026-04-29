@@ -52,7 +52,7 @@ async fn main() {
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|p| p.parse().ok())
-        .unwrap_or(1540);
+        .unwrap_or(9898);
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
 
