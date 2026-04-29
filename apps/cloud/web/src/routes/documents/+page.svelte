@@ -96,37 +96,48 @@
 	<section class="card border border-base-content/10 bg-base-200 p-4">
 		<h2 class="mb-3 text-lg font-semibold">Add a document</h2>
 		<form class="flex flex-col gap-3" onsubmit={submit}>
-			<div class="grid gap-3 sm:grid-cols-2">
-				<label class="form-control">
-					<span class="label-text text-xs">Name</span>
-					<input
-						type="text"
-						class="input-bordered input input-sm"
-						placeholder="Project brief"
-						bind:value={name}
-						disabled={creating}
-					/>
-				</label>
-				<label class="form-control">
-					<span class="label-text text-xs">Author</span>
-					<input
-						type="text"
-						class="input-bordered input input-sm"
-						placeholder="Jane Doe"
-						bind:value={author}
-						disabled={creating}
-					/>
-				</label>
+			<div class="overflow-x-auto rounded-box border border-base-content/10">
+				<table class="table table-sm">
+					<tbody>
+						<tr>
+							<th class="w-32 align-middle">Name</th>
+							<td>
+								<input
+									type="text"
+									class="input-bordered input input-sm w-full"
+									placeholder="Project brief"
+									bind:value={name}
+									disabled={creating}
+								/>
+							</td>
+						</tr>
+						<tr>
+							<th class="w-32 align-middle">Author</th>
+							<td>
+								<input
+									type="text"
+									class="input-bordered input input-sm w-full"
+									placeholder="Jane Doe"
+									bind:value={author}
+									disabled={creating}
+								/>
+							</td>
+						</tr>
+						<tr>
+							<th class="w-32 align-top">Description</th>
+							<td>
+								<input
+									type="text"
+									class="input-bordered input input-sm w-full"
+									placeholder="Short summary of the document"
+									bind:value={description}
+									disabled={creating}
+								/>
+							</td>
+						</tr>
+					</tbody>
+				</table>
 			</div>
-			<label class="form-control">
-				<span class="label-text text-xs">Description</span>
-				<textarea
-					class="textarea-bordered textarea min-h-20 textarea-sm"
-					placeholder="Short summary of the document"
-					bind:value={description}
-					disabled={creating}
-				></textarea>
-			</label>
 			<div>
 				<button
 					type="submit"
