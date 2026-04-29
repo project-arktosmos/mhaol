@@ -140,10 +140,22 @@
 	}
 
 	function pickAudio(result: YouTubeStreamUrlResult): YouTubeStreamFormat | null {
+		// Prefer the muxed (video+audio) format for audio-mode playback. The
+		// audio-only adaptive streams YouTube serves are fragmented MP4
+		// (`ftyp dash`) — browsers reject those in plain `<video src=...>` /
+		// `<audio src=...>` with `MEDIA_ERR_SRC_NOT_SUPPORTED` because the
+		// file shape needs MediaSource Extensions to play. The muxed format
+		// is a self-contained MP4 that decodes everywhere; the player surface
+		// hides the video frame and shows a music-note overlay, so the
+		// user-facing experience is "audio only" either way.
+		const muxed = pickMuxed(result);
+		if (muxed) return muxed;
+		// No muxed format available — fall back to audio-only as a last
+		// resort. The player will surface any decode failure on screen.
 		const audioOnly = result.formats.filter((f) => f.isAudioOnly);
 		const mp4Audio = audioOnly.filter((f) => f.container === 'mp4');
 		const sorted = (list: YouTubeStreamFormat[]) => [...list].sort((a, b) => b.bitrate - a.bitrate);
-		return sorted(mp4Audio)[0] ?? sorted(audioOnly)[0] ?? pickMuxed(result);
+		return sorted(mp4Audio)[0] ?? sorted(audioOnly)[0] ?? null;
 	}
 
 	function pickFormat(

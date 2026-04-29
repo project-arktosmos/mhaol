@@ -87,10 +87,13 @@ fn pick_muxed(result: &StreamUrlResult) -> Option<&mhaol_yt_dlp::ResolvedFormat>
     muxed.first().copied()
 }
 
-/// Pick the format `pickAudio` picks: highest-bitrate mp4 (AAC) audio-only,
-/// falling back to any audio-only, falling back to muxed. Mirrors
+/// Pick the format `pickAudio` picks: muxed first (so the browser can
+/// actually play it), then audio-only as a last-resort fallback. Mirrors
 /// `apps/cloud/web/src/routes/youtube/+page.svelte::pickAudio`.
 fn pick_audio(result: &StreamUrlResult) -> Option<&mhaol_yt_dlp::ResolvedFormat> {
+    if let Some(muxed) = pick_muxed(result) {
+        return Some(muxed);
+    }
     let audio_only: Vec<&mhaol_yt_dlp::ResolvedFormat> = result
         .formats
         .iter()
@@ -107,7 +110,7 @@ fn pick_audio(result: &StreamUrlResult) -> Option<&mhaol_yt_dlp::ResolvedFormat>
     }
     let mut any_audio = audio_only;
     any_audio.sort_by(|a, b| b.bitrate.cmp(&a.bitrate));
-    any_audio.first().copied().or_else(|| pick_muxed(result))
+    any_audio.first().copied()
 }
 
 /// Range-fetch the resolved format URL and confirm the CDN actually serves it.
@@ -269,24 +272,36 @@ async fn browser_extraction_yields_playable_audio_url() {
         .unwrap_or_else(|e| panic!("extract_stream_urls_for_browser failed for {url}: {e}"));
 
     let format = pick_audio(&result).unwrap_or_else(|| {
-        panic!(
-            "no audio-only (and no muxed fallback) format in extraction result for {url}"
-        )
+        panic!("no playable format (muxed nor audio-only) in extraction result for {url}")
     });
 
     eprintln!(
-        "picked audio: itag={} container={} {}kbps audioOnly={}",
+        "picked audio-mode format: itag={} container={} {}kbps audioOnly={} videoOnly={}",
         format.itag,
         format.container,
         format.bitrate / 1000,
-        format.is_audio_only
+        format.is_audio_only,
+        format.is_video_only,
     );
 
-    // Browser <audio> simulation. This is the failure mode that was hiding
-    // the real bug behind the "youtube origin" headers I had originally.
+    // Audio-mode playback in the cloud webui must NOT pick a fragmented-MP4
+    // audio-only stream — those need MediaSource Extensions to play in a
+    // plain `<video src=...>` element and the browser surfaces them as
+    // MEDIA_ERR_SRC_NOT_SUPPORTED. The picker is meant to prefer the muxed
+    // (self-contained mp4) format for that reason.
+    assert!(
+        !format.is_audio_only || pick_muxed(&result).is_none(),
+        "audio mode picked an audio-only fragmented MP4 (itag={}) when a muxed format was \
+         available — this regresses the browser-playable contract",
+        format.itag
+    );
+
+    // Browser <video> simulation. The cloud's PlayerVideo always uses a
+    // single <video> element regardless of mode, so the audio test fetches
+    // with the same shape the browser would.
     let (status, content_length, content_type) = fetch_resolved_url(&format.url, true)
         .await
-        .unwrap_or_else(|e| panic!("range-fetch as <audio> failed for audio itag {}: {e}", format.itag));
+        .unwrap_or_else(|e| panic!("range-fetch failed for itag {}: {e}", format.itag));
 
     if !(200..300).contains(&status) {
         // Useful diagnostics: try the same URL with the youtube-origin headers
