@@ -9,6 +9,14 @@
 		type CatalogGenre,
 		type CatalogSource
 	} from '$lib/catalog.service';
+	import {
+		formatSizeBytes,
+		matchTorrentsForResult,
+		searchTorrents,
+		type SearchResultItem,
+		type TorrentResultItem
+	} from '$lib/search.service';
+	import { documentsService, type DocumentSource, type DocumentType } from '$lib/documents.service';
 
 	let sources = $state<CatalogSource[]>([]);
 	let sourcesError = $state<string | null>(null);
@@ -27,6 +35,18 @@
 	let itemsLoading = $state(false);
 	let itemsError = $state<string | null>(null);
 
+	type ItemTorrentStatus = 'pending' | 'searching' | 'done' | 'error';
+	interface ItemTorrentState {
+		status: ItemTorrentStatus;
+		matches: TorrentResultItem[];
+		error: string | null;
+	}
+	let torrentState = $state<Record<string, ItemTorrentState>>({});
+	let addedHashes = $state<Set<string>>(new Set());
+	let addingHash = $state<string | null>(null);
+	let assignError = $state<string | null>(null);
+	let runId = 0;
+
 	const currentSource = $derived(sources.find((s) => s.id === addon));
 	const availableTypes = $derived(currentSource?.types ?? []);
 	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
@@ -37,6 +57,36 @@
 			type = availableTypes[0]?.id ?? '';
 		}
 	});
+
+	function mapToDocumentType(addonId: string, typeId: string): DocumentType {
+		if (addonId === 'tmdb' && typeId === 'tv') return 'tv show';
+		if (addonId === 'tmdb') return 'movie';
+		if (addonId === 'musicbrainz') return 'album';
+		if (addonId === 'openlibrary') return 'book';
+		if (addonId === 'retroachievements') return 'game';
+		return 'movie';
+	}
+
+	function mapToDocumentSource(addonId: string): DocumentSource {
+		if (addonId === 'tmdb') return 'tmdb';
+		if (addonId === 'musicbrainz') return 'musicbrainz';
+		if (addonId === 'openlibrary') return 'openlibrary';
+		if (addonId === 'retroachievements') return 'retroachievements';
+		return 'tmdb';
+	}
+
+	function itemAsSearchResult(item: CatalogItem): SearchResultItem {
+		return {
+			title: item.title,
+			description: item.description ?? '',
+			artists: [],
+			images: [],
+			files: [],
+			year: item.year,
+			externalId: item.id,
+			raw: item
+		};
+	}
 
 	async function refreshGenres() {
 		if (!addon || !hasFilter) {
@@ -62,10 +112,13 @@
 	async function refreshItems() {
 		if (!addon) {
 			items = [];
+			torrentState = {};
 			return;
 		}
 		itemsLoading = true;
 		itemsError = null;
+		runId++;
+		torrentState = {};
 		try {
 			const result = await loadPopular(addon, {
 				type: type || undefined,
@@ -81,6 +134,69 @@
 			itemsError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
 			itemsLoading = false;
+		}
+		void runTorrentSearches();
+	}
+
+	async function runTorrentSearches() {
+		const myRun = ++runId;
+		const docType = mapToDocumentType(addon, type);
+		const seeded: Record<string, ItemTorrentState> = {};
+		for (const item of items) {
+			seeded[item.id] = { status: 'pending', matches: [], error: null };
+		}
+		torrentState = seeded;
+		for (const item of items) {
+			if (myRun !== runId) return;
+			torrentState = {
+				...torrentState,
+				[item.id]: { status: 'searching', matches: [], error: null }
+			};
+			try {
+				const torrents = await searchTorrents(docType, item.title);
+				if (myRun !== runId) return;
+				const matches = matchTorrentsForResult(itemAsSearchResult(item), torrents);
+				torrentState = {
+					...torrentState,
+					[item.id]: { status: 'done', matches, error: null }
+				};
+			} catch (err) {
+				if (myRun !== runId) return;
+				torrentState = {
+					...torrentState,
+					[item.id]: {
+						status: 'error',
+						matches: [],
+						error: err instanceof Error ? err.message : 'Unknown error'
+					}
+				};
+			}
+		}
+	}
+
+	async function assignTorrent(item: CatalogItem, torrent: TorrentResultItem) {
+		if (!torrent.magnetLink || addedHashes.has(torrent.magnetLink) || addingHash) return;
+		assignError = null;
+		addingHash = torrent.magnetLink;
+		try {
+			const images = [item.posterUrl, item.backdropUrl]
+				.filter((url): url is string => Boolean(url))
+				.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
+			await documentsService.create({
+				title: item.title,
+				artists: [],
+				description: item.description ?? '',
+				images,
+				files: [{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }],
+				year: item.year,
+				type: mapToDocumentType(addon, type),
+				source: mapToDocumentSource(addon)
+			});
+			addedHashes = new Set(addedHashes).add(torrent.magnetLink);
+		} catch (err) {
+			assignError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			addingHash = null;
 		}
 	}
 
@@ -133,7 +249,9 @@
 		<h1 class="text-2xl font-bold">Catalog</h1>
 		<p class="text-sm text-base-content/60">
 			Browse popular items from each addon. Pick a source, optionally narrow by type and genre, and
-			the cloud server fetches the data on your behalf.
+			the cloud server fetches the data on your behalf. For each result the cloud also runs a
+			torrent search (one at a time) and lists the matches; click a torrent to save the item as a
+			document with that magnet attached.
 		</p>
 	</header>
 
@@ -240,44 +358,93 @@
 			</div>
 		{/if}
 
+		{#if assignError}
+			<div class="alert alert-error">
+				<span>{assignError}</span>
+			</div>
+		{/if}
+
 		{#if itemsLoading && items.length === 0}
 			<p class="text-sm text-base-content/60">Loading…</p>
 		{:else if items.length === 0}
 			<p class="text-sm text-base-content/60">No items.</p>
 		{:else}
 			<div
-				class={classNames(
-					'grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
-					{ 'opacity-60': itemsLoading }
-				)}
+				class={classNames('grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3', {
+					'opacity-60': itemsLoading
+				})}
 			>
 				{#each items as item (item.id)}
-					<div
-						class="flex flex-col overflow-hidden rounded-box border border-base-content/10 bg-base-100"
-					>
-						<div class="aspect-[2/3] w-full bg-base-300">
-							{#if item.posterUrl}
-								<img
-									src={item.posterUrl}
-									alt={item.title}
-									class="h-full w-full object-cover"
-									loading="lazy"
-								/>
-							{:else}
-								<div
-									class="flex h-full w-full items-center justify-center text-xs text-base-content/40"
+					{@const ts = torrentState[item.id]}
+					<div class="flex overflow-hidden rounded-box border border-base-content/10 bg-base-100">
+						<div class="flex w-32 shrink-0 flex-col bg-base-300">
+							<div class="aspect-[2/3] w-full">
+								{#if item.posterUrl}
+									<img
+										src={item.posterUrl}
+										alt={item.title}
+										class="h-full w-full object-cover"
+										loading="lazy"
+									/>
+								{:else}
+									<div
+										class="flex h-full w-full items-center justify-center text-xs text-base-content/40"
+									>
+										No image
+									</div>
+								{/if}
+							</div>
+							<div class="flex flex-col gap-1 p-2">
+								<span class="line-clamp-2 text-sm font-medium" title={item.title}>{item.title}</span
 								>
-									No image
-								</div>
-							{/if}
+								{#if item.year}
+									<span class="text-xs text-base-content/60">{item.year}</span>
+								{/if}
+								{#if item.description}
+									<span class="line-clamp-3 text-xs text-base-content/70">{item.description}</span>
+								{/if}
+							</div>
 						</div>
-						<div class="flex flex-1 flex-col gap-1 p-2">
-							<span class="line-clamp-2 text-sm font-medium" title={item.title}>{item.title}</span>
-							{#if item.year}
-								<span class="text-xs text-base-content/60">{item.year}</span>
-							{/if}
-							{#if item.description}
-								<span class="line-clamp-3 text-xs text-base-content/70">{item.description}</span>
+						<div class="flex flex-1 flex-col border-l border-base-content/10 p-2">
+							<span class="mb-1 text-xs font-semibold text-base-content/60 uppercase">
+								Torrents{ts && ts.matches.length > 0 ? ` (${ts.matches.length})` : ''}
+							</span>
+							{#if !ts || ts.status === 'pending'}
+								<p class="text-xs text-base-content/50">Queued…</p>
+							{:else if ts.status === 'searching'}
+								<p class="text-xs text-base-content/50">Searching…</p>
+							{:else if ts.status === 'error'}
+								<p class="text-xs text-error">{ts.error ?? 'Failed'}</p>
+							{:else if ts.matches.length === 0}
+								<p class="text-xs text-base-content/50">No matching torrents.</p>
+							{:else}
+								<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
+									{#each ts.matches as torrent (torrent.infoHash)}
+										<button
+											type="button"
+											class={classNames(
+												'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-200',
+												{
+													'opacity-60':
+														addedHashes.has(torrent.magnetLink) || addingHash === torrent.magnetLink
+												}
+											)}
+											onclick={() => assignTorrent(item, torrent)}
+											disabled={addingHash !== null || addedHashes.has(torrent.magnetLink)}
+											title={torrent.title}
+										>
+											<span class="font-medium">{torrent.quality ?? '—'}</span>
+											<span class="text-success">↑{torrent.seeders}</span>
+											<span class="text-warning">↓{torrent.leechers}</span>
+											<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
+											{#if addedHashes.has(torrent.magnetLink)}
+												<span class="ml-auto">✓</span>
+											{:else if addingHash === torrent.magnetLink}
+												<span class="ml-auto">…</span>
+											{/if}
+										</button>
+									{/each}
+								</div>
 							{/if}
 						</div>
 					</div>
