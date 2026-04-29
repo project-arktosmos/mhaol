@@ -1,10 +1,12 @@
 import { writable, type Writable } from 'svelte/store';
+import type { IpfsPin } from '$lib/ipfs.service';
 
 export interface Library {
 	id: string;
 	path: string;
 	created_at: string;
 	updated_at: string;
+	last_scanned_at: string | null;
 }
 
 export interface ScanEntry {
@@ -77,6 +79,14 @@ class LibrariesService {
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		return (await res.json()) as ScanResponse;
+	}
+
+	async pins(id: string): Promise<IpfsPin[]> {
+		const res = await fetch(`/api/libraries/${encodeURIComponent(id)}/pins`, {
+			cache: 'no-store'
+		});
+		if (!res.ok) throw new Error(await parseError(res));
+		return (await res.json()) as IpfsPin[];
 	}
 
 	async remove(id: string): Promise<void> {

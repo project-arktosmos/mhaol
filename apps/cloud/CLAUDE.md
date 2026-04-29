@@ -33,7 +33,7 @@ web/                     # SvelteKit static SPA (pnpm package `cloud`); builds t
 ## Database
 
 - Engine: **SurrealDB 2.x** with the embedded **SurrealKV** kv backend (pure Rust, no external server).
-- Default location: `apps/cloud/cloud-surrealkv/` (a directory managed by SurrealKV).
+- Default location: `<home>/mhaol/cloud-surrealkv/` — resolved via `dirs::home_dir()`, so it's OS-aware (`~/mhaol/...` on macOS/Linux, `%USERPROFILE%\mhaol\...` on Windows). The directory is managed by SurrealKV.
 - Namespace: `mhaol`, database: `cloud`.
 - Override path via `DB_PATH` env var, or set `DATA_DIR` to put it under `<DATA_DIR>/cloud-surrealkv/`.
 - The store is created fresh on first boot. There are no schemas or repos defined yet — add tables/queries as features land.
@@ -82,7 +82,7 @@ pnpm build:cloud
 
 - `PORT` — Server port (default: 9898; `pnpm dev:cloud` and `pnpm dev` set it to 9899)
 - `HOST` — Bind address (default: 0.0.0.0; `pnpm dev:cloud` and `pnpm dev` set it to 127.0.0.1)
-- `DB_PATH` — SurrealDB store path (default: `apps/cloud/cloud-surrealkv/`)
+- `DB_PATH` — SurrealDB store path (default: `<home>/mhaol/cloud-surrealkv/`, resolved per-OS via `dirs::home_dir()`)
 - `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-surrealkv/`
 - `SIGNALING_URL` — PartyKit signaling URL (default: hosted instance)
 - `IPFS_SWARM_KEY_FILE` — Path to the IPFS pre-shared swarm key. Default: `<DATA_DIR>/downloads/ipfs/swarm.key` (auto-generated on first boot when missing). All nodes on the same private swarm must share this file byte-for-byte.
@@ -99,7 +99,8 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/libraries/:id` — fetch one library.
 - `PUT /api/libraries/:id` — update the path. The new path is created on disk if missing; duplicates are rejected with `409`.
 - `DELETE /api/libraries/:id` — remove the library record (the on-disk directory is left untouched).
-- `GET /api/libraries/:id/scan` — recursively walk the library directory and return `{ root, total_files, total_size, entries }` where each entry is `{ path, relative_path, size, mime }`. MIME types are resolved by extension via `mime_guess`; the scan response itself is not persisted, but every entry whose mime starts with `audio/`, `video/`, or `image/` is asynchronously added to the embedded IPFS node (recursive pin) and recorded in the `ipfs_pin` table.
+- `GET /api/libraries/:id/scan` — recursively walk the library directory and return `{ root, total_files, total_size, entries }` where each entry is `{ path, relative_path, size, mime }`. MIME types are resolved by extension via `mime_guess`; the scan response itself is not persisted, but every entry whose mime starts with `audio/`, `video/`, or `image/` is asynchronously added to the embedded IPFS node (recursive pin) and recorded in the `ipfs_pin` table. The library's `last_scanned_at` is updated on the record once the walk completes.
+- `GET /api/libraries/:id/pins` — list pins from `ipfs_pin` whose `path` lies under this library's directory. Same shape as `GET /api/ipfs/pins`.
 - `GET /api/ipfs/pins` — list every pin recorded by the cloud (`ipfs_pin` table). Each row is `{ id, cid, path, mime, size, created_at }`. Records are deduplicated by `(cid, path)` so re-scans don't create duplicates.
 - `GET /api/documents` — list documents persisted in SurrealDB (`document` table).
 - `POST /api/documents` — create a document `{ name, author, description? }`. `name` and `author` are required.

@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import classNames from 'classnames';
-	import { librariesService, type ScanResponse } from '$lib/libraries.service';
+	import { librariesService, type ScanResponse, type Library } from '$lib/libraries.service';
+	import type { IpfsPin } from '$lib/ipfs.service';
 	import DirectoryPicker from '../../components/DirectoryPicker.svelte';
 
 	const libsStore = librariesService.state;
+	const SCAN_STALE_MS = 60 * 60 * 1000;
 
 	let pickedDir = $state('');
 	let newSubfolder = $state('');
@@ -14,10 +17,43 @@
 	let scanningId = $state<string | null>(null);
 	let scanResults = $state<Record<string, ScanResponse>>({});
 	let scanErrors = $state<Record<string, string>>({});
+	let libPins = $state<Record<string, IpfsPin[]>>({});
+	let pinsErrors = $state<Record<string, string>>({});
 
-	onMount(() => {
-		librariesService.refresh();
+	onMount(async () => {
+		await librariesService.refresh();
+		const { libraries } = get(libsStore);
+		await Promise.all(libraries.map(handleLibraryOnMount));
 	});
+
+	function isStale(lib: Library): boolean {
+		if (!lib.last_scanned_at) return true;
+		const ts = new Date(lib.last_scanned_at).getTime();
+		if (Number.isNaN(ts)) return true;
+		return Date.now() - ts > SCAN_STALE_MS;
+	}
+
+	async function handleLibraryOnMount(lib: Library) {
+		if (isStale(lib)) {
+			await scan(lib.id);
+		} else {
+			await loadPins(lib.id);
+		}
+	}
+
+	async function loadPins(id: string) {
+		try {
+			const pins = await librariesService.pins(id);
+			libPins = { ...libPins, [id]: pins };
+			const { [id]: _ignored, ...rest } = pinsErrors;
+			pinsErrors = rest;
+		} catch (err) {
+			pinsErrors = {
+				...pinsErrors,
+				[id]: err instanceof Error ? err.message : 'Unknown error'
+			};
+		}
+	}
 
 	function sanitize(value: string): string {
 		// eslint-disable-next-line no-control-regex
@@ -64,6 +100,7 @@
 		try {
 			const result = await librariesService.scan(id);
 			scanResults = { ...scanResults, [id]: result };
+			await Promise.all([librariesService.refresh(), loadPins(id)]);
 		} catch (err) {
 			scanErrors = {
 				...scanErrors,
@@ -196,6 +233,7 @@
 						<tr>
 							<th>Path</th>
 							<th>Created</th>
+							<th>Last scanned</th>
 							<th class="w-24"></th>
 						</tr>
 					</thead>
@@ -204,6 +242,9 @@
 							<tr>
 								<td class="font-mono text-xs break-all">{lib.path}</td>
 								<td class="text-xs text-base-content/60">{formatDate(lib.created_at)}</td>
+								<td class="text-xs text-base-content/60">
+									{lib.last_scanned_at ? formatDate(lib.last_scanned_at) : '—'}
+								</td>
 								<td class="text-right">
 									<div class="flex justify-end gap-1">
 										<button
@@ -223,9 +264,58 @@
 									</div>
 								</td>
 							</tr>
+							{#if pinsErrors[lib.id]}
+								<tr>
+									<td colspan="4" class="bg-base-100">
+										<div class="my-2 alert alert-warning">
+											<span class="text-sm">Pins: {pinsErrors[lib.id]}</span>
+										</div>
+									</td>
+								</tr>
+							{:else if libPins[lib.id]}
+								<tr>
+									<td colspan="4" class="bg-base-100 p-3">
+										<div class="flex flex-col gap-2">
+											<p class="text-xs text-base-content/70">
+												IPFS pins ({libPins[lib.id].length})
+											</p>
+											{#if libPins[lib.id].length === 0}
+												<p class="text-xs text-base-content/60">
+													No pinned media yet for this library.
+												</p>
+											{:else}
+												<div class="max-h-72 overflow-y-auto rounded border border-base-content/10">
+													<table class="table table-xs">
+														<thead class="sticky top-0 bg-base-200">
+															<tr>
+																<th>CID</th>
+																<th>Path</th>
+																<th class="w-32">MIME</th>
+																<th class="w-24 text-right">Size</th>
+															</tr>
+														</thead>
+														<tbody>
+															{#each libPins[lib.id] as pin (pin.id)}
+																<tr>
+																	<td class="font-mono text-xs break-all">{pin.cid}</td>
+																	<td class="font-mono text-xs break-all">{pin.path}</td>
+																	<td class="font-mono text-xs">{pin.mime}</td>
+																	<td class="text-right text-xs">
+																		{formatBytes(pin.size)}
+																	</td>
+																</tr>
+															{/each}
+														</tbody>
+													</table>
+												</div>
+											{/if}
+										</div>
+									</td>
+								</tr>
+							{/if}
 							{#if scanErrors[lib.id]}
 								<tr>
-									<td colspan="3" class="bg-base-100">
+									<td colspan="4" class="bg-base-100">
 										<div class="my-2 alert alert-error">
 											<span class="text-sm">{scanErrors[lib.id]}</span>
 											<button class="btn btn-ghost btn-xs" onclick={() => clearScan(lib.id)}>
@@ -236,7 +326,7 @@
 								</tr>
 							{:else if scanResults[lib.id]}
 								<tr>
-									<td colspan="3" class="bg-base-100 p-3">
+									<td colspan="4" class="bg-base-100 p-3">
 										<div class="flex flex-col gap-2">
 											<div class="flex items-center justify-between gap-2">
 												<p class="text-xs text-base-content/70">

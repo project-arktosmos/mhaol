@@ -88,7 +88,7 @@ Layout:
 
 The cloud frontend has these screens:
 - **Health** (`/`) — polls `/api/cloud/status` every 5 seconds and renders status, latency, uptime, bind, package health, and identities.
-- **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. The form lets you pick an existing directory, or browse to a parent and create a new subfolder; each library is identified by its directory path. Each row has a `Scan` button that walks the directory recursively, reports file size + MIME, and asynchronously pins audio, video, and image files to IPFS.
+- **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. The form lets you pick an existing directory, or browse to a parent and create a new subfolder; each library is identified by its directory path. Each row has a `Scan` button that walks the directory recursively, reports file size + MIME, and asynchronously pins audio, video, and image files to IPFS. The row also shows the IPFS pins (CID, path, MIME, size) recorded for that library, and on page load any library whose `last_scanned_at` is missing or older than 1 hour is rescanned automatically.
 - **IPFS** (`/ipfs`) — reads `/api/ipfs/pins` and lists every pin recorded by library scans (CID, path, MIME, size).
 
 ### Transport Layer

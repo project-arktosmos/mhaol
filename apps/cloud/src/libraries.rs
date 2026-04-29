@@ -19,6 +19,8 @@ pub struct Library {
     pub path: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
+    pub last_scanned_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -27,6 +29,7 @@ pub struct LibraryDto {
     pub path: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub last_scanned_at: Option<DateTime<Utc>>,
 }
 
 impl From<Library> for LibraryDto {
@@ -41,6 +44,7 @@ impl From<Library> for LibraryDto {
             path: lib.path,
             created_at: lib.created_at,
             updated_at: lib.updated_at,
+            last_scanned_at: lib.last_scanned_at,
         }
     }
 }
@@ -60,6 +64,7 @@ pub fn router() -> Router<CloudState> {
         .route("/", get(list).post(create))
         .route("/{id}", put(update).delete(delete).get(get_one))
         .route("/{id}/scan", get(scan))
+        .route("/{id}/pins", get(pins))
 }
 
 fn ensure_dir(path: &std::path::Path) -> Result<(), std::io::Error> {
@@ -144,6 +149,7 @@ async fn create(
         path: normalized,
         created_at: now,
         updated_at: now,
+        last_scanned_at: None,
     };
 
     let created: Option<Library> = state
@@ -313,10 +319,49 @@ async fn scan(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("scan task failed: {e}")))?;
 
+    let mut updated = lib.clone();
+    updated.id = None;
+    updated.last_scanned_at = Some(Utc::now());
+    if let Err(e) = state
+        .db
+        .update::<Option<Library>>((TABLE, id.as_str()))
+        .content(updated)
+        .await
+    {
+        tracing::warn!("failed to record last_scanned_at for library {id}: {e}");
+    }
+
     #[cfg(not(target_os = "android"))]
     schedule_audio_pins(&state, &response.entries);
 
     Ok(Json(response))
+}
+
+async fn pins(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<crate::ipfs_pins::IpfsPinDto>>, (StatusCode, Json<serde_json::Value>)> {
+    let lib: Option<Library> = state
+        .db
+        .select((TABLE, id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let lib = lib.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "library not found"))?;
+
+    let all: Vec<crate::ipfs_pins::IpfsPin> = state
+        .db
+        .select(crate::ipfs_pins::TABLE)
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+
+    let prefix = lib.path;
+    let mut filtered: Vec<crate::ipfs_pins::IpfsPinDto> = all
+        .into_iter()
+        .filter(|p| p.path.starts_with(&prefix))
+        .map(Into::into)
+        .collect();
+    filtered.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(Json(filtered))
 }
 
 #[cfg(not(target_os = "android"))]
