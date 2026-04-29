@@ -62,6 +62,17 @@
 		files = [...files, { type: 'torrent magnet', value: t.magnetLink, title: t.title }];
 	}
 
+	async function pickResultTorrent(
+		result: SearchResultItem,
+		index: number,
+		torrent: TorrentResultItem
+	) {
+		if (selectedResultIndex !== index) {
+			await applyResult(result, index);
+		}
+		addTorrentAsFile(torrent);
+	}
+
 	function resetForm() {
 		title = '';
 		description = '';
@@ -614,7 +625,7 @@
 												'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-200',
 												{ 'opacity-60': addedHashes.has(torrent.magnetLink) }
 											)}
-											onclick={() => addTorrentAsFile(torrent)}
+											onclick={() => pickResultTorrent(result, i, torrent)}
 											title={torrent.title}
 										>
 											<span class="font-medium">{torrent.quality ?? '—'}</span>
