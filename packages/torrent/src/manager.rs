@@ -376,19 +376,26 @@ impl TorrentManager {
             let info_hash = item.info_hash.to_string();
             let name = item.name.unwrap_or_else(|| "Unknown".to_string());
 
-            // Look up tracking info by info_hash, create if missing
-            let tracking = match self.get_tracking_info(&info_hash) {
-                Some(t) => t,
-                None => {
-                    let output_path = self.download_path().to_string_lossy().to_string();
-                    let file_path = format!("{}/{}", output_path, name);
-                    let new_tracking = TrackingInfo {
-                        output_path: Some(file_path),
-                    };
-                    self.set_tracking_info(info_hash.clone(), new_tracking.clone());
-                    new_tracking
-                }
-            };
+            // Always rebuild output_path from the resolved item.name. The cached
+            // path may have been computed from the magnet's `dn=` display name,
+            // which can differ from the actual torrent metadata name once rqbit
+            // resolves it (e.g. magnet dn "The Dark Knight (2008) 720p ..." vs
+            // on-disk "The Dark Knight (2008)"). Preserve any custom download
+            // directory the user supplied at add-time by taking the parent of
+            // the cached path, falling back to the configured default.
+            let cached = self.get_tracking_info(&info_hash);
+            let download_dir: PathBuf = cached
+                .as_ref()
+                .and_then(|t| t.output_path.as_ref())
+                .and_then(|p| std::path::Path::new(p).parent().map(|p| p.to_path_buf()))
+                .unwrap_or_else(|| self.download_path());
+            let file_path = download_dir.join(&name).to_string_lossy().to_string();
+            self.set_tracking_info(
+                info_hash.clone(),
+                TrackingInfo {
+                    output_path: Some(file_path.clone()),
+                },
+            );
 
             torrents.push(TorrentInfo {
                 id,
@@ -403,7 +410,7 @@ impl TorrentManager {
                 state: torrent_state,
                 added_at: get_unix_timestamp(),
                 eta,
-                output_path: tracking.output_path,
+                output_path: Some(file_path),
             });
         }
 
