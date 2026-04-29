@@ -9,6 +9,12 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
 	{
+		"label": "Catalog",
+		"href": "/catalog",
+		"hasOwnPage": true,
+		"children": []
+	},
+	{
 		"label": "Database",
 		"href": "/database",
 		"hasOwnPage": true,

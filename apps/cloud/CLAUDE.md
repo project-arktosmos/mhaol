@@ -20,6 +20,7 @@ src/
 ├── database.rs          # /api/database/tables{,/:table} — read-only SurrealDB explorer (lists tables, paginates records)
 ├── ipfs_pins.rs         # /api/ipfs/pins — lists pins recorded when libraries are scanned; exposes record_pin() used by the scan handler
 ├── fs_browse.rs         # /api/fs/browse — list subdirectories under a path (defaults to home), used by the WebUI directory picker
+├── catalog.rs           # /api/catalog/* — proxies popular items + genres for tmdb / musicbrainz / openlibrary / retroachievements
 └── frontend.rs          # rust-embed wrapper that serves web/dist-static/
 
 web/                     # SvelteKit static SPA (pnpm package `cloud`); builds to web/dist-static/
@@ -110,3 +111,6 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/database/tables` — list every table in the cloud SurrealDB database with its row count. Returns `{ namespace, database, tables: [{ name, record_count }] }`. Used by the embedded `/database` explorer.
 - `GET /api/database/tables/:table?limit=<n>&offset=<n>` — paginate records in a single table. Table names are validated as `[A-Za-z0-9_]{1,64}`. `limit` defaults to 100 (max 1000); `offset` defaults to 0. Returns `{ table, limit, offset, total, records }` where each record is JSON with the SurrealDB `id` flattened to a `<table>:<id>` string.
 - `GET /api/fs/browse?path=<optional>` — list subdirectories under `path` (defaults to the system home directory). Returns `{ path, parent, home, separator, roots, entries }` where `entries` only contains directories (hidden dot-folders are skipped). On Windows, `roots` lists available drive letters.
+- `GET /api/catalog/sources` — list addons supported by the catalog browser. Each entry is `{ id, label, types: [{ id, label }], filterLabel, hasFilter }`. Currently `tmdb` (movies + tv shows, genre filter), `musicbrainz` (albums, genre filter), `openlibrary` (books, subject filter), and `retroachievements` (games, console filter).
+- `GET /api/catalog/:addon/popular?type=<>&filter=<>&page=<>` — returns `{ items: [{ id, title, year, description, posterUrl, backdropUrl }], page, totalPages }` for the given addon. `type` is required for tmdb (`movie` or `tv`) and ignored for others. `filter` is the genre/subject/console id from `/genres`. TMDB and RetroAchievements need `TMDB_API_KEY` and `RA_USERNAME` + `RA_API_KEY` respectively; missing keys return `503`.
+- `GET /api/catalog/:addon/genres?type=<>` — returns `[{ id, name }]` for the addon's filter dimension. TMDB requires `type=movie|tv` (queries `/genre/{type}/list` upstream); MusicBrainz/OpenLibrary/RetroAchievements return a static curated list (genres / subjects / console ids).

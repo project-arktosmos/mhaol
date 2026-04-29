@@ -1,3 +1,4 @@
+mod catalog;
 mod cloud_status;
 mod database;
 mod db;
@@ -207,6 +208,7 @@ async fn main() {
         .nest("/api/ipfs", ipfs_pins::router())
         .nest("/api/fs", fs_browse::router())
         .nest("/api/search", search::router())
+        .nest("/api/catalog", catalog::router())
         .fallback(frontend::serve_frontend)
         .with_state(state)
         .layer(cors);
