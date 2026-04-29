@@ -19,6 +19,7 @@ use state::CloudState;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::cors::{Any, CorsLayer};
 
 #[cfg(not(target_os = "android"))]
 use mhaol_ed2k::{Ed2kConfig, Ed2kManager};
@@ -192,6 +193,11 @@ async fn main() {
         ipfs_manager,
     );
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
         .nest("/api/health", health::router())
         .nest("/api/cloud", cloud_status::router())
@@ -202,7 +208,8 @@ async fn main() {
         .nest("/api/fs", fs_browse::router())
         .nest("/api/search", search::router())
         .fallback(frontend::serve_frontend)
-        .with_state(state);
+        .with_state(state)
+        .layer(cors);
 
     let addr = format!("{}:{}", host, port);
     let listener = TcpListener::bind(&addr)
