@@ -52,7 +52,25 @@
 		</p>
 	{/if}
 	{#if tableFiles.length > 0}
-		<div class="card-body p-0">
+		<details class="group border-t border-base-content/10">
+			<summary
+				class="flex cursor-pointer items-center justify-between px-4 py-2 text-xs font-semibold text-base-content/70 hover:bg-base-300"
+			>
+				<span>Files ({tableFiles.length})</span>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="h-3 w-3 transition-transform group-open:rotate-180"
+					aria-hidden="true"
+				>
+					<polyline points="6 9 12 15 18 9" />
+				</svg>
+			</summary>
 			<table class="table w-full table-fixed table-sm">
 				<tbody>
 					{#each tableFiles as file, i (i)}
@@ -68,7 +86,7 @@
 					{/each}
 				</tbody>
 			</table>
-		</div>
+		</details>
 	{/if}
 	{#if magnetFiles.length > 0}
 		<footer class="flex flex-wrap items-center gap-2 border-t border-base-content/10 px-4 py-3">
