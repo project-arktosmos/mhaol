@@ -11,8 +11,13 @@ rust-ipfs = "0.14"
 # We re-declare it here with the `sha2` feature so cargo's feature unification
 # turns the variant on for the rust-ipfs build.
 multihash-codetable = { version = "0.1", default-features = false, features = ["sha2"] }
+# Pull libp2p with the `pnet` and `tcp`+`tokio`+`noise`+`yamux`+`dns` features
+# enabled. Cargo unifies these with rust-ipfs's libp2p dep so the
+# `libp2p::pnet` re-export becomes available without a version mismatch.
+libp2p = { version = "0.54", default-features = false, features = ["pnet", "tcp", "tokio", "noise", "yamux", "dns"] }
 cid = "0.11"
 bytes = "1"
+rand = "0.8"
 futures = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

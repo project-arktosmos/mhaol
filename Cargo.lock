@@ -5379,6 +5379,7 @@ dependencies = [
  "libp2p-metrics",
  "libp2p-noise",
  "libp2p-ping",
+ "libp2p-pnet",
  "libp2p-quic",
  "libp2p-relay",
  "libp2p-rendezvous",
@@ -5709,6 +5710,20 @@ dependencies = [
  "tracing",
  "void",
  "web-time",
+]
+
+[[package]]
+name = "libp2p-pnet"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32241732fe6654c1599461c4df70fc906a94f27aea4e19c5cfbd8a47497f0b60"
+dependencies = [
+ "futures",
+ "pin-project",
+ "rand 0.8.5",
+ "salsa20",
+ "sha3 0.10.8",
+ "tracing",
 ]
 
 [[package]]
@@ -6578,9 +6593,11 @@ dependencies = [
  "cid",
  "futures",
  "futures-util",
+ "libp2p",
  "log",
  "multihash-codetable 0.1.4",
  "parking_lot",
+ "rand 0.8.5",
  "rust-ipfs",
  "serde",
  "serde_json",

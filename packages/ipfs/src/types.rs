@@ -38,6 +38,12 @@ pub struct IpfsStats {
     pub pinned_count: u32,
     pub repo_size_bytes: u64,
     pub listen_addrs: Vec<String>,
+    /// `true` when the node is bound to a private swarm via a pre-shared key.
+    pub private_network: bool,
+    /// Hex fingerprint of the active pre-shared key (or `None` for public
+    /// swarms). Same fingerprint algorithm as go-libp2p so operators can
+    /// confirm two nodes are on the same network without dumping the key.
+    pub swarm_key_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -91,6 +97,8 @@ mod tests {
             pinned_count: 0,
             repo_size_bytes: 1024,
             listen_addrs: vec!["/ip4/127.0.0.1/tcp/4001".to_string()],
+            private_network: true,
+            swarm_key_fingerprint: Some("aabbccdd".to_string()),
         };
         let json = serde_json::to_string(&s).unwrap();
         let back: IpfsStats = serde_json::from_str(&json).unwrap();

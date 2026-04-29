@@ -4,6 +4,11 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use futures::StreamExt;
+use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::transport::{Boxed, OrTransport};
+use libp2p::core::upgrade;
+use libp2p::pnet::{PnetConfig, PreSharedKey};
+use libp2p::{noise, tcp, yamux, Transport as Libp2pTransport};
 use rust_ipfs::libp2p::Multiaddr;
 use rust_ipfs::{Ipfs, IpfsPath, UninitializedIpfsDefault};
 
@@ -11,7 +16,7 @@ use crate::config::{IpfsConfig, DEFAULT_BOOTSTRAP};
 use crate::types::{
     AddIpfsRequest, IpfsFileInfo, IpfsPeerInfo, IpfsState, IpfsStats,
 };
-use crate::util::{get_unix_timestamp, path_size_bytes};
+use crate::util::{get_unix_timestamp, path_size_bytes, swarm_key_fingerprint};
 
 /// Embedded IPFS node manager. Wraps a `rust_ipfs::Ipfs` handle so the
 /// rest of the app can add files, pin/unpin CIDs, and query peers without
@@ -29,6 +34,9 @@ pub struct IpfsManager {
     /// hit the IPFS task channel.
     peer_id: RwLock<Option<String>>,
     listen_addrs: RwLock<Vec<String>>,
+    /// Cached PSK fingerprint so the sync stats endpoint can return it
+    /// without re-parsing the swarm key on every poll.
+    swarm_key_fingerprint: RwLock<Option<String>>,
 }
 
 impl IpfsManager {
@@ -40,7 +48,16 @@ impl IpfsManager {
             files: RwLock::new(HashMap::new()),
             peer_id: RwLock::new(None),
             listen_addrs: RwLock::new(Vec::new()),
+            swarm_key_fingerprint: RwLock::new(None),
         }
+    }
+
+    pub fn is_private_network(&self) -> bool {
+        self.config.read().is_private()
+    }
+
+    pub fn swarm_key_fingerprint(&self) -> Option<String> {
+        self.swarm_key_fingerprint.read().clone()
     }
 
     pub fn state(&self) -> IpfsState {
@@ -77,6 +94,10 @@ impl IpfsManager {
 
     /// Build, configure, and start an IPFS node from `config`. Idempotent —
     /// calling twice with a live node first shuts the previous one down.
+    ///
+    /// When `config.swarm_key` is set the node joins a private swarm: the
+    /// transport stack is replaced with TCP+pnet+noise+yamux, the public
+    /// bootstrap list is skipped, and `bootstrap_on_start` is ignored.
     pub async fn initialize(&self, config: IpfsConfig) -> Result<()> {
         if self.is_initialized() {
             self.shutdown().await;
@@ -84,6 +105,25 @@ impl IpfsManager {
 
         *self.state.write() = IpfsState::Starting;
         *self.config.write() = config.clone();
+
+        // Parse and cache the swarm-key fingerprint up front so a malformed
+        // key fails fast with a clear error instead of crashing inside the
+        // libp2p task.
+        let private_psk = match config.swarm_key.as_deref() {
+            Some(key) => {
+                let psk = PreSharedKey::from_str(key).map_err(|e| {
+                    *self.state.write() = IpfsState::Error;
+                    anyhow!("Invalid swarm key: {}", e)
+                })?;
+                let fingerprint = swarm_key_fingerprint(key).ok();
+                *self.swarm_key_fingerprint.write() = fingerprint;
+                Some(psk)
+            }
+            None => {
+                *self.swarm_key_fingerprint.write() = None;
+                None
+            }
+        };
 
         let mut builder = UninitializedIpfsDefault::new()
             .with_default()
@@ -105,27 +145,44 @@ impl IpfsManager {
             builder = builder.add_listening_addr(listen);
         }
 
-        let bootstrap_iter = DEFAULT_BOOTSTRAP
-            .iter()
-            .copied()
-            .chain(config.extra_bootstrap.iter().map(|s| s.as_str()));
-        for addr in bootstrap_iter {
-            if let Ok(ma) = Multiaddr::from_str(addr) {
-                builder = builder.add_bootstrap(ma);
-            } else {
-                log::warn!("[ipfs] skipping invalid bootstrap multiaddr: {}", addr);
+        // Public-swarm bootstrap is meaningless on a private network — those
+        // peers don't have our PSK and the connection would fail anyway.
+        if private_psk.is_none() {
+            let bootstrap_iter = DEFAULT_BOOTSTRAP
+                .iter()
+                .copied()
+                .chain(config.extra_bootstrap.iter().map(|s| s.as_str()));
+            for addr in bootstrap_iter {
+                if let Ok(ma) = Multiaddr::from_str(addr) {
+                    builder = builder.add_bootstrap(ma);
+                } else {
+                    log::warn!("[ipfs] skipping invalid bootstrap multiaddr: {}", addr);
+                }
+            }
+        } else {
+            // Private network: only honour user-supplied bootstrap entries.
+            for addr in config.extra_bootstrap.iter() {
+                if let Ok(ma) = Multiaddr::from_str(addr) {
+                    builder = builder.add_bootstrap(ma);
+                } else {
+                    log::warn!("[ipfs] skipping invalid bootstrap multiaddr: {}", addr);
+                }
             }
         }
 
-        let ipfs = builder
-            .start()
-            .await
-            .map_err(|e| {
-                *self.state.write() = IpfsState::Error;
-                anyhow!("Failed to start IPFS node: {}", e)
-            })?;
+        if let Some(psk) = private_psk {
+            builder = builder.with_custom_transport(Box::new(move |keypair, relay| {
+                build_pnet_transport(psk, keypair, relay)
+            }));
+        }
 
-        if config.bootstrap_on_start {
+        let ipfs = builder.start().await.map_err(|e| {
+            *self.state.write() = IpfsState::Error;
+            anyhow!("Failed to start IPFS node: {}", e)
+        })?;
+
+        // Public bootstrap only makes sense for public swarms.
+        if config.bootstrap_on_start && config.swarm_key.is_none() {
             if let Err(e) = ipfs.bootstrap().await {
                 log::warn!("[ipfs] bootstrap failed: {}", e);
             }
@@ -158,6 +215,7 @@ impl IpfsManager {
         *self.state.write() = IpfsState::Stopped;
         *self.peer_id.write() = None;
         self.listen_addrs.write().clear();
+        *self.swarm_key_fingerprint.write() = None;
     }
 
     fn handle(&self) -> Option<Ipfs> {
@@ -306,8 +364,41 @@ impl IpfsManager {
             pinned_count: self.pinned_count(),
             repo_size_bytes: self.repo_size_bytes(),
             listen_addrs: self.listen_addrs(),
+            private_network: self.is_private_network(),
+            swarm_key_fingerprint: self.swarm_key_fingerprint(),
         }
     }
+}
+
+/// Build the libp2p transport pipeline for a private swarm: TCP -> pnet
+/// handshake -> noise -> yamux. Returned as the `Boxed` transport rust-ipfs
+/// expects from `with_custom_transport`. Relay is currently not supported on
+/// private networks (the public relay nodes don't carry our PSK), so the
+/// `relay` argument is intentionally ignored.
+fn build_pnet_transport(
+    psk: PreSharedKey,
+    keypair: &libp2p::identity::Keypair,
+    _relay: Option<libp2p::relay::client::Transport>,
+) -> std::io::Result<Boxed<(libp2p::PeerId, StreamMuxerBox)>> {
+    // Two independent TCP instances: one feeds the DNS resolver (for
+    // `/dns4/...` addresses), the other handles raw `/ip4/.../tcp/...`
+    // addresses directly. `tcp::tokio::Transport` is not `Clone`, so we
+    // construct it twice instead.
+    let tcp_for_dns = tcp::tokio::Transport::new(tcp::Config::new().nodelay(true));
+    let tcp_raw = tcp::tokio::Transport::new(tcp::Config::new().nodelay(true));
+    let dns = libp2p::dns::tokio::Transport::system(tcp_for_dns)
+        .map_err(std::io::Error::other)?;
+    let base = OrTransport::new(dns, tcp_raw);
+
+    let pnet_cfg = PnetConfig::new(psk);
+    let noise_cfg = noise::Config::new(keypair).map_err(std::io::Error::other)?;
+
+    Ok(base
+        .and_then(move |socket, _| pnet_cfg.handshake(socket))
+        .upgrade(upgrade::Version::V1)
+        .authenticate(noise_cfg)
+        .multiplex(yamux::Config::default())
+        .boxed())
 }
 
 impl Default for IpfsManager {
@@ -396,6 +487,23 @@ mod tests {
         assert_eq!(s.state, IpfsState::Stopped);
         assert_eq!(s.connected_peers, 0);
         assert_eq!(s.pinned_count, 0);
+        assert!(!s.private_network);
+        assert!(s.swarm_key_fingerprint.is_none());
+    }
+
+    #[tokio::test]
+    async fn initialize_rejects_invalid_swarm_key() {
+        let mgr = IpfsManager::new();
+        let res = mgr
+            .initialize(IpfsConfig {
+                swarm_key: Some("not a key".to_string()),
+                ..IpfsConfig::default()
+            })
+            .await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("swarm key"));
+        assert_eq!(mgr.state(), IpfsState::Error);
+        assert!(mgr.swarm_key_fingerprint().is_none());
     }
 
     #[tokio::test]

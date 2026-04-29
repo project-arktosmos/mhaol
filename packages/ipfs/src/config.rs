@@ -28,6 +28,12 @@ pub struct IpfsConfig {
     pub extra_bootstrap: Vec<String>,
     /// Display name advertised over Identify.
     pub agent_version: String,
+    /// Pre-shared swarm key (go-ipfs `swarm.key` file format). When set, the
+    /// node joins a private network only reachable by peers using the same
+    /// key, the public bootstrap list is ignored, and the transport stack is
+    /// constrained to TCP+pnet+noise+yamux (no QUIC/WebSocket). When `None`,
+    /// the node behaves as a public IPFS node.
+    pub swarm_key: Option<String>,
 }
 
 impl Default for IpfsConfig {
@@ -40,7 +46,16 @@ impl Default for IpfsConfig {
             bootstrap_on_start: true,
             extra_bootstrap: vec![],
             agent_version: format!("mhaol-ipfs/{}", env!("CARGO_PKG_VERSION")),
+            swarm_key: None,
         }
+    }
+}
+
+impl IpfsConfig {
+    /// Convenience: returns true when the node is configured for a private
+    /// swarm (i.e. has a swarm key).
+    pub fn is_private(&self) -> bool {
+        self.swarm_key.is_some()
     }
 }
 
@@ -66,6 +81,16 @@ mod tests {
         assert!(c.extra_bootstrap.is_empty());
         assert!(c.agent_version.starts_with("mhaol-ipfs/"));
         assert_eq!(c.repo_path, PathBuf::new());
+        assert!(c.swarm_key.is_none());
+        assert!(!c.is_private());
+    }
+
+    #[test]
+    fn is_private_reflects_swarm_key() {
+        let mut c = IpfsConfig::default();
+        assert!(!c.is_private());
+        c.swarm_key = Some("anything".to_string());
+        assert!(c.is_private());
     }
 
     #[test]

@@ -9,6 +9,10 @@ pub use manager::IpfsManager;
 pub use types::{
     AddIpfsRequest, IpfsFileInfo, IpfsPeerInfo, IpfsState, IpfsStats,
 };
+pub use util::{
+    ensure_swarm_key, generate_swarm_key, load_swarm_key, save_swarm_key,
+    swarm_key_fingerprint,
+};
 
 #[cfg(test)]
 mod tests {
