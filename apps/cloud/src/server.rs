@@ -10,6 +10,7 @@ mod ipfs_pins;
 mod libraries;
 mod search;
 mod state;
+mod torrent;
 
 use axum::Router;
 use mhaol_identity::IdentityManager;
@@ -209,6 +210,7 @@ async fn main() {
         .nest("/api/fs", fs_browse::router())
         .nest("/api/search", search::router())
         .nest("/api/catalog", catalog::router())
+        .nest("/api/torrent", torrent::router())
         .fallback(frontend::serve_frontend)
         .with_state(state)
         .layer(cors);
