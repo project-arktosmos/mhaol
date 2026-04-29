@@ -21,7 +21,7 @@ On non-Android targets, the shell also spawns an embedded yt-dlp HTTP server (`m
 - `/` — landing
 - `/clouds` — cloud connection setup
 - `/documents` — document browser
-- `/youtube`, `/youtube/[id]` — YouTube browse + detail. Mirrors the frontend's `/media/youtube` view; uses the embedded yt-dlp server for `/api/ytdl/*` and the node for `/api/youtube/*` channels/library state.
+- `/youtube` — Self-contained yt-dlp UI. Talks **directly** to the embedded yt-dlp server via plain `fetch('/api/ytdl/...')`; does **not** use `ui-lib`'s transport layer or `youtubeService`/`youtubeLibraryService` (those depend on node-only endpoints). Paste a URL → fetch info → queue audio/video/both. Live progress via SSE on `/api/ytdl/downloads/events`.
 
 ## Running
 

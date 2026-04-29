@@ -1,522 +1,323 @@
 <script lang="ts">
-	import { onMount, getContext } from 'svelte';
-	import classNames from 'classnames';
-	import { fetchRaw } from 'ui-lib/transport/fetch-helpers';
-	import Portal from 'ui-lib/components/core/Portal.svelte';
-	import { MEDIA_BAR_KEY, type MediaBarContext } from 'ui-lib/types/media-bar.type';
+  import { onMount, onDestroy } from "svelte";
+  import classNames from "classnames";
+  import type {
+    YouTubeDownloadProgress,
+    YouTubeVideoInfo,
+    DownloadMode,
+  } from "addons/youtube/types";
+  import { extractVideoId } from "addons/youtube/types";
 
-	const mediaBar = getContext<MediaBarContext>(MEDIA_BAR_KEY);
-	mediaBar.configure({ title: 'YouTube' });
-	import { apiUrl } from 'ui-lib/lib/api-base';
-	import { youtubeLibraryService } from 'ui-lib/services/youtube-library.service';
-	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	import { youtubeService } from 'ui-lib/services/youtube.service';
-	import { youtubeSearchService } from 'ui-lib/services/youtube-search.service';
-	import type {
-		YouTubeDownloadProgress,
-		YouTubeChannelMeta,
-		YouTubeRssFeedResponse
-	} from 'ui-lib/types/youtube.type';
-	import { youTubeCardAdapter } from 'ui-lib/adapters/classes/youtube-card.adapter';
-	import type { LibraryCardItem } from 'ui-lib/types/library.type';
-	import type { YouTubeSearchChannelItem } from 'ui-lib/types/youtube-search.type';
-	import LibraryContentGrid from 'ui-lib/components/libraries/LibraryContentGrid.svelte';
-	import YouTubeSearchInput from 'ui-lib/components/youtube-search/YouTubeSearchInput.svelte';
-	import YouTubeChannelCard from 'ui-lib/components/youtube-search/YouTubeChannelCard.svelte';
-	import { favoritesService } from 'ui-lib/services/favorites.service';
-	import { pinsService } from 'ui-lib/services/pins.service';
+  let url = $state("");
+  let info = $state<YouTubeVideoInfo | null>(null);
+  let infoLoading = $state(false);
+  let infoError = $state<string | null>(null);
+  let downloads = $state<YouTubeDownloadProgress[]>([]);
+  let queueing = $state<DownloadMode | null>(null);
+  let queueError = $state<string | null>(null);
+  let connected = $state(false);
 
-	const libState = youtubeLibraryService.state;
-	const ytState = youtubeService.state;
-	const searchState = youtubeSearchService.state;
+  let sse: EventSource | null = null;
 
-	interface YouTubeChannel {
-		id: string;
-		handle: string;
-		name: string;
-		url: string;
-		subscriber_text: string | null;
-		image_url: string | null;
-		created_at: string;
-		updated_at: string;
-	}
+  async function fetchInfo() {
+    if (!url.trim()) return;
+    infoLoading = true;
+    infoError = null;
+    info = null;
+    try {
+      const res = await fetch(
+        `/api/ytdl/info/video?url=${encodeURIComponent(url.trim())}`,
+      );
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `HTTP ${res.status}`);
+      }
+      info = (await res.json()) as YouTubeVideoInfo;
+    } catch (e) {
+      infoError = e instanceof Error ? e.message : String(e);
+    } finally {
+      infoLoading = false;
+    }
+  }
 
-	let dbChannels: YouTubeChannel[] = $state([]);
-	let channelsLoading = $state(true);
-	let channelMeta: Record<string, YouTubeChannelMeta> = $state({});
+  async function queueDownload(mode: DownloadMode) {
+    if (!info) return;
+    queueing = mode;
+    queueError = null;
+    try {
+      const res = await fetch("/api/ytdl/downloads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: url.trim(),
+          videoId: info.videoId,
+          title: info.title,
+          mode,
+          thumbnailUrl: info.thumbnailUrl,
+          durationSeconds: info.duration,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `HTTP ${res.status}`);
+      }
+    } catch (e) {
+      queueError = e instanceof Error ? e.message : String(e);
+    } finally {
+      queueing = null;
+    }
+  }
 
-	const CHANNEL_ROWS_INCREMENT = 3;
-	let channelColumns = $state(4);
-	let channelVisibleRows = $state(1);
-	let channelGridEl: HTMLDivElement | undefined = $state();
+  async function cancelDownload(id: string) {
+    try {
+      await fetch(`/api/ytdl/downloads/${id}`, { method: "DELETE" });
+    } catch {
+      // ignore — SSE will reconcile
+    }
+  }
 
-	let channelMaxSlots = $derived(channelColumns * channelVisibleRows);
-	let channelHasMore = $derived(dbChannels.length > channelMaxSlots);
-	let channelIsExpanded = $derived(channelVisibleRows > 1);
-	let visibleChannels = $derived(
-		channelHasMore ? dbChannels.slice(0, channelMaxSlots - 1) : dbChannels.slice(0, channelMaxSlots)
-	);
-	let channelRemaining = $derived(dbChannels.length - visibleChannels.length);
+  async function clearCompleted() {
+    try {
+      await fetch("/api/ytdl/downloads/completed", { method: "DELETE" });
+      downloads = downloads.filter(
+        (d) => !["completed", "failed", "cancelled"].includes(d.state),
+      );
+    } catch {
+      // ignore
+    }
+  }
 
-	async function fetchChannels() {
-		channelsLoading = true;
-		try {
-			const res = await fetchRaw('/api/youtube/channels');
-			if (!res.ok) return;
-			const data: YouTubeChannel[] = await res.json();
-			dbChannels = data;
-			fetchAllChannelMeta(data);
-		} catch {
-			// silent on home page
-		} finally {
-			channelsLoading = false;
-		}
-	}
+  function upsertDownload(progress: YouTubeDownloadProgress) {
+    const idx = downloads.findIndex((d) => d.downloadId === progress.downloadId);
+    if (idx >= 0) {
+      downloads[idx] = progress;
+      downloads = downloads;
+    } else {
+      downloads = [progress, ...downloads];
+    }
+  }
 
-	async function fetchAllChannelMeta(rows: YouTubeChannel[]) {
-		const initial: Record<string, YouTubeChannelMeta> = {};
-		const needsFetch: YouTubeChannel[] = [];
-		for (const channel of rows) {
-			if (channel.image_url) {
-				initial[channel.handle] = {
-					channelId: channel.id,
-					avatar: channel.image_url!,
-					description: '',
-					subscriberText: channel.subscriber_text ?? ''
-				};
-			} else {
-				needsFetch.push(channel);
-			}
-		}
-		channelMeta = { ...channelMeta, ...initial };
+  function connectSSE() {
+    sse = new EventSource("/api/ytdl/downloads/events");
+    sse.addEventListener("connected", () => {
+      connected = true;
+    });
+    sse.addEventListener("progress", (e) => {
+      try {
+        upsertDownload(JSON.parse(e.data));
+      } catch {
+        // ignore malformed event
+      }
+    });
+    sse.addEventListener("error", () => {
+      connected = false;
+    });
+  }
 
-		for (const channel of needsFetch) {
-			if (channelMeta[channel.handle]) continue;
-			try {
-				const res = await fetchRaw(`/api/youtube/channel-meta?handle=${channel.handle}`);
-				if (!res.ok) continue;
-				const data: YouTubeChannelMeta = await res.json();
-				channelMeta = { ...channelMeta, [channel.handle]: data };
-			} catch {
-				// silent
-			}
-		}
-	}
+  function fmtBytes(n: number): string {
+    if (!n) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    let i = 0;
+    let v = n;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+  }
 
-	interface ChannelFeed {
-		channel: YouTubeChannel;
-		videos: LibraryCardItem[];
-		loading: boolean;
-	}
+  function fmtDuration(secs: number | null): string {
+    if (!secs) return "";
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.floor(secs % 60);
+    return h > 0
+      ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+      : `${m}:${String(s).padStart(2, "0")}`;
+  }
 
-	let expandedFeeds: ChannelFeed[] = $state([]);
+  const ACTIVE_STATES = ["pending", "fetching", "downloading", "muxing"];
+  let activeDownloads = $derived(
+    downloads.filter((d) => ACTIVE_STATES.includes(d.state)),
+  );
+  let finishedDownloads = $derived(
+    downloads.filter((d) => !ACTIVE_STATES.includes(d.state)),
+  );
+  let canFetchInfo = $derived(!!extractVideoId(url));
 
-	async function toggleChannelFeed(channel: YouTubeChannel) {
-		const idx = expandedFeeds.findIndex((f) => f.channel.id === channel.id);
-		if (idx >= 0) {
-			expandedFeeds = expandedFeeds.filter((_, i) => i !== idx);
-			return;
-		}
+  onMount(() => {
+    connectSSE();
+  });
 
-		const feed: ChannelFeed = { channel, videos: [], loading: true };
-		expandedFeeds = [...expandedFeeds, feed];
-
-		try {
-			const res = await fetchRaw(`/api/youtube/channel-rss?handle=${channel.handle}`);
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const data: YouTubeRssFeedResponse = await res.json();
-			expandedFeeds = expandedFeeds.map((f) =>
-				f.channel.id === channel.id
-					? {
-							...f,
-							videos: data.videos.map((v) => youTubeCardAdapter.fromRssVideo(v)),
-							loading: false
-						}
-					: f
-			);
-		} catch {
-			expandedFeeds = expandedFeeds.map((f) =>
-				f.channel.id === channel.id ? { ...f, loading: false } : f
-			);
-		}
-	}
-
-	function getYoutubeItemHref(item: LibraryCardItem): string {
-		return `${base}/youtube/${item.videoId}`;
-	}
-
-	function handleFeedVideoClick(video: LibraryCardItem) {
-		goto(getYoutubeItemHref(video));
-	}
-
-	$effect(() => {
-		if (!channelGridEl) return;
-		function updateColumns() {
-			if (!channelGridEl) return;
-			const style = getComputedStyle(channelGridEl);
-			const cols = style.getPropertyValue('grid-template-columns').split(' ').length;
-			channelColumns = cols;
-		}
-		const observer = new ResizeObserver(updateColumns);
-		observer.observe(channelGridEl);
-		updateColumns();
-		return () => observer.disconnect();
-	});
-
-	const ACTIVE_STATES = ['pending', 'fetching', 'downloading', 'muxing'];
-
-	const favState = favoritesService.state;
-	const pinState = pinsService.state;
-
-	let favoritedYtIds = $derived(
-		new Set($favState.items.filter((f) => f.service === 'youtube').map((f) => f.serviceId))
-	);
-	let pinnedYtIds = $derived(
-		new Set($pinState.items.filter((p) => p.service === 'youtube').map((p) => p.serviceId))
-	);
-
-	let cardItems = $derived(
-		$libState.content.map(youTubeCardAdapter.fromContent.bind(youTubeCardAdapter))
-	);
-
-	let pinnedItems = $derived(
-		cardItems.filter((item) => pinnedYtIds.has(item.videoId))
-	);
-
-	let favoriteItems = $derived(
-		cardItems.filter((item) => favoritedYtIds.has(item.videoId))
-	);
-
-	let videoItems = $derived(cardItems.filter((item) => item.hasVideo));
-	let musicItems = $derived(cardItems.filter((item) => item.hasAudio));
-
-	let activeDownloadMap = $derived(
-		new Map<string, YouTubeDownloadProgress>(
-			$ytState.downloads.filter((d) => ACTIVE_STATES.includes(d.state)).map((d) => [d.videoId, d])
-		)
-	);
-
-	let isSearchMode = $derived(
-		$searchState.searching || $searchState.results.length > 0 || !!$searchState.query
-	);
-
-	let localSearchResults = $derived(
-		isSearchMode && $searchState.query
-			? cardItems.filter((item) => {
-					const q = $searchState.query.toLowerCase();
-					return (
-						item.title.toLowerCase().includes(q) ||
-						(item.channelName?.toLowerCase().includes(q) ?? false)
-					);
-				})
-			: []
-	);
-
-	let youtubeSearchCardItems = $derived(
-		$searchState.results.map(youTubeCardAdapter.fromSearchItem.bind(youTubeCardAdapter))
-	);
-
-	onMount(() => {
-		youtubeService.initialize();
-		youtubeLibraryService.initialize();
-		fetchChannels();
-	});
-
-	function handleItemClick(item: LibraryCardItem) {
-		goto(getYoutubeItemHref(item));
-	}
-
-	function handleSearch(query: string) {
-		youtubeSearchService.search(query);
-	}
-
-	function handleSearchItemClick(cardItem: LibraryCardItem) {
-		goto(getYoutubeItemHref(cardItem));
-	}
-
-	function handleLoadMore() {
-		youtubeSearchService.loadMore();
-	}
-
-	let subscribedIds = $derived(new Set(dbChannels.map((c) => c.id)));
-
-	function extractHandle(url: string): string | null {
-		if (url.startsWith('/@')) return url.slice(2);
-		return null;
-	}
-
-	async function handleSubscribe(channel: YouTubeSearchChannelItem) {
-		const handle = extractHandle(channel.url);
-		if (!handle || !channel.channelId) return;
-		await fetchRaw('/api/youtube/channel-subscribe', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				id: channel.channelId,
-				handle,
-				name: channel.name,
-				url: `https://www.youtube.com${channel.url}`,
-				subscriber_text: channel.subscriberText || null,
-				image_url: channel.thumbnail || null
-			})
-		});
-		await fetchChannels();
-	}
+  onDestroy(() => {
+    sse?.close();
+  });
 </script>
 
-<Portal target={mediaBar.controlsTarget}>
-	<YouTubeSearchInput
-		query={$searchState.query}
-		searching={$searchState.searching}
-		onsearch={handleSearch}
-	/>
-</Portal>
+<div class="flex h-full flex-col">
+  <header
+    class="flex flex-wrap items-center gap-3 border-b border-base-300 px-4 py-3"
+  >
+    <h1 class="text-lg font-bold">YouTube</h1>
+    <span
+      class={classNames("badge badge-sm", {
+        "badge-success": connected,
+        "badge-ghost": !connected,
+      })}
+    >
+      {connected ? "yt-dlp connected" : "connecting…"}
+    </span>
+  </header>
 
-<div class="container mx-auto p-4">
+  <div class="min-w-0 flex-1 overflow-y-auto p-4">
+    <div class="mb-6 flex flex-col gap-2">
+      <div class="join">
+        <input
+          type="text"
+          class="input join-item input-bordered flex-1"
+          placeholder="https://www.youtube.com/watch?v=…"
+          bind:value={url}
+          onkeydown={(e) => {
+            if (e.key === "Enter" && canFetchInfo) fetchInfo();
+          }}
+        />
+        <button
+          class="btn join-item btn-primary"
+          disabled={!canFetchInfo || infoLoading}
+          onclick={fetchInfo}
+        >
+          {#if infoLoading}
+            <span class="loading loading-sm loading-spinner"></span>
+          {:else}
+            Fetch info
+          {/if}
+        </button>
+      </div>
+      {#if infoError}
+        <div class="alert alert-error">
+          <span>{infoError}</span>
+        </div>
+      {/if}
+    </div>
 
-	{#if $searchState.error}
-		<div class="mb-4 alert alert-error">
-			<span>{$searchState.error}</span>
-			<button
-				class="btn btn-ghost btn-sm"
-				onclick={() => youtubeSearchService.state.update((s) => ({ ...s, error: null }))}
-			>
-				Dismiss
-			</button>
-		</div>
-	{/if}
+    {#if info}
+      <div class="mb-6 flex gap-4 rounded-lg bg-base-200 p-4">
+        {#if info.thumbnailUrl}
+          <img
+            src={info.thumbnailUrl}
+            alt={info.title}
+            class="h-24 w-40 shrink-0 rounded object-cover"
+            loading="lazy"
+          />
+        {/if}
+        <div class="flex min-w-0 flex-1 flex-col gap-2">
+          <p class="font-semibold">{info.title}</p>
+          <p class="text-sm opacity-70">
+            {info.uploader ?? "Unknown uploader"}
+            {#if info.duration}
+              · {fmtDuration(info.duration)}
+            {/if}
+          </p>
+          <div class="mt-auto flex flex-wrap gap-2">
+            <button
+              class="btn btn-sm btn-primary"
+              disabled={queueing !== null}
+              onclick={() => queueDownload("video")}
+            >
+              {queueing === "video" ? "Queueing…" : "Download video"}
+            </button>
+            <button
+              class="btn btn-sm btn-secondary"
+              disabled={queueing !== null}
+              onclick={() => queueDownload("audio")}
+            >
+              {queueing === "audio" ? "Queueing…" : "Download audio"}
+            </button>
+            <button
+              class="btn btn-sm"
+              disabled={queueing !== null}
+              onclick={() => queueDownload("both")}
+            >
+              {queueing === "both" ? "Queueing…" : "Both"}
+            </button>
+          </div>
+          {#if queueError}
+            <p class="text-sm text-error">{queueError}</p>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
-	{#if isSearchMode}
-		{#if localSearchResults.length > 0}
-			<LibraryContentGrid
-				title="In your library"
-				items={localSearchResults}
-				{activeDownloadMap}
-				itemHref={getYoutubeItemHref}
-				onitemclick={handleItemClick}
-				classes="mb-6"
-			/>
-		{/if}
+    {#if activeDownloads.length > 0}
+      <section class="mb-6">
+        <h2 class="mb-2 text-lg font-semibold">In progress</h2>
+        <div class="flex flex-col gap-2">
+          {#each activeDownloads as d (d.downloadId)}
+            <div class="rounded-lg bg-base-200 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <p class="truncate font-medium">{d.title || d.videoId}</p>
+                <button
+                  class="btn btn-ghost btn-xs"
+                  onclick={() => cancelDownload(d.downloadId)}
+                >
+                  Cancel
+                </button>
+              </div>
+              <div class="mt-1 flex items-center gap-2 text-sm opacity-70">
+                <span>{d.state}</span>
+                <span>·</span>
+                <span>{d.mode}</span>
+                <span>·</span>
+                <span
+                  >{fmtBytes(d.downloadedBytes)} / {fmtBytes(
+                    d.totalBytes,
+                  )}</span
+                >
+              </div>
+              <progress
+                class="progress mt-2 w-full"
+                value={d.progress}
+                max="1"
+              ></progress>
+            </div>
+          {/each}
+        </div>
+      </section>
+    {/if}
 
-		{#if $searchState.searching}
-			<div class="mb-4">
-				<h2 class="sticky top-0 z-10 mb-4 rounded-lg bg-base-100 px-3 py-2 text-xl font-semibold">
-					YouTube videos
-				</h2>
-				<div class="flex justify-center py-8">
-					<span class="loading loading-lg loading-spinner"></span>
-				</div>
-			</div>
-		{:else if youtubeSearchCardItems.length > 0}
-			<LibraryContentGrid
-				title="YouTube videos"
-				items={youtubeSearchCardItems}
-				{activeDownloadMap}
-				itemHref={getYoutubeItemHref}
-				onitemclick={handleSearchItemClick}
-				onloadmore={$searchState.continuation ? handleLoadMore : undefined}
-				loadingMore={$searchState.loadingMore}
-			/>
-		{:else if $searchState.query}
-			<div class="mb-4">
-				<h2 class="sticky top-0 z-10 mb-4 rounded-lg bg-base-100 px-3 py-2 text-xl font-semibold">
-					YouTube videos
-				</h2>
-				<p class="rounded-lg bg-base-200 p-4 text-center opacity-50">No videos found</p>
-			</div>
-		{/if}
+    {#if finishedDownloads.length > 0}
+      <section>
+        <div class="mb-2 flex items-center justify-between">
+          <h2 class="text-lg font-semibold">Finished</h2>
+          <button class="btn btn-ghost btn-sm" onclick={clearCompleted}
+            >Clear</button
+          >
+        </div>
+        <div class="flex flex-col gap-2">
+          {#each finishedDownloads as d (d.downloadId)}
+            <div
+              class={classNames("rounded-lg p-3", {
+                "bg-success/10": d.state === "completed",
+                "bg-error/10": d.state === "failed",
+                "bg-base-200":
+                  d.state !== "completed" && d.state !== "failed",
+              })}
+            >
+              <p class="truncate font-medium">{d.title || d.videoId}</p>
+              <p class="text-sm opacity-70">
+                {d.state}
+                {#if d.error}— {d.error}{/if}
+              </p>
+            </div>
+          {/each}
+        </div>
+      </section>
+    {/if}
 
-		<div class="mb-4">
-			<h2 class="sticky top-0 z-10 mb-4 rounded-lg bg-base-100 px-3 py-2 text-xl font-semibold">
-				YouTube channels
-			</h2>
-			{#if $searchState.searching}
-				<div class="flex justify-center py-8">
-					<span class="loading loading-lg loading-spinner"></span>
-				</div>
-			{:else if $searchState.channels.length > 0}
-				<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-					{#each $searchState.channels as channel (channel.channelId)}
-						<YouTubeChannelCard
-							{channel}
-							subscribed={subscribedIds.has(channel.channelId)}
-							onsubscribe={handleSubscribe}
-						/>
-					{/each}
-				</div>
-			{:else}
-				<p class="rounded-lg bg-base-200 p-4 text-center opacity-50">No channels found</p>
-			{/if}
-		</div>
-	{:else if $libState.contentLoading && $libState.content.length === 0}
-		<div class="flex justify-center py-12">
-			<span class="loading loading-md loading-spinner"></span>
-		</div>
-	{:else if $libState.contentError}
-		<div class="rounded-lg bg-error/10 px-4 py-3 text-error">
-			{$libState.contentError}
-		</div>
-	{:else if $libState.content.length === 0 && dbChannels.length === 0}
-		<div class="rounded-lg bg-base-200 p-8 text-center">
-			<p class="opacity-50">No downloaded content yet. Search for videos above to get started.</p>
-		</div>
-	{:else}
-		{#if pinnedItems.length > 0}
-			<LibraryContentGrid
-				title="Pinned"
-				items={pinnedItems}
-				{activeDownloadMap}
-				favoritedIds={favoritedYtIds}
-				pinnedIds={pinnedYtIds}
-				itemHref={getYoutubeItemHref}
-				onitemclick={handleItemClick}
-			/>
-		{/if}
-
-		{#if favoriteItems.length > 0}
-			<LibraryContentGrid
-				title="Favorites"
-				items={favoriteItems}
-				{activeDownloadMap}
-				favoritedIds={favoritedYtIds}
-				pinnedIds={pinnedYtIds}
-				itemHref={getYoutubeItemHref}
-				onitemclick={handleItemClick}
-			/>
-		{/if}
-
-		{#if dbChannels.length > 0}
-			<div class="mb-4">
-				<h2 class="sticky top-0 z-10 mb-4 rounded-lg bg-base-100 px-3 py-2 text-xl font-semibold">
-					Channels
-				</h2>
-				<div bind:this={channelGridEl} class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-					{#each visibleChannels as channel (channel.id)}
-						{@const meta = channelMeta[channel.handle]}
-						{@const avatar = channel.image_url || meta?.avatar}
-						{@const subscriberText = channel.subscriber_text || meta?.subscriberText}
-						{@const isOpen = expandedFeeds.some((f) => f.channel.id === channel.id)}
-						<button
-							onclick={() => toggleChannelFeed(channel)}
-							class={classNames(
-								'flex items-center gap-3 rounded-lg p-3 text-left transition-colors',
-								{
-									'bg-primary/15 hover:bg-primary/20': isOpen,
-									'bg-base-200 hover:bg-base-300': !isOpen
-								}
-							)}
-						>
-							{#if avatar}
-								<img
-									src={apiUrl(`/api/youtube/image-proxy?url=${encodeURIComponent(avatar)}`)}
-									alt={channel.name}
-									class="h-10 w-10 shrink-0 rounded-full object-cover"
-									loading="lazy"
-								/>
-							{:else}
-								<div
-									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-error/10 text-error"
-								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										class="h-5 w-5"
-										viewBox="0 0 24 24"
-										fill="currentColor"
-									>
-										<path
-											d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
-										/>
-									</svg>
-								</div>
-							{/if}
-							<div class="min-w-0 flex-1">
-								<p class="truncate font-medium">{channel.name}</p>
-								<p class="truncate text-sm opacity-50">
-									@{channel.handle}{subscriberText ? ` · ${subscriberText}` : ''}
-								</p>
-							</div>
-						</button>
-					{/each}
-					{#if channelHasMore}
-						<button
-							class="flex min-h-16 items-center justify-center rounded-lg border border-base-300 text-sm opacity-70 transition-opacity hover:opacity-100"
-							onclick={() => (channelVisibleRows += CHANNEL_ROWS_INCREMENT)}
-						>
-							+{channelRemaining} more
-						</button>
-					{:else if channelIsExpanded}
-						<button
-							class="flex min-h-16 items-center justify-center rounded-lg border border-base-300 text-sm opacity-70 transition-opacity hover:opacity-100"
-							onclick={() => (channelVisibleRows = 1)}
-						>
-							Show less
-						</button>
-					{/if}
-				</div>
-			</div>
-		{/if}
-
-		{#each expandedFeeds as feed (feed.channel.id)}
-			{#if feed.loading}
-				<div class="mb-4">
-					<h2 class="sticky top-0 z-10 mb-4 rounded-lg bg-base-100 px-3 py-2 text-xl font-semibold">
-						{feed.channel.name}
-					</h2>
-					<div class="flex justify-center py-6">
-						<span class="loading loading-md loading-spinner"></span>
-					</div>
-				</div>
-			{:else if feed.videos.length > 0}
-				<LibraryContentGrid
-					title={feed.channel.name}
-					items={feed.videos}
-					{activeDownloadMap}
-					itemHref={getYoutubeItemHref}
-					onitemclick={handleFeedVideoClick}
-				/>
-			{:else}
-				<div class="mb-4">
-					<h2 class="sticky top-0 z-10 mb-4 rounded-lg bg-base-100 px-3 py-2 text-xl font-semibold">
-						{feed.channel.name}
-					</h2>
-					<p class="rounded-lg bg-base-200 p-4 text-center opacity-50">No videos found</p>
-				</div>
-			{/if}
-		{/each}
-
-		{#if videoItems.length > 0}
-			<LibraryContentGrid
-				title="Videos"
-				items={videoItems}
-				{activeDownloadMap}
-				favoritedIds={favoritedYtIds}
-				pinnedIds={pinnedYtIds}
-				itemHref={getYoutubeItemHref}
-				onitemclick={handleItemClick}
-			/>
-		{/if}
-
-		{#if musicItems.length > 0}
-			<LibraryContentGrid
-				title="Music"
-				items={musicItems}
-				{activeDownloadMap}
-				favoritedIds={favoritedYtIds}
-				pinnedIds={pinnedYtIds}
-				itemHref={getYoutubeItemHref}
-				onitemclick={handleItemClick}
-			/>
-		{/if}
-
-		<LibraryContentGrid
-			title="All cached"
-			items={cardItems}
-			{activeDownloadMap}
-			favoritedIds={favoritedYtIds}
-			pinnedIds={pinnedYtIds}
-			itemHref={getYoutubeItemHref}
-				onitemclick={handleItemClick}
-		/>
-	{/if}
+    {#if !info && downloads.length === 0}
+      <p class="rounded-lg bg-base-200 p-8 text-center opacity-60">
+        Paste a YouTube URL above to fetch info and queue a download.
+      </p>
+    {/if}
+  </div>
 </div>
