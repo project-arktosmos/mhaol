@@ -587,15 +587,16 @@ async fn retroachievements_popular(
     console_id: Option<&str>,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
-    let user = std::env::var("RA_USERNAME")
+    let user = std::env::var("RA_API_USER")
         .ok()
         .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("RA_USERNAME").ok().filter(|s| !s.is_empty()))
         .or_else(|| std::env::var("RA_USER").ok().filter(|s| !s.is_empty()));
     let key = std::env::var("RA_API_KEY").ok().filter(|s| !s.is_empty());
     let (Some(user), Some(key)) = (user, key) else {
         return Err(err(
             StatusCode::SERVICE_UNAVAILABLE,
-            "RA_USERNAME and RA_API_KEY env vars must be set on the cloud server",
+            "RA_API_USER and RA_API_KEY env vars must be set on the cloud server",
         ));
     };
     let console = console_id
