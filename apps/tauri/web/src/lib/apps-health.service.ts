@@ -8,7 +8,7 @@ export interface AppEndpoint {
 	expectsJson: boolean;
 }
 
-export const APP_ENDPOINTS: AppEndpoint[] = [
+const ALL_ENDPOINTS: AppEndpoint[] = [
 	{
 		id: 'cloud',
 		label: 'Cloud',
@@ -24,6 +24,15 @@ export const APP_ENDPOINTS: AppEndpoint[] = [
 		expectsJson: false
 	}
 ];
+
+const enabledIds = new Set(
+	(import.meta.env.VITE_MHAOL_HEALTH_APPS ?? 'cloud,player')
+		.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean)
+);
+
+export const APP_ENDPOINTS: AppEndpoint[] = ALL_ENDPOINTS.filter((e) => enabledIds.has(e.id));
 
 export interface AppHealth {
 	id: AppEndpoint['id'];

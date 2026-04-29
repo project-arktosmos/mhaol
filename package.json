@@ -4,10 +4,10 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm run dev:player & pnpm run dev:cloud",
+		"dev": "pnpm run dev:player & VITE_MHAOL_HEALTH_APPS=cloud,player pnpm run dev:cloud",
 		"dev:apps": "pnpm run app:cloud & wait-on tcp:9899 && pnpm run app:cloud:web & pnpm run dev:player & wait",
 		"dev:node": "set -a; . ./.env 2>/dev/null; set +a; PORT=1530 cargo run -p mhaol-node --bin mhaol-node",
-		"dev:cloud": "pnpm run app:cloud & wait-on tcp:9899 && pnpm run app:cloud:web & wait-on tcp:9898 && pnpm run app:tauri",
+		"dev:cloud": "export VITE_MHAOL_HEALTH_APPS=${VITE_MHAOL_HEALTH_APPS:-cloud}; pnpm run app:cloud & wait-on tcp:9899 && pnpm run app:cloud:web & wait-on tcp:9898 && pnpm run app:tauri",
 		"dev:cloud:web": "pnpm --filter cloud dev",
 		"dev:frontend": "pnpm --filter frontend dev",
 		"dev:player": "pnpm --filter player dev",
