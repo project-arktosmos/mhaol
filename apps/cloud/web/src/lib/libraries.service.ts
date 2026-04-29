@@ -2,27 +2,20 @@ import { writable, type Writable } from 'svelte/store';
 
 export interface Library {
 	id: string;
-	name: string;
 	path: string;
 	created_at: string;
 	updated_at: string;
 }
 
-export interface LibraryDefaults {
-	base: string;
-}
-
 export interface LibrariesState {
 	loading: boolean;
 	libraries: Library[];
-	defaults: LibraryDefaults | null;
 	error: string | null;
 }
 
 const initialState: LibrariesState = {
 	loading: false,
 	libraries: [],
-	defaults: null,
 	error: null
 };
 
@@ -42,33 +35,21 @@ class LibrariesService {
 	async refresh(): Promise<void> {
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const [listRes, defaultsRes] = await Promise.all([
-				fetch('/api/libraries', { cache: 'no-store' }),
-				fetch('/api/libraries/defaults', { cache: 'no-store' })
-			]);
-			if (!listRes.ok) throw new Error(await parseError(listRes));
-			if (!defaultsRes.ok) throw new Error(await parseError(defaultsRes));
-			const libraries = (await listRes.json()) as Library[];
-			const defaults = (await defaultsRes.json()) as LibraryDefaults;
-			this.state.set({
-				loading: false,
-				libraries,
-				defaults,
-				error: null
-			});
+			const res = await fetch('/api/libraries', { cache: 'no-store' });
+			if (!res.ok) throw new Error(await parseError(res));
+			const libraries = (await res.json()) as Library[];
+			this.state.set({ loading: false, libraries, error: null });
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Unknown error';
 			this.state.update((s) => ({ ...s, loading: false, error: message }));
 		}
 	}
 
-	async create(name: string, path?: string): Promise<Library> {
-		const body: Record<string, string> = { name };
-		if (path && path.trim() !== '') body.path = path.trim();
+	async create(path: string): Promise<Library> {
 		const res = await fetch('/api/libraries', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify(body)
+			body: JSON.stringify({ path })
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const created = (await res.json()) as Library;

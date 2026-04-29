@@ -15,7 +15,7 @@ src/
 ├── db.rs                # SurrealDB connection helper (SurrealKv engine)
 ├── state.rs             # CloudState: { db, identity_manager, queue, ytdl_manager, torrent_manager, ed2k_manager, ipfs_manager }
 ├── cloud_status.rs      # GET /api/cloud/status
-├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records pointing at on-disk dirs
+├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir
 ├── documents.rs         # /api/documents CRUD — SurrealDB-backed document records (name, author, description)
 ├── fs_browse.rs         # /api/fs/browse — list subdirectories under a path (defaults to home), used by the WebUI directory picker
 └── frontend.rs          # rust-embed wrapper that serves web/dist-static/
@@ -92,11 +92,10 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 ## Public WebUI endpoints
 
 - `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, signaling/client wallet addresses, db engine/namespace/version, and a `packages` block reporting health for `p2pStream`, `queue`, `ytDlp`, `torrent`, `ed2k`, and `ipfs`. No auth required (used by the embedded WebUI).
-- `GET /api/libraries` — list libraries persisted in SurrealDB (`library` table).
-- `GET /api/libraries/defaults` — returns `{ base }` with the default mhaol directory (`<system Documents>/mhaol`, falls back to `<HOME>/Documents/mhaol`).
-- `POST /api/libraries` — create a library `{ name, path? }`. When `path` is omitted, the directory defaults to `<defaults.base>/<sanitized-name>` and is created on disk.
+- `GET /api/libraries` — list libraries persisted in SurrealDB (`library` table). Libraries have no name; each is identified by its directory path.
+- `POST /api/libraries` — create a library `{ path }`. The directory is created on disk if it does not exist; duplicate paths are rejected with `409`.
 - `GET /api/libraries/:id` — fetch one library.
-- `PUT /api/libraries/:id` — update name or path. The new path is created on disk if missing.
+- `PUT /api/libraries/:id` — update the path. The new path is created on disk if missing; duplicates are rejected with `409`.
 - `DELETE /api/libraries/:id` — remove the library record (the on-disk directory is left untouched).
 - `GET /api/documents` — list documents persisted in SurrealDB (`document` table).
 - `POST /api/documents` — create a document `{ name, author, description? }`. `name` and `author` are required.

@@ -6,8 +6,8 @@
 
 	const libsStore = librariesService.state;
 
-	let name = $state('');
-	let parentDir = $state('');
+	let pickedDir = $state('');
+	let newSubfolder = $state('');
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
@@ -19,7 +19,7 @@
 	function sanitize(value: string): string {
 		// eslint-disable-next-line no-control-regex
 		const controlAndIllegal = /[\\/:*?"<>|\x00-\x1f]/g;
-		return value.replace(controlAndIllegal, '_').trim() || 'library';
+		return value.replace(controlAndIllegal, '_').trim();
 	}
 
 	function joinPath(base: string, child: string): string {
@@ -30,28 +30,23 @@
 	}
 
 	const finalPath = $derived.by(() => {
-		const trimmed = name.trim();
-		if (!parentDir) return '';
-		if (!trimmed) return parentDir;
-		return joinPath(parentDir, sanitize(trimmed));
+		const sub = sanitize(newSubfolder);
+		if (!pickedDir) return '';
+		if (!sub) return pickedDir;
+		return joinPath(pickedDir, sub);
 	});
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		createError = null;
-		const trimmed = name.trim();
-		if (!trimmed) {
-			createError = 'Name is required';
-			return;
-		}
-		if (!parentDir) {
-			createError = 'Pick a parent directory';
+		if (!finalPath) {
+			createError = 'Pick a directory';
 			return;
 		}
 		creating = true;
 		try {
-			await librariesService.create(trimmed, finalPath);
-			name = '';
+			await librariesService.create(finalPath);
+			newSubfolder = '';
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -91,8 +86,8 @@
 		<div>
 			<h1 class="text-2xl font-bold">Libraries</h1>
 			<p class="text-sm text-base-content/60">
-				Each library references a directory on this machine. Pick a parent directory below — the
-				library folder will be created inside it.
+				Each library is a directory on this machine. Browse to an existing folder to use it as a
+				library, or pick a parent and create a new subfolder.
 			</p>
 		</div>
 		<button
@@ -113,28 +108,32 @@
 	<section class="card border border-base-content/10 bg-base-200 p-4">
 		<h2 class="mb-3 text-lg font-semibold">Add a library</h2>
 		<form class="flex flex-col gap-3" onsubmit={submit}>
+			<div class="form-control">
+				<span class="label-text mb-1 text-xs">Directory</span>
+				<DirectoryPicker value={pickedDir} disabled={creating} onChange={(p) => (pickedDir = p)} />
+			</div>
 			<label class="form-control">
-				<span class="label-text text-xs">Name</span>
+				<span class="label-text text-xs">
+					New subfolder (optional — created inside the picked directory)
+				</span>
 				<input
 					type="text"
 					class="input-bordered input input-sm"
-					placeholder="Movies"
-					bind:value={name}
+					placeholder="leave empty to use the picked folder"
+					bind:value={newSubfolder}
 					disabled={creating}
 				/>
 			</label>
-			<div class="form-control">
-				<span class="label-text mb-1 text-xs">Parent directory</span>
-				<DirectoryPicker value={parentDir} disabled={creating} onChange={(p) => (parentDir = p)} />
-			</div>
 			<p class="text-xs text-base-content/60">
-				Library folder: <span class="font-mono">{finalPath || '—'}</span>
+				Library directory: <span class="font-mono">{finalPath || '—'}</span>
 			</p>
 			<div>
 				<button
 					type="submit"
-					class={classNames('btn btn-sm btn-primary', { 'btn-disabled': creating })}
-					disabled={creating}
+					class={classNames('btn btn-sm btn-primary', {
+						'btn-disabled': creating || !finalPath
+					})}
+					disabled={creating || !finalPath}
 				>
 					{creating ? 'Creating…' : 'Create'}
 				</button>
@@ -156,7 +155,6 @@
 				<table class="table table-sm">
 					<thead>
 						<tr>
-							<th>Name</th>
 							<th>Path</th>
 							<th>Created</th>
 							<th class="w-24"></th>
@@ -165,7 +163,6 @@
 					<tbody>
 						{#each $libsStore.libraries as lib (lib.id)}
 							<tr>
-								<td class="font-medium">{lib.name}</td>
 								<td class="font-mono text-xs break-all">{lib.path}</td>
 								<td class="text-xs text-base-content/60">{formatDate(lib.created_at)}</td>
 								<td class="text-right">
