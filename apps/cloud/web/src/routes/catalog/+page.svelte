@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import classNames from 'classnames';
 	import { base } from '$app/paths';
 	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
@@ -129,14 +130,44 @@
 		void createDocumentsForItems();
 	}
 
+	function findExistingDoc(
+		allDocs: Document[],
+		item: CatalogItem,
+		docType: DocumentType,
+		docSource: DocumentSource
+	): Document | null {
+		const targetTitle = item.title.toLowerCase();
+		const matches = allDocs.filter(
+			(d) =>
+				d.title.toLowerCase() === targetTitle &&
+				d.year === item.year &&
+				d.type === docType &&
+				d.source === docSource
+		);
+		if (matches.length === 0) return null;
+		return matches.slice().sort((a, b) => b.files.length - a.files.length)[0];
+	}
+
 	async function createDocumentsForItems() {
 		const myRun = runId;
 		const docType = mapToDocumentType(addon, type);
 		const docSource = mapToDocumentSource(addon);
+		try {
+			await documentsService.refresh();
+		} catch (err) {
+			console.warn('Failed to refresh documents:', err);
+		}
+		if (myRun !== runId) return;
+		const allDocs = get(documentsService.state).documents;
 		await Promise.all(
 			items.map(async (item) => {
 				if (myRun !== runId) return;
 				if (itemDocs[item.id]) return;
+				const existing = findExistingDoc(allDocs, item, docType, docSource);
+				if (existing) {
+					itemDocs = { ...itemDocs, [item.id]: existing };
+					return;
+				}
 				const images = [item.posterUrl, item.backdropUrl]
 					.filter((url): url is string => Boolean(url))
 					.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
