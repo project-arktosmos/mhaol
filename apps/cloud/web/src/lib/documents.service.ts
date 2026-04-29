@@ -30,6 +30,27 @@ export const DOCUMENT_SOURCES = [
 
 export type DocumentSource = (typeof DOCUMENT_SOURCES)[number];
 
+export const TYPES_BY_SOURCE: Record<DocumentSource, readonly DocumentType[]> = {
+	tmdb: ['movie', 'tv show', 'tv season', 'tv episode', 'image'],
+	'torrent-search-thepiratebay': [
+		'movie',
+		'tv show',
+		'tv season',
+		'tv episode',
+		'album',
+		'track',
+		'book',
+		'game'
+	],
+	'torrent-search-spanish': ['movie', 'tv show', 'tv season', 'tv episode'],
+	musicbrainz: ['album', 'track'],
+	retroachievements: ['game'],
+	youtube: ['youtube video', 'youtube channel'],
+	lrclib: ['track'],
+	openlibrary: ['book'],
+	'wyzie-subs': ['movie', 'tv episode']
+};
+
 export interface Document {
 	id: string;
 	name: string;

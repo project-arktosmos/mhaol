@@ -3,8 +3,8 @@
 	import classNames from 'classnames';
 	import {
 		documentsService,
-		DOCUMENT_TYPES,
 		DOCUMENT_SOURCES,
+		TYPES_BY_SOURCE,
 		type DocumentType,
 		type DocumentSource
 	} from '$lib/documents.service';
@@ -15,8 +15,14 @@
 	let name = $state('');
 	let author = $state('');
 	let description = $state('');
-	let type = $state<DocumentType>(DOCUMENT_TYPES[0]);
 	let source = $state<DocumentSource>(DOCUMENT_SOURCES[0]);
+	let type = $state<DocumentType>(TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0]);
+	const availableTypes = $derived(TYPES_BY_SOURCE[source]);
+	$effect(() => {
+		if (!availableTypes.includes(type)) {
+			type = availableTypes[0];
+		}
+	});
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
@@ -27,8 +33,8 @@
 				name: name.trim(),
 				author: author.trim(),
 				description: description.trim(),
-				type,
-				source
+				source,
+				type
 			},
 			null,
 			2
@@ -80,8 +86,8 @@
 			name = '';
 			author = '';
 			description = '';
-			type = DOCUMENT_TYPES[0];
 			source = DOCUMENT_SOURCES[0];
+			type = TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0];
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -147,20 +153,6 @@
 				<table class="table table-sm">
 					<tbody>
 						<tr>
-							<th class="w-32 align-middle">Type</th>
-							<td>
-								<select
-									class="select-bordered select w-full select-sm"
-									bind:value={type}
-									disabled={creating}
-								>
-									{#each DOCUMENT_TYPES as option (option)}
-										<option value={option}>{option}</option>
-									{/each}
-								</select>
-							</td>
-						</tr>
-						<tr>
 							<th class="w-32 align-middle">Source</th>
 							<td>
 								<select
@@ -169,6 +161,20 @@
 									disabled={creating}
 								>
 									{#each DOCUMENT_SOURCES as option (option)}
+										<option value={option}>{option}</option>
+									{/each}
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th class="w-32 align-middle">Type</th>
+							<td>
+								<select
+									class="select-bordered select w-full select-sm"
+									bind:value={type}
+									disabled={creating}
+								>
+									{#each availableTypes as option (option)}
 										<option value={option}>{option}</option>
 									{/each}
 								</select>
