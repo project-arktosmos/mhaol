@@ -26,6 +26,10 @@ pub struct PeerSession {
     signaling_tx: mpsc::UnboundedSender<SignalingMessage>,
     data_channel: glib::Object,
     data_channel_open: Arc<AtomicBool>,
+    /// Set to `true` once an SDP offer has been sent. Both the
+    /// `on-negotiation-needed` handler and the post-pad-added watchdog read
+    /// this to ensure exactly one offer is produced per session.
+    offer_sent: Arc<AtomicBool>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -44,20 +48,18 @@ impl PeerSession {
         signaling_tx: mpsc::UnboundedSender<SignalingMessage>,
     ) -> Result<Self> {
         let state = Arc::new(Mutex::new(SessionState::New));
+        let offer_sent = Arc::new(AtomicBool::new(false));
 
         // Connect webrtcbin signals BEFORE creating the data channel.
         // create-data-channel can synchronously emit `on-negotiation-needed`;
         // any handler connected after that point misses the emission entirely
-        // (GStreamer signals are not queued). For audio-only sources the
-        // initial emission is the only one — webrtcbin won't re-fire after
-        // the audio branch is linked because the previous request is still
-        // considered pending — so missing it leaves the session stuck with
-        // no SDP offer.
+        // (GStreamer signals are not queued).
         connect_webrtcbin_signals_impl(
             stream_pipeline.webrtcbin(),
             id.clone(),
             state.clone(),
             signaling_tx.clone(),
+            offer_sent.clone(),
         );
 
         // GStreamer 1.28 requires the pipeline to be in at least READY state
@@ -102,6 +104,7 @@ impl PeerSession {
             signaling_tx,
             data_channel,
             data_channel_open: Arc::new(AtomicBool::new(false)),
+            offer_sent,
             shutdown: Arc::new(AtomicBool::new(false)),
         };
 
@@ -118,6 +121,14 @@ impl PeerSession {
     pub fn start(&self) -> Result<()> {
         *self.state.lock() = SessionState::Connecting;
         self.stream_pipeline.play()?;
+        watch_for_sink_pads(
+            self.stream_pipeline.webrtcbin().clone(),
+            self.id.clone(),
+            self.signaling_tx.clone(),
+            self.state.clone(),
+            self.offer_sent.clone(),
+            self.shutdown.clone(),
+        );
         self.start_position_ticker();
         info!("Session {} started", self.id);
         Ok(())
@@ -377,27 +388,35 @@ impl PeerSession {
 /// the very first negotiation-needed emission can be triggered synchronously
 /// by `create-data-channel`, and GStreamer signals are not queued — handlers
 /// connected after the emission would silently miss it.
+///
+/// `offer_sent` is a shared flag used to avoid sending two offers when both
+/// the negotiation-needed handler and the post-pad-added watchdog (see
+/// [`watch_for_sink_pads`]) try to negotiate.
 fn connect_webrtcbin_signals_impl(
     webrtcbin: &gst::Element,
     session_id: String,
     state: Arc<Mutex<SessionState>>,
     signaling_tx: mpsc::UnboundedSender<SignalingMessage>,
+    offer_sent: Arc<AtomicBool>,
 ) {
-    // on-negotiation-needed: create and send an SDP offer
+    // on-negotiation-needed: create and send an SDP offer.
+    // For audio-only sources webrtcbin only fires this signal once — when
+    // the data channel is created in READY state, before any media transceiver
+    // exists. We must not call create-offer with zero transceivers, otherwise
+    // we'd produce an empty SDP and burn the only chance to negotiate. Instead
+    // we mark "deferred" and rely on `watch_for_sink_pads` (started in
+    // `PeerSession::start`) to drive create-offer once the audio/video branch
+    // has linked into webrtcbin.
     {
+        let webrtcbin_clone = webrtcbin.clone();
         let signaling_tx = signaling_tx.clone();
         let state = state.clone();
         let session_id = session_id.clone();
-        let webrtcbin_clone = webrtcbin.clone();
+        let offer_sent = offer_sent.clone();
 
         webrtcbin.connect("on-negotiation-needed", false, move |_values| {
             info!("Session {session_id}: negotiation needed");
 
-            // Guard: do not call create-offer until at least one media branch
-            // has been linked to webrtcbin.  Calling create-offer with no
-            // transceivers produces an empty SDP and may consume the internal
-            // negotiation-needed state, preventing the signal from re-firing
-            // when an audio-only pad is linked later.
             let has_sink_pads = webrtcbin_clone
                 .pads()
                 .iter()
@@ -407,58 +426,12 @@ fn connect_webrtcbin_signals_impl(
                 return None;
             }
 
-            let signaling_tx = signaling_tx.clone();
-            let state = state.clone();
-            let webrtcbin_inner = webrtcbin_clone.clone();
-            let session_id = session_id.clone();
-
-            let promise = gst::Promise::with_change_func(move |reply| {
-                let reply = match reply {
-                    Ok(Some(reply)) => reply,
-                    _ => {
-                        error!("Failed to create SDP offer");
-                        return;
-                    }
-                };
-
-                let offer = reply
-                    .value("offer")
-                    .expect("Reply must contain 'offer'")
-                    .get::<gst_webrtc::WebRTCSessionDescription>()
-                    .expect("offer must be WebRTCSessionDescription");
-
-                let sdp_text = offer.sdp().to_string();
-
-                // Safety net: skip offers with no media descriptions
-                if !sdp_text.contains("m=") {
-                    info!("Skipping SDP offer with no media descriptions");
-                    return;
-                }
-
-                if sdp_text.contains("m=application") {
-                    debug!("Session {session_id}: SDP offer includes data channel");
-                } else {
-                    warn!("Session {session_id}: SDP offer MISSING data channel!");
-                }
-
-                webrtcbin_inner.emit_by_name::<()>(
-                    "set-local-description",
-                    &[&offer, &None::<gst::Promise>],
-                );
-
-                let _ = signaling_tx.send(SignalingMessage::SessionDescription(
-                    SessionDescription {
-                        sdp_type: SdpType::Offer,
-                        sdp: sdp_text,
-                    },
-                ));
-
-                *state.lock() = SessionState::OfferSent;
-            });
-
-            webrtcbin_clone.emit_by_name::<()>(
-                "create-offer",
-                &[&None::<gst::Structure>, &promise],
+            create_offer_and_send(
+                &webrtcbin_clone,
+                session_id.clone(),
+                signaling_tx.clone(),
+                state.clone(),
+                offer_sent.clone(),
             );
             None
         });
@@ -482,6 +455,122 @@ fn connect_webrtcbin_signals_impl(
             None
         });
     }
+}
+
+/// Trigger create-offer + send the resulting SDP over signaling.
+/// Idempotent — only the first call actually emits "create-offer".
+fn create_offer_and_send(
+    webrtcbin: &gst::Element,
+    session_id: String,
+    signaling_tx: mpsc::UnboundedSender<SignalingMessage>,
+    state: Arc<Mutex<SessionState>>,
+    offer_sent: Arc<AtomicBool>,
+) {
+    if offer_sent
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        debug!("Session {session_id}: offer already sent, skipping");
+        return;
+    }
+
+    let webrtcbin_inner = webrtcbin.clone();
+    let session_id_inner = session_id.clone();
+    let promise = gst::Promise::with_change_func(move |reply| {
+        let reply = match reply {
+            Ok(Some(reply)) => reply,
+            _ => {
+                error!("Session {session_id_inner}: failed to create SDP offer");
+                return;
+            }
+        };
+
+        let offer = reply
+            .value("offer")
+            .expect("Reply must contain 'offer'")
+            .get::<gst_webrtc::WebRTCSessionDescription>()
+            .expect("offer must be WebRTCSessionDescription");
+
+        let sdp_text = offer.sdp().to_string();
+
+        if !sdp_text.contains("m=") {
+            warn!("Session {session_id_inner}: SDP offer has no media descriptions, skipping");
+            return;
+        }
+
+        if sdp_text.contains("m=application") {
+            debug!("Session {session_id_inner}: SDP offer includes data channel");
+        } else {
+            warn!("Session {session_id_inner}: SDP offer MISSING data channel!");
+        }
+
+        webrtcbin_inner.emit_by_name::<()>(
+            "set-local-description",
+            &[&offer, &None::<gst::Promise>],
+        );
+
+        let _ = signaling_tx.send(SignalingMessage::SessionDescription(SessionDescription {
+            sdp_type: SdpType::Offer,
+            sdp: sdp_text,
+        }));
+
+        *state.lock() = SessionState::OfferSent;
+        info!("Session {session_id_inner}: SDP offer sent");
+    });
+
+    webrtcbin.emit_by_name::<()>("create-offer", &[&None::<gst::Structure>, &promise]);
+}
+
+/// Watchdog: poll webrtcbin for sink pads and drive create-offer when one
+/// appears. This is the workaround for webrtcbin not re-firing
+/// `on-negotiation-needed` after the audio (or video) branch links —
+/// without this, audio-only sessions hang in "negotiating WebRTC connection"
+/// because the deferred-negotiation guard (above) never gets a second chance
+/// to run.
+///
+/// Stops as soon as either an offer is sent (`offer_sent` flag flipped) or
+/// `shutdown` is signaled or the session is torn down (~10s safety cap).
+fn watch_for_sink_pads(
+    webrtcbin: gst::Element,
+    session_id: String,
+    signaling_tx: mpsc::UnboundedSender<SignalingMessage>,
+    state: Arc<Mutex<SessionState>>,
+    offer_sent: Arc<AtomicBool>,
+    shutdown: Arc<AtomicBool>,
+) {
+    std::thread::Builder::new()
+        .name(format!("p2p-stream-negotiation-watch-{session_id}"))
+        .spawn(move || {
+            let poll_interval = std::time::Duration::from_millis(50);
+            let max_iters = 200; // ~10 seconds
+            for _ in 0..max_iters {
+                if offer_sent.load(Ordering::SeqCst) || shutdown.load(Ordering::Relaxed) {
+                    return;
+                }
+                let has_sink_pads = webrtcbin
+                    .pads()
+                    .iter()
+                    .any(|p| p.direction() == gst::PadDirection::Sink);
+                if has_sink_pads {
+                    info!(
+                        "Session {session_id}: sink pad detected, triggering create-offer"
+                    );
+                    create_offer_and_send(
+                        &webrtcbin,
+                        session_id.clone(),
+                        signaling_tx.clone(),
+                        state.clone(),
+                        offer_sent.clone(),
+                    );
+                    return;
+                }
+                std::thread::sleep(poll_interval);
+            }
+            warn!(
+                "Session {session_id}: no sink pads after watchdog timeout, negotiation aborted"
+            );
+        })
+        .expect("Failed to spawn negotiation watchdog thread");
 }
 
 /// Emit the "send-string" action signal on a GstWebRTCDataChannel.
