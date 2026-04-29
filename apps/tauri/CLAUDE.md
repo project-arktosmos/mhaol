@@ -4,30 +4,18 @@
 **Crate:** `mhaol-tauri`
 **Binary:** `mhaol-tauri`
 
-A Tauri 2 shell that bundles different frontends per platform and per launch config.
+A Tauri 2 shell that bundles different frontends per platform.
 
-## Desktop — cloud wrapper (default config)
+## Desktop
 
 Loads `apps/tauri/web/`, a minimal Svelte SPA (pnpm package `tauri-web`, dev port `1571`) that polls the local Mhaol apps and renders a health panel for each:
 
 - **Cloud** — `GET http://localhost:9898/api/cloud/status` (parsed as JSON; uses `version`, `host`, `port`, `uptime_seconds`)
 - **Player** — `GET http://localhost:9595/` with `mode: 'no-cors'` (success means the static SPA is being served)
 
-Both probes refresh every 5 seconds. Each panel shows status, latency, app-specific metadata, and an "Open" button that opens the app in the system browser.
+Both probes refresh every 5 seconds. Each panel shows status, latency, app-specific metadata, and an "Open" button that opens the app in the system browser. `VITE_MHAOL_HEALTH_APPS` (e.g. `cloud`, `player`, `cloud,player`) selects which panels to render.
 
-The desktop UI is the SPA at `apps/tauri/web/`; it builds to `apps/tauri/web/dist-static/`, which `tauri.conf.json` loads as `frontendDist`. Launched via `pnpm app:tauri` (used by `pnpm dev:cloud`).
-
-## Desktop — player wrapper (`tauri.player.conf.json`)
-
-`tauri.player.conf.json` overrides the desktop build block to wrap the player SPA directly:
-
-- `productName`: `Mhaol Player`
-- `identifier`: `com.arktosmos.mhaol.player` (distinct from the cloud wrapper so both can coexist)
-- `frontendDist`: `../../player/dist-static`
-- `devUrl`: `http://localhost:9595`
-- `beforeDevCommand`/`beforeBuildCommand`: build the player
-
-Launched via `pnpm app:tauri:player` (`cargo tauri dev --config tauri.player.conf.json`). Used by `pnpm dev:player` to give the player its own Tauri shell on desktop, mirroring how `dev:cloud` gives the cloud its Tauri shell.
+The desktop UI is the SPA at `apps/tauri/web/`; it builds to `apps/tauri/web/dist-static/`, which `tauri.conf.json` loads as `frontendDist`. Launched via `pnpm app:tauri` and reused by both `pnpm dev:cloud` and `pnpm dev:player` — those scripts only differ in which services they boot alongside the shell. The Tauri webview always shows the health UI; the cloud and player apps themselves stay browser-accessible at `http://localhost:9898` and `http://localhost:9595`.
 
 ## Mobile (Android/iOS)
 
@@ -46,8 +34,7 @@ apps/tauri/
 ├── src-tauri/
 │   ├── Cargo.toml                  # mhaol-tauri crate
 │   ├── build.rs
-│   ├── tauri.conf.json             # base + desktop (loads ../web/dist-static — cloud wrapper)
-│   ├── tauri.player.conf.json      # desktop override → wraps player SPA at :9595
+│   ├── tauri.conf.json             # base + desktop (loads ../web/dist-static)
 │   ├── tauri.android.conf.json     # mobile override → player
 │   ├── tauri.ios.conf.json         # mobile override → player
 │   ├── capabilities/default.json
@@ -67,41 +54,37 @@ apps/tauri/
 
 ## Running
 
-The cloud and player each get their own Tauri wrapper on desktop:
+`pnpm dev:cloud` and `pnpm dev:player` both run the same `pnpm app:tauri` health shell. They only differ in which services they boot alongside it and which panels the health UI renders (`VITE_MHAOL_HEALTH_APPS`):
 
-- `pnpm dev:cloud` boots the cloud Rust loopback server (9899), the cloud Vite WebUI (9898), then runs `pnpm app:tauri` (brings up `tauri-web` on 1571 as Tauri's `beforeDevCommand` and opens a native window with the health UI). Cloud stays reachable in the browser at `http://localhost:9898`.
-- `pnpm dev:player` runs `pnpm app:tauri:player` (`cargo tauri dev --config tauri.player.conf.json`). The override config's `beforeDevCommand` brings up the player Vite server on 9595, and Tauri opens a native window pointing at it. Player stays reachable in the browser at `http://localhost:9595`.
+- `pnpm dev:cloud` boots the cloud Rust loopback server (9899), the cloud Vite WebUI (9898), then `pnpm app:tauri` (brings up `tauri-web` on 1571 as Tauri's `beforeDevCommand` and opens a native window with the health UI). Defaults `VITE_MHAOL_HEALTH_APPS=cloud`. Cloud stays reachable in the browser at `http://localhost:9898`.
+- `pnpm dev:player` boots the player Vite server (9595), then `pnpm app:tauri`. Defaults `VITE_MHAOL_HEALTH_APPS=player`. Player stays reachable in the browser at `http://localhost:9595`. The Tauri webview shows the health UI, not the player itself.
 
-`pnpm dev` runs both side-by-side: it spawns the player Vite server (`pnpm app:player`, no Tauri shell) in the background and runs `dev:cloud` in the foreground. Only one Tauri shell (cloud) launches in this combined flow — running both `dev:player` and `dev:cloud` simultaneously would have two `cargo tauri dev` processes competing on the same target dir. Hot reload works for the cloud WebUI, the player, and the Tauri health UI; the cloud Rust binary still needs a manual restart.
+`pnpm dev` runs both side-by-side: it spawns the player Vite server (`pnpm app:player`, no Tauri shell) in the background and runs `dev:cloud` in the foreground with `VITE_MHAOL_HEALTH_APPS=cloud,player` so the single Tauri health shell shows both panels. Running `dev:player` and `dev:cloud` as separate processes would launch two `cargo tauri dev` invocations competing on the same target dir, so the combined flow only spawns one Tauri shell. Hot reload works for the cloud WebUI, the player, and the Tauri health UI; the cloud Rust binary still needs a manual restart.
 
 ```bash
-# Full desktop dev stack (cloud Tauri wrapper + player Vite in browser)
+# Full desktop dev stack (cloud Rust + cloud Vite + player Vite + one Tauri health shell)
 pnpm dev
 
 # Cloud + player Vite servers only (no Tauri shell — browser-based workflow)
 pnpm dev:apps
 
-# Cloud + its Tauri wrapper (Rust + Vite WebUI + Tauri shell with health UI)
+# Cloud + its Tauri health shell (Rust + Vite WebUI + Tauri shell)
 pnpm dev:cloud
 
-# Player + its Tauri wrapper (Vite :9595 + native window wrapping the player)
+# Player + its Tauri health shell (Vite :9595 + Tauri shell)
 pnpm dev:player
 
 # Player Vite only (no Tauri shell)
 pnpm app:player
 
-# Cloud Tauri shell standalone (assumes cloud Vite and player are already running)
+# Tauri health shell standalone (assumes cloud and/or player are already running)
 pnpm app:tauri
-
-# Player Tauri shell standalone (its beforeDevCommand starts the player Vite server)
-pnpm app:tauri:player
 
 # Health UI Vite dev server only (no Tauri shell — quick UI tweaks in a browser)
 pnpm app:tauri:web
 
-# Desktop release builds
-pnpm app:tauri:build         # cloud wrapper
-pnpm app:tauri:player:build  # player wrapper
+# Desktop release build
+pnpm app:tauri:build
 
 # Mobile (Android)
 pnpm tauri:android:dev
