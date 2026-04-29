@@ -110,24 +110,41 @@ fn pick_audio(result: &StreamUrlResult) -> Option<&mhaol_yt_dlp::ResolvedFormat>
     any_audio.first().copied().or_else(|| pick_muxed(result))
 }
 
-/// HEAD-request the resolved format URL with browser-shaped headers and
-/// confirm the googlevideo CDN actually serves it. Returns `(status,
-/// content_length, content_type)`.
-async fn head_with_browser_headers(url: &str) -> anyhow::Result<(u16, Option<u64>, String)> {
+/// Range-fetch the resolved format URL and confirm the CDN actually serves it.
+/// Returns `(status, content_length, content_type)`.
+///
+/// `as_media_element=true` simulates how a `<video src=...>` / `<audio src=...>`
+/// element actually fetches in a browser tab loaded from `http://localhost:9898`:
+/// no `Origin`, the `Referer` is the page URL (downgraded to origin), and the
+/// `User-Agent` is the browser's default. Crucially, this is **not** the same
+/// as a `fetch()` from JS — which is what a lot of yt-dlp ports get wrong.
+///
+/// `as_media_element=false` mimics youtube.com itself fetching the URL
+/// (`Origin` + `Referer` set to youtube.com). This proves the URL is signed
+/// correctly even if it gets rejected when fetched from a localhost page.
+async fn fetch_resolved_url(
+    url: &str,
+    as_media_element: bool,
+) -> anyhow::Result<(u16, Option<u64>, String)> {
     let client = reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::limited(5))
         .build()?;
-    // googlevideo serves HEAD inconsistently; do a Range:bytes=0-0 GET so we
-    // exercise the same fetch the browser would make for the first byte while
-    // staying cheap.
-    let resp = client
+    let mut req = client
         .get(url)
         .header(reqwest::header::USER_AGENT, BROWSER_USER_AGENT)
-        .header(reqwest::header::RANGE, "bytes=0-0")
-        .header(reqwest::header::REFERER, "https://www.youtube.com/")
-        .header(reqwest::header::ORIGIN, "https://www.youtube.com")
-        .send()
-        .await?;
+        .header(reqwest::header::RANGE, "bytes=0-0");
+    if as_media_element {
+        // Mirror what a media element on a localhost cloud webui sends. No
+        // Origin (HTML media elements don't send Origin without `crossorigin`),
+        // Referer is the page origin.
+        req = req.header(reqwest::header::REFERER, "http://localhost:9898/");
+    } else {
+        req = req
+            .header(reqwest::header::REFERER, "https://www.youtube.com/")
+            .header(reqwest::header::ORIGIN, "https://www.youtube.com");
+    }
+    let resp = req.send().await?;
     let status = resp.status().as_u16();
     let content_type = resp
         .headers()
@@ -207,13 +224,13 @@ async fn browser_extraction_yields_playable_video_url() {
         format.bitrate / 1000
     );
 
-    let (status, content_length, content_type) = head_with_browser_headers(&format.url)
+    let (status, content_length, content_type) = fetch_resolved_url(&format.url, true)
         .await
-        .unwrap_or_else(|e| panic!("range-fetch failed for muxed itag {}: {e}", format.itag));
+        .unwrap_or_else(|e| panic!("range-fetch as <video> failed for muxed itag {}: {e}", format.itag));
 
     assert!(
         (200..300).contains(&status),
-        "muxed URL returned non-2xx for itag={}: status={}, content-type={:?}, url={}",
+        "muxed URL returned non-2xx as <video> for itag={}: status={}, content-type={:?}, url={}",
         format.itag,
         status,
         content_type,
@@ -265,18 +282,23 @@ async fn browser_extraction_yields_playable_audio_url() {
         format.is_audio_only
     );
 
-    let (status, content_length, content_type) = head_with_browser_headers(&format.url)
+    // Browser <audio> simulation. This is the failure mode that was hiding
+    // the real bug behind the "youtube origin" headers I had originally.
+    let (status, content_length, content_type) = fetch_resolved_url(&format.url, true)
         .await
-        .unwrap_or_else(|e| panic!("range-fetch failed for audio itag {}: {e}", format.itag));
+        .unwrap_or_else(|e| panic!("range-fetch as <audio> failed for audio itag {}: {e}", format.itag));
 
-    assert!(
-        (200..300).contains(&status),
-        "audio URL returned non-2xx for itag={}: status={}, content-type={:?}, url={}",
-        format.itag,
-        status,
-        content_type,
-        format.url
-    );
+    if !(200..300).contains(&status) {
+        // Useful diagnostics: try the same URL with the youtube-origin headers
+        // — if that succeeds, we know the URL is signed correctly and the
+        // CDN is rejecting the localhost-page Referer specifically.
+        let yt = fetch_resolved_url(&format.url, false).await.ok();
+        panic!(
+            "audio URL returned non-2xx as <audio> for itag={}: status={}, content-type={:?}\n  \
+             with youtube origin: {:?}\n  url={}",
+            format.itag, status, content_type, yt, format.url
+        );
+    }
     assert!(
         content_type.starts_with("audio/") || content_type.starts_with("video/"),
         "audio URL returned unexpected content-type {:?}",
