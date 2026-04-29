@@ -38,8 +38,8 @@
 		<div>
 			<h1 class="text-2xl font-bold">IPFS</h1>
 			<p class="text-sm text-base-content/60">
-				Audio files discovered while scanning libraries are pinned to the embedded IPFS node. This
-				page lists every pin recorded by the cloud server.
+				Audio, video, and image files discovered while scanning libraries are pinned to the embedded
+				IPFS node. This page lists every pin recorded by the cloud server.
 			</p>
 		</div>
 		<button

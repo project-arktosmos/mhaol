@@ -320,19 +320,24 @@ async fn scan(
 }
 
 #[cfg(not(target_os = "android"))]
+fn is_pinnable_mime(mime: &str) -> bool {
+    mime.starts_with("audio/") || mime.starts_with("video/") || mime.starts_with("image/")
+}
+
+#[cfg(not(target_os = "android"))]
 fn schedule_audio_pins(state: &CloudState, entries: &[ScanEntry]) {
-    let audio: Vec<(String, String, u64)> = entries
+    let to_pin: Vec<(String, String, u64)> = entries
         .iter()
-        .filter(|e| e.mime.starts_with("audio/"))
+        .filter(|e| is_pinnable_mime(&e.mime))
         .map(|e| (e.path.clone(), e.mime.clone(), e.size))
         .collect();
-    if audio.is_empty() {
+    if to_pin.is_empty() {
         return;
     }
     let ipfs = state.ipfs_manager.clone();
     let state = state.clone();
     tokio::spawn(async move {
-        for (path, mime, size) in audio {
+        for (path, mime, size) in to_pin {
             let req = mhaol_ipfs::AddIpfsRequest {
                 source: path.clone(),
                 pin: Some(true),
