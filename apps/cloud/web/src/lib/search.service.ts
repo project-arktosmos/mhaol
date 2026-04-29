@@ -28,10 +28,54 @@ function parseYear(s: string | null | undefined): number | null {
 
 export interface TorrentResultItem {
 	title: string;
+	parsedTitle: string;
+	year: number | null;
+	quality: string | null;
 	description: string;
 	magnetLink: string;
 	infoHash: string;
 	raw: unknown;
+}
+
+const TORRENT_QUALITY_PATTERNS: [RegExp, string][] = [
+	[/\b2160p\b/i, '2160p'],
+	[/\bUHD\b/i, '4K UHD'],
+	[/\b4K\b/i, '4K'],
+	[/\b1080p\b/i, '1080p'],
+	[/\b720p\b/i, '720p'],
+	[/\b480p\b/i, '480p'],
+	[/\b360p\b/i, '360p']
+];
+
+export function parseTorrentName(name: string): {
+	parsedTitle: string;
+	year: number | null;
+	quality: string | null;
+} {
+	const yearMatch = name.match(/[\s.([](\d{4})[\s.)\]]/);
+	const year = yearMatch ? parseInt(yearMatch[1], 10) : null;
+
+	let quality: string | null = null;
+	let qualityIdx = -1;
+	for (const [re, label] of TORRENT_QUALITY_PATTERNS) {
+		const m = name.match(re);
+		if (m && m.index !== undefined) {
+			quality = label;
+			qualityIdx = m.index;
+			break;
+		}
+	}
+
+	const yearIdx = yearMatch?.index ?? -1;
+	let cutIdx = -1;
+	if (yearIdx > 0) cutIdx = yearIdx;
+	if (qualityIdx > 0 && (cutIdx < 0 || qualityIdx < cutIdx)) cutIdx = qualityIdx;
+
+	let parsedTitle = cutIdx > 0 ? name.slice(0, cutIdx) : name;
+	parsedTitle = parsedTitle.replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
+	if (!parsedTitle) parsedTitle = name;
+
+	return { parsedTitle, year, quality };
 }
 
 export async function searchSource(
@@ -86,7 +130,8 @@ export async function searchTorrents(
 		body: JSON.stringify({ query: trimmed, category: tpbCategoryFor(type) })
 	});
 	if (!res.ok) throw new Error(await parseError(res));
-	return (await res.json()) as TorrentResultItem[];
+	const raw = (await res.json()) as Omit<TorrentResultItem, 'parsedTitle' | 'year' | 'quality'>[];
+	return raw.map((t) => ({ ...t, ...parseTorrentName(t.title) }));
 }
 
 async function parseError(res: Response): Promise<string> {

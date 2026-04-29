@@ -629,6 +629,8 @@
 						<thead>
 							<tr>
 								<th>Title</th>
+								<th>Year</th>
+								<th>Quality</th>
 								<th>Stats</th>
 								<th class="w-16">Added</th>
 							</tr>
@@ -641,7 +643,9 @@
 									})}
 									onclick={() => addTorrentAsFile(torrent)}
 								>
-									<td class="font-medium">{torrent.title}</td>
+									<td class="font-medium" title={torrent.title}>{torrent.parsedTitle}</td>
+									<td class="text-xs">{torrent.year ?? ''}</td>
+									<td class="text-xs">{torrent.quality ?? ''}</td>
 									<td class="text-xs text-base-content/70">{torrent.description}</td>
 									<td class="text-center text-xs"
 										>{addedHashes.has(torrent.magnetLink) ? '✓' : ''}</td
