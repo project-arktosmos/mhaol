@@ -24,6 +24,7 @@
 	let files = $derived(document.files ?? []);
 	let magnetFiles = $derived(files.filter((f) => f.type === 'torrent magnet'));
 	let tableFiles = $derived(files.filter((f) => f.type !== 'torrent magnet'));
+	let hasIpfsFiles = $derived(files.some((f) => f.type === 'ipfs'));
 
 	const torrentsState = documentTorrentsService.state;
 	let pendingHashes = $state<Record<string, boolean>>({});
@@ -165,12 +166,57 @@
 			</table>
 		</details>
 	{/if}
-	{#if magnetFiles.length > 0}
+	{#if magnetFiles.length > 0 || hasIpfsFiles}
 		<footer class="flex flex-col gap-2 border-t border-base-content/10 px-4 py-3">
 			{#each magnetFiles as file, i (i)}
 				{@const torrent = torrentFor(file)}
 				{@const pending = isPending(file)}
-				{#if torrent}
+				{#if hasIpfsFiles}
+					<div class="flex items-center gap-2">
+						<button
+							type="button"
+							class="btn btn-outline btn-sm flex-1 justify-start gap-2 btn-disabled"
+							disabled
+							title={fileTooltip(file)}
+							aria-label="Torrent already downloaded"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								class="h-4 w-4 shrink-0"
+								aria-hidden="true"
+							>
+								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+								<polyline points="7 10 12 15 17 10" />
+								<line x1="12" y1="15" x2="12" y2="3" />
+							</svg>
+							<span class="truncate">{file.title ?? 'Downloaded'}</span>
+						</button>
+						<button
+							type="button"
+							class="btn btn-primary btn-sm gap-2 btn-disabled"
+							disabled
+							aria-label="Play (not implemented)"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 24 24"
+								fill="currentColor"
+								stroke="none"
+								class="h-4 w-4 shrink-0"
+								aria-hidden="true"
+							>
+								<polygon points="6 4 20 12 6 20 6 4" />
+							</svg>
+							<span>Play</span>
+						</button>
+					</div>
+				{:else if torrent}
 					<div class="flex flex-col gap-1" title={fileTooltip(file)}>
 						<div class="flex items-center justify-between gap-2 text-xs">
 							<span class="truncate text-base-content/80">{file.title ?? torrent.name}</span>
@@ -221,6 +267,26 @@
 					</button>
 				{/if}
 			{/each}
+			{#if hasIpfsFiles && magnetFiles.length === 0}
+				<button
+					type="button"
+					class="btn btn-primary btn-sm justify-start gap-2 btn-disabled"
+					disabled
+					aria-label="Play (not implemented)"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						stroke="none"
+						class="h-4 w-4 shrink-0"
+						aria-hidden="true"
+					>
+						<polygon points="6 4 20 12 6 20 6 4" />
+					</svg>
+					<span>Play</span>
+				</button>
+			{/if}
 		</footer>
 	{/if}
 </article>
