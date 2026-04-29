@@ -1,8 +1,8 @@
 use crate::state::CloudState;
 use axum::{
+    body::Body,
     extract::Query,
-    http::{header, HeaderMap, HeaderValue, StatusCode},
-    response::IntoResponse,
+    http::{header, HeaderValue, Response, StatusCode},
     routing::get,
     Router,
 };
@@ -42,7 +42,19 @@ fn filename_for(url_str: &str) -> String {
     format!("{}.{}", hex, ext)
 }
 
-async fn serve(Query(q): Query<Q>) -> Result<impl IntoResponse, StatusCode> {
+fn build_response(bytes: Vec<u8>, content_type: HeaderValue) -> Result<Response<Body>, StatusCode> {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        )
+        .body(Body::from(bytes))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn serve(Query(q): Query<Q>) -> Result<Response<Body>, StatusCode> {
     let url = q.url;
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err(StatusCode::BAD_REQUEST);
@@ -51,19 +63,11 @@ async fn serve(Query(q): Query<Q>) -> Result<impl IntoResponse, StatusCode> {
     let path = dir.join(filename_for(&url));
 
     let mime = mime_guess::from_path(&path).first_or_octet_stream();
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_str(mime.as_ref())
-            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
-    );
-    headers.insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=31536000, immutable"),
-    );
+    let content_type = HeaderValue::from_str(mime.as_ref())
+        .unwrap_or(HeaderValue::from_static("application/octet-stream"));
 
     if let Ok(bytes) = tokio::fs::read(&path).await {
-        return Ok((headers, bytes).into_response());
+        return build_response(bytes, content_type);
     }
 
     let resp = reqwest::get(&url)
@@ -72,6 +76,11 @@ async fn serve(Query(q): Query<Q>) -> Result<impl IntoResponse, StatusCode> {
     if !resp.status().is_success() {
         return Err(StatusCode::BAD_GATEWAY);
     }
+    let upstream_ct = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| HeaderValue::from_str(s).ok());
     let bytes = resp
         .bytes()
         .await
@@ -80,5 +89,5 @@ async fn serve(Query(q): Query<Q>) -> Result<impl IntoResponse, StatusCode> {
     if let Err(e) = tokio::fs::write(&path, &bytes).await {
         tracing::warn!("image cache write failed for {}: {}", path.display(), e);
     }
-    Ok((headers, bytes).into_response())
+    build_response(bytes, upstream_ct.unwrap_or(content_type))
 }
