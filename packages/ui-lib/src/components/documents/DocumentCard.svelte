@@ -13,9 +13,9 @@
 
 	let hasYear = $derived(document.year !== null && document.year !== undefined);
 
-	let artistsValue = $derived((document.artists ?? []).map((a) => a.name).join(', '));
-
 	let files = $derived(document.files ?? []);
+	let magnetFiles = $derived(files.filter((f) => f.type === 'torrent magnet'));
+	let tableFiles = $derived(files.filter((f) => f.type !== 'torrent magnet'));
 
 	function fileTooltip(file: DocumentFile): string {
 		return file.title ? `${file.title}\n${file.value}` : file.value;
@@ -51,57 +51,52 @@
 			{document.description}
 		</p>
 	{/if}
-	<div class="card-body p-0">
-		<table class="table w-full table-fixed table-sm">
-			<tbody>
-				<tr>
-					<th class="w-1/3 align-top text-xs font-semibold text-base-content/70">Artists</th>
-					<td
-						class="w-2/3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word]"
-						>{artistsValue}</td
+	{#if tableFiles.length > 0}
+		<div class="card-body p-0">
+			<table class="table w-full table-fixed table-sm">
+				<tbody>
+					{#each tableFiles as file, i (i)}
+						<tr>
+							<th class="w-1/3 align-top text-xs font-semibold text-base-content/70"
+								>{file.type}</th
+							>
+							<td
+								class="w-2/3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word]"
+								title={fileTooltip(file)}>{file.title ?? file.value}</td
+							>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
+	{#if magnetFiles.length > 0}
+		<footer class="flex flex-wrap items-center gap-2 border-t border-base-content/10 px-4 py-3">
+			{#each magnetFiles as file, i (i)}
+				<a
+					href={file.value}
+					title={fileTooltip(file)}
+					aria-label={file.title ? `Magnet: ${file.title}` : 'Magnet link'}
+					class="inline-flex h-8 w-8 items-center justify-center rounded text-base-content/70 hover:bg-base-300 hover:text-base-content"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class="h-5 w-5"
+						aria-hidden="true"
 					>
-				</tr>
-			</tbody>
-		</table>
-	</div>
-	{#if files.length > 0}
-		<footer
-			class="flex flex-wrap items-center gap-2 border-t border-base-content/10 px-4 py-3"
-		>
-			{#each files as file, i (i)}
-				{#if file.type === 'torrent magnet'}
-					<a
-						href={file.value}
-						title={fileTooltip(file)}
-						aria-label={file.title ? `Magnet: ${file.title}` : 'Magnet link'}
-						class="inline-flex h-8 w-8 items-center justify-center rounded text-base-content/70 hover:bg-base-300 hover:text-base-content"
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							class="h-5 w-5"
-							aria-hidden="true"
-						>
-							<path d="M6 3v9a6 6 0 0 0 12 0V3" />
-							<path d="M6 8h4" />
-							<path d="M14 8h4" />
-							<path d="M6 3H3" />
-							<path d="M21 3h-3" />
-						</svg>
-					</a>
-				{:else}
-					<span
-						class="text-xs break-all [overflow-wrap:anywhere] text-base-content/70"
-						title={fileTooltip(file)}
-					>
-						{file.title ? `${file.type}: ${file.title}` : `${file.type}: ${file.value}`}
-					</span>
-				{/if}
+						<path d="M6 3v9a6 6 0 0 0 12 0V3" />
+						<path d="M6 8h4" />
+						<path d="M14 8h4" />
+						<path d="M6 3H3" />
+						<path d="M21 3h-3" />
+					</svg>
+				</a>
 			{/each}
 		</footer>
 	{/if}
