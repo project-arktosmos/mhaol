@@ -34,6 +34,7 @@
 	let addingHash = $state<string | null>(null);
 	let assignError = $state<string | null>(null);
 	let searchRun = 0;
+	let startedHashes = $state<Set<string>>(new Set());
 
 	const existingHashes = $derived(
 		new Set(
@@ -49,6 +50,19 @@
 		const kind = document.type as DocumentType;
 		const year = document.year;
 		void runTorrentSearch(id, title, kind, year);
+	});
+
+	$effect(() => {
+		const magnets = document.files
+			.filter((f) => f.type === 'torrent magnet' && f.value)
+			.map((f) => f.value);
+		for (const magnet of magnets) {
+			if (startedHashes.has(magnet)) continue;
+			startedHashes = new Set(startedHashes).add(magnet);
+			void startTorrentDownload(magnet).catch((err) => {
+				console.warn('[catalog detail] auto-start failed for magnet:', err);
+			});
+		}
 	});
 
 	async function runTorrentSearch(
