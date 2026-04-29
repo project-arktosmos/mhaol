@@ -226,6 +226,17 @@ async fn delete(
     State(state): State<CloudState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    let existing: Option<Library> = state
+        .db
+        .select((TABLE, id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let lib = existing
+        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "library not found"))?;
+
+    #[cfg(not(target_os = "android"))]
+    clear_pins_for_library(&state, &lib.path).await;
+
     let removed: Option<Library> = state
         .db
         .delete((TABLE, id.as_str()))
@@ -357,11 +368,22 @@ async fn pins(
     let prefix = lib.path;
     let mut filtered: Vec<crate::ipfs_pins::IpfsPinDto> = all
         .into_iter()
-        .filter(|p| p.path.starts_with(&prefix))
+        .filter(|p| path_under_prefix(&p.path, &prefix))
         .map(Into::into)
         .collect();
     filtered.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(Json(filtered))
+}
+
+/// True when `path` equals `prefix` or sits under it as a directory child.
+/// Plain `str::starts_with` would match `/foo2/bar` against `/foo` — this
+/// requires the next character to be a path separator (or end of string).
+fn path_under_prefix(path: &str, prefix: &str) -> bool {
+    if !path.starts_with(prefix) {
+        return false;
+    }
+    let rest = &path[prefix.len()..];
+    rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\')
 }
 
 #[cfg(not(target_os = "android"))]
@@ -377,11 +399,20 @@ fn schedule_audio_pins(state: &CloudState, entries: &[ScanEntry]) {
         .map(|e| (e.path.clone(), e.mime.clone(), e.size))
         .collect();
     if to_pin.is_empty() {
+        tracing::info!("[libraries] scan produced no pinnable files");
         return;
     }
     let ipfs = state.ipfs_manager.clone();
     let state = state.clone();
+    let count = to_pin.len();
     tokio::spawn(async move {
+        if !wait_for_ipfs_ready(&ipfs).await {
+            tracing::warn!(
+                "[libraries] skipping pin of {count} file(s): ipfs node never reached running state"
+            );
+            return;
+        }
+        tracing::info!("[libraries] pinning {count} scanned file(s) to ipfs");
         for (path, mime, size) in to_pin {
             let req = mhaol_ipfs::AddIpfsRequest {
                 source: path.clone(),
@@ -400,6 +431,68 @@ fn schedule_audio_pins(state: &CloudState, entries: &[ScanEntry]) {
             }
         }
     });
+}
+
+#[cfg(not(target_os = "android"))]
+async fn wait_for_ipfs_ready(ipfs: &std::sync::Arc<mhaol_ipfs::IpfsManager>) -> bool {
+    use mhaol_ipfs::IpfsState;
+    // Cap the wait at ~60s so a permanently-broken node doesn't pin tasks
+    // forever. Most boots reach Running within a few seconds.
+    for _ in 0..120 {
+        match ipfs.state() {
+            IpfsState::Running => return true,
+            IpfsState::Error => return false,
+            IpfsState::Stopped | IpfsState::Starting => {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+        }
+    }
+    matches!(ipfs.state(), IpfsState::Running)
+}
+
+#[cfg(not(target_os = "android"))]
+async fn clear_pins_for_library(state: &CloudState, lib_path: &str) {
+    use surrealdb::sql::Thing;
+
+    let pins: Vec<crate::ipfs_pins::IpfsPin> = match state.db.select(crate::ipfs_pins::TABLE).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!("[libraries] failed to load pins for cleanup: {e}");
+            return;
+        }
+    };
+
+    let to_clear: Vec<(Thing, String)> = pins
+        .into_iter()
+        .filter(|p| path_under_prefix(&p.path, lib_path))
+        .filter_map(|p| p.id.map(|id| (id, p.cid)))
+        .collect();
+
+    if to_clear.is_empty() {
+        return;
+    }
+
+    tracing::info!(
+        "[libraries] removing {} pin record(s) for library {}",
+        to_clear.len(),
+        lib_path
+    );
+
+    for (thing, cid) in to_clear {
+        if let Err(e) = state.ipfs_manager.unpin(&cid).await {
+            // Pin may not exist on the node (already gc'd, or never made it
+            // there) — log and keep going so the DB record still goes away.
+            tracing::warn!("[libraries] failed to unpin {cid} from ipfs: {e}");
+        }
+        let record_id = thing.id.to_raw();
+        if let Err(e) = state
+            .db
+            .delete::<Option<crate::ipfs_pins::IpfsPin>>((crate::ipfs_pins::TABLE, record_id.as_str()))
+            .await
+        {
+            tracing::warn!("[libraries] failed to delete pin record {record_id}: {e}");
+        }
+    }
 }
 
 impl IntoResponse for LibraryDto {
