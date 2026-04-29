@@ -34,6 +34,7 @@
 	let year = $state<number | null>(null);
 	let source = $state<DocumentSource>(DOCUMENT_SOURCES[0]);
 	let type = $state<DocumentType>(TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0]);
+	let prefilledFiles = $state<FileEntry[]>([]);
 	const availableTypes = $derived(TYPES_BY_SOURCE[source]);
 	$effect(() => {
 		if (!availableTypes.includes(type)) {
@@ -85,6 +86,7 @@
 		year = null;
 		source = DOCUMENT_SOURCES[0];
 		type = TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0];
+		prefilledFiles = [];
 	}
 
 	function addArtist() {
@@ -112,7 +114,7 @@
 		description = result.description;
 		artists = result.artists.map((a) => ({ ...a }));
 		images = result.images.map((img) => ({ ...img }));
-		files = result.files.map((f) => ({ ...f }));
+		files = [...prefilledFiles.map((f) => ({ ...f })), ...result.files.map((f) => ({ ...f }))];
 		year = result.year;
 		enrichError = null;
 
@@ -208,7 +210,45 @@
 
 	onMount(() => {
 		documentsService.refresh();
+		consumeUrlParams();
 	});
+
+	function consumeUrlParams() {
+		const params = new URLSearchParams(window.location.search);
+		const cidParam = params.get('cid');
+		if (!cidParam) return;
+
+		const sourceParam = params.get('source');
+		if (sourceParam && (DOCUMENT_SOURCES as readonly string[]).includes(sourceParam)) {
+			source = sourceParam as DocumentSource;
+		}
+		const typeParam = params.get('type');
+		if (typeParam && (TYPES_BY_SOURCE[source] as readonly string[]).includes(typeParam)) {
+			type = typeParam as DocumentType;
+		}
+		const titleParam = params.get('title')?.trim() ?? '';
+		if (titleParam) title = titleParam;
+		const yearParam = params.get('year');
+		if (yearParam) {
+			const y = parseInt(yearParam, 10);
+			if (Number.isFinite(y) && y >= 1000 && y <= 9999) year = y;
+		}
+		const filenameParam = params.get('filename')?.trim();
+		const ipfsEntry: FileEntry = {
+			type: 'ipfs',
+			value: cidParam,
+			title: filenameParam || undefined
+		};
+		prefilledFiles = [ipfsEntry];
+		files = [ipfsEntry];
+		showAdvanced = true;
+
+		window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+
+		if (title.trim()) {
+			void runSearch();
+		}
+	}
 
 	async function commitCreate(): Promise<boolean> {
 		createError = null;
