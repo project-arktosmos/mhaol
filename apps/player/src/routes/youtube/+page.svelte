@@ -8,25 +8,107 @@
   } from "addons/youtube/types";
   import { extractVideoId } from "addons/youtube/types";
 
+  interface SearchItem {
+    videoId: string;
+    type: string;
+    url: string;
+    title: string;
+    thumbnail: string;
+    duration: number;
+    durationText: string;
+    views: number;
+    viewsText: string;
+    uploadedDate: string;
+    uploaderName: string;
+    uploaderUrl: string;
+    uploaderAvatar: string;
+    uploaderVerified: boolean;
+  }
+
+  interface SearchResponse {
+    items: SearchItem[];
+    channels: unknown[];
+    continuation: string | null;
+  }
+
+  let query = $state("");
+  let searching = $state(false);
+  let searchError = $state<string | null>(null);
+  let searchResults = $state<SearchItem[]>([]);
+  let searchContinuation = $state<string | null>(null);
+  let loadingMore = $state(false);
+
   let url = $state("");
   let info = $state<YouTubeVideoInfo | null>(null);
   let infoLoading = $state(false);
   let infoError = $state<string | null>(null);
   let downloads = $state<YouTubeDownloadProgress[]>([]);
-  let queueing = $state<DownloadMode | null>(null);
+  let queueing = $state<string | null>(null); // download id being queued
   let queueError = $state<string | null>(null);
   let connected = $state(false);
 
   let sse: EventSource | null = null;
 
-  async function fetchInfo() {
-    if (!url.trim()) return;
+  async function runSearch() {
+    const q = query.trim();
+    if (!q) return;
+    searching = true;
+    searchError = null;
+    searchResults = [];
+    searchContinuation = null;
+    try {
+      const res = await fetch(
+        `/api/ytdl/search?q=${encodeURIComponent(q)}`,
+      );
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as SearchResponse;
+      searchResults = data.items;
+      searchContinuation = data.continuation;
+    } catch (e) {
+      searchError = e instanceof Error ? e.message : String(e);
+    } finally {
+      searching = false;
+    }
+  }
+
+  async function loadMore() {
+    if (!searchContinuation || loadingMore) return;
+    loadingMore = true;
+    try {
+      const res = await fetch(
+        `/api/ytdl/search?continuation=${encodeURIComponent(searchContinuation)}`,
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as SearchResponse;
+      searchResults = [...searchResults, ...data.items];
+      searchContinuation = data.continuation;
+    } catch {
+      // ignore
+    } finally {
+      loadingMore = false;
+    }
+  }
+
+  function clearSearch() {
+    query = "";
+    searchResults = [];
+    searchContinuation = null;
+    searchError = null;
+  }
+
+  async function fetchInfo(target?: string) {
+    const value = (target ?? url).trim();
+    if (!value) return;
+    url = value;
     infoLoading = true;
     infoError = null;
     info = null;
     try {
       const res = await fetch(
-        `/api/ytdl/info/video?url=${encodeURIComponent(url.trim())}`,
+        `/api/ytdl/info/video?url=${encodeURIComponent(value)}`,
       );
       if (!res.ok) {
         const body = await res.text();
@@ -40,9 +122,41 @@
     }
   }
 
+  function selectSearchResult(item: SearchItem) {
+    fetchInfo(`https://www.youtube.com/watch?v=${item.videoId}`);
+  }
+
+  async function quickQueue(item: SearchItem, mode: DownloadMode) {
+    const dlUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
+    queueing = item.videoId;
+    queueError = null;
+    try {
+      const res = await fetch("/api/ytdl/downloads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: dlUrl,
+          videoId: item.videoId,
+          title: item.title,
+          mode,
+          thumbnailUrl: item.thumbnail,
+          durationSeconds: item.duration,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `HTTP ${res.status}`);
+      }
+    } catch (e) {
+      queueError = e instanceof Error ? e.message : String(e);
+    } finally {
+      queueing = null;
+    }
+  }
+
   async function queueDownload(mode: DownloadMode) {
     if (!info) return;
-    queueing = mode;
+    queueing = info.videoId;
     queueError = null;
     try {
       const res = await fetch("/api/ytdl/downloads", {
@@ -88,7 +202,9 @@
   }
 
   function upsertDownload(progress: YouTubeDownloadProgress) {
-    const idx = downloads.findIndex((d) => d.downloadId === progress.downloadId);
+    const idx = downloads.findIndex(
+      (d) => d.downloadId === progress.downloadId,
+    );
     if (idx >= 0) {
       downloads[idx] = progress;
       downloads = downloads;
@@ -167,6 +283,37 @@
     >
       {connected ? "yt-dlp connected" : "connecting…"}
     </span>
+    <div class="ml-auto flex items-center gap-2">
+      <div class="join">
+        <input
+          type="text"
+          class="input join-item input-sm input-bordered w-64"
+          placeholder="Search YouTube…"
+          bind:value={query}
+          onkeydown={(e) => {
+            if (e.key === "Enter") runSearch();
+          }}
+        />
+        <button
+          class="btn join-item btn-sm btn-primary"
+          disabled={!query.trim() || searching}
+          onclick={runSearch}
+        >
+          {#if searching}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            Search
+          {/if}
+        </button>
+        {#if searchResults.length > 0 || query}
+          <button
+            class="btn join-item btn-sm"
+            onclick={clearSearch}
+            disabled={searching}>Clear</button
+          >
+        {/if}
+      </div>
+    </div>
   </header>
 
   <div class="min-w-0 flex-1 overflow-y-auto p-4">
@@ -175,7 +322,7 @@
         <input
           type="text"
           class="input join-item input-bordered flex-1"
-          placeholder="https://www.youtube.com/watch?v=…"
+          placeholder="…or paste a URL: https://www.youtube.com/watch?v=…"
           bind:value={url}
           onkeydown={(e) => {
             if (e.key === "Enter" && canFetchInfo) fetchInfo();
@@ -184,7 +331,7 @@
         <button
           class="btn join-item btn-primary"
           disabled={!canFetchInfo || infoLoading}
-          onclick={fetchInfo}
+          onclick={() => fetchInfo()}
         >
           {#if infoLoading}
             <span class="loading loading-sm loading-spinner"></span>
@@ -200,6 +347,85 @@
       {/if}
     </div>
 
+    {#if searchError}
+      <div class="alert alert-error mb-4">
+        <span>{searchError}</span>
+      </div>
+    {/if}
+
+    {#if searching && searchResults.length === 0}
+      <div class="flex justify-center py-8">
+        <span class="loading loading-lg loading-spinner"></span>
+      </div>
+    {:else if searchResults.length > 0}
+      <section class="mb-6">
+        <h2 class="mb-3 text-lg font-semibold">Search results</h2>
+        <div class="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {#each searchResults as item (item.videoId)}
+            <div class="flex gap-3 rounded-lg bg-base-200 p-2">
+              <button
+                class="shrink-0"
+                onclick={() => selectSearchResult(item)}
+                aria-label="Select {item.title}"
+              >
+                {#if item.thumbnail}
+                  <img
+                    src={item.thumbnail}
+                    alt={item.title}
+                    class="h-20 w-32 rounded object-cover"
+                    loading="lazy"
+                  />
+                {:else}
+                  <div class="h-20 w-32 rounded bg-base-300"></div>
+                {/if}
+              </button>
+              <div class="flex min-w-0 flex-1 flex-col gap-1">
+                <button
+                  class="truncate text-left text-sm font-medium hover:underline"
+                  onclick={() => selectSearchResult(item)}
+                  title={item.title}
+                >
+                  {item.title}
+                </button>
+                <p class="truncate text-xs opacity-60">
+                  {item.uploaderName}
+                  {#if item.durationText}· {item.durationText}{/if}
+                  {#if item.viewsText}· {item.viewsText}{/if}
+                </p>
+                <div class="mt-auto flex gap-1">
+                  <button
+                    class="btn btn-xs btn-primary"
+                    disabled={queueing === item.videoId}
+                    onclick={() => quickQueue(item, "video")}
+                  >
+                    Video
+                  </button>
+                  <button
+                    class="btn btn-xs btn-secondary"
+                    disabled={queueing === item.videoId}
+                    onclick={() => quickQueue(item, "audio")}
+                  >
+                    Audio
+                  </button>
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
+        {#if searchContinuation}
+          <div class="mt-3 flex justify-center">
+            <button
+              class="btn btn-sm"
+              disabled={loadingMore}
+              onclick={loadMore}
+            >
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
+          </div>
+        {/if}
+      </section>
+    {/if}
+
     {#if info}
       <div class="mb-6 flex gap-4 rounded-lg bg-base-200 p-4">
         {#if info.thumbnailUrl}
@@ -214,9 +440,7 @@
           <p class="font-semibold">{info.title}</p>
           <p class="text-sm opacity-70">
             {info.uploader ?? "Unknown uploader"}
-            {#if info.duration}
-              · {fmtDuration(info.duration)}
-            {/if}
+            {#if info.duration}· {fmtDuration(info.duration)}{/if}
           </p>
           <div class="mt-auto flex flex-wrap gap-2">
             <button
@@ -224,21 +448,21 @@
               disabled={queueing !== null}
               onclick={() => queueDownload("video")}
             >
-              {queueing === "video" ? "Queueing…" : "Download video"}
+              {queueing === info.videoId ? "Queueing…" : "Download video"}
             </button>
             <button
               class="btn btn-sm btn-secondary"
               disabled={queueing !== null}
               onclick={() => queueDownload("audio")}
             >
-              {queueing === "audio" ? "Queueing…" : "Download audio"}
+              {queueing === info.videoId ? "Queueing…" : "Download audio"}
             </button>
             <button
               class="btn btn-sm"
               disabled={queueing !== null}
               onclick={() => queueDownload("both")}
             >
-              {queueing === "both" ? "Queueing…" : "Both"}
+              Both
             </button>
           </div>
           {#if queueError}
@@ -314,9 +538,10 @@
       </section>
     {/if}
 
-    {#if !info && downloads.length === 0}
+    {#if !info && downloads.length === 0 && searchResults.length === 0}
       <p class="rounded-lg bg-base-200 p-8 text-center opacity-60">
-        Paste a YouTube URL above to fetch info and queue a download.
+        Search for videos above, or paste a URL to fetch info and queue a
+        download.
       </p>
     {/if}
   </div>
