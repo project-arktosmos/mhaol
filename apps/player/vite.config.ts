@@ -3,6 +3,13 @@ import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 import { navPlugin } from "./scripts/nav-vite-plugin.mjs";
 
+const proxy = {
+  "/api/documents": "http://127.0.0.1:9899",
+  "/api/torrent/list": "http://127.0.0.1:9899",
+  "/api/torrent/add": "http://127.0.0.1:9899",
+  "/api": "http://localhost:1530",
+};
+
 export default defineConfig({
   plugins: [navPlugin(), tailwindcss(), sveltekit()],
   server: {
@@ -11,15 +18,11 @@ export default defineConfig({
     fs: {
       allow: ["../.."],
     },
-    proxy: {
-      "/api": "http://localhost:1530",
-    },
+    proxy,
   },
   preview: {
     host: true,
     port: parseInt(process.env.PORT || "9595"),
-    proxy: {
-      "/api": "http://localhost:1530",
-    },
+    proxy,
   },
 });
