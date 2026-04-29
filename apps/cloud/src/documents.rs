@@ -75,6 +75,46 @@ pub struct FileEntry {
     pub title: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SyncedLine {
+    pub time: f64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SubsLyrics {
+    pub kind: String,
+    pub source: String,
+    #[serde(rename = "externalId", default)]
+    pub external_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(rename = "trackName", default, skip_serializing_if = "Option::is_none")]
+    pub track_name: Option<String>,
+    #[serde(rename = "artistName", default, skip_serializing_if = "Option::is_none")]
+    pub artist_name: Option<String>,
+    #[serde(rename = "albumName", default, skip_serializing_if = "Option::is_none")]
+    pub album_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(rename = "plainLyrics", default, skip_serializing_if = "Option::is_none")]
+    pub plain_lyrics: Option<String>,
+    #[serde(rename = "syncedLyrics", default, skip_serializing_if = "Option::is_none")]
+    pub synced_lyrics: Option<Vec<SyncedLine>>,
+    #[serde(default)]
+    pub instrumental: bool,
+    #[serde(rename = "isHearingImpaired", default)]
+    pub is_hearing_impaired: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<String>,
+    #[serde(rename = "sourceExternalId", default, skip_serializing_if = "Option::is_none")]
+    pub source_external_id: Option<String>,
+}
+
 #[derive(Serialize)]
 struct DocumentPayloadView<'a> {
     title: &'a str,
@@ -82,6 +122,8 @@ struct DocumentPayloadView<'a> {
     artists: &'a [Artist],
     images: &'a [ImageMeta],
     files: &'a [FileEntry],
+    #[serde(rename = "subsLyrics")]
+    subs_lyrics: &'a [SubsLyrics],
     year: Option<i32>,
     #[serde(rename = "type")]
     kind: &'a str,
@@ -97,6 +139,7 @@ pub fn compute_document_cid(
     artists: &[Artist],
     images: &[ImageMeta],
     files: &[FileEntry],
+    subs_lyrics: &[SubsLyrics],
     year: Option<i32>,
     kind: &str,
     source: &str,
@@ -109,6 +152,7 @@ pub fn compute_document_cid(
         artists,
         images,
         files,
+        subs_lyrics,
         year,
         kind,
         source,
@@ -135,6 +179,8 @@ pub struct Document {
     pub images: Vec<ImageMeta>,
     #[serde(default)]
     pub files: Vec<FileEntry>,
+    #[serde(rename = "subsLyrics", alias = "subs_lyrics", default)]
+    pub subs_lyrics: Vec<SubsLyrics>,
     #[serde(default)]
     pub year: Option<i32>,
     #[serde(rename = "type", default)]
@@ -157,6 +203,8 @@ pub struct DocumentDto {
     pub description: String,
     pub images: Vec<ImageMeta>,
     pub files: Vec<FileEntry>,
+    #[serde(rename = "subsLyrics")]
+    pub subs_lyrics: Vec<SubsLyrics>,
     pub year: Option<i32>,
     #[serde(rename = "type")]
     pub kind: String,
@@ -181,6 +229,7 @@ impl From<Document> for DocumentDto {
             description: doc.description,
             images: doc.images,
             files: doc.files,
+            subs_lyrics: doc.subs_lyrics,
             year: doc.year,
             kind: doc.kind,
             source: doc.source,
@@ -202,6 +251,8 @@ pub struct CreateDocumentRequest {
     pub images: Vec<ImageMeta>,
     #[serde(default)]
     pub files: Vec<FileEntry>,
+    #[serde(rename = "subsLyrics", alias = "subs_lyrics", default)]
+    pub subs_lyrics: Vec<SubsLyrics>,
     #[serde(default)]
     pub year: Option<i32>,
     #[serde(rename = "type")]
@@ -216,6 +267,8 @@ pub struct UpdateDocumentRequest {
     pub description: Option<String>,
     pub images: Option<Vec<ImageMeta>>,
     pub files: Option<Vec<FileEntry>>,
+    #[serde(rename = "subsLyrics", alias = "subs_lyrics")]
+    pub subs_lyrics: Option<Vec<SubsLyrics>>,
     pub year: Option<i32>,
     #[serde(rename = "type")]
     pub kind: Option<String>,
@@ -236,6 +289,82 @@ fn err_response(
         status,
         Json(serde_json::json!({ "error": message.into() })),
     )
+}
+
+fn sanitize_subs_lyrics(items: Vec<SubsLyrics>) -> Vec<SubsLyrics> {
+    items
+        .into_iter()
+        .filter_map(|s| {
+            let kind = s.kind.trim().to_string();
+            let source = s.source.trim().to_string();
+            if kind.is_empty() || source.is_empty() {
+                return None;
+            }
+            let plain_lyrics = s
+                .plain_lyrics
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty());
+            let synced_lyrics = s
+                .synced_lyrics
+                .filter(|v| !v.is_empty());
+            let url = s.url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
+            let format = s
+                .format
+                .map(|f| f.trim().to_string())
+                .filter(|f| !f.is_empty());
+            let language = s
+                .language
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty());
+            let track_name = s
+                .track_name
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty());
+            let artist_name = s
+                .artist_name
+                .map(|a| a.trim().to_string())
+                .filter(|a| !a.is_empty());
+            let album_name = s
+                .album_name
+                .map(|a| a.trim().to_string())
+                .filter(|a| !a.is_empty());
+            let display = s
+                .display
+                .map(|d| d.trim().to_string())
+                .filter(|d| !d.is_empty());
+            let source_external_id = s
+                .source_external_id
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            // For lyrics we need at least one of plain/synced/instrumental flag.
+            // For subtitles we need at least a URL.
+            let has_payload = plain_lyrics.is_some()
+                || synced_lyrics.is_some()
+                || s.instrumental
+                || url.is_some();
+            if !has_payload {
+                return None;
+            }
+            Some(SubsLyrics {
+                kind,
+                source,
+                external_id: s.external_id.trim().to_string(),
+                language,
+                track_name,
+                artist_name,
+                album_name,
+                duration: s.duration,
+                format,
+                url,
+                plain_lyrics,
+                synced_lyrics,
+                instrumental: s.instrumental,
+                is_hearing_impaired: s.is_hearing_impaired,
+                display,
+                source_external_id,
+            })
+        })
+        .collect()
 }
 
 async fn list(
@@ -356,6 +485,8 @@ async fn create(
 
     let year = req.year.filter(|y| (1000..=9999).contains(y));
 
+    let subs_lyrics = sanitize_subs_lyrics(req.subs_lyrics);
+
     let now = Utc::now();
     let version: u32 = 0;
     let version_hashes: Vec<String> = Vec::new();
@@ -365,6 +496,7 @@ async fn create(
         &artists,
         &images,
         &files,
+        &subs_lyrics,
         year,
         kind,
         source,
@@ -388,6 +520,7 @@ async fn create(
         description,
         images,
         files,
+        subs_lyrics,
         year,
         kind: kind.to_string(),
         source: source.to_string(),
@@ -489,6 +622,10 @@ async fn update(
             });
         }
         current.files = next;
+    }
+
+    if let Some(subs_lyrics) = req.subs_lyrics {
+        current.subs_lyrics = sanitize_subs_lyrics(subs_lyrics);
     }
 
     if let Some(description) = req.description.as_ref() {

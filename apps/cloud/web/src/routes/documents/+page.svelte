@@ -11,14 +11,17 @@
 		type DocumentType,
 		type DocumentSource,
 		type FileEntry,
-		type ImageMeta
+		type ImageMeta,
+		type SubsLyrics
 	} from '$lib/documents.service';
 	import {
 		fetchAlbumTrackTitles,
 		fetchTmdbEpisodeTitles,
 		formatSizeBytes,
+		matchSubsLyricsForResult,
 		matchTorrentsForResult,
 		searchSource,
+		searchSubsLyrics,
 		searchTorrents,
 		type SearchResultItem,
 		type TorrentResultItem
@@ -46,7 +49,7 @@
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
 	let showAdvanced = $state(false);
-	let activeTab = $state<'covers' | 'results' | 'torrents'>('covers');
+	let activeTab = $state<'covers' | 'results' | 'torrents' | 'subs-lyrics'>('covers');
 
 	let searching = $state(false);
 	let searchError = $state<string | null>(null);
@@ -54,8 +57,42 @@
 	let selectedResultIndex = $state<number | null>(null);
 	let torrentResults = $state<TorrentResultItem[]>([]);
 	let torrentError = $state<string | null>(null);
+	let subsLyricsResults = $state<SubsLyrics[]>([]);
+	let subsLyricsError = $state<string | null>(null);
+	let pickedSubsLyrics = $state<SubsLyrics[]>([]);
 	let enrichingFiles = $state(false);
 	let enrichError = $state<string | null>(null);
+	const pickedSubsLyricsKey = $derived(
+		new Set(pickedSubsLyrics.map((s) => `${s.source}::${s.externalId}`))
+	);
+
+	function subsLyricsKey(s: SubsLyrics): string {
+		return `${s.source}::${s.externalId}`;
+	}
+
+	function isSubsLyricsPicked(s: SubsLyrics): boolean {
+		return pickedSubsLyricsKey.has(subsLyricsKey(s));
+	}
+
+	function toggleSubsLyrics(s: SubsLyrics): void {
+		const key = subsLyricsKey(s);
+		if (pickedSubsLyrics.some((p) => subsLyricsKey(p) === key)) {
+			pickedSubsLyrics = pickedSubsLyrics.filter((p) => subsLyricsKey(p) !== key);
+		} else {
+			pickedSubsLyrics = [...pickedSubsLyrics, s];
+		}
+	}
+
+	function describeSubsLyrics(s: SubsLyrics): string {
+		if (s.kind === 'lyrics') {
+			const synced = (s.syncedLyrics?.length ?? 0) > 0 ? 'synced' : 'plain';
+			return `${synced}${s.instrumental ? ' · instrumental' : ''}`;
+		}
+		const parts: string[] = [];
+		if (s.format) parts.push(s.format);
+		if (s.isHearingImpaired) parts.push('HI');
+		return parts.join(' · ') || s.source;
+	}
 	const addedHashes = $derived(
 		new Set(files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
 	);
@@ -84,6 +121,7 @@
 		artists = [];
 		images = [];
 		files = [];
+		pickedSubsLyrics = [];
 		year = null;
 		source = DOCUMENT_SOURCES[0];
 		type = TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0];
@@ -148,11 +186,24 @@
 		searching = true;
 		searchError = null;
 		torrentError = null;
+		subsLyricsError = null;
+		subsLyricsResults = [];
 		selectedResultIndex = null;
-		const [sourceOutcome, torrentOutcome] = await Promise.allSettled([
+		const isMusic = type === 'album' || type === 'track';
+
+		// For music, lyrics search runs in parallel against the title.
+		// For movies/TV, subs need a TMDB id, so we wait for the source results
+		// before fanning out per-id Wyzie requests.
+		const subsPromise: Promise<SubsLyrics[]> = isMusic
+			? searchSubsLyrics(type, trimmed)
+			: Promise.resolve([]);
+
+		const [sourceOutcome, torrentOutcome, subsOutcome] = await Promise.allSettled([
 			searchSource(source, type, trimmed),
-			searchTorrents(type, trimmed)
+			searchTorrents(type, trimmed),
+			subsPromise
 		]);
+
 		if (sourceOutcome.status === 'fulfilled') {
 			searchResults = sourceOutcome.value;
 		} else {
@@ -167,6 +218,26 @@
 			torrentError =
 				torrentOutcome.reason instanceof Error ? torrentOutcome.reason.message : 'Unknown error';
 		}
+		if (subsOutcome.status === 'fulfilled') {
+			subsLyricsResults = subsOutcome.value;
+		} else {
+			subsLyricsResults = [];
+			subsLyricsError =
+				subsOutcome.reason instanceof Error ? subsOutcome.reason.message : 'Unknown error';
+		}
+
+		if (!isMusic) {
+			const ids = searchResults.map((r) => r.externalId).filter((id): id is string => Boolean(id));
+			if (ids.length > 0) {
+				try {
+					subsLyricsResults = await searchSubsLyrics(type, trimmed, ids);
+				} catch (err) {
+					subsLyricsResults = [];
+					subsLyricsError = err instanceof Error ? err.message : 'Unknown error';
+				}
+			}
+		}
+
 		searching = false;
 	}
 
@@ -178,6 +249,7 @@
 				artists,
 				images,
 				files,
+				subsLyrics: pickedSubsLyrics,
 				year,
 				source,
 				type
@@ -267,6 +339,7 @@
 				description: description.trim(),
 				images,
 				files,
+				subsLyrics: pickedSubsLyrics,
 				year,
 				type,
 				source
@@ -275,8 +348,10 @@
 			selectedResultIndex = null;
 			searchResults = [];
 			torrentResults = [];
+			subsLyricsResults = [];
 			searchError = null;
 			torrentError = null;
+			subsLyricsError = null;
 			return true;
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
@@ -304,7 +379,6 @@
 			deletingId = null;
 		}
 	}
-
 </script>
 
 <svelte:head>
@@ -647,7 +721,7 @@
 		{/if}
 	</section>
 
-	{#if searchResults.length > 0 || torrentResults.length > 0 || searching || searchError || torrentError}
+	{#if searchResults.length > 0 || torrentResults.length > 0 || subsLyricsResults.length > 0 || searching || searchError || torrentError || subsLyricsError}
 		<section class="card border border-base-content/10 bg-base-200 p-4">
 			<div class="mb-3 flex items-center justify-between">
 				<h2 class="text-lg font-semibold">Results</h2>
@@ -677,6 +751,14 @@
 				>
 					Torrents
 				</button>
+				<button
+					type="button"
+					role="tab"
+					class={classNames('tab', { 'tab-active': activeTab === 'subs-lyrics' })}
+					onclick={() => (activeTab = 'subs-lyrics')}
+				>
+					Subs/Lyrics{subsLyricsResults.length > 0 ? ` (${subsLyricsResults.length})` : ''}
+				</button>
 			</div>
 
 			{#if activeTab === 'covers'}
@@ -689,6 +771,7 @@
 						{#each searchResults as result, i (result.externalId ?? i)}
 							{@const cover = result.images[0]?.url}
 							{@const matches = matchTorrentsForResult(result, torrentResults)}
+							{@const subsMatches = matchSubsLyricsForResult(result, subsLyricsResults)}
 							<div
 								class={classNames(
 									'flex overflow-hidden rounded-box border bg-base-100 transition',
@@ -758,6 +841,35 @@
 											{/each}
 										</div>
 									{/if}
+									<span class="mt-2 mb-1 text-xs font-semibold text-base-content/60 uppercase">
+										Subs/Lyrics{subsMatches.length > 0 ? ` (${subsMatches.length})` : ''}
+									</span>
+									{#if subsMatches.length === 0}
+										<p class="text-xs text-base-content/50">No matching subs/lyrics.</p>
+									{:else}
+										<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
+											{#each subsMatches as sub (subsLyricsKey(sub))}
+												{@const picked = isSubsLyricsPicked(sub)}
+												<button
+													type="button"
+													class={classNames(
+														'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-200',
+														{ 'opacity-60': picked }
+													)}
+													onclick={() => toggleSubsLyrics(sub)}
+													title={sub.display ?? `${sub.source}:${sub.externalId}`}
+												>
+													<span class="font-medium">
+														{sub.kind === 'lyrics' ? 'LRC' : (sub.language ?? sub.format ?? '?')}
+													</span>
+													<span class="text-base-content/60">{describeSubsLyrics(sub)}</span>
+													{#if picked}
+														<span class="ml-auto">✓</span>
+													{/if}
+												</button>
+											{/each}
+										</div>
+									{/if}
 								</div>
 							</div>
 						{/each}
@@ -807,6 +919,56 @@
 										>
 										<td class="font-mono text-xs text-base-content/70">{result.externalId ?? ''}</td
 										>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			{:else if activeTab === 'subs-lyrics'}
+				{#if subsLyricsError}
+					<div class="mb-3 alert alert-error">
+						<span>{subsLyricsError}</span>
+					</div>
+				{/if}
+				{#if searching}
+					<p class="text-sm text-base-content/60">Searching…</p>
+				{:else if subsLyricsResults.length === 0}
+					<p class="text-sm text-base-content/60">
+						No subs/lyrics yet — pick a music or movie/TV type and search.
+					</p>
+				{:else}
+					<div class="overflow-x-auto rounded-box border border-base-content/10">
+						<table class="table table-sm">
+							<thead>
+								<tr>
+									<th>Kind</th>
+									<th>Source</th>
+									<th>Title / Lang</th>
+									<th>Format</th>
+									<th>Detail</th>
+									<th class="w-16">Picked</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each subsLyricsResults as sub (subsLyricsKey(sub))}
+									{@const picked = isSubsLyricsPicked(sub)}
+									<tr
+										class={classNames('cursor-pointer hover:bg-base-300', {
+											'bg-base-300': picked
+										})}
+										onclick={() => toggleSubsLyrics(sub)}
+									>
+										<td class="text-xs">{sub.kind}</td>
+										<td class="text-xs">{sub.source}</td>
+										<td class="text-xs"
+											>{sub.kind === 'lyrics'
+												? `${sub.artistName ?? ''} — ${sub.trackName ?? ''}`
+												: (sub.display ?? sub.language ?? '')}</td
+										>
+										<td class="text-xs">{sub.format ?? ''}</td>
+										<td class="text-xs text-base-content/70">{describeSubsLyrics(sub)}</td>
+										<td class="text-center text-xs">{picked ? '✓' : ''}</td>
 									</tr>
 								{/each}
 							</tbody>

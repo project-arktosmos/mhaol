@@ -66,14 +66,17 @@ The Svelte app lives at `apps/cloud/web/` (pnpm package name `cloud`). The user-
 ## Running
 
 ```bash
-# Dev — starts cloud (Rust loopback :9899 + Vite WebUI :9898) + player (:9595)
+# Dev — full desktop stack (cloud + player + Tauri health shell)
 pnpm dev
 
-# Dev — Rust server only on 127.0.0.1:9899 (no UI; for API-only work)
+# Dev — full cloud independently (Rust loopback :9899 + Vite WebUI :9898)
 pnpm dev:cloud
 
-# Dev — WebUI hot-reload on 9898 (proxies /api to 127.0.0.1:9899)
+# Dev — WebUI hot-reload on 9898 only (proxies /api to 127.0.0.1:9899; assumes the Rust server is already running)
 pnpm dev:cloud:web
+
+# Dev — Rust loopback server only on 127.0.0.1:9899 (no UI; for API-only work)
+pnpm app:cloud
 
 # Production build (embeds the WebUI)
 pnpm build:cloud
@@ -81,8 +84,8 @@ pnpm build:cloud
 
 ## Environment Variables
 
-- `PORT` — Server port (default: 9898; `pnpm dev:cloud` and `pnpm dev` set it to 9899)
-- `HOST` — Bind address (default: 0.0.0.0; `pnpm dev:cloud` and `pnpm dev` set it to 127.0.0.1)
+- `PORT` — Server port (default: 9898; `pnpm app:cloud` / `pnpm dev:cloud` / `pnpm dev` set it to 9899 so Vite can own 9898)
+- `HOST` — Bind address (default: 0.0.0.0; `pnpm app:cloud` / `pnpm dev:cloud` / `pnpm dev` set it to 127.0.0.1)
 - `DB_PATH` — SurrealDB store path (default: `<home>/mhaol/cloud-surrealkv/`, resolved per-OS via `dirs::home_dir()`)
 - `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-surrealkv/`
 - `SIGNALING_URL` — PartyKit signaling URL (default: hosted instance)
@@ -116,11 +119,12 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/catalog/:addon/genres?type=<>` — returns `[{ id, name }]` for the addon's filter dimension. TMDB requires `type=movie|tv` (queries `/genre/{type}/list` upstream); MusicBrainz/OpenLibrary/RetroAchievements return a static curated list (genres / subjects / console ids).
 - `GET /api/torrent/list` — returns the cloud `TorrentManager`'s current torrents as `TorrentInfo[]` (`{ id, name, infoHash, size, progress, downloadSpeed, uploadSpeed, peers, seeds, state, addedAt, eta, outputPath }`). Returns `[]` while the session is still warming up. Used by the shared `DocumentCard` to render real-time progress.
 - `POST /api/torrent/add` — adds a magnet to the cloud torrent client. Body: `{ magnet }`. Returns the initial `TorrentInfo`. `400` if the URI is not a magnet, `503` until the session has finished initializing.
+- `POST /api/search/subs-lyrics` — third search alongside source + torrents. Body: `{ type, query, externalIds?, languages? }`. For `album`/`track` types it queries LRCLIB (`https://lrclib.net/api/search?q=<query>`) and returns lyrics matches with optional `plainLyrics` and parsed `syncedLyrics: [{ time, text }]`. For `movie`/`tv *` types it fans out per `externalId` (TMDB id) to Wyzie (`https://sub.wyzie.io/search?id=<>`) and returns subtitle entries (uses `WYZIE_API_KEY` env if set). Each item's `sourceExternalId` carries the TMDB id of the source result it was fetched for so the WebUI can pair it back. Persisting picked items into the document body uses the unified `subsLyrics` field, which participates in the document CID.
 - `POST /api/p2p-stream/sessions` — start a WebRTC streaming session for a previously pinned IPFS file. Body: `{ cid }`. Looks up the on-disk path in the `ipfs_pin` table, asks the `WorkerBridge` (a `mhaol-cloud worker` subprocess running `mhaol_p2p_stream::worker::run()`) to publish the file as a video stream into a fresh PartyKit room, and returns `{ sessionId, roomId, signalingUrl }`. The player connects to the same room and consumes the WebRTC stream via the existing `playerService.playRemote()`. `404` if the CID isn't pinned locally or the file is gone, `503` while the worker is still warming up.
 
 ## Document versioning
 
-Documents are content-addressed: the SurrealDB record `id` is the CIDv1-raw of the document body (title, description, artists, images, files, year, type, source, version, version_hashes). Two new fields participate in this hash:
+Documents are content-addressed: the SurrealDB record `id` is the CIDv1-raw of the document body (title, description, artists, images, files, subsLyrics, year, type, source, version, version_hashes). Two new fields participate in this hash:
 
 - `version: u32` — rolling-forward nonce, starts at `0`. Records persisted before this field existed deserialize as `0`.
 - `version_hashes: Vec<String>` — CIDs of every prior version, oldest first. Chain integrity invariant: `version_hashes.len() == version`.
