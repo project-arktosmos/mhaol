@@ -8,7 +8,6 @@ const STORE_KEY = 'connection-config';
 
 export interface NodeDefaults {
 	serverUrl: string;
-	serverAddress: string;
 	signalingUrl: string;
 	port: number;
 }
@@ -28,25 +27,18 @@ class ConnectionConfigService {
 
 	save(config: ConnectionConfig): void {
 		this.store.set(config);
-
-		if (config.transportMode === 'http' || config.transportMode === 'ws') {
-			localStorage.setItem('api-server-url', config.serverUrl);
-		} else {
-			localStorage.setItem('signaling-url', config.signalingUrl);
-		}
+		localStorage.setItem('api-server-url', config.serverUrl);
 	}
 
 	clear(): void {
 		this.store.set(null);
 		localStorage.removeItem('api-server-url');
-		localStorage.removeItem('signaling-url');
 	}
 
 	defaults() {
 		if (this._nodeDefaults && this._nodeDefaults.serverUrl) {
 			return {
 				serverUrl: this._nodeDefaults.serverUrl,
-				serverAddress: this._nodeDefaults.serverAddress,
 				signalingUrl: this._nodeDefaults.signalingUrl || DEFAULT_SIGNALING_URL
 			};
 		}
@@ -57,14 +49,12 @@ class ConnectionConfigService {
 			const host = typeof window !== 'undefined' ? window.location.hostname : '';
 			return {
 				serverUrl: host === 'localhost' ? 'http://localhost:1530' : '',
-				serverAddress: '',
 				signalingUrl: DEFAULT_SIGNALING_URL
 			};
 		}
 		const host = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
 		return {
 			serverUrl: `http://${host}:9898`,
-			serverAddress: '',
 			signalingUrl: DEFAULT_SIGNALING_URL
 		};
 	}
@@ -78,7 +68,7 @@ class ConnectionConfigService {
 			});
 			if (!res.ok) return null;
 			const data: NodeDefaults = await res.json();
-			if (data.serverUrl || data.serverAddress) {
+			if (data.serverUrl) {
 				this._nodeDefaults = data;
 				return data;
 			}

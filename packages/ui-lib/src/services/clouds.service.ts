@@ -6,18 +6,10 @@ import type { CloudServer } from 'ui-lib/types/cloud-server.type';
 import type { ConnectionConfig } from 'ui-lib/types/connection-config.type';
 
 function cloudId(config: ConnectionConfig): string {
-	const key =
-		config.transportMode === 'webrtc'
-			? config.serverAddress.toLowerCase()
-			: config.serverUrl.toLowerCase();
-	return `${config.transportMode}:${key}`;
+	return `ws:${config.serverUrl.toLowerCase()}`;
 }
 
 function defaultName(config: ConnectionConfig): string {
-	if (config.transportMode === 'webrtc') {
-		const addr = config.serverAddress;
-		return addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : 'WebRTC cloud';
-	}
 	try {
 		return new URL(config.serverUrl).host;
 	} catch {
@@ -46,7 +38,6 @@ class CloudsService extends ArrayServiceClass<CloudServer> {
 				...existing,
 				transportMode: config.transportMode,
 				serverUrl: config.serverUrl,
-				serverAddress: config.serverAddress,
 				signalingUrl: config.signalingUrl,
 				lastConnectedAt: now
 			};
@@ -58,7 +49,6 @@ class CloudsService extends ArrayServiceClass<CloudServer> {
 			name: defaultName(config),
 			transportMode: config.transportMode,
 			serverUrl: config.serverUrl,
-			serverAddress: config.serverAddress,
 			signalingUrl: config.signalingUrl,
 			lastConnectedAt: now
 		};

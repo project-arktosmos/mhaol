@@ -20,17 +20,8 @@
 	let reconnectError = $state<string | null>(null);
 	function connectWith(config: import('ui-lib/types/connection-config.type').ConnectionConfig) {
 		reconnecting = true;
-		let promise: Promise<void>;
-
-		if (config.transportMode === 'ws') {
-			promise = nodeConnectionService.connectWs(config);
-		} else if (config.transportMode === 'webrtc') {
-			promise = nodeConnectionService.connectWebRtc(config);
-		} else {
-			promise = nodeConnectionService.connectHttp(config);
-		}
-
-		promise
+		nodeConnectionService
+			.connectWs(config)
 			.then(async () => {
 				reconnecting = false;
 				connectionConfigService.save(config);
