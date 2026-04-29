@@ -22,6 +22,7 @@ pub struct SearchResultItem {
     pub description: String,
     #[serde(rename = "externalId")]
     pub external_id: Option<String>,
+    pub raw: serde_json::Value,
 }
 
 fn err(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
@@ -108,6 +109,7 @@ async fn search_tmdb(
                         author: year,
                         description,
                         external_id,
+                        raw: r.clone(),
                     }
                 })
                 .collect()

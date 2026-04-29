@@ -9,6 +9,7 @@ export interface SearchResultItem {
 	author: string;
 	description: string;
 	externalId?: string;
+	raw: unknown;
 }
 
 export async function searchSource(
@@ -60,7 +61,8 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 			title: rec.title,
 			author: formatArtistCredits(rec['artist-credit'] ?? []),
 			description: '',
-			externalId: rec.id
+			externalId: rec.id,
+			raw: rec
 		}));
 	}
 	if (type === 'album') {
@@ -69,7 +71,8 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 			title: rg.title,
 			author: formatArtistCredits(rg['artist-credit'] ?? []),
 			description: rg['primary-type'] ?? '',
-			externalId: rg.id
+			externalId: rg.id,
+			raw: rg
 		}));
 	}
 	const res = await searchArtists(query);
@@ -77,7 +80,8 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 		title: a.name,
 		author: a.country ?? '',
 		description: a.disambiguation ?? '',
-		externalId: a.id
+		externalId: a.id,
+		raw: a
 	}));
 }
 
@@ -87,7 +91,8 @@ async function searchOpenLibrary(query: string): Promise<SearchResultItem[]> {
 		title: doc.title,
 		author: (doc.author_name ?? []).join(', '),
 		description: doc.first_publish_year ? String(doc.first_publish_year) : '',
-		externalId: doc.key
+		externalId: doc.key,
+		raw: doc
 	}));
 }
 
@@ -97,6 +102,7 @@ async function searchTpb(query: string): Promise<SearchResultItem[]> {
 		title: r.name,
 		author: r.uploadedBy ?? '',
 		description: `${r.seeders} seeders · ${r.leechers} leechers · ${r.size} bytes`,
-		externalId: r.infoHash
+		externalId: r.infoHash,
+		raw: r
 	}));
 }

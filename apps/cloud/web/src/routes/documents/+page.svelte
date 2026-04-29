@@ -31,6 +31,12 @@
 	let searching = $state(false);
 	let searchError = $state<string | null>(null);
 	let searchResults = $state<SearchResultItem[]>([]);
+	let selectedResultIndex = $state<number | null>(null);
+	const selectedResultJson = $derived(
+		selectedResultIndex !== null && searchResults[selectedResultIndex]
+			? JSON.stringify(searchResults[selectedResultIndex].raw, null, 2)
+			: ''
+	);
 
 	async function runSearch() {
 		const trimmed = title.trim();
@@ -40,6 +46,7 @@
 		}
 		searching = true;
 		searchError = null;
+		selectedResultIndex = null;
 		try {
 			searchResults = await searchSource(source, type, trimmed);
 		} catch (err) {
@@ -296,7 +303,12 @@
 					</thead>
 					<tbody>
 						{#each searchResults as result, i (result.externalId ?? i)}
-							<tr>
+							<tr
+								class={classNames('cursor-pointer hover:bg-base-300', {
+									'bg-base-300': selectedResultIndex === i
+								})}
+								onclick={() => (selectedResultIndex = selectedResultIndex === i ? null : i)}
+							>
 								<td class="font-medium">{result.title}</td>
 								<td>{result.author}</td>
 								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
@@ -308,6 +320,17 @@
 					</tbody>
 				</table>
 			</div>
+			{#if selectedResultIndex !== null}
+				<div class="mt-3 flex flex-col gap-1">
+					<span class="text-xs font-semibold text-base-content/60 uppercase">Raw JSON</span>
+					<textarea
+						class="textarea-bordered textarea h-64 w-full font-mono text-xs"
+						readonly
+						disabled
+						value={selectedResultJson}
+					></textarea>
+				</div>
+			{/if}
 		{/if}
 	</section>
 
