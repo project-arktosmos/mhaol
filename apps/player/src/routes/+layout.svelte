@@ -8,6 +8,7 @@
   import NodeStatusBadge from "ui-lib/components/core/NodeStatusBadge.svelte";
   import ToastOutlet from "ui-lib/components/core/ToastOutlet.svelte";
   import PlayerVideo from "ui-lib/components/player/PlayerVideo.svelte";
+  import DocumentFilesPanel from "ui-lib/components/documents/DocumentFilesPanel.svelte";
   import { themeService } from "ui-lib/services/theme.service";
   import { connectionConfigService } from "ui-lib/services/connection-config.service";
   import { nodeConnectionService } from "ui-lib/services/node-connection.service";
@@ -106,6 +107,7 @@
     <aside
       class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
     >
+      <DocumentFilesPanel />
       <PlayerVideo
         file={$playerState.currentFile}
         connectionState={$playerState.connectionState}

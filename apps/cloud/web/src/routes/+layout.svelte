@@ -5,12 +5,16 @@
 	import Navbar from 'ui-lib/components/core/Navbar.svelte';
 	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
 	import ToastOutlet from 'ui-lib/components/core/ToastOutlet.svelte';
+	import DocumentFilesPanel from 'ui-lib/components/documents/DocumentFilesPanel.svelte';
+	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
 	import { themeService } from 'ui-lib/services/theme.service';
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { NAV_ITEMS, type NavItem } from '$lib/generated/nav';
 
 	let { children } = $props();
+
+	const playbackState = documentPlaybackService.state;
 
 	const triggerClass = (item: NavItem) =>
 		classNames('btn btn-outline btn-sm', { 'btn-disabled': !item.hasOwnPage });
@@ -56,10 +60,17 @@
 		{/snippet}
 	</Navbar>
 
-	<main class="flex min-w-0 flex-1 overflow-y-auto">
-		<div class="relative flex min-w-0 flex-1 flex-col">
+	<main class="flex min-w-0 flex-1 overflow-hidden">
+		<div class="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
 			{@render children?.()}
 		</div>
+		{#if $playbackState.document}
+			<aside
+				class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
+			>
+				<DocumentFilesPanel />
+			</aside>
+		{/if}
 	</main>
 </div>
 
