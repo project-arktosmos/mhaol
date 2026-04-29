@@ -49,15 +49,26 @@
 	let runId = 0;
 
 	const currentSource = $derived(sources.find((s) => s.id === addon));
-	const availableTypes = $derived(currentSource?.types ?? []);
 	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
 
-	$effect(() => {
-		if (currentSource && availableTypes.length > 0 && !availableTypes.some((t) => t.id === type)) {
-			type = availableTypes[0]?.id ?? '';
-		}
-	});
+	interface CatalogTypeButton {
+		docType: DocumentType;
+		label: string;
+		addonId: string;
+		catalogType: string;
+	}
+
+	const catalogTypeButtons = $derived<CatalogTypeButton[]>(
+		sources.flatMap((src) =>
+			src.types.map((t) => ({
+				docType: mapToDocumentType(src.id, t.id),
+				label: t.label,
+				addonId: src.id,
+				catalogType: t.id
+			}))
+		)
+	);
 
 	function mapToDocumentType(addonId: string, typeId: string): DocumentType {
 		if (addonId === 'tmdb' && typeId === 'tv') return 'tv show';
@@ -201,16 +212,10 @@
 		}
 	}
 
-	async function selectAddon(id: string) {
-		if (addon === id) return;
-		addon = id;
-		page = 1;
-		filter = '';
-		await refreshGenres();
-		await refreshItems();
-	}
-
-	async function onTypeChange() {
+	async function selectType(button: CatalogTypeButton) {
+		if (addon === button.addonId && type === button.catalogType) return;
+		addon = button.addonId;
+		type = button.catalogType;
 		page = 1;
 		filter = '';
 		await refreshGenres();
@@ -259,41 +264,27 @@
 			<table class="table table-sm">
 				<tbody>
 					<tr>
-						<th class="w-32 align-middle">Source</th>
+						<th class="w-32 align-middle">Type</th>
 						<td>
 							<div class="flex flex-wrap gap-2">
-								{#each sources as option (option.id)}
+								{#each catalogTypeButtons as button (button.addonId + ':' + button.catalogType)}
+									{@const active =
+										addon === button.addonId && type === button.catalogType}
 									<button
 										type="button"
 										class={classNames('btn btn-sm', {
-											'btn-primary': addon === option.id,
-											'btn-outline': addon !== option.id
+											'btn-primary': active,
+											'btn-outline': !active
 										})}
-										onclick={() => selectAddon(option.id)}
-										disabled={sources.length === 0}
+										onclick={() => selectType(button)}
+										disabled={catalogTypeButtons.length === 0}
 									>
-										{option.label}
+										{button.label}
 									</button>
 								{/each}
 							</div>
 						</td>
 					</tr>
-					{#if availableTypes.length > 1}
-						<tr>
-							<th class="w-32 align-middle">Type</th>
-							<td>
-								<select
-									class="select-bordered select w-full select-sm"
-									bind:value={type}
-									onchange={onTypeChange}
-								>
-									{#each availableTypes as option (option.id)}
-										<option value={option.id}>{option.label}</option>
-									{/each}
-								</select>
-							</td>
-						</tr>
-					{/if}
 					{#if hasFilter}
 						<tr>
 							<th class="w-32 align-middle">{filterLabel}</th>
