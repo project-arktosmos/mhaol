@@ -19,7 +19,6 @@
 				key: 'Artists',
 				value: (document.artists ?? []).map((a) => a.name).join(', ')
 			},
-			{ key: 'Description', value: document.description ?? '' },
 			{
 				key: 'Files',
 				value: (document.files ?? [])
@@ -52,6 +51,13 @@
 				loading="lazy"
 			/>
 		</figure>
+	{/if}
+	{#if document.description}
+		<p
+			class="border-b border-base-content/10 px-4 py-3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere] text-base-content/80"
+		>
+			{document.description}
+		</p>
 	{/if}
 	<div class="card-body p-0">
 		<table class="table w-full table-fixed table-sm">
