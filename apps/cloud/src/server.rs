@@ -8,10 +8,12 @@ mod fs_browse;
 mod health;
 mod ipfs_pins;
 mod libraries;
+mod p2p_stream;
 mod search;
 mod state;
 mod torrent;
 mod torrent_completion;
+mod worker_bridge;
 
 use axum::Router;
 use mhaol_identity::IdentityManager;
@@ -92,7 +94,7 @@ async fn main() {
         "https://mhaol-signaling.project-arktosmos.partykit.dev".to_string()
     });
     let identity_manager =
-        IdentityManager::new(identities_dir, "cloud".to_string(), signaling_url);
+        IdentityManager::new(identities_dir, "cloud".to_string(), signaling_url.clone());
 
     identity_manager.ensure_identity("SIGNALING_WALLET");
     identity_manager.ensure_identity("CLIENT_WALLET");
@@ -182,6 +184,9 @@ async fn main() {
         manager
     };
 
+    #[cfg(not(target_os = "android"))]
+    let worker_bridge = Arc::new(worker_bridge::WorkerBridge::new());
+
     let state = CloudState::new(
         surreal,
         identity_manager,
@@ -194,6 +199,10 @@ async fn main() {
         ed2k_manager,
         #[cfg(not(target_os = "android"))]
         ipfs_manager,
+        #[cfg(not(target_os = "android"))]
+        Arc::clone(&worker_bridge),
+        #[cfg(not(target_os = "android"))]
+        signaling_url.clone(),
     );
 
     #[cfg(not(target_os = "android"))]
@@ -201,6 +210,14 @@ async fn main() {
         let watcher_state = state.clone();
         tokio::spawn(async move {
             torrent_completion::run(watcher_state).await;
+        });
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let bridge = Arc::clone(&worker_bridge);
+        tokio::spawn(async move {
+            bridge.start().await;
         });
     }
 
@@ -220,6 +237,7 @@ async fn main() {
         .nest("/api/search", search::router())
         .nest("/api/catalog", catalog::router())
         .nest("/api/torrent", torrent::router())
+        .nest("/api/p2p-stream", p2p_stream::router())
         .fallback(frontend::serve_frontend)
         .with_state(state)
         .layer(cors);
