@@ -44,11 +44,34 @@ const ALLOWED_SOURCES: &[&str] = &[
     "wyzie-subs",
 ];
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Artist {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(rename = "imageUrl", default, skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ImageMeta {
+    pub url: String,
+    #[serde(rename = "mimeType", default)]
+    pub mime_type: String,
+    #[serde(rename = "fileSize", default)]
+    pub file_size: u64,
+    #[serde(default)]
+    pub width: u32,
+    #[serde(default)]
+    pub height: u32,
+}
+
 #[derive(Serialize)]
 struct DocumentPayloadView<'a> {
     title: &'a str,
-    author: &'a str,
     description: &'a str,
+    artists: &'a [Artist],
+    images: &'a [ImageMeta],
     #[serde(rename = "type")]
     kind: &'a str,
     source: &'a str,
@@ -56,12 +79,13 @@ struct DocumentPayloadView<'a> {
 
 fn compute_document_cid(
     title: &str,
-    author: &str,
     description: &str,
+    artists: &[Artist],
+    images: &[ImageMeta],
     kind: &str,
     source: &str,
 ) -> String {
-    let view = DocumentPayloadView { title, author, description, kind, source };
+    let view = DocumentPayloadView { title, description, artists, images, kind, source };
     let json = serde_json::to_string_pretty(&view)
         .expect("DocumentPayloadView serializes to JSON");
     let digest = Sha256::digest(json.as_bytes());
@@ -75,8 +99,11 @@ pub struct Document {
     pub id: Option<Thing>,
     #[serde(alias = "name")]
     pub title: String,
-    pub author: String,
+    #[serde(default)]
+    pub artists: Vec<Artist>,
     pub description: String,
+    #[serde(default)]
+    pub images: Vec<ImageMeta>,
     #[serde(rename = "type", default)]
     pub kind: String,
     #[serde(default)]
@@ -89,8 +116,9 @@ pub struct Document {
 pub struct DocumentDto {
     pub id: String,
     pub title: String,
-    pub author: String,
+    pub artists: Vec<Artist>,
     pub description: String,
+    pub images: Vec<ImageMeta>,
     #[serde(rename = "type")]
     pub kind: String,
     pub source: String,
@@ -108,8 +136,9 @@ impl From<Document> for DocumentDto {
         Self {
             id,
             title: doc.title,
-            author: doc.author,
+            artists: doc.artists,
             description: doc.description,
+            images: doc.images,
             kind: doc.kind,
             source: doc.source,
             created_at: doc.created_at,
@@ -121,8 +150,11 @@ impl From<Document> for DocumentDto {
 #[derive(Debug, Deserialize)]
 pub struct CreateDocumentRequest {
     pub title: String,
-    pub author: String,
+    #[serde(default)]
+    pub artists: Vec<Artist>,
     pub description: Option<String>,
+    #[serde(default)]
+    pub images: Vec<ImageMeta>,
     #[serde(rename = "type")]
     pub kind: String,
     pub source: String,
@@ -131,8 +163,9 @@ pub struct CreateDocumentRequest {
 #[derive(Debug, Deserialize)]
 pub struct UpdateDocumentRequest {
     pub title: Option<String>,
-    pub author: Option<String>,
+    pub artists: Option<Vec<Artist>>,
     pub description: Option<String>,
+    pub images: Option<Vec<ImageMeta>>,
     #[serde(rename = "type")]
     pub kind: Option<String>,
     pub source: Option<String>,
@@ -190,10 +223,6 @@ async fn create(
     if title.is_empty() {
         return Err(err_response(StatusCode::BAD_REQUEST, "title is required"));
     }
-    let author = req.author.trim();
-    if author.is_empty() {
-        return Err(err_response(StatusCode::BAD_REQUEST, "author is required"));
-    }
     let description = req
         .description
         .as_deref()
@@ -220,9 +249,39 @@ async fn create(
             format!("invalid source: {source}"),
         ));
     }
+    let artists: Vec<Artist> = req
+        .artists
+        .into_iter()
+        .filter_map(|a| {
+            let name = a.name.trim().to_string();
+            if name.is_empty() {
+                return None;
+            }
+            Some(Artist {
+                name,
+                url: a.url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+                image_url: a
+                    .image_url
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+            })
+        })
+        .collect();
+    let images: Vec<ImageMeta> = req
+        .images
+        .into_iter()
+        .filter(|img| !img.url.trim().is_empty())
+        .map(|img| ImageMeta {
+            url: img.url.trim().to_string(),
+            mime_type: img.mime_type.trim().to_string(),
+            file_size: img.file_size,
+            width: img.width,
+            height: img.height,
+        })
+        .collect();
 
     let now = Utc::now();
-    let new_id = compute_document_cid(title, author, &description, kind, source);
+    let new_id = compute_document_cid(title, &description, &artists, &images, kind, source);
 
     let existing: Option<Document> = state
         .db
@@ -236,8 +295,9 @@ async fn create(
     let record = Document {
         id: None,
         title: title.to_string(),
-        author: author.to_string(),
+        artists,
         description,
+        images,
         kind: kind.to_string(),
         source: source.to_string(),
         created_at: now,
@@ -277,11 +337,38 @@ async fn update(
         current.title = title.to_string();
     }
 
-    if let Some(author) = req.author.as_ref().map(|a| a.trim()) {
-        if author.is_empty() {
-            return Err(err_response(StatusCode::BAD_REQUEST, "author cannot be empty"));
-        }
-        current.author = author.to_string();
+    if let Some(artists) = req.artists {
+        current.artists = artists
+            .into_iter()
+            .filter_map(|a| {
+                let name = a.name.trim().to_string();
+                if name.is_empty() {
+                    return None;
+                }
+                Some(Artist {
+                    name,
+                    url: a.url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+                    image_url: a
+                        .image_url
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty()),
+                })
+            })
+            .collect();
+    }
+
+    if let Some(images) = req.images {
+        current.images = images
+            .into_iter()
+            .filter(|img| !img.url.trim().is_empty())
+            .map(|img| ImageMeta {
+                url: img.url.trim().to_string(),
+                mime_type: img.mime_type.trim().to_string(),
+                file_size: img.file_size,
+                width: img.width,
+                height: img.height,
+            })
+            .collect();
     }
 
     if let Some(description) = req.description.as_ref() {

@@ -51,11 +51,26 @@ export const TYPES_BY_SOURCE: Record<DocumentSource, readonly DocumentType[]> = 
 	'wyzie-subs': ['movie', 'tv episode']
 };
 
+export interface Artist {
+	name: string;
+	url?: string;
+	imageUrl?: string;
+}
+
+export interface ImageMeta {
+	url: string;
+	mimeType: string;
+	fileSize: number;
+	width: number;
+	height: number;
+}
+
 export interface Document {
 	id: string;
 	title: string;
-	author: string;
+	artists: Artist[];
 	description: string;
+	images: ImageMeta[];
 	type: string;
 	source: string;
 	created_at: string;
@@ -100,17 +115,18 @@ class DocumentsService {
 		}
 	}
 
-	async create(
-		title: string,
-		author: string,
-		description: string,
-		type: DocumentType,
-		source: DocumentSource
-	): Promise<Document> {
+	async create(input: {
+		title: string;
+		artists: Artist[];
+		description: string;
+		images: ImageMeta[];
+		type: DocumentType;
+		source: DocumentSource;
+	}): Promise<Document> {
 		const res = await fetch('/api/documents', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ title, author, description, type, source })
+			body: JSON.stringify(input)
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const created = (await res.json()) as Document;

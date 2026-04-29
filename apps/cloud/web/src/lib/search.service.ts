@@ -1,13 +1,13 @@
 import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/musicbrainz';
-import { formatArtistCredits } from 'addons/musicbrainz/transform';
 import { searchBooks } from 'addons/openlibrary';
 import { search as searchPirateBay } from 'addons/torrent-search-thepiratebay';
-import type { DocumentSource, DocumentType } from './documents.service';
+import type { Artist, DocumentSource, DocumentType, ImageMeta } from './documents.service';
 
 export interface SearchResultItem {
 	title: string;
-	author: string;
 	description: string;
+	artists: Artist[];
+	images: ImageMeta[];
 	externalId?: string;
 	raw: unknown;
 }
@@ -59,8 +59,9 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 		const res = await searchRecordings(query);
 		return res.recordings.map((rec) => ({
 			title: rec.title,
-			author: formatArtistCredits(rec['artist-credit'] ?? []),
-			description: '',
+			description: rec.disambiguation ?? '',
+			artists: mbArtistCreditsToArtists(rec['artist-credit'] ?? []),
+			images: [],
 			externalId: rec.id,
 			raw: rec
 		}));
@@ -69,8 +70,19 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 		const res = await searchReleaseGroups(query);
 		return res['release-groups'].map((rg) => ({
 			title: rg.title,
-			author: formatArtistCredits(rg['artist-credit'] ?? []),
-			description: rg['primary-type'] ?? '',
+			description: [rg['primary-type'], rg['first-release-date']]
+				.filter((s): s is string => Boolean(s))
+				.join(' · '),
+			artists: mbArtistCreditsToArtists(rg['artist-credit'] ?? []),
+			images: [
+				{
+					url: `https://coverartarchive.org/release-group/${rg.id}/front`,
+					mimeType: 'image/jpeg',
+					fileSize: 0,
+					width: 0,
+					height: 0
+				}
+			],
 			externalId: rg.id,
 			raw: rg
 		}));
@@ -78,30 +90,87 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 	const res = await searchArtists(query);
 	return res.artists.map((a) => ({
 		title: a.name,
-		author: a.country ?? '',
-		description: a.disambiguation ?? '',
+		description: [a.disambiguation, a.country, a.type]
+			.filter((s): s is string => Boolean(s))
+			.join(' · '),
+		artists: [
+			{
+				name: a.name,
+				url: `https://musicbrainz.org/artist/${a.id}`
+			}
+		],
+		images: [],
 		externalId: a.id,
 		raw: a
 	}));
 }
 
+interface MbArtistCredit {
+	name?: string;
+	artist?: { id: string; name: string };
+	joinphrase?: string;
+}
+
+function mbArtistCreditsToArtists(credits: MbArtistCredit[]): Artist[] {
+	const out: Artist[] = [];
+	for (const c of credits) {
+		const name = c.artist?.name ?? c.name ?? '';
+		if (!name) continue;
+		const artist: Artist = { name };
+		if (c.artist?.id) artist.url = `https://musicbrainz.org/artist/${c.artist.id}`;
+		out.push(artist);
+	}
+	return out;
+}
+
 async function searchOpenLibrary(query: string): Promise<SearchResultItem[]> {
 	const res = await searchBooks(query);
-	return (res?.docs ?? []).map((doc) => ({
-		title: doc.title,
-		author: (doc.author_name ?? []).join(', '),
-		description: doc.first_publish_year ? String(doc.first_publish_year) : '',
-		externalId: doc.key,
-		raw: doc
-	}));
+	return (res?.docs ?? []).map((doc) => {
+		const authorNames = doc.author_name ?? [];
+		const authorKeys = doc.author_key ?? [];
+		const artists: Artist[] = authorNames.map((name, i) => ({
+			name,
+			url: authorKeys[i] ? `https://openlibrary.org/authors/${authorKeys[i]}` : undefined,
+			imageUrl: authorKeys[i]
+				? `https://covers.openlibrary.org/a/olid/${authorKeys[i]}-L.jpg`
+				: undefined
+		}));
+		const images: ImageMeta[] = doc.cover_i
+			? [
+					{
+						url: `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`,
+						mimeType: 'image/jpeg',
+						fileSize: 0,
+						width: 0,
+						height: 0
+					}
+				]
+			: [];
+		const description = [
+			doc.first_publish_year ? String(doc.first_publish_year) : null,
+			doc.publisher?.[0],
+			doc.number_of_pages_median ? `${doc.number_of_pages_median}p` : null
+		]
+			.filter((s): s is string => Boolean(s))
+			.join(' · ');
+		return {
+			title: doc.title,
+			description,
+			artists,
+			images,
+			externalId: doc.key,
+			raw: doc
+		};
+	});
 }
 
 async function searchTpb(query: string): Promise<SearchResultItem[]> {
 	const results = await searchPirateBay(query);
 	return results.map((r) => ({
 		title: r.name,
-		author: r.uploadedBy ?? '',
 		description: `${r.seeders} seeders · ${r.leechers} leechers · ${r.size} bytes`,
+		artists: r.uploadedBy ? [{ name: r.uploadedBy }] : [],
+		images: [],
 		externalId: r.infoHash,
 		raw: r
 	}));

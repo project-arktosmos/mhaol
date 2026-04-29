@@ -1,8 +1,10 @@
+use crate::documents::{Artist, ImageMeta};
 use crate::state::CloudState;
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
 
 const TMDB_BASE: &str = "https://api.themoviedb.org/3";
+const TMDB_IMG_BASE: &str = "https://image.tmdb.org/t/p";
 
 pub fn router() -> Router<CloudState> {
     Router::new().route("/tmdb", post(search_tmdb))
@@ -18,8 +20,9 @@ pub struct SearchRequest {
 #[derive(Debug, Serialize)]
 pub struct SearchResultItem {
     pub title: String,
-    pub author: String,
     pub description: String,
+    pub artists: Vec<Artist>,
+    pub images: Vec<ImageMeta>,
     #[serde(rename = "externalId")]
     pub external_id: Option<String>,
     pub raw: serde_json::Value,
@@ -45,11 +48,8 @@ async fn search_tmdb(
         ));
     }
 
-    let endpoint = if matches!(req.kind.as_str(), "tv show" | "tv season" | "tv episode") {
-        "/search/tv"
-    } else {
-        "/search/movie"
-    };
+    let is_tv = matches!(req.kind.as_str(), "tv show" | "tv season" | "tv episode");
+    let endpoint = if is_tv { "/search/tv" } else { "/search/movie" };
 
     let url = format!(
         "{}{}?api_key={}&query={}&include_adult=false",
@@ -83,40 +83,60 @@ async fn search_tmdb(
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
-                .map(|r| {
-                    let title = r
-                        .get("title")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| r.get("name").and_then(|v| v.as_str()))
-                        .unwrap_or("")
-                        .to_string();
-                    let date = r
-                        .get("release_date")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| r.get("first_air_date").and_then(|v| v.as_str()))
-                        .unwrap_or("");
-                    let year = date.get(0..4).unwrap_or("").to_string();
-                    let description = r
-                        .get("overview")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let external_id = r
-                        .get("id")
-                        .map(|v| v.to_string());
-                    SearchResultItem {
-                        title,
-                        author: year,
-                        description,
-                        external_id,
-                        raw: r.clone(),
-                    }
-                })
+                .map(|r| build_tmdb_item(r))
                 .collect()
         })
         .unwrap_or_default();
 
     Ok(Json(items))
+}
+
+fn build_tmdb_item(r: &serde_json::Value) -> SearchResultItem {
+    let title = r
+        .get("title")
+        .and_then(|v| v.as_str())
+        .or_else(|| r.get("name").and_then(|v| v.as_str()))
+        .unwrap_or("")
+        .to_string();
+    let description = r
+        .get("overview")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let external_id = r.get("id").map(|v| v.to_string());
+
+    let mut images: Vec<ImageMeta> = Vec::new();
+    if let Some(poster) = r.get("poster_path").and_then(|v| v.as_str()) {
+        if !poster.is_empty() {
+            images.push(ImageMeta {
+                url: format!("{}/w500{}", TMDB_IMG_BASE, poster),
+                mime_type: "image/jpeg".to_string(),
+                file_size: 0,
+                width: 500,
+                height: 750,
+            });
+        }
+    }
+    if let Some(backdrop) = r.get("backdrop_path").and_then(|v| v.as_str()) {
+        if !backdrop.is_empty() {
+            images.push(ImageMeta {
+                url: format!("{}/w1280{}", TMDB_IMG_BASE, backdrop),
+                mime_type: "image/jpeg".to_string(),
+                file_size: 0,
+                width: 1280,
+                height: 720,
+            });
+        }
+    }
+
+    SearchResultItem {
+        title,
+        description,
+        artists: Vec::new(),
+        images,
+        external_id,
+        raw: r.clone(),
+    }
 }
 
 fn urlencoding(s: &str) -> String {

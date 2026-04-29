@@ -5,8 +5,10 @@
 		documentsService,
 		DOCUMENT_SOURCES,
 		TYPES_BY_SOURCE,
+		type Artist,
 		type DocumentType,
-		type DocumentSource
+		type DocumentSource,
+		type ImageMeta
 	} from '$lib/documents.service';
 	import { searchSource, type SearchResultItem } from '$lib/search.service';
 	import { computeCidV1Raw } from '$lib/cid';
@@ -14,8 +16,9 @@
 	const docsStore = documentsService.state;
 
 	let title = $state('');
-	let author = $state('');
 	let description = $state('');
+	let artists = $state<Artist[]>([]);
+	let images = $state<ImageMeta[]>([]);
 	let source = $state<DocumentSource>(DOCUMENT_SOURCES[0]);
 	let type = $state<DocumentType>(TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0]);
 	const availableTypes = $derived(TYPES_BY_SOURCE[source]);
@@ -32,11 +35,36 @@
 	let searchError = $state<string | null>(null);
 	let searchResults = $state<SearchResultItem[]>([]);
 	let selectedResultIndex = $state<number | null>(null);
-	const selectedResultJson = $derived(
-		selectedResultIndex !== null && searchResults[selectedResultIndex]
-			? JSON.stringify(searchResults[selectedResultIndex].raw, null, 2)
-			: ''
-	);
+
+	function resetForm() {
+		title = '';
+		description = '';
+		artists = [];
+		images = [];
+		source = DOCUMENT_SOURCES[0];
+		type = TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0];
+	}
+
+	function addArtist() {
+		artists = [...artists, { name: '' }];
+	}
+	function removeArtist(i: number) {
+		artists = artists.filter((_, idx) => idx !== i);
+	}
+	function addImage() {
+		images = [...images, { url: '', mimeType: '', fileSize: 0, width: 0, height: 0 }];
+	}
+	function removeImage(i: number) {
+		images = images.filter((_, idx) => idx !== i);
+	}
+
+	function applyResult(result: SearchResultItem, index: number) {
+		selectedResultIndex = index;
+		title = result.title;
+		description = result.description;
+		artists = result.artists.map((a) => ({ ...a }));
+		images = result.images.map((img) => ({ ...img }));
+	}
 
 	async function runSearch() {
 		const trimmed = title.trim();
@@ -61,8 +89,9 @@
 		JSON.stringify(
 			{
 				title: title.trim(),
-				author: author.trim(),
 				description: description.trim(),
+				artists,
+				images,
 				source,
 				type
 			},
@@ -101,23 +130,22 @@
 		event.preventDefault();
 		createError = null;
 		const trimmedTitle = title.trim();
-		const trimmedAuthor = author.trim();
 		if (!trimmedTitle) {
 			createError = 'Title is required';
 			return;
 		}
-		if (!trimmedAuthor) {
-			createError = 'Author is required';
-			return;
-		}
 		creating = true;
 		try {
-			await documentsService.create(trimmedTitle, trimmedAuthor, description.trim(), type, source);
-			title = '';
-			author = '';
-			description = '';
-			source = DOCUMENT_SOURCES[0];
-			type = TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0];
+			await documentsService.create({
+				title: trimmedTitle,
+				artists,
+				description: description.trim(),
+				images,
+				type,
+				source
+			});
+			resetForm();
+			selectedResultIndex = null;
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -157,8 +185,8 @@
 		<div>
 			<h1 class="text-2xl font-bold">Documents</h1>
 			<p class="text-sm text-base-content/60">
-				Documents stored in the cloud's SurrealDB. Each entry has a title, an author, and a
-				description.
+				Documents stored in the cloud's SurrealDB. Each entry has a title, a list of artists, a
+				description, and a list of images.
 			</p>
 		</div>
 		<button
@@ -235,15 +263,119 @@
 							</td>
 						</tr>
 						<tr>
-							<th class="w-32 align-middle">Author</th>
+							<th class="w-32 align-top">Artists</th>
 							<td>
-								<input
-									type="text"
-									class="input-bordered input input-sm w-full"
-									placeholder="Jane Doe"
-									bind:value={author}
-									disabled={creating}
-								/>
+								<div class="flex flex-col gap-2">
+									{#each artists as _, i (i)}
+										<div class="flex items-center gap-2">
+											<input
+												type="text"
+												class="input-bordered input input-sm w-1/3"
+												placeholder="Name"
+												bind:value={artists[i].name}
+												disabled={creating}
+											/>
+											<input
+												type="text"
+												class="input-bordered input input-sm w-1/3"
+												placeholder="URL"
+												bind:value={artists[i].url}
+												disabled={creating}
+											/>
+											<input
+												type="text"
+												class="input-bordered input input-sm w-1/3"
+												placeholder="Image URL"
+												bind:value={artists[i].imageUrl}
+												disabled={creating}
+											/>
+											<button
+												type="button"
+												class="btn text-error btn-ghost btn-xs"
+												onclick={() => removeArtist(i)}
+												disabled={creating}
+												aria-label="Remove artist"
+											>
+												×
+											</button>
+										</div>
+									{/each}
+									<div>
+										<button
+											type="button"
+											class="btn btn-outline btn-xs"
+											onclick={addArtist}
+											disabled={creating}
+										>
+											+ Add artist
+										</button>
+									</div>
+								</div>
+							</td>
+						</tr>
+						<tr>
+							<th class="w-32 align-top">Images</th>
+							<td>
+								<div class="flex flex-col gap-2">
+									{#each images as _, i (i)}
+										<div class="flex flex-wrap items-center gap-2">
+											<input
+												type="text"
+												class="input-bordered input input-sm min-w-48 flex-1"
+												placeholder="URL"
+												bind:value={images[i].url}
+												disabled={creating}
+											/>
+											<input
+												type="text"
+												class="input-bordered input input-sm w-32"
+												placeholder="Mime type"
+												bind:value={images[i].mimeType}
+												disabled={creating}
+											/>
+											<input
+												type="number"
+												class="input-bordered input input-sm w-28"
+												placeholder="Size (B)"
+												bind:value={images[i].fileSize}
+												disabled={creating}
+											/>
+											<input
+												type="number"
+												class="input-bordered input input-sm w-20"
+												placeholder="W"
+												bind:value={images[i].width}
+												disabled={creating}
+											/>
+											<input
+												type="number"
+												class="input-bordered input input-sm w-20"
+												placeholder="H"
+												bind:value={images[i].height}
+												disabled={creating}
+											/>
+											<button
+												type="button"
+												class="btn text-error btn-ghost btn-xs"
+												onclick={() => removeImage(i)}
+												disabled={creating}
+												aria-label="Remove image"
+											>
+												×
+											</button>
+										</div>
+									{/each}
+									<div>
+										<button
+											type="button"
+											class="btn btn-outline btn-xs"
+											onclick={addImage}
+											disabled={creating}
+										>
+											+ Add image
+										</button>
+									</div>
+								</div>
 							</td>
 						</tr>
 						<tr>
@@ -291,12 +423,14 @@
 		{:else if searchResults.length === 0}
 			<p class="text-sm text-base-content/60">No results yet — type a title and click Search.</p>
 		{:else}
+			<p class="mb-2 text-xs text-base-content/60">Click a result to fill in the form above.</p>
 			<div class="overflow-x-auto rounded-box border border-base-content/10">
 				<table class="table table-sm">
 					<thead>
 						<tr>
 							<th>Title</th>
-							<th>Author</th>
+							<th>Artists</th>
+							<th>Images</th>
 							<th>Description</th>
 							<th>External ID</th>
 						</tr>
@@ -307,10 +441,11 @@
 								class={classNames('cursor-pointer hover:bg-base-300', {
 									'bg-base-300': selectedResultIndex === i
 								})}
-								onclick={() => (selectedResultIndex = selectedResultIndex === i ? null : i)}
+								onclick={() => applyResult(result, i)}
 							>
 								<td class="font-medium">{result.title}</td>
-								<td>{result.author}</td>
+								<td class="text-xs">{result.artists.map((a) => a.name).join(', ')}</td>
+								<td class="text-xs">{result.images.length}</td>
 								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
 									>{result.description}</td
 								>
@@ -320,17 +455,6 @@
 					</tbody>
 				</table>
 			</div>
-			{#if selectedResultIndex !== null}
-				<div class="mt-3 flex flex-col gap-1">
-					<span class="text-xs font-semibold text-base-content/60 uppercase">Raw JSON</span>
-					<textarea
-						class="textarea-bordered textarea h-64 w-full font-mono text-xs"
-						readonly
-						disabled
-						value={selectedResultJson}
-					></textarea>
-				</div>
-			{/if}
 		{/if}
 	</section>
 
@@ -378,7 +502,8 @@
 							<th>Type</th>
 							<th>Source</th>
 							<th>Title</th>
-							<th>Author</th>
+							<th>Artists</th>
+							<th>Images</th>
 							<th>Description</th>
 							<th>Created</th>
 							<th class="w-24"></th>
@@ -391,7 +516,8 @@
 								<td class="text-xs">{doc.type}</td>
 								<td class="text-xs">{doc.source}</td>
 								<td class="font-medium">{doc.title}</td>
-								<td>{doc.author}</td>
+								<td class="text-xs">{(doc.artists ?? []).map((a) => a.name).join(', ')}</td>
+								<td class="text-xs">{(doc.images ?? []).length}</td>
 								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
 									>{doc.description}</td
 								>
