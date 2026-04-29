@@ -70,9 +70,10 @@ The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node
 - `apps/cloud/src/frontend.rs` — Embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it as the fallback handler
 - `apps/cloud/web/` — SvelteKit static SPA (pnpm package `cloud`) built with the same `ui-lib` components as the player. Builds to `apps/cloud/web/dist-static/`, which is what the cloud crate embeds at compile time.
 
-The cloud frontend has two screens:
+The cloud frontend has these screens:
 - **Health** (`/`) — polls `/api/cloud/status` every 5 seconds and renders status, latency, uptime, bind, package health, and identities.
-- **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. The form lets you pick an existing directory, or browse to a parent and create a new subfolder; each library is identified by its directory path.
+- **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. The form lets you pick an existing directory, or browse to a parent and create a new subfolder; each library is identified by its directory path. Each row has a `Scan` button that walks the directory recursively, reports file size + MIME, and asynchronously pins audio files to IPFS.
+- **IPFS** (`/ipfs`) — reads `/api/ipfs/pins` and lists every pin recorded by library scans (CID, path, MIME, size).
 
 ### Transport Layer
 

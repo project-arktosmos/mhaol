@@ -18,6 +18,7 @@ src/
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir
 ├── documents.rs         # /api/documents CRUD — SurrealDB-backed document records (name, author, description)
 ├── database.rs          # /api/database/tables{,/:table} — read-only SurrealDB explorer (lists tables, paginates records)
+├── ipfs_pins.rs         # /api/ipfs/pins — lists pins recorded when libraries are scanned; exposes record_pin() used by the scan handler
 ├── fs_browse.rs         # /api/fs/browse — list subdirectories under a path (defaults to home), used by the WebUI directory picker
 └── frontend.rs          # rust-embed wrapper that serves web/dist-static/
 
@@ -98,7 +99,8 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/libraries/:id` — fetch one library.
 - `PUT /api/libraries/:id` — update the path. The new path is created on disk if missing; duplicates are rejected with `409`.
 - `DELETE /api/libraries/:id` — remove the library record (the on-disk directory is left untouched).
-- `GET /api/libraries/:id/scan` — recursively walk the library directory and return `{ root, total_files, total_size, entries }` where each entry is `{ path, relative_path, size, mime }`. MIME types are resolved by extension via `mime_guess`; nothing is persisted.
+- `GET /api/libraries/:id/scan` — recursively walk the library directory and return `{ root, total_files, total_size, entries }` where each entry is `{ path, relative_path, size, mime }`. MIME types are resolved by extension via `mime_guess`; the scan response itself is not persisted, but every entry whose mime starts with `audio/` is asynchronously added to the embedded IPFS node (recursive pin) and recorded in the `ipfs_pin` table.
+- `GET /api/ipfs/pins` — list every pin recorded by the cloud (`ipfs_pin` table). Each row is `{ id, cid, path, mime, size, created_at }`. Records are deduplicated by `(cid, path)` so re-scans don't create duplicates.
 - `GET /api/documents` — list documents persisted in SurrealDB (`document` table).
 - `POST /api/documents` — create a document `{ name, author, description? }`. `name` and `author` are required.
 - `GET /api/documents/:id` — fetch one document.

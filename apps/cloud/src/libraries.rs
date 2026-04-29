@@ -313,7 +313,43 @@ async fn scan(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("scan task failed: {e}")))?;
 
+    #[cfg(not(target_os = "android"))]
+    schedule_audio_pins(&state, &response.entries);
+
     Ok(Json(response))
+}
+
+#[cfg(not(target_os = "android"))]
+fn schedule_audio_pins(state: &CloudState, entries: &[ScanEntry]) {
+    let audio: Vec<(String, String, u64)> = entries
+        .iter()
+        .filter(|e| e.mime.starts_with("audio/"))
+        .map(|e| (e.path.clone(), e.mime.clone(), e.size))
+        .collect();
+    if audio.is_empty() {
+        return;
+    }
+    let ipfs = state.ipfs_manager.clone();
+    let state = state.clone();
+    tokio::spawn(async move {
+        for (path, mime, size) in audio {
+            let req = mhaol_ipfs::AddIpfsRequest {
+                source: path.clone(),
+                pin: Some(true),
+            };
+            match ipfs.add(req).await {
+                Ok(info) => {
+                    if let Err(e) =
+                        crate::ipfs_pins::record_pin(&state, info.cid, path.clone(), mime, size)
+                            .await
+                    {
+                        tracing::warn!("failed to record ipfs pin for {path}: {e}");
+                    }
+                }
+                Err(e) => tracing::warn!("failed to pin {path} to ipfs: {e}"),
+            }
+        }
+    });
 }
 
 impl IntoResponse for LibraryDto {
