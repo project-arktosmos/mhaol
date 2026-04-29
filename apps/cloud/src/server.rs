@@ -68,8 +68,10 @@ async fn main() {
                 .map(|d| PathBuf::from(d).join("cloud-surrealkv"))
         })
         .unwrap_or_else(|| {
-            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            manifest_dir.join("cloud-surrealkv")
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("mhaol")
+                .join("cloud-surrealkv")
         });
 
     tracing::info!("Opening SurrealDB store at {}", db_path.display());
