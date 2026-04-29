@@ -438,7 +438,12 @@
 					/>
 				</svg>
 			</div>
-			<audio bind:this={audioElement} class="absolute h-0 w-0 overflow-hidden"></audio>
+			<audio
+				bind:this={audioElement}
+				class="absolute h-0 w-0 overflow-hidden"
+				onwaiting={handleWaiting}
+				onplaying={handlePlaying}
+			></audio>
 		{/if}
 
 		{#if !isStreaming && connectionState !== 'idle'}

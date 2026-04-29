@@ -529,6 +529,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 					this.handleMediaInfo(msg.payload as MediaInfoPayload);
 				} else if (type === 'PositionUpdate') {
 					this.handlePositionUpdate(msg.payload as PositionPayload);
+				} else if (type === 'TrackEnded') {
+					this.handleTrackEnded();
 				}
 			} catch (e) {
 				console.warn('[Player] Data channel message parse error:', e);
@@ -621,6 +623,30 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			...s,
 			durationSecs: payload.duration_secs
 		}));
+	}
+
+	private trackEndedListeners: Set<() => void> = new Set();
+
+	/// Register a callback for when the worker reports the current track has
+	/// ended (sent via the data channel as `{"type":"TrackEnded"}`). Returns
+	/// an unsubscribe function. This is the hook the document playback
+	/// service uses to auto-advance to the next track in an album.
+	onTrackEnded(callback: () => void): () => void {
+		this.trackEndedListeners.add(callback);
+		return () => {
+			this.trackEndedListeners.delete(callback);
+		};
+	}
+
+	private handleTrackEnded(): void {
+		console.log('[Player] Track ended, notifying listeners');
+		for (const listener of this.trackEndedListeners) {
+			try {
+				listener();
+			} catch (e) {
+				console.error('[Player] onTrackEnded listener threw:', e);
+			}
+		}
 	}
 
 	// ===== Stop playback =====

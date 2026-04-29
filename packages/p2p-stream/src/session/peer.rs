@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::pipeline::StreamPipeline;
+use crate::pipeline::{BusEvent, StreamPipeline};
 use crate::session::state::SessionState;
 use crate::signaling::*;
 use gstreamer as gst;
@@ -44,11 +44,12 @@ unsafe impl Sync for PeerSession {}
 impl PeerSession {
     pub(crate) fn new(
         id: String,
-        stream_pipeline: StreamPipeline,
+        mut stream_pipeline: StreamPipeline,
         signaling_tx: mpsc::UnboundedSender<SignalingMessage>,
     ) -> Result<Self> {
         let state = Arc::new(Mutex::new(SessionState::New));
         let offer_sent = Arc::new(AtomicBool::new(false));
+        let bus_events = stream_pipeline.take_bus_events();
 
         // Connect webrtcbin signals BEFORE creating the data channel.
         // create-data-channel can synchronously emit `on-negotiation-needed`;
@@ -109,6 +110,14 @@ impl PeerSession {
         };
 
         session.connect_data_channel_signals();
+
+        // Watch the GStreamer bus for EOS so we can tell the browser to
+        // advance to the next track. Browsers don't fire `ended` on a
+        // MediaStream when the upstream goes silent, so we have to push
+        // an explicit signal over the data channel.
+        if let Some(rx) = bus_events {
+            session.start_bus_watcher(rx);
+        }
 
         Ok(session)
     }
@@ -330,6 +339,71 @@ impl PeerSession {
                 }
             })
             .expect("Failed to spawn position ticker thread");
+    }
+
+    /// Forward GStreamer EOS to the browser as a `TrackEnded` data-channel
+    /// message so it can advance to the next track. Browsers don't fire
+    /// `ended` on a MediaStream when upstream just stops sending packets,
+    /// so an explicit signal is required.
+    ///
+    /// Polls with `try_recv` + a short sleep so the `shutdown` flag wakes
+    /// the thread up quickly when the session is torn down.
+    fn start_bus_watcher(&self, mut bus_events: mpsc::UnboundedReceiver<BusEvent>) {
+        let dc_open = self.data_channel_open.clone();
+        let shutdown = self.shutdown.clone();
+        let session_id = self.id.clone();
+
+        // Same lifetime trick as the position ticker: ref the data-channel
+        // GObject, ship the pointer across the thread boundary, unref on
+        // exit. The `send-string` action signal is thread-safe.
+        let dc_addr = self.data_channel.as_ptr() as usize;
+        unsafe {
+            glib::gobject_ffi::g_object_ref(dc_addr as *mut _);
+        }
+
+        std::thread::Builder::new()
+            .name("bus-watcher".into())
+            .spawn(move || {
+                let poll_interval = std::time::Duration::from_millis(100);
+                loop {
+                    if shutdown.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    match bus_events.try_recv() {
+                        Ok(BusEvent::Eos) => {
+                            info!("Session {session_id}: pipeline EOS, signaling TrackEnded");
+                            if dc_open.load(Ordering::Relaxed) {
+                                let msg =
+                                    serde_json::json!({ "type": "TrackEnded" }).to_string();
+                                send_string_on_dc(dc_addr, &msg);
+                            } else {
+                                debug!(
+                                    "Session {session_id}: EOS observed but data channel not open"
+                                );
+                            }
+                        }
+                        Ok(BusEvent::Error { message, debug: dbg }) => {
+                            error!(
+                                "Session {session_id}: pipeline error: {message} (debug: {:?})",
+                                dbg
+                            );
+                        }
+                        Ok(_) => {}
+                        Err(mpsc::error::TryRecvError::Empty) => {
+                            std::thread::sleep(poll_interval);
+                        }
+                        Err(mpsc::error::TryRecvError::Disconnected) => {
+                            debug!("Session {session_id}: bus channel closed, watcher exiting");
+                            break;
+                        }
+                    }
+                }
+
+                unsafe {
+                    glib::gobject_ffi::g_object_unref(dc_addr as *mut _);
+                }
+            })
+            .expect("Failed to spawn bus watcher thread");
     }
 
     // ===== WebRTC signaling (SDP/ICE only) =====
