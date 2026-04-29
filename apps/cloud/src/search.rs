@@ -1,4 +1,4 @@
-use crate::documents::{Artist, ImageMeta};
+use crate::documents::{Artist, FileEntry, ImageMeta};
 use crate::state::CloudState;
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,7 @@ pub struct SearchResultItem {
     pub description: String,
     pub artists: Vec<Artist>,
     pub images: Vec<ImageMeta>,
+    pub files: Vec<FileEntry>,
     #[serde(rename = "externalId")]
     pub external_id: Option<String>,
     pub raw: serde_json::Value,
@@ -134,6 +135,7 @@ fn build_tmdb_item(r: &serde_json::Value) -> SearchResultItem {
         description,
         artists: Vec::new(),
         images,
+        files: Vec::new(),
         external_id,
         raw: r.clone(),
     }

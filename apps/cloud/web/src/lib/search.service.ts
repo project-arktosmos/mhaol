@@ -1,13 +1,20 @@
 import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/musicbrainz';
 import { searchBooks } from 'addons/openlibrary';
 import { search as searchPirateBay } from 'addons/torrent-search-thepiratebay';
-import type { Artist, DocumentSource, DocumentType, ImageMeta } from './documents.service';
+import type {
+	Artist,
+	DocumentSource,
+	DocumentType,
+	FileEntry,
+	ImageMeta
+} from './documents.service';
 
 export interface SearchResultItem {
 	title: string;
 	description: string;
 	artists: Artist[];
 	images: ImageMeta[];
+	files: FileEntry[];
 	externalId?: string;
 	raw: unknown;
 }
@@ -62,6 +69,7 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 			description: rec.disambiguation ?? '',
 			artists: mbArtistCreditsToArtists(rec['artist-credit'] ?? []),
 			images: [],
+			files: [],
 			externalId: rec.id,
 			raw: rec
 		}));
@@ -83,6 +91,7 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 					height: 0
 				}
 			],
+			files: [],
 			externalId: rg.id,
 			raw: rg
 		}));
@@ -100,6 +109,7 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 			}
 		],
 		images: [],
+		files: [],
 		externalId: a.id,
 		raw: a
 	}));
@@ -158,6 +168,7 @@ async function searchOpenLibrary(query: string): Promise<SearchResultItem[]> {
 			description,
 			artists,
 			images,
+			files: [],
 			externalId: doc.key,
 			raw: doc
 		};
@@ -171,6 +182,7 @@ async function searchTpb(query: string): Promise<SearchResultItem[]> {
 		description: `${r.seeders} seeders · ${r.leechers} leechers · ${r.size} bytes`,
 		artists: r.uploadedBy ? [{ name: r.uploadedBy }] : [],
 		images: [],
+		files: r.magnetLink ? [{ type: 'torrent magnet' as const, value: r.magnetLink }] : [],
 		externalId: r.infoHash,
 		raw: r
 	}));

@@ -4,10 +4,12 @@
 	import {
 		documentsService,
 		DOCUMENT_SOURCES,
+		FILE_TYPES,
 		TYPES_BY_SOURCE,
 		type Artist,
 		type DocumentType,
 		type DocumentSource,
+		type FileEntry,
 		type ImageMeta
 	} from '$lib/documents.service';
 	import { searchSource, type SearchResultItem } from '$lib/search.service';
@@ -19,6 +21,7 @@
 	let description = $state('');
 	let artists = $state<Artist[]>([]);
 	let images = $state<ImageMeta[]>([]);
+	let files = $state<FileEntry[]>([]);
 	let source = $state<DocumentSource>(DOCUMENT_SOURCES[0]);
 	let type = $state<DocumentType>(TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0]);
 	const availableTypes = $derived(TYPES_BY_SOURCE[source]);
@@ -41,6 +44,7 @@
 		description = '';
 		artists = [];
 		images = [];
+		files = [];
 		source = DOCUMENT_SOURCES[0];
 		type = TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0];
 	}
@@ -57,6 +61,12 @@
 	function removeImage(i: number) {
 		images = images.filter((_, idx) => idx !== i);
 	}
+	function addFile() {
+		files = [...files, { type: FILE_TYPES[0], value: '' }];
+	}
+	function removeFile(i: number) {
+		files = files.filter((_, idx) => idx !== i);
+	}
 
 	function applyResult(result: SearchResultItem, index: number) {
 		selectedResultIndex = index;
@@ -64,6 +74,7 @@
 		description = result.description;
 		artists = result.artists.map((a) => ({ ...a }));
 		images = result.images.map((img) => ({ ...img }));
+		files = result.files.map((f) => ({ ...f }));
 	}
 
 	async function runSearch() {
@@ -92,6 +103,7 @@
 				description: description.trim(),
 				artists,
 				images,
+				files,
 				source,
 				type
 			},
@@ -141,6 +153,7 @@
 				artists,
 				description: description.trim(),
 				images,
+				files,
 				type,
 				source
 			});
@@ -185,8 +198,8 @@
 		<div>
 			<h1 class="text-2xl font-bold">Documents</h1>
 			<p class="text-sm text-base-content/60">
-				Documents stored in the cloud's SurrealDB. Each entry has a title, a list of artists, a
-				description, and a list of images.
+				Documents stored in the cloud's SurrealDB. Each entry has a title, artists, description,
+				images, and a list of files (ipfs CIDs, torrent magnets, or direct URLs).
 			</p>
 		</div>
 		<button
@@ -379,6 +392,59 @@
 							</td>
 						</tr>
 						<tr>
+							<th class="w-32 align-top">Files</th>
+							<td>
+								<div class="flex flex-col gap-2">
+									{#each files as _, i (i)}
+										<div class="flex flex-wrap items-center gap-2">
+											<select
+												class="select-bordered select w-40 select-sm"
+												bind:value={files[i].type}
+												disabled={creating}
+											>
+												{#each FILE_TYPES as option (option)}
+													<option value={option}>{option}</option>
+												{/each}
+											</select>
+											<input
+												type="text"
+												class="input-bordered input input-sm min-w-48 flex-1"
+												placeholder="Value (CID, magnet:?…, https://…)"
+												bind:value={files[i].value}
+												disabled={creating}
+											/>
+											<input
+												type="text"
+												class="input-bordered input input-sm w-48"
+												placeholder="Title (optional)"
+												bind:value={files[i].title}
+												disabled={creating}
+											/>
+											<button
+												type="button"
+												class="btn text-error btn-ghost btn-xs"
+												onclick={() => removeFile(i)}
+												disabled={creating}
+												aria-label="Remove file"
+											>
+												×
+											</button>
+										</div>
+									{/each}
+									<div>
+										<button
+											type="button"
+											class="btn btn-outline btn-xs"
+											onclick={addFile}
+											disabled={creating}
+										>
+											+ Add file
+										</button>
+									</div>
+								</div>
+							</td>
+						</tr>
+						<tr>
 							<th class="w-32 align-top">Description</th>
 							<td>
 								<input
@@ -431,6 +497,7 @@
 							<th>Title</th>
 							<th>Artists</th>
 							<th>Images</th>
+							<th>Files</th>
 							<th>Description</th>
 							<th>External ID</th>
 						</tr>
@@ -446,6 +513,7 @@
 								<td class="font-medium">{result.title}</td>
 								<td class="text-xs">{result.artists.map((a) => a.name).join(', ')}</td>
 								<td class="text-xs">{result.images.length}</td>
+								<td class="text-xs">{result.files.length}</td>
 								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
 									>{result.description}</td
 								>
@@ -504,6 +572,7 @@
 							<th>Title</th>
 							<th>Artists</th>
 							<th>Images</th>
+							<th>Files</th>
 							<th>Description</th>
 							<th>Created</th>
 							<th class="w-24"></th>
@@ -518,6 +587,7 @@
 								<td class="font-medium">{doc.title}</td>
 								<td class="text-xs">{(doc.artists ?? []).map((a) => a.name).join(', ')}</td>
 								<td class="text-xs">{(doc.images ?? []).length}</td>
+								<td class="text-xs">{(doc.files ?? []).length}</td>
 								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
 									>{doc.description}</td
 								>

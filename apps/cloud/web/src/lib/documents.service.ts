@@ -65,12 +65,22 @@ export interface ImageMeta {
 	height: number;
 }
 
+export const FILE_TYPES = ['ipfs', 'torrent magnet', 'url'] as const;
+export type FileType = (typeof FILE_TYPES)[number];
+
+export interface FileEntry {
+	type: FileType;
+	value: string;
+	title?: string;
+}
+
 export interface Document {
 	id: string;
 	title: string;
 	artists: Artist[];
 	description: string;
 	images: ImageMeta[];
+	files: FileEntry[];
 	type: string;
 	source: string;
 	created_at: string;
@@ -120,6 +130,7 @@ class DocumentsService {
 		artists: Artist[];
 		description: string;
 		images: ImageMeta[];
+		files: FileEntry[];
 		type: DocumentType;
 		source: DocumentSource;
 	}): Promise<Document> {

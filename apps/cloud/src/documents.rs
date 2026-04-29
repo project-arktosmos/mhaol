@@ -44,6 +44,8 @@ const ALLOWED_SOURCES: &[&str] = &[
     "wyzie-subs",
 ];
 
+const ALLOWED_FILE_TYPES: &[&str] = &["ipfs", "torrent magnet", "url"];
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Artist {
     pub name: String,
@@ -66,12 +68,22 @@ pub struct ImageMeta {
     pub height: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FileEntry {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub value: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
 #[derive(Serialize)]
 struct DocumentPayloadView<'a> {
     title: &'a str,
     description: &'a str,
     artists: &'a [Artist],
     images: &'a [ImageMeta],
+    files: &'a [FileEntry],
     #[serde(rename = "type")]
     kind: &'a str,
     source: &'a str,
@@ -82,10 +94,19 @@ fn compute_document_cid(
     description: &str,
     artists: &[Artist],
     images: &[ImageMeta],
+    files: &[FileEntry],
     kind: &str,
     source: &str,
 ) -> String {
-    let view = DocumentPayloadView { title, description, artists, images, kind, source };
+    let view = DocumentPayloadView {
+        title,
+        description,
+        artists,
+        images,
+        files,
+        kind,
+        source,
+    };
     let json = serde_json::to_string_pretty(&view)
         .expect("DocumentPayloadView serializes to JSON");
     let digest = Sha256::digest(json.as_bytes());
@@ -104,6 +125,8 @@ pub struct Document {
     pub description: String,
     #[serde(default)]
     pub images: Vec<ImageMeta>,
+    #[serde(default)]
+    pub files: Vec<FileEntry>,
     #[serde(rename = "type", default)]
     pub kind: String,
     #[serde(default)]
@@ -119,6 +142,7 @@ pub struct DocumentDto {
     pub artists: Vec<Artist>,
     pub description: String,
     pub images: Vec<ImageMeta>,
+    pub files: Vec<FileEntry>,
     #[serde(rename = "type")]
     pub kind: String,
     pub source: String,
@@ -139,6 +163,7 @@ impl From<Document> for DocumentDto {
             artists: doc.artists,
             description: doc.description,
             images: doc.images,
+            files: doc.files,
             kind: doc.kind,
             source: doc.source,
             created_at: doc.created_at,
@@ -155,6 +180,8 @@ pub struct CreateDocumentRequest {
     pub description: Option<String>,
     #[serde(default)]
     pub images: Vec<ImageMeta>,
+    #[serde(default)]
+    pub files: Vec<FileEntry>,
     #[serde(rename = "type")]
     pub kind: String,
     pub source: String,
@@ -166,6 +193,7 @@ pub struct UpdateDocumentRequest {
     pub artists: Option<Vec<Artist>>,
     pub description: Option<String>,
     pub images: Option<Vec<ImageMeta>>,
+    pub files: Option<Vec<FileEntry>>,
     #[serde(rename = "type")]
     pub kind: Option<String>,
     pub source: Option<String>,
@@ -279,9 +307,31 @@ async fn create(
             height: img.height,
         })
         .collect();
+    let mut files: Vec<FileEntry> = Vec::with_capacity(req.files.len());
+    for f in req.files.into_iter() {
+        let value = f.value.trim().to_string();
+        if value.is_empty() {
+            continue;
+        }
+        let kind = f.kind.trim();
+        if !ALLOWED_FILE_TYPES.contains(&kind) {
+            return Err(err_response(
+                StatusCode::BAD_REQUEST,
+                format!("invalid file type: {kind}"),
+            ));
+        }
+        files.push(FileEntry {
+            kind: kind.to_string(),
+            value,
+            title: f
+                .title
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty()),
+        });
+    }
 
     let now = Utc::now();
-    let new_id = compute_document_cid(title, &description, &artists, &images, kind, source);
+    let new_id = compute_document_cid(title, &description, &artists, &images, &files, kind, source);
 
     let existing: Option<Document> = state
         .db
@@ -298,6 +348,7 @@ async fn create(
         artists,
         description,
         images,
+        files,
         kind: kind.to_string(),
         source: source.to_string(),
         created_at: now,
@@ -369,6 +420,32 @@ async fn update(
                 height: img.height,
             })
             .collect();
+    }
+
+    if let Some(files) = req.files {
+        let mut next: Vec<FileEntry> = Vec::with_capacity(files.len());
+        for f in files.into_iter() {
+            let value = f.value.trim().to_string();
+            if value.is_empty() {
+                continue;
+            }
+            let kind = f.kind.trim();
+            if !ALLOWED_FILE_TYPES.contains(&kind) {
+                return Err(err_response(
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid file type: {kind}"),
+                ));
+            }
+            next.push(FileEntry {
+                kind: kind.to_string(),
+                value,
+                title: f
+                    .title
+                    .map(|t| t.trim().to_string())
+                    .filter(|t| !t.is_empty()),
+            });
+        }
+        current.files = next;
     }
 
     if let Some(description) = req.description.as_ref() {
