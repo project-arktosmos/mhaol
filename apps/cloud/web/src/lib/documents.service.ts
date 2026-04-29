@@ -68,6 +68,7 @@ export interface Document {
 	description: string;
 	images: ImageMeta[];
 	files: FileEntry[];
+	year: number | null;
 	type: string;
 	source: string;
 	created_at: string;
@@ -118,6 +119,7 @@ class DocumentsService {
 		description: string;
 		images: ImageMeta[];
 		files: FileEntry[];
+		year: number | null;
 		type: DocumentType;
 		source: DocumentSource;
 	}): Promise<Document> {

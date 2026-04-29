@@ -36,6 +36,7 @@ pub struct SearchResultItem {
     pub artists: Vec<Artist>,
     pub images: Vec<ImageMeta>,
     pub files: Vec<FileEntry>,
+    pub year: Option<i32>,
     #[serde(rename = "externalId")]
     pub external_id: Option<String>,
     pub raw: serde_json::Value,
@@ -116,6 +117,12 @@ fn build_tmdb_item(r: &serde_json::Value) -> SearchResultItem {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    let year = r
+        .get("release_date")
+        .and_then(|v| v.as_str())
+        .or_else(|| r.get("first_air_date").and_then(|v| v.as_str()))
+        .and_then(|d| d.get(0..4))
+        .and_then(|s| s.parse::<i32>().ok());
     let external_id = r.get("id").map(|v| v.to_string());
 
     let mut images: Vec<ImageMeta> = Vec::new();
@@ -148,6 +155,7 @@ fn build_tmdb_item(r: &serde_json::Value) -> SearchResultItem {
         artists: Vec::new(),
         images,
         files: Vec::new(),
+        year,
         external_id,
         raw: r.clone(),
     }

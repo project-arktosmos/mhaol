@@ -15,8 +15,15 @@ export interface SearchResultItem {
 	artists: Artist[];
 	images: ImageMeta[];
 	files: FileEntry[];
+	year: number | null;
 	externalId?: string;
 	raw: unknown;
+}
+
+function parseYear(s: string | null | undefined): number | null {
+	if (!s) return null;
+	const n = parseInt(s.slice(0, 4), 10);
+	return Number.isFinite(n) && n >= 1000 && n <= 9999 ? n : null;
 }
 
 export interface TorrentResultItem {
@@ -142,15 +149,19 @@ export async function fetchAlbumTrackTitles(releaseGroupId: string): Promise<str
 async function searchMusicBrainz(type: DocumentType, query: string): Promise<SearchResultItem[]> {
 	if (type === 'track') {
 		const res = await searchRecordings(query);
-		return res.recordings.map((rec) => ({
-			title: rec.title,
-			description: rec.disambiguation ?? '',
-			artists: mbArtistCreditsToArtists(rec['artist-credit'] ?? []),
-			images: [],
-			files: [],
-			externalId: rec.id,
-			raw: rec
-		}));
+		return res.recordings.map((rec) => {
+			const recAny = rec as unknown as { 'first-release-date'?: string };
+			return {
+				title: rec.title,
+				description: rec.disambiguation ?? '',
+				artists: mbArtistCreditsToArtists(rec['artist-credit'] ?? []),
+				images: [],
+				files: [],
+				year: parseYear(recAny['first-release-date']),
+				externalId: rec.id,
+				raw: rec
+			};
+		});
 	}
 	if (type === 'album') {
 		const res = await searchReleaseGroups(query);
@@ -170,27 +181,32 @@ async function searchMusicBrainz(type: DocumentType, query: string): Promise<Sea
 				}
 			],
 			files: [],
+			year: parseYear(rg['first-release-date']),
 			externalId: rg.id,
 			raw: rg
 		}));
 	}
 	const res = await searchArtists(query);
-	return res.artists.map((a) => ({
-		title: a.name,
-		description: [a.disambiguation, a.country, a.type]
-			.filter((s): s is string => Boolean(s))
-			.join(' · '),
-		artists: [
-			{
-				name: a.name,
-				url: `https://musicbrainz.org/artist/${a.id}`
-			}
-		],
-		images: [],
-		files: [],
-		externalId: a.id,
-		raw: a
-	}));
+	return res.artists.map((a) => {
+		const aAny = a as unknown as { 'life-span'?: { begin?: string } };
+		return {
+			title: a.name,
+			description: [a.disambiguation, a.country, a.type]
+				.filter((s): s is string => Boolean(s))
+				.join(' · '),
+			artists: [
+				{
+					name: a.name,
+					url: `https://musicbrainz.org/artist/${a.id}`
+				}
+			],
+			images: [],
+			files: [],
+			year: parseYear(aAny['life-span']?.begin),
+			externalId: a.id,
+			raw: a
+		};
+	});
 }
 
 interface MbArtistCredit {
@@ -247,6 +263,7 @@ async function searchOpenLibrary(query: string): Promise<SearchResultItem[]> {
 			artists,
 			images,
 			files: [],
+			year: doc.first_publish_year ?? null,
 			externalId: doc.key,
 			raw: doc
 		};

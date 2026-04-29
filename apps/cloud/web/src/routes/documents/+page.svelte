@@ -29,6 +29,7 @@
 	let artists = $state<Artist[]>([]);
 	let images = $state<ImageMeta[]>([]);
 	let files = $state<FileEntry[]>([]);
+	let year = $state<number | null>(null);
 	let source = $state<DocumentSource>(DOCUMENT_SOURCES[0]);
 	let type = $state<DocumentType>(TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0]);
 	const availableTypes = $derived(TYPES_BY_SOURCE[source]);
@@ -65,6 +66,7 @@
 		artists = [];
 		images = [];
 		files = [];
+		year = null;
 		source = DOCUMENT_SOURCES[0];
 		type = TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0];
 	}
@@ -95,6 +97,7 @@
 		artists = result.artists.map((a) => ({ ...a }));
 		images = result.images.map((img) => ({ ...img }));
 		files = result.files.map((f) => ({ ...f }));
+		year = result.year;
 		enrichError = null;
 
 		const externalId = result.externalId;
@@ -156,6 +159,7 @@
 				artists,
 				images,
 				files,
+				year,
 				source,
 				type
 			},
@@ -206,6 +210,7 @@
 				description: description.trim(),
 				images,
 				files,
+				year,
 				type,
 				source
 			});
@@ -325,6 +330,20 @@
 										{searching ? 'Searching…' : 'Search'}
 									</button>
 								</div>
+							</td>
+						</tr>
+						<tr>
+							<th class="w-32 align-middle">Year</th>
+							<td>
+								<input
+									type="number"
+									class="input-bordered input input-sm w-32"
+									placeholder="e.g. 1999"
+									min="1000"
+									max="9999"
+									bind:value={year}
+									disabled={creating}
+								/>
 							</td>
 						</tr>
 						<tr>
@@ -554,6 +573,7 @@
 						<thead>
 							<tr>
 								<th>Title</th>
+								<th>Year</th>
 								<th>Artists</th>
 								<th>Images</th>
 								<th>Files</th>
@@ -570,6 +590,7 @@
 									onclick={() => applyResult(result, i)}
 								>
 									<td class="font-medium">{result.title}</td>
+									<td class="text-xs">{result.year ?? ''}</td>
 									<td class="text-xs">{result.artists.map((a) => a.name).join(', ')}</td>
 									<td class="text-xs">{result.images.length}</td>
 									<td class="text-xs">{result.files.length}</td>
@@ -678,6 +699,7 @@
 							<th>Type</th>
 							<th>Source</th>
 							<th>Title</th>
+							<th>Year</th>
 							<th>Artists</th>
 							<th>Images</th>
 							<th>Files</th>
@@ -693,6 +715,7 @@
 								<td class="text-xs">{doc.type}</td>
 								<td class="text-xs">{doc.source}</td>
 								<td class="font-medium">{doc.title}</td>
+								<td class="text-xs">{doc.year ?? ''}</td>
 								<td class="text-xs">{(doc.artists ?? []).map((a) => a.name).join(', ')}</td>
 								<td class="text-xs">{(doc.images ?? []).length}</td>
 								<td class="text-xs">{(doc.files ?? []).length}</td>

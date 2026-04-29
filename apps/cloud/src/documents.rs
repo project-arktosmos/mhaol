@@ -82,6 +82,7 @@ struct DocumentPayloadView<'a> {
     artists: &'a [Artist],
     images: &'a [ImageMeta],
     files: &'a [FileEntry],
+    year: Option<i32>,
     #[serde(rename = "type")]
     kind: &'a str,
     source: &'a str,
@@ -93,6 +94,7 @@ fn compute_document_cid(
     artists: &[Artist],
     images: &[ImageMeta],
     files: &[FileEntry],
+    year: Option<i32>,
     kind: &str,
     source: &str,
 ) -> String {
@@ -102,6 +104,7 @@ fn compute_document_cid(
         artists,
         images,
         files,
+        year,
         kind,
         source,
     };
@@ -125,6 +128,8 @@ pub struct Document {
     pub images: Vec<ImageMeta>,
     #[serde(default)]
     pub files: Vec<FileEntry>,
+    #[serde(default)]
+    pub year: Option<i32>,
     #[serde(rename = "type", default)]
     pub kind: String,
     #[serde(default)]
@@ -141,6 +146,7 @@ pub struct DocumentDto {
     pub description: String,
     pub images: Vec<ImageMeta>,
     pub files: Vec<FileEntry>,
+    pub year: Option<i32>,
     #[serde(rename = "type")]
     pub kind: String,
     pub source: String,
@@ -162,6 +168,7 @@ impl From<Document> for DocumentDto {
             description: doc.description,
             images: doc.images,
             files: doc.files,
+            year: doc.year,
             kind: doc.kind,
             source: doc.source,
             created_at: doc.created_at,
@@ -180,6 +187,8 @@ pub struct CreateDocumentRequest {
     pub images: Vec<ImageMeta>,
     #[serde(default)]
     pub files: Vec<FileEntry>,
+    #[serde(default)]
+    pub year: Option<i32>,
     #[serde(rename = "type")]
     pub kind: String,
     pub source: String,
@@ -192,6 +201,7 @@ pub struct UpdateDocumentRequest {
     pub description: Option<String>,
     pub images: Option<Vec<ImageMeta>>,
     pub files: Option<Vec<FileEntry>>,
+    pub year: Option<i32>,
     #[serde(rename = "type")]
     pub kind: Option<String>,
     pub source: Option<String>,
@@ -329,8 +339,19 @@ async fn create(
         });
     }
 
+    let year = req.year.filter(|y| (1000..=9999).contains(y));
+
     let now = Utc::now();
-    let new_id = compute_document_cid(title, &description, &artists, &images, &files, kind, source);
+    let new_id = compute_document_cid(
+        title,
+        &description,
+        &artists,
+        &images,
+        &files,
+        year,
+        kind,
+        source,
+    );
 
     let existing: Option<Document> = state
         .db
@@ -348,6 +369,7 @@ async fn create(
         description,
         images,
         files,
+        year,
         kind: kind.to_string(),
         source: source.to_string(),
         created_at: now,
@@ -450,6 +472,14 @@ async fn update(
 
     if let Some(description) = req.description.as_ref() {
         current.description = description.trim().to_string();
+    }
+
+    if let Some(year) = req.year {
+        current.year = if (1000..=9999).contains(&year) {
+            Some(year)
+        } else {
+            None
+        };
     }
 
     if let Some(kind) = req.kind.as_ref().map(|k| k.trim()) {
