@@ -31,13 +31,14 @@ class DocumentStreamService {
 		if (!browser) return;
 		if (file.type !== 'ipfs') return;
 
+		const mode: 'audio' | 'video' = isAudioFile(file) ? 'audio' : 'video';
+
 		const session = await fetchJson<StartSessionResponse>('/api/p2p-stream/sessions', {
 			method: 'POST',
-			body: JSON.stringify({ cid: file.value })
+			body: JSON.stringify({ cid: file.value, mode })
 		});
 
 		const name = file.title ?? file.value;
-		const mode: 'audio' | 'video' = isAudioFile(file) ? 'audio' : 'video';
 		await playerService.playRemote(
 			name,
 			session.sessionId,

@@ -17,6 +17,8 @@ use crate::worker_bridge::WorkerEvent;
 #[derive(Debug, Deserialize)]
 pub struct StartSessionRequest {
     pub cid: String,
+    #[serde(default)]
+    pub mode: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -69,6 +71,11 @@ async fn start_session(
         ));
     }
 
+    let mode = match req.mode.as_deref() {
+        Some("audio") => "audio".to_string(),
+        _ => "video".to_string(),
+    };
+
     let session_id = uuid::Uuid::new_v4().to_string();
     let event = state
         .worker_bridge
@@ -77,7 +84,7 @@ async fn start_session(
             &pin.path,
             None,
             &state.signaling_url,
-            Some("video".to_string()),
+            Some(mode),
             None,
             None,
             None,
