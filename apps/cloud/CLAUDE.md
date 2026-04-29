@@ -66,13 +66,13 @@ The Svelte app lives at `apps/cloud/web/` (pnpm package name `cloud`). The user-
 ## Running
 
 ```bash
-# Dev — full desktop stack (cloud + player + Tauri health shell)
+# Dev — full desktop stack (cloud + Tauri shell + player Vite)
 pnpm dev
 
-# Dev — full cloud independently (Rust loopback :9899 + Vite WebUI :9898)
+# Dev — cloud independently with its own Tauri wrapper (Rust loopback :9899 + Vite WebUI :9898 + Tauri shell)
 pnpm dev:cloud
 
-# Dev — WebUI hot-reload on 9898 only (proxies /api to 127.0.0.1:9899; assumes the Rust server is already running)
+# Dev — WebUI hot-reload on 9898 only (proxies /api to 127.0.0.1:9899; assumes the Rust server is already running, no Tauri)
 pnpm dev:cloud:web
 
 # Dev — Rust loopback server only on 127.0.0.1:9899 (no UI; for API-only work)

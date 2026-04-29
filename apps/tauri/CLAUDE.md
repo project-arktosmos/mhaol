@@ -54,14 +54,20 @@ apps/tauri/
 
 ## Running
 
-`pnpm dev` is the full dev stack: it boots cloud (Rust 9899 + Vite 9898) and player (Vite 9595) in the background, waits for both ports, then launches `pnpm app:tauri`. Tauri's `beforeDevCommand` brings up `tauri-web` (Vite 1571) and the native window with the health UI. Hot reload works for the cloud WebUI, the player, and the Tauri health UI; the cloud Rust binary still needs a manual restart.
+The Tauri shell is the wrapper for the **cloud** app. It is launched as part of `pnpm dev:cloud`, which boots the cloud Rust loopback server (9899), the cloud Vite WebUI (9898), then runs `pnpm app:tauri` (which brings up `tauri-web` on 1571 as Tauri's `beforeDevCommand` and opens the native window with the health UI). The player is a plain Svelte SPA with no Tauri wrapper — start it via `pnpm dev:player`. `pnpm dev` runs both side-by-side: it spawns `dev:player` in the background and runs `dev:cloud` in the foreground. Cloud and player stay reachable in the browser at `http://localhost:9898` and `http://localhost:9595` while the Tauri health UI polls them. Hot reload works for the cloud WebUI, the player, and the Tauri health UI; the cloud Rust binary still needs a manual restart.
 
 ```bash
-# Full desktop dev stack (cloud + player + Tauri shell)
+# Full desktop dev stack (cloud + its Tauri wrapper + player)
 pnpm dev
 
-# Cloud + player only (no Tauri shell — browser-based workflow)
+# Cloud + player Vite servers only (no Tauri shell — browser-based workflow)
 pnpm dev:apps
+
+# Cloud + its Tauri wrapper (Rust + Vite WebUI + Tauri shell)
+pnpm dev:cloud
+
+# Player independently (plain Svelte SPA, no Tauri)
+pnpm dev:player
 
 # Tauri shell standalone (assumes cloud and player are already running)
 pnpm app:tauri
