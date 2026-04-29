@@ -1,5 +1,6 @@
 mod cloud_status;
 mod db;
+mod documents;
 mod frontend;
 mod libraries;
 mod state;
@@ -145,6 +146,7 @@ async fn main() {
     let app = Router::new()
         .nest("/api/cloud", cloud_status::router())
         .nest("/api/libraries", libraries::router())
+        .nest("/api/documents", documents::router())
         .fallback(frontend::serve_frontend)
         .with_state(state);
 

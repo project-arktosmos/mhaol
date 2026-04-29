@@ -16,6 +16,7 @@ src/
 ├── state.rs             # CloudState: { db, identity_manager, queue, ytdl_manager, torrent_manager, ed2k_manager }
 ├── cloud_status.rs      # GET /api/cloud/status
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records pointing at on-disk dirs
+├── documents.rs         # /api/documents CRUD — SurrealDB-backed document records (name, author, description)
 └── frontend.rs          # rust-embed wrapper that serves apps/cloud-web/dist-static/
 ```
 
