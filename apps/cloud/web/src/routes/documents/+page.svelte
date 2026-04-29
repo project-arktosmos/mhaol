@@ -43,6 +43,7 @@
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
+	let showAdvanced = $state(false);
 
 	let searching = $state(false);
 	let searchError = $state<string | null>(null);
@@ -357,206 +358,221 @@
 							</td>
 						</tr>
 						<tr>
-							<th class="w-32 align-middle">Year</th>
-							<td>
-								<input
-									type="number"
-									class="input-bordered input input-sm w-32"
-									placeholder="e.g. 1999"
-									min="1000"
-									max="9999"
-									bind:value={year}
-									disabled={creating}
-								/>
+							<td colspan="2" class="bg-base-100/50">
+								<button
+									type="button"
+									class="btn btn-ghost btn-xs"
+									onclick={() => (showAdvanced = !showAdvanced)}
+								>
+									{showAdvanced ? '▾ Hide' : '▸ Show'} more fields (year, artists, images, files, description)
+								</button>
 							</td>
 						</tr>
-						<tr>
-							<th class="w-32 align-top">Artists</th>
-							<td>
-								<div class="flex flex-col gap-2">
-									{#each artists as _, i (i)}
-										<div class="flex items-center gap-2">
-											<input
-												type="text"
-												class="input-bordered input input-sm w-1/3"
-												placeholder="Name"
-												bind:value={artists[i].name}
-												disabled={creating}
-											/>
-											<input
-												type="text"
-												class="input-bordered input input-sm w-1/3"
-												placeholder="URL"
-												bind:value={artists[i].url}
-												disabled={creating}
-											/>
-											<input
-												type="text"
-												class="input-bordered input input-sm w-1/3"
-												placeholder="Image URL"
-												bind:value={artists[i].imageUrl}
-												disabled={creating}
-											/>
+						{#if showAdvanced}
+							<tr>
+								<th class="w-32 align-middle">Year</th>
+								<td>
+									<input
+										type="number"
+										class="input-bordered input input-sm w-32"
+										placeholder="e.g. 1999"
+										min="1000"
+										max="9999"
+										bind:value={year}
+										disabled={creating}
+									/>
+								</td>
+							</tr>
+							<tr>
+								<th class="w-32 align-top">Artists</th>
+								<td>
+									<div class="flex flex-col gap-2">
+										{#each artists as _, i (i)}
+											<div class="flex items-center gap-2">
+												<input
+													type="text"
+													class="input-bordered input input-sm w-1/3"
+													placeholder="Name"
+													bind:value={artists[i].name}
+													disabled={creating}
+												/>
+												<input
+													type="text"
+													class="input-bordered input input-sm w-1/3"
+													placeholder="URL"
+													bind:value={artists[i].url}
+													disabled={creating}
+												/>
+												<input
+													type="text"
+													class="input-bordered input input-sm w-1/3"
+													placeholder="Image URL"
+													bind:value={artists[i].imageUrl}
+													disabled={creating}
+												/>
+												<button
+													type="button"
+													class="btn text-error btn-ghost btn-xs"
+													onclick={() => removeArtist(i)}
+													disabled={creating}
+													aria-label="Remove artist"
+												>
+													×
+												</button>
+											</div>
+										{/each}
+										<div>
 											<button
 												type="button"
-												class="btn text-error btn-ghost btn-xs"
-												onclick={() => removeArtist(i)}
+												class="btn btn-outline btn-xs"
+												onclick={addArtist}
 												disabled={creating}
-												aria-label="Remove artist"
 											>
-												×
+												+ Add artist
 											</button>
 										</div>
-									{/each}
-									<div>
-										<button
-											type="button"
-											class="btn btn-outline btn-xs"
-											onclick={addArtist}
-											disabled={creating}
-										>
-											+ Add artist
-										</button>
 									</div>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<th class="w-32 align-top">Images</th>
-							<td>
-								<div class="flex flex-col gap-2">
-									{#each images as _, i (i)}
-										<div class="flex flex-wrap items-center gap-2">
-											<input
-												type="text"
-												class="input-bordered input input-sm min-w-48 flex-1"
-												placeholder="URL"
-												bind:value={images[i].url}
-												disabled={creating}
-											/>
-											<input
-												type="text"
-												class="input-bordered input input-sm w-32"
-												placeholder="Mime type"
-												bind:value={images[i].mimeType}
-												disabled={creating}
-											/>
-											<input
-												type="number"
-												class="input-bordered input input-sm w-28"
-												placeholder="Size (B)"
-												bind:value={images[i].fileSize}
-												disabled={creating}
-											/>
-											<input
-												type="number"
-												class="input-bordered input input-sm w-20"
-												placeholder="W"
-												bind:value={images[i].width}
-												disabled={creating}
-											/>
-											<input
-												type="number"
-												class="input-bordered input input-sm w-20"
-												placeholder="H"
-												bind:value={images[i].height}
-												disabled={creating}
-											/>
+								</td>
+							</tr>
+							<tr>
+								<th class="w-32 align-top">Images</th>
+								<td>
+									<div class="flex flex-col gap-2">
+										{#each images as _, i (i)}
+											<div class="flex flex-wrap items-center gap-2">
+												<input
+													type="text"
+													class="input-bordered input input-sm min-w-48 flex-1"
+													placeholder="URL"
+													bind:value={images[i].url}
+													disabled={creating}
+												/>
+												<input
+													type="text"
+													class="input-bordered input input-sm w-32"
+													placeholder="Mime type"
+													bind:value={images[i].mimeType}
+													disabled={creating}
+												/>
+												<input
+													type="number"
+													class="input-bordered input input-sm w-28"
+													placeholder="Size (B)"
+													bind:value={images[i].fileSize}
+													disabled={creating}
+												/>
+												<input
+													type="number"
+													class="input-bordered input input-sm w-20"
+													placeholder="W"
+													bind:value={images[i].width}
+													disabled={creating}
+												/>
+												<input
+													type="number"
+													class="input-bordered input input-sm w-20"
+													placeholder="H"
+													bind:value={images[i].height}
+													disabled={creating}
+												/>
+												<button
+													type="button"
+													class="btn text-error btn-ghost btn-xs"
+													onclick={() => removeImage(i)}
+													disabled={creating}
+													aria-label="Remove image"
+												>
+													×
+												</button>
+											</div>
+										{/each}
+										<div>
 											<button
 												type="button"
-												class="btn text-error btn-ghost btn-xs"
-												onclick={() => removeImage(i)}
+												class="btn btn-outline btn-xs"
+												onclick={addImage}
 												disabled={creating}
-												aria-label="Remove image"
 											>
-												×
+												+ Add image
 											</button>
 										</div>
-									{/each}
-									<div>
-										<button
-											type="button"
-											class="btn btn-outline btn-xs"
-											onclick={addImage}
-											disabled={creating}
-										>
-											+ Add image
-										</button>
 									</div>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<th class="w-32 align-top">Files</th>
-							<td>
-								<div class="flex flex-col gap-2">
-									{#if enrichingFiles}
-										<p class="text-xs text-base-content/60">Loading episodes/tracks…</p>
-									{/if}
-									{#if enrichError}
-										<p class="text-xs text-error">Could not load episodes/tracks: {enrichError}</p>
-									{/if}
-									{#each files as _, i (i)}
-										<div class="flex flex-wrap items-center gap-2">
-											<select
-												class="select-bordered select w-40 select-sm"
-												bind:value={files[i].type}
-												disabled={creating}
-											>
-												{#each FILE_TYPES as option (option)}
-													<option value={option}>{option}</option>
-												{/each}
-											</select>
-											<input
-												type="text"
-												class="input-bordered input input-sm min-w-48 flex-1"
-												placeholder="Value (CID, magnet:?…, https://…)"
-												bind:value={files[i].value}
-												disabled={creating}
-											/>
-											<input
-												type="text"
-												class="input-bordered input input-sm w-48"
-												placeholder="Title (optional)"
-												bind:value={files[i].title}
-												disabled={creating}
-											/>
+								</td>
+							</tr>
+							<tr>
+								<th class="w-32 align-top">Files</th>
+								<td>
+									<div class="flex flex-col gap-2">
+										{#if enrichingFiles}
+											<p class="text-xs text-base-content/60">Loading episodes/tracks…</p>
+										{/if}
+										{#if enrichError}
+											<p class="text-xs text-error">
+												Could not load episodes/tracks: {enrichError}
+											</p>
+										{/if}
+										{#each files as _, i (i)}
+											<div class="flex flex-wrap items-center gap-2">
+												<select
+													class="select-bordered select w-40 select-sm"
+													bind:value={files[i].type}
+													disabled={creating}
+												>
+													{#each FILE_TYPES as option (option)}
+														<option value={option}>{option}</option>
+													{/each}
+												</select>
+												<input
+													type="text"
+													class="input-bordered input input-sm min-w-48 flex-1"
+													placeholder="Value (CID, magnet:?…, https://…)"
+													bind:value={files[i].value}
+													disabled={creating}
+												/>
+												<input
+													type="text"
+													class="input-bordered input input-sm w-48"
+													placeholder="Title (optional)"
+													bind:value={files[i].title}
+													disabled={creating}
+												/>
+												<button
+													type="button"
+													class="btn text-error btn-ghost btn-xs"
+													onclick={() => removeFile(i)}
+													disabled={creating}
+													aria-label="Remove file"
+												>
+													×
+												</button>
+											</div>
+										{/each}
+										<div>
 											<button
 												type="button"
-												class="btn text-error btn-ghost btn-xs"
-												onclick={() => removeFile(i)}
+												class="btn btn-outline btn-xs"
+												onclick={addFile}
 												disabled={creating}
-												aria-label="Remove file"
 											>
-												×
+												+ Add file
 											</button>
 										</div>
-									{/each}
-									<div>
-										<button
-											type="button"
-											class="btn btn-outline btn-xs"
-											onclick={addFile}
-											disabled={creating}
-										>
-											+ Add file
-										</button>
 									</div>
-								</div>
-							</td>
-						</tr>
-						<tr>
-							<th class="w-32 align-top">Description</th>
-							<td>
-								<input
-									type="text"
-									class="input-bordered input input-sm w-full"
-									placeholder="Short summary of the document"
-									bind:value={description}
-									disabled={creating}
-								/>
-							</td>
-						</tr>
+								</td>
+							</tr>
+							<tr>
+								<th class="w-32 align-top">Description</th>
+								<td>
+									<input
+										type="text"
+										class="input-bordered input input-sm w-full"
+										placeholder="Short summary of the document"
+										bind:value={description}
+										disabled={creating}
+									/>
+								</td>
+							</tr>
+						{/if}
 					</tbody>
 				</table>
 			</div>
