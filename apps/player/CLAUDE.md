@@ -14,6 +14,15 @@ The player ships a desktop Tauri shell at `apps/player/src-tauri/` (crate `mhaol
 
 See `apps/tauri/CLAUDE.md` for how the two desktop shells share the health UI Vite server.
 
+On non-Android targets, the shell also spawns an embedded yt-dlp HTTP server (`mhaol-yt-dlp`) on `127.0.0.1:9897`, exposing routes under `/api/ytdl/*`. The player Vite dev server proxies `/api/ytdl` → `9897`, so the `/youtube` page reaches yt-dlp through the player shell instead of the node. Override the port with `YTDL_PORT`.
+
+## Routes
+
+- `/` — landing
+- `/clouds` — cloud connection setup
+- `/documents` — document browser
+- `/youtube`, `/youtube/[id]` — YouTube browse + detail. Mirrors the frontend's `/media/youtube` view; uses the embedded yt-dlp server for `/api/ytdl/*` and the node for `/api/youtube/*` channels/library state.
+
 ## Running
 
 ```bash
