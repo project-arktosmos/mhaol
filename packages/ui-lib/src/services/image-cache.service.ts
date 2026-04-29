@@ -3,8 +3,15 @@ import { isTauri } from 'ui-lib/lib/platform';
 const blobUrls = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
 
+let browserResolver: ((url: string) => string) | null = null;
+
+export function setBrowserImageCacheResolver(fn: ((url: string) => string) | null): void {
+	browserResolver = fn;
+}
+
 export async function getCachedImageUrl(url: string): Promise<string> {
-	if (!url || !isTauri) return url;
+	if (!url) return url;
+	if (!isTauri) return browserResolver ? browserResolver(url) : url;
 
 	const existing = blobUrls.get(url);
 	if (existing) return existing;

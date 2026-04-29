@@ -6,6 +6,7 @@ mod documents;
 mod frontend;
 mod fs_browse;
 mod health;
+mod image_cache;
 mod ipfs_pins;
 mod libraries;
 mod p2p_stream;
@@ -234,6 +235,7 @@ async fn main() {
         .nest("/api/database", database::router())
         .nest("/api/ipfs", ipfs_pins::router())
         .nest("/api/fs", fs_browse::router())
+        .nest("/api/image-cache", image_cache::router())
         .nest("/api/search", search::router())
         .nest("/api/catalog", catalog::router())
         .nest("/api/torrent", torrent::router())

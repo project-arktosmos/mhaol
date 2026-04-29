@@ -6,21 +6,35 @@
 	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
 	import ToastOutlet from 'ui-lib/components/core/ToastOutlet.svelte';
 	import DocumentFilesPanel from 'ui-lib/components/documents/DocumentFilesPanel.svelte';
+	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
+	import SubsLyricsFinder from 'ui-lib/components/player/SubsLyricsFinder.svelte';
 	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
+	import { documentStreamService } from 'ui-lib/services/document-stream.service';
+	import { playerService } from 'ui-lib/services/player.service';
 	import { themeService } from 'ui-lib/services/theme.service';
-	import { onMount } from 'svelte';
+	import { setBrowserImageCacheResolver } from 'ui-lib/services/image-cache.service';
+	import { cachedImageUrl } from '$lib/image-cache';
+	import { onMount, onDestroy } from 'svelte';
 	import { base } from '$app/paths';
 	import { NAV_ITEMS, type NavItem } from '$lib/generated/nav';
+
+	setBrowserImageCacheResolver(cachedImageUrl);
 
 	let { children } = $props();
 
 	const playbackState = documentPlaybackService.state;
+	const playerState = playerService.state;
 
 	const triggerClass = (item: NavItem) =>
 		classNames('btn btn-outline btn-sm', { 'btn-disabled': !item.hasOwnPage });
 
 	onMount(() => {
 		themeService.initialize('flix');
+		playerService.initialize();
+	});
+
+	onDestroy(() => {
+		playerService.destroy();
 	});
 </script>
 
@@ -64,13 +78,23 @@
 		<div class="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
 			{@render children?.()}
 		</div>
-		{#if $playbackState.document}
-			<aside
-				class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
-			>
-				<DocumentFilesPanel />
-			</aside>
-		{/if}
+		<aside
+			class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
+		>
+			{#if $playbackState.document}
+				<DocumentFilesPanel onPlayFile={(file) => documentStreamService.play(file)} />
+			{/if}
+			<PlayerVideo
+				file={$playerState.currentFile}
+				connectionState={$playerState.connectionState}
+				positionSecs={$playerState.positionSecs}
+				durationSecs={$playerState.durationSecs}
+				buffering={$playerState.buffering}
+				poster={$playerState.currentFile?.thumbnailUrl}
+				directStreamUrl={$playerState.directStreamUrl}
+			/>
+			<SubsLyricsFinder />
+		</aside>
 	</main>
 </div>
 

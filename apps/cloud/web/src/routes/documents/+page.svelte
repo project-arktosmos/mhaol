@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
+	import { cachedImageUrl } from '$lib/image-cache';
 	import {
 		documentsService,
 		DOCUMENT_SOURCES,
@@ -709,7 +710,7 @@
 									<div class="aspect-[2/3] w-full">
 										{#if cover}
 											<img
-												src={cover}
+												src={cachedImageUrl(cover)}
 												alt={result.title}
 												class="h-full w-full object-cover"
 												loading="lazy"
