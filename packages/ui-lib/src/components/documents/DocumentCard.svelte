@@ -1,6 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import type { CloudDocument, DocumentFile } from 'ui-lib/types/document.type';
+	import {
+		documentTorrentsService,
+		infoHashFromMagnet
+	} from 'ui-lib/services/document-torrents.service';
+	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 
 	interface Props {
 		document: CloudDocument;
@@ -19,8 +25,60 @@
 	let magnetFiles = $derived(files.filter((f) => f.type === 'torrent magnet'));
 	let tableFiles = $derived(files.filter((f) => f.type !== 'torrent magnet'));
 
+	const torrentsState = documentTorrentsService.state;
+	let pendingHashes = $state<Record<string, boolean>>({});
+
+	onMount(() => {
+		if (magnetFiles.length === 0) return;
+		return documentTorrentsService.start();
+	});
+
+	function torrentFor(file: DocumentFile): TorrentInfo | null {
+		const hash = infoHashFromMagnet(file.value);
+		if (!hash) return null;
+		return $torrentsState.byHash[hash] ?? null;
+	}
+
+	function isPending(file: DocumentFile): boolean {
+		const hash = infoHashFromMagnet(file.value);
+		return hash ? pendingHashes[hash] === true : false;
+	}
+
+	async function downloadMagnet(file: DocumentFile) {
+		const hash = infoHashFromMagnet(file.value);
+		if (!hash) return;
+		pendingHashes = { ...pendingHashes, [hash]: true };
+		try {
+			await documentTorrentsService.add(file.value);
+		} finally {
+			pendingHashes = { ...pendingHashes, [hash]: false };
+		}
+	}
+
 	function fileTooltip(file: DocumentFile): string {
 		return file.title ? `${file.title}\n${file.value}` : file.value;
+	}
+
+	function progressPercent(t: TorrentInfo): number {
+		return Math.round(Math.min(1, Math.max(0, t.progress)) * 100);
+	}
+
+	function progressLabel(t: TorrentInfo): string {
+		const pct = progressPercent(t);
+		switch (t.state) {
+			case 'seeding':
+				return 'Seeding · 100%';
+			case 'paused':
+				return `Paused · ${pct}%`;
+			case 'error':
+				return 'Error';
+			case 'initializing':
+				return pct > 0 ? `Starting · ${pct}%` : 'Starting…';
+			case 'checking':
+				return `Checking · ${pct}%`;
+			default:
+				return `${pct}%`;
+		}
 	}
 </script>
 
@@ -108,32 +166,60 @@
 		</details>
 	{/if}
 	{#if magnetFiles.length > 0}
-		<footer class="flex flex-wrap items-center gap-2 border-t border-base-content/10 px-4 py-3">
+		<footer class="flex flex-col gap-2 border-t border-base-content/10 px-4 py-3">
 			{#each magnetFiles as file, i (i)}
-				<a
-					href={file.value}
-					title={fileTooltip(file)}
-					aria-label={file.title ? `Magnet: ${file.title}` : 'Magnet link'}
-					class="inline-flex h-8 w-8 items-center justify-center rounded text-base-content/70 hover:bg-base-300 hover:text-base-content"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						class="h-5 w-5"
-						aria-hidden="true"
+				{@const torrent = torrentFor(file)}
+				{@const pending = isPending(file)}
+				{#if torrent}
+					<div class="flex flex-col gap-1" title={fileTooltip(file)}>
+						<div class="flex items-center justify-between gap-2 text-xs">
+							<span class="truncate text-base-content/80">{file.title ?? torrent.name}</span>
+							<span class="shrink-0 font-mono text-base-content/70">{progressLabel(torrent)}</span>
+						</div>
+						<progress
+							class={classNames('progress w-full', {
+								'progress-primary': torrent.state === 'downloading',
+								'progress-success': torrent.state === 'seeding',
+								'progress-warning': torrent.state === 'paused',
+								'progress-error': torrent.state === 'error',
+								'progress-info':
+									torrent.state === 'initializing' || torrent.state === 'checking'
+							})}
+							value={progressPercent(torrent)}
+							max="100"
+						></progress>
+					</div>
+				{:else}
+					<button
+						type="button"
+						class={classNames('btn btn-outline btn-sm justify-start gap-2', {
+							'btn-disabled': pending
+						})}
+						onclick={() => downloadMagnet(file)}
+						disabled={pending}
+						title={fileTooltip(file)}
+						aria-label={file.title ? `Download torrent: ${file.title}` : 'Download torrent'}
 					>
-						<path d="M6 3v9a6 6 0 0 0 12 0V3" />
-						<path d="M6 8h4" />
-						<path d="M14 8h4" />
-						<path d="M6 3H3" />
-						<path d="M21 3h-3" />
-					</svg>
-				</a>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							class="h-4 w-4 shrink-0"
+							aria-hidden="true"
+						>
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="7 10 12 15 17 10" />
+							<line x1="12" y1="15" x2="12" y2="3" />
+						</svg>
+						<span class="truncate">
+							{pending ? 'Adding…' : (file.title ?? 'Download torrent')}
+						</span>
+					</button>
+				{/if}
 			{/each}
 		</footer>
 	{/if}
