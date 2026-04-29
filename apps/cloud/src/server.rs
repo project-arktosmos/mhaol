@@ -6,6 +6,7 @@ mod frontend;
 mod fs_browse;
 mod ipfs_pins;
 mod libraries;
+mod search;
 mod state;
 
 use axum::Router;
@@ -195,6 +196,7 @@ async fn main() {
         .nest("/api/database", database::router())
         .nest("/api/ipfs", ipfs_pins::router())
         .nest("/api/fs", fs_browse::router())
+        .nest("/api/search", search::router())
         .fallback(frontend::serve_frontend)
         .with_state(state);
 

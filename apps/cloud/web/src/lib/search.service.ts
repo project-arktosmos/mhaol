@@ -1,5 +1,3 @@
-import { searchMovies, searchTvShows } from 'addons/tmdb';
-import { extractYear } from 'addons/tmdb/transform';
 import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/musicbrainz';
 import { formatArtistCredits } from 'addons/musicbrainz/transform';
 import { searchBooks } from 'addons/openlibrary';
@@ -12,8 +10,6 @@ export interface SearchResultItem {
 	description: string;
 	externalId?: string;
 }
-
-const TMDB_API_KEY = (import.meta.env.VITE_TMDB_API_KEY as string | undefined) ?? '';
 
 export async function searchSource(
 	source: DocumentSource,
@@ -37,26 +33,24 @@ export async function searchSource(
 	}
 }
 
+async function parseError(res: Response): Promise<string> {
+	try {
+		const data = await res.json();
+		if (data && typeof data.error === 'string') return data.error;
+	} catch {
+		// fall through
+	}
+	return `HTTP ${res.status}`;
+}
+
 async function searchTmdb(type: DocumentType, query: string): Promise<SearchResultItem[]> {
-	if (!TMDB_API_KEY) {
-		throw new Error('TMDB API key missing — set VITE_TMDB_API_KEY in your env');
-	}
-	if (type === 'tv show' || type === 'tv season' || type === 'tv episode') {
-		const res = await searchTvShows(TMDB_API_KEY, query);
-		return (res?.results ?? []).map((show) => ({
-			title: show.name,
-			author: extractYear(show.first_air_date) ?? '',
-			description: show.overview ?? '',
-			externalId: String(show.id)
-		}));
-	}
-	const res = await searchMovies(TMDB_API_KEY, query);
-	return (res?.results ?? []).map((movie) => ({
-		title: movie.title,
-		author: extractYear(movie.release_date) ?? '',
-		description: movie.overview ?? '',
-		externalId: String(movie.id)
-	}));
+	const res = await fetch('/api/search/tmdb', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ type, query })
+	});
+	if (!res.ok) throw new Error(await parseError(res));
+	return (await res.json()) as SearchResultItem[];
 }
 
 async function searchMusicBrainz(type: DocumentType, query: string): Promise<SearchResultItem[]> {
