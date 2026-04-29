@@ -7,7 +7,7 @@
 
 The cloud server runs an embedded SurrealDB store, an identity manager, the shared `mhaol-queue` task manager (on a separate `cloud-queue.db` SQLite file), and the desktop-only managers from `mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, and `mhaol-ipfs`. It loads `mhaol-p2p-stream` for the GStreamer worker, and serves the Svelte WebUI from the nested `web/` directory. It is **independent** from `mhaol-node` — node still uses its own SQLite layer, cloud has its own state.
 
-The cloud also ships a desktop Tauri shell at `apps/cloud/src-tauri/` (crate `mhaol-cloud-shell`, productName "Mhaol Cloud"). The shell loads the shared health UI under `apps/tauri/web/` — it does **not** wrap the cloud WebUI itself; the WebUI stays browser-accessible at `http://localhost:9898`.
+The cloud also ships a desktop Tauri shell at `apps/cloud/src-tauri/` (crate `mhaol-cloud-shell`, productName "Mhaol Cloud"). The shell loads the shared health UI under `apps/tauri/web/` — it does **not** wrap the cloud WebUI itself; the WebUI stays browser-accessible at `http://localhost:9898`. The shell also registers a system tray icon (id `mhaol-cloud-tray`) on macOS/Windows/Linux with a single **Open** menu item that opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`.
 
 ## Source Structure
 
