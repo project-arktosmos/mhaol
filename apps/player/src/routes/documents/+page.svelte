@@ -14,7 +14,7 @@
   <title>Mhaol Player — Documents</title>
 </svelte:head>
 
-<div class="flex min-h-full flex-col gap-6 p-6">
+<div class="flex h-full min-h-0 flex-col gap-6 overflow-y-auto p-6">
   <header class="flex items-center justify-between gap-4">
     <div>
       <h1 class="text-2xl font-bold">Documents</h1>
@@ -44,7 +44,7 @@
     <p class="text-sm text-base-content/60">No documents in the cloud yet.</p>
   {:else}
     <div
-      class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+      class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
     >
       {#each $docs.documents as doc (doc.id)}
         <DocumentCard document={doc} />
