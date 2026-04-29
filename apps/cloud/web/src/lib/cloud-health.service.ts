@@ -24,6 +24,7 @@ export interface PackagesHealth {
 	ytDlp: PackageHealth;
 	torrent: PackageHealth;
 	ed2k: PackageHealth;
+	ipfs: PackageHealth;
 }
 
 export interface CloudStatus {
