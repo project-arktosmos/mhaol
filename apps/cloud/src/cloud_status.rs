@@ -92,7 +92,7 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
 
     let db_version = state.db.version().await.ok().map(|v| v.to_string());
     let db = DbStatus {
-        engine: "surrealkv",
+        engine: crate::db::ENGINE,
         namespace: crate::db::NAMESPACE,
         database: crate::db::DATABASE,
         connected: db_version.is_some(),

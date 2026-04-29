@@ -1,7 +1,7 @@
 # Cloud
 
 **Location:** `apps/cloud/`
-**Framework:** Rust — Axum 0.8 + Tokio + SurrealDB (embedded SurrealKV)
+**Framework:** Rust — Axum 0.8 + Tokio + SurrealDB (embedded RocksDB)
 **Crate:** `mhaol-cloud`
 **Binary:** `mhaol-cloud` (default port 9898)
 
@@ -14,7 +14,7 @@ The cloud also ships a desktop Tauri shell at `apps/cloud/src-tauri/` (crate `mh
 ```
 src/
 ├── server.rs            # Binary entry point — opens SurrealDB, builds router
-├── db.rs                # SurrealDB connection helper (SurrealKv engine)
+├── db.rs                # SurrealDB connection helper (RocksDB engine)
 ├── state.rs             # CloudState: { db, identity_manager, queue, ytdl_manager, torrent_manager, ed2k_manager, ipfs_manager }
 ├── cloud_status.rs      # GET /api/cloud/status
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir
@@ -35,10 +35,10 @@ web/                     # SvelteKit static SPA (pnpm package `cloud`); builds t
 
 ## Database
 
-- Engine: **SurrealDB 2.x** with the embedded **SurrealKV** kv backend (pure Rust, no external server).
-- Default location: `<home>/mhaol/cloud-surrealkv/` — resolved via `dirs::home_dir()`, so it's OS-aware (`~/mhaol/...` on macOS/Linux, `%USERPROFILE%\mhaol\...` on Windows). The directory is managed by SurrealKV.
+- Engine: **SurrealDB 2.x** with the embedded **RocksDB** kv backend. SurrealKV was tried first but hit [surrealdb/surrealdb#5064](https://github.com/surrealdb/surrealdb/issues/5064) — concurrent writes from background scan / pin / request handlers corrupted the store and reads panicked with `Invalid revision N for type Value`. RocksDB does not have this problem.
+- Default location: `<home>/mhaol/cloud-rocksdb/` — resolved via `dirs::home_dir()`, so it's OS-aware (`~/mhaol/...` on macOS/Linux, `%USERPROFILE%\mhaol\...` on Windows). The directory is managed by RocksDB.
 - Namespace: `mhaol`, database: `cloud`.
-- Override path via `DB_PATH` env var, or set `DATA_DIR` to put it under `<DATA_DIR>/cloud-surrealkv/`.
+- Override path via `DB_PATH` env var, or set `DATA_DIR` to put it under `<DATA_DIR>/cloud-rocksdb/`.
 - The store is created fresh on first boot. There are no schemas or repos defined yet — add tables/queries as features land.
 
 ## Packages loaded by cloud
@@ -88,8 +88,8 @@ pnpm build:cloud
 
 - `PORT` — Server port (default: 9898; `pnpm app:cloud` / `pnpm dev:cloud` / `pnpm dev` set it to 9899 so Vite can own 9898)
 - `HOST` — Bind address (default: 0.0.0.0; `pnpm app:cloud` / `pnpm dev:cloud` / `pnpm dev` set it to 127.0.0.1)
-- `DB_PATH` — SurrealDB store path (default: `<home>/mhaol/cloud-surrealkv/`, resolved per-OS via `dirs::home_dir()`)
-- `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-surrealkv/`
+- `DB_PATH` — SurrealDB store path (default: `<home>/mhaol/cloud-rocksdb/`, resolved per-OS via `dirs::home_dir()`)
+- `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-rocksdb/`
 - `SIGNALING_URL` — PartyKit signaling URL (default: hosted instance)
 - `IPFS_SWARM_KEY_FILE` — Path to the IPFS pre-shared swarm key. Default: `<DATA_DIR>/downloads/ipfs/swarm.key` (auto-generated on first boot when missing). All nodes on the same private swarm must share this file byte-for-byte.
 

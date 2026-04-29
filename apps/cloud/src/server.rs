@@ -72,13 +72,13 @@ async fn main() {
         .or_else(|| {
             std::env::var("DATA_DIR")
                 .ok()
-                .map(|d| PathBuf::from(d).join("cloud-surrealkv"))
+                .map(|d| PathBuf::from(d).join("cloud-rocksdb"))
         })
         .unwrap_or_else(|| {
             dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join("mhaol")
-                .join("cloud-surrealkv")
+                .join("cloud-rocksdb")
         });
 
     tracing::info!("Opening SurrealDB store at {}", db_path.display());
