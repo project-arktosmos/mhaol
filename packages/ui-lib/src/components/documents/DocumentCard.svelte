@@ -33,13 +33,13 @@
 
 <article class={classNames('card bg-base-200 shadow-sm', classes)}>
 	<header
-		class="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-base-content/10 px-4 py-3"
+		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
 	>
-		<h3 class="text-base font-semibold [overflow-wrap:anywhere]">{document.title}</h3>
 		<span class="text-xs text-base-content/70">{document.type}</span>
-		{#if hasYear}
-			<span class="text-xs text-base-content/70">· {document.year}</span>
-		{/if}
+		<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
+			{document.title}
+		</h3>
+		<span class="text-xs text-base-content/70">{hasYear ? document.year : ''}</span>
 	</header>
 	{#if coverImage}
 		<figure class="bg-base-300">
