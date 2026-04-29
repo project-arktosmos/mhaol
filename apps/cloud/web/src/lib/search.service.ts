@@ -162,19 +162,76 @@ function tpbCategoryFor(type: DocumentType): TorrentCategory {
 	}
 }
 
+const TORRENT_CACHE_STORAGE_KEY = 'mhaol-cloud:torrent-search-cache';
+const TORRENT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const TORRENT_CACHE_MAX_ENTRIES = 200;
+
+type RawTorrentResult = Omit<TorrentResultItem, 'parsedTitle' | 'year' | 'quality'>;
+
+interface TorrentCacheEntry {
+	ts: number;
+	data: RawTorrentResult[];
+}
+
+function loadTorrentCache(): Record<string, TorrentCacheEntry> {
+	if (typeof localStorage === 'undefined') return {};
+	try {
+		const raw = localStorage.getItem(TORRENT_CACHE_STORAGE_KEY);
+		if (!raw) return {};
+		const parsed = JSON.parse(raw);
+		return parsed && typeof parsed === 'object' ? parsed : {};
+	} catch {
+		return {};
+	}
+}
+
+function saveTorrentCache(cache: Record<string, TorrentCacheEntry>): void {
+	if (typeof localStorage === 'undefined') return;
+	try {
+		localStorage.setItem(TORRENT_CACHE_STORAGE_KEY, JSON.stringify(cache));
+	} catch {
+		// quota exceeded or unavailable — drop silently
+	}
+}
+
+function torrentCacheKey(category: string, query: string): string {
+	return `${category}::${query.toLowerCase()}`;
+}
+
 export async function searchTorrents(
 	type: DocumentType,
 	query: string
 ): Promise<TorrentResultItem[]> {
 	const trimmed = query.trim();
 	if (!trimmed) return [];
-	const res = await fetch('/api/search/torrents', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ query: trimmed, category: tpbCategoryFor(type) })
-	});
-	if (!res.ok) throw new Error(await parseError(res));
-	const raw = (await res.json()) as Omit<TorrentResultItem, 'parsedTitle' | 'year' | 'quality'>[];
+	const category = tpbCategoryFor(type);
+	const key = torrentCacheKey(category, trimmed);
+	const now = Date.now();
+	const cache = loadTorrentCache();
+	const hit = cache[key];
+	let raw: RawTorrentResult[];
+	if (hit && now - hit.ts < TORRENT_CACHE_TTL_MS) {
+		raw = hit.data;
+	} else {
+		const res = await fetch('/api/search/torrents', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ query: trimmed, category })
+		});
+		if (!res.ok) throw new Error(await parseError(res));
+		raw = (await res.json()) as RawTorrentResult[];
+		cache[key] = { ts: now, data: raw };
+		const keys = Object.keys(cache);
+		if (keys.length > TORRENT_CACHE_MAX_ENTRIES) {
+			const trimmedKeys = keys
+				.map((k) => [k, cache[k].ts] as const)
+				.sort((a, b) => a[1] - b[1])
+				.slice(0, keys.length - TORRENT_CACHE_MAX_ENTRIES)
+				.map(([k]) => k);
+			for (const k of trimmedKeys) delete cache[k];
+		}
+		saveTorrentCache(cache);
+	}
 	return raw.map((t) => ({ ...t, ...parseTorrentName(t.title) }));
 }
 
