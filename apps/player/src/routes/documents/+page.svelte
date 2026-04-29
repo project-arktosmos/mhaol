@@ -1,20 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { documentsService } from "ui-lib/services/documents.service";
+  import DocumentCard from "ui-lib/components/documents/DocumentCard.svelte";
 
   const docs = documentsService.state;
 
   onMount(() => {
     documentsService.refresh();
   });
-
-  function formatDate(value: string): string {
-    try {
-      return new Date(value).toLocaleString();
-    } catch {
-      return value;
-    }
-  }
 </script>
 
 <svelte:head>
@@ -50,46 +43,12 @@
   {:else if $docs.documents.length === 0}
     <p class="text-sm text-base-content/60">No documents in the cloud yet.</p>
   {:else}
-    <div class="overflow-x-auto rounded-box border border-base-content/10">
-      <table class="table table-sm">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Type</th>
-            <th>Source</th>
-            <th>Title</th>
-            <th>Year</th>
-            <th>Artists</th>
-            <th>Images</th>
-            <th>Files</th>
-            <th>Description</th>
-            <th>Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each $docs.documents as doc (doc.id)}
-            <tr>
-              <td class="font-mono text-xs text-base-content/70">{doc.id}</td>
-              <td class="text-xs">{doc.type}</td>
-              <td class="text-xs">{doc.source}</td>
-              <td class="font-medium">{doc.title}</td>
-              <td class="text-xs">{doc.year ?? ""}</td>
-              <td class="text-xs"
-                >{(doc.artists ?? []).map((a) => a.name).join(", ")}</td
-              >
-              <td class="text-xs">{(doc.images ?? []).length}</td>
-              <td class="text-xs">{(doc.files ?? []).length}</td>
-              <td
-                class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
-                >{doc.description}</td
-              >
-              <td class="text-xs text-base-content/60"
-                >{formatDate(doc.created_at)}</td
-              >
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+    <div
+      class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+    >
+      {#each $docs.documents as doc (doc.id)}
+        <DocumentCard document={doc} />
+      {/each}
     </div>
   {/if}
 </div>

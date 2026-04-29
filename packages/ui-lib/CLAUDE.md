@@ -15,6 +15,7 @@ src/
 │   ├── browse/               # Generic browse primitives (BrowseGrid, BrowseHeader, BrowseViewToggle)
 │   ├── catalog/              # Unified media catalog (CatalogCard, CatalogBrowsePage, CatalogDetailPage, PinnedFavoritesSection, TmdbCatalogGrid, MovieLibrarySection, TvLibrarySection, detail/, filters/)
 │   ├── core/                 # Shared reusable (Button, Modal, Navbar, ModalOutlet, ThemeToggle, ConnectionStatus, etc.)
+│   ├── documents/            # Cloud document cards (DocumentCard)
 │   ├── downloads/            # Download management
 │   ├── hub/                  # Hub dashboard (app management)
 │   ├── identity/             # Identity/wallet
