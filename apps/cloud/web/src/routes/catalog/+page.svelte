@@ -201,7 +201,9 @@
 		}
 	}
 
-	async function onAddonChange() {
+	async function selectAddon(id: string) {
+		if (addon === id) return;
+		addon = id;
 		page = 1;
 		filter = '';
 		await refreshGenres();
@@ -259,16 +261,21 @@
 					<tr>
 						<th class="w-32 align-middle">Source</th>
 						<td>
-							<select
-								class="select-bordered select w-full select-sm"
-								bind:value={addon}
-								onchange={onAddonChange}
-								disabled={sources.length === 0}
-							>
+							<div class="flex flex-wrap gap-2">
 								{#each sources as option (option.id)}
-									<option value={option.id}>{option.label}</option>
+									<button
+										type="button"
+										class={classNames('btn btn-sm', {
+											'btn-primary': addon === option.id,
+											'btn-outline': addon !== option.id
+										})}
+										onclick={() => selectAddon(option.id)}
+										disabled={sources.length === 0}
+									>
+										{option.label}
+									</button>
 								{/each}
-							</select>
+							</div>
 						</td>
 					</tr>
 					{#if availableTypes.length > 1}
