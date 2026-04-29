@@ -7,6 +7,7 @@ const proxy = {
   "/api/documents": "http://127.0.0.1:9899",
   "/api/torrent/list": "http://127.0.0.1:9899",
   "/api/torrent/add": "http://127.0.0.1:9899",
+  "/api/p2p-stream": "http://127.0.0.1:9899",
   "/api": "http://localhost:1530",
 };
 
