@@ -15,6 +15,8 @@
 	import {
 		fetchAlbumTrackTitles,
 		fetchTmdbEpisodeTitles,
+		formatSizeBytes,
+		matchTorrentsForResult,
 		searchSource,
 		searchTorrents,
 		type SearchResultItem,
@@ -556,47 +558,78 @@
 			<h2 class="mb-3 text-lg font-semibold">Covers</h2>
 			<p class="mb-3 text-xs text-base-content/60">
 				One card per addon result, using the same image that will be assigned to the document. Click
-				to fill the form.
+				the cover to fill the form, or click a torrent to add it as a file.
 			</p>
-			<div
-				class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8"
-			>
+			<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
 				{#each searchResults as result, i (result.externalId ?? i)}
 					{@const cover = result.images[0]?.url}
-					<button
-						type="button"
-						class={classNames(
-							'card flex flex-col overflow-hidden rounded-box border text-left transition hover:bg-base-300',
-							{
-								'border-primary bg-base-300': selectedResultIndex === i,
-								'border-base-content/10': selectedResultIndex !== i
-							}
-						)}
-						onclick={() => applyResult(result, i)}
+					{@const matches = matchTorrentsForResult(result, torrentResults)}
+					<div
+						class={classNames('flex overflow-hidden rounded-box border bg-base-100 transition', {
+							'border-primary': selectedResultIndex === i,
+							'border-base-content/10': selectedResultIndex !== i
+						})}
 					>
-						<div class="aspect-[2/3] w-full bg-base-300">
-							{#if cover}
-								<img
-									src={cover}
-									alt={result.title}
-									class="h-full w-full object-cover"
-									loading="lazy"
-								/>
+						<button
+							type="button"
+							class="flex w-32 shrink-0 flex-col bg-base-300 text-left hover:bg-base-200"
+							onclick={() => applyResult(result, i)}
+							aria-label={`Use "${result.title}" to fill form`}
+						>
+							<div class="aspect-[2/3] w-full">
+								{#if cover}
+									<img
+										src={cover}
+										alt={result.title}
+										class="h-full w-full object-cover"
+										loading="lazy"
+									/>
+								{:else}
+									<div
+										class="flex h-full w-full items-center justify-center text-xs text-base-content/40"
+									>
+										No image
+									</div>
+								{/if}
+							</div>
+							<div class="flex flex-col gap-1 p-2">
+								<span class="line-clamp-2 text-sm font-medium">{result.title}</span>
+								{#if result.year}
+									<span class="text-xs text-base-content/60">{result.year}</span>
+								{/if}
+							</div>
+						</button>
+						<div class="flex flex-1 flex-col border-l border-base-content/10 p-2">
+							<span class="mb-1 text-xs font-semibold text-base-content/60 uppercase">
+								Torrents{matches.length > 0 ? ` (${matches.length})` : ''}
+							</span>
+							{#if matches.length === 0}
+								<p class="text-xs text-base-content/50">No matching torrents.</p>
 							{:else}
-								<div
-									class="flex h-full w-full items-center justify-center text-xs text-base-content/40"
-								>
-									No image
+								<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
+									{#each matches as torrent (torrent.infoHash)}
+										<button
+											type="button"
+											class={classNames(
+												'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-200',
+												{ 'opacity-60': addedHashes.has(torrent.magnetLink) }
+											)}
+											onclick={() => addTorrentAsFile(torrent)}
+											title={torrent.title}
+										>
+											<span class="font-medium">{torrent.quality ?? '—'}</span>
+											<span class="text-success">↑{torrent.seeders}</span>
+											<span class="text-warning">↓{torrent.leechers}</span>
+											<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
+											{#if addedHashes.has(torrent.magnetLink)}
+												<span class="ml-auto">✓</span>
+											{/if}
+										</button>
+									{/each}
 								</div>
 							{/if}
 						</div>
-						<div class="flex flex-col gap-1 p-2">
-							<span class="line-clamp-2 text-sm font-medium">{result.title}</span>
-							{#if result.year}
-								<span class="text-xs text-base-content/60">{result.year}</span>
-							{/if}
-						</div>
-					</button>
+					</div>
 				{/each}
 			</div>
 		</section>

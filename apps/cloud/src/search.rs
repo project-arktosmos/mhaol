@@ -272,6 +272,10 @@ pub struct TorrentSearchRequest {
 pub struct TorrentResult {
     pub title: String,
     pub description: String,
+    pub seeders: u64,
+    pub leechers: u64,
+    #[serde(rename = "sizeBytes")]
+    pub size_bytes: u64,
     #[serde(rename = "magnetLink")]
     pub magnet_link: String,
     #[serde(rename = "infoHash")]
@@ -379,6 +383,9 @@ async fn search_torrents(
                 description: format!(
                     "{seeders} seeders · {leechers} leechers · {size_bytes} bytes"
                 ),
+                seeders,
+                leechers,
+                size_bytes,
                 magnet_link,
                 info_hash,
                 raw: r.clone(),

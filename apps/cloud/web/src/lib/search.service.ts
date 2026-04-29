@@ -31,10 +31,54 @@ export interface TorrentResultItem {
 	parsedTitle: string;
 	year: number | null;
 	quality: string | null;
+	seeders: number;
+	leechers: number;
+	sizeBytes: number;
 	description: string;
 	magnetLink: string;
 	infoHash: string;
 	raw: unknown;
+}
+
+function normalizeForMatch(s: string): string {
+	return s
+		.toLowerCase()
+		.replace(/[^a-z0-9\s]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+export function matchTorrentsForResult(
+	result: SearchResultItem,
+	torrents: TorrentResultItem[]
+): TorrentResultItem[] {
+	const targetWords = normalizeForMatch(result.title)
+		.split(' ')
+		.filter((w) => w.length > 1);
+	if (targetWords.length === 0) return [];
+	const matches: TorrentResultItem[] = [];
+	for (const t of torrents) {
+		const torrentTitle = normalizeForMatch(t.parsedTitle || t.title);
+		if (!torrentTitle) continue;
+		const hits = targetWords.filter((w) => torrentTitle.includes(w)).length;
+		if (hits / targetWords.length < 0.7) continue;
+		if (result.year != null && t.year != null && t.year !== result.year) continue;
+		matches.push(t);
+	}
+	matches.sort((a, b) => b.seeders - a.seeders);
+	return matches;
+}
+
+export function formatSizeBytes(bytes: number): string {
+	if (!bytes || bytes <= 0) return '';
+	const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+	let n = bytes;
+	let i = 0;
+	while (n >= 1024 && i < units.length - 1) {
+		n /= 1024;
+		i++;
+	}
+	return `${n.toFixed(n >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 const TORRENT_QUALITY_PATTERNS: [RegExp, string][] = [
