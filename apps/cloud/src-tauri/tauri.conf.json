@@ -1,18 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Mhaol",
+  "productName": "Mhaol Cloud",
   "version": "0.1.0",
-  "identifier": "com.arktosmos.mhaol",
+  "identifier": "com.arktosmos.mhaol.cloud",
   "build": {
-    "frontendDist": "../web/dist-static",
+    "frontendDist": "../../tauri/web/dist-static",
     "devUrl": "http://localhost:1571",
-    "beforeDevCommand": "pnpm --filter tauri-web dev",
+    "beforeDevCommand": "(lsof -i:1571 >/dev/null 2>&1) || pnpm --filter tauri-web dev",
     "beforeBuildCommand": "pnpm --filter tauri-web build"
   },
   "app": {
     "windows": [
       {
-        "title": "Mhaol",
+        "title": "Mhaol Cloud",
         "width": 900,
         "height": 640,
         "resizable": true,
@@ -32,9 +32,6 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "android": {
-      "minSdkVersion": 24
-    }
+    ]
   }
 }

@@ -6,8 +6,9 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `packages/ui-lib/CLAUDE.md` — UI components, services, types, adapters, utils, CSS/themes, transport layer
 - `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
 - `apps/node/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
-- `apps/cloud/CLAUDE.md` — Cloud server (node services + embedded Svelte health WebUI)
-- `apps/tauri/CLAUDE.md` — Tauri shell (desktop health dashboard, mobile player wrapper)
+- `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`)
+- `apps/player/CLAUDE.md` — Player SPA + player desktop Tauri shell (`mhaol-player-shell`) and mobile shell
+- `apps/tauri/CLAUDE.md` — Shared health UI (`tauri-web`) loaded by both per-app desktop Tauri shells
 ---
 
 ## Monorepo Overview
@@ -16,11 +17,11 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 mhaol.git/
 ├── apps/
 │   ├── frontend/                     # Unified SPA (landing + connect + media, port 1570)
-│   ├── player/                       # Player SPA, mirrors frontend visuals/setup (port 9595)
+│   ├── player/                       # Player SPA (port 9595) + per-app Tauri shell at player/src-tauri (mhaol-player-shell, "Mhaol Player")
 │   ├── node/                         # Rust Axum server (standalone, port 1530)
-│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI under cloud/web/, single user-facing port 9898 (dev: Vite on 9898 proxies /api → loopback Rust on 9899; prod: Rust on 9898 serves embedded WebUI)
+│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + per-app Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud")
 │   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
-│   └── tauri/                        # Tauri shell — desktop loads a minimal health UI for cloud (9898) + player (9595); mobile wraps the player app
+│   └── tauri/                        # Shared assets only — `web/` is the health UI both desktop Tauri shells load
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, OpenLibrary, Wyzie subtitles, torrent search)
@@ -72,19 +73,24 @@ The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node
 - `apps/cloud/src/frontend.rs` — Embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it as the fallback handler
 - `apps/cloud/web/` — SvelteKit static SPA (pnpm package `cloud`) built with the same `ui-lib` components as the player. Builds to `apps/cloud/web/dist-static/`, which is what the cloud crate embeds at compile time.
 
-### Tauri
+### Tauri shells
 
-The Tauri app at `apps/tauri/` is a desktop + mobile shell. Crate name `mhaol-tauri`, binary `mhaol-tauri`. The shell loads different frontends per platform:
+There are two desktop Tauri shells, one per app, each in its own crate so they have independent cargo targets and can run side by side without colliding:
 
-- **Desktop** — loads `apps/tauri/web/`, a minimal Svelte SPA (pnpm package `tauri-web`, dev port 1571) that polls `http://localhost:9898/api/cloud/status` and `http://localhost:9595/` and renders one health panel per app (status, latency, uptime, version). The same shell is used by both `pnpm dev:cloud` and `pnpm dev:player` — the only difference is which services they boot alongside it (`VITE_MHAOL_HEALTH_APPS` controls which panels are shown). The cloud and player apps themselves are exposed to the browser at `http://localhost:9898` and `http://localhost:9595`; the Tauri webview only ever shows the health UI, never wraps an app's frontend directly.
-- **Mobile (Android/iOS)** — `tauri.android.conf.json` and `tauri.ios.conf.json` override `frontendDist` to `../../player/dist-static` and `devUrl` to `http://localhost:9595`, so the mobile shell wraps the player app directly.
+- **`apps/cloud/src-tauri/`** — crate `mhaol-cloud-shell`, binary `mhaol-cloud-shell`. `productName: "Mhaol Cloud"`, identifier `com.arktosmos.mhaol.cloud`, window title `Mhaol Cloud`.
+- **`apps/player/src-tauri/`** — crate `mhaol-player-shell`, binary `mhaol-player-shell`. `productName: "Mhaol Player"`, identifier `com.arktosmos.mhaol.player`, window title `Mhaol Player`. Carries `tauri.android.conf.json` and `tauri.ios.conf.json` overrides so the mobile shell wraps the player SPA directly (`frontendDist: ../dist-static`, `devUrl: http://localhost:9595`).
 
-Layout:
-- `apps/tauri/src-tauri/Cargo.toml` — Tauri crate manifest
-- `apps/tauri/src-tauri/src/lib.rs` / `main.rs` — Tauri entry point (uses `mobile_entry_point` for Android/iOS)
-- `apps/tauri/src-tauri/tauri.conf.json` — base + desktop config (frontendDist `../web/dist-static`, devUrl `http://localhost:1571`)
-- `apps/tauri/src-tauri/tauri.android.conf.json`, `tauri.ios.conf.json` — mobile overrides pointing at the player
-- `apps/tauri/web/` — desktop health UI; static SPA, builds to `apps/tauri/web/dist-static/`
+Both desktop shells point at the **same shared health UI** under `apps/tauri/web/` (pnpm package `tauri-web`, dev port 1571) — a minimal Svelte SPA that polls `http://localhost:9898/api/cloud/status` and `http://localhost:9595/` and renders one panel per app. `VITE_MHAOL_HEALTH_APPS` (`cloud`, `player`, `cloud,player`) selects which panels are shown. Each shell's `beforeDevCommand` is idempotent: `(lsof -i:1571 >/dev/null 2>&1) || pnpm --filter tauri-web dev`, so when both shells run together (`pnpm dev`) only one tauri-web Vite server is started; the second shell sees 1571 already up and skips. tauri-web's Vite config uses `strictPort: true` to make port collisions fail loudly.
+
+The Tauri webviews always show the health UI, never an app's frontend directly. The cloud and player frontends stay browser-accessible at `http://localhost:9898` and `http://localhost:9595`.
+
+Layout per shell (cloud and player are structurally identical):
+- `apps/<app>/src-tauri/Cargo.toml` — crate manifest
+- `apps/<app>/src-tauri/src/{lib.rs,main.rs}` — Tauri entry point (uses `mobile_entry_point` cfg for Android/iOS)
+- `apps/<app>/src-tauri/tauri.conf.json` — desktop config (frontendDist `../../tauri/web/dist-static`, devUrl `http://localhost:1571`)
+- `apps/<app>/src-tauri/capabilities/default.json`, `icons/`, `build.rs`
+- (player only) `tauri.android.conf.json`, `tauri.ios.conf.json` — mobile overrides
+- `apps/tauri/web/` — shared health UI; static SPA, builds to `apps/tauri/web/dist-static/`
 
 The cloud frontend has these screens:
 - **Health** (`/`) — polls `/api/cloud/status` every 5 seconds and renders status, latency, uptime, bind, package health, and identities.
@@ -195,13 +201,13 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Full desktop stack: spawns the player Vite server (app:player) in the background then runs dev:cloud (which boots the cloud Rust server, the cloud Vite WebUI, and the Tauri shell with the health UI). Closing the Tauri window stops the dev session.
-pnpm dev:apps         # Same as above without the Tauri shell — cloud + player Vite servers only, browser-based workflow
+pnpm dev              # Full desktop stack: pre-starts tauri-web (1571) with VITE_MHAOL_HEALTH_APPS=cloud,player, then runs dev:cloud and dev:player concurrently — two named Tauri windows ("Mhaol Cloud", "Mhaol Player") sharing the one health UI.
+pnpm dev:apps         # Same backends without any Tauri shell — cloud + player Vite servers only, browser-based workflow
 pnpm dev:node         # Rust node server only (PORT=1530)
-pnpm dev:cloud        # Cloud + its Tauri wrapper: Rust loopback :9899 + Vite WebUI :9898 + Tauri shell (health UI :1571 + native window)
+pnpm dev:cloud        # Cloud + its named Tauri shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + tauri-web :1571 + Mhaol Cloud window
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
 pnpm dev:frontend     # Frontend dev server only (port 1570)
-pnpm dev:player       # Player + its Tauri health shell: Vite :9595 (browser-accessible) + Tauri shell with the health UI :1571 polling the player
+pnpm dev:player       # Player + its named Tauri shell ("Mhaol Player"): Vite :9595 (browser-accessible) + tauri-web :1571 + Mhaol Player window
 
 # Building
 pnpm build            # Frontend build
@@ -219,12 +225,14 @@ pnpm format           # Prettier write
 pnpm app:shepperd         # Shepperd dev (watch mode)
 pnpm app:shepperd:build   # Shepperd production build
 
-# Tauri shell (apps/tauri)
-pnpm app:tauri            # Desktop dev — boots the health UI + Tauri webview
-pnpm app:tauri:web        # Health UI Vite dev server only (port 1571)
-pnpm app:tauri:build      # Desktop release build
-pnpm tauri:android:dev    # adb reverse :9595 then run the mobile shell pointing at the player
-pnpm tauri:android:build  # Mobile release build (bundles player/dist-static)
+# Tauri shells (per app)
+pnpm app:tauri:cloud         # Mhaol Cloud desktop shell (apps/cloud/src-tauri)
+pnpm app:tauri:cloud:build   # Mhaol Cloud release build
+pnpm app:tauri:player        # Mhaol Player desktop shell (apps/player/src-tauri)
+pnpm app:tauri:player:build  # Mhaol Player release build
+pnpm app:tauri:web           # Shared health UI Vite dev server only (apps/tauri/web, port 1571)
+pnpm tauri:android:dev       # adb reverse :9595 then run the mobile player shell (apps/player/src-tauri, mobile overrides wrap player directly)
+pnpm tauri:android:build     # Mobile release build (bundles player/dist-static)
 
 # Signaling
 pnpm signaling:dev    # PartyKit local dev

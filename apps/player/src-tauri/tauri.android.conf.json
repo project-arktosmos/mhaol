@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Mhaol",
+  "productName": "Mhaol Player",
   "build": {
-    "frontendDist": "../../player/dist-static",
+    "frontendDist": "../dist-static",
     "devUrl": "http://localhost:9595",
     "beforeDevCommand": "pnpm --filter player dev",
     "beforeBuildCommand": "pnpm --filter player build"
