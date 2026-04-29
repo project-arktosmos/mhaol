@@ -248,7 +248,7 @@ async fn main() {
 
     #[cfg(not(target_os = "android"))]
     {
-        app = app.nest_service("/api/ytdl", ytdl::router(Arc::clone(&state.ytdl_manager)));
+        app = app.nest("/api/ytdl", ytdl::router());
     }
 
     let app = app

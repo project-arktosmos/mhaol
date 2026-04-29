@@ -6708,6 +6708,7 @@ name = "mhaol-cloud"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "axum",
  "chrono",
  "cid",
@@ -6733,6 +6734,7 @@ dependencies = [
  "sha3 0.10.8",
  "surrealdb",
  "tokio",
+ "tokio-stream",
  "tower-http",
  "tracing",
  "tracing-subscriber",
