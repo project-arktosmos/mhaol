@@ -11,14 +11,10 @@
 
 	let coverImage = $derived(document.images?.[0] ?? null);
 
+	let hasYear = $derived(document.year !== null && document.year !== undefined);
+
 	let rows = $derived.by(() => {
 		const out: { key: string; value: string }[] = [
-			{ key: 'Type', value: document.type },
-			{ key: 'Title', value: document.title },
-			{
-				key: 'Year',
-				value: document.year !== null && document.year !== undefined ? String(document.year) : ''
-			},
 			{
 				key: 'Artists',
 				value: (document.artists ?? []).map((a) => a.name).join(', ')
@@ -36,6 +32,15 @@
 </script>
 
 <article class={classNames('card bg-base-200 shadow-sm', classes)}>
+	<header
+		class="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-base-content/10 px-4 py-3"
+	>
+		<h3 class="text-base font-semibold [overflow-wrap:anywhere]">{document.title}</h3>
+		<span class="text-xs text-base-content/70">{document.type}</span>
+		{#if hasYear}
+			<span class="text-xs text-base-content/70">· {document.year}</span>
+		{/if}
+	</header>
 	{#if coverImage}
 		<figure class="bg-base-300">
 			<img
