@@ -6689,6 +6689,7 @@ dependencies = [
  "hex",
  "http 1.4.0",
  "k256",
+ "libc",
  "parking_lot",
  "serde",
  "serde_json",

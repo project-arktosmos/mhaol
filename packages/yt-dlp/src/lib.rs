@@ -5,6 +5,7 @@ pub mod extractor;
 pub mod http_server;
 pub mod js;
 pub mod manager;
+pub mod search;
 pub mod types;
 pub mod util;
 
