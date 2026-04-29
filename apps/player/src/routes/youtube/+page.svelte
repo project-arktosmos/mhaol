@@ -132,16 +132,7 @@
     fetchInfo(`https://www.youtube.com/watch?v=${item.videoId}`);
   }
 
-  function pickFormat(
-    result: YouTubeStreamUrlResult,
-    mode: "audio" | "video",
-  ): YouTubeStreamFormat | null {
-    if (mode === "audio") {
-      const audio = result.formats.filter((f) => f.isAudioOnly);
-      if (audio.length === 0) return null;
-      audio.sort((a, b) => b.bitrate - a.bitrate);
-      return audio[0];
-    }
+  function pickMuxed(result: YouTubeStreamUrlResult): YouTubeStreamFormat | null {
     const muxed = result.formats.filter((f) => !f.isAudioOnly && !f.isVideoOnly);
     if (muxed.length === 0) return null;
     muxed.sort((a, b) => {
@@ -150,6 +141,24 @@
       return b.bitrate - a.bitrate;
     });
     return muxed[0];
+  }
+
+  function pickAudio(result: YouTubeStreamUrlResult): YouTubeStreamFormat | null {
+    // Prefer AAC/m4a (mp4 container) for cross-browser compatibility (Safari can't play
+    // YouTube's webm/opus). Fall back to webm/opus, then to a muxed format which always
+    // contains audio the <audio> element can play.
+    const audioOnly = result.formats.filter((f) => f.isAudioOnly);
+    const mp4Audio = audioOnly.filter((f) => f.container === "mp4");
+    const sorted = (list: YouTubeStreamFormat[]) =>
+      [...list].sort((a, b) => b.bitrate - a.bitrate);
+    return sorted(mp4Audio)[0] ?? sorted(audioOnly)[0] ?? pickMuxed(result);
+  }
+
+  function pickFormat(
+    result: YouTubeStreamUrlResult,
+    mode: "audio" | "video",
+  ): YouTubeStreamFormat | null {
+    return mode === "audio" ? pickAudio(result) : pickMuxed(result);
   }
 
   async function streamItem(item: SearchItem, mode: "audio" | "video") {

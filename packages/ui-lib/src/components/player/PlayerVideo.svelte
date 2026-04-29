@@ -159,9 +159,28 @@
 					...s,
 					error: 'Playback blocked by browser. Click play to start.'
 				}));
+			} else {
+				playerService.state.update((s) => ({
+					...s,
+					error: `Playback failed: ${err.message}`
+				}));
 			}
 		});
+		const onError = () => {
+			const mediaErr = element.error;
+			const reason = mediaErr
+				? `code ${mediaErr.code}: ${mediaErr.message || 'media decode error'}`
+				: 'unknown error';
+			playerService.state.update((s) => ({
+				...s,
+				error: `Stream error (${reason})`
+			}));
+		};
+		element.addEventListener('error', onError);
 		streamAttached = true;
+		return () => {
+			element.removeEventListener('error', onError);
+		};
 	});
 
 	$effect(() => {
