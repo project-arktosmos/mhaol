@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use surrealdb::sql::Thing;
 
-const TABLE: &str = "document";
+pub const TABLE: &str = "document";
 
 const SHA2_256_CODE: u64 = 0x12;
 const RAW_CODEC: u64 = 0x55;
@@ -86,9 +86,12 @@ struct DocumentPayloadView<'a> {
     #[serde(rename = "type")]
     kind: &'a str,
     source: &'a str,
+    version: u32,
+    version_hashes: &'a [String],
 }
 
-fn compute_document_cid(
+#[allow(clippy::too_many_arguments)]
+pub fn compute_document_cid(
     title: &str,
     description: &str,
     artists: &[Artist],
@@ -97,6 +100,8 @@ fn compute_document_cid(
     year: Option<i32>,
     kind: &str,
     source: &str,
+    version: u32,
+    version_hashes: &[String],
 ) -> String {
     let view = DocumentPayloadView {
         title,
@@ -107,6 +112,8 @@ fn compute_document_cid(
         year,
         kind,
         source,
+        version,
+        version_hashes,
     };
     let json = serde_json::to_string_pretty(&view)
         .expect("DocumentPayloadView serializes to JSON");
@@ -136,6 +143,10 @@ pub struct Document {
     pub source: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
+    pub version: u32,
+    #[serde(default)]
+    pub version_hashes: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -152,6 +163,8 @@ pub struct DocumentDto {
     pub source: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub version: u32,
+    pub version_hashes: Vec<String>,
 }
 
 impl From<Document> for DocumentDto {
@@ -173,6 +186,8 @@ impl From<Document> for DocumentDto {
             source: doc.source,
             created_at: doc.created_at,
             updated_at: doc.updated_at,
+            version: doc.version,
+            version_hashes: doc.version_hashes,
         }
     }
 }
@@ -342,6 +357,8 @@ async fn create(
     let year = req.year.filter(|y| (1000..=9999).contains(y));
 
     let now = Utc::now();
+    let version: u32 = 0;
+    let version_hashes: Vec<String> = Vec::new();
     let new_id = compute_document_cid(
         title,
         &description,
@@ -351,6 +368,8 @@ async fn create(
         year,
         kind,
         source,
+        version,
+        &version_hashes,
     );
 
     let existing: Option<Document> = state
@@ -374,6 +393,8 @@ async fn create(
         source: source.to_string(),
         created_at: now,
         updated_at: now,
+        version,
+        version_hashes,
     };
 
     let created: Option<Document> = state

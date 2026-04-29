@@ -32,4 +32,8 @@ export interface CloudDocument {
 	source: string;
 	created_at: string;
 	updated_at: string;
+	/** Rolling-forward nonce. Older records without this field are treated as 0. */
+	version?: number;
+	/** CIDs of every prior version, oldest first. `version_hashes.length === version` is the chain integrity invariant. */
+	version_hashes?: string[];
 }
