@@ -74,15 +74,17 @@ The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node
 
 ### Tauri
 
-The Tauri app at `apps/tauri/` is a desktop + mobile shell. Crate name `mhaol-tauri`, binary `mhaol-tauri`. The shell loads different frontends per platform:
+The Tauri app at `apps/tauri/` is a desktop + mobile shell. Crate name `mhaol-tauri`, binary `mhaol-tauri`. The shell loads different frontends per platform and per launch config:
 
-- **Desktop** — loads `apps/tauri/web/`, a minimal Svelte SPA (pnpm package `tauri-web`, dev port 1571) that polls `http://localhost:9898/api/cloud/status` and `http://localhost:9595/` and renders one health panel per app (status, latency, uptime, version).
+- **Desktop (cloud wrapper, default)** — loads `apps/tauri/web/`, a minimal Svelte SPA (pnpm package `tauri-web`, dev port 1571) that polls `http://localhost:9898/api/cloud/status` and `http://localhost:9595/` and renders one health panel per app (status, latency, uptime, version). Launched via `pnpm app:tauri` (used by `pnpm dev:cloud`).
+- **Desktop (player wrapper)** — wraps the player SPA directly (`apps/player/`, dev port 9595) using the override config `tauri.player.conf.json`. Launched via `pnpm app:tauri:player` (used by `pnpm dev:player`).
 - **Mobile (Android/iOS)** — `tauri.android.conf.json` and `tauri.ios.conf.json` override `frontendDist` to `../../player/dist-static` and `devUrl` to `http://localhost:9595`, so the mobile shell wraps the player app directly.
 
 Layout:
 - `apps/tauri/src-tauri/Cargo.toml` — Tauri crate manifest
 - `apps/tauri/src-tauri/src/lib.rs` / `main.rs` — Tauri entry point (uses `mobile_entry_point` for Android/iOS)
 - `apps/tauri/src-tauri/tauri.conf.json` — base + desktop config (frontendDist `../web/dist-static`, devUrl `http://localhost:1571`)
+- `apps/tauri/src-tauri/tauri.player.conf.json` — desktop override that wraps the player (frontendDist `../../player/dist-static`, devUrl `http://localhost:9595`)
 - `apps/tauri/src-tauri/tauri.android.conf.json`, `tauri.ios.conf.json` — mobile overrides pointing at the player
 - `apps/tauri/web/` — desktop health UI; static SPA, builds to `apps/tauri/web/dist-static/`
 
@@ -195,13 +197,13 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Full desktop stack: spawns dev:player in the background then runs dev:cloud (which boots the cloud Rust server, the cloud Vite WebUI, and the Tauri shell). Closing the Tauri window stops the dev session.
-pnpm dev:apps         # Same as above without the Tauri shell — cloud + player only, browser-based workflow
+pnpm dev              # Full desktop stack: spawns the player Vite server (app:player) in the background then runs dev:cloud (which boots the cloud Rust server, the cloud Vite WebUI, and the Tauri shell with the health UI). Closing the Tauri window stops the dev session.
+pnpm dev:apps         # Same as above without the Tauri shell — cloud + player Vite servers only, browser-based workflow
 pnpm dev:node         # Rust node server only (PORT=1530)
 pnpm dev:cloud        # Cloud + its Tauri wrapper: Rust loopback :9899 + Vite WebUI :9898 + Tauri shell (health UI :1571 + native window)
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
 pnpm dev:frontend     # Frontend dev server only (port 1570)
-pnpm dev:player       # Player dev server only (port 9595, plain Svelte SPA, no Tauri wrapper)
+pnpm dev:player       # Player + its Tauri wrapper: Vite :9595 + Tauri shell that wraps the player directly (uses tauri.player.conf.json)
 
 # Building
 pnpm build            # Frontend build
@@ -220,11 +222,13 @@ pnpm app:shepperd         # Shepperd dev (watch mode)
 pnpm app:shepperd:build   # Shepperd production build
 
 # Tauri shell (apps/tauri)
-pnpm app:tauri            # Desktop dev — boots the health UI + Tauri webview
-pnpm app:tauri:web        # Health UI Vite dev server only (port 1571)
-pnpm app:tauri:build      # Desktop release build
-pnpm tauri:android:dev    # adb reverse :9595 then run the mobile shell pointing at the player
-pnpm tauri:android:build  # Mobile release build (bundles player/dist-static)
+pnpm app:tauri               # Desktop dev — boots the health UI + Tauri webview (cloud wrapper)
+pnpm app:tauri:web           # Health UI Vite dev server only (port 1571)
+pnpm app:tauri:build         # Desktop release build (cloud wrapper)
+pnpm app:tauri:player        # Desktop dev — Tauri shell wrapping the player SPA at :9595 (uses tauri.player.conf.json)
+pnpm app:tauri:player:build  # Desktop release build (player wrapper)
+pnpm tauri:android:dev       # adb reverse :9595 then run the mobile shell pointing at the player
+pnpm tauri:android:build     # Mobile release build (bundles player/dist-static)
 
 # Signaling
 pnpm signaling:dev    # PartyKit local dev
