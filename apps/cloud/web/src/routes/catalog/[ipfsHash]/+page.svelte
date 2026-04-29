@@ -15,7 +15,6 @@
 		searchTorrents,
 		type TorrentResultItem
 	} from '$lib/search.service';
-	import { documentTorrentsService } from 'ui-lib/services/document-torrents.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 
@@ -79,6 +78,24 @@
 		}
 	}
 
+	async function startTorrentDownload(magnet: string): Promise<void> {
+		const res = await fetch('/api/torrent/add', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ magnet })
+		});
+		if (!res.ok) {
+			let message = `HTTP ${res.status}`;
+			try {
+				const body = await res.json();
+				if (body && typeof body.error === 'string') message = body.error;
+			} catch {
+				// ignore
+			}
+			throw new Error(message);
+		}
+	}
+
 	async function assignTorrent(torrent: TorrentResultItem) {
 		if (
 			!torrent.magnetLink ||
@@ -103,7 +120,7 @@
 				type: document.type as DocumentType,
 				source: document.source as DocumentSource
 			});
-			await documentTorrentsService.add(torrent.magnetLink);
+			await startTorrentDownload(torrent.magnetLink);
 			if (created.id !== document.id) {
 				await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
 			}
