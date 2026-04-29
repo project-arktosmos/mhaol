@@ -139,9 +139,30 @@ async fn main() {
         let manager = Arc::new(IpfsManager::new());
         let manager_clone = Arc::clone(&manager);
         let repo_path = downloads_dir().join("ipfs");
+        let default_swarm_key_path = repo_path.join("swarm.key");
         tokio::spawn(async move {
+            // The IPFS node always runs on a private network: read an
+            // existing swarm key off disk or generate one on first boot. Copy
+            // `<repo>/swarm.key` to any other node that should join the same
+            // swarm. Override the path with `IPFS_SWARM_KEY_FILE`.
+            std::fs::create_dir_all(&repo_path).ok();
+            let key_path = std::env::var("IPFS_SWARM_KEY_FILE")
+                .map(std::path::PathBuf::from)
+                .unwrap_or(default_swarm_key_path);
+            let swarm_key = match mhaol_ipfs::ensure_swarm_key(&key_path) {
+                Ok(k) => Some(k),
+                Err(e) => {
+                    tracing::warn!(
+                        "[ipfs] swarm key bootstrap failed at {}: {} — running on the public swarm",
+                        key_path.display(),
+                        e
+                    );
+                    None
+                }
+            };
             let config = IpfsConfig {
                 repo_path,
+                swarm_key,
                 ..IpfsConfig::default()
             };
             if let Err(e) = manager_clone.initialize(config).await {

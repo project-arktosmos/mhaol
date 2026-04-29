@@ -328,6 +328,8 @@ async fn ipfs_health(state: &CloudState) -> PackageHealth {
                 "pinnedCount": stats.pinned_count,
                 "repoSizeBytes": stats.repo_size_bytes,
                 "listenAddrs": stats.listen_addrs,
+                "privateNetwork": stats.private_network,
+                "swarmKeyFingerprint": stats.swarm_key_fingerprint,
             }),
         };
     }
