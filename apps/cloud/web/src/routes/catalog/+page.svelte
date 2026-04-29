@@ -246,16 +246,6 @@
 </svelte:head>
 
 <div class="flex min-h-full flex-col gap-6 p-6">
-	<header class="flex flex-col gap-1">
-		<h1 class="text-2xl font-bold">Catalog</h1>
-		<p class="text-sm text-base-content/60">
-			Browse popular items from each addon. Pick a source, optionally narrow by type and genre, and
-			the cloud server fetches the data on your behalf. For each result the cloud also runs a
-			torrent search (one at a time) and lists the matches; click a torrent to save the item as a
-			document with that magnet attached.
-		</p>
-	</header>
-
 	{#if sourcesError}
 		<div class="alert alert-error">
 			<span>Could not load catalog sources: {sourcesError}</span>
