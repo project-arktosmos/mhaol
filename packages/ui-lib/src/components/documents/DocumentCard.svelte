@@ -7,6 +7,7 @@
 		infoHashFromMagnet
 	} from 'ui-lib/services/document-torrents.service';
 	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
+	import { getCachedImageUrl } from 'ui-lib/services/image-cache.service';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 
 	interface Props {
@@ -19,6 +20,22 @@
 	let { document, classes = '', onRemove, removing = false }: Props = $props();
 
 	let coverImage = $derived(document.images?.[0] ?? null);
+	let resolvedCoverUrl = $state<string | null>(null);
+
+	$effect(() => {
+		const url = coverImage?.url;
+		if (!url) {
+			resolvedCoverUrl = null;
+			return;
+		}
+		let cancelled = false;
+		getCachedImageUrl(url).then((u) => {
+			if (!cancelled) resolvedCoverUrl = u;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
 
 	let hasYear = $derived(document.year !== null && document.year !== undefined);
 
@@ -107,14 +124,16 @@
 	</header>
 	{#if coverImage}
 		<figure class="relative overflow-hidden bg-base-300">
-			<img
-				src={coverImage.url}
-				alt={document.title}
-				width={coverImage.width || undefined}
-				height={coverImage.height || undefined}
-				class="block h-auto w-full"
-				loading="lazy"
-			/>
+			{#if resolvedCoverUrl}
+				<img
+					src={resolvedCoverUrl}
+					alt={document.title}
+					width={coverImage.width || undefined}
+					height={coverImage.height || undefined}
+					class="block h-auto w-full"
+					loading="lazy"
+				/>
+			{/if}
 			{#if document.description}
 				<figcaption
 					class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/50 px-4 py-3 text-xs [overflow-wrap:anywhere] whitespace-pre-wrap text-white opacity-0 transition-opacity group-hover:opacity-100"
