@@ -17,8 +17,7 @@ mhaol.git/
 │   ├── frontend/                     # Unified SPA (landing + connect + media, port 1570)
 │   ├── player/                       # Player SPA, mirrors frontend visuals/setup (port 9595)
 │   ├── node/                         # Rust Axum server (standalone, port 1530)
-│   ├── cloud/                        # Rust Axum server: same services as node + embedded Svelte health WebUI (port 1540)
-│   ├── cloud-web/                    # Svelte SPA whose static build is embedded by the cloud crate (dev port 9596)
+│   ├── cloud/                        # Rust Axum server (port 1540) + nested Svelte WebUI under cloud/web/ (dev port 9596) embedded into the binary
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
@@ -67,8 +66,8 @@ The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node
 - `apps/cloud/src/server.rs` — Binary entry point; bootstraps `AppState`, spawns the same workers as `mhaol-node`, and serves the embedded WebUI as a fallback to `/api/*`
 - `apps/cloud/src/cloud_status.rs` — Public `/api/cloud/status` route used by the WebUI for health polling
 - `apps/cloud/src/libraries.rs` — `/api/libraries` CRUD; library records are stored in SurrealDB and reference an on-disk directory (default: `<system Documents>/mhaol/<name>`)
-- `apps/cloud/src/frontend.rs` — Embeds `apps/cloud-web/dist-static/` via `rust-embed` and serves it as the fallback handler
-- `apps/cloud-web/` — SvelteKit static SPA built with the same `ui-lib` components as the player. Builds to `apps/cloud-web/dist-static/`, which is what the cloud crate embeds at compile time.
+- `apps/cloud/src/frontend.rs` — Embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it as the fallback handler
+- `apps/cloud/web/` — SvelteKit static SPA (pnpm package `cloud`) built with the same `ui-lib` components as the player. Builds to `apps/cloud/web/dist-static/`, which is what the cloud crate embeds at compile time.
 
 The cloud frontend has two screens:
 - **Health** (`/`) — polls `/api/cloud/status` every 5 seconds and renders status, latency, uptime, bind, package health, and identities.
@@ -180,14 +179,14 @@ Run these from the **repo root**:
 pnpm dev              # Rust cloud (port 1540) + player (port 9595) in parallel
 pnpm dev:node         # Rust node server only (PORT=1530)
 pnpm dev:cloud        # Rust cloud server only (PORT=1540) — runs same services as node + serves embedded WebUI
-pnpm dev:cloud-web    # Vite dev server for the cloud WebUI (port 9596, proxies /api → :1540)
+pnpm dev:cloud:web    # Vite dev server for the cloud WebUI (port 9596, proxies /api → :1540)
 pnpm dev:frontend     # Frontend dev server only (port 1570)
 pnpm dev:player       # Player dev server only (port 9595)
 
 # Building
 pnpm build            # Frontend build
 pnpm build:node       # Rust node release build
-pnpm build:cloud-web  # Build cloud WebUI static assets only
+pnpm build:cloud:web  # Build cloud WebUI static assets only
 pnpm build:cloud      # Build cloud WebUI then build mhaol-cloud release binary (embeds the WebUI)
 
 # Quality

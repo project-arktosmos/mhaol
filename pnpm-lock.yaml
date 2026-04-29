@@ -15,7 +15,7 @@ importers:
         specifier: ^9.0.4
         version: 9.0.4
 
-  apps/cloud-web:
+  apps/cloud/web:
     dependencies:
       '@sveltejs/adapter-static':
         specifier: ^3.0.10
@@ -28,7 +28,7 @@ importers:
         version: 4.0.1(svelte@5.53.7)
       ui-lib:
         specifier: workspace:*
-        version: link:../../packages/ui-lib
+        version: link:../../../packages/ui-lib
     devDependencies:
       '@eslint/compat':
         specifier: ^2.0.2

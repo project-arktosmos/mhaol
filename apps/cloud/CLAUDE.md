@@ -5,7 +5,7 @@
 **Crate:** `mhaol-cloud`
 **Binary:** `mhaol-cloud` (default port 1540)
 
-The cloud server runs an embedded SurrealDB store, an identity manager, the shared `mhaol-queue` task manager (on a separate `cloud-queue.db` SQLite file), and the desktop-only managers from `mhaol-yt-dlp`, `mhaol-torrent`, and `mhaol-ed2k`. It loads `mhaol-p2p-stream` for the GStreamer worker, and serves the Svelte WebUI from `apps/cloud-web/`. It is **independent** from `mhaol-node` — node still uses its own SQLite layer, cloud has its own state.
+The cloud server runs an embedded SurrealDB store, an identity manager, the shared `mhaol-queue` task manager (on a separate `cloud-queue.db` SQLite file), and the desktop-only managers from `mhaol-yt-dlp`, `mhaol-torrent`, and `mhaol-ed2k`. It loads `mhaol-p2p-stream` for the GStreamer worker, and serves the Svelte WebUI from the nested `web/` directory. It is **independent** from `mhaol-node` — node still uses its own SQLite layer, cloud has its own state.
 
 ## Source Structure
 
@@ -17,7 +17,14 @@ src/
 ├── cloud_status.rs      # GET /api/cloud/status
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records pointing at on-disk dirs
 ├── documents.rs         # /api/documents CRUD — SurrealDB-backed document records (name, author, description)
-└── frontend.rs          # rust-embed wrapper that serves apps/cloud-web/dist-static/
+└── frontend.rs          # rust-embed wrapper that serves web/dist-static/
+
+web/                     # SvelteKit static SPA (pnpm package `cloud`); builds to web/dist-static/
+├── src/                 # routes, components, services, css
+├── scripts/             # nav generator + Vite plugin
+├── svelte.config.js
+├── vite.config.ts
+└── package.json
 ```
 
 ## Database
@@ -46,7 +53,7 @@ The cloud binary used to depend on `mhaol-node` and spawn its recommendation wor
 
 ## WebUI
 
-The Svelte app lives at `apps/cloud-web/` and builds to `apps/cloud-web/dist-static/`. The cloud crate embeds that directory via `rust-embed` and serves it as a fallback for any non-API path. Build it with `pnpm --filter cloud-web build` (or `pnpm build:cloud` to build the WebUI and the release binary together).
+The Svelte app lives at `apps/cloud/web/` (pnpm package name `cloud`) and builds to `apps/cloud/web/dist-static/`. The cloud crate embeds that directory via `rust-embed` and serves it as a fallback for any non-API path. Build it with `pnpm --filter cloud build` (or `pnpm build:cloud` to build the WebUI and the release binary together).
 
 ## Running
 
@@ -55,7 +62,7 @@ The Svelte app lives at `apps/cloud-web/` and builds to `apps/cloud-web/dist-sta
 pnpm dev:cloud
 
 # Dev — WebUI hot-reload on 9596 (proxies /api to :1540)
-pnpm dev:cloud-web
+pnpm dev:cloud:web
 
 # Production build (embeds the WebUI)
 pnpm build:cloud

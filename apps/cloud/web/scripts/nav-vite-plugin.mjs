@@ -1,3 +1,4 @@
+// @ts-nocheck
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generate } from './generate-nav.mjs';
@@ -7,7 +8,7 @@ const ROUTES_DIR = path.resolve(__dirname, '../src/routes');
 
 export function navPlugin() {
 	return {
-		name: 'cloud-web-auto-nav',
+		name: 'cloud-auto-nav',
 		buildStart() {
 			generate();
 		},

@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 @plugin 'daisyui';
-@source '../../../../packages/ui-lib/src';
+@source '../../../../../packages/ui-lib/src';
 @import 'ui-lib/css/themes.css';
 
 body {

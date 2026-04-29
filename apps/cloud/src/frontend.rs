@@ -5,7 +5,7 @@ use axum::{
 use rust_embed::Embed;
 
 #[derive(Embed)]
-#[folder = "../cloud-web/dist-static/"]
+#[folder = "web/dist-static/"]
 struct CloudWebAssets;
 
 pub async fn serve_frontend(uri: Uri) -> impl IntoResponse {
@@ -26,7 +26,7 @@ pub async fn serve_frontend(uri: Uri) -> impl IntoResponse {
         .into_response(),
         None => (
             StatusCode::NOT_FOUND,
-            "cloud web frontend is not embedded. Run `pnpm --filter cloud-web build` and rebuild mhaol-cloud.",
+            "cloud web frontend is not embedded. Run `pnpm --filter cloud build` and rebuild mhaol-cloud.",
         )
             .into_response(),
     }

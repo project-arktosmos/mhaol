@@ -16,13 +16,13 @@ const config = {
 			assets: 'dist-static'
 		}),
 		alias: {
-			$components: '../../packages/ui-lib/src/components',
-			$utils: '../../packages/ui-lib/src/utils',
-			$types: '../../packages/ui-lib/src/types',
-			$data: '../../packages/ui-lib/src/data',
-			$adapters: '../../packages/ui-lib/src/adapters',
-			$services: '../../packages/ui-lib/src/services',
-			'ui-lib': '../../packages/ui-lib/src'
+			$components: '../../../packages/ui-lib/src/components',
+			$utils: '../../../packages/ui-lib/src/utils',
+			$types: '../../../packages/ui-lib/src/types',
+			$data: '../../../packages/ui-lib/src/data',
+			$adapters: '../../../packages/ui-lib/src/adapters',
+			$services: '../../../packages/ui-lib/src/services',
+			'ui-lib': '../../../packages/ui-lib/src'
 		}
 	}
 };

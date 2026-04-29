@@ -9,7 +9,7 @@ export default defineConfig({
 		host: true,
 		port: parseInt(process.env.PORT || '9596'),
 		fs: {
-			allow: ['../..']
+			allow: ['../../..']
 		},
 		proxy: {
 			'/api': 'http://localhost:1540'

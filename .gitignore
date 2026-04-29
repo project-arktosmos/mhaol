@@ -43,6 +43,9 @@ target/
 *.db-wal
 *.db-shm
 
+# SurrealDB / SurrealKV
+cloud-surrealkv/
+
 # Downloads
 downloads/
 **/downloads/
