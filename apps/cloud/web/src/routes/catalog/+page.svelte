@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
+	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
+	import type { CloudDocument } from 'ui-lib/types/document.type';
 	import {
 		listSources,
 		loadGenres,
@@ -16,7 +18,12 @@
 		type SearchResultItem,
 		type TorrentResultItem
 	} from '$lib/search.service';
-	import { documentsService, type DocumentSource, type DocumentType } from '$lib/documents.service';
+	import {
+		documentsService,
+		type Document,
+		type DocumentSource,
+		type DocumentType
+	} from '$lib/documents.service';
 	import { cachedImageUrl } from '$lib/image-cache';
 
 	let sources = $state<CatalogSource[]>([]);
@@ -43,6 +50,7 @@
 		error: string | null;
 	}
 	let torrentState = $state<Record<string, ItemTorrentState>>({});
+	let itemDocs = $state<Record<string, Document>>({});
 	let addedHashes = $state<Set<string>>(new Set());
 	let addingHash = $state<string | null>(null);
 	let assignError = $state<string | null>(null);
@@ -125,12 +133,14 @@
 		if (!addon) {
 			items = [];
 			torrentState = {};
+			itemDocs = {};
 			return;
 		}
 		itemsLoading = true;
 		itemsError = null;
 		runId++;
 		torrentState = {};
+		itemDocs = {};
 		try {
 			const result = await loadPopular(addon, {
 				type: type || undefined,
@@ -148,6 +158,38 @@
 			itemsLoading = false;
 		}
 		void runTorrentSearches();
+		void createDocumentsForItems();
+	}
+
+	async function createDocumentsForItems() {
+		const myRun = runId;
+		const docType = mapToDocumentType(addon, type);
+		const docSource = mapToDocumentSource(addon);
+		await Promise.all(
+			items.map(async (item) => {
+				if (myRun !== runId) return;
+				if (itemDocs[item.id]) return;
+				const images = [item.posterUrl, item.backdropUrl]
+					.filter((url): url is string => Boolean(url))
+					.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
+				try {
+					const doc = await documentsService.create({
+						title: item.title,
+						artists: [],
+						description: item.description ?? '',
+						images,
+						files: [],
+						year: item.year,
+						type: docType,
+						source: docSource
+					});
+					if (myRun !== runId) return;
+					itemDocs = { ...itemDocs, [item.id]: doc };
+				} catch (err) {
+					console.warn('Failed to auto-create document for', item.id, err);
+				}
+			})
+		);
 	}
 
 	async function runTorrentSearches() {
@@ -359,83 +401,92 @@
 			<p class="text-sm text-base-content/60">No items.</p>
 		{:else}
 			<div
-				class={classNames('grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3', {
-					'opacity-60': itemsLoading
-				})}
+				class={classNames(
+					'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+					{ 'opacity-60': itemsLoading }
+				)}
 			>
 				{#each items as item (item.id)}
 					{@const ts = torrentState[item.id]}
-					<div class="flex overflow-hidden rounded-box border border-base-content/10 bg-base-100">
-						<div class="flex w-32 shrink-0 flex-col bg-base-300">
-							<div class="aspect-[2/3] w-full">
-								{#if item.posterUrl}
-									<img
-										src={cachedImageUrl(item.posterUrl)}
-										alt={item.title}
-										class="h-full w-full object-cover"
-										loading="lazy"
-									/>
+					{@const doc = itemDocs[item.id]}
+					<div class="flex flex-col gap-2">
+						{#if doc}
+							<DocumentCard document={doc as CloudDocument} />
+						{:else}
+							<article class="card bg-base-200 shadow-sm">
+								<header
+									class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
+								>
+									<span class="text-xs text-base-content/70">{mapToDocumentType(addon, type)}</span>
+									<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
+										{item.title}
+									</h3>
+									<span class="text-xs text-base-content/70">{item.year ?? ''}</span>
+								</header>
+								<figure class="bg-base-300">
+									{#if item.posterUrl}
+										<img
+											src={cachedImageUrl(item.posterUrl)}
+											alt={item.title}
+											class="block h-auto w-full"
+											loading="lazy"
+										/>
+									{:else}
+										<div
+											class="flex aspect-[2/3] w-full items-center justify-center text-xs text-base-content/40"
+										>
+											Creating document…
+										</div>
+									{/if}
+								</figure>
+							</article>
+						{/if}
+						<details class="rounded-box border border-base-content/10 bg-base-200">
+							<summary
+								class="cursor-pointer px-3 py-2 text-xs font-semibold text-base-content/70 hover:bg-base-300"
+							>
+								Torrents{ts && ts.matches.length > 0 ? ` (${ts.matches.length})` : ''}
+							</summary>
+							<div class="border-t border-base-content/10 p-2">
+								{#if !ts || ts.status === 'pending'}
+									<p class="text-xs text-base-content/50">Queued…</p>
+								{:else if ts.status === 'searching'}
+									<p class="text-xs text-base-content/50">Searching…</p>
+								{:else if ts.status === 'error'}
+									<p class="text-xs text-error">{ts.error ?? 'Failed'}</p>
+								{:else if ts.matches.length === 0}
+									<p class="text-xs text-base-content/50">No matching torrents.</p>
 								{:else}
-									<div
-										class="flex h-full w-full items-center justify-center text-xs text-base-content/40"
-									>
-										No image
+									<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
+										{#each ts.matches as torrent (torrent.infoHash)}
+											<button
+												type="button"
+												class={classNames(
+													'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
+													{
+														'opacity-60':
+															addedHashes.has(torrent.magnetLink) || addingHash === torrent.magnetLink
+													}
+												)}
+												onclick={() => assignTorrent(item, torrent)}
+												disabled={addingHash !== null || addedHashes.has(torrent.magnetLink)}
+												title={torrent.title}
+											>
+												<span class="font-medium">{torrent.quality ?? '—'}</span>
+												<span class="text-success">↑{torrent.seeders}</span>
+												<span class="text-warning">↓{torrent.leechers}</span>
+												<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
+												{#if addedHashes.has(torrent.magnetLink)}
+													<span class="ml-auto">✓</span>
+												{:else if addingHash === torrent.magnetLink}
+													<span class="ml-auto">…</span>
+												{/if}
+											</button>
+										{/each}
 									</div>
 								{/if}
 							</div>
-							<div class="flex flex-col gap-1 p-2">
-								<span class="line-clamp-2 text-sm font-medium" title={item.title}>{item.title}</span
-								>
-								{#if item.year}
-									<span class="text-xs text-base-content/60">{item.year}</span>
-								{/if}
-								{#if item.description}
-									<span class="line-clamp-3 text-xs text-base-content/70">{item.description}</span>
-								{/if}
-							</div>
-						</div>
-						<div class="flex flex-1 flex-col border-l border-base-content/10 p-2">
-							<span class="mb-1 text-xs font-semibold text-base-content/60 uppercase">
-								Torrents{ts && ts.matches.length > 0 ? ` (${ts.matches.length})` : ''}
-							</span>
-							{#if !ts || ts.status === 'pending'}
-								<p class="text-xs text-base-content/50">Queued…</p>
-							{:else if ts.status === 'searching'}
-								<p class="text-xs text-base-content/50">Searching…</p>
-							{:else if ts.status === 'error'}
-								<p class="text-xs text-error">{ts.error ?? 'Failed'}</p>
-							{:else if ts.matches.length === 0}
-								<p class="text-xs text-base-content/50">No matching torrents.</p>
-							{:else}
-								<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
-									{#each ts.matches as torrent (torrent.infoHash)}
-										<button
-											type="button"
-											class={classNames(
-												'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-200',
-												{
-													'opacity-60':
-														addedHashes.has(torrent.magnetLink) || addingHash === torrent.magnetLink
-												}
-											)}
-											onclick={() => assignTorrent(item, torrent)}
-											disabled={addingHash !== null || addedHashes.has(torrent.magnetLink)}
-											title={torrent.title}
-										>
-											<span class="font-medium">{torrent.quality ?? '—'}</span>
-											<span class="text-success">↑{torrent.seeders}</span>
-											<span class="text-warning">↓{torrent.leechers}</span>
-											<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
-											{#if addedHashes.has(torrent.magnetLink)}
-												<span class="ml-auto">✓</span>
-											{:else if addingHash === torrent.magnetLink}
-												<span class="ml-auto">…</span>
-											{/if}
-										</button>
-									{/each}
-								</div>
-							{/if}
-						</div>
+						</details>
 					</div>
 				{/each}
 			</div>

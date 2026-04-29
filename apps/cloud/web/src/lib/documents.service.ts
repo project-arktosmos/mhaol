@@ -161,7 +161,15 @@ class DocumentsService {
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const created = (await res.json()) as Document;
-		this.state.update((s) => ({ ...s, documents: [...s.documents, created] }));
+		this.state.update((s) => {
+			const existing = s.documents.findIndex((d) => d.id === created.id);
+			if (existing >= 0) {
+				const next = s.documents.slice();
+				next[existing] = created;
+				return { ...s, documents: next };
+			}
+			return { ...s, documents: [...s.documents, created] };
+		});
 		return created;
 	}
 
