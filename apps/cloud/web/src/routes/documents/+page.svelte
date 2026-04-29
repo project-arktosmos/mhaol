@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { documentsService } from '$lib/documents.service';
+	import { computeCidV1Raw } from '$lib/cid';
 
 	const docsStore = documentsService.state;
 
@@ -11,6 +12,40 @@
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
+
+	const payloadJson = $derived(
+		JSON.stringify(
+			{
+				name: name.trim(),
+				author: author.trim(),
+				description: description.trim()
+			},
+			null,
+			2
+		)
+	);
+
+	let ipfsHash = $state('');
+	let hashError = $state<string | null>(null);
+
+	$effect(() => {
+		const json = payloadJson;
+		let cancelled = false;
+		computeCidV1Raw(new TextEncoder().encode(json))
+			.then((cid) => {
+				if (cancelled) return;
+				ipfsHash = cid;
+				hashError = null;
+			})
+			.catch((err) => {
+				if (cancelled) return;
+				ipfsHash = '';
+				hashError = err instanceof Error ? err.message : 'Unknown error';
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
 
 	onMount(() => {
 		documentsService.refresh();
@@ -151,6 +186,35 @@
 		{#if createError}
 			<p class="mt-2 text-sm text-error">{createError}</p>
 		{/if}
+	</section>
+
+	<section class="card border border-base-content/10 bg-base-200 p-4">
+		<h2 class="mb-3 text-lg font-semibold">Create payload preview</h2>
+		<p class="mb-3 text-xs text-base-content/60">
+			JSON body that will be POSTed to <code>/api/documents</code> when you hit Create. The IPFS hash
+			is the CIDv1 (raw, sha2-256) of these bytes and updates as you type.
+		</p>
+		<div class="flex flex-col gap-3">
+			<label class="flex flex-col gap-1">
+				<span class="text-xs font-semibold uppercase text-base-content/60">JSON</span>
+				<textarea
+					class="textarea-bordered textarea h-40 w-full font-mono text-xs"
+					readonly
+					disabled
+					value={payloadJson}
+				></textarea>
+			</label>
+			<label class="flex flex-col gap-1">
+				<span class="text-xs font-semibold uppercase text-base-content/60">IPFS hash (CIDv1)</span>
+				<input
+					type="text"
+					class="input-bordered input input-sm w-full font-mono text-xs"
+					readonly
+					disabled
+					value={hashError ?? ipfsHash}
+				/>
+			</label>
+		</div>
 	</section>
 
 	<section class="flex flex-col gap-3">
