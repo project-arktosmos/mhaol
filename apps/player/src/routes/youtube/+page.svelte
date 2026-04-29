@@ -167,7 +167,7 @@
     playError = null;
     try {
       const res = await fetch(
-        `/api/ytdl/info/stream-urls?url=${encodeURIComponent(dlUrl)}`,
+        `/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(dlUrl)}`,
       );
       if (!res.ok) {
         const body = await res.text();

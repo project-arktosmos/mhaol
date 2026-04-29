@@ -338,6 +338,26 @@ impl DownloadManager {
             .await
     }
 
+    /// Extract stream URLs intended for in-browser playback. Forces the WEB
+    /// client so audio-only adaptive URLs are signed for the browser User-Agent.
+    pub async fn extract_stream_urls_for_browser(
+        &self,
+        url: &str,
+    ) -> anyhow::Result<StreamUrlResult> {
+        let video_id = extract_video_id(url)?;
+        let (po_token, visitor_data) = {
+            let config = self.config.read();
+            (config.po_token.clone(), config.visitor_data.clone())
+        };
+        self.pipeline
+            .extract_stream_urls_for_browser(
+                &video_id,
+                po_token.as_deref(),
+                visitor_data.as_deref(),
+            )
+            .await
+    }
+
     /// Fetch and download subtitles on-demand for a video.
     pub async fn fetch_subtitles(
         &self,

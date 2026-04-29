@@ -132,8 +132,35 @@ impl DownloadPipeline {
         po_token: Option<&str>,
         visitor_data: Option<&str>,
     ) -> Result<StreamUrlResult> {
-        let (player_response, _client, po_token_was_used) =
-            self.fetch_player_response(video_id, po_token, visitor_data).await?;
+        self.extract_stream_urls_inner(video_id, po_token, visitor_data, false).await
+    }
+
+    /// Extract resolved stream URLs preferring browser-client (WEB) signing so that
+    /// the URLs can be fetched from a browser User-Agent without CDN 403s. This
+    /// matters specifically for audio-only adaptive streams — non-WEB clients
+    /// (ANDROID/IOS) sign URLs that the googlevideo CDN refuses to serve to a
+    /// browser UA.
+    pub async fn extract_stream_urls_for_browser(
+        &self,
+        video_id: &str,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+    ) -> Result<StreamUrlResult> {
+        self.extract_stream_urls_inner(video_id, po_token, visitor_data, true).await
+    }
+
+    async fn extract_stream_urls_inner(
+        &self,
+        video_id: &str,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+        prefer_browser: bool,
+    ) -> Result<StreamUrlResult> {
+        let (player_response, _client, po_token_was_used) = if prefer_browser {
+            self.fetch_player_response_prefer_browser(video_id, po_token, visitor_data).await?
+        } else {
+            self.fetch_player_response(video_id, po_token, visitor_data).await?
+        };
 
         if !player_response.is_playable() {
             let reason = player_response
@@ -652,6 +679,20 @@ impl DownloadPipeline {
         headers
     }
 
+    /// Force browser-client priority regardless of po_token presence. Used by the
+    /// browser-streaming path so audio-only adaptive URLs are signed for the WEB
+    /// User-Agent (otherwise the CDN 403s when the browser fetches them).
+    async fn fetch_player_response_prefer_browser(
+        &self,
+        video_id: &str,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+    ) -> Result<(PlayerResponse, &'static InnertubeClient, bool)> {
+        use crate::extractor::clients::{ANDROID, IOS, TV, WEB, WEB_EMBEDDED};
+        let web_priority: &[&InnertubeClient] = &[&*WEB, &*WEB_EMBEDDED, &*TV, &*ANDROID, &*IOS];
+        self.fetch_player_response_with_clients(video_id, po_token, visitor_data, web_priority).await
+    }
+
     /// Returns (player_response, client, po_token_was_used).
     async fn fetch_player_response(
         &self,
@@ -667,6 +708,16 @@ impl DownloadPipeline {
         } else {
             &*CLIENT_PRIORITY
         };
+        self.fetch_player_response_with_clients(video_id, po_token, visitor_data, clients).await
+    }
+
+    async fn fetch_player_response_with_clients(
+        &self,
+        video_id: &str,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+        clients: &[&'static InnertubeClient],
+    ) -> Result<(PlayerResponse, &'static InnertubeClient, bool)> {
 
         for client in clients {
             let (token, vd) = if client.is_browser {

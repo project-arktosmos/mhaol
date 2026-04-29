@@ -45,6 +45,7 @@ pub fn build_router(manager: Arc<DownloadManager>) -> Router {
         .route("/info/video", get(get_video_info))
         .route("/info/playlist", get(get_playlist_info))
         .route("/info/stream-urls", get(get_stream_urls))
+        .route("/info/stream-urls-browser", get(get_stream_urls_browser))
         .route("/search", get(search::search))
         .route("/downloads", get(list_downloads))
         .route("/downloads", post(queue_download))
@@ -98,6 +99,18 @@ async fn get_stream_urls(
     Query(query): Query<UrlQuery>,
 ) -> impl IntoResponse {
     match mgr.extract_stream_urls(&query.url).await {
+        Ok(result) => (StatusCode::OK, Json(serde_json::to_value(result).unwrap())).into_response(),
+        Err(e) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
+    }
+}
+
+async fn get_stream_urls_browser(
+    State(mgr): State<AppState>,
+    Query(query): Query<UrlQuery>,
+) -> impl IntoResponse {
+    match mgr.extract_stream_urls_for_browser(&query.url).await {
         Ok(result) => (StatusCode::OK, Json(serde_json::to_value(result).unwrap())).into_response(),
         Err(e) => {
             error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
