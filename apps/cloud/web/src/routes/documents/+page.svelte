@@ -582,7 +582,7 @@
 				One card per addon result, using the same image that will be assigned to the document. Click
 				the cover to fill the form, or click a torrent to add it as a file.
 			</p>
-			<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+			<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
 				{#each searchResults as result, i (result.externalId ?? i)}
 					{@const cover = result.images[0]?.url}
 					{@const matches = matchTorrentsForResult(result, torrentResults)}
