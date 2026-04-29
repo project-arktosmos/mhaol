@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { get } from 'svelte/store';
 	import classNames from 'classnames';
 	import { playerService } from 'ui-lib/services/player.service';
 	import { subtitlesService } from 'ui-lib/services/subtitles.service';
@@ -151,6 +152,12 @@
 	// Direct URL playback (yt-dlp): set src= on the video element. The same
 	// element handles audio-only sources too (the music-icon overlay covers
 	// the empty video frame).
+	//
+	// We also pump the element's `timeupdate` and `loadedmetadata` events
+	// back into `playerService.state` so the seek bar and timer move. The
+	// WebRTC path gets these from the worker's `PositionUpdate`/`MediaInfo`
+	// data-channel messages — direct-URL playback has no data channel, so
+	// without this listener `positionSecs` stays at 0 forever.
 	$effect(() => {
 		if (!directStreamUrl) return;
 		const element = videoElement;
@@ -195,10 +202,33 @@
 			mediaError = `Stream error (${reason})`;
 			playerService.state.update((s) => ({ ...s, error: mediaError }));
 		};
+		const onTimeUpdate = () => {
+			// Don't fight the user while they're dragging the seek bar.
+			if (get(playerService.state).isSeeking) return;
+			playerService.state.update((s) => ({
+				...s,
+				positionSecs: element.currentTime
+			}));
+		};
+		const onLoadedMetadata = () => {
+			if (Number.isFinite(element.duration) && element.duration > 0) {
+				playerService.state.update((s) => ({
+					...s,
+					durationSecs: element.duration
+				}));
+			}
+		};
+		const onDurationChange = onLoadedMetadata;
 		element.addEventListener('error', onError);
+		element.addEventListener('timeupdate', onTimeUpdate);
+		element.addEventListener('loadedmetadata', onLoadedMetadata);
+		element.addEventListener('durationchange', onDurationChange);
 		streamAttached = true;
 		return () => {
 			element.removeEventListener('error', onError);
+			element.removeEventListener('timeupdate', onTimeUpdate);
+			element.removeEventListener('loadedmetadata', onLoadedMetadata);
+			element.removeEventListener('durationchange', onDurationChange);
 		};
 	});
 
@@ -340,6 +370,19 @@
 	}
 
 	function handleSeek(positionSecs: number): void {
+		// Direct URL playback (yt-dlp) — there's no WebRTC data channel, so
+		// `playerService.seek()` is a no-op. Move the playhead on the
+		// element directly and clear the seeking flag so `timeupdate` can
+		// resume driving the position.
+		if (directStreamUrl && videoElement) {
+			videoElement.currentTime = positionSecs;
+			playerService.state.update((s) => ({
+				...s,
+				positionSecs,
+				isSeeking: false
+			}));
+			return;
+		}
 		playerService.seek(positionSecs);
 	}
 
