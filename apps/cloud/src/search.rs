@@ -5,11 +5,21 @@ use serde::{Deserialize, Serialize};
 
 const TMDB_BASE: &str = "https://api.themoviedb.org/3";
 const TMDB_IMG_BASE: &str = "https://image.tmdb.org/t/p";
+const PIRATEBAY_BASE: &str = "https://apibay.org";
+const TPB_TRACKERS: &[&str] = &[
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://tracker.openbittorrent.com:6969/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://tracker.dler.org:6969/announce",
+    "udp://opentracker.i2p.rocks:6969/announce",
+];
 
 pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/tmdb", post(search_tmdb))
         .route("/tmdb/episodes", post(tmdb_episodes))
+        .route("/torrents", post(search_torrents))
 }
 
 #[derive(Debug, Deserialize)]
@@ -241,6 +251,134 @@ async fn tmdb_episodes(
     }
 
     Ok(Json(episodes))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TorrentSearchRequest {
+    pub query: String,
+    #[serde(default)]
+    pub category: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TorrentResult {
+    pub title: String,
+    pub description: String,
+    #[serde(rename = "magnetLink")]
+    pub magnet_link: String,
+    #[serde(rename = "infoHash")]
+    pub info_hash: String,
+    pub raw: serde_json::Value,
+}
+
+fn build_magnet_link(info_hash: &str, name: &str) -> String {
+    let encoded_name = urlencoding(name);
+    let trackers = TPB_TRACKERS
+        .iter()
+        .map(|t| format!("&tr={}", urlencoding(t)))
+        .collect::<String>();
+    format!("magnet:?xt=urn:btih:{info_hash}&dn={encoded_name}{trackers}")
+}
+
+async fn search_torrents(
+    State(_state): State<CloudState>,
+    Json(req): Json<TorrentSearchRequest>,
+) -> Result<Json<Vec<TorrentResult>>, (StatusCode, Json<serde_json::Value>)> {
+    let query = req.query.trim();
+    if query.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+    let category = req.category.as_deref().unwrap_or("0");
+
+    let url = format!(
+        "{}/q.php?q={}&cat={}",
+        PIRATEBAY_BASE,
+        urlencoding(query),
+        urlencoding(category)
+    );
+
+    let res = reqwest::Client::new()
+        .get(&url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (compatible; Mhaol/1.0)",
+        )
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("piratebay request failed: {e}")))?;
+
+    if !res.status().is_success() {
+        return Err(err(
+            StatusCode::BAD_GATEWAY,
+            format!("piratebay returned {}", res.status()),
+        ));
+    }
+
+    let raw: serde_json::Value = res
+        .json()
+        .await
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("piratebay parse failed: {e}")))?;
+
+    let arr = match raw.as_array() {
+        Some(a) => a,
+        None => return Ok(Json(Vec::new())),
+    };
+
+    // The API returns a single sentinel row when there are no results.
+    if arr.len() == 1
+        && arr[0].get("id").and_then(|v| v.as_str()) == Some("0")
+        && arr[0].get("name").and_then(|v| v.as_str()) == Some("No results returned")
+    {
+        return Ok(Json(Vec::new()));
+    }
+
+    let parsed: Vec<TorrentResult> = arr
+        .iter()
+        .map(|r| {
+            let name = r
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let info_hash = r
+                .get("info_hash")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let seeders = r
+                .get("seeders")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0);
+            let leechers = r
+                .get("leechers")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0);
+            let size_bytes = r
+                .get("size")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0);
+            let magnet_link = if info_hash.is_empty() {
+                String::new()
+            } else {
+                build_magnet_link(&info_hash, &name)
+            };
+            TorrentResult {
+                title: name,
+                description: format!(
+                    "{seeders} seeders · {leechers} leechers · {size_bytes} bytes"
+                ),
+                magnet_link,
+                info_hash,
+                raw: r.clone(),
+            }
+        })
+        .collect();
+
+    Ok(Json(parsed))
 }
 
 fn urlencoding(s: &str) -> String {

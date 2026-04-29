@@ -1,6 +1,5 @@
 import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/musicbrainz';
 import { searchBooks } from 'addons/openlibrary';
-import { search as searchPirateBay } from 'addons/torrent-search-thepiratebay';
 import { TorrentCategory } from 'addons/torrent-search-thepiratebay/types';
 import type {
 	Artist,
@@ -74,14 +73,13 @@ export async function searchTorrents(
 ): Promise<TorrentResultItem[]> {
 	const trimmed = query.trim();
 	if (!trimmed) return [];
-	const results = await searchPirateBay(trimmed, { category: tpbCategoryFor(type) });
-	return results.map((r) => ({
-		title: r.name,
-		description: `${r.seeders} seeders · ${r.leechers} leechers · ${r.size} bytes`,
-		magnetLink: r.magnetLink,
-		infoHash: r.infoHash,
-		raw: r
-	}));
+	const res = await fetch('/api/search/torrents', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ query: trimmed, category: tpbCategoryFor(type) })
+	});
+	if (!res.ok) throw new Error(await parseError(res));
+	return (await res.json()) as TorrentResultItem[];
 }
 
 async function parseError(res: Response): Promise<string> {
