@@ -22,7 +22,7 @@
 	}
 </script>
 
-<article class={classNames('card bg-base-200 shadow-sm', classes)}>
+<article class={classNames('card group bg-base-200 shadow-sm', classes)}>
 	<header
 		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
 	>
@@ -33,7 +33,7 @@
 		<span class="text-xs text-base-content/70">{hasYear ? document.year : ''}</span>
 	</header>
 	{#if coverImage}
-		<figure class="bg-base-300">
+		<figure class="relative overflow-hidden bg-base-300">
 			<img
 				src={coverImage.url}
 				alt={document.title}
@@ -42,9 +42,15 @@
 				class="block h-auto w-full"
 				loading="lazy"
 			/>
+			{#if document.description}
+				<figcaption
+					class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/50 px-4 py-3 text-xs whitespace-pre-wrap text-white opacity-0 transition-opacity [overflow-wrap:anywhere] group-hover:opacity-100"
+				>
+					{document.description}
+				</figcaption>
+			{/if}
 		</figure>
-	{/if}
-	{#if document.description}
+	{:else if document.description}
 		<p
 			class="border-b border-base-content/10 px-4 py-3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere] text-base-content/80"
 		>
