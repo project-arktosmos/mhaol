@@ -15,6 +15,7 @@
 		searchTorrents,
 		type TorrentResultItem
 	} from '$lib/search.service';
+	import { documentTorrentsService } from 'ui-lib/services/document-torrents.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 
@@ -102,6 +103,7 @@
 				type: document.type as DocumentType,
 				source: document.source as DocumentSource
 			});
+			await documentTorrentsService.add(torrent.magnetLink);
 			if (created.id !== document.id) {
 				await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
 			}
