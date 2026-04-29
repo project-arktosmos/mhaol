@@ -53,7 +53,7 @@ export const TYPES_BY_SOURCE: Record<DocumentSource, readonly DocumentType[]> = 
 
 export interface Document {
 	id: string;
-	name: string;
+	title: string;
 	author: string;
 	description: string;
 	type: string;
@@ -101,7 +101,7 @@ class DocumentsService {
 	}
 
 	async create(
-		name: string,
+		title: string,
 		author: string,
 		description: string,
 		type: DocumentType,
@@ -110,7 +110,7 @@ class DocumentsService {
 		const res = await fetch('/api/documents', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ name, author, description, type, source })
+			body: JSON.stringify({ title, author, description, type, source })
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const created = (await res.json()) as Document;

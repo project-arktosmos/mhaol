@@ -12,7 +12,7 @@
 
 	const docsStore = documentsService.state;
 
-	let name = $state('');
+	let title = $state('');
 	let author = $state('');
 	let description = $state('');
 	let source = $state<DocumentSource>(DOCUMENT_SOURCES[0]);
@@ -30,7 +30,7 @@
 	const payloadJson = $derived(
 		JSON.stringify(
 			{
-				name: name.trim(),
+				title: title.trim(),
 				author: author.trim(),
 				description: description.trim(),
 				source,
@@ -70,10 +70,10 @@
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		createError = null;
-		const trimmedName = name.trim();
+		const trimmedTitle = title.trim();
 		const trimmedAuthor = author.trim();
-		if (!trimmedName) {
-			createError = 'Name is required';
+		if (!trimmedTitle) {
+			createError = 'Title is required';
 			return;
 		}
 		if (!trimmedAuthor) {
@@ -82,8 +82,8 @@
 		}
 		creating = true;
 		try {
-			await documentsService.create(trimmedName, trimmedAuthor, description.trim(), type, source);
-			name = '';
+			await documentsService.create(trimmedTitle, trimmedAuthor, description.trim(), type, source);
+			title = '';
 			author = '';
 			description = '';
 			source = DOCUMENT_SOURCES[0];
@@ -127,7 +127,7 @@
 		<div>
 			<h1 class="text-2xl font-bold">Documents</h1>
 			<p class="text-sm text-base-content/60">
-				Documents stored in the cloud's SurrealDB. Each entry has a name, an author, and a
+				Documents stored in the cloud's SurrealDB. Each entry has a title, an author, and a
 				description.
 			</p>
 		</div>
@@ -181,13 +181,13 @@
 							</td>
 						</tr>
 						<tr>
-							<th class="w-32 align-middle">Name</th>
+							<th class="w-32 align-middle">Title</th>
 							<td>
 								<input
 									type="text"
 									class="input-bordered input input-sm w-full"
 									placeholder="Project brief"
-									bind:value={name}
+									bind:value={title}
 									disabled={creating}
 								/>
 							</td>
@@ -277,7 +277,7 @@
 							<th>ID</th>
 							<th>Type</th>
 							<th>Source</th>
-							<th>Name</th>
+							<th>Title</th>
 							<th>Author</th>
 							<th>Description</th>
 							<th>Created</th>
@@ -290,7 +290,7 @@
 								<td class="font-mono text-xs text-base-content/70">{doc.id}</td>
 								<td class="text-xs">{doc.type}</td>
 								<td class="text-xs">{doc.source}</td>
-								<td class="font-medium">{doc.name}</td>
+								<td class="font-medium">{doc.title}</td>
 								<td>{doc.author}</td>
 								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
 									>{doc.description}</td

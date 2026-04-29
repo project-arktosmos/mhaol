@@ -46,7 +46,7 @@ const ALLOWED_SOURCES: &[&str] = &[
 
 #[derive(Serialize)]
 struct DocumentPayloadView<'a> {
-    name: &'a str,
+    title: &'a str,
     author: &'a str,
     description: &'a str,
     #[serde(rename = "type")]
@@ -55,13 +55,13 @@ struct DocumentPayloadView<'a> {
 }
 
 fn compute_document_cid(
-    name: &str,
+    title: &str,
     author: &str,
     description: &str,
     kind: &str,
     source: &str,
 ) -> String {
-    let view = DocumentPayloadView { name, author, description, kind, source };
+    let view = DocumentPayloadView { title, author, description, kind, source };
     let json = serde_json::to_string_pretty(&view)
         .expect("DocumentPayloadView serializes to JSON");
     let digest = Sha256::digest(json.as_bytes());
@@ -73,7 +73,8 @@ fn compute_document_cid(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub id: Option<Thing>,
-    pub name: String,
+    #[serde(alias = "name")]
+    pub title: String,
     pub author: String,
     pub description: String,
     #[serde(rename = "type", default)]
@@ -87,7 +88,7 @@ pub struct Document {
 #[derive(Debug, Serialize)]
 pub struct DocumentDto {
     pub id: String,
-    pub name: String,
+    pub title: String,
     pub author: String,
     pub description: String,
     #[serde(rename = "type")]
@@ -106,7 +107,7 @@ impl From<Document> for DocumentDto {
             .unwrap_or_default();
         Self {
             id,
-            name: doc.name,
+            title: doc.title,
             author: doc.author,
             description: doc.description,
             kind: doc.kind,
@@ -119,7 +120,7 @@ impl From<Document> for DocumentDto {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateDocumentRequest {
-    pub name: String,
+    pub title: String,
     pub author: String,
     pub description: Option<String>,
     #[serde(rename = "type")]
@@ -129,7 +130,7 @@ pub struct CreateDocumentRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateDocumentRequest {
-    pub name: Option<String>,
+    pub title: Option<String>,
     pub author: Option<String>,
     pub description: Option<String>,
     #[serde(rename = "type")]
@@ -185,9 +186,9 @@ async fn create(
     State(state): State<CloudState>,
     Json(req): Json<CreateDocumentRequest>,
 ) -> Result<(StatusCode, Json<DocumentDto>), (StatusCode, Json<serde_json::Value>)> {
-    let name = req.name.trim();
-    if name.is_empty() {
-        return Err(err_response(StatusCode::BAD_REQUEST, "name is required"));
+    let title = req.title.trim();
+    if title.is_empty() {
+        return Err(err_response(StatusCode::BAD_REQUEST, "title is required"));
     }
     let author = req.author.trim();
     if author.is_empty() {
@@ -221,7 +222,7 @@ async fn create(
     }
 
     let now = Utc::now();
-    let new_id = compute_document_cid(name, author, &description, kind, source);
+    let new_id = compute_document_cid(title, author, &description, kind, source);
 
     let existing: Option<Document> = state
         .db
@@ -234,7 +235,7 @@ async fn create(
 
     let record = Document {
         id: None,
-        name: name.to_string(),
+        title: title.to_string(),
         author: author.to_string(),
         description,
         kind: kind.to_string(),
@@ -269,11 +270,11 @@ async fn update(
     let mut current = existing
         .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "document not found"))?;
 
-    if let Some(name) = req.name.as_ref().map(|n| n.trim()) {
-        if name.is_empty() {
-            return Err(err_response(StatusCode::BAD_REQUEST, "name cannot be empty"));
+    if let Some(title) = req.title.as_ref().map(|t| t.trim()) {
+        if title.is_empty() {
+            return Err(err_response(StatusCode::BAD_REQUEST, "title cannot be empty"));
         }
-        current.name = name.to_string();
+        current.title = title.to_string();
     }
 
     if let Some(author) = req.author.as_ref().map(|a| a.trim()) {
