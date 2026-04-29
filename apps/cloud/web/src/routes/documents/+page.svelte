@@ -844,7 +844,12 @@
 									<span class="mt-2 mb-1 text-xs font-semibold text-base-content/60 uppercase">
 										Subs/Lyrics{subsMatches.length > 0 ? ` (${subsMatches.length})` : ''}
 									</span>
-									{#if subsMatches.length === 0}
+									{#if searching && subsMatches.length === 0}
+										<div class="flex items-center gap-2 text-xs text-base-content/60">
+											<span class="loading loading-xs loading-spinner"></span>
+											<span>Searching…</span>
+										</div>
+									{:else if subsMatches.length === 0}
 										<p class="text-xs text-base-content/50">No matching subs/lyrics.</p>
 									{:else}
 										<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
@@ -932,7 +937,10 @@
 					</div>
 				{/if}
 				{#if searching}
-					<p class="text-sm text-base-content/60">Searching…</p>
+					<div class="flex items-center gap-2 text-sm text-base-content/60">
+						<span class="loading loading-sm loading-spinner"></span>
+						<span>Searching subs/lyrics…</span>
+					</div>
 				{:else if subsLyricsResults.length === 0}
 					<p class="text-sm text-base-content/60">
 						No subs/lyrics yet — pick a music or movie/TV type and search.
