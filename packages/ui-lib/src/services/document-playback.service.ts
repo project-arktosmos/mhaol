@@ -1,5 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import type { CloudDocument, DocumentFile } from 'ui-lib/types/document.type';
+import { documentStreamService, isVideoFile } from 'ui-lib/services/document-stream.service';
 
 export interface DocumentPlaybackState {
 	document: CloudDocument | null;
@@ -17,6 +18,10 @@ class DocumentPlaybackService {
 	select(document: CloudDocument): void {
 		const files = (document.files ?? []).filter((f) => f.type === 'ipfs');
 		this.state.set({ document, files });
+		const videos = files.filter(isVideoFile);
+		if (videos.length === 1) {
+			void documentStreamService.play(videos[0]);
+		}
 	}
 
 	clear(): void {

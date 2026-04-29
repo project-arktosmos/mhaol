@@ -84,7 +84,7 @@
 	}
 </script>
 
-<article class={classNames('card group bg-base-200 shadow-sm', classes)}>
+<article class={classNames('group card bg-base-200 shadow-sm', classes)}>
 	<header
 		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
 	>
@@ -117,7 +117,7 @@
 			/>
 			{#if document.description}
 				<figcaption
-					class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/50 px-4 py-3 text-xs whitespace-pre-wrap text-white opacity-0 transition-opacity [overflow-wrap:anywhere] group-hover:opacity-100"
+					class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/50 px-4 py-3 text-xs [overflow-wrap:anywhere] whitespace-pre-wrap text-white opacity-0 transition-opacity group-hover:opacity-100"
 				>
 					{document.description}
 				</figcaption>
@@ -125,7 +125,7 @@
 		</figure>
 	{:else if document.description}
 		<p
-			class="border-b border-base-content/10 px-4 py-3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere] text-base-content/80"
+			class="border-b border-base-content/10 px-4 py-3 text-xs [overflow-wrap:anywhere] whitespace-pre-wrap text-base-content/80"
 		>
 			{document.description}
 		</p>
@@ -154,11 +154,10 @@
 				<tbody>
 					{#each tableFiles as file, i (i)}
 						<tr>
-							<th class="w-1/3 align-top text-xs font-semibold text-base-content/70"
-								>{file.type}</th
+							<th class="w-1/3 align-top text-xs font-semibold text-base-content/70">{file.type}</th
 							>
 							<td
-								class="w-2/3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word]"
+								class="w-2/3 text-xs [overflow-wrap:anywhere] [word-break:break-word] whitespace-pre-wrap"
 								title={fileTooltip(file)}>{file.title ?? file.value}</td
 							>
 						</tr>
@@ -169,17 +168,58 @@
 	{/if}
 	{#if magnetFiles.length > 0 || hasIpfsFiles}
 		<footer class="flex flex-col gap-2 border-t border-base-content/10 px-4 py-3">
-			{#each magnetFiles as file, i (i)}
-				{@const torrent = torrentFor(file)}
-				{@const pending = isPending(file)}
-				{#if hasIpfsFiles}
-					<div class="flex items-center gap-2">
+			{#if hasIpfsFiles}
+				<button
+					type="button"
+					class="btn justify-start gap-2 btn-sm btn-primary"
+					onclick={() => documentPlaybackService.select(document)}
+					aria-label="Play"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						stroke="none"
+						class="h-4 w-4 shrink-0"
+						aria-hidden="true"
+					>
+						<polygon points="6 4 20 12 6 20 6 4" />
+					</svg>
+					<span>Play</span>
+				</button>
+			{:else}
+				{#each magnetFiles as file, i (i)}
+					{@const torrent = torrentFor(file)}
+					{@const pending = isPending(file)}
+					{#if torrent}
+						<div class="flex flex-col gap-1" title={fileTooltip(file)}>
+							<div class="flex items-center justify-between gap-2 text-xs">
+								<span class="truncate text-base-content/80">{file.title ?? torrent.name}</span>
+								<span class="shrink-0 font-mono text-base-content/70">{progressLabel(torrent)}</span
+								>
+							</div>
+							<progress
+								class={classNames('progress w-full', {
+									'progress-primary': torrent.state === 'downloading',
+									'progress-success': torrent.state === 'seeding',
+									'progress-warning': torrent.state === 'paused',
+									'progress-error': torrent.state === 'error',
+									'progress-info': torrent.state === 'initializing' || torrent.state === 'checking'
+								})}
+								value={progressPercent(torrent)}
+								max="100"
+							></progress>
+						</div>
+					{:else}
 						<button
 							type="button"
-							class="btn btn-outline btn-sm flex-1 justify-start gap-2 btn-disabled"
-							disabled
+							class={classNames('btn justify-start gap-2 btn-outline btn-sm', {
+								'btn-disabled': pending
+							})}
+							onclick={() => downloadMagnet(file)}
+							disabled={pending}
 							title={fileTooltip(file)}
-							aria-label="Torrent already downloaded"
+							aria-label={file.title ? `Download torrent: ${file.title}` : 'Download torrent'}
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -196,97 +236,12 @@
 								<polyline points="7 10 12 15 17 10" />
 								<line x1="12" y1="15" x2="12" y2="3" />
 							</svg>
-							<span class="truncate">{file.title ?? 'Downloaded'}</span>
+							<span class="truncate">
+								{pending ? 'Adding…' : (file.title ?? 'Download torrent')}
+							</span>
 						</button>
-						<button
-							type="button"
-							class="btn btn-primary btn-sm gap-2"
-							onclick={() => documentPlaybackService.select(document)}
-							aria-label="Play"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								viewBox="0 0 24 24"
-								fill="currentColor"
-								stroke="none"
-								class="h-4 w-4 shrink-0"
-								aria-hidden="true"
-							>
-								<polygon points="6 4 20 12 6 20 6 4" />
-							</svg>
-							<span>Play</span>
-						</button>
-					</div>
-				{:else if torrent}
-					<div class="flex flex-col gap-1" title={fileTooltip(file)}>
-						<div class="flex items-center justify-between gap-2 text-xs">
-							<span class="truncate text-base-content/80">{file.title ?? torrent.name}</span>
-							<span class="shrink-0 font-mono text-base-content/70">{progressLabel(torrent)}</span>
-						</div>
-						<progress
-							class={classNames('progress w-full', {
-								'progress-primary': torrent.state === 'downloading',
-								'progress-success': torrent.state === 'seeding',
-								'progress-warning': torrent.state === 'paused',
-								'progress-error': torrent.state === 'error',
-								'progress-info':
-									torrent.state === 'initializing' || torrent.state === 'checking'
-							})}
-							value={progressPercent(torrent)}
-							max="100"
-						></progress>
-					</div>
-				{:else}
-					<button
-						type="button"
-						class={classNames('btn btn-outline btn-sm justify-start gap-2', {
-							'btn-disabled': pending
-						})}
-						onclick={() => downloadMagnet(file)}
-						disabled={pending}
-						title={fileTooltip(file)}
-						aria-label={file.title ? `Download torrent: ${file.title}` : 'Download torrent'}
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							class="h-4 w-4 shrink-0"
-							aria-hidden="true"
-						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="7 10 12 15 17 10" />
-							<line x1="12" y1="15" x2="12" y2="3" />
-						</svg>
-						<span class="truncate">
-							{pending ? 'Adding…' : (file.title ?? 'Download torrent')}
-						</span>
-					</button>
-				{/if}
-			{/each}
-			{#if hasIpfsFiles && magnetFiles.length === 0}
-				<button
-					type="button"
-					class="btn btn-primary btn-sm justify-start gap-2"
-					onclick={() => documentPlaybackService.select(document)}
-					aria-label="Play"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="currentColor"
-						stroke="none"
-						class="h-4 w-4 shrink-0"
-						aria-hidden="true"
-					>
-						<polygon points="6 4 20 12 6 20 6 4" />
-					</svg>
-					<span>Play</span>
-				</button>
+					{/if}
+				{/each}
 			{/if}
 		</footer>
 	{/if}
