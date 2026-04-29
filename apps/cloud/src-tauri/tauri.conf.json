@@ -10,15 +10,7 @@
     "beforeBuildCommand": "pnpm --filter tauri-web build"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Mhaol Cloud",
-        "width": 900,
-        "height": 640,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }

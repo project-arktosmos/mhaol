@@ -77,12 +77,12 @@ The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node
 
 There are two desktop Tauri shells, one per app, each in its own crate so they have independent cargo targets and can run side by side without colliding:
 
-- **`apps/cloud/src-tauri/`** — crate `mhaol-cloud-shell`, binary `mhaol-cloud-shell`. `productName: "Mhaol Cloud"`, identifier `com.arktosmos.mhaol.cloud`, window title `Mhaol Cloud`.
+- **`apps/cloud/src-tauri/`** — crate `mhaol-cloud-shell`, binary `mhaol-cloud-shell`. `productName: "Mhaol Cloud"`, identifier `com.arktosmos.mhaol.cloud`. **Tray-only**: `app.windows: []`, no window is ever created. macOS sets `ActivationPolicy::Accessory` (no dock icon), `RunEvent::ExitRequested` calls `prevent_exit()` so the process stays alive without windows. The system tray icon (id `mhaol-cloud-tray`, tooltip "Mhaol Cloud") has two items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`.
 - **`apps/player/src-tauri/`** — crate `mhaol-player-shell`, binary `mhaol-player-shell`. `productName: "Mhaol Player"`, identifier `com.arktosmos.mhaol.player`, window title `Mhaol Player`. Carries `tauri.android.conf.json` and `tauri.ios.conf.json` overrides so the mobile shell wraps the player SPA directly (`frontendDist: ../dist-static`, `devUrl: http://localhost:9595`).
 
-Both desktop shells point at the **same shared health UI** under `apps/tauri/web/` (pnpm package `tauri-web`, dev port 1571) — a minimal Svelte SPA that polls `http://localhost:9898/api/cloud/status` and `http://localhost:9595/` and renders one panel per app. `VITE_MHAOL_HEALTH_APPS` (`cloud`, `player`, `cloud,player`) selects which panels are shown. Each shell's `beforeDevCommand` is idempotent: `(lsof -i:1571 >/dev/null 2>&1) || pnpm --filter tauri-web dev`, so when both shells run together (`pnpm dev`) only one tauri-web Vite server is started; the second shell sees 1571 already up and skips. tauri-web's Vite config uses `strictPort: true` to make port collisions fail loudly.
+The **player** shell points at the shared health UI under `apps/tauri/web/` (pnpm package `tauri-web`, dev port 1571) — a minimal Svelte SPA that polls `http://localhost:9898/api/cloud/status` and `http://localhost:9595/` and renders one panel per app. `VITE_MHAOL_HEALTH_APPS` (`cloud`, `player`, `cloud,player`) selects which panels are shown. The player shell's `beforeDevCommand` is idempotent: `(lsof -i:1571 >/dev/null 2>&1) || pnpm --filter tauri-web dev`. tauri-web's Vite config uses `strictPort: true` to make port collisions fail loudly. The cloud shell does **not** load this UI — it's tray-only and has no window — but `apps/cloud/src-tauri/tauri.conf.json` still references `frontendDist`/`devUrl`/`beforeDevCommand` so build/dev tooling resolves cleanly; nothing actually renders the assets.
 
-The Tauri webviews always show the health UI, never an app's frontend directly. The cloud and player frontends stay browser-accessible at `http://localhost:9898` and `http://localhost:9595`.
+The player Tauri webview shows the health UI, never an app's frontend directly. The cloud and player frontends stay browser-accessible at `http://localhost:9898` and `http://localhost:9595`. The cloud shell only contributes a system tray entry.
 
 Layout per shell (cloud and player are structurally identical):
 - `apps/<app>/src-tauri/Cargo.toml` — crate manifest
@@ -201,10 +201,10 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Full desktop stack: pre-starts tauri-web (1571) with VITE_MHAOL_HEALTH_APPS=cloud,player, then runs dev:cloud and dev:player concurrently — two named Tauri windows ("Mhaol Cloud", "Mhaol Player") sharing the one health UI.
+pnpm dev              # Full desktop stack: pre-starts tauri-web (1571) with VITE_MHAOL_HEALTH_APPS=cloud,player, then runs dev:cloud and dev:player concurrently — Mhaol Player shows the shared health UI, Mhaol Cloud is tray-only.
 pnpm dev:apps         # Same backends without any Tauri shell — cloud + player Vite servers only, browser-based workflow
 pnpm dev:node         # Rust node server only (PORT=1530)
-pnpm dev:cloud        # Cloud + its named Tauri shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + tauri-web :1571 + Mhaol Cloud window
+pnpm dev:cloud        # Cloud + its tray-only Tauri shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + tray icon (no window)
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
 pnpm dev:frontend     # Frontend dev server only (port 1570)
 pnpm dev:player       # Player + its named Tauri shell ("Mhaol Player"): Vite :9595 (browser-accessible) + tauri-web :1571 + Mhaol Player window
