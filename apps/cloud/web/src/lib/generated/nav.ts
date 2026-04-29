@@ -37,5 +37,11 @@ export const NAV_ITEMS: NavItem[] = [
 		"href": "/libraries",
 		"hasOwnPage": true,
 		"children": []
+	},
+	{
+		"label": "Youtube",
+		"href": "/youtube",
+		"hasOwnPage": true,
+		"children": []
 	}
 ];
