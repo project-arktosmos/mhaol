@@ -7,10 +7,33 @@ use axum::{
     Json, Router,
 };
 use chrono::{DateTime, Utc};
+use cid::Cid;
+use multihash::Multihash;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use surrealdb::sql::Thing;
 
 const TABLE: &str = "document";
+
+const SHA2_256_CODE: u64 = 0x12;
+const RAW_CODEC: u64 = 0x55;
+
+#[derive(Serialize)]
+struct DocumentPayloadView<'a> {
+    name: &'a str,
+    author: &'a str,
+    description: &'a str,
+}
+
+fn compute_document_cid(name: &str, author: &str, description: &str) -> String {
+    let view = DocumentPayloadView { name, author, description };
+    let json = serde_json::to_string_pretty(&view)
+        .expect("DocumentPayloadView serializes to JSON");
+    let digest = Sha256::digest(json.as_bytes());
+    let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
+        .expect("sha2-256 digest fits in multihash");
+    Cid::new_v1(RAW_CODEC, mh).to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
@@ -128,7 +151,17 @@ async fn create(
         .to_string();
 
     let now = Utc::now();
-    let new_id = uuid::Uuid::new_v4().to_string();
+    let new_id = compute_document_cid(name, author, &description);
+
+    let existing: Option<Document> = state
+        .db
+        .select((TABLE, new_id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    if let Some(existing) = existing {
+        return Ok((StatusCode::OK, Json(existing.into())));
+    }
+
     let record = Document {
         id: None,
         name: name.to_string(),
