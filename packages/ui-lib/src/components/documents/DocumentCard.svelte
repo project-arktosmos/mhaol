@@ -37,13 +37,13 @@
 
 <article class={classNames('card bg-base-200 shadow-sm', classes)}>
 	{#if coverImage}
-		<figure class="aspect-[3/4] overflow-hidden bg-base-300">
+		<figure class="bg-base-300">
 			<img
 				src={coverImage.url}
 				alt={document.title}
 				width={coverImage.width || undefined}
 				height={coverImage.height || undefined}
-				class="h-full w-full object-cover"
+				class="block h-auto w-full"
 				loading="lazy"
 			/>
 		</figure>
