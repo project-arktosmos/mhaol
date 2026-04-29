@@ -29,6 +29,7 @@ mhaol.git/
 │   ├── recommendations/              # Rust TMDB recommendations (queue worker + SQLite storage)
 │   ├── torrent/                      # Rust torrent implementation
 │   ├── ed2k/                         # Rust eDonkey/ed2k network client (search + add)
+│   ├── ipfs/                         # Rust IPFS node (libp2p + Bitswap + Kademlia DHT, embedded)
 │   └── webrtc/                       # WebRTC contact handshake layer (TypeScript)
 ├── pnpm-workspace.yaml
 └── package.json                      # Root workspace scripts
