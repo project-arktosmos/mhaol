@@ -156,24 +156,22 @@ impl DownloadPipeline {
         visitor_data: Option<&str>,
         prefer_browser: bool,
     ) -> Result<StreamUrlResult> {
-        let (player_response, _client, po_token_was_used) = if prefer_browser {
-            self.fetch_player_response_prefer_browser(video_id, po_token, visitor_data).await?
+        use crate::extractor::clients::{ANDROID, IOS, TV, WEB, WEB_EMBEDDED};
+
+        // Browser-priority client list. We use the same order whether or not
+        // a po_token is present — the post-fetch retry loop below decides
+        // which client wins, not the token.
+        let web_priority: &[&InnertubeClient] =
+            &[&*WEB, &*WEB_EMBEDDED, &*TV, &*ANDROID, &*IOS];
+        let clients: &[&InnertubeClient] = if prefer_browser || po_token.is_some() {
+            web_priority
         } else {
-            self.fetch_player_response(video_id, po_token, visitor_data).await?
+            &*CLIENT_PRIORITY
         };
 
-        if !player_response.is_playable() {
-            let reason = player_response
-                .unplayable_reason()
-                .unwrap_or_else(|| "Unknown reason".to_string());
-            return Err(YtDlpError::VideoUnavailable { reason }.into());
-        }
-
-        let mut resolved_formats = self.resolve_formats(&player_response, video_id).await?;
-
-        if resolved_formats.is_empty() {
-            return Err(YtDlpError::NoSuitableFormat.into());
-        }
+        let (player_response, mut resolved_formats, _client, po_token_was_used) = self
+            .fetch_and_resolve_with_clients(video_id, po_token, visitor_data, clients)
+            .await?;
 
         // Append pot=TOKEN when applicable
         if po_token_was_used {
@@ -679,18 +677,105 @@ impl DownloadPipeline {
         headers
     }
 
-    /// Force browser-client priority regardless of po_token presence. Used by the
-    /// browser-streaming path so audio-only adaptive URLs are signed for the WEB
-    /// User-Agent (otherwise the CDN 403s when the browser fetches them).
-    async fn fetch_player_response_prefer_browser(
+    /// Iterate clients and return the first one whose response is playable
+    /// AND whose formats resolve to >= 1 URL. The single-shot
+    /// `fetch_player_response_with_clients` returns the first client that
+    /// reports `playabilityStatus: OK`, but with the modern WEB surface that
+    /// flag can be `OK` while every returned format carries an unresolvable
+    /// `signatureCipher` (player.js extraction misses, throttled n-param,
+    /// etc.) — `resolve_formats` then yields an empty Vec and the caller has
+    /// to surface `NoSuitableFormat`. The browser-streaming path is the
+    /// loudest victim of this since it forces WEB first. Doing the resolve
+    /// here lets us drop a non-resolving client and try the next one in the
+    /// priority list, so a half-working WEB no longer poisons the whole
+    /// extraction.
+    async fn fetch_and_resolve_with_clients(
         &self,
         video_id: &str,
         po_token: Option<&str>,
         visitor_data: Option<&str>,
-    ) -> Result<(PlayerResponse, &'static InnertubeClient, bool)> {
-        use crate::extractor::clients::{ANDROID, IOS, TV, WEB, WEB_EMBEDDED};
-        let web_priority: &[&InnertubeClient] = &[&*WEB, &*WEB_EMBEDDED, &*TV, &*ANDROID, &*IOS];
-        self.fetch_player_response_with_clients(video_id, po_token, visitor_data, web_priority).await
+        clients: &[&'static InnertubeClient],
+    ) -> Result<(
+        PlayerResponse,
+        Vec<ResolvedFormat>,
+        &'static InnertubeClient,
+        bool,
+    )> {
+        let mut last_unplayable_reason: Option<String> = None;
+
+        for client in clients {
+            let (token, vd) = if client.is_browser {
+                (po_token, visitor_data)
+            } else {
+                (None, None)
+            };
+
+            let sts = if client.requires_js {
+                if let Err(e) = self.ensure_player_js_loaded(video_id).await {
+                    log::warn!(
+                        "Could not load player.js before {} request (no STS): {}",
+                        client.name,
+                        e
+                    );
+                }
+                self.sig_resolver.lock().sts()
+            } else {
+                None
+            };
+
+            let player_response = match self
+                .innertube
+                .player(video_id, client, sts, token, vd)
+                .await
+            {
+                Ok(resp) if resp.is_playable() => resp,
+                Ok(resp) => {
+                    let reason = resp.unplayable_reason().unwrap_or_default();
+                    log::warn!(
+                        "{} client returned unplayable for {}: {}",
+                        client.name,
+                        video_id,
+                        reason
+                    );
+                    if !reason.is_empty() {
+                        last_unplayable_reason = Some(reason);
+                    }
+                    continue;
+                }
+                Err(e) => {
+                    log::warn!("{} client failed for {}: {}", client.name, video_id, e);
+                    continue;
+                }
+            };
+
+            let resolved_formats = self.resolve_formats(&player_response, video_id).await?;
+
+            if resolved_formats.is_empty() {
+                log::warn!(
+                    "{} client returned playable response but resolved 0 formats for {} \u{2014} falling back to next client",
+                    client.name,
+                    video_id
+                );
+                continue;
+            }
+
+            let token_used = token.is_some();
+            log::info!(
+                "Got playable response with {} resolved formats from {} client for {}{}",
+                resolved_formats.len(),
+                client.name,
+                video_id,
+                if token_used { " (with PO token)" } else { "" },
+            );
+
+            return Ok((player_response, resolved_formats, client, token_used));
+        }
+
+        if let Some(reason) = last_unplayable_reason {
+            Err(YtDlpError::VideoUnavailable { reason }.into())
+        } else {
+            Err(YtDlpError::NoSuitableFormat.into())
+        }
     }
 
     /// Returns (player_response, client, po_token_was_used).
