@@ -11,7 +11,12 @@ use crate::util::{get_unix_timestamp, parse_magnet_uri};
 
 #[derive(Debug, Clone)]
 pub struct TrackingInfo {
-    pub output_path: Option<String>,
+    /// Parent directory the torrent was added under. The full output path is
+    /// derived by joining this with the resolved torrent name on each `list()`,
+    /// so we always reflect the actual on-disk layout (which can drift from
+    /// the magnet `dn=` once rqbit resolves the metadata, especially when
+    /// `dn=` contains literal slashes).
+    pub download_dir: Option<String>,
 }
 
 pub struct TorrentManager {
@@ -207,7 +212,7 @@ impl TorrentManager {
             self.set_tracking_info(
                 info_hash.clone(),
                 TrackingInfo {
-                    output_path: Some(file_path.clone()),
+                    download_dir: Some(output_path.clone()),
                 },
             );
 
@@ -243,7 +248,7 @@ impl TorrentManager {
         self.set_tracking_info(
             info_hash.clone(),
             TrackingInfo {
-                output_path: Some(file_path.clone()),
+                download_dir: Some(output_path.clone()),
             },
         );
 
@@ -376,24 +381,21 @@ impl TorrentManager {
             let info_hash = item.info_hash.to_string();
             let name = item.name.unwrap_or_else(|| "Unknown".to_string());
 
-            // Always rebuild output_path from the resolved item.name. The cached
-            // path may have been computed from the magnet's `dn=` display name,
-            // which can differ from the actual torrent metadata name once rqbit
-            // resolves it (e.g. magnet dn "The Dark Knight (2008) 720p ..." vs
-            // on-disk "The Dark Knight (2008)"). Preserve any custom download
-            // directory the user supplied at add-time by taking the parent of
-            // the cached path, falling back to the configured default.
-            let cached = self.get_tracking_info(&info_hash);
-            let download_dir: PathBuf = cached
-                .as_ref()
-                .and_then(|t| t.output_path.as_ref())
-                .and_then(|p| std::path::Path::new(p).parent().map(|p| p.to_path_buf()))
+            // Always derive output_path from the resolved item.name joined onto
+            // the tracked download_dir. The magnet `dn=` we cached at add-time
+            // can drift from the metadata name rqbit eventually resolves
+            // (e.g. dn contains a literal `/` from `[Remastered/2009]`), so we
+            // can't trust any name baked into the cached path.
+            let download_dir: PathBuf = self
+                .get_tracking_info(&info_hash)
+                .and_then(|t| t.download_dir)
+                .map(PathBuf::from)
                 .unwrap_or_else(|| self.download_path());
             let file_path = download_dir.join(&name).to_string_lossy().to_string();
             self.set_tracking_info(
                 info_hash.clone(),
                 TrackingInfo {
-                    output_path: Some(file_path.clone()),
+                    download_dir: Some(download_dir.to_string_lossy().to_string()),
                 },
             );
 
@@ -835,12 +837,12 @@ mod tests {
     fn set_and_get_tracking_info() {
         let mgr = TorrentManager::new();
         let info = TrackingInfo {
-            output_path: Some("/tmp/test".to_string()),
+            download_dir: Some("/tmp/test".to_string()),
         };
         mgr.set_tracking_info("abc123".to_string(), info);
         let retrieved = mgr.get_tracking_info("abc123");
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().output_path, Some("/tmp/test".to_string()));
+        assert_eq!(retrieved.unwrap().download_dir, Some("/tmp/test".to_string()));
     }
 
     #[test]
@@ -855,17 +857,17 @@ mod tests {
         mgr.set_tracking_info(
             "abc".to_string(),
             TrackingInfo {
-                output_path: Some("/first".to_string()),
+                download_dir: Some("/first".to_string()),
             },
         );
         mgr.set_tracking_info(
             "abc".to_string(),
             TrackingInfo {
-                output_path: Some("/second".to_string()),
+                download_dir: Some("/second".to_string()),
             },
         );
         let retrieved = mgr.get_tracking_info("abc").unwrap();
-        assert_eq!(retrieved.output_path, Some("/second".to_string()));
+        assert_eq!(retrieved.download_dir, Some("/second".to_string()));
     }
 
     #[test]
@@ -874,7 +876,7 @@ mod tests {
         mgr.set_tracking_info(
             "abc".to_string(),
             TrackingInfo {
-                output_path: None,
+                download_dir: None,
             },
         );
         mgr.mark_torrent_completed("abc".to_string());
@@ -1280,7 +1282,7 @@ mod tests {
         let tracking =
             mgr.get_tracking_info("da39a3ee5e6b4b0d3255bfef95601890afd80709");
         assert!(tracking.is_some());
-        assert!(tracking.unwrap().output_path.is_some());
+        assert!(tracking.unwrap().download_dir.is_some());
     }
 
     #[tokio::test]
@@ -1352,24 +1354,24 @@ mod tests {
     #[test]
     fn tracking_info_clone() {
         let info = TrackingInfo {
-            output_path: Some("/path".to_string()),
+            download_dir: Some("/path".to_string()),
         };
         let cloned = info.clone();
-        assert_eq!(cloned.output_path, info.output_path);
+        assert_eq!(cloned.download_dir, info.download_dir);
     }
 
     #[test]
     fn tracking_info_debug() {
         let info = TrackingInfo {
-            output_path: Some("/test".to_string()),
+            download_dir: Some("/test".to_string()),
         };
         let debug = format!("{:?}", info);
         assert!(debug.contains("/test"));
     }
 
     #[test]
-    fn tracking_info_none_output_path() {
-        let info = TrackingInfo { output_path: None };
-        assert!(info.output_path.is_none());
+    fn tracking_info_none_download_dir() {
+        let info = TrackingInfo { download_dir: None };
+        assert!(info.download_dir.is_none());
     }
 }
