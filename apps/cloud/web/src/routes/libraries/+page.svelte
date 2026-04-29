@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import { librariesService } from '$lib/libraries.service';
+	import { librariesService, type ScanResponse } from '$lib/libraries.service';
 	import DirectoryPicker from '../../components/DirectoryPicker.svelte';
 
 	const libsStore = librariesService.state;
@@ -11,6 +11,9 @@
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
+	let scanningId = $state<string | null>(null);
+	let scanResults = $state<Record<string, ScanResponse>>({});
+	let scanErrors = $state<Record<string, string>>({});
 
 	onMount(() => {
 		librariesService.refresh();
@@ -52,6 +55,42 @@
 		} finally {
 			creating = false;
 		}
+	}
+
+	async function scan(id: string) {
+		scanningId = id;
+		const { [id]: _ignored, ...rest } = scanErrors;
+		scanErrors = rest;
+		try {
+			const result = await librariesService.scan(id);
+			scanResults = { ...scanResults, [id]: result };
+		} catch (err) {
+			scanErrors = {
+				...scanErrors,
+				[id]: err instanceof Error ? err.message : 'Unknown error'
+			};
+		} finally {
+			scanningId = null;
+		}
+	}
+
+	function clearScan(id: string) {
+		const { [id]: _ignored, ...rest } = scanResults;
+		scanResults = rest;
+		const { [id]: _ignored2, ...errRest } = scanErrors;
+		scanErrors = errRest;
+	}
+
+	function formatBytes(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		const units = ['KB', 'MB', 'GB', 'TB'];
+		let value = bytes / 1024;
+		let i = 0;
+		while (value >= 1024 && i < units.length - 1) {
+			value /= 1024;
+			i++;
+		}
+		return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[i]}`;
 	}
 
 	async function remove(id: string) {
@@ -166,15 +205,80 @@
 								<td class="font-mono text-xs break-all">{lib.path}</td>
 								<td class="text-xs text-base-content/60">{formatDate(lib.created_at)}</td>
 								<td class="text-right">
-									<button
-										class="btn text-error btn-ghost btn-xs"
-										onclick={() => remove(lib.id)}
-										disabled={deletingId === lib.id}
-									>
-										{deletingId === lib.id ? 'Removing…' : 'Remove'}
-									</button>
+									<div class="flex justify-end gap-1">
+										<button
+											class="btn btn-ghost btn-xs"
+											onclick={() => scan(lib.id)}
+											disabled={scanningId === lib.id}
+										>
+											{scanningId === lib.id ? 'Scanning…' : 'Scan'}
+										</button>
+										<button
+											class="btn text-error btn-ghost btn-xs"
+											onclick={() => remove(lib.id)}
+											disabled={deletingId === lib.id}
+										>
+											{deletingId === lib.id ? 'Removing…' : 'Remove'}
+										</button>
+									</div>
 								</td>
 							</tr>
+							{#if scanErrors[lib.id]}
+								<tr>
+									<td colspan="3" class="bg-base-100">
+										<div class="my-2 alert alert-error">
+											<span class="text-sm">{scanErrors[lib.id]}</span>
+											<button class="btn btn-ghost btn-xs" onclick={() => clearScan(lib.id)}>
+												Dismiss
+											</button>
+										</div>
+									</td>
+								</tr>
+							{:else if scanResults[lib.id]}
+								<tr>
+									<td colspan="3" class="bg-base-100 p-3">
+										<div class="flex flex-col gap-2">
+											<div class="flex items-center justify-between gap-2">
+												<p class="text-xs text-base-content/70">
+													{scanResults[lib.id].total_files} files —
+													{formatBytes(scanResults[lib.id].total_size)} total
+												</p>
+												<button class="btn btn-ghost btn-xs" onclick={() => clearScan(lib.id)}>
+													Hide
+												</button>
+											</div>
+											{#if scanResults[lib.id].entries.length === 0}
+												<p class="text-xs text-base-content/60">No files in this directory.</p>
+											{:else}
+												<div class="max-h-72 overflow-y-auto rounded border border-base-content/10">
+													<table class="table table-xs">
+														<thead class="sticky top-0 bg-base-200">
+															<tr>
+																<th>Path</th>
+																<th class="w-32">MIME</th>
+																<th class="w-24 text-right">Size</th>
+															</tr>
+														</thead>
+														<tbody>
+															{#each scanResults[lib.id].entries as entry (entry.path)}
+																<tr>
+																	<td class="font-mono text-xs break-all">
+																		{entry.relative_path}
+																	</td>
+																	<td class="font-mono text-xs">{entry.mime}</td>
+																	<td class="text-right text-xs">
+																		{formatBytes(entry.size)}
+																	</td>
+																</tr>
+															{/each}
+														</tbody>
+													</table>
+												</div>
+											{/if}
+										</div>
+									</td>
+								</tr>
+							{/if}
 						{/each}
 					</tbody>
 				</table>

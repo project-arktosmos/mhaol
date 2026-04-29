@@ -7,6 +7,20 @@ export interface Library {
 	updated_at: string;
 }
 
+export interface ScanEntry {
+	path: string;
+	relative_path: string;
+	size: number;
+	mime: string;
+}
+
+export interface ScanResponse {
+	root: string;
+	total_files: number;
+	total_size: number;
+	entries: ScanEntry[];
+}
+
 export interface LibrariesState {
 	loading: boolean;
 	libraries: Library[];
@@ -55,6 +69,14 @@ class LibrariesService {
 		const created = (await res.json()) as Library;
 		this.state.update((s) => ({ ...s, libraries: [...s.libraries, created] }));
 		return created;
+	}
+
+	async scan(id: string): Promise<ScanResponse> {
+		const res = await fetch(`/api/libraries/${encodeURIComponent(id)}/scan`, {
+			cache: 'no-store'
+		});
+		if (!res.ok) throw new Error(await parseError(res));
+		return (await res.json()) as ScanResponse;
 	}
 
 	async remove(id: string): Promise<void> {

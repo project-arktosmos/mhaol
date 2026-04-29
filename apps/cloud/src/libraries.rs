@@ -59,6 +59,7 @@ pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/", get(list).post(create))
         .route("/{id}", put(update).delete(delete).get(get_one))
+        .route("/{id}/scan", get(scan))
 }
 
 fn ensure_dir(path: &std::path::Path) -> Result<(), std::io::Error> {
@@ -228,6 +229,91 @@ async fn delete(
         Some(_) => Ok(StatusCode::NO_CONTENT),
         None => Err(err_response(StatusCode::NOT_FOUND, "library not found")),
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct ScanEntry {
+    pub path: String,
+    pub relative_path: String,
+    pub size: u64,
+    pub mime: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ScanResponse {
+    pub root: String,
+    pub total_files: usize,
+    pub total_size: u64,
+    pub entries: Vec<ScanEntry>,
+}
+
+fn scan_directory(root: PathBuf) -> ScanResponse {
+    let mut entries: Vec<ScanEntry> = Vec::new();
+    let mut total_size: u64 = 0;
+
+    for entry in walkdir::WalkDir::new(&root).follow_links(false).into_iter().flatten() {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let abs = entry.path();
+        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        let mime = mime_guess::from_path(abs)
+            .first()
+            .map(|m| m.essence_str().to_string())
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+        let relative = abs
+            .strip_prefix(&root)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| abs.to_string_lossy().to_string());
+        total_size += size;
+        entries.push(ScanEntry {
+            path: abs.to_string_lossy().to_string(),
+            relative_path: relative,
+            size,
+            mime,
+        });
+    }
+
+    entries.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+
+    ScanResponse {
+        root: root.to_string_lossy().to_string(),
+        total_files: entries.len(),
+        total_size,
+        entries,
+    }
+}
+
+async fn scan(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<ScanResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let lib: Option<Library> = state
+        .db
+        .select((TABLE, id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let lib = lib.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "library not found"))?;
+
+    let root = PathBuf::from(&lib.path);
+    if !root.exists() {
+        return Err(err_response(
+            StatusCode::NOT_FOUND,
+            format!("library directory does not exist: {}", root.display()),
+        ));
+    }
+    if !root.is_dir() {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            format!("library path is not a directory: {}", root.display()),
+        ));
+    }
+
+    let response = tokio::task::spawn_blocking(move || scan_directory(root))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("scan task failed: {e}")))?;
+
+    Ok(Json(response))
 }
 
 impl IntoResponse for LibraryDto {
