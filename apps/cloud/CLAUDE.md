@@ -55,12 +55,18 @@ The cloud binary used to depend on `mhaol-node` and spawn its recommendation wor
 
 ## WebUI
 
-The Svelte app lives at `apps/cloud/web/` (pnpm package name `cloud`) and builds to `apps/cloud/web/dist-static/`. The cloud crate embeds that directory via `rust-embed` and serves it as a fallback for any non-API path. Build it with `pnpm --filter cloud build` (or `pnpm build:cloud` to build the WebUI and the release binary together).
+The Svelte app lives at `apps/cloud/web/` (pnpm package name `cloud`). It is served two different ways:
+
+- **Dev (debug builds)** — the Rust server (port 1540) issues a 307 redirect for any non-`/api/*` request to the Vite dev server on port **9596** (configurable via `CLOUD_DEV_PROXY`). The Vite server in turn proxies `/api/*` calls back to 1540, so a single browser tab on 9596 gives you the live Svelte app with hot reload plus the real Rust API. `pnpm dev` starts both processes; just hit either port and you'll end up on 9596.
+- **Production (release builds)** — the Rust server embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it directly as the fallback for any non-API path. Build it with `pnpm --filter cloud build` (or `pnpm build:cloud` to build the WebUI and the release binary together).
 
 ## Running
 
 ```bash
-# Dev — Rust server on 1540
+# Dev — starts cloud Rust server (1540) + cloud WebUI Vite (9596) + player (9595)
+pnpm dev
+
+# Dev — Rust server only on 1540 (redirects WebUI traffic to CLOUD_DEV_PROXY)
 pnpm dev:cloud
 
 # Dev — WebUI hot-reload on 9596 (proxies /api to :1540)
@@ -77,6 +83,7 @@ pnpm build:cloud
 - `DB_PATH` — SurrealDB store path (default: `apps/cloud/cloud-surrealkv/`)
 - `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-surrealkv/`
 - `SIGNALING_URL` — PartyKit signaling URL (default: hosted instance)
+- `CLOUD_DEV_PROXY` — Debug-build only. URL the WebUI fallback redirects to (default: `http://localhost:9596`).
 
 ## Worker subcommand
 
