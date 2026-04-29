@@ -45,7 +45,7 @@ The cloud crate directly depends on these mhaol packages and reports their healt
 - `mhaol-yt-dlp` — YouTube download manager (cfg(not(target_os = "android"))).
 - `mhaol-torrent` — `librqbit`-backed torrent session, initialized in the background on startup so the server can bind quickly (cfg(not(target_os = "android"))).
 - `mhaol-ed2k` — eDonkey/ed2k client (cfg(not(target_os = "android"))).
-- `mhaol-ipfs` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT, optional mDNS), initialized in the background on startup. The blockstore lives at `<DATA_DIR>/downloads/ipfs/` (cfg(not(target_os = "android"))).
+- `mhaol-ipfs` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT, optional mDNS), initialized in the background on startup. The blockstore lives at `<DATA_DIR>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node always runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<DATA_DIR>/downloads/ipfs/swarm.key` (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped, and the transport stack is constrained to TCP+pnet+noise+yamux. Copy the file to every other node that should join the network.
 
 Default download paths land under `<DATA_DIR>/downloads/{torrents,ed2k,ipfs}` (or `<crate>/downloads/...` if `DATA_DIR` is unset). yt-dlp honors `YTDL_OUTPUT_DIR`/`YTDL_PO_TOKEN`/`YTDL_VISITOR_DATA`/`YTDL_COOKIES` via `YtDownloadConfig::from_env()`.
 
@@ -83,6 +83,7 @@ pnpm build:cloud
 - `DB_PATH` — SurrealDB store path (default: `apps/cloud/cloud-surrealkv/`)
 - `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-surrealkv/`
 - `SIGNALING_URL` — PartyKit signaling URL (default: hosted instance)
+- `IPFS_SWARM_KEY_FILE` — Path to the IPFS pre-shared swarm key. Default: `<DATA_DIR>/downloads/ipfs/swarm.key` (auto-generated on first boot when missing). All nodes on the same private swarm must share this file byte-for-byte.
 
 ## Worker subcommand
 
