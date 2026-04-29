@@ -5,9 +5,7 @@
 
   const docs = documentsService.state;
 
-  onMount(() => {
-    documentsService.refresh();
-  });
+  onMount(() => documentsService.start());
 </script>
 
 <svelte:head>

@@ -210,8 +210,9 @@
 	});
 
 	onMount(() => {
-		documentsService.refresh();
+		const cleanup = documentsService.start();
 		consumeUrlParams();
+		return cleanup;
 	});
 
 	function consumeUrlParams() {
