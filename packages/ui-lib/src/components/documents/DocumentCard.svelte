@@ -49,12 +49,15 @@
 		</figure>
 	{/if}
 	<div class="card-body p-0">
-		<table class="table w-full table-sm">
+		<table class="table w-full table-fixed table-sm">
 			<tbody>
 				{#each rows as row (row.key)}
 					<tr>
 						<th class="w-1/3 align-top text-xs font-semibold text-base-content/70">{row.key}</th>
-						<td class="text-xs break-words whitespace-pre-wrap">{row.value}</td>
+						<td
+							class="w-2/3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word]"
+							>{row.value}</td
+						>
 					</tr>
 				{/each}
 			</tbody>
