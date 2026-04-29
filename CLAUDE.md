@@ -7,6 +7,7 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
 - `apps/node/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
 - `apps/cloud/CLAUDE.md` — Cloud server (node services + embedded Svelte health WebUI)
+- `apps/tauri/CLAUDE.md` — Tauri shell (desktop health dashboard, mobile player wrapper)
 ---
 
 ## Monorepo Overview
@@ -18,7 +19,8 @@ mhaol.git/
 │   ├── player/                       # Player SPA, mirrors frontend visuals/setup (port 9595)
 │   ├── node/                         # Rust Axum server (standalone, port 1530)
 │   ├── cloud/                        # Rust Axum server + nested Svelte WebUI under cloud/web/, single user-facing port 9898 (dev: Vite on 9898 proxies /api → loopback Rust on 9899; prod: Rust on 9898 serves embedded WebUI)
-│   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
+│   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
+│   └── tauri/                        # Tauri shell — desktop loads a minimal health UI for cloud (9898) + player (9595); mobile wraps the player app
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, OpenLibrary, Wyzie subtitles, torrent search)
@@ -70,9 +72,23 @@ The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node
 - `apps/cloud/src/frontend.rs` — Embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it as the fallback handler
 - `apps/cloud/web/` — SvelteKit static SPA (pnpm package `cloud`) built with the same `ui-lib` components as the player. Builds to `apps/cloud/web/dist-static/`, which is what the cloud crate embeds at compile time.
 
+### Tauri
+
+The Tauri app at `apps/tauri/` is a desktop + mobile shell. Crate name `mhaol-tauri`, binary `mhaol-tauri`. The shell loads different frontends per platform:
+
+- **Desktop** — loads `apps/tauri/web/`, a minimal Svelte SPA (pnpm package `tauri-web`, dev port 1571) that polls `http://localhost:9898/api/cloud/status` and `http://localhost:9595/` and renders one health panel per app (status, latency, uptime, version).
+- **Mobile (Android/iOS)** — `tauri.android.conf.json` and `tauri.ios.conf.json` override `frontendDist` to `../../player/dist-static` and `devUrl` to `http://localhost:9595`, so the mobile shell wraps the player app directly.
+
+Layout:
+- `apps/tauri/src-tauri/Cargo.toml` — Tauri crate manifest
+- `apps/tauri/src-tauri/src/lib.rs` / `main.rs` — Tauri entry point (uses `mobile_entry_point` for Android/iOS)
+- `apps/tauri/src-tauri/tauri.conf.json` — base + desktop config (frontendDist `../web/dist-static`, devUrl `http://localhost:1571`)
+- `apps/tauri/src-tauri/tauri.android.conf.json`, `tauri.ios.conf.json` — mobile overrides pointing at the player
+- `apps/tauri/web/` — desktop health UI; static SPA, builds to `apps/tauri/web/dist-static/`
+
 The cloud frontend has these screens:
 - **Health** (`/`) — polls `/api/cloud/status` every 5 seconds and renders status, latency, uptime, bind, package health, and identities.
-- **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. The form lets you pick an existing directory, or browse to a parent and create a new subfolder; each library is identified by its directory path. Each row has a `Scan` button that walks the directory recursively, reports file size + MIME, and asynchronously pins audio files to IPFS.
+- **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. The form lets you pick an existing directory, or browse to a parent and create a new subfolder; each library is identified by its directory path. Each row has a `Scan` button that walks the directory recursively, reports file size + MIME, and asynchronously pins audio, video, and image files to IPFS.
 - **IPFS** (`/ipfs`) — reads `/api/ipfs/pins` and lists every pin recorded by library scans (CID, path, MIME, size).
 
 ### Transport Layer
@@ -200,6 +216,13 @@ pnpm format           # Prettier write
 # Browser extension
 pnpm app:shepperd         # Shepperd dev (watch mode)
 pnpm app:shepperd:build   # Shepperd production build
+
+# Tauri shell (apps/tauri)
+pnpm app:tauri            # Desktop dev — boots the health UI + Tauri webview
+pnpm app:tauri:web        # Health UI Vite dev server only (port 1571)
+pnpm app:tauri:build      # Desktop release build
+pnpm tauri:android:dev    # adb reverse :9595 then run the mobile shell pointing at the player
+pnpm tauri:android:build  # Mobile release build (bundles player/dist-static)
 
 # Signaling
 pnpm signaling:dev    # PartyKit local dev

@@ -5,6 +5,7 @@ members = [
     "apps/node",
     "apps/cloud",
     "apps/signaling",
+    "apps/tauri/src-tauri",
     "packages/identity",
     "packages/queue",
     "packages/yt-dlp",

@@ -1,0 +1,16 @@
+[package]
+name = "mhaol-tauri"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "mhaol_tauri"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.10", features = [] }
+tauri-plugin-shell = "2"
