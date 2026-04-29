@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
-	import { isVideoFile } from 'ui-lib/services/document-stream.service';
+	import { isPlayableFile } from 'ui-lib/services/document-stream.service';
 	import type { DocumentFile } from 'ui-lib/types/document.type';
 
 	interface Props {
@@ -33,7 +33,7 @@
 		{:else}
 			<ul class="flex flex-col gap-1">
 				{#each $state.files as file (file.value)}
-					{@const playable = !!onPlayFile && isVideoFile(file)}
+					{@const playable = !!onPlayFile && isPlayableFile(file)}
 					<li
 						class={classNames(
 							'flex flex-col gap-0.5 rounded border border-base-content/10 bg-base-100 px-2 py-1',
@@ -70,16 +70,10 @@
 								</span>
 							</button>
 						{:else}
-							<span
-								class="truncate text-xs font-medium"
-								title={file.title ?? file.value}
-							>
+							<span class="truncate text-xs font-medium" title={file.title ?? file.value}>
 								{file.title ?? file.value}
 							</span>
-							<span
-								class="truncate font-mono text-[10px] text-base-content/60"
-								title={file.value}
-							>
+							<span class="truncate font-mono text-[10px] text-base-content/60" title={file.value}>
 								{file.value}
 							</span>
 						{/if}

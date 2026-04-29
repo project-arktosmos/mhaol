@@ -229,7 +229,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		name: string,
 		sessionId: string,
 		roomId: string,
-		signalingUrl: string
+		signalingUrl: string,
+		mode: 'audio' | 'video' = 'video'
 	): Promise<void> {
 		if (!browser) return;
 
@@ -240,7 +241,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			type: 'library',
 			name,
 			outputPath: '',
-			mode: 'video',
+			mode,
 			format: null,
 			videoFormat: null,
 			thumbnailUrl: null,

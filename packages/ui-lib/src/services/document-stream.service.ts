@@ -10,10 +10,20 @@ interface StartSessionResponse {
 }
 
 const VIDEO_EXTENSIONS = /\.(mp4|m4v|mkv|webm|mov|avi|ts|mpe?g|wmv|flv|ogv)$/i;
+const AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|aac|alac|ogg|oga|opus|wav|wma|aiff|aif|ape)$/i;
 
 export function isVideoFile(file: DocumentFile): boolean {
 	const label = file.title ?? file.value ?? '';
 	return VIDEO_EXTENSIONS.test(label);
+}
+
+export function isAudioFile(file: DocumentFile): boolean {
+	const label = file.title ?? file.value ?? '';
+	return AUDIO_EXTENSIONS.test(label);
+}
+
+export function isPlayableFile(file: DocumentFile): boolean {
+	return isVideoFile(file) || isAudioFile(file);
 }
 
 class DocumentStreamService {
@@ -27,7 +37,14 @@ class DocumentStreamService {
 		});
 
 		const name = file.title ?? file.value;
-		await playerService.playRemote(name, session.sessionId, session.roomId, session.signalingUrl);
+		const mode: 'audio' | 'video' = isAudioFile(file) ? 'audio' : 'video';
+		await playerService.playRemote(
+			name,
+			session.sessionId,
+			session.roomId,
+			session.signalingUrl,
+			mode
+		);
 	}
 }
 
