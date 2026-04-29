@@ -6,6 +6,7 @@
 		documentTorrentsService,
 		infoHashFromMagnet
 	} from 'ui-lib/services/document-torrents.service';
+	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 
 	interface Props {
@@ -199,9 +200,9 @@
 						</button>
 						<button
 							type="button"
-							class="btn btn-primary btn-sm gap-2 btn-disabled"
-							disabled
-							aria-label="Play (not implemented)"
+							class="btn btn-primary btn-sm gap-2"
+							onclick={() => documentPlaybackService.select(document)}
+							aria-label="Play"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -270,9 +271,9 @@
 			{#if hasIpfsFiles && magnetFiles.length === 0}
 				<button
 					type="button"
-					class="btn btn-primary btn-sm justify-start gap-2 btn-disabled"
-					disabled
-					aria-label="Play (not implemented)"
+					class="btn btn-primary btn-sm justify-start gap-2"
+					onclick={() => documentPlaybackService.select(document)}
+					aria-label="Play"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
