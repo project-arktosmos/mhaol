@@ -20,6 +20,9 @@ importers:
       '@sveltejs/adapter-static':
         specifier: ^3.0.10
         version: 3.0.10(@sveltejs/kit@2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)))
+      addons:
+        specifier: workspace:*
+        version: link:../../../packages/addons
       classnames:
         specifier: ^2.5.1
         version: 2.5.1

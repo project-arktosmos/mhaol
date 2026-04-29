@@ -8,6 +8,7 @@
 		type DocumentType,
 		type DocumentSource
 	} from '$lib/documents.service';
+	import { searchSource, type SearchResultItem } from '$lib/search.service';
 	import { computeCidV1Raw } from '$lib/cid';
 
 	const docsStore = documentsService.state;
@@ -26,6 +27,28 @@
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
+
+	let searching = $state(false);
+	let searchError = $state<string | null>(null);
+	let searchResults = $state<SearchResultItem[]>([]);
+
+	async function runSearch() {
+		const trimmed = title.trim();
+		if (!trimmed) {
+			searchError = 'Enter a title to search';
+			return;
+		}
+		searching = true;
+		searchError = null;
+		try {
+			searchResults = await searchSource(source, type, trimmed);
+		} catch (err) {
+			searchError = err instanceof Error ? err.message : 'Unknown error';
+			searchResults = [];
+		} finally {
+			searching = false;
+		}
+	}
 
 	const payloadJson = $derived(
 		JSON.stringify(
@@ -183,13 +206,25 @@
 						<tr>
 							<th class="w-32 align-middle">Title</th>
 							<td>
-								<input
-									type="text"
-									class="input-bordered input input-sm w-full"
-									placeholder="Project brief"
-									bind:value={title}
-									disabled={creating}
-								/>
+								<div class="flex items-center gap-2">
+									<input
+										type="text"
+										class="input-bordered input input-sm w-full"
+										placeholder="Project brief"
+										bind:value={title}
+										disabled={creating}
+									/>
+									<button
+										type="button"
+										class={classNames('btn btn-outline btn-sm', {
+											'btn-disabled': searching || creating
+										})}
+										onclick={runSearch}
+										disabled={searching || creating}
+									>
+										{searching ? 'Searching…' : 'Search'}
+									</button>
+								</div>
 							</td>
 						</tr>
 						<tr>
@@ -231,6 +266,48 @@
 		</form>
 		{#if createError}
 			<p class="mt-2 text-sm text-error">{createError}</p>
+		{/if}
+	</section>
+
+	<section class="card border border-base-content/10 bg-base-200 p-4">
+		<h2 class="mb-3 text-lg font-semibold">Search results</h2>
+		<p class="mb-3 text-xs text-base-content/60">
+			Results from <code>{source}</code> for type <code>{type}</code>.
+		</p>
+		{#if searchError}
+			<div class="mb-3 alert alert-error">
+				<span>{searchError}</span>
+			</div>
+		{/if}
+		{#if searching}
+			<p class="text-sm text-base-content/60">Searching…</p>
+		{:else if searchResults.length === 0}
+			<p class="text-sm text-base-content/60">No results yet — type a title and click Search.</p>
+		{:else}
+			<div class="overflow-x-auto rounded-box border border-base-content/10">
+				<table class="table table-sm">
+					<thead>
+						<tr>
+							<th>Title</th>
+							<th>Author</th>
+							<th>Description</th>
+							<th>External ID</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each searchResults as result, i (result.externalId ?? i)}
+							<tr>
+								<td class="font-medium">{result.title}</td>
+								<td>{result.author}</td>
+								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
+									>{result.description}</td
+								>
+								<td class="font-mono text-xs text-base-content/70">{result.externalId ?? ''}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
 		{/if}
 	</section>
 
