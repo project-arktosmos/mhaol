@@ -5,9 +5,11 @@
 	interface Props {
 		document: CloudDocument;
 		classes?: string;
+		onRemove?: (id: string) => void;
+		removing?: boolean;
 	}
 
-	let { document, classes = '' }: Props = $props();
+	let { document, classes = '', onRemove, removing = false }: Props = $props();
 
 	let coverImage = $derived(document.images?.[0] ?? null);
 
@@ -31,6 +33,17 @@
 			{document.title}
 		</h3>
 		<span class="text-xs text-base-content/70">{hasYear ? document.year : ''}</span>
+		{#if onRemove}
+			<button
+				type="button"
+				class="btn text-error btn-ghost btn-xs"
+				onclick={() => onRemove?.(document.id)}
+				disabled={removing}
+				aria-label="Remove document"
+			>
+				{removing ? '…' : '×'}
+			</button>
+		{/if}
 	</header>
 	{#if coverImage}
 		<figure class="relative overflow-hidden bg-base-300">
