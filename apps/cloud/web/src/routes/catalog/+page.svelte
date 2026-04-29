@@ -13,13 +13,6 @@
 		type CatalogSource
 	} from '$lib/catalog.service';
 	import {
-		formatSizeBytes,
-		matchTorrentsForResult,
-		searchTorrents,
-		type SearchResultItem,
-		type TorrentResultItem
-	} from '$lib/search.service';
-	import {
 		documentsService,
 		type Document,
 		type DocumentSource,
@@ -44,17 +37,7 @@
 	let itemsLoading = $state(false);
 	let itemsError = $state<string | null>(null);
 
-	type ItemTorrentStatus = 'pending' | 'searching' | 'done' | 'error';
-	interface ItemTorrentState {
-		status: ItemTorrentStatus;
-		matches: TorrentResultItem[];
-		error: string | null;
-	}
-	let torrentState = $state<Record<string, ItemTorrentState>>({});
 	let itemDocs = $state<Record<string, Document>>({});
-	let addedHashes = $state<Set<string>>(new Set());
-	let addingHash = $state<string | null>(null);
-	let assignError = $state<string | null>(null);
 	let runId = 0;
 
 	const currentSource = $derived(sources.find((s) => s.id === addon));
@@ -96,19 +79,6 @@
 		return 'tmdb';
 	}
 
-	function itemAsSearchResult(item: CatalogItem): SearchResultItem {
-		return {
-			title: item.title,
-			description: item.description ?? '',
-			artists: [],
-			images: [],
-			files: [],
-			year: item.year,
-			externalId: item.id,
-			raw: item
-		};
-	}
-
 	async function refreshGenres() {
 		if (!addon || !hasFilter) {
 			genres = [];
@@ -133,14 +103,12 @@
 	async function refreshItems() {
 		if (!addon) {
 			items = [];
-			torrentState = {};
 			itemDocs = {};
 			return;
 		}
 		itemsLoading = true;
 		itemsError = null;
 		runId++;
-		torrentState = {};
 		itemDocs = {};
 		try {
 			const result = await loadPopular(addon, {
@@ -158,7 +126,6 @@
 		} finally {
 			itemsLoading = false;
 		}
-		void runTorrentSearches();
 		void createDocumentsForItems();
 	}
 
@@ -191,68 +158,6 @@
 				}
 			})
 		);
-	}
-
-	async function runTorrentSearches() {
-		const myRun = ++runId;
-		const docType = mapToDocumentType(addon, type);
-		const seeded: Record<string, ItemTorrentState> = {};
-		for (const item of items) {
-			seeded[item.id] = { status: 'pending', matches: [], error: null };
-		}
-		torrentState = seeded;
-		for (const item of items) {
-			if (myRun !== runId) return;
-			torrentState = {
-				...torrentState,
-				[item.id]: { status: 'searching', matches: [], error: null }
-			};
-			try {
-				const torrents = await searchTorrents(docType, item.title);
-				if (myRun !== runId) return;
-				const matches = matchTorrentsForResult(itemAsSearchResult(item), torrents);
-				torrentState = {
-					...torrentState,
-					[item.id]: { status: 'done', matches, error: null }
-				};
-			} catch (err) {
-				if (myRun !== runId) return;
-				torrentState = {
-					...torrentState,
-					[item.id]: {
-						status: 'error',
-						matches: [],
-						error: err instanceof Error ? err.message : 'Unknown error'
-					}
-				};
-			}
-		}
-	}
-
-	async function assignTorrent(item: CatalogItem, torrent: TorrentResultItem) {
-		if (!torrent.magnetLink || addedHashes.has(torrent.magnetLink) || addingHash) return;
-		assignError = null;
-		addingHash = torrent.magnetLink;
-		try {
-			const images = [item.posterUrl, item.backdropUrl]
-				.filter((url): url is string => Boolean(url))
-				.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
-			await documentsService.create({
-				title: item.title,
-				artists: [],
-				description: item.description ?? '',
-				images,
-				files: [{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }],
-				year: item.year,
-				type: mapToDocumentType(addon, type),
-				source: mapToDocumentSource(addon)
-			});
-			addedHashes = new Set(addedHashes).add(torrent.magnetLink);
-		} catch (err) {
-			assignError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			addingHash = null;
-		}
 	}
 
 	async function selectType(button: CatalogTypeButton) {
@@ -390,12 +295,6 @@
 			</div>
 		{/if}
 
-		{#if assignError}
-			<div class="alert alert-error">
-				<span>{assignError}</span>
-			</div>
-		{/if}
-
 		{#if itemsLoading && items.length === 0}
 			<p class="text-sm text-base-content/60">Loading…</p>
 		{:else if items.length === 0}
@@ -408,7 +307,6 @@
 				)}
 			>
 				{#each items as item (item.id)}
-					{@const ts = torrentState[item.id]}
 					{@const doc = itemDocs[item.id]}
 					<div class="flex flex-col gap-2">
 						{#if doc}
@@ -448,52 +346,6 @@
 								</figure>
 							</article>
 						{/if}
-						<details class="rounded-box border border-base-content/10 bg-base-200">
-							<summary
-								class="cursor-pointer px-3 py-2 text-xs font-semibold text-base-content/70 hover:bg-base-300"
-							>
-								Torrents{ts && ts.matches.length > 0 ? ` (${ts.matches.length})` : ''}
-							</summary>
-							<div class="border-t border-base-content/10 p-2">
-								{#if !ts || ts.status === 'pending'}
-									<p class="text-xs text-base-content/50">Queued…</p>
-								{:else if ts.status === 'searching'}
-									<p class="text-xs text-base-content/50">Searching…</p>
-								{:else if ts.status === 'error'}
-									<p class="text-xs text-error">{ts.error ?? 'Failed'}</p>
-								{:else if ts.matches.length === 0}
-									<p class="text-xs text-base-content/50">No matching torrents.</p>
-								{:else}
-									<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
-										{#each ts.matches as torrent (torrent.infoHash)}
-											<button
-												type="button"
-												class={classNames(
-													'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
-													{
-														'opacity-60':
-															addedHashes.has(torrent.magnetLink) || addingHash === torrent.magnetLink
-													}
-												)}
-												onclick={() => assignTorrent(item, torrent)}
-												disabled={addingHash !== null || addedHashes.has(torrent.magnetLink)}
-												title={torrent.title}
-											>
-												<span class="font-medium">{torrent.quality ?? '—'}</span>
-												<span class="text-success">↑{torrent.seeders}</span>
-												<span class="text-warning">↓{torrent.leechers}</span>
-												<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
-												{#if addedHashes.has(torrent.magnetLink)}
-													<span class="ml-auto">✓</span>
-												{:else if addingHash === torrent.magnetLink}
-													<span class="ml-auto">…</span>
-												{/if}
-											</button>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						</details>
 					</div>
 				{/each}
 			</div>

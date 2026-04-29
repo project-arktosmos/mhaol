@@ -3,8 +3,20 @@
 	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
 	import type { CloudDocument } from 'ui-lib/types/document.type';
 	import { cachedImageUrl } from '$lib/image-cache';
-	import { documentsService, type Document } from '$lib/documents.service';
+	import {
+		documentsService,
+		type Document,
+		type DocumentSource,
+		type DocumentType
+	} from '$lib/documents.service';
+	import {
+		formatSizeBytes,
+		matchTorrentsForResult,
+		searchTorrents,
+		type TorrentResultItem
+	} from '$lib/search.service';
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 
 	interface Props {
 		data: { document: Document };
@@ -14,6 +26,91 @@
 	const document = $derived<Document>(data.document);
 	let removing = $state(false);
 	let removeError = $state<string | null>(null);
+
+	type TorrentStatus = 'idle' | 'searching' | 'done' | 'error';
+	let torrentStatus = $state<TorrentStatus>('idle');
+	let torrentError = $state<string | null>(null);
+	let torrentMatches = $state<TorrentResultItem[]>([]);
+	let addingHash = $state<string | null>(null);
+	let assignError = $state<string | null>(null);
+	let searchRun = 0;
+
+	const existingHashes = $derived(
+		new Set(
+			document.files
+				.filter((f) => f.type === 'torrent magnet' && f.value)
+				.map((f) => f.value)
+		)
+	);
+
+	$effect(() => {
+		const id = document.id;
+		const title = document.title;
+		const kind = document.type as DocumentType;
+		const year = document.year;
+		void runTorrentSearch(id, title, kind, year);
+	});
+
+	async function runTorrentSearch(
+		_id: string,
+		title: string,
+		kind: DocumentType,
+		year: number | null
+	) {
+		const myRun = ++searchRun;
+		torrentStatus = 'searching';
+		torrentError = null;
+		torrentMatches = [];
+		try {
+			const torrents = await searchTorrents(kind, title);
+			if (myRun !== searchRun) return;
+			const matches = matchTorrentsForResult(
+				{ title, description: '', artists: [], images: [], files: [], year, raw: null },
+				torrents
+			);
+			torrentMatches = matches;
+			torrentStatus = 'done';
+		} catch (err) {
+			if (myRun !== searchRun) return;
+			torrentMatches = [];
+			torrentError = err instanceof Error ? err.message : 'Unknown error';
+			torrentStatus = 'error';
+		}
+	}
+
+	async function assignTorrent(torrent: TorrentResultItem) {
+		if (
+			!torrent.magnetLink ||
+			addingHash ||
+			existingHashes.has(torrent.magnetLink)
+		) {
+			return;
+		}
+		assignError = null;
+		addingHash = torrent.magnetLink;
+		try {
+			const created = await documentsService.create({
+				title: document.title,
+				artists: document.artists,
+				description: document.description,
+				images: document.images,
+				files: [
+					...document.files,
+					{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
+				],
+				year: document.year,
+				type: document.type as DocumentType,
+				source: document.source as DocumentSource
+			});
+			if (created.id !== document.id) {
+				await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
+			}
+		} catch (err) {
+			assignError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			addingHash = null;
+		}
+	}
 
 	function formatDate(value: string): string {
 		try {
@@ -193,6 +290,62 @@
 					</div>
 				</div>
 			{/if}
+
+			<div class="card border border-base-content/10 bg-base-200 p-4">
+				<div class="mb-2 flex items-center justify-between gap-2">
+					<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+						Torrent search{torrentMatches.length > 0 ? ` (${torrentMatches.length})` : ''}
+					</h2>
+					<button
+						type="button"
+						class="btn btn-outline btn-xs"
+						onclick={() => runTorrentSearch(document.id, document.title, document.type as DocumentType, document.year)}
+						disabled={torrentStatus === 'searching'}
+					>
+						{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
+					</button>
+				</div>
+				{#if assignError}
+					<div class="mb-2 alert alert-error">
+						<span>{assignError}</span>
+					</div>
+				{/if}
+				{#if torrentStatus === 'searching' && torrentMatches.length === 0}
+					<p class="text-sm text-base-content/60">Searching…</p>
+				{:else if torrentStatus === 'error'}
+					<p class="text-sm text-error">{torrentError ?? 'Failed'}</p>
+				{:else if torrentMatches.length === 0}
+					<p class="text-sm text-base-content/60">No matching torrents.</p>
+				{:else}
+					<div class="flex flex-col gap-1">
+						{#each torrentMatches as torrent (torrent.infoHash)}
+							{@const added = existingHashes.has(torrent.magnetLink)}
+							{@const adding = addingHash === torrent.magnetLink}
+							<button
+								type="button"
+								class={classNames(
+									'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
+									{ 'opacity-60': added || adding }
+								)}
+								onclick={() => assignTorrent(torrent)}
+								disabled={addingHash !== null || added}
+								title={torrent.title}
+							>
+								<span class="font-medium">{torrent.quality ?? '—'}</span>
+								<span class="text-success">↑{torrent.seeders}</span>
+								<span class="text-warning">↓{torrent.leechers}</span>
+								<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
+								<span class="truncate text-base-content/70">{torrent.parsedTitle || torrent.title}</span>
+								{#if added}
+									<span class="ml-auto">✓</span>
+								{:else if adding}
+									<span class="ml-auto">…</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
