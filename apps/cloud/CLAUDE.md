@@ -5,7 +5,7 @@
 **Crate:** `mhaol-cloud`
 **Binary:** `mhaol-cloud` (default port 1540)
 
-The cloud server runs an embedded SurrealDB store, an identity manager, the shared `mhaol-queue` task manager (on a separate `cloud-queue.db` SQLite file), and the desktop-only managers from `mhaol-yt-dlp`, `mhaol-torrent`, and `mhaol-ed2k`. It loads `mhaol-p2p-stream` for the GStreamer worker, and serves the Svelte WebUI from the nested `web/` directory. It is **independent** from `mhaol-node` — node still uses its own SQLite layer, cloud has its own state.
+The cloud server runs an embedded SurrealDB store, an identity manager, the shared `mhaol-queue` task manager (on a separate `cloud-queue.db` SQLite file), and the desktop-only managers from `mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, and `mhaol-ipfs`. It loads `mhaol-p2p-stream` for the GStreamer worker, and serves the Svelte WebUI from the nested `web/` directory. It is **independent** from `mhaol-node` — node still uses its own SQLite layer, cloud has its own state.
 
 ## Source Structure
 
@@ -13,10 +13,11 @@ The cloud server runs an embedded SurrealDB store, an identity manager, the shar
 src/
 ├── server.rs            # Binary entry point — opens SurrealDB, builds router
 ├── db.rs                # SurrealDB connection helper (SurrealKv engine)
-├── state.rs             # CloudState: { db, identity_manager, queue, ytdl_manager, torrent_manager, ed2k_manager }
+├── state.rs             # CloudState: { db, identity_manager, queue, ytdl_manager, torrent_manager, ed2k_manager, ipfs_manager }
 ├── cloud_status.rs      # GET /api/cloud/status
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records pointing at on-disk dirs
 ├── documents.rs         # /api/documents CRUD — SurrealDB-backed document records (name, author, description)
+├── fs_browse.rs         # /api/fs/browse — list subdirectories under a path (defaults to home), used by the WebUI directory picker
 └── frontend.rs          # rust-embed wrapper that serves web/dist-static/
 
 web/                     # SvelteKit static SPA (pnpm package `cloud`); builds to web/dist-static/
@@ -44,8 +45,9 @@ The cloud crate directly depends on these mhaol packages and reports their healt
 - `mhaol-yt-dlp` — YouTube download manager (cfg(not(target_os = "android"))).
 - `mhaol-torrent` — `librqbit`-backed torrent session, initialized in the background on startup so the server can bind quickly (cfg(not(target_os = "android"))).
 - `mhaol-ed2k` — eDonkey/ed2k client (cfg(not(target_os = "android"))).
+- `mhaol-ipfs` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT, optional mDNS), initialized in the background on startup. The blockstore lives at `<DATA_DIR>/downloads/ipfs/` (cfg(not(target_os = "android"))).
 
-Default download paths land under `<DATA_DIR>/downloads/{torrents,ed2k}` (or `<crate>/downloads/...` if `DATA_DIR` is unset). yt-dlp honors `YTDL_OUTPUT_DIR`/`YTDL_PO_TOKEN`/`YTDL_VISITOR_DATA`/`YTDL_COOKIES` via `YtDownloadConfig::from_env()`.
+Default download paths land under `<DATA_DIR>/downloads/{torrents,ed2k,ipfs}` (or `<crate>/downloads/...` if `DATA_DIR` is unset). yt-dlp honors `YTDL_OUTPUT_DIR`/`YTDL_PO_TOKEN`/`YTDL_VISITOR_DATA`/`YTDL_COOKIES` via `YtDownloadConfig::from_env()`.
 
 ## What is NOT here (yet)
 
@@ -82,7 +84,7 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 
 ## Public WebUI endpoints
 
-- `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, signaling/client wallet addresses, db engine/namespace/version, and a `packages` block reporting health for `p2pStream`, `queue`, `ytDlp`, `torrent`, and `ed2k`. No auth required (used by the embedded WebUI).
+- `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, signaling/client wallet addresses, db engine/namespace/version, and a `packages` block reporting health for `p2pStream`, `queue`, `ytDlp`, `torrent`, `ed2k`, and `ipfs`. No auth required (used by the embedded WebUI).
 - `GET /api/libraries` — list libraries persisted in SurrealDB (`library` table).
 - `GET /api/libraries/defaults` — returns `{ base }` with the default mhaol directory (`<system Documents>/mhaol`, falls back to `<HOME>/Documents/mhaol`).
 - `POST /api/libraries` — create a library `{ name, path? }`. When `path` is omitted, the directory defaults to `<defaults.base>/<sanitized-name>` and is created on disk.
@@ -94,3 +96,4 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/documents/:id` — fetch one document.
 - `PUT /api/documents/:id` — update `name`, `author`, or `description` (any subset).
 - `DELETE /api/documents/:id` — remove the document record.
+- `GET /api/fs/browse?path=<optional>` — list subdirectories under `path` (defaults to the system home directory). Returns `{ path, parent, home, separator, roots, entries }` where `entries` only contains directories (hidden dot-folders are skipped). On Windows, `roots` lists available drive letters.

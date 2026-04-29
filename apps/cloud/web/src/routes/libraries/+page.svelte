@@ -2,11 +2,12 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { librariesService } from '$lib/libraries.service';
+	import DirectoryPicker from '../../components/DirectoryPicker.svelte';
 
 	const libsStore = librariesService.state;
 
 	let name = $state('');
-	let path = $state('');
+	let parentDir = $state('');
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
@@ -21,13 +22,19 @@
 		return value.replace(controlAndIllegal, '_').trim() || 'library';
 	}
 
-	function placeholderFor(currentName: string, base: string): string {
-		if (!base) return '';
-		const trimmed = currentName.trim();
-		if (!trimmed) return `${base}/<name>`;
+	function joinPath(base: string, child: string): string {
+		if (!base) return child;
 		const sep = base.includes('\\') && !base.includes('/') ? '\\' : '/';
-		return `${base}${sep}${sanitize(trimmed)}`;
+		const trimmed = base.endsWith('/') || base.endsWith('\\') ? base.slice(0, -1) : base;
+		return `${trimmed}${sep}${child}`;
 	}
+
+	const finalPath = $derived.by(() => {
+		const trimmed = name.trim();
+		if (!parentDir) return '';
+		if (!trimmed) return parentDir;
+		return joinPath(parentDir, sanitize(trimmed));
+	});
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -37,11 +44,14 @@
 			createError = 'Name is required';
 			return;
 		}
+		if (!parentDir) {
+			createError = 'Pick a parent directory';
+			return;
+		}
 		creating = true;
 		try {
-			await librariesService.create(trimmed, path.trim() || undefined);
+			await librariesService.create(trimmed, finalPath);
 			name = '';
-			path = '';
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -81,8 +91,8 @@
 		<div>
 			<h1 class="text-2xl font-bold">Libraries</h1>
 			<p class="text-sm text-base-content/60">
-				Each library references a directory on this machine. New libraries default to a folder
-				inside <span class="font-mono">{$libsStore.defaults?.base ?? '<Documents>/mhaol'}</span>.
+				Each library references a directory on this machine. Pick a parent directory below — the
+				library folder will be created inside it.
 			</p>
 		</div>
 		<button
@@ -102,10 +112,7 @@
 
 	<section class="card border border-base-content/10 bg-base-200 p-4">
 		<h2 class="mb-3 text-lg font-semibold">Add a library</h2>
-		<form
-			class="flex flex-col gap-3 sm:grid sm:grid-cols-[1fr_2fr_auto] sm:items-end"
-			onsubmit={submit}
-		>
+		<form class="flex flex-col gap-3" onsubmit={submit}>
 			<label class="form-control">
 				<span class="label-text text-xs">Name</span>
 				<input
@@ -116,23 +123,22 @@
 					disabled={creating}
 				/>
 			</label>
-			<label class="form-control">
-				<span class="label-text text-xs">Directory (optional)</span>
-				<input
-					type="text"
-					class="input-bordered input input-sm font-mono"
-					placeholder={placeholderFor(name, $libsStore.defaults?.base ?? '')}
-					bind:value={path}
+			<div class="form-control">
+				<span class="label-text mb-1 text-xs">Parent directory</span>
+				<DirectoryPicker value={parentDir} disabled={creating} onChange={(p) => (parentDir = p)} />
+			</div>
+			<p class="text-xs text-base-content/60">
+				Library folder: <span class="font-mono">{finalPath || '—'}</span>
+			</p>
+			<div>
+				<button
+					type="submit"
+					class={classNames('btn btn-sm btn-primary', { 'btn-disabled': creating })}
 					disabled={creating}
-				/>
-			</label>
-			<button
-				type="submit"
-				class={classNames('btn btn-sm btn-primary', { 'btn-disabled': creating })}
-				disabled={creating}
-			>
-				{creating ? 'Creating…' : 'Create'}
-			</button>
+				>
+					{creating ? 'Creating…' : 'Create'}
+				</button>
+			</div>
 		</form>
 		{#if createError}
 			<p class="mt-2 text-sm text-error">{createError}</p>

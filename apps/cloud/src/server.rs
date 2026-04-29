@@ -2,6 +2,7 @@ mod cloud_status;
 mod db;
 mod documents;
 mod frontend;
+mod fs_browse;
 mod libraries;
 mod state;
 
@@ -147,6 +148,7 @@ async fn main() {
         .nest("/api/cloud", cloud_status::router())
         .nest("/api/libraries", libraries::router())
         .nest("/api/documents", documents::router())
+        .nest("/api/fs", fs_browse::router())
         .fallback(frontend::serve_frontend)
         .with_state(state);
 
