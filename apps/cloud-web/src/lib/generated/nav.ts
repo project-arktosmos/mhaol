@@ -7,4 +7,11 @@ export type NavItem = {
 	children: NavChildItem[];
 };
 
-export const NAV_ITEMS: NavItem[] = [];
+export const NAV_ITEMS: NavItem[] = [
+	{
+		label: 'Libraries',
+		href: '/libraries',
+		hasOwnPage: true,
+		children: []
+	}
+];

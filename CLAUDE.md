@@ -66,10 +66,13 @@ The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node
 - `apps/cloud/Cargo.toml` — Crate manifest (depends on `mhaol-node` as a library)
 - `apps/cloud/src/server.rs` — Binary entry point; bootstraps `AppState`, spawns the same workers as `mhaol-node`, and serves the embedded WebUI as a fallback to `/api/*`
 - `apps/cloud/src/cloud_status.rs` — Public `/api/cloud/status` route used by the WebUI for health polling
+- `apps/cloud/src/libraries.rs` — `/api/libraries` CRUD; library records are stored in SurrealDB and reference an on-disk directory (default: `<system Documents>/mhaol/<name>`)
 - `apps/cloud/src/frontend.rs` — Embeds `apps/cloud-web/dist-static/` via `rust-embed` and serves it as the fallback handler
 - `apps/cloud-web/` — SvelteKit static SPA built with the same `ui-lib` components as the player. Builds to `apps/cloud-web/dist-static/`, which is what the cloud crate embeds at compile time.
 
-The cloud frontend's only screen is the Health page; it polls `/api/cloud/status` every 5 seconds and renders status, latency, uptime, bind, libraries, queue depth, and identities.
+The cloud frontend has two screens:
+- **Health** (`/`) — polls `/api/cloud/status` every 5 seconds and renders status, latency, uptime, bind, package health, and identities.
+- **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. Defaults to `<system Documents>/mhaol/<name>` when no path is given.
 
 ### Transport Layer
 

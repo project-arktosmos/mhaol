@@ -1,6 +1,7 @@
 mod cloud_status;
 mod db;
 mod frontend;
+mod libraries;
 mod state;
 
 use axum::Router;
@@ -143,6 +144,7 @@ async fn main() {
 
     let app = Router::new()
         .nest("/api/cloud", cloud_status::router())
+        .nest("/api/libraries", libraries::router())
         .fallback(frontend::serve_frontend)
         .with_state(state);
 

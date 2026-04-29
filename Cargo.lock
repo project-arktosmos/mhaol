@@ -5256,6 +5256,8 @@ name = "mhaol-cloud"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
+ "dirs 5.0.1",
  "mhaol-ed2k",
  "mhaol-identity",
  "mhaol-p2p-stream",
@@ -5274,6 +5276,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

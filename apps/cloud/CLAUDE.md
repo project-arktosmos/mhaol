@@ -15,6 +15,7 @@ src/
 ├── db.rs                # SurrealDB connection helper (SurrealKv engine)
 ├── state.rs             # CloudState: { db, identity_manager, queue, ytdl_manager, torrent_manager, ed2k_manager }
 ├── cloud_status.rs      # GET /api/cloud/status
+├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records pointing at on-disk dirs
 └── frontend.rs          # rust-embed wrapper that serves apps/cloud-web/dist-static/
 ```
 
@@ -71,6 +72,17 @@ pnpm build:cloud
 
 The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::worker::run()` for the GStreamer worker process. This subcommand does not touch the database or the identity manager.
 
-## Public WebUI endpoint
+## Public WebUI endpoints
 
 - `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, signaling/client wallet addresses, db engine/namespace/version, and a `packages` block reporting health for `p2pStream`, `queue`, `ytDlp`, `torrent`, and `ed2k`. No auth required (used by the embedded WebUI).
+- `GET /api/libraries` — list libraries persisted in SurrealDB (`library` table).
+- `GET /api/libraries/defaults` — returns `{ base }` with the default mhaol directory (`<system Documents>/mhaol`, falls back to `<HOME>/Documents/mhaol`).
+- `POST /api/libraries` — create a library `{ name, path? }`. When `path` is omitted, the directory defaults to `<defaults.base>/<sanitized-name>` and is created on disk.
+- `GET /api/libraries/:id` — fetch one library.
+- `PUT /api/libraries/:id` — update name or path. The new path is created on disk if missing.
+- `DELETE /api/libraries/:id` — remove the library record (the on-disk directory is left untouched).
+- `GET /api/documents` — list documents persisted in SurrealDB (`document` table).
+- `POST /api/documents` — create a document `{ name, author, description? }`. `name` and `author` are required.
+- `GET /api/documents/:id` — fetch one document.
+- `PUT /api/documents/:id` — update `name`, `author`, or `description` (any subset).
+- `DELETE /api/documents/:id` — remove the document record.
