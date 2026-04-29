@@ -33,6 +33,7 @@ pub mod recommendation_labels;
 pub mod recommendations;
 pub mod retroachievements;
 pub mod roster;
+pub mod search;
 pub mod signaling;
 pub mod signaling_ws;
 pub mod smart_pair;
@@ -96,6 +97,7 @@ pub fn build_app_router(state: AppState) -> Router {
         .nest("/api/openlibrary", openlibrary::router())
         .nest("/api/queue", queue::router())
         .nest("/api/iptv", iptv::router())
+        .nest("/api/search", search::router())
         .nest("/api/smart-pair", smart_pair::router())
         .nest("/api/smart-search", smart_search::router())
         .nest("/api/subtitles", subtitles::router())

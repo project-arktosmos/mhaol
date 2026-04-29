@@ -6,6 +6,10 @@
 
 A SvelteKit static SPA that imports everything from `packages/ui-lib` (see the root `CLAUDE.md` for the import-and-assemble pattern). Builds to `apps/player/dist-static/`.
 
+## Right-side sidebar
+
+The layout's right-side aside (after the player) hosts, in order: `DocumentFilesPanel` (file list for the active document), `PlayerVideo` (video/audio surface), and `SubsLyricsFinder` (search subs or lyrics for the currently playing item). The finder hits `/api/search/subs-lyrics` on the connected node — it pre-fills with the current file name and a guessed type (audio → track, video → movie); for video kinds you must add a TMDB id before searching.
+
 ## Tauri shell
 
 The player ships a desktop Tauri shell at `apps/player/src-tauri/` (crate `mhaol-player-shell`, productName "Mhaol Player", identifier `com.arktosmos.mhaol.player`). The shell loads the **shared health UI** under `apps/tauri/web/` — it does **not** wrap the player SPA on desktop; the player stays browser-accessible at `http://localhost:9595`.

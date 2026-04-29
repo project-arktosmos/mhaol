@@ -61,30 +61,6 @@ export interface FileEntry {
 	title?: string;
 }
 
-export interface SyncedLine {
-	time: number;
-	text: string;
-}
-
-export interface SubsLyrics {
-	kind: 'lyrics' | 'subtitle';
-	source: string;
-	externalId: string;
-	language?: string;
-	trackName?: string;
-	artistName?: string;
-	albumName?: string;
-	duration?: number;
-	format?: string;
-	url?: string;
-	plainLyrics?: string;
-	syncedLyrics?: SyncedLine[];
-	instrumental?: boolean;
-	isHearingImpaired?: boolean;
-	display?: string;
-	sourceExternalId?: string;
-}
-
 export interface Document {
 	id: string;
 	title: string;
@@ -92,7 +68,6 @@ export interface Document {
 	description: string;
 	images: ImageMeta[];
 	files: FileEntry[];
-	subsLyrics?: SubsLyrics[];
 	year: number | null;
 	type: string;
 	source: string;
@@ -175,7 +150,6 @@ class DocumentsService {
 		description: string;
 		images: ImageMeta[];
 		files: FileEntry[];
-		subsLyrics?: SubsLyrics[];
 		year: number | null;
 		type: DocumentType;
 		source: DocumentSource;

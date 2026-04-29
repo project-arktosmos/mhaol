@@ -8,6 +8,7 @@
   import NodeStatusBadge from "ui-lib/components/core/NodeStatusBadge.svelte";
   import ToastOutlet from "ui-lib/components/core/ToastOutlet.svelte";
   import PlayerVideo from "ui-lib/components/player/PlayerVideo.svelte";
+  import SubsLyricsFinder from "ui-lib/components/player/SubsLyricsFinder.svelte";
   import DocumentFilesPanel from "ui-lib/components/documents/DocumentFilesPanel.svelte";
   import { documentStreamService } from "ui-lib/services/document-stream.service";
   import { themeService } from "ui-lib/services/theme.service";
@@ -117,6 +118,7 @@
         buffering={$playerState.buffering}
         poster={$playerState.currentFile?.thumbnailUrl}
       />
+      <SubsLyricsFinder />
     </aside>
   </main>
 </div>

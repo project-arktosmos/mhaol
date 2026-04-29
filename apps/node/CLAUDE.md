@@ -29,6 +29,7 @@ src/
 │   ├── player.rs
 │   ├── plugins.rs
 │   ├── retroachievements.rs  # RetroAchievements game metadata proxy
+│   ├── search.rs          # /api/search/subs-lyrics — LRCLIB lyrics + Wyzie subtitles, used by the player sidebar finder
 │   ├── queue.rs           # Queue task management (CRUD + SSE subscribe)
 │   ├── game_recommendations.rs # Game recommendations via metadata matching (bulk enqueue, query, labels)
 │   ├── music_recommendations.rs # Music recommendations via ListenBrainz (bulk enqueue, query, labels)

@@ -6,8 +6,7 @@ import type {
 	DocumentSource,
 	DocumentType,
 	FileEntry,
-	ImageMeta,
-	SubsLyrics
+	ImageMeta
 } from './documents.service';
 
 export interface SearchResultItem {
@@ -67,47 +66,6 @@ export function matchTorrentsForResult(
 		matches.push(t);
 	}
 	matches.sort((a, b) => b.seeders - a.seeders);
-	return matches;
-}
-
-export function matchSubsLyricsForResult(
-	result: SearchResultItem,
-	items: SubsLyrics[]
-): SubsLyrics[] {
-	if (items.length === 0) return [];
-	const targetWords = normalizeForMatch(result.title)
-		.split(' ')
-		.filter((w) => w.length > 1);
-	const matches: SubsLyrics[] = [];
-	for (const it of items) {
-		if (it.kind === 'subtitle') {
-			if (it.sourceExternalId && result.externalId && it.sourceExternalId === result.externalId) {
-				matches.push(it);
-			}
-			continue;
-		}
-		// kind === 'lyrics' — title-driven word-overlap match (same logic as torrents).
-		if (targetWords.length === 0) continue;
-		const haystack = normalizeForMatch(
-			[it.trackName, it.artistName, it.albumName, it.display].filter(Boolean).join(' ')
-		);
-		if (!haystack) continue;
-		const hits = targetWords.filter((w) => haystack.includes(w)).length;
-		if (hits / targetWords.length < 0.7) continue;
-		if (result.artists.length > 0 && it.artistName) {
-			const resultArtist = normalizeForMatch(result.artists[0].name);
-			const itemArtist = normalizeForMatch(it.artistName);
-			if (
-				resultArtist &&
-				itemArtist &&
-				!itemArtist.includes(resultArtist) &&
-				!resultArtist.includes(itemArtist)
-			) {
-				continue;
-			}
-		}
-		matches.push(it);
-	}
 	return matches;
 }
 
@@ -413,30 +371,6 @@ function mbArtistCreditsToArtists(credits: MbArtistCredit[]): Artist[] {
 		out.push(artist);
 	}
 	return out;
-}
-
-export async function searchSubsLyrics(
-	type: DocumentType,
-	query: string,
-	externalIds: string[] = [],
-	languages?: string[]
-): Promise<SubsLyrics[]> {
-	const trimmed = query.trim();
-	const cleanIds = externalIds.map((id) => id.trim()).filter((id) => id.length > 0);
-	const isMusic = type === 'album' || type === 'track';
-	const isVisual =
-		type === 'movie' || type === 'tv show' || type === 'tv season' || type === 'tv episode';
-	if (isMusic && !trimmed) return [];
-	if (isVisual && cleanIds.length === 0) return [];
-	if (!isMusic && !isVisual) return [];
-
-	const res = await fetch('/api/search/subs-lyrics', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ type, query: trimmed, externalIds: cleanIds, languages })
-	});
-	if (!res.ok) throw new Error(await parseError(res));
-	return (await res.json()) as SubsLyrics[];
 }
 
 async function searchOpenLibrary(query: string): Promise<SearchResultItem[]> {
