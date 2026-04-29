@@ -462,24 +462,22 @@
 		{/if}
 	</div>
 
-	{#if isStreaming}
-		<div class={effectiveFullscreen ? 'bg-base-100 p-4' : 'mt-1'}>
-			<PlayerControls
-				mediaElement={activeMediaElement}
-				{isVideo}
-				{positionSecs}
-				{durationSecs}
-				{connectionState}
-				isFullscreen={effectiveFullscreen}
-				onseek={handleSeek}
-				onseekstart={handleSeekStart}
-				onstop={handleStop}
-				onfullscreentoggle={toggleFullscreen}
-				{onprev}
-				{onnext}
-			/>
-		</div>
-	{/if}
+	<div class={effectiveFullscreen ? 'bg-base-100 p-4' : 'mt-1'}>
+		<PlayerControls
+			mediaElement={activeMediaElement}
+			{isVideo}
+			{positionSecs}
+			{durationSecs}
+			{connectionState}
+			isFullscreen={effectiveFullscreen}
+			onseek={handleSeek}
+			onseekstart={handleSeekStart}
+			onstop={handleStop}
+			onfullscreentoggle={toggleFullscreen}
+			{onprev}
+			{onnext}
+		/>
+	</div>
 </div>
 
 <SubtitlesSearchModal
