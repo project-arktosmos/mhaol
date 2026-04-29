@@ -28,7 +28,7 @@ use crate::state::CloudState;
 use mhaol_torrent::{TorrentInfo, TorrentState};
 
 #[cfg(not(target_os = "android"))]
-const POLL_INTERVAL: Duration = Duration::from_secs(5);
+const POLL_INTERVAL: Duration = Duration::from_secs(3);
 
 #[cfg(not(target_os = "android"))]
 pub async fn run(state: CloudState) {
