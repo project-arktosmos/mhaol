@@ -228,6 +228,7 @@
 				<table class="table table-sm">
 					<thead>
 						<tr>
+							<th>ID</th>
 							<th>Name</th>
 							<th>Author</th>
 							<th>Description</th>
@@ -238,6 +239,7 @@
 					<tbody>
 						{#each $docsStore.documents as doc (doc.id)}
 							<tr>
+								<td class="font-mono text-xs text-base-content/70">{doc.id}</td>
 								<td class="font-medium">{doc.name}</td>
 								<td>{doc.author}</td>
 								<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
