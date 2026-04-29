@@ -44,6 +44,7 @@
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
 	let showAdvanced = $state(false);
+	let activeTab = $state<'covers' | 'results' | 'torrents'>('covers');
 
 	let searching = $state(false);
 	let searchError = $state<string | null>(null);
@@ -572,6 +573,26 @@
 									/>
 								</td>
 							</tr>
+							<tr>
+								<th class="w-32 align-top">JSON</th>
+								<td>
+									<div class="flex flex-col gap-2">
+										<textarea
+											class="textarea-bordered textarea h-40 w-full font-mono text-xs"
+											readonly
+											disabled
+											value={payloadJson}
+										></textarea>
+										<input
+											type="text"
+											class="input-bordered input input-sm w-full font-mono text-xs"
+											readonly
+											disabled
+											value={hashError ?? ipfsHash}
+										/>
+									</div>
+								</td>
+							</tr>
 						{/if}
 					</tbody>
 				</table>
@@ -591,226 +612,220 @@
 		{/if}
 	</section>
 
-	{#if searchResults.length > 0}
+	{#if searchResults.length > 0 || torrentResults.length > 0 || searching || searchError || torrentError}
 		<section class="card border border-base-content/10 bg-base-200 p-4">
-			<h2 class="mb-3 text-lg font-semibold">Covers</h2>
-			<p class="mb-3 text-xs text-base-content/60">
-				One card per addon result, using the same image that will be assigned to the document. Click
-				the cover to fill the form, or click a torrent to add it as a file.
-			</p>
-			<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-				{#each searchResults as result, i (result.externalId ?? i)}
-					{@const cover = result.images[0]?.url}
-					{@const matches = matchTorrentsForResult(result, torrentResults)}
-					<div
-						class={classNames('flex overflow-hidden rounded-box border bg-base-100 transition', {
-							'border-primary': selectedResultIndex === i,
-							'border-base-content/10': selectedResultIndex !== i
-						})}
-					>
-						<button
-							type="button"
-							class="flex w-32 shrink-0 flex-col bg-base-300 text-left hover:bg-base-200"
-							onclick={() => applyResult(result, i)}
-							aria-label={`Use "${result.title}" to fill form`}
-						>
-							<div class="aspect-[2/3] w-full">
-								{#if cover}
-									<img
-										src={cover}
-										alt={result.title}
-										class="h-full w-full object-cover"
-										loading="lazy"
-									/>
-								{:else}
-									<div
-										class="flex h-full w-full items-center justify-center text-xs text-base-content/40"
-									>
-										No image
-									</div>
-								{/if}
-							</div>
-							<div class="flex flex-col gap-1 p-2">
-								<span class="line-clamp-2 text-sm font-medium">{result.title}</span>
-								{#if result.year}
-									<span class="text-xs text-base-content/60">{result.year}</span>
-								{/if}
-							</div>
-						</button>
-						<div class="flex flex-1 flex-col border-l border-base-content/10 p-2">
-							<span class="mb-1 text-xs font-semibold text-base-content/60 uppercase">
-								Torrents{matches.length > 0 ? ` (${matches.length})` : ''}
-							</span>
-							{#if matches.length === 0}
-								<p class="text-xs text-base-content/50">No matching torrents.</p>
-							{:else}
-								<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
-									{#each matches as torrent (torrent.infoHash)}
-										<button
-											type="button"
-											class={classNames(
-												'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-200',
-												{ 'opacity-60': addedHashes.has(torrent.magnetLink) }
-											)}
-											onclick={() => pickResultTorrent(result, i, torrent)}
-											title={torrent.title}
-										>
-											<span class="font-medium">{torrent.quality ?? '—'}</span>
-											<span class="text-success">↑{torrent.seeders}</span>
-											<span class="text-warning">↓{torrent.leechers}</span>
-											<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
-											{#if addedHashes.has(torrent.magnetLink)}
-												<span class="ml-auto">✓</span>
-											{/if}
-										</button>
-									{/each}
-								</div>
-							{/if}
-						</div>
-					</div>
-				{/each}
+			<div class="mb-3 flex items-center justify-between">
+				<h2 class="text-lg font-semibold">Results</h2>
 			</div>
+			<div role="tablist" class="tabs-bordered mb-3 tabs">
+				<button
+					type="button"
+					role="tab"
+					class={classNames('tab', { 'tab-active': activeTab === 'covers' })}
+					onclick={() => (activeTab = 'covers')}
+				>
+					Covers
+				</button>
+				<button
+					type="button"
+					role="tab"
+					class={classNames('tab', { 'tab-active': activeTab === 'results' })}
+					onclick={() => (activeTab = 'results')}
+				>
+					Search results
+				</button>
+				<button
+					type="button"
+					role="tab"
+					class={classNames('tab', { 'tab-active': activeTab === 'torrents' })}
+					onclick={() => (activeTab = 'torrents')}
+				>
+					Torrents
+				</button>
+			</div>
+
+			{#if activeTab === 'covers'}
+				{#if searchResults.length === 0}
+					<p class="text-sm text-base-content/60">
+						No results yet — type a title and click Search.
+					</p>
+				{:else}
+					<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+						{#each searchResults as result, i (result.externalId ?? i)}
+							{@const cover = result.images[0]?.url}
+							{@const matches = matchTorrentsForResult(result, torrentResults)}
+							<div
+								class={classNames(
+									'flex overflow-hidden rounded-box border bg-base-100 transition',
+									{
+										'border-primary': selectedResultIndex === i,
+										'border-base-content/10': selectedResultIndex !== i
+									}
+								)}
+							>
+								<button
+									type="button"
+									class="flex w-32 shrink-0 flex-col bg-base-300 text-left hover:bg-base-200"
+									onclick={() => applyResult(result, i)}
+									aria-label={`Use "${result.title}" to fill form`}
+								>
+									<div class="aspect-[2/3] w-full">
+										{#if cover}
+											<img
+												src={cover}
+												alt={result.title}
+												class="h-full w-full object-cover"
+												loading="lazy"
+											/>
+										{:else}
+											<div
+												class="flex h-full w-full items-center justify-center text-xs text-base-content/40"
+											>
+												No image
+											</div>
+										{/if}
+									</div>
+									<div class="flex flex-col gap-1 p-2">
+										<span class="line-clamp-2 text-sm font-medium">{result.title}</span>
+										{#if result.year}
+											<span class="text-xs text-base-content/60">{result.year}</span>
+										{/if}
+									</div>
+								</button>
+								<div class="flex flex-1 flex-col border-l border-base-content/10 p-2">
+									<span class="mb-1 text-xs font-semibold text-base-content/60 uppercase">
+										Torrents{matches.length > 0 ? ` (${matches.length})` : ''}
+									</span>
+									{#if matches.length === 0}
+										<p class="text-xs text-base-content/50">No matching torrents.</p>
+									{:else}
+										<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
+											{#each matches as torrent (torrent.infoHash)}
+												<button
+													type="button"
+													class={classNames(
+														'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-200',
+														{ 'opacity-60': addedHashes.has(torrent.magnetLink) }
+													)}
+													onclick={() => pickResultTorrent(result, i, torrent)}
+													title={torrent.title}
+												>
+													<span class="font-medium">{torrent.quality ?? '—'}</span>
+													<span class="text-success">↑{torrent.seeders}</span>
+													<span class="text-warning">↓{torrent.leechers}</span>
+													<span class="text-base-content/60"
+														>{formatSizeBytes(torrent.sizeBytes)}</span
+													>
+													{#if addedHashes.has(torrent.magnetLink)}
+														<span class="ml-auto">✓</span>
+													{/if}
+												</button>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			{:else if activeTab === 'results'}
+				{#if searchError}
+					<div class="mb-3 alert alert-error">
+						<span>{searchError}</span>
+					</div>
+				{/if}
+				{#if searching}
+					<p class="text-sm text-base-content/60">Searching…</p>
+				{:else if searchResults.length === 0}
+					<p class="text-sm text-base-content/60">
+						No results yet — type a title and click Search.
+					</p>
+				{:else}
+					<div class="overflow-x-auto rounded-box border border-base-content/10">
+						<table class="table table-sm">
+							<thead>
+								<tr>
+									<th>Title</th>
+									<th>Year</th>
+									<th>Artists</th>
+									<th>Images</th>
+									<th>Files</th>
+									<th>Description</th>
+									<th>External ID</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each searchResults as result, i (result.externalId ?? i)}
+									<tr
+										class={classNames('cursor-pointer hover:bg-base-300', {
+											'bg-base-300': selectedResultIndex === i
+										})}
+										onclick={() => applyResult(result, i)}
+									>
+										<td class="font-medium">{result.title}</td>
+										<td class="text-xs">{result.year ?? ''}</td>
+										<td class="text-xs">{result.artists.map((a) => a.name).join(', ')}</td>
+										<td class="text-xs">{result.images.length}</td>
+										<td class="text-xs">{result.files.length}</td>
+										<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
+											>{result.description}</td
+										>
+										<td class="font-mono text-xs text-base-content/70">{result.externalId ?? ''}</td
+										>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			{:else if activeTab === 'torrents'}
+				{#if torrentError}
+					<div class="mb-3 alert alert-error">
+						<span>{torrentError}</span>
+					</div>
+				{/if}
+				{#if searching}
+					<p class="text-sm text-base-content/60">Searching…</p>
+				{:else if torrentResults.length === 0}
+					<p class="text-sm text-base-content/60">No torrents yet — hit Search.</p>
+				{:else}
+					<div class="overflow-x-auto rounded-box border border-base-content/10">
+						<table class="table table-sm">
+							<thead>
+								<tr>
+									<th>Title</th>
+									<th>Year</th>
+									<th>Quality</th>
+									<th>Name</th>
+									<th>Stats</th>
+									<th class="w-16">Added</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each torrentResults as torrent (torrent.infoHash)}
+									<tr
+										class={classNames('cursor-pointer hover:bg-base-300', {
+											'opacity-60': addedHashes.has(torrent.magnetLink)
+										})}
+										onclick={() => addTorrentAsFile(torrent)}
+									>
+										<td class="font-medium">{torrent.parsedTitle}</td>
+										<td class="text-xs">{torrent.year ?? ''}</td>
+										<td class="text-xs">{torrent.quality ?? ''}</td>
+										<td class="max-w-md text-xs break-all text-base-content/70">{torrent.title}</td>
+										<td class="text-xs text-base-content/70">{torrent.description}</td>
+										<td class="text-center text-xs"
+											>{addedHashes.has(torrent.magnetLink) ? '✓' : ''}</td
+										>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			{/if}
 		</section>
 	{/if}
-
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-		<section class="card border border-base-content/10 bg-base-200 p-4">
-			<h2 class="mb-3 text-lg font-semibold">Search results</h2>
-			<p class="mb-3 text-xs text-base-content/60">
-				Results from <code>{source}</code> for type <code>{type}</code>.
-			</p>
-			{#if searchError}
-				<div class="mb-3 alert alert-error">
-					<span>{searchError}</span>
-				</div>
-			{/if}
-			{#if searching}
-				<p class="text-sm text-base-content/60">Searching…</p>
-			{:else if searchResults.length === 0}
-				<p class="text-sm text-base-content/60">No results yet — type a title and click Search.</p>
-			{:else}
-				<p class="mb-2 text-xs text-base-content/60">Click a result to fill in the form above.</p>
-				<div class="overflow-x-auto rounded-box border border-base-content/10">
-					<table class="table table-sm">
-						<thead>
-							<tr>
-								<th>Title</th>
-								<th>Year</th>
-								<th>Artists</th>
-								<th>Images</th>
-								<th>Files</th>
-								<th>Description</th>
-								<th>External ID</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each searchResults as result, i (result.externalId ?? i)}
-								<tr
-									class={classNames('cursor-pointer hover:bg-base-300', {
-										'bg-base-300': selectedResultIndex === i
-									})}
-									onclick={() => applyResult(result, i)}
-								>
-									<td class="font-medium">{result.title}</td>
-									<td class="text-xs">{result.year ?? ''}</td>
-									<td class="text-xs">{result.artists.map((a) => a.name).join(', ')}</td>
-									<td class="text-xs">{result.images.length}</td>
-									<td class="text-xs">{result.files.length}</td>
-									<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
-										>{result.description}</td
-									>
-									<td class="font-mono text-xs text-base-content/70">{result.externalId ?? ''}</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			{/if}
-		</section>
-
-		<section class="card border border-base-content/10 bg-base-200 p-4">
-			<h2 class="mb-3 text-lg font-semibold">Torrents (PirateBay)</h2>
-			<p class="mb-3 text-xs text-base-content/60">
-				Torrents matching the title in the category for <code>{type}</code>.
-			</p>
-			{#if torrentError}
-				<div class="mb-3 alert alert-error">
-					<span>{torrentError}</span>
-				</div>
-			{/if}
-			{#if searching}
-				<p class="text-sm text-base-content/60">Searching…</p>
-			{:else if torrentResults.length === 0}
-				<p class="text-sm text-base-content/60">No torrents yet — hit Search.</p>
-			{:else}
-				<p class="mb-2 text-xs text-base-content/60">
-					Click a torrent to add it as a file to the form above.
-				</p>
-				<div class="overflow-x-auto rounded-box border border-base-content/10">
-					<table class="table table-sm">
-						<thead>
-							<tr>
-								<th>Title</th>
-								<th>Year</th>
-								<th>Quality</th>
-								<th>Name</th>
-								<th>Stats</th>
-								<th class="w-16">Added</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each torrentResults as torrent (torrent.infoHash)}
-								<tr
-									class={classNames('cursor-pointer hover:bg-base-300', {
-										'opacity-60': addedHashes.has(torrent.magnetLink)
-									})}
-									onclick={() => addTorrentAsFile(torrent)}
-								>
-									<td class="font-medium">{torrent.parsedTitle}</td>
-									<td class="text-xs">{torrent.year ?? ''}</td>
-									<td class="text-xs">{torrent.quality ?? ''}</td>
-									<td class="max-w-md text-xs break-all text-base-content/70">{torrent.title}</td>
-									<td class="text-xs text-base-content/70">{torrent.description}</td>
-									<td class="text-center text-xs"
-										>{addedHashes.has(torrent.magnetLink) ? '✓' : ''}</td
-									>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			{/if}
-		</section>
-	</div>
-
-	<section class="card border border-base-content/10 bg-base-200 p-4">
-		<h2 class="mb-3 text-lg font-semibold">Create payload preview</h2>
-		<p class="mb-3 text-xs text-base-content/60">
-			JSON body that will be POSTed to <code>/api/documents</code> when you hit Create. The IPFS hash
-			is the CIDv1 (raw, sha2-256) of these bytes and updates as you type.
-		</p>
-		<div class="flex flex-col gap-3">
-			<label class="flex flex-col gap-1">
-				<span class="text-xs font-semibold text-base-content/60 uppercase">JSON</span>
-				<textarea
-					class="textarea-bordered textarea h-40 w-full font-mono text-xs"
-					readonly
-					disabled
-					value={payloadJson}
-				></textarea>
-			</label>
-			<label class="flex flex-col gap-1">
-				<span class="text-xs font-semibold text-base-content/60 uppercase">IPFS hash (CIDv1)</span>
-				<input
-					type="text"
-					class="input-bordered input input-sm w-full font-mono text-xs"
-					readonly
-					disabled
-					value={hashError ?? ipfsHash}
-				/>
-			</label>
-		</div>
-	</section>
 
 	<section class="flex flex-col gap-3">
 		<h2 class="text-lg font-semibold">Existing documents</h2>
