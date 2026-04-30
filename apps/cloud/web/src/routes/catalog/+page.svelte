@@ -12,7 +12,14 @@
 		type CatalogGenre,
 		type CatalogSource
 	} from '$lib/catalog.service';
-	import type { DocumentSource, DocumentType } from '$lib/documents.service';
+	import {
+		documentsService,
+		type Document,
+		type DocumentSource,
+		type DocumentType
+	} from '$lib/documents.service';
+
+	const documentsStore = documentsService.state;
 
 	let sources = $state<CatalogSource[]>([]);
 	let sourcesError = $state<string | null>(null);
@@ -34,6 +41,19 @@
 	const currentSource = $derived(sources.find((s) => s.id === addon));
 	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
+
+	const currentDocType = $derived<DocumentType | null>(
+		addon && type ? mapToDocumentType(addon, type) : null
+	);
+	const libraryDocuments = $derived<Document[]>(
+		currentDocType
+			? $documentsStore.documents
+					.filter((d) => d.type === currentDocType)
+					.slice()
+					.sort((a, b) => b.created_at.localeCompare(a.created_at))
+					.slice(0, 6)
+			: []
+	);
 
 	interface CatalogTypeButton {
 		docType: DocumentType;
@@ -173,18 +193,24 @@
 		await refreshItems();
 	}
 
-	onMount(async () => {
-		try {
-			sources = await listSources();
-			if (sources.length > 0) {
-				addon = sources[0].id;
-				type = sources[0].types[0]?.id ?? '';
-				await refreshGenres();
-				await refreshItems();
+	onMount(() => {
+		const stopDocs = documentsService.start();
+		void (async () => {
+			try {
+				sources = await listSources();
+				if (sources.length > 0) {
+					addon = sources[0].id;
+					type = sources[0].types[0]?.id ?? '';
+					await refreshGenres();
+					await refreshItems();
+				}
+			} catch (err) {
+				sourcesError = err instanceof Error ? err.message : 'Unknown error';
 			}
-		} catch (err) {
-			sourcesError = err instanceof Error ? err.message : 'Unknown error';
-		}
+		})();
+		return () => {
+			stopDocs();
+		};
 	});
 </script>
 
@@ -253,6 +279,19 @@
 				</tbody>
 			</table>
 		</div>
+	</section>
+
+	<section class="flex flex-col gap-3">
+		<h2 class="text-lg font-semibold">Library</h2>
+		{#if libraryDocuments.length === 0}
+			<p class="text-sm text-base-content/60">No library items yet.</p>
+		{:else}
+			<div class="grid grid-cols-6 gap-4">
+				{#each libraryDocuments as doc (doc.id)}
+					<DocumentCard document={doc as CloudDocument} />
+				{/each}
+			</div>
+		{/if}
 	</section>
 
 	<section class="flex flex-col gap-3">
