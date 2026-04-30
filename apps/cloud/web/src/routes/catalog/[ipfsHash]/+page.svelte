@@ -110,6 +110,98 @@
 	let torrentStreamStarting = $state(false);
 	let torrentStreamError = $state<string | null>(null);
 
+	type StreamEvalState =
+		| { kind: 'idle' }
+		| { kind: 'evaluating' }
+		| {
+				kind: 'streamable';
+				fileName: string;
+				fileSize: number;
+				mimeType: string | null;
+		  }
+		| { kind: 'not-streamable'; reason: string };
+	let streamEval = $state<StreamEvalState>({ kind: 'idle' });
+	let evalRun = 0;
+
+	$effect(() => {
+		const magnet = firstMagnet;
+		if (!magnet) {
+			streamEval = { kind: 'idle' };
+			return;
+		}
+		const myRun = ++evalRun;
+		streamEval = { kind: 'evaluating' };
+		void (async () => {
+			try {
+				const res = await fetch('/api/torrent/evaluate', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ magnet })
+				});
+				if (myRun !== evalRun) return;
+				const body = (await res.json()) as
+					| {
+							streamable: true;
+							infoHash: string;
+							name: string;
+							fileIndex: number;
+							fileName: string;
+							fileSize: number;
+							mimeType: string | null;
+					  }
+					| { streamable: false; reason: string };
+				if (myRun !== evalRun) return;
+				if (body.streamable) {
+					streamEval = {
+						kind: 'streamable',
+						fileName: body.fileName,
+						fileSize: body.fileSize,
+						mimeType: body.mimeType
+					};
+				} else {
+					streamEval = { kind: 'not-streamable', reason: body.reason };
+				}
+			} catch (err) {
+				if (myRun !== evalRun) return;
+				const message = err instanceof Error ? err.message : 'Unknown error';
+				streamEval = { kind: 'not-streamable', reason: message };
+			}
+		})();
+	});
+
+	const torrentStreamButtonDisabled = $derived(
+		!firstMagnet ||
+			streamEval.kind === 'idle' ||
+			streamEval.kind === 'evaluating' ||
+			streamEval.kind === 'not-streamable' ||
+			torrentStreamStarting
+	);
+	const torrentStreamButtonTitle = $derived.by(() => {
+		if (!firstMagnet) return 'Available once a torrent magnet is attached';
+		switch (streamEval.kind) {
+			case 'idle':
+			case 'evaluating':
+				return 'Probing magnet metadata via DHT/trackers (BEP 9/10) — this can take 10–60s on DHT-only torrents';
+			case 'not-streamable':
+				return `Not streamable: ${streamEval.reason}`;
+			case 'streamable':
+				return `Stream "${streamEval.fileName}" as it downloads`;
+		}
+	});
+	const torrentStreamButtonLabel = $derived.by(() => {
+		if (torrentStreamStarting) return 'Starting…';
+		switch (streamEval.kind) {
+			case 'idle':
+				return 'Torrent Stream';
+			case 'evaluating':
+				return 'Probing…';
+			case 'not-streamable':
+				return 'Not streamable';
+			case 'streamable':
+				return 'Torrent Stream';
+		}
+	});
+
 	async function startTorrentStream(): Promise<void> {
 		if (!firstMagnet || torrentStreamStarting) return;
 		torrentStreamStarting = true;
@@ -480,11 +572,9 @@
 				type="button"
 				class="btn gap-2 btn-sm btn-accent"
 				onclick={startTorrentStream}
-				disabled={!firstMagnet || torrentStreamStarting}
+				disabled={torrentStreamButtonDisabled}
 				aria-label="Torrent Stream"
-				title={firstMagnet
-					? 'Resolve magnet metadata, pick the largest video file, and stream it as it downloads'
-					: 'Available once a torrent magnet is attached'}
+				title={torrentStreamButtonTitle}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -496,7 +586,7 @@
 				>
 					<polygon points="6 4 20 12 6 20 6 4" />
 				</svg>
-				<span>{torrentStreamStarting ? 'Resolving…' : 'Torrent Stream'}</span>
+				<span>{torrentStreamButtonLabel}</span>
 			</button>
 			<button
 				type="button"
