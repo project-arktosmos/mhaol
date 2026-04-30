@@ -1485,6 +1485,7 @@
 						<table class="table table-sm">
 							<thead>
 								<tr>
+									<th class="w-12"></th>
 									<th class="w-24">Type</th>
 									<th>Title</th>
 									<th>Value</th>
@@ -1492,7 +1493,35 @@
 							</thead>
 							<tbody>
 								{#each firkin.files as file, i (i)}
+									{@const fileCore =
+										file.type === 'ipfs' ? coreForRom(firkin.title, file.title) : null}
 									<tr>
+										<td class="w-12">
+											{#if fileCore}
+												<button
+													type="button"
+													class="btn btn-xs btn-primary"
+													onclick={() =>
+														launchRom({
+															name: file.title ?? '',
+															relative_path: file.title ?? '',
+															cid: file.value
+														})}
+													title={`Launch in WASM emulator (${fileCore})`}
+													aria-label="Play"
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														viewBox="0 0 24 24"
+														fill="currentColor"
+														class="h-3 w-3"
+														aria-hidden="true"
+													>
+														<polygon points="6 4 20 12 6 20 6 4" />
+													</svg>
+												</button>
+											{/if}
+										</td>
 										<td class={classNames('text-xs font-semibold')}>
 											<span class="badge badge-outline badge-sm">{file.type}</span>
 										</td>
