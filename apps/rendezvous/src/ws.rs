@@ -10,6 +10,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::sync::mpsc;
+use tracing::{debug, info, warn};
 
 use crate::state::RendezvousState;
 use crate::turn;
@@ -31,27 +32,46 @@ pub async fn ws_handler(
     Query(params): Query<AuthParams>,
     State(state): State<RendezvousState>,
 ) -> impl IntoResponse {
+    info!(room_id = %room_id, address = %params.address, "ws upgrade requested");
+
     let ts: u64 = match params.timestamp.parse() {
         Ok(t) => t,
-        Err(_) => return (StatusCode::UNAUTHORIZED, "Invalid timestamp").into_response(),
+        Err(_) => {
+            warn!(room_id = %room_id, "ws auth rejected: invalid timestamp");
+            return (StatusCode::UNAUTHORIZED, "Invalid timestamp").into_response();
+        }
     };
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
     if now.abs_diff(ts) > AUTH_TIMESTAMP_MAX_AGE_MS {
+        warn!(
+            room_id = %room_id,
+            client_ts = ts,
+            server_ts = now,
+            skew_ms = now.abs_diff(ts),
+            "ws auth rejected: timestamp out of window"
+        );
         return (StatusCode::UNAUTHORIZED, "Expired or invalid timestamp").into_response();
     }
 
     let message = format!("partykit-auth:{}:{}", room_id, params.timestamp);
     let recovered = match mhaol_identity::eip191_recover(&message, &params.signature) {
         Ok(addr) => addr,
-        Err(_) => {
-            return (StatusCode::UNAUTHORIZED, "Signature verification failed").into_response()
+        Err(e) => {
+            warn!(room_id = %room_id, error = %e, "ws auth rejected: eip191 recover failed");
+            return (StatusCode::UNAUTHORIZED, "Signature verification failed").into_response();
         }
     };
 
     if recovered.to_lowercase() != params.address.to_lowercase() {
+        warn!(
+            room_id = %room_id,
+            recovered = %recovered,
+            claimed = %params.address,
+            "ws auth rejected: signature mismatch"
+        );
         return (StatusCode::UNAUTHORIZED, "Signature mismatch").into_response();
     }
 
@@ -61,6 +81,13 @@ pub async fn ws_handler(
         &peer_id,
         params.passport_raw.as_deref(),
         params.passport_signature.as_deref(),
+    );
+
+    info!(
+        room_id = %room_id,
+        peer_id = %peer_id,
+        instance_type = %instance_type,
+        "ws auth ok, upgrading"
     );
 
     ws.on_upgrade(move |socket| {
@@ -137,6 +164,13 @@ async fn handle_socket(
         state
             .rooms
             .add_peer(&room_id, &connection_id, &peer_id, &name, &instance_type, tx);
+
+    info!(
+        room_id = %room_id,
+        peer_id = %peer_id,
+        existing_peers = existing_peers.len(),
+        "peer joined"
+    );
 
     let joined_msg = serde_json::json!({
         "type": "peer-joined",
@@ -232,17 +266,39 @@ async fn handle_socket(
 fn handle_message(state: &RendezvousState, room_id: &str, from_peer_id: &str, text: &str) {
     let msg: serde_json::Value = match serde_json::from_str(text) {
         Ok(v) => v,
-        Err(_) => return,
+        Err(e) => {
+            warn!(room_id = %room_id, from = %from_peer_id, error = %e, "ws message: invalid json");
+            return;
+        }
     };
 
     let msg_type = match msg.get("type").and_then(|t| t.as_str()) {
         Some(t) => t,
-        None => return,
+        None => {
+            warn!(room_id = %room_id, from = %from_peer_id, "ws message: missing 'type'");
+            return;
+        }
     };
     let target_peer_id = match msg.get("target_peer_id").and_then(|t| t.as_str()) {
         Some(t) => t,
-        None => return,
+        None => {
+            warn!(
+                room_id = %room_id,
+                from = %from_peer_id,
+                msg_type = %msg_type,
+                "ws message: missing 'target_peer_id'"
+            );
+            return;
+        }
     };
+
+    debug!(
+        room_id = %room_id,
+        from = %from_peer_id,
+        target = %target_peer_id,
+        msg_type = %msg_type,
+        "relaying"
+    );
 
     let relay_msg = match msg_type {
         "offer" => serde_json::json!({
@@ -275,6 +331,12 @@ fn handle_message(state: &RendezvousState, room_id: &str, from_peer_id: &str, te
 
 fn cleanup(state: &RendezvousState, room_id: &str, connection_id: &str) {
     if let Some((peer_info, remaining_txs)) = state.rooms.remove_peer(room_id, connection_id) {
+        info!(
+            room_id = %room_id,
+            peer_id = %peer_info.peer_id,
+            remaining = remaining_txs.len(),
+            "peer left"
+        );
         let left_msg = serde_json::json!({
             "type": "peer-left",
             "room_id": room_id,

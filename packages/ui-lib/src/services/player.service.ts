@@ -291,7 +291,16 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		}));
 
 		try {
-			await this.connectToSignalingRoom(signalingAdapter.resolveLocalUrl(signalingUrl), roomId);
+			const resolved = signalingAdapter.resolveLocalUrl(signalingUrl);
+			console.log(
+				'[Player] signaling URL — raw:',
+				signalingUrl,
+				'resolved:',
+				resolved,
+				'window:',
+				window.location.href
+			);
+			await this.connectToSignalingRoom(resolved, roomId);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
