@@ -38,6 +38,9 @@ dist-static/
 # Rust
 target/
 
+# Runtime logs
+logs/
+
 # SQLite
 *.db
 *.db-wal
