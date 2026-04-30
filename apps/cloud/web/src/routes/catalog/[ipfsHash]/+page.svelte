@@ -18,6 +18,7 @@
 		searchTorrents,
 		type TorrentResultItem
 	} from '$lib/search.service';
+	import { resolveYouTubeUrlForTrack } from '$lib/youtube-match.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 
@@ -341,6 +342,14 @@
 	let searchRun = 0;
 	let startedHashes = $state<Set<string>>(new Set());
 
+	type TorrentRowEval =
+		| { kind: 'pending' }
+		| { kind: 'evaluating' }
+		| { kind: 'streamable'; fileName: string; fileSize: number; mimeType: string | null }
+		| { kind: 'not-streamable'; reason: string };
+	let resultEvals = $state<Record<string, TorrentRowEval>>({});
+	const EVAL_CONCURRENCY = 4;
+
 	const existingHashes = $derived(
 		new Set(firkin.files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
 	);
@@ -354,39 +363,47 @@
 		void runTorrentSearch(id, title, addon, year);
 	});
 
-	type Track = { id: string; position: number; title: string; lengthMs: number | null };
+	type Track = {
+		id: string;
+		position: number;
+		title: string;
+		lengthMs: number | null;
+		youtubeUrl: string | null;
+		youtubeStatus: 'idle' | 'pending' | 'searching' | 'found' | 'missing' | 'error';
+	};
 	type TracksStatus = 'idle' | 'loading' | 'done' | 'error';
 	let tracksStatus = $state<TracksStatus>('idle');
 	let tracksError = $state<string | null>(null);
-	let fetchedTracks = $state<Track[]>([]);
+	let tracks = $state<Track[]>([]);
 	let tracksRun = 0;
-
-	const displayTracks = $derived.by<Track[]>(() => {
-		if (!isMusicBrainz) return [];
-		if (trackFiles.length > 0) {
-			return trackFiles.map((f, i) => ({
-				id: `file-${i}`,
-				position: i + 1,
-				title: f.title ?? '',
-				lengthMs: null
-			}));
-		}
-		return fetchedTracks;
-	});
+	let tracksInitForFirkinId: string | null = null;
 
 	$effect(() => {
 		if (!isMusicBrainz) return;
-		if (trackFiles.length > 0) return;
-		const t = firkin.title;
-		if (!t) return;
-		void loadMusicBrainzTracks(t);
+		const fid = firkin.id;
+		if (tracksInitForFirkinId === fid) return;
+		tracksInitForFirkinId = fid;
+		const myRun = ++tracksRun;
+		if (trackFiles.length > 0) {
+			tracks = trackFiles.map((f, i) => ({
+				id: `file-${i}`,
+				position: i + 1,
+				title: f.title ?? '',
+				lengthMs: null,
+				youtubeUrl: f.value || null,
+				youtubeStatus: f.value ? 'idle' : 'pending'
+			}));
+			tracksStatus = 'done';
+			void resolveYouTubeForAllTracks(myRun);
+		} else if (firkin.title) {
+			void loadAndResolve(firkin.title, myRun);
+		}
 	});
 
-	async function loadMusicBrainzTracks(albumTitle: string) {
-		const myRun = ++tracksRun;
+	async function loadAndResolve(albumTitle: string, myRun: number) {
 		tracksStatus = 'loading';
 		tracksError = null;
-		fetchedTracks = [];
+		tracks = [];
 		try {
 			const searchUrl = `https://musicbrainz.org/ws/2/release-group?query=${encodeURIComponent(albumTitle)}&fmt=json&limit=1`;
 			const searchRes = await fetch(searchUrl, { headers: { Accept: 'application/json' } });
@@ -412,15 +429,92 @@
 				}
 				throw new Error(message);
 			}
-			const body = (await res.json()) as Track[];
+			const body = (await res.json()) as {
+				id: string;
+				position: number;
+				title: string;
+				lengthMs: number | null;
+			}[];
 			if (myRun !== tracksRun) return;
-			fetchedTracks = body;
+			tracks = body.map((t) => ({
+				id: t.id,
+				position: t.position,
+				title: t.title,
+				lengthMs: t.lengthMs,
+				youtubeUrl: null,
+				youtubeStatus: 'pending'
+			}));
 			tracksStatus = 'done';
+			void resolveYouTubeForAllTracks(myRun);
 		} catch (err) {
 			if (myRun !== tracksRun) return;
 			tracksError = err instanceof Error ? err.message : 'Unknown error';
 			tracksStatus = 'error';
 		}
+	}
+
+	async function resolveYouTubeForAllTracks(myRun: number) {
+		const album = firkin.title;
+		const artist = firkin.artists
+			.map((a) => a.name)
+			.filter((n) => n && n.length > 0)
+			.join(', ');
+		for (let i = 0; i < tracks.length; i++) {
+			if (myRun !== tracksRun) return;
+			const t = tracks[i];
+			if (t.youtubeStatus === 'idle' || t.youtubeStatus === 'found') continue;
+			tracks = tracks.map((tr, idx) => (idx === i ? { ...tr, youtubeStatus: 'searching' } : tr));
+			let url: string | null = null;
+			try {
+				url = await resolveYouTubeUrlForTrack(t.title, artist, album, t.lengthMs);
+				if (myRun !== tracksRun) return;
+				tracks = tracks.map((tr, idx) =>
+					idx === i ? { ...tr, youtubeUrl: url, youtubeStatus: url ? 'found' : 'missing' } : tr
+				);
+			} catch {
+				if (myRun !== tracksRun) return;
+				tracks = tracks.map((tr, idx) =>
+					idx === i ? { ...tr, youtubeUrl: null, youtubeStatus: 'error' } : tr
+				);
+				continue;
+			}
+			if (url) {
+				try {
+					await persistTrackUrl(t.title, url);
+				} catch (err) {
+					console.warn('[catalog detail] failed to persist track url', err);
+				}
+			}
+		}
+	}
+
+	async function persistTrackUrl(trackTitle: string, url: string): Promise<void> {
+		const next = firkin.files.map((f) => ({ ...f }));
+		const idx = next.findIndex(
+			(f) => f.type === 'url' && (f.title ?? '').trim() === trackTitle.trim()
+		);
+		if (idx >= 0) {
+			next[idx] = { ...next[idx], value: url };
+		} else {
+			next.push({ type: 'url', value: url, title: trackTitle });
+		}
+		const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}`, {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ files: next })
+		});
+		if (!res.ok) {
+			let message = `HTTP ${res.status}`;
+			try {
+				const body = await res.json();
+				if (body && typeof body.error === 'string') message = body.error;
+			} catch {
+				// ignore
+			}
+			throw new Error(message);
+		}
+		const updated = (await res.json()) as Firkin;
+		data.firkin = updated;
 	}
 
 	function formatDuration(ms: number | null): string {
@@ -488,6 +582,7 @@
 		torrentStatus = 'searching';
 		torrentError = null;
 		torrentMatches = [];
+		resultEvals = {};
 		try {
 			const torrents = await searchTorrents(addon, title);
 			if (myRun !== searchRun) return;
@@ -497,12 +592,76 @@
 			);
 			torrentMatches = matches;
 			torrentStatus = 'done';
+			void evaluateResults(matches, myRun);
 		} catch (err) {
 			if (myRun !== searchRun) return;
 			torrentMatches = [];
 			torrentError = err instanceof Error ? err.message : 'Unknown error';
 			torrentStatus = 'error';
 		}
+	}
+
+	async function evaluateResults(matches: TorrentResultItem[], runToken: number): Promise<void> {
+		const seed: Record<string, TorrentRowEval> = {};
+		for (const t of matches) {
+			if (t.magnetLink) seed[t.magnetLink] = { kind: 'pending' };
+		}
+		resultEvals = seed;
+
+		// Sliding-window concurrency: each `/api/torrent/evaluate` call may
+		// block for up to ~60s while librqbit fetches metadata via DHT or
+		// trackers (BEP 9/10). Firing all of them at once would saturate the
+		// torrent client; cap to a small fixed pool instead.
+		let cursor = 0;
+		const next = (): TorrentResultItem | null => {
+			while (cursor < matches.length) {
+				const t = matches[cursor++];
+				if (t.magnetLink) return t;
+			}
+			return null;
+		};
+
+		const worker = async () => {
+			while (runToken === searchRun) {
+				const t = next();
+				if (!t || !t.magnetLink) break;
+				resultEvals = { ...resultEvals, [t.magnetLink]: { kind: 'evaluating' } };
+				let result: TorrentRowEval;
+				try {
+					const res = await fetch('/api/torrent/evaluate', {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ magnet: t.magnetLink })
+					});
+					const body = (await res.json()) as
+						| {
+								streamable: true;
+								fileName: string;
+								fileSize: number;
+								mimeType: string | null;
+						  }
+						| { streamable: false; reason: string };
+					if (body.streamable) {
+						result = {
+							kind: 'streamable',
+							fileName: body.fileName,
+							fileSize: body.fileSize,
+							mimeType: body.mimeType
+						};
+					} else {
+						result = { kind: 'not-streamable', reason: body.reason };
+					}
+				} catch (err) {
+					const reason = err instanceof Error ? err.message : 'Unknown error';
+					result = { kind: 'not-streamable', reason };
+				}
+				if (runToken !== searchRun) return;
+				resultEvals = { ...resultEvals, [t.magnetLink]: result };
+			}
+		};
+
+		const pool = Math.min(EVAL_CONCURRENCY, matches.length);
+		await Promise.all(Array.from({ length: pool }, () => worker()));
 	}
 
 	async function startTorrentDownload(magnet: string): Promise<void> {
@@ -821,28 +980,18 @@
 				<div class="card border border-base-content/10 bg-base-200 p-4">
 					<div class="mb-2 flex items-center justify-between gap-2">
 						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
-							Tracks{displayTracks.length > 0 ? ` (${displayTracks.length})` : ''}
+							Tracks{tracks.length > 0 ? ` (${tracks.length})` : ''}
 						</h2>
-						{#if trackFiles.length === 0}
-							<button
-								type="button"
-								class="btn btn-outline btn-xs"
-								onclick={() => loadMusicBrainzTracks(firkin.title)}
-								disabled={tracksStatus === 'loading'}
-							>
-								{tracksStatus === 'loading' ? 'Loading…' : 'Refresh'}
-							</button>
-						{/if}
 					</div>
-					{#if trackFiles.length === 0 && tracksStatus === 'loading' && displayTracks.length === 0}
+					{#if tracksStatus === 'loading' && tracks.length === 0}
 						<p class="text-sm text-base-content/60">Loading…</p>
-					{:else if trackFiles.length === 0 && tracksStatus === 'error'}
+					{:else if tracksStatus === 'error'}
 						<p class="text-sm text-error">{tracksError ?? 'Failed'}</p>
-					{:else if displayTracks.length === 0}
+					{:else if tracks.length === 0}
 						<p class="text-sm text-base-content/60">No tracks found.</p>
 					{:else}
 						<ol class="flex flex-col gap-1">
-							{#each displayTracks as track (track.id || `${track.position}-${track.title}`)}
+							{#each tracks as track (track.id || `${track.position}-${track.title}`)}
 								<li
 									class="flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-xs"
 								>
@@ -851,6 +1000,23 @@
 									>
 									<span class="flex-1 truncate" title={track.title}>{track.title}</span>
 									<span class="text-base-content/60">{formatDuration(track.lengthMs)}</span>
+									{#if track.youtubeStatus === 'pending'}
+										<span class="badge badge-ghost badge-xs">YT queued</span>
+									{:else if track.youtubeStatus === 'searching'}
+										<span class="badge badge-ghost badge-xs">YT…</span>
+									{:else if (track.youtubeStatus === 'found' || track.youtubeStatus === 'idle') && track.youtubeUrl}
+										<a
+											class="link truncate text-[11px] link-primary"
+											href={track.youtubeUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											title={track.youtubeUrl}>YouTube</a
+										>
+									{:else if track.youtubeStatus === 'missing'}
+										<span class="badge badge-xs badge-warning">no match</span>
+									{:else if track.youtubeStatus === 'error'}
+										<span class="badge badge-xs badge-error">error</span>
+									{/if}
 								</li>
 							{/each}
 						</ol>
@@ -887,6 +1053,9 @@
 							{#each torrentMatches as torrent (torrent.infoHash)}
 								{@const added = existingHashes.has(torrent.magnetLink)}
 								{@const adding = addingHash === torrent.magnetLink}
+								{@const streamEvalRow: TorrentRowEval = torrent.magnetLink
+									? (resultEvals[torrent.magnetLink] ?? ({ kind: 'pending' } as TorrentRowEval))
+									: ({ kind: 'not-streamable', reason: 'no magnet' } as TorrentRowEval)}
 								<button
 									type="button"
 									class={classNames(
@@ -895,8 +1064,54 @@
 									)}
 									onclick={() => assignTorrent(torrent)}
 									disabled={addingHash !== null || added}
-									title={torrent.title}
+									title={streamEvalRow.kind === 'streamable'
+										? `Streamable — ${streamEvalRow.fileName} · ${torrent.title}`
+										: streamEvalRow.kind === 'not-streamable'
+											? `Not streamable: ${streamEvalRow.reason} · ${torrent.title}`
+											: torrent.title}
 								>
+									{#if streamEvalRow.kind === 'pending' || streamEvalRow.kind === 'evaluating'}
+										<span
+											class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
+											aria-label="Probing torrent metadata"
+										></span>
+									{:else if streamEvalRow.kind === 'streamable'}
+										<span
+											class="shrink-0 text-success"
+											aria-label="Streamable"
+											title={`Streamable — ${streamEvalRow.fileName}`}
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												viewBox="0 0 24 24"
+												fill="currentColor"
+												class="h-3.5 w-3.5"
+												aria-hidden="true"
+											>
+												<polygon points="6 4 20 12 6 20 6 4" />
+											</svg>
+										</span>
+									{:else}
+										<span
+											class="shrink-0 text-base-content/30"
+											aria-label="Not streamable"
+											title={`Not streamable: ${streamEvalRow.reason}`}
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												stroke-linecap="round"
+												class="h-3.5 w-3.5"
+												aria-hidden="true"
+											>
+												<line x1="5" y1="5" x2="19" y2="19" />
+												<line x1="19" y1="5" x2="5" y2="19" />
+											</svg>
+										</span>
+									{/if}
 									<span class="font-medium">{torrent.quality ?? '—'}</span>
 									<span class="text-success">↑{torrent.seeders}</span>
 									<span class="text-warning">↓{torrent.leechers}</span>
