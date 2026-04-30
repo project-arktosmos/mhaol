@@ -30,6 +30,8 @@ const ALLOWED_TYPES: &[&str] = &[
     "youtube channel",
     "book",
     "game",
+    "iptv channel",
+    "radio station",
 ];
 
 const ALLOWED_SOURCES: &[&str] = &[
@@ -40,6 +42,8 @@ const ALLOWED_SOURCES: &[&str] = &[
     "lrclib",
     "openlibrary",
     "wyzie-subs",
+    "iptv",
+    "radio",
     "local",
 ];
 
