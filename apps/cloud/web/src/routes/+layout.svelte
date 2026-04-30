@@ -27,9 +27,9 @@
 	const playerState = playerService.state;
 	const identityState = userIdentityService.state;
 
-	// `/access` lives on the right side of the navbar (as the identity menu),
+	// `/profile` lives on the right side of the navbar (as the identity menu),
 	// so hide it from the auto-generated central menu.
-	const centralNavItems = NAV_ITEMS.filter((item) => item.href !== '/access');
+	const centralNavItems = NAV_ITEMS.filter((item) => item.href !== '/profile');
 
 	const triggerClass = (item: NavItem) =>
 		classNames('btn btn-outline btn-sm', { 'btn-disabled': !item.hasOwnPage });
@@ -78,7 +78,7 @@
 			<div class="flex items-center gap-1">
 				{#if $identityState.identity}
 					<a
-						href="{base}/access"
+						href="{base}/profile"
 						class="btn font-mono normal-case btn-ghost btn-sm"
 						title="Manage identity"
 					>

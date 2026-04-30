@@ -133,13 +133,13 @@
 </script>
 
 <svelte:head>
-	<title>Mhaol Cloud — Access</title>
+	<title>Mhaol Cloud — Profile</title>
 </svelte:head>
 
 <div class="flex min-h-full flex-col gap-6 p-6">
 	<header class="flex items-baseline justify-between gap-4">
 		<div>
-			<h1 class="text-2xl font-bold">Access</h1>
+			<h1 class="text-2xl font-bold">Profile</h1>
 			<p class="text-sm text-base-content/60">
 				Your identity for this cloud. Stored only in your browser; export the JSON if you want to
 				use it on another device.
