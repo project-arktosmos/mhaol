@@ -94,9 +94,8 @@ async fn main() {
         .ok()
         .map(|d| PathBuf::from(d).join("identities"))
         .unwrap_or_else(mhaol_identity::default_identities_dir);
-    let signaling_url = std::env::var("SIGNALING_URL").unwrap_or_else(|_| {
-        "https://mhaol-signaling.project-arktosmos.partykit.dev".to_string()
-    });
+    let signaling_url = std::env::var("SIGNALING_URL")
+        .unwrap_or_else(|_| "http://localhost:14080".to_string());
     let identity_manager =
         IdentityManager::new(identities_dir, "cloud".to_string(), signaling_url.clone());
 

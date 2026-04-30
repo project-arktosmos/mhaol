@@ -24,7 +24,7 @@ export function apiUrl(path: string): string {
 	return `${apiBase}${path}`;
 }
 
-export const DEFAULT_SIGNALING_URL = 'https://mhaol-signaling.project-arktosmos.partykit.dev';
+export const DEFAULT_SIGNALING_URL = 'http://localhost:14080';
 
 export function getSignalingUrl(): string {
 	if (!browser) return DEFAULT_SIGNALING_URL;
