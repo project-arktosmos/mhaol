@@ -34,6 +34,11 @@ pub struct IpfsConfig {
     /// constrained to TCP+pnet+noise+yamux (no QUIC/WebSocket). When `None`,
     /// the node behaves as a public IPFS node.
     pub swarm_key: Option<String>,
+    /// Force the Kademlia DHT into Server mode after the node starts. Default
+    /// `false` — leaves the node in `Auto` mode. Bootstrap nodes (rendezvous)
+    /// must run in Server mode so other peers can store and look up records
+    /// against them; regular peers can leave this off.
+    pub dht_server_mode: bool,
 }
 
 impl Default for IpfsConfig {
@@ -47,6 +52,7 @@ impl Default for IpfsConfig {
             extra_bootstrap: vec![],
             agent_version: format!("mhaol-ipfs/{}", env!("CARGO_PKG_VERSION")),
             swarm_key: None,
+            dht_server_mode: false,
         }
     }
 }

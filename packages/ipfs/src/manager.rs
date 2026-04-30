@@ -9,8 +9,9 @@ use libp2p::core::transport::{Boxed, OrTransport};
 use libp2p::core::upgrade;
 use libp2p::pnet::{PnetConfig, PreSharedKey};
 use libp2p::{noise, tcp, yamux, Transport as Libp2pTransport};
+use rust_ipfs::libp2p::kad::Quorum;
 use rust_ipfs::libp2p::Multiaddr;
-use rust_ipfs::{Ipfs, IpfsPath, UninitializedIpfsDefault};
+use rust_ipfs::{DhtMode, Ipfs, IpfsPath, UninitializedIpfsDefault};
 
 use crate::config::{IpfsConfig, DEFAULT_BOOTSTRAP};
 use crate::types::{
@@ -181,10 +182,21 @@ impl IpfsManager {
             anyhow!("Failed to start IPFS node: {}", e)
         })?;
 
-        // Public bootstrap only makes sense for public swarms.
-        if config.bootstrap_on_start && config.swarm_key.is_none() {
+        // For public swarms, bootstrap_on_start dials the well-known public
+        // bootstrap nodes. For private swarms, bootstrap is only meaningful
+        // when the caller has supplied at least one peer to dial — typically
+        // the rendezvous bootstrap node.
+        let should_bootstrap = config.bootstrap_on_start
+            && (config.swarm_key.is_none() || !config.extra_bootstrap.is_empty());
+        if should_bootstrap {
             if let Err(e) = ipfs.bootstrap().await {
                 log::warn!("[ipfs] bootstrap failed: {}", e);
+            }
+        }
+
+        if config.dht_server_mode {
+            if let Err(e) = ipfs.dht_mode(DhtMode::Server).await {
+                log::warn!("[ipfs] dht server mode failed: {}", e);
             }
         }
 
@@ -222,6 +234,56 @@ impl IpfsManager {
         // We hold a clone-able handle inside the lock so reads don't have to
         // be awaited under contention.
         self.ipfs.try_read().ok().and_then(|g| g.clone())
+    }
+
+    /// Cloneable handle to the running IPFS node, or `None` if the node has
+    /// not been initialized yet. Exposed so callers can drive less-common
+    /// libp2p surfaces (e.g. raw pubsub) without forcing the manager to
+    /// re-export every method on `rust_ipfs::Ipfs`.
+    pub fn ipfs_handle(&self) -> Option<Ipfs> {
+        self.handle()
+    }
+
+    /// Switch the embedded Kademlia DHT into the given mode at runtime.
+    /// Bootstrap nodes need `DhtMode::Server` so other peers can publish
+    /// records against them; clients usually leave this in `Auto`.
+    pub async fn set_dht_mode(&self, mode: DhtMode) -> Result<()> {
+        let ipfs = self
+            .handle()
+            .ok_or_else(|| anyhow!("IPFS node not initialized"))?;
+        ipfs.dht_mode(mode)
+            .await
+            .map_err(|e| anyhow!("Failed to set DHT mode: {}", e))
+    }
+
+    /// Store an arbitrary `(key, value)` record in the Kademlia DHT with
+    /// `Quorum::One`. Used by the rendezvous app to expose WebRTC SDP
+    /// offers/answers across the private swarm without a centralized signal
+    /// server.
+    pub async fn dht_put(&self, key: &[u8], value: Vec<u8>) -> Result<()> {
+        let ipfs = self
+            .handle()
+            .ok_or_else(|| anyhow!("IPFS node not initialized"))?;
+        ipfs.dht_put(key, value, Quorum::One)
+            .await
+            .map_err(|e| anyhow!("Failed to put DHT record: {}", e))
+    }
+
+    /// Fetch the first DHT record for `key`, or `None` if the lookup
+    /// completes without finding one. Records published by `dht_put` from
+    /// any peer on the same swarm are reachable here.
+    pub async fn dht_get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let ipfs = self
+            .handle()
+            .ok_or_else(|| anyhow!("IPFS node not initialized"))?;
+        let mut stream = ipfs
+            .dht_get(key)
+            .await
+            .map_err(|e| anyhow!("Failed to query DHT: {}", e))?;
+        if let Some(record) = stream.next().await {
+            return Ok(Some(record.value));
+        }
+        Ok(None)
     }
 
     /// Add a file or directory at `request.source` to the IPFS blockstore.

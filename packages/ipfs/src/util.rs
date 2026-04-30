@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use libp2p::pnet::PreSharedKey;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -59,6 +59,38 @@ pub fn save_swarm_key(path: &Path, swarm_key: &str) -> Result<()> {
         let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
     }
     Ok(())
+}
+
+/// Default location of the shared `swarm.key` file. Resolved as:
+/// `$DATA_DIR/swarm.key` when `DATA_DIR` is set, otherwise
+/// `<home>/mhaol/swarm.key`, falling back to `./swarm.key` if the home
+/// directory cannot be determined. Every Mhaol process that should join the
+/// same private swarm reads this path by default — keeping it shared is what
+/// lets the cloud and the rendezvous bootstrap node converge on the same PSK
+/// without per-app configuration.
+pub fn default_swarm_key_path() -> PathBuf {
+    if let Ok(data_dir) = std::env::var("DATA_DIR") {
+        return PathBuf::from(data_dir).join("swarm.key");
+    }
+    if let Some(home) = dirs_home() {
+        return home.join("mhaol").join("swarm.key");
+    }
+    PathBuf::from("swarm.key")
+}
+
+#[cfg(unix)]
+fn dirs_home() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
+}
+
+#[cfg(windows)]
+fn dirs_home() -> Option<PathBuf> {
+    std::env::var_os("USERPROFILE").map(PathBuf::from)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn dirs_home() -> Option<PathBuf> {
+    None
 }
 
 /// Returns an existing swarm key on disk, or generates and persists a new one.
