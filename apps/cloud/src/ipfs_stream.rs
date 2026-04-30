@@ -41,6 +41,8 @@ pub struct StartSessionResponse {
     pub session_id: String,
     pub playlist_url: String,
     pub playlist_ready: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_seconds: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -120,10 +122,24 @@ async fn start_session(
     .await
     .unwrap_or(false);
 
+    // Probe the source's full duration so the player can render a real
+    // total even though the rolling HLS playlist still looks live.
+    // decodebin reports duration shortly after the pipeline reaches
+    // PLAYING, which `wait_for_playlist` already implies.
+    let manager_for_dur = manager.clone();
+    let session_for_dur = session_id.clone();
+    let duration_seconds = tokio::task::spawn_blocking(move || {
+        manager_for_dur.query_source_duration(&session_for_dur, Duration::from_secs(2))
+    })
+    .await
+    .ok()
+    .flatten();
+
     Ok(Json(StartSessionResponse {
         session_id: session_id.clone(),
         playlist_url: format!("/api/ipfs-stream/sessions/{session_id}/playlist.m3u8"),
         playlist_ready: ready,
+        duration_seconds,
     }))
 }
 

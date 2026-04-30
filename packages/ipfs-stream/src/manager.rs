@@ -144,6 +144,31 @@ impl IpfsStreamManager {
             .map(|e| e.record.snapshot())
     }
 
+    /// Query the source media's total duration in seconds by polling the
+    /// running pipeline's duration query. Returns `None` if the pipeline is
+    /// gone or the duration is still unknown after `timeout`. Useful so the
+    /// player can show a finite total even though the rolling HLS playlist
+    /// looks live (no `#EXT-X-ENDLIST`) until transcoding finishes.
+    pub fn query_source_duration(&self, session_id: &str, timeout: Duration) -> Option<f64> {
+        let pipeline = self
+            .inner
+            .lock()
+            .sessions
+            .get(session_id)
+            .map(|e| e.pipeline.pipeline().clone())?;
+        let deadline = std::time::Instant::now() + timeout;
+        while std::time::Instant::now() < deadline {
+            if let Some(d) = pipeline.query_duration::<gst::ClockTime>() {
+                let secs = d.nseconds() as f64 / 1_000_000_000.0;
+                if secs > 0.0 {
+                    return Some(secs);
+                }
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        None
+    }
+
     /// Wait (blocking the current thread, polling) for the playlist file to
     /// be written and contain at least one segment reference. Returns `true`
     /// if the playlist is ready within `timeout`, `false` otherwise.

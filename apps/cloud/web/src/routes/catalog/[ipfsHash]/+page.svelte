@@ -68,7 +68,15 @@
 				}
 				throw new Error(message);
 			}
-			const body = (await res.json()) as { sessionId: string; playlistUrl: string };
+			const body = (await res.json()) as {
+				sessionId: string;
+				playlistUrl: string;
+				durationSeconds?: number;
+			};
+			const durationSecs =
+				typeof body.durationSeconds === 'number' && body.durationSeconds > 0
+					? body.durationSeconds
+					: null;
 			const file: PlayableFile = {
 				id: `firkin:${firkin.id}:ipfs:${firstIpfsCid}`,
 				type: 'library',
@@ -78,10 +86,13 @@
 				format: null,
 				videoFormat: null,
 				thumbnailUrl: firkin.images[0]?.url ?? null,
-				durationSeconds: null,
+				durationSeconds: durationSecs,
 				size: 0,
 				completedAt: ''
 			};
+			// The rolling HLS playlist has no #EXT-X-ENDLIST until transcode
+			// completes, so videoElement.duration stays Infinity — seed
+			// durationSecs from the server-probed source duration instead.
 			await playerService.playUrl(
 				file,
 				body.playlistUrl,
