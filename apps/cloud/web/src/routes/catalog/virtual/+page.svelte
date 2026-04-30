@@ -16,6 +16,7 @@
 		searchTorrents,
 		type TorrentResultItem
 	} from '$lib/search.service';
+	import { resolveYouTubeUrlForTrack } from '$lib/youtube-match.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
@@ -89,12 +90,21 @@
 		}
 	}
 
-	type Track = { id: string; position: number; title: string; lengthMs: number | null };
+	type Track = {
+		id: string;
+		position: number;
+		title: string;
+		lengthMs: number | null;
+		youtubeUrl: string | null;
+		youtubeStatus: 'pending' | 'searching' | 'found' | 'missing' | 'error';
+	};
 	type TracksStatus = 'idle' | 'loading' | 'done' | 'error';
 	let tracksStatus = $state<TracksStatus>('idle');
 	let tracksError = $state<string | null>(null);
 	let tracks = $state<Track[]>([]);
 	let tracksRun = 0;
+
+	const albumArtist = $derived(description.split(' · ')[0]?.trim() ?? '');
 
 	$effect(() => {
 		if (!title) return;
@@ -133,14 +143,49 @@
 				}
 				throw new Error(message);
 			}
-			const body = (await res.json()) as Track[];
+			const body = (await res.json()) as {
+				id: string;
+				position: number;
+				title: string;
+				lengthMs: number | null;
+			}[];
 			if (myRun !== tracksRun) return;
-			tracks = body;
+			tracks = body.map((t) => ({
+				id: t.id,
+				position: t.position,
+				title: t.title,
+				lengthMs: t.lengthMs,
+				youtubeUrl: null,
+				youtubeStatus: 'pending'
+			}));
 			tracksStatus = 'done';
+			void resolveYouTubeForAllTracks(myRun);
 		} catch (err) {
 			if (myRun !== tracksRun) return;
 			tracksError = err instanceof Error ? err.message : 'Unknown error';
 			tracksStatus = 'error';
+		}
+	}
+
+	async function resolveYouTubeForAllTracks(myRun: number) {
+		const album = title;
+		const artist = albumArtist;
+		for (let i = 0; i < tracks.length; i++) {
+			if (myRun !== tracksRun) return;
+			const t = tracks[i];
+			tracks = tracks.map((tr, idx) => (idx === i ? { ...tr, youtubeStatus: 'searching' } : tr));
+			try {
+				const url = await resolveYouTubeUrlForTrack(t.title, artist, album, t.lengthMs);
+				if (myRun !== tracksRun) return;
+				tracks = tracks.map((tr, idx) =>
+					idx === i ? { ...tr, youtubeUrl: url, youtubeStatus: url ? 'found' : 'missing' } : tr
+				);
+			} catch {
+				if (myRun !== tracksRun) return;
+				tracks = tracks.map((tr, idx) =>
+					idx === i ? { ...tr, youtubeUrl: null, youtubeStatus: 'error' } : tr
+				);
+			}
 		}
 	}
 
@@ -359,6 +404,23 @@
 									>
 									<span class="flex-1 truncate" title={track.title}>{track.title}</span>
 									<span class="text-base-content/60">{formatDuration(track.lengthMs)}</span>
+									{#if track.youtubeStatus === 'pending'}
+										<span class="badge badge-ghost badge-xs">YT queued</span>
+									{:else if track.youtubeStatus === 'searching'}
+										<span class="badge badge-ghost badge-xs">YT…</span>
+									{:else if track.youtubeStatus === 'found' && track.youtubeUrl}
+										<a
+											class="link truncate text-[11px] link-primary"
+											href={track.youtubeUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											title={track.youtubeUrl}>YouTube</a
+										>
+									{:else if track.youtubeStatus === 'missing'}
+										<span class="badge badge-xs badge-warning">no match</span>
+									{:else if track.youtubeStatus === 'error'}
+										<span class="badge badge-xs badge-error">error</span>
+									{/if}
 								</li>
 							{/each}
 						</ol>
