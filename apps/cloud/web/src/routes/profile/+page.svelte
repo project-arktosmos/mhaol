@@ -5,6 +5,8 @@
 
 	const identityStore = userIdentityService.state;
 
+	type Tab = 'export' | 'import' | 'reset';
+	let activeTab = $state<Tab>('export');
 	let importText = $state('');
 	let usernameDraft = $state('');
 	let savingUsername = $state(false);
@@ -204,69 +206,92 @@
 					</dd>
 				{/if}
 			</dl>
-		</section>
 
-		<section class="card bg-base-200 p-4">
-			<h2 class="mb-2 text-lg font-semibold">Export</h2>
-			<p class="mb-3 text-sm text-base-content/60">
-				Save the JSON below to move this identity to another device. It contains your private key —
-				keep it secret.
-			</p>
-			<textarea
-				class="textarea-bordered textarea h-40 w-full font-mono text-xs"
-				readonly
-				value={exportText}
-			></textarea>
-			<div class="mt-3 flex flex-wrap gap-2">
-				<button class="btn btn-outline btn-sm" onclick={copyJson}>
-					{copied ? 'Copied!' : 'Copy to clipboard'}
+			<div class="divider my-4"></div>
+
+			<div role="tablist" class="tabs-bordered tabs">
+				<button
+					role="tab"
+					class={classNames('tab', { 'tab-active': activeTab === 'export' })}
+					onclick={() => (activeTab = 'export')}
+				>
+					Export
 				</button>
-				<button class="btn btn-outline btn-sm" onclick={downloadJson}>Download .json</button>
+				<button
+					role="tab"
+					class={classNames('tab', { 'tab-active': activeTab === 'import' })}
+					onclick={() => (activeTab = 'import')}
+				>
+					Import
+				</button>
+				<button
+					role="tab"
+					class={classNames('tab', { 'tab-active': activeTab === 'reset' })}
+					onclick={() => (activeTab = 'reset')}
+				>
+					Reset
+				</button>
 			</div>
-		</section>
 
-		<section class="card bg-base-200 p-4">
-			<h2 class="mb-2 text-lg font-semibold">Import</h2>
-			<p class="mb-3 text-sm text-base-content/60">
-				Replace the current identity with one you exported earlier.
-			</p>
-			<textarea
-				class="textarea-bordered textarea h-32 w-full font-mono text-xs"
-				placeholder={`{ "address": "0x…", "privateKey": "0x…", "username": "…" }`}
-				bind:value={importText}
-			></textarea>
-			<div class="mt-3 flex flex-wrap items-center gap-2">
-				<button class="btn btn-sm btn-primary" onclick={importFromText}>Import from text</button>
-				<label class="btn btn-outline btn-sm">
-					Import from file…
-					<input
-						type="file"
-						accept="application/json,.json"
-						class="hidden"
-						onchange={importFromFile}
-					/>
-				</label>
+			<div class="pt-4">
+				{#if activeTab === 'export'}
+					<p class="mb-3 text-sm text-base-content/60">
+						Save the JSON below to move this identity to another device. It contains your private
+						key — keep it secret.
+					</p>
+					<textarea
+						class="textarea-bordered textarea h-40 w-full font-mono text-xs"
+						readonly
+						value={exportText}
+					></textarea>
+					<div class="mt-3 flex flex-wrap gap-2">
+						<button class="btn btn-outline btn-sm" onclick={copyJson}>
+							{copied ? 'Copied!' : 'Copy to clipboard'}
+						</button>
+						<button class="btn btn-outline btn-sm" onclick={downloadJson}>Download .json</button>
+					</div>
+				{:else if activeTab === 'import'}
+					<p class="mb-3 text-sm text-base-content/60">
+						Replace the current identity with one you exported earlier.
+					</p>
+					<textarea
+						class="textarea-bordered textarea h-32 w-full font-mono text-xs"
+						placeholder={`{ "address": "0x…", "privateKey": "0x…", "username": "…" }`}
+						bind:value={importText}
+					></textarea>
+					<div class="mt-3 flex flex-wrap items-center gap-2">
+						<button class="btn btn-sm btn-primary" onclick={importFromText}>
+							Import from text
+						</button>
+						<label class="btn btn-outline btn-sm">
+							Import from file…
+							<input
+								type="file"
+								accept="application/json,.json"
+								class="hidden"
+								onchange={importFromFile}
+							/>
+						</label>
+					</div>
+					{#if importError}
+						<p class="mt-2 text-sm text-error">{importError}</p>
+					{/if}
+				{:else}
+					<p class="mb-3 text-sm text-base-content/60">
+						Generate a new key pair and register it. The current identity will be discarded.
+					</p>
+					<button
+						class="btn btn-outline btn-sm btn-warning"
+						disabled={regenerating}
+						onclick={regenerate}
+					>
+						{regenerating ? 'Regenerating…' : 'Regenerate identity'}
+					</button>
+					{#if actionError}
+						<p class="mt-2 text-sm text-error">{actionError}</p>
+					{/if}
+				{/if}
 			</div>
-			{#if importError}
-				<p class="mt-2 text-sm text-error">{importError}</p>
-			{/if}
-		</section>
-
-		<section class="card bg-base-200 p-4">
-			<h2 class="mb-2 text-lg font-semibold">Reset</h2>
-			<p class="mb-3 text-sm text-base-content/60">
-				Generate a new key pair and register it. The current identity will be discarded.
-			</p>
-			<button
-				class="btn btn-outline btn-sm btn-warning"
-				disabled={regenerating}
-				onclick={regenerate}
-			>
-				{regenerating ? 'Regenerating…' : 'Regenerate identity'}
-			</button>
-			{#if actionError}
-				<p class="mt-2 text-sm text-error">{actionError}</p>
-			{/if}
 		</section>
 	{/if}
 </div>
