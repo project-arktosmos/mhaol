@@ -14,6 +14,7 @@ The cloud also ships a desktop Tauri shell at `apps/cloud/src-tauri/` (crate `mh
 ```
 src/
 ├── server.rs            # Binary entry point — opens SurrealDB, builds router
+├── paths.rs             # Single source of truth for on-disk paths under <data_root>
 ├── db.rs                # SurrealDB connection helper (RocksDB engine)
 ├── state.rs             # CloudState: { db, identity_manager, ytdl_manager, torrent_manager, ed2k_manager, ipfs_manager }
 ├── cloud_status.rs      # GET /api/cloud/status
@@ -37,12 +38,42 @@ web/                     # SvelteKit static SPA (pnpm package `cloud`); builds t
 └── package.json
 ```
 
+## On-disk layout
+
+Everything the cloud writes lives under a single root:
+
+- Default: `<home>/mhaol-cloud/` — resolved via `dirs::home_dir()`, OS-aware (`~/mhaol-cloud/` on macOS/Linux, `%USERPROFILE%\mhaol-cloud\` on Windows).
+- Override the root: set `DATA_DIR` to any path you like; everything below moves with it.
+
+```
+<data_root>/
+├── db/                          # SurrealDB (RocksDB) store
+├── identities/                  # Ethereum keystore (mhaol-identity)
+├── swarm.key                    # IPFS PSK
+├── rendezvous/
+│   └── bootstrap.multiaddr      # written by the rendezvous app, read on startup
+└── downloads/
+    ├── torrents/                # mhaol-torrent
+    ├── ed2k/                    # mhaol-ed2k
+    ├── ipfs/                    # embedded IPFS repo (blockstore + datastore)
+    ├── ipfs-stream/             # HLS segments produced by mhaol-ipfs-stream
+    └── youtube/                 # yt-dlp output
+```
+
+Per-path env overrides still apply on top of `DATA_DIR`:
+
+- `DB_PATH` — full path to the SurrealDB store (skips `<data_root>/db`).
+- `IPFS_SWARM_KEY_FILE` — full path to the swarm key.
+- `RENDEZVOUS_BOOTSTRAP_FILE` — full path to the bootstrap multiaddr file.
+- `YTDL_OUTPUT_DIR` — full path to the yt-dlp output dir.
+
+`apps/cloud/src/paths.rs` is the single source of truth for these defaults.
+
 ## Database
 
 - Engine: **SurrealDB 2.x** with the embedded **RocksDB** kv backend. SurrealKV was tried first but hit [surrealdb/surrealdb#5064](https://github.com/surrealdb/surrealdb/issues/5064) — concurrent writes from background scan / pin / request handlers corrupted the store and reads panicked with `Invalid revision N for type Value`. RocksDB does not have this problem.
-- Default location: `<home>/mhaol/cloud-rocksdb/` — resolved via `dirs::home_dir()`, so it's OS-aware (`~/mhaol/...` on macOS/Linux, `%USERPROFILE%\mhaol\...` on Windows). The directory is managed by RocksDB.
+- Location: `<data_root>/db/` (see "On-disk layout" above).
 - Namespace: `mhaol`, database: `cloud`.
-- Override path via `DB_PATH` env var, or set `DATA_DIR` to put it under `<DATA_DIR>/cloud-rocksdb/`.
 - The store is created fresh on first boot. There are no schemas or repos defined yet — add tables/queries as features land.
 
 ## Packages loaded by cloud
@@ -53,9 +84,9 @@ The cloud crate directly depends on these mhaol packages and reports their healt
 - `mhaol-yt-dlp` — YouTube download manager (cfg(not(target_os = "android"))).
 - `mhaol-torrent` — `librqbit`-backed torrent session, initialized in the background on startup so the server can bind quickly (cfg(not(target_os = "android"))).
 - `mhaol-ed2k` — eDonkey/ed2k client (cfg(not(target_os = "android"))).
-- `mhaol-ipfs` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT), initialized in the background on startup. The blockstore lives at `<DATA_DIR>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node **always** runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<DATA_DIR>/swarm.key` — the same default location that `apps/rendezvous` uses (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped, mDNS is off, and the transport stack is constrained to TCP+pnet+noise+yamux. Non-PSK peers fail at the libp2p `pnet` handshake before anything reaches Kademlia or the application — that is the only enforcement layer needed. If the swarm key cannot be loaded or generated the IPFS subsystem refuses to start (no fallback to the public swarm). The cloud bootstraps against the rendezvous node: precedence is `RENDEZVOUS_BOOTSTRAP` env var (newline- or comma-separated multiaddrs), then `<DATA_DIR>/rendezvous/bootstrap.multiaddr` (override with `RENDEZVOUS_BOOTSTRAP_FILE`), then a localhost default of `/ip4/127.0.0.1/tcp/14001`.
+- `mhaol-ipfs` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT), initialized in the background on startup. The blockstore lives at `<data_root>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node **always** runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<data_root>/swarm.key` (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped, mDNS is off, and the transport stack is constrained to TCP+pnet+noise+yamux. Non-PSK peers fail at the libp2p `pnet` handshake before anything reaches Kademlia or the application — that is the only enforcement layer needed. If the swarm key cannot be loaded or generated the IPFS subsystem refuses to start (no fallback to the public swarm). The cloud bootstraps against the rendezvous node: precedence is `RENDEZVOUS_BOOTSTRAP` env var (newline- or comma-separated multiaddrs), then `<data_root>/rendezvous/bootstrap.multiaddr` (override with `RENDEZVOUS_BOOTSTRAP_FILE`), then a localhost default of `/ip4/127.0.0.1/tcp/14001`.
 
-Default download paths land under `<DATA_DIR>/downloads/{torrents,ed2k,ipfs}` (or `<crate>/downloads/...` if `DATA_DIR` is unset). yt-dlp honors `YTDL_OUTPUT_DIR`/`YTDL_PO_TOKEN`/`YTDL_VISITOR_DATA`/`YTDL_COOKIES` via `YtDownloadConfig::from_env()`.
+All download paths land under `<data_root>/downloads/{torrents,ed2k,ipfs,ipfs-stream,youtube}`. yt-dlp uses `<data_root>/downloads/youtube` by default and still honors `YTDL_OUTPUT_DIR`/`YTDL_PO_TOKEN`/`YTDL_VISITOR_DATA`/`YTDL_COOKIES`.
 
 ## WebUI
 
@@ -95,12 +126,13 @@ pnpm build:cloud
 
 - `PORT` — Server port (default: 9898; `pnpm app:cloud` / `pnpm dev:cloud` / `pnpm dev` set it to 9899 so Vite can own 9898)
 - `HOST` — Bind address (default: 0.0.0.0; `pnpm app:cloud` / `pnpm dev:cloud` / `pnpm dev` set it to 127.0.0.1)
-- `DB_PATH` — SurrealDB store path (default: `<home>/mhaol/cloud-rocksdb/`, resolved per-OS via `dirs::home_dir()`)
-- `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-rocksdb/`
+- `DATA_DIR` — Root directory for all cloud-managed state. Default: `<home>/mhaol-cloud/`. The DB, identities, swarm key, rendezvous bootstrap and downloads all sit under this root.
+- `DB_PATH` — Override the SurrealDB store path specifically (default: `<data_root>/db/`).
 - `SIGNALING_URL` — Base URL of the rendezvous WebSocket signaling server (default: `http://localhost:14080`). The cloud bakes this into passport metadata and propagates it to the GStreamer worker so `/api/p2p-stream/sessions` can return it to the player.
-- `IPFS_SWARM_KEY_FILE` — Path to the IPFS pre-shared swarm key. Default: `<DATA_DIR>/swarm.key` (or `<home>/mhaol/swarm.key` when `DATA_DIR` is unset), auto-generated on first boot when missing. The rendezvous app defaults to the same path, so a single-machine setup shares the key out of the box. All nodes on the same private swarm must share this file byte-for-byte.
+- `IPFS_SWARM_KEY_FILE` — Override the IPFS pre-shared swarm key path (default: `<data_root>/swarm.key`, auto-generated on first boot when missing). Note: the rendezvous app defaults to its own swarm key location; if you run both on the same machine, point one of them at the other's key (or symlink) so they share the same PSK.
 - `RENDEZVOUS_BOOTSTRAP` — Newline- or comma-separated rendezvous multiaddrs to dial on startup (e.g. `/ip4/192.168.1.10/tcp/14001/p2p/12D3...`). Takes precedence over the bootstrap file.
-- `RENDEZVOUS_BOOTSTRAP_FILE` — Path to the rendezvous-written bootstrap multiaddr file. Default: `<DATA_DIR>/rendezvous/bootstrap.multiaddr` (or `<home>/mhaol/rendezvous/bootstrap.multiaddr`).
+- `RENDEZVOUS_BOOTSTRAP_FILE` — Override the rendezvous-written bootstrap multiaddr file path (default: `<data_root>/rendezvous/bootstrap.multiaddr`).
+- `YTDL_OUTPUT_DIR` — Override the yt-dlp output directory (default: `<data_root>/downloads/youtube`).
 
 ## Worker subcommand
 

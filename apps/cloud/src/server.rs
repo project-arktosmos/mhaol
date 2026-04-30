@@ -13,6 +13,7 @@ mod libraries;
 #[cfg(not(target_os = "android"))]
 mod library_scan;
 mod p2p_stream;
+mod paths;
 mod player;
 mod search;
 mod state;
@@ -71,30 +72,15 @@ async fn main() {
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
 
-    let db_path = std::env::var("DB_PATH")
-        .ok()
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var("DATA_DIR")
-                .ok()
-                .map(|d| PathBuf::from(d).join("cloud-rocksdb"))
-        })
-        .unwrap_or_else(|| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join("mhaol")
-                .join("cloud-rocksdb")
-        });
+    let db_path = paths::db_path();
 
+    tracing::info!("Cloud data root: {}", paths::data_root().display());
     tracing::info!("Opening SurrealDB store at {}", db_path.display());
     let surreal = db::open(&db_path)
         .await
         .expect("Failed to initialize SurrealDB");
 
-    let identities_dir = std::env::var("DATA_DIR")
-        .ok()
-        .map(|d| PathBuf::from(d).join("identities"))
-        .unwrap_or_else(mhaol_identity::default_identities_dir);
+    let identities_dir = paths::identities_dir();
     let signaling_url = std::env::var("SIGNALING_URL")
         .unwrap_or_else(|_| "http://localhost:14080".to_string());
     let identity_manager =
@@ -114,13 +100,20 @@ async fn main() {
     }
 
     #[cfg(not(target_os = "android"))]
-    let ytdl_manager = Arc::new(DownloadManager::new(YtDownloadConfig::from_env()));
+    let ytdl_manager = {
+        let mut config = YtDownloadConfig::from_env();
+        if std::env::var("YTDL_OUTPUT_DIR").is_err() {
+            config.output_path = paths::youtube_dir().to_string_lossy().into_owned();
+        }
+        std::fs::create_dir_all(&config.output_path).ok();
+        Arc::new(DownloadManager::new(config))
+    };
 
     #[cfg(not(target_os = "android"))]
     let torrent_manager = {
         let manager = Arc::new(TorrentManager::new());
         let manager_clone = Arc::clone(&manager);
-        let download_path = downloads_dir().join("torrents");
+        let download_path = paths::torrents_dir();
         tokio::spawn(async move {
             let config = TorrentConfig {
                 download_path,
@@ -137,7 +130,7 @@ async fn main() {
     let ed2k_manager = {
         let manager = Arc::new(Ed2kManager::new());
         manager.install_arc();
-        let download_path = downloads_dir().join("ed2k");
+        let download_path = paths::ed2k_dir();
         let config = Ed2kConfig {
             download_path,
             ..Ed2kConfig::default()
@@ -177,18 +170,14 @@ async fn main() {
     let ipfs_manager = {
         let manager = Arc::new(IpfsManager::new());
         let manager_clone = Arc::clone(&manager);
-        let repo_path = downloads_dir().join("ipfs");
+        let repo_path = paths::ipfs_repo_dir();
         tokio::spawn(async move {
             // The IPFS node always runs on a private network: read an
-            // existing swarm key off disk or generate one on first boot. The
-            // shared default location is `<DATA_DIR>/swarm.key` (or
-            // `<home>/mhaol/swarm.key`) so the cloud, the rendezvous app and
-            // any other Mhaol process converge on the same key without
-            // explicit configuration. Override with `IPFS_SWARM_KEY_FILE`.
+            // existing swarm key off disk or generate one on first boot.
+            // Default location is `<data_root>/swarm.key`; override with
+            // `IPFS_SWARM_KEY_FILE`.
             std::fs::create_dir_all(&repo_path).ok();
-            let key_path = std::env::var("IPFS_SWARM_KEY_FILE")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|_| mhaol_ipfs::default_swarm_key_path());
+            let key_path = paths::swarm_key_path();
             if let Some(parent) = key_path.parent() {
                 std::fs::create_dir_all(parent).ok();
             }
@@ -236,7 +225,7 @@ async fn main() {
         if let Err(e) = mhaol_ipfs_stream::init() {
             tracing::warn!("[ipfs-stream] gstreamer init failed: {}", e);
         }
-        let base_dir = downloads_dir().join("ipfs-stream");
+        let base_dir = paths::ipfs_stream_dir();
         std::fs::create_dir_all(&base_dir).ok();
         Arc::new(mhaol_ipfs_stream::manager::IpfsStreamManager::new(base_dir))
     };
@@ -318,26 +307,12 @@ async fn main() {
     axum::serve(listener, app).await.expect("Server error");
 }
 
-#[cfg(not(target_os = "android"))]
-fn downloads_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("DATA_DIR") {
-        let p = PathBuf::from(dir).join("downloads");
-        std::fs::create_dir_all(&p).ok();
-        return p;
-    }
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let p = manifest_dir.join("downloads");
-    std::fs::create_dir_all(&p).ok();
-    p
-}
-
 /// Build the bootstrap multiaddr list for the rendezvous IPFS node.
 ///
 /// Sources, in order of precedence:
 /// 1. `RENDEZVOUS_BOOTSTRAP` env var (newline- or comma-separated multiaddrs).
 /// 2. The bootstrap file written by the rendezvous binary, default
-///    `<DATA_DIR>/rendezvous/bootstrap.multiaddr` (or
-///    `<home>/mhaol/rendezvous/bootstrap.multiaddr`). Override with
+///    `<data_root>/rendezvous/bootstrap.multiaddr`. Override with
 ///    `RENDEZVOUS_BOOTSTRAP_FILE`.
 /// 3. A localhost default (`/ip4/127.0.0.1/tcp/14001`) so a single-machine
 ///    setup works without configuration. The peer-id portion is stripped, so
@@ -355,17 +330,7 @@ fn resolve_rendezvous_bootstrap() -> Vec<String> {
         }
     }
 
-    let bootstrap_file = std::env::var("RENDEZVOUS_BOOTSTRAP_FILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            if let Ok(dir) = std::env::var("DATA_DIR") {
-                PathBuf::from(dir).join("rendezvous").join("bootstrap.multiaddr")
-            } else if let Some(home) = dirs::home_dir() {
-                home.join("mhaol").join("rendezvous").join("bootstrap.multiaddr")
-            } else {
-                PathBuf::from("rendezvous").join("bootstrap.multiaddr")
-            }
-        });
+    let bootstrap_file = paths::rendezvous_bootstrap_file();
 
     if let Ok(contents) = std::fs::read_to_string(&bootstrap_file) {
         let entries: Vec<String> = contents
