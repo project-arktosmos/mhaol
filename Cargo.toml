@@ -4,7 +4,6 @@ members = [
     "apps/cloud",
     "apps/cloud/src-tauri",
     "apps/rendezvous",
-    "apps/signaling",
     "packages/identity",
     "packages/yt-dlp",
     "packages/torrent",
