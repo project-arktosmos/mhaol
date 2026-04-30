@@ -35,6 +35,7 @@ enum WorkerCommand {
         ice_servers: Option<Vec<IceServerEntry>>,
     },
     #[serde(rename = "delete_session")]
+    #[allow(dead_code)]
     DeleteSession { session_id: String },
 }
 
@@ -224,6 +225,7 @@ impl WorkerBridge {
     }
 
     /// Send a delete_session command to the worker.
+    #[allow(dead_code)]
     pub async fn delete_session(&self, session_id: &str) -> Result<WorkerEvent, String> {
         if !self.is_ready() {
             return Err("Worker is not running".to_string());

@@ -1,7 +1,5 @@
 /**
- * Castilian Spanish (España) language detection. Mirrors the Rust
- * `is_spanish_release` in `apps/node/src/api/torrent_spanish.rs` so the
- * frontend can defensively filter results that slip past a stale backend.
+ * Castilian Spanish (España) language detection.
  *
  * Latin American Spanish (`latino`, `latam`, `es-MX`, etc.) is rejected:
  * the latino marker wins even when a Castilian marker is also present.

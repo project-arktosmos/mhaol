@@ -4,10 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.arktosmos.mhaol.cloud",
   "build": {
-    "frontendDist": "../../tauri/web/dist-static",
-    "devUrl": "http://localhost:1571",
-    "beforeDevCommand": "(lsof -i:1571 >/dev/null 2>&1) || pnpm --filter tauri-web dev",
-    "beforeBuildCommand": "pnpm --filter tauri-web build"
+    "frontendDist": "../web/dist-static",
+    "devUrl": "http://localhost:9898",
+    "beforeBuildCommand": "pnpm --filter cloud build"
   },
   "app": {
     "windows": [],
