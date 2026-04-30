@@ -14,7 +14,7 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 ```
 mhaol.git/
 ├── apps/
-│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + Tauri desktop shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud")
+│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud")
 │   ├── rendezvous/                   # Rust IPFS bootstrap node for the private Mhaol swarm + DHT-backed WebRTC signaling (mhaol-rendezvous, HTTP 14080, libp2p 14001)
 │   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 │   └── signaling/                    # Rust signaling server (self-hosted alternative to PartyKit)
@@ -60,9 +60,9 @@ The cloud is a Rust Axum server at `apps/cloud/` that bootstraps an embedded Sur
 
 ### Tauri shell
 
-`apps/cloud/src-tauri/` — crate `mhaol-cloud-shell`, binary `mhaol-cloud-shell`. `productName: "Mhaol Cloud"`, identifier `com.arktosmos.mhaol.cloud`. Ships a real desktop window: `app.windows` declares a single `main` window (1280×800, min 800×600, resizable, title "Mhaol Cloud") that loads `http://localhost:9898` (the `devUrl` in dev — Vite; the embedded WebUI in release). `tauri.conf.json` keeps `frontendDist: ../web/dist-static` / `devUrl: http://localhost:9898`. A system tray icon (id `mhaol-cloud-tray`, tooltip "Mhaol Cloud") is also registered: **Open** focuses the `main` window if it exists (falls back to opening the URL in the system default browser via `tauri-plugin-opener` if not); **Quit** calls `app.exit(0)`.
+`apps/cloud/src-tauri/` — crate `mhaol-cloud-shell`, binary `mhaol-cloud-shell`. `productName: "Mhaol Cloud"`, identifier `com.arktosmos.mhaol.cloud`. **Tray-only**: `app.windows: []`, no window is ever created. macOS sets `ActivationPolicy::Accessory` (no dock icon), `RunEvent::ExitRequested` calls `prevent_exit()` so the process stays alive without windows. The system tray icon (id `mhaol-cloud-tray`, tooltip "Mhaol Cloud") has two items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`. `tauri.conf.json` keeps `frontendDist: ../web/dist-static` / `devUrl: http://localhost:9898` so build/dev tooling resolves cleanly; nothing actually renders the assets at runtime.
 
-The cloud WebUI also stays browser-accessible at `http://localhost:9898`.
+The cloud WebUI stays browser-accessible at `http://localhost:9898`.
 
 Layout:
 - `apps/cloud/src-tauri/Cargo.toml` — crate manifest
@@ -179,7 +179,7 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Cloud + Tauri desktop shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + Tauri window loading http://localhost:9898
+pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + tray icon (no window)
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
 
 # Building

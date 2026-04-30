@@ -7,7 +7,7 @@
 
 The cloud server runs an embedded SurrealDB store, an identity manager, and the desktop-only managers from `mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, and `mhaol-ipfs`. It loads `mhaol-p2p-stream` for the GStreamer worker, and serves the Svelte WebUI from the nested `web/` directory.
 
-The cloud also ships a desktop Tauri shell at `apps/cloud/src-tauri/` (crate `mhaol-cloud-shell`, productName "Mhaol Cloud"). The shell opens a real desktop window: `app.windows` declares a single `main` window (1280×800, min 800×600, resizable, title "Mhaol Cloud") that loads `http://localhost:9898` — Vite in dev (`devUrl`), the embedded WebUI in release. A system tray icon (id `mhaol-cloud-tray`) is also registered on macOS/Windows/Linux with two menu items: **Open** focuses the `main` window if it exists, otherwise falls back to opening the URL in the default browser via `tauri-plugin-opener`; **Quit** calls `app.exit(0)`. The cloud WebUI also remains browser-accessible at `http://localhost:9898`.
+The cloud also ships a desktop Tauri shell at `apps/cloud/src-tauri/` (crate `mhaol-cloud-shell`, productName "Mhaol Cloud"). The shell is **tray-only** — it never opens a window. `tauri.conf.json` has `app.windows: []`, on macOS the activation policy is set to `Accessory` (no dock icon), and `RunEvent::ExitRequested` is intercepted via `prevent_exit()` so the app stays alive without any windows. It registers a system tray icon (id `mhaol-cloud-tray`) on macOS/Windows/Linux with two menu items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`. The cloud WebUI itself remains browser-accessible at `http://localhost:9898`.
 
 ## Source Structure
 
