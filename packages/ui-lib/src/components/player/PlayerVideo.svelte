@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
 	import Hls from 'hls.js';
@@ -92,6 +92,9 @@
 
 	let isVideo = $derived(file?.mode !== 'audio');
 	let isStreaming = $derived(connectionState === 'streaming');
+	let isHlsStream = $derived(
+		!!directStreamUrl && isHlsUrl(directStreamUrl, directStreamMimeType)
+	);
 	let activeMediaElement = $derived(videoElement as HTMLMediaElement | null);
 	// Combine subtitles already attached to the file with any downloaded for the search context.
 	let assignedSubs = $derived(subtitleSearchContext ? $subsState.assigned : []);
@@ -285,13 +288,17 @@
 		element.addEventListener('loadedmetadata', onLoadedMetadata);
 		element.addEventListener('durationchange', onDurationChange);
 		// Pump the current values once in case metadata already loaded
-		// before this effect ran (common on hot-reload).
-		if (Number.isFinite(element.duration) && element.duration > 0) {
-			playerService.state.update((s) => ({ ...s, durationSecs: element.duration }));
-		}
-		if (Number.isFinite(element.currentTime) && element.currentTime > 0) {
-			playerService.state.update((s) => ({ ...s, positionSecs: element.currentTime }));
-		}
+		// before this effect ran (common on hot-reload). Wrapped in
+		// untrack so the sync state write doesn't feed back into this
+		// effect's reactive dependencies.
+		untrack(() => {
+			if (Number.isFinite(element.duration) && element.duration > 0) {
+				playerService.state.update((s) => ({ ...s, durationSecs: element.duration }));
+			}
+			if (Number.isFinite(element.currentTime) && element.currentTime > 0) {
+				playerService.state.update((s) => ({ ...s, positionSecs: element.currentTime }));
+			}
+		});
 		return () => {
 			element.removeEventListener('error', onError);
 			element.removeEventListener('timeupdate', onTimeUpdate);
@@ -468,6 +475,10 @@
 	}
 
 	function handleWaiting(): void {
+		// hls.js drives its own buffering; native `waiting` cycles
+		// through every MSE buffer underrun and would leave the spinner
+		// flickering on top of an otherwise-playing stream.
+		if (isHlsStream) return;
 		playerService.setBuffering(true);
 	}
 
@@ -607,7 +618,7 @@
 			</div>
 		{/if}
 
-		{#if buffering}
+		{#if buffering && !isHlsStream}
 			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
 				<span class="loading loading-lg loading-spinner text-primary"></span>
 			</div>
