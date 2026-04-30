@@ -76,7 +76,8 @@ async fn search_tmdb(
         urlencoding(query)
     );
 
-    let res = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let res = client
         .get(&url)
         .header("Accept", "application/json")
         .send()
@@ -95,17 +96,128 @@ async fn search_tmdb(
         .await
         .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("tmdb parse failed: {e}")))?;
 
-    let items = payload
+    let raw_results: Vec<serde_json::Value> = payload
         .get("results")
         .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .map(|r| build_tmdb_item(r))
-                .collect()
-        })
+        .cloned()
         .unwrap_or_default();
 
+    let mut tasks = Vec::with_capacity(raw_results.len());
+    for r in &raw_results {
+        let tmdb_id = r.get("id").and_then(|v| v.as_i64());
+        let client = client.clone();
+        let api_key = api_key.clone();
+        tasks.push(tokio::spawn(async move {
+            match tmdb_id {
+                Some(id) => fetch_tmdb_credits(&client, is_tv, id, &api_key).await,
+                None => Vec::new(),
+            }
+        }));
+    }
+
+    let mut items: Vec<SearchResultItem> = Vec::with_capacity(raw_results.len());
+    for (i, r) in raw_results.iter().enumerate() {
+        let mut item = build_tmdb_item(r);
+        if let Some(handle) = tasks.get_mut(i) {
+            if let Ok(artists) = handle.await {
+                item.artists = artists;
+            }
+        }
+        items.push(item);
+    }
+
     Ok(Json(items))
+}
+
+async fn fetch_tmdb_credits(
+    client: &reqwest::Client,
+    is_tv: bool,
+    tmdb_id: i64,
+    api_key: &str,
+) -> Vec<Artist> {
+    let kind = if is_tv { "tv" } else { "movie" };
+    let url = format!("{}/{}/{}/credits?api_key={}", TMDB_BASE, kind, tmdb_id, api_key);
+    let res = match client
+        .get(&url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => r,
+        _ => return Vec::new(),
+    };
+    let payload: serde_json::Value = match res.json().await {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    build_tmdb_artists(&payload)
+}
+
+const TMDB_RELEVANT_CREW_DEPARTMENTS: &[&str] = &["Directing", "Writing", "Production"];
+const TMDB_CAST_LIMIT: usize = 20;
+const TMDB_CREW_LIMIT: usize = 15;
+
+fn build_tmdb_artists(credits: &serde_json::Value) -> Vec<Artist> {
+    let mut out: Vec<Artist> = Vec::new();
+    let mut seen_ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
+
+    if let Some(cast) = credits.get("cast").and_then(|v| v.as_array()) {
+        let mut cast_sorted = cast.iter().collect::<Vec<_>>();
+        cast_sorted.sort_by_key(|c| c.get("order").and_then(|v| v.as_i64()).unwrap_or(i64::MAX));
+        for c in cast_sorted.into_iter().take(TMDB_CAST_LIMIT) {
+            if let Some(id) = c.get("id").and_then(|v| v.as_i64()) {
+                if !seen_ids.insert(id) {
+                    continue;
+                }
+            }
+            if let Some(artist) = build_tmdb_artist_from_person(c) {
+                out.push(artist);
+            }
+        }
+    }
+
+    if let Some(crew) = credits.get("crew").and_then(|v| v.as_array()) {
+        let filtered: Vec<&serde_json::Value> = crew
+            .iter()
+            .filter(|c| {
+                c.get("department")
+                    .and_then(|v| v.as_str())
+                    .map(|d| TMDB_RELEVANT_CREW_DEPARTMENTS.contains(&d))
+                    .unwrap_or(false)
+            })
+            .collect();
+        for c in filtered.into_iter().take(TMDB_CREW_LIMIT) {
+            if let Some(id) = c.get("id").and_then(|v| v.as_i64()) {
+                if !seen_ids.insert(id) {
+                    continue;
+                }
+            }
+            if let Some(artist) = build_tmdb_artist_from_person(c) {
+                out.push(artist);
+            }
+        }
+    }
+
+    out
+}
+
+fn build_tmdb_artist_from_person(person: &serde_json::Value) -> Option<Artist> {
+    let name = person.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
+    let id = person.get("id").and_then(|v| v.as_i64());
+    let url = id.map(|id| format!("https://www.themoviedb.org/person/{}", id));
+    let image_url = person
+        .get("profile_path")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|p| format!("{}/w185{}", TMDB_IMG_BASE, p));
+    Some(Artist {
+        name: name.to_string(),
+        url,
+        image_url,
+    })
 }
 
 fn build_tmdb_item(r: &serde_json::Value) -> SearchResultItem {
