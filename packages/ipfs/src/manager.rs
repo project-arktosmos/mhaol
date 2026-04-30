@@ -327,6 +327,35 @@ impl IpfsManager {
         Ok(info)
     }
 
+    /// Add raw bytes to the blockstore as a UnixFS file with the given
+    /// `name`, pinning the result. Returns the CID assigned by `add_unixfs`
+    /// (this is a UnixFS CID, not a raw-codec sha256 of `bytes`).
+    pub async fn add_bytes(&self, name: String, bytes: Vec<u8>) -> Result<IpfsFileInfo> {
+        let ipfs = self
+            .handle()
+            .ok_or_else(|| anyhow!("IPFS node not initialized"))?;
+        let size = bytes.len() as u64;
+        let ipfs_path: IpfsPath = ipfs
+            .add_unixfs((name.clone(), bytes))
+            .pin(true)
+            .await
+            .map_err(|e| anyhow!("Failed to add bytes to IPFS: {}", e))?;
+        let cid_str = ipfs_path
+            .root()
+            .cid()
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| ipfs_path.to_string());
+        let info = IpfsFileInfo {
+            cid: cid_str.clone(),
+            name,
+            size,
+            pinned: true,
+            added_at: get_unix_timestamp(),
+        };
+        self.files.write().insert(cid_str, info.clone());
+        Ok(info)
+    }
+
     /// Pin a CID recursively. Idempotent — pinning an already-pinned CID
     /// returns Ok.
     pub async fn pin(&self, cid_str: &str) -> Result<()> {

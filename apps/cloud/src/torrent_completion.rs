@@ -19,7 +19,10 @@ use std::time::Duration;
 use parking_lot::Mutex;
 
 #[cfg(not(target_os = "android"))]
-use crate::firkins::{compute_firkin_cid, Firkin, FileEntry, TABLE as FIRKIN_TABLE};
+use crate::firkins::{
+    compute_firkin_cid, pin_firkin_body, serialize_firkin_payload, FileEntry, Firkin,
+    TABLE as FIRKIN_TABLE,
+};
 #[cfg(not(target_os = "android"))]
 use crate::ipfs_pins;
 #[cfg(not(target_os = "android"))]
@@ -177,8 +180,7 @@ async fn rollforward(
         &doc.images,
         &updated_files,
         doc.year,
-        &doc.kind,
-        &doc.source,
+        &doc.addon,
         new_version,
         &new_hashes,
     );
@@ -188,6 +190,18 @@ async fn rollforward(
         return Ok(false);
     }
 
+    let new_body_json = serialize_firkin_payload(
+        &doc.title,
+        &doc.description,
+        &doc.artists,
+        &doc.images,
+        &updated_files,
+        doc.year,
+        &doc.addon,
+        new_version,
+        &new_hashes,
+    );
+
     let new_record = Firkin {
         id: None,
         title: doc.title.clone(),
@@ -196,8 +210,7 @@ async fn rollforward(
         images: doc.images.clone(),
         files: updated_files,
         year: doc.year,
-        kind: doc.kind.clone(),
-        source: doc.source.clone(),
+        addon: doc.addon.clone(),
         created_at: doc.created_at,
         updated_at: chrono::Utc::now(),
         version: new_version,
@@ -232,6 +245,8 @@ async fn rollforward(
             return Err(e.into());
         }
     }
+
+    pin_firkin_body(state, &new_id, new_body_json).await;
 
     tracing::info!(
         "[torrent-completion] {} → {} (v{}, +{} file(s))",

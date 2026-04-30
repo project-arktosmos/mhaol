@@ -20,7 +20,7 @@ src/
 ├── cloud_status.rs      # GET /api/cloud/status
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir; carries a list of catalog `kinds` (movie / tv / album / book / game)
 ├── library_scan.rs      # Scan-time media detection + firkin persistence (cfg(not(target_os = "android")))
-├── firkins.rs         # /api/firkins CRUD — SurrealDB-backed firkin records (name, author, description)
+├── firkins.rs         # /api/firkins CRUD — SurrealDB-backed firkin records (id is a CIDv1-raw of the body); create also pins the body JSON to the embedded IPFS node and records an `ipfs_pin` row keyed `firkin://<id>`
 ├── database.rs          # /api/database/tables{,/:table} — read-only SurrealDB explorer (lists tables, paginates records)
 ├── ipfs_pins.rs         # /api/ipfs/pins — lists pins recorded when libraries are scanned; exposes record_pin() used by the scan handler
 ├── fs_browse.rs         # /api/fs/browse — list subdirectories under a path (defaults to home), used by the WebUI directory picker
@@ -150,11 +150,11 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/libraries/:id/scan` — recursively walk the library directory and return `{ root, total_files, total_size, entries }` where each entry is `{ path, relative_path, size, mime }`. MIME types are resolved by extension via `mime_guess`. The scan response itself is not persisted; the library's `last_scanned_at` is updated once the walk completes. After the walk, the scan handler hands off to `library_scan::schedule_pins_and_firkins` (see "Library scan → firkins" below). The pin task waits for the IPFS node to reach `Running` state (up to ~60s) before it starts so the very first scan after server boot doesn't race the IPFS init.
 - `GET /api/libraries/:id/pins` — list pins from `ipfs_pin` whose `path` lies under this library's directory. Same shape as `GET /api/ipfs/pins`.
 - `GET /api/ipfs/pins` — list every pin recorded by the cloud (`ipfs_pin` table). Each row is `{ id, cid, path, mime, size, created_at }`. Records are deduplicated by `(cid, path)` so re-scans don't create duplicates.
-- `GET /api/firkins` — list firkins persisted in SurrealDB (`firkin` table).
-- `POST /api/firkins` — create a firkin `{ name, author, description? }`. `name` and `author` are required.
+- `GET /api/firkins` — list firkins persisted in SurrealDB (`firkin` table). Superseded versions (any id appearing in another row's `version_hashes`) are filtered out so callers only see the head of each chain.
+- `POST /api/firkins` — create a firkin `{ title, addon, description?, artists?, images?, files?, year? }`. `title` and `addon` are required (`addon` must be a known addon id; see `/api/catalog/sources` for browsable ones, plus the `local-*` family and the non-browsable `wyzie-subs-*`/`lrclib` ids). The id is the CIDv1-raw sha256 of the canonical pretty-printed JSON body, computed by `compute_firkin_cid`. Returns `200` with the existing record if a firkin with that id already exists, otherwise `201`. **Bookmark semantics**: in addition to the SurrealDB write, the handler pins the firkin's body JSON to the embedded IPFS node via `IpfsManager::add_bytes` (named `firkin-<id>.json`) and inserts an `ipfs_pin` row `{ cid: <unixfs cid>, path: "firkin://<id>", mime: "application/json", size }`. The IPFS pin is best-effort — failures are logged via `tracing::warn!` but do not fail the create, so the WebUI's Bookmark / torrent-pick flows still succeed while the IPFS node is warming up. Note: the `ipfs_pin.cid` is the UnixFS CID (which wraps the JSON in a UnixFS protobuf) and is not equal to the firkin's id (which is a raw-codec sha256 of the same bytes).
 - `GET /api/firkins/:id` — fetch one firkin.
-- `PUT /api/firkins/:id` — update `name`, `author`, or `description` (any subset).
-- `DELETE /api/firkins/:id` — remove the firkin record.
+- `PUT /api/firkins/:id` — update `title`, `addon`, `description`, `artists`, `images`, `files`, `year` (any subset). Currently mutates in place at the existing id; the firkin id is **not** recomputed and the IPFS pin from the original create is **not** refreshed. Programmatic version-rollforward is the path that produces a new id (see "Firkin versioning"); this endpoint is for direct edits where preserving the id is intentional.
+- `DELETE /api/firkins/:id` — remove the firkin record from SurrealDB. The IPFS pin row left by `POST /api/firkins` is currently not garbage-collected.
 - `GET /api/database/tables` — list every table in the cloud SurrealDB database with its row count. Returns `{ namespace, database, tables: [{ name, record_count }] }`. Used by the embedded `/database` explorer.
 - `GET /api/database/tables/:table?limit=<n>&offset=<n>` — paginate records in a single table. Table names are validated as `[A-Za-z0-9_]{1,64}`. `limit` defaults to 100 (max 1000); `offset` defaults to 0. Returns `{ table, limit, offset, total, records }` where each record is JSON with the SurrealDB `id` flattened to a `<table>:<id>` string.
 - `GET /api/fs/browse?path=<optional>` — list subdirectories under `path` (defaults to the system home directory). Returns `{ path, parent, home, separator, roots, entries }` where `entries` only contains directories (hidden dot-folders are skipped). On Windows, `roots` lists available drive letters.
@@ -197,6 +197,8 @@ Firkins are content-addressed: the SurrealDB record `id` is the CIDv1-raw of the
 - `version_hashes: Vec<String>` — CIDs of every prior version, oldest first. Chain integrity invariant: `version_hashes.len() == version`.
 
 Whenever the firkin is updated programmatically (currently only the torrent-completion flow), the prior CID is pushed onto `version_hashes`, `version` is incremented, the new CID is computed over the full new body, the old record is deleted, and a new record is created at the new CID. Verifiers walk `version_hashes` backwards to rebuild the chain.
+
+The body is also pinned to IPFS twice: once at create time via `POST /api/firkins` (the "bookmark" pin), and again at every version-rollforward (the new body is added via `IpfsManager::add_bytes` and the new `firkin://<id>` row is recorded). Each version's body is therefore independently retrievable from the swarm by its UnixFS CID; the firkin's own `id` (a raw-codec sha256 of the same JSON) remains the canonical SurrealDB key and is what `version_hashes` references.
 
 ## Torrent → firkin auto-update
 

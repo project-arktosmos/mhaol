@@ -1,3 +1,4 @@
+use crate::catalog::is_known_addon;
 use crate::state::CloudState;
 use axum::{
     extract::{Path, State},
@@ -17,32 +18,6 @@ pub const TABLE: &str = "firkin";
 
 const SHA2_256_CODE: u64 = 0x12;
 const RAW_CODEC: u64 = 0x55;
-
-const ALLOWED_TYPES: &[&str] = &[
-    "movie",
-    "tv show",
-    "album",
-    "image",
-    "youtube video",
-    "youtube channel",
-    "book",
-    "game",
-    "iptv channel",
-    "radio station",
-];
-
-const ALLOWED_SOURCES: &[&str] = &[
-    "tmdb",
-    "musicbrainz",
-    "retroachievements",
-    "youtube",
-    "lrclib",
-    "openlibrary",
-    "wyzie-subs",
-    "iptv",
-    "radio",
-    "local",
-];
 
 const ALLOWED_FILE_TYPES: &[&str] = &["ipfs", "torrent magnet", "url"];
 
@@ -85,23 +60,19 @@ struct FirkinPayloadView<'a> {
     images: &'a [ImageMeta],
     files: &'a [FileEntry],
     year: Option<i32>,
-    #[serde(rename = "type")]
-    kind: &'a str,
-    source: &'a str,
+    addon: &'a str,
     version: u32,
     version_hashes: &'a [String],
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn compute_firkin_cid(
+pub fn serialize_firkin_payload(
     title: &str,
     description: &str,
     artists: &[Artist],
     images: &[ImageMeta],
     files: &[FileEntry],
     year: Option<i32>,
-    kind: &str,
-    source: &str,
+    addon: &str,
     version: u32,
     version_hashes: &[String],
 ) -> String {
@@ -112,13 +83,35 @@ pub fn compute_firkin_cid(
         images,
         files,
         year,
-        kind,
-        source,
+        addon,
         version,
         version_hashes,
     };
-    let json = serde_json::to_string_pretty(&view)
-        .expect("FirkinPayloadView serializes to JSON");
+    serde_json::to_string_pretty(&view).expect("FirkinPayloadView serializes to JSON")
+}
+
+pub fn compute_firkin_cid(
+    title: &str,
+    description: &str,
+    artists: &[Artist],
+    images: &[ImageMeta],
+    files: &[FileEntry],
+    year: Option<i32>,
+    addon: &str,
+    version: u32,
+    version_hashes: &[String],
+) -> String {
+    let json = serialize_firkin_payload(
+        title,
+        description,
+        artists,
+        images,
+        files,
+        year,
+        addon,
+        version,
+        version_hashes,
+    );
     let digest = Sha256::digest(json.as_bytes());
     let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
         .expect("sha2-256 digest fits in multihash");
@@ -139,10 +132,10 @@ pub struct Firkin {
     pub files: Vec<FileEntry>,
     #[serde(default)]
     pub year: Option<i32>,
-    #[serde(rename = "type", default)]
-    pub kind: String,
-    #[serde(default)]
-    pub source: String,
+    /// Addon id (single source of identity for the firkin's content kind).
+    /// Replaces the prior split between `type` and `source`.
+    #[serde(default, alias = "source")]
+    pub addon: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
@@ -160,9 +153,7 @@ pub struct FirkinDto {
     pub images: Vec<ImageMeta>,
     pub files: Vec<FileEntry>,
     pub year: Option<i32>,
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub source: String,
+    pub addon: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub version: u32,
@@ -184,8 +175,7 @@ impl From<Firkin> for FirkinDto {
             images: doc.images,
             files: doc.files,
             year: doc.year,
-            kind: doc.kind,
-            source: doc.source,
+            addon: doc.addon,
             created_at: doc.created_at,
             updated_at: doc.updated_at,
             version: doc.version,
@@ -206,9 +196,7 @@ pub struct CreateFirkinRequest {
     pub files: Vec<FileEntry>,
     #[serde(default)]
     pub year: Option<i32>,
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub source: String,
+    pub addon: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -219,9 +207,7 @@ pub struct UpdateFirkinRequest {
     pub images: Option<Vec<ImageMeta>>,
     pub files: Option<Vec<FileEntry>>,
     pub year: Option<i32>,
-    #[serde(rename = "type")]
-    pub kind: Option<String>,
-    pub source: Option<String>,
+    pub addon: Option<String>,
 }
 
 pub fn router() -> Router<CloudState> {
@@ -304,24 +290,14 @@ async fn create(
         .unwrap_or("")
         .trim()
         .to_string();
-    let kind = req.kind.trim();
-    if kind.is_empty() {
-        return Err(err_response(StatusCode::BAD_REQUEST, "type is required"));
+    let addon = req.addon.trim();
+    if addon.is_empty() {
+        return Err(err_response(StatusCode::BAD_REQUEST, "addon is required"));
     }
-    if !ALLOWED_TYPES.contains(&kind) {
+    if !is_known_addon(addon) {
         return Err(err_response(
             StatusCode::BAD_REQUEST,
-            format!("invalid type: {kind}"),
-        ));
-    }
-    let source = req.source.trim();
-    if source.is_empty() {
-        return Err(err_response(StatusCode::BAD_REQUEST, "source is required"));
-    }
-    if !ALLOWED_SOURCES.contains(&source) {
-        return Err(err_response(
-            StatusCode::BAD_REQUEST,
-            format!("invalid source: {source}"),
+            format!("invalid addon: {addon}"),
         ));
     }
     let artists: Vec<Artist> = req
@@ -383,18 +359,21 @@ async fn create(
     let now = Utc::now();
     let version: u32 = 0;
     let version_hashes: Vec<String> = Vec::new();
-    let new_id = compute_firkin_cid(
+    let body_json = serialize_firkin_payload(
         title,
         &description,
         &artists,
         &images,
         &files,
         year,
-        kind,
-        source,
+        addon,
         version,
         &version_hashes,
     );
+    let digest = Sha256::digest(body_json.as_bytes());
+    let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
+        .expect("sha2-256 digest fits in multihash");
+    let new_id = Cid::new_v1(RAW_CODEC, mh).to_string();
 
     let existing: Option<Firkin> = state
         .db
@@ -413,8 +392,7 @@ async fn create(
         images,
         files,
         year,
-        kind: kind.to_string(),
-        source: source.to_string(),
+        addon: addon.to_string(),
         created_at: now,
         updated_at: now,
         version,
@@ -431,8 +409,46 @@ async fn create(
     let dto: FirkinDto = created
         .ok_or_else(|| err_response(StatusCode::INTERNAL_SERVER_ERROR, "firkin was not persisted"))?
         .into();
+
+    pin_firkin_body(&state, &new_id, body_json).await;
+
     Ok((StatusCode::CREATED, Json(dto)))
 }
+
+/// Pin the firkin body's JSON bytes to the embedded IPFS node and record an
+/// `ipfs_pin` row keyed on the synthetic path `firkin://<id>`. Best-effort:
+/// failures are logged but do not surface to the caller, since the IPFS node
+/// can still be initializing when the first firkins are created.
+#[cfg(not(target_os = "android"))]
+pub(crate) async fn pin_firkin_body(state: &CloudState, firkin_id: &str, body_json: String) {
+    let bytes = body_json.into_bytes();
+    let size = bytes.len() as u64;
+    let info = match state
+        .ipfs_manager
+        .add_bytes(format!("firkin-{firkin_id}.json"), bytes)
+        .await
+    {
+        Ok(info) => info,
+        Err(e) => {
+            tracing::warn!("[firkins] failed to pin body for {firkin_id}: {e}");
+            return;
+        }
+    };
+    if let Err(e) = crate::ipfs_pins::record_pin(
+        state,
+        info.cid,
+        format!("firkin://{firkin_id}"),
+        "application/json".to_string(),
+        size,
+    )
+    .await
+    {
+        tracing::warn!("[firkins] failed to record pin row for {firkin_id}: {e}");
+    }
+}
+
+#[cfg(target_os = "android")]
+pub(crate) async fn pin_firkin_body(_state: &CloudState, _firkin_id: &str, _body_json: String) {}
 
 async fn update(
     State(state): State<CloudState>,
@@ -527,30 +543,17 @@ async fn update(
         };
     }
 
-    if let Some(kind) = req.kind.as_ref().map(|k| k.trim()) {
-        if kind.is_empty() {
-            return Err(err_response(StatusCode::BAD_REQUEST, "type cannot be empty"));
+    if let Some(addon) = req.addon.as_ref().map(|a| a.trim()) {
+        if addon.is_empty() {
+            return Err(err_response(StatusCode::BAD_REQUEST, "addon cannot be empty"));
         }
-        if !ALLOWED_TYPES.contains(&kind) {
+        if !is_known_addon(addon) {
             return Err(err_response(
                 StatusCode::BAD_REQUEST,
-                format!("invalid type: {kind}"),
+                format!("invalid addon: {addon}"),
             ));
         }
-        current.kind = kind.to_string();
-    }
-
-    if let Some(source) = req.source.as_ref().map(|s| s.trim()) {
-        if source.is_empty() {
-            return Err(err_response(StatusCode::BAD_REQUEST, "source cannot be empty"));
-        }
-        if !ALLOWED_SOURCES.contains(&source) {
-            return Err(err_response(
-                StatusCode::BAD_REQUEST,
-                format!("invalid source: {source}"),
-            ));
-        }
-        current.source = source.to_string();
+        current.addon = addon.to_string();
     }
 
     current.updated_at = Utc::now();
