@@ -6,6 +6,7 @@
 	import EmulatorModal from 'ui-lib/components/videogames/EmulatorModal.svelte';
 	import {
 		coreForRom,
+		isRomArchive,
 		resolveRomForFile,
 		type EmulatorCore
 	} from 'ui-lib/components/videogames/emulator-cores';
@@ -402,12 +403,18 @@
 	// Scanning the firkin's torrent extracts archives in place, pins each
 	// ROM to IPFS and rolls the firkin forward — afterwards `firkin.files`
 	// contains the new `ipfs` entries and the Files table renders play
-	// buttons for them via `resolveRomForFile`. The status + error are
-	// surfaced inline next to the Files heading.
-	type RomScanResponse = { firkin_id: string };
+	// buttons for them via `resolveRomForFile`. Status is surfaced
+	// per-archive inline in each row (not as a global "Scanning…" label)
+	// because archive extraction is the slow step the user wants to see.
+	type ArchiveStatus = 'scanning' | 'extracted' | 'already_extracted' | 'failed' | 'skipped';
+	type ArchiveStatusInfo = { status: ArchiveStatus; error?: string };
+	type RomScanResponse = {
+		firkin_id: string;
+		archives: { name: string; relative_path: string; status: string; error?: string }[];
+	};
 	type RomsStatus = 'idle' | 'loading' | 'done' | 'error';
 	let romsStatus = $state<RomsStatus>('idle');
-	let romsError = $state<string | null>(null);
+	let archiveStatuses = $state<Record<string, ArchiveStatusInfo>>({});
 	let romsRun = 0;
 	let romsLoadedForKey: string | null = null;
 
@@ -417,7 +424,15 @@
 		romsLoadedForKey = key;
 		const myRun = ++romsRun;
 		romsStatus = 'loading';
-		romsError = null;
+		// Mark every archive entry on the firkin as 'scanning' so each row
+		// shows its own spinner while the backend works.
+		const initial: Record<string, ArchiveStatusInfo> = {};
+		for (const f of firkin.files) {
+			if (f.type === 'ipfs' && f.title && isRomArchive(f.title)) {
+				initial[f.title] = { status: 'scanning' };
+			}
+		}
+		archiveStatuses = { ...archiveStatuses, ...initial };
 		try {
 			const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}/roms`, {
 				method: 'POST',
@@ -436,13 +451,33 @@
 			}
 			const body = (await res.json()) as RomScanResponse;
 			if (myRun !== romsRun) return;
+			const next = { ...archiveStatuses };
+			for (const a of body.archives) {
+				const status: ArchiveStatus =
+					a.status === 'extracted' ||
+					a.status === 'already_extracted' ||
+					a.status === 'failed' ||
+					a.status === 'skipped'
+						? a.status
+						: 'failed';
+				next[a.relative_path] = { status, error: a.error };
+			}
+			archiveStatuses = next;
 			romsStatus = 'done';
 			if (body.firkin_id && body.firkin_id !== firkin.id) {
 				await goto(`${base}/catalog/${encodeURIComponent(body.firkin_id)}`);
 			}
 		} catch (err) {
 			if (myRun !== romsRun) return;
-			romsError = err instanceof Error ? err.message : 'Unknown error';
+			// Roll any still-'scanning' rows back to a failed marker so the
+			// user can see the request itself failed rather than a per-row
+			// extraction outcome.
+			const next = { ...archiveStatuses };
+			for (const [k, v] of Object.entries(next)) {
+				if (v.status === 'scanning')
+					next[k] = { status: 'failed', error: err instanceof Error ? err.message : undefined };
+			}
+			archiveStatuses = next;
 			romsStatus = 'error';
 		}
 	}
@@ -1382,20 +1417,15 @@
 						Files ({firkin.files.length})
 					</h2>
 					{#if isRetroAchievementsConsole && completedTorrents.length > 0}
-						<div class="flex items-center gap-2">
-							{#if romsStatus === 'error' && romsError}
-								<span class="text-xs [overflow-wrap:anywhere] text-error">{romsError}</span>
-							{/if}
-							<button
-								type="button"
-								class="btn btn-outline btn-xs"
-								onclick={() => loadRoms(true)}
-								disabled={romsStatus === 'loading'}
-								title="Extract archives in the torrent's download dir, pin each ROM to IPFS, and append them as files on this firkin"
-							>
-								{romsStatus === 'loading' ? 'Scanning…' : 'Scan ROMs'}
-							</button>
-						</div>
+						<button
+							type="button"
+							class="btn btn-outline btn-xs"
+							onclick={() => loadRoms(true)}
+							disabled={romsStatus === 'loading'}
+							title="Extract archives in the torrent's download dir, pin each ROM to IPFS, and append them as files on this firkin"
+						>
+							Scan ROMs
+						</button>
 					{/if}
 				</div>
 				{#if firkin.files.length === 0}
@@ -1414,6 +1444,10 @@
 							<tbody>
 								{#each firkin.files as file, i (i)}
 									{@const resolved = resolveRomForFile(file, firkin.files)}
+									{@const archiveStatus =
+										file.type === 'ipfs' && file.title && isRomArchive(file.title)
+											? archiveStatuses[file.title]
+											: undefined}
 									<tr>
 										<td class="w-12">
 											{#if resolved}
@@ -1441,12 +1475,41 @@
 														<polygon points="6 4 20 12 6 20 6 4" />
 													</svg>
 												</button>
+											{:else if archiveStatus?.status === 'scanning'}
+												<span
+													class="loading loading-xs loading-spinner text-base-content/50"
+													aria-label="Scanning archive"
+												></span>
 											{/if}
 										</td>
 										<td class={classNames('text-xs font-semibold')}>
 											<span class="badge badge-outline badge-sm">{file.type}</span>
 										</td>
-										<td class="text-xs [overflow-wrap:anywhere]">{file.title ?? ''}</td>
+										<td class="text-xs [overflow-wrap:anywhere]">
+											{file.title ?? ''}
+											{#if archiveStatus}
+												<span
+													class={classNames('ml-2 badge align-middle badge-xs', {
+														'badge-ghost': archiveStatus.status === 'scanning',
+														'badge-success':
+															archiveStatus.status === 'extracted' ||
+															archiveStatus.status === 'already_extracted',
+														'badge-error': archiveStatus.status === 'failed',
+														'badge-warning': archiveStatus.status === 'skipped'
+													})}
+													title={archiveStatus.error ?? archiveStatus.status}
+												>
+													{archiveStatus.status === 'already_extracted'
+														? 'extracted'
+														: archiveStatus.status === 'scanning'
+															? 'scanning…'
+															: archiveStatus.status}
+												</span>
+												{#if archiveStatus.status === 'failed' && archiveStatus.error}
+													<div class="mt-0.5 text-error">{archiveStatus.error}</div>
+												{/if}
+											{/if}
+										</td>
 										<td class="font-mono text-xs break-all">{file.value}</td>
 									</tr>
 								{/each}
