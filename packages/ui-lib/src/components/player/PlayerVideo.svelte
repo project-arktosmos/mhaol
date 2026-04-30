@@ -57,6 +57,7 @@
 	let activeSubUrl = $state<string | null>(null);
 	let mediaError = $state<string | null>(null);
 	let hlsInstance: Hls | null = null;
+	let attachedDirectUrl: string | null = null;
 
 	function isHlsUrl(url: string, mime: string | null): boolean {
 		if (mime && /mpegurl/i.test(mime)) return true;
@@ -180,16 +181,18 @@
 	$effect(() => {
 		if (!directStreamUrl) {
 			destroyHls();
+			attachedDirectUrl = null;
 			return;
 		}
 		const element = videoElement;
 		if (!element) return;
 		const url = directStreamUrl;
 		const mime = directStreamMimeType;
-		if (element.src === url && !isHlsUrl(url, mime)) return;
+		if (attachedDirectUrl === url) return;
 		mediaError = null;
 		element.srcObject = null;
 		destroyHls();
+		attachedDirectUrl = url;
 
 		const playElement = () =>
 			element.play().catch((err: Error) => {
