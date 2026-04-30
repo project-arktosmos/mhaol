@@ -19,12 +19,13 @@
 	let removeError = $state<string | null>(null);
 
 	let editName = $state('');
-	let editRole = $state('');
+	/** One role per line — split + trimmed + blank-filtered + deduped on save. */
+	let editRoles = $state('');
 	let editImageUrl = $state('');
 
 	function startEdit() {
 		editName = artist.name;
-		editRole = artist.role ?? '';
+		editRoles = (artist.roles ?? []).join('\n');
 		editImageUrl = artist.imageUrl ?? '';
 		editing = true;
 		saveError = null;
@@ -45,9 +46,17 @@
 		saving = true;
 		saveError = null;
 		try {
+			const seen = new Set<string>();
+			const roles: string[] = [];
+			for (const line of editRoles.split('\n')) {
+				const t = line.trim();
+				if (t.length === 0 || seen.has(t)) continue;
+				seen.add(t);
+				roles.push(t);
+			}
 			const updated = await artistsService.update(artist.id, {
 				name: trimmed,
-				role: editRole.trim() ? editRole.trim() : undefined,
+				roles,
 				imageUrl: editImageUrl.trim() ? editImageUrl.trim() : undefined
 			});
 			data.artist = updated;
@@ -116,8 +125,12 @@
 		<div class="flex flex-col gap-1">
 			<a class="text-xs text-base-content/60 hover:underline" href="{base}/artist">← Artists</a>
 			<h1 class="text-2xl font-bold [overflow-wrap:anywhere]">{artist.name}</h1>
-			{#if artist.role}
-				<p class="text-sm text-base-content/70">{artist.role}</p>
+			{#if artist.roles.length > 0}
+				<div class="flex flex-wrap gap-1">
+					{#each artist.roles as role (role)}
+						<span class="badge badge-sm badge-outline">{role}</span>
+					{/each}
+				</div>
 			{/if}
 		</div>
 		<div class="flex items-center gap-2">
@@ -161,8 +174,12 @@
 					</span>
 				{/if}
 				<span class="text-center text-sm font-medium [overflow-wrap:anywhere]">{artist.name}</span>
-				{#if artist.role}
-					<span class="text-xs text-base-content/60">{artist.role}</span>
+				{#if artist.roles.length > 0}
+					<div class="flex flex-wrap justify-center gap-1">
+						{#each artist.roles as role (role)}
+							<span class="badge badge-xs badge-ghost">{role}</span>
+						{/each}
+					</div>
 				{/if}
 			</div>
 		</aside>
@@ -187,10 +204,10 @@
 					</tbody>
 				</table>
 				<p class="mt-2 text-[10px] text-base-content/50">
-					The CID is computed from the canonical body <code>{'{ name, role?, imageUrl? }'}</code>.
-					Editing the body via this page mutates the record in place at the same CID — to get a new
-					content-addressed record, create a new artist with a different body via
-					<code>POST /api/artists</code>.
+					The CID is computed from the (normalised) <code>name</code> only — adding a role or
+					updating the image URL does not roll the CID. Different artists with the same name will
+					collide; the cloud merges them into one record by design (see <code>artists::upsert</code>).
+					To create a distinct record, use a different name.
 				</p>
 			</div>
 
@@ -208,14 +225,14 @@
 							/>
 						</label>
 						<label class="form-control w-full">
-							<span class="text-xs text-base-content/60">Role</span>
-							<input
-								type="text"
-								class="input-bordered input input-sm"
-								placeholder="Director / Actor / Author / …"
-								bind:value={editRole}
+							<span class="text-xs text-base-content/60">Roles (one per line)</span>
+							<textarea
+								class="textarea-bordered textarea textarea-sm font-mono"
+								placeholder={'Director\nActor as Forrest Gump\nProducer'}
+								rows="4"
+								bind:value={editRoles}
 								disabled={saving}
-							/>
+							></textarea>
 						</label>
 						<label class="form-control w-full">
 							<span class="text-xs text-base-content/60">Image URL</span>
@@ -238,12 +255,7 @@
 							>
 								Cancel
 							</button>
-							<button
-								type="button"
-								class="btn btn-primary btn-sm"
-								onclick={save}
-								disabled={saving}
-							>
+							<button type="button" class="btn btn-sm btn-primary" onclick={save} disabled={saving}>
 								{saving ? 'Saving…' : 'Save'}
 							</button>
 						</div>
@@ -253,9 +265,7 @@
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-					Referenced by{referencingFirkins.length > 0
-						? ` (${referencingFirkins.length})`
-						: ''}
+					Referenced by{referencingFirkins.length > 0 ? ` (${referencingFirkins.length})` : ''}
 				</h2>
 				{#if $firkinsStore.loading && referencingFirkins.length === 0}
 					<p class="text-sm text-base-content/60">Loading firkins…</p>

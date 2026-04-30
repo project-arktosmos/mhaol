@@ -24,7 +24,8 @@
 		const q = query.trim().toLowerCase();
 		if (!q) return $artistsStore.artists;
 		return $artistsStore.artists.filter(
-			(a) => a.name.toLowerCase().includes(q) || (a.role ?? '').toLowerCase().includes(q)
+			(a) =>
+				a.name.toLowerCase().includes(q) || (a.roles ?? []).some((r) => r.toLowerCase().includes(q))
 		);
 	});
 </script>
@@ -45,7 +46,7 @@
 		<div class="flex items-center gap-2">
 			<input
 				type="text"
-				class="input input-sm input-bordered"
+				class="input-bordered input input-sm"
 				placeholder="Filter by name or role"
 				bind:value={query}
 			/>
@@ -97,10 +98,19 @@
 								{initials(artist.name)}
 							</span>
 						{/if}
-						<div class="flex min-w-0 flex-1 flex-col">
+						<div class="flex min-w-0 flex-1 flex-col gap-1">
 							<span class="truncate text-sm font-medium">{artist.name}</span>
-							{#if artist.role}
-								<span class="truncate text-xs text-base-content/60">{artist.role}</span>
+							{#if artist.roles && artist.roles.length > 0}
+								<div class="flex flex-wrap gap-1">
+									{#each artist.roles.slice(0, 3) as role (role)}
+										<span class="badge badge-sm badge-ghost text-[10px]">{role}</span>
+									{/each}
+									{#if artist.roles.length > 3}
+										<span class="badge badge-sm badge-ghost text-[10px]"
+											>+{artist.roles.length - 3}</span
+										>
+									{/if}
+								</div>
 							{/if}
 							<span class="truncate font-mono text-[10px] text-base-content/40">{artist.id}</span>
 						</div>

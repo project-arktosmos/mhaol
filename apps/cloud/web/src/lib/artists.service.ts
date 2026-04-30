@@ -3,7 +3,8 @@ import { writable, type Writable } from 'svelte/store';
 export interface Artist {
 	id: string;
 	name: string;
-	role?: string;
+	/** Deduped union of every role/title this artist has been recorded with. */
+	roles: string[];
 	imageUrl?: string;
 	created_at: string;
 	updated_at: string;
@@ -55,7 +56,7 @@ class ArtistsService {
 
 	async update(
 		id: string,
-		patch: { name: string; role?: string; imageUrl?: string }
+		patch: { name: string; roles?: string[]; imageUrl?: string }
 	): Promise<Artist> {
 		const res = await fetch(`/api/artists/${encodeURIComponent(id)}`, {
 			method: 'PUT',
