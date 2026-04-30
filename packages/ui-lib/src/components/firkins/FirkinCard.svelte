@@ -39,7 +39,6 @@
 	<header
 		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
 	>
-		<span class="text-xs text-base-content/70">{firkin.addon}</span>
 		{#if !coverImage}
 			<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
 				{firkin.title}
