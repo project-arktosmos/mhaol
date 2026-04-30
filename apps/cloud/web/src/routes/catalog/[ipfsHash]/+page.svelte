@@ -8,7 +8,9 @@
 		firkinTorrentsService,
 		infoHashFromMagnet
 	} from 'ui-lib/services/firkin-torrents.service';
+	import { playerService } from 'ui-lib/services/player.service';
 	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
+	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import { cachedImageUrl } from '$lib/image-cache';
 	import {
 		firkinsService,
@@ -37,6 +39,13 @@
 	const hasIpfsFiles = $derived(firkin.files.some((f) => f.type === 'ipfs'));
 	const firstIpfsCid = $derived(firkin.files.find((f) => f.type === 'ipfs')?.value ?? null);
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
+	const isStreamUrlKind = $derived(
+		firkin.type === 'iptv channel' || firkin.type === 'radio station'
+	);
+	const firstStreamUrl = $derived(
+		isStreamUrlKind ? (firkin.files.find((f) => f.type === 'url')?.value ?? null) : null
+	);
+	const hasStreamUrl = $derived(firstStreamUrl !== null);
 	let ipfsPlayerCid = $state<string | null>(null);
 
 	function startIpfsPlay(): void {
@@ -65,12 +74,30 @@
 		return out;
 	});
 
-	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0);
+	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0 || hasStreamUrl);
 
 	let finalizing = $state(false);
 	let finalizeError = $state<string | null>(null);
 
 	async function play() {
+		if (hasStreamUrl && firstStreamUrl) {
+			const mode: 'audio' | 'video' = firkin.type === 'radio station' ? 'audio' : 'video';
+			const file: PlayableFile = {
+				id: `firkin:${firkin.id}`,
+				type: 'library',
+				name: firkin.title,
+				outputPath: '',
+				mode,
+				format: null,
+				videoFormat: null,
+				thumbnailUrl: firkin.images[0]?.url ?? null,
+				durationSeconds: null,
+				size: 0,
+				completedAt: ''
+			};
+			await playerService.playUrl(file, firstStreamUrl, null, 'sidebar');
+			return;
+		}
 		if (hasIpfsFiles) {
 			firkinPlaybackService.select(firkin as CloudFirkin);
 			return;
