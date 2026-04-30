@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, put},
+    routing::{get, post, put},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
@@ -227,6 +227,7 @@ pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/", get(list).post(create))
         .route("/{id}", put(update).delete(delete).get(get_one))
+        .route("/{id}/finalize", post(finalize))
 }
 
 fn err_response(
@@ -565,4 +566,40 @@ impl IntoResponse for DocumentDto {
     fn into_response(self) -> axum::response::Response {
         Json(self).into_response()
     }
+}
+
+#[cfg(not(target_os = "android"))]
+async fn finalize(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<DocumentDto>, (StatusCode, Json<serde_json::Value>)> {
+    let latest_id = crate::torrent_completion::finalize_document(&state, &id)
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("finalize failed: {e}"),
+            )
+        })?;
+    let latest_id = latest_id.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "document not found"))?;
+    let doc: Option<Document> = state
+        .db
+        .select((TABLE, latest_id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    match doc {
+        Some(d) => Ok(Json(d.into())),
+        None => Err(err_response(StatusCode::NOT_FOUND, "document not found")),
+    }
+}
+
+#[cfg(target_os = "android")]
+async fn finalize(
+    State(_state): State<CloudState>,
+    Path(_id): Path<String>,
+) -> Result<Json<DocumentDto>, (StatusCode, Json<serde_json::Value>)> {
+    Err(err_response(
+        StatusCode::NOT_IMPLEMENTED,
+        "finalize is not supported on this platform",
+    ))
 }

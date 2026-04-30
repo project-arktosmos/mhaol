@@ -1,7 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
 	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
+	import {
+		documentTorrentsService,
+		infoHashFromMagnet
+	} from 'ui-lib/services/document-torrents.service';
 	import type { CloudDocument } from 'ui-lib/types/document.type';
 	import { cachedImageUrl } from '$lib/image-cache';
 	import {
@@ -30,6 +35,66 @@
 
 	const hasIpfsFiles = $derived(document.files.some((f) => f.type === 'ipfs'));
 	const hasMagnetFiles = $derived(document.files.some((f) => f.type === 'torrent magnet'));
+
+	const torrentsState = documentTorrentsService.state;
+	onMount(() => documentTorrentsService.start());
+
+	const completedTorrents = $derived.by(() => {
+		const out: { hash: string; title: string }[] = [];
+		for (const f of document.files) {
+			if (f.type !== 'torrent magnet' || !f.value) continue;
+			const hash = infoHashFromMagnet(f.value);
+			if (!hash) continue;
+			const t = $torrentsState.byHash[hash];
+			if (!t) continue;
+			const finished = t.state === 'seeding' || t.progress >= 1;
+			if (finished) out.push({ hash, title: f.title ?? t.name });
+		}
+		return out;
+	});
+
+	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0);
+
+	let finalizing = $state(false);
+	let finalizeError = $state<string | null>(null);
+
+	async function play() {
+		if (hasIpfsFiles) {
+			documentPlaybackService.select(document as CloudDocument);
+			return;
+		}
+		if (finalizing) return;
+		finalizeError = null;
+		finalizing = true;
+		try {
+			const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/finalize`, {
+				method: 'POST'
+			});
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const next = (await res.json()) as Document;
+			if (next.id !== document.id) {
+				await goto(`${base}/catalog/${encodeURIComponent(next.id)}`);
+			} else {
+				data.document = next;
+			}
+			if (next.files.some((f) => f.type === 'ipfs')) {
+				documentPlaybackService.select(next as unknown as CloudDocument);
+			}
+		} catch (err) {
+			finalizeError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			finalizing = false;
+		}
+	}
 
 	type TorrentStatus = 'idle' | 'searching' | 'done' | 'error';
 	let torrentStatus = $state<TorrentStatus>('idle');
@@ -234,11 +299,12 @@
 			</p>
 		</div>
 		<div class="flex items-center gap-2">
-			{#if hasIpfsFiles}
+			{#if canPlay}
 				<button
 					type="button"
 					class="btn gap-2 btn-sm btn-primary"
-					onclick={() => documentPlaybackService.select(document as CloudDocument)}
+					onclick={play}
+					disabled={finalizing}
 					aria-label="Play"
 				>
 					<svg
@@ -251,7 +317,7 @@
 					>
 						<polygon points="6 4 20 12 6 20 6 4" />
 					</svg>
-					<span>Play</span>
+					<span>{finalizing ? 'Pinning…' : 'Play'}</span>
 				</button>
 			{/if}
 			<button
@@ -268,6 +334,12 @@
 	{#if removeError}
 		<div class="alert alert-error">
 			<span>{removeError}</span>
+		</div>
+	{/if}
+
+	{#if finalizeError}
+		<div class="alert alert-error">
+			<span>{finalizeError}</span>
 		</div>
 	{/if}
 

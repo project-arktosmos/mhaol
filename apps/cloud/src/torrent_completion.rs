@@ -90,6 +90,18 @@ async fn handle_completion(state: &CloudState, torrent: &TorrentInfo) -> anyhow:
         None => return Ok(false),
     };
 
+    rollforward(state, &target, torrent).await
+}
+
+/// Pin every downloaded file from `torrent` into IPFS, append them to `doc`'s
+/// files, and roll the document forward to a new CID. Returns `Ok(true)` when
+/// the document was rolled forward, `Ok(false)` when nothing changed.
+#[cfg(not(target_os = "android"))]
+async fn rollforward(
+    state: &CloudState,
+    doc: &Document,
+    torrent: &TorrentInfo,
+) -> anyhow::Result<bool> {
     let output_path = match torrent.output_path.as_deref() {
         Some(p) => PathBuf::from(p),
         None => return Ok(false),
@@ -106,7 +118,7 @@ async fn handle_completion(state: &CloudState, torrent: &TorrentInfo) -> anyhow:
         anyhow::bail!("no files yet under {}", output_path.display());
     }
 
-    let existing_titles: HashSet<String> = target
+    let existing_titles: HashSet<String> = doc
         .files
         .iter()
         .filter(|f| f.kind == "ipfs")
@@ -146,31 +158,27 @@ async fn handle_completion(state: &CloudState, torrent: &TorrentInfo) -> anyhow:
         return Ok(false);
     }
 
-    let old_id = target
-        .id
-        .as_ref()
-        .map(|t| t.id.to_raw())
-        .unwrap_or_default();
+    let old_id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
     if old_id.is_empty() {
         return Ok(false);
     }
 
-    let mut updated_files = target.files.clone();
+    let mut updated_files = doc.files.clone();
     updated_files.extend(new_entries);
 
-    let new_version = target.version.saturating_add(1);
-    let mut new_hashes = target.version_hashes.clone();
+    let new_version = doc.version.saturating_add(1);
+    let mut new_hashes = doc.version_hashes.clone();
     new_hashes.push(old_id.clone());
 
     let new_id = compute_document_cid(
-        &target.title,
-        &target.description,
-        &target.artists,
-        &target.images,
+        &doc.title,
+        &doc.description,
+        &doc.artists,
+        &doc.images,
         &updated_files,
-        target.year,
-        &target.kind,
-        &target.source,
+        doc.year,
+        &doc.kind,
+        &doc.source,
         new_version,
         &new_hashes,
     );
@@ -182,15 +190,15 @@ async fn handle_completion(state: &CloudState, torrent: &TorrentInfo) -> anyhow:
 
     let new_record = Document {
         id: None,
-        title: target.title.clone(),
-        artists: target.artists.clone(),
-        description: target.description.clone(),
-        images: target.images.clone(),
+        title: doc.title.clone(),
+        artists: doc.artists.clone(),
+        description: doc.description.clone(),
+        images: doc.images.clone(),
         files: updated_files,
-        year: target.year,
-        kind: target.kind.clone(),
-        source: target.source.clone(),
-        created_at: target.created_at,
+        year: doc.year,
+        kind: doc.kind.clone(),
+        source: doc.source.clone(),
+        created_at: doc.created_at,
         updated_at: chrono::Utc::now(),
         version: new_version,
         version_hashes: new_hashes,
@@ -222,6 +230,84 @@ fn matches_magnet(files: &[FileEntry], needle: &str) -> bool {
     files
         .iter()
         .any(|f| f.kind == "torrent magnet" && f.value.to_lowercase().contains(needle))
+}
+
+/// On-demand rollforward: pin every completed torrent attached to `doc_id`
+/// and roll the document forward. Returns the latest document id (the new
+/// CID after rollforward, or `doc_id` unchanged if nothing was finalized).
+/// `Ok(None)` means the document does not exist.
+#[cfg(not(target_os = "android"))]
+pub async fn finalize_document(
+    state: &CloudState,
+    doc_id: &str,
+) -> anyhow::Result<Option<String>> {
+    let mut current: Document = match state.db.select((DOCUMENT_TABLE, doc_id)).await? {
+        Some(d) => d,
+        None => return Ok(None),
+    };
+    let mut current_id = doc_id.to_string();
+
+    if !state.torrent_manager.is_initialized() {
+        return Ok(Some(current_id));
+    }
+
+    let torrents = state.torrent_manager.list().await?;
+
+    let hashes: Vec<String> = current
+        .files
+        .iter()
+        .filter(|f| f.kind == "torrent magnet")
+        .filter_map(|f| {
+            let lower = f.value.to_lowercase();
+            let idx = lower.find("btih:")?;
+            let tail = &lower[idx + "btih:".len()..];
+            let end = tail.find('&').unwrap_or(tail.len());
+            let hash = tail[..end].trim().to_string();
+            if hash.is_empty() {
+                None
+            } else {
+                Some(hash)
+            }
+        })
+        .collect();
+
+    for hash in hashes {
+        let torrent = match torrents.iter().find(|t| t.info_hash.to_lowercase() == hash) {
+            Some(t) => t,
+            None => continue,
+        };
+        let finished = matches!(torrent.state, TorrentState::Seeding) || torrent.progress >= 1.0;
+        if !finished {
+            continue;
+        }
+        match rollforward(state, &current, torrent).await {
+            Ok(true) => {
+                let docs: Vec<Document> = state.db.select(DOCUMENT_TABLE).await?;
+                if let Some(next) = docs
+                    .into_iter()
+                    .find(|d| d.version_hashes.iter().any(|h| h == &current_id))
+                {
+                    current_id = next
+                        .id
+                        .as_ref()
+                        .map(|t| t.id.to_raw())
+                        .unwrap_or(current_id);
+                    current = next;
+                }
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "[torrent-completion] finalize failed for {} ({}): {e}",
+                    current_id,
+                    hash
+                );
+                return Err(e);
+            }
+        }
+    }
+
+    Ok(Some(current_id))
 }
 
 #[cfg(not(target_os = "android"))]
