@@ -73,12 +73,25 @@
 		bookmarkError = null;
 		bookmarking = true;
 		try {
+			// Persist the upstream MusicBrainz release-group id so the detail
+			// page can deterministically refetch the same tracks instead of
+			// doing a fuzzy search by title that returns a different release.
+			const sourceFiles =
+				isMusicBrainz && itemId
+					? [
+							{
+								type: 'url' as const,
+								value: `https://musicbrainz.org/release-group/${itemId}`,
+								title: 'MusicBrainz Release Group'
+							}
+						]
+					: [];
 			const created: Firkin = await firkinsService.create({
 				title,
 				artists: [],
 				description,
 				images,
-				files: [],
+				files: sourceFiles,
 				year,
 				addon: addon as FirkinAddon
 			});

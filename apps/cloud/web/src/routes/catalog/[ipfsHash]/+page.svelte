@@ -36,8 +36,46 @@
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
 	const firkinKind = $derived(addonKind(firkin.addon));
 	const isMusicBrainz = $derived(firkin.addon === 'musicbrainz');
+
+	function isYouTubeUrl(value: string): boolean {
+		try {
+			const host = new URL(value).hostname.toLowerCase();
+			return (
+				host === 'www.youtube.com' ||
+				host === 'youtube.com' ||
+				host === 'm.youtube.com' ||
+				host === 'music.youtube.com' ||
+				host === 'youtu.be'
+			);
+		} catch {
+			return false;
+		}
+	}
+
+	function parseMusicBrainzReleaseGroupId(value: string): string | null {
+		try {
+			const u = new URL(value);
+			if (u.hostname.toLowerCase() !== 'musicbrainz.org') return null;
+			const m = u.pathname.match(/^\/release-group\/([^\/]+)/);
+			return m?.[1] ?? null;
+		} catch {
+			return null;
+		}
+	}
+
+	// Track entries are persisted as `url` files whose value points at YouTube.
+	// Other `url` files (e.g. the MusicBrainz release-group source URL stored
+	// at bookmark time) must be excluded so they don't render as fake tracks.
 	const trackFiles = $derived(
-		firkin.files.filter((f) => f.type === 'url' && (f.title ?? '').trim().length > 0)
+		firkin.files.filter(
+			(f) => f.type === 'url' && (f.title ?? '').trim().length > 0 && isYouTubeUrl(f.value)
+		)
+	);
+
+	const musicBrainzReleaseGroupId = $derived(
+		firkin.files
+			.map((f) => (f.type === 'url' ? parseMusicBrainzReleaseGroupId(f.value) : null))
+			.find((id): id is string => Boolean(id)) ?? null
 	);
 	const isStreamUrlKind = $derived(firkinKind === 'iptv channel' || firkinKind === 'radio station');
 	const firstStreamUrl = $derived(
@@ -395,10 +433,55 @@
 			}));
 			tracksStatus = 'done';
 			void resolveYouTubeForAllTracks(myRun);
+		} else if (musicBrainzReleaseGroupId) {
+			void loadByReleaseGroupId(musicBrainzReleaseGroupId, myRun);
 		} else if (firkin.title) {
 			void loadAndResolve(firkin.title, myRun);
 		}
 	});
+
+	async function loadByReleaseGroupId(releaseGroupId: string, myRun: number) {
+		tracksStatus = 'loading';
+		tracksError = null;
+		tracks = [];
+		try {
+			const res = await fetch(
+				`/api/catalog/musicbrainz/release-groups/${encodeURIComponent(releaseGroupId)}/tracks`,
+				{ cache: 'no-store' }
+			);
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const body = (await res.json()) as {
+				id: string;
+				position: number;
+				title: string;
+				lengthMs: number | null;
+			}[];
+			if (myRun !== tracksRun) return;
+			tracks = body.map((t) => ({
+				id: t.id,
+				position: t.position,
+				title: t.title,
+				lengthMs: t.lengthMs,
+				youtubeUrl: null,
+				youtubeStatus: 'pending' as const
+			}));
+			tracksStatus = 'done';
+			void resolveYouTubeForAllTracks(myRun);
+		} catch (err) {
+			if (myRun !== tracksRun) return;
+			tracksError = err instanceof Error ? err.message : 'Unknown error';
+			tracksStatus = 'error';
+		}
+	}
 
 	async function loadAndResolve(albumTitle: string, myRun: number) {
 		tracksStatus = 'loading';
