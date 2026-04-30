@@ -11,12 +11,7 @@
 	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import { cachedImageUrl } from '$lib/image-cache';
-	import {
-		firkinsService,
-		type Firkin,
-		type FirkinSource,
-		type FirkinType
-	} from '$lib/firkins.service';
+	import { firkinsService, addonKind, type Firkin, type FirkinAddon } from '$lib/firkins.service';
 	import {
 		formatSizeBytes,
 		matchTorrentsForResult,
@@ -38,9 +33,8 @@
 	const hasIpfsFiles = $derived(firkin.files.some((f) => f.type === 'ipfs'));
 	const firstIpfsCid = $derived(firkin.files.find((f) => f.type === 'ipfs')?.value ?? null);
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
-	const isStreamUrlKind = $derived(
-		firkin.type === 'iptv channel' || firkin.type === 'radio station'
-	);
+	const firkinKind = $derived(addonKind(firkin.addon));
+	const isStreamUrlKind = $derived(firkinKind === 'iptv channel' || firkinKind === 'radio station');
 	const firstStreamUrl = $derived(
 		isStreamUrlKind ? (firkin.files.find((f) => f.type === 'url')?.value ?? null) : null
 	);
@@ -109,6 +103,63 @@
 	const torrentsState = firkinTorrentsService.state;
 	onMount(() => firkinTorrentsService.start());
 
+	const firstMagnet = $derived(
+		firkin.files.find((f) => f.type === 'torrent magnet')?.value ?? null
+	);
+
+	let torrentStreamStarting = $state(false);
+	let torrentStreamError = $state<string | null>(null);
+
+	async function startTorrentStream(): Promise<void> {
+		if (!firstMagnet || torrentStreamStarting) return;
+		torrentStreamStarting = true;
+		torrentStreamError = null;
+		try {
+			const res = await fetch('/api/torrent/stream', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ magnet: firstMagnet })
+			});
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const body = (await res.json()) as {
+				infoHash: string;
+				name: string;
+				fileIndex: number;
+				fileName: string;
+				fileSize: number;
+				mimeType: string | null;
+				streamUrl: string;
+			};
+			const file: PlayableFile = {
+				id: `firkin:${firkin.id}:torrent:${body.infoHash}:${body.fileIndex}`,
+				type: 'library',
+				name: body.fileName || firkin.title,
+				outputPath: '',
+				mode: 'video',
+				format: null,
+				videoFormat: null,
+				thumbnailUrl: firkin.images[0]?.url ?? null,
+				durationSeconds: null,
+				size: body.fileSize,
+				completedAt: ''
+			};
+			await playerService.playUrl(file, body.streamUrl, body.mimeType ?? null, 'sidebar');
+		} catch (err) {
+			torrentStreamError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			torrentStreamStarting = false;
+		}
+	}
+
 	const completedTorrents = $derived.by(() => {
 		const out: { hash: string; title: string }[] = [];
 		for (const f of firkin.files) {
@@ -130,7 +181,7 @@
 
 	async function play() {
 		if (hasStreamUrl && firstStreamUrl) {
-			const mode: 'audio' | 'video' = firkin.type === 'radio station' ? 'audio' : 'video';
+			const mode: 'audio' | 'video' = firkinKind === 'radio station' ? 'audio' : 'video';
 			const file: PlayableFile = {
 				id: `firkin:${firkin.id}`,
 				type: 'library',
@@ -144,7 +195,7 @@
 				size: 0,
 				completedAt: ''
 			};
-			const mime = firkin.type === 'iptv channel' ? 'application/vnd.apple.mpegurl' : null;
+			const mime = firkinKind === 'iptv channel' ? 'application/vnd.apple.mpegurl' : null;
 			await playerService.playUrl(file, firstStreamUrl, mime, 'sidebar');
 			return;
 		}
@@ -201,9 +252,9 @@
 	$effect(() => {
 		const id = firkin.id;
 		const title = firkin.title;
-		const kind = firkin.type as FirkinType;
+		const addon = firkin.addon;
 		const year = firkin.year;
-		void runTorrentSearch(id, title, kind, year);
+		void runTorrentSearch(id, title, addon, year);
 	});
 
 	$effect(() => {
@@ -258,18 +309,13 @@
 		}
 	});
 
-	async function runTorrentSearch(
-		_id: string,
-		title: string,
-		kind: FirkinType,
-		year: number | null
-	) {
+	async function runTorrentSearch(_id: string, title: string, addon: string, year: number | null) {
 		const myRun = ++searchRun;
 		torrentStatus = 'searching';
 		torrentError = null;
 		torrentMatches = [];
 		try {
-			const torrents = await searchTorrents(kind, title);
+			const torrents = await searchTorrents(addon, title);
 			if (myRun !== searchRun) return;
 			const matches = matchTorrentsForResult(
 				{ title, description: '', artists: [], images: [], files: [], year, raw: null },
@@ -320,8 +366,7 @@
 					{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
 				],
 				year: firkin.year,
-				type: firkin.type as FirkinType,
-				source: firkin.source as FirkinSource
+				addon: firkin.addon as FirkinAddon
 			});
 			await startTorrentDownload(torrent.magnetLink);
 			if (created.id !== firkin.id) {
@@ -378,8 +423,10 @@
 			<a class="text-xs text-base-content/60 hover:underline" href="{base}/catalog">← Catalog</a>
 			<h1 class="text-2xl font-bold [overflow-wrap:anywhere]">{firkin.title}</h1>
 			<p class="text-sm text-base-content/70">
-				<span class="badge badge-outline badge-sm">{firkin.type}</span>
-				<span class="badge badge-outline badge-sm">{firkin.source}</span>
+				<span class="badge badge-outline badge-sm">{firkin.addon}</span>
+				{#if firkinKind}
+					<span class="badge badge-outline badge-sm">{firkinKind}</span>
+				{/if}
 				{#if firkin.year !== null && firkin.year !== undefined}
 					<span class="badge badge-outline badge-sm">{firkin.year}</span>
 				{/if}
@@ -431,6 +478,28 @@
 			</button>
 			<button
 				type="button"
+				class="btn gap-2 btn-sm btn-accent"
+				onclick={startTorrentStream}
+				disabled={!firstMagnet || torrentStreamStarting}
+				aria-label="Torrent Stream"
+				title={firstMagnet
+					? 'Resolve magnet metadata, pick the largest video file, and stream it as it downloads'
+					: 'Available once a torrent magnet is attached'}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+					stroke="none"
+					class="h-4 w-4 shrink-0"
+					aria-hidden="true"
+				>
+					<polygon points="6 4 20 12 6 20 6 4" />
+				</svg>
+				<span>{torrentStreamStarting ? 'Resolving…' : 'Torrent Stream'}</span>
+			</button>
+			<button
+				type="button"
 				class="btn btn-outline btn-sm btn-error"
 				onclick={remove}
 				disabled={removing}
@@ -455,6 +524,12 @@
 	{#if ipfsError}
 		<div class="alert alert-error">
 			<span>{ipfsError}</span>
+		</div>
+	{/if}
+
+	{#if torrentStreamError}
+		<div class="alert alert-error">
+			<span>{torrentStreamError}</span>
 		</div>
 	{/if}
 
@@ -578,8 +653,7 @@
 					<button
 						type="button"
 						class="btn btn-outline btn-xs"
-						onclick={() =>
-							runTorrentSearch(firkin.id, firkin.title, firkin.type as FirkinType, firkin.year)}
+						onclick={() => runTorrentSearch(firkin.id, firkin.title, firkin.addon, firkin.year)}
 						disabled={torrentStatus === 'searching'}
 					>
 						{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
