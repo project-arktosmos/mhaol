@@ -92,6 +92,7 @@
 				buffering={$playerState.buffering}
 				poster={$playerState.currentFile?.thumbnailUrl}
 				directStreamUrl={$playerState.directStreamUrl}
+				directStreamMimeType={$playerState.directStreamMimeType}
 			/>
 			<SubsLyricsFinder />
 		</aside>

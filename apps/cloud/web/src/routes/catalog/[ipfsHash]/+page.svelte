@@ -95,7 +95,9 @@
 				size: 0,
 				completedAt: ''
 			};
-			await playerService.playUrl(file, firstStreamUrl, null, 'sidebar');
+			const mime =
+				firkin.type === 'iptv channel' ? 'application/vnd.apple.mpegurl' : null;
+			await playerService.playUrl(file, firstStreamUrl, mime, 'sidebar');
 			return;
 		}
 		if (hasIpfsFiles) {

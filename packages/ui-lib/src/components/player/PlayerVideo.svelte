@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
+	import Hls from 'hls.js';
 	import { playerService } from 'ui-lib/services/player.service';
 	import { subtitlesService } from 'ui-lib/services/subtitles.service';
 	import type {
@@ -23,6 +24,7 @@
 		poster = null,
 		subtitleSearchContext = null,
 		directStreamUrl = null,
+		directStreamMimeType = null,
 		onprev,
 		onnext
 	}: {
@@ -35,6 +37,7 @@
 		poster?: string | null;
 		subtitleSearchContext?: SubtitleSearchContext | null;
 		directStreamUrl?: string | null;
+		directStreamMimeType?: string | null;
 		onprev?: () => void;
 		onnext?: () => void;
 	} = $props();
@@ -53,6 +56,20 @@
 	let audioTrackTick = $state(0);
 	let activeSubUrl = $state<string | null>(null);
 	let mediaError = $state<string | null>(null);
+	let hlsInstance: Hls | null = null;
+
+	function isHlsUrl(url: string, mime: string | null): boolean {
+		if (mime && /mpegurl/i.test(mime)) return true;
+		const path = url.split('?')[0];
+		return /\.m3u8$/i.test(path);
+	}
+
+	function destroyHls(): void {
+		if (hlsInstance) {
+			hlsInstance.destroy();
+			hlsInstance = null;
+		}
+	}
 
 	interface SubCue {
 		start: number;
@@ -161,23 +178,59 @@
 	// effect (and short-circuits when nothing changed). Effect B owns the
 	// event listeners — its cleanup matches its setup on every run.
 	$effect(() => {
-		if (!directStreamUrl) return;
+		if (!directStreamUrl) {
+			destroyHls();
+			return;
+		}
 		const element = videoElement;
 		if (!element) return;
-		if (element.src === directStreamUrl) return;
+		const url = directStreamUrl;
+		const mime = directStreamMimeType;
+		if (element.src === url && !isHlsUrl(url, mime)) return;
 		mediaError = null;
 		element.srcObject = null;
-		element.src = directStreamUrl;
-		element.load();
-		element.play().catch((err: Error) => {
-			console.error('[PlayerVideo] play() rejected for', directStreamUrl, err);
-			if (err.name === 'NotAllowedError') {
-				mediaError = 'Playback blocked by browser. Click Play to start.';
+		destroyHls();
+
+		const playElement = () =>
+			element.play().catch((err: Error) => {
+				console.error('[PlayerVideo] play() rejected for', url, err);
+				if (err.name === 'NotAllowedError') {
+					mediaError = 'Playback blocked by browser. Click Play to start.';
+				} else {
+					mediaError = `Playback failed: ${err.message}`;
+				}
+				playerService.state.update((s) => ({ ...s, error: mediaError }));
+			});
+
+		if (isHlsUrl(url, mime)) {
+			if (Hls.isSupported()) {
+				element.removeAttribute('src');
+				const instance = new Hls({ enableWorker: true, lowLatencyMode: true });
+				instance.loadSource(url);
+				instance.attachMedia(element);
+				instance.on(Hls.Events.MANIFEST_PARSED, () => playElement());
+				instance.on(Hls.Events.ERROR, (_event, data) => {
+					if (data.fatal) {
+						console.error('[PlayerVideo] hls fatal error', data);
+						mediaError = `HLS error: ${data.details ?? data.type}`;
+						playerService.state.update((s) => ({ ...s, error: mediaError }));
+						destroyHls();
+					}
+				});
+				hlsInstance = instance;
+			} else if (element.canPlayType('application/vnd.apple.mpegurl')) {
+				element.src = url;
+				element.load();
+				playElement();
 			} else {
-				mediaError = `Playback failed: ${err.message}`;
+				mediaError = 'HLS playback is not supported in this browser';
+				playerService.state.update((s) => ({ ...s, error: mediaError }));
 			}
-			playerService.state.update((s) => ({ ...s, error: mediaError }));
-		});
+		} else {
+			element.src = url;
+			element.load();
+			playElement();
+		}
 		streamAttached = true;
 	});
 
