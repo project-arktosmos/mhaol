@@ -76,8 +76,8 @@
 				images: firkin.images ?? [],
 				files: firkin.files ?? [],
 				year: firkin.year ?? null,
-				type: firkin.type,
-				source: firkin.source
+				addon: firkin.addon,
+				creator: firkin.creator ?? ''
 			});
 			persistedRealIds = { ...persistedRealIds, [firkin.id]: created.id };
 			return created.id;
@@ -86,6 +86,13 @@
 			return null;
 		}
 	}
+
+	function shortAddress(addr: string): string {
+		if (!addr) return '';
+		return addr.length > 10 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+	}
+
+	let creatorBadge = $derived(shortAddress(firkin.creator ?? ''));
 
 	async function reactWith(emoji: ReactionEmoji) {
 		if (persistingReaction) return;
@@ -157,11 +164,22 @@
 	<header
 		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
 	>
-		<span class="text-xs text-base-content/70">{firkin.type}</span>
-		<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
-			{firkin.title}
-		</h3>
+		<span class="text-xs text-base-content/70">{firkin.addon}</span>
+		{#if !coverImage}
+			<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
+				{firkin.title}
+			</h3>
+		{/if}
 		<span class="text-xs text-base-content/70">{hasYear ? firkin.year : ''}</span>
+		{#if creatorBadge}
+			<span
+				class="badge font-mono badge-ghost badge-sm"
+				title={`Creator: ${firkin.creator}`}
+				aria-label={`Creator: ${firkin.creator}`}
+			>
+				{creatorBadge}
+			</span>
+		{/if}
 		{#if onRemove}
 			<button
 				type="button"
@@ -176,6 +194,11 @@
 	</header>
 	{#if coverImage}
 		<figure class="relative overflow-hidden bg-base-300">
+			<h3
+				class="absolute inset-x-0 top-0 z-10 bg-black/60 px-4 py-2 text-center text-base font-semibold [overflow-wrap:anywhere] text-white"
+			>
+				{firkin.title}
+			</h3>
 			{#if resolvedCoverUrl}
 				<img
 					src={resolvedCoverUrl}
