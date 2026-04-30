@@ -186,9 +186,7 @@
 		<HealthCard
 			label="Public IP"
 			value={$state.status?.public_ip ?? '—'}
-			hint={$state.status?.public_ip
-				? 'Observed via libp2p Identify'
-				: 'Awaiting rendezvous handshake'}
+			hint={$state.status?.public_ip ? 'Resolved via api.ipify.org' : 'Unavailable'}
 			mono
 		/>
 		<HealthCard

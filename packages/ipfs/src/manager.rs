@@ -81,24 +81,6 @@ impl IpfsManager {
         self.listen_addrs.read().clone()
     }
 
-    /// Addresses libp2p has confirmed are externally reachable. These are
-    /// populated via the Identify protocol — every connected peer reports the
-    /// address it observed us at, and the swarm collects the confirmed set.
-    /// Empty until at least one peer has completed an Identify exchange (in
-    /// the cloud, that's normally the rendezvous bootstrap node).
-    pub async fn external_addresses(&self) -> Vec<String> {
-        let Some(ipfs) = self.handle() else {
-            return Vec::new();
-        };
-        match ipfs.external_addresses().await {
-            Ok(addrs) => addrs.into_iter().map(|a| a.to_string()).collect(),
-            Err(e) => {
-                log::warn!("[ipfs] external_addresses failed: {}", e);
-                Vec::new()
-            }
-        }
-    }
-
     pub fn pinned_count(&self) -> u32 {
         self.files.read().values().filter(|f| f.pinned).count() as u32
     }
