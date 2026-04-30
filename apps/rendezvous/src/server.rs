@@ -1,17 +1,51 @@
 mod config;
+mod health_check;
+mod rooms;
+mod setup;
 mod signaling;
 mod state;
 mod status;
+mod turn;
+mod ws;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use axum::Router;
+use axum::{routing::get, Router};
+use clap::{Parser, Subcommand};
 use config::RendezvousConfig;
 use mhaol_ipfs::{ensure_swarm_key, IpfsConfig, IpfsManager};
+use rooms::RoomManager;
 use state::RendezvousState;
-use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
+
+#[derive(Parser)]
+#[command(
+    name = "mhaol-rendezvous",
+    about = "Private-swarm IPFS bootstrap node + DHT/WebSocket WebRTC signaling"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run the rendezvous server (default).
+    Serve {
+        /// Optional TOML config file. Env vars override file values.
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+    },
+    /// Interactive Linux deployment wizard (coturn + Let's Encrypt + systemd).
+    Setup,
+    /// Health-check a running rendezvous instance.
+    Status {
+        #[arg(short, long, default_value = "http://localhost:14080")]
+        url: String,
+    },
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -22,7 +56,20 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    let cfg = RendezvousConfig::from_env();
+    let cli = Cli::parse();
+
+    match cli.command.unwrap_or(Commands::Serve { config: None }) {
+        Commands::Serve { config } => serve(config).await,
+        Commands::Setup => setup::run_wizard()
+            .map_err(|e| anyhow!(e)),
+        Commands::Status { url } => health_check::check(&url)
+            .await
+            .map_err(|e| anyhow!(e)),
+    }
+}
+
+async fn serve(config_path: Option<PathBuf>) -> Result<()> {
+    let cfg = RendezvousConfig::from_env_with_file(config_path.as_deref());
 
     std::fs::create_dir_all(&cfg.repo_path).ok();
     if let Some(parent) = cfg.swarm_key_path.parent() {
@@ -76,9 +123,14 @@ async fn main() -> Result<()> {
     if let Some(fp) = manager.swarm_key_fingerprint() {
         tracing::info!("private swarm fingerprint: {}", fp);
     }
+    if cfg.turn.is_configured() {
+        tracing::info!("turn configured for domain {}", cfg.turn.domain);
+    }
 
     let state = RendezvousState {
         ipfs: Arc::clone(&manager),
+        rooms: Arc::new(RoomManager::new()),
+        turn: Arc::new(cfg.turn.clone()),
     };
 
     let cors = CorsLayer::new()
@@ -88,29 +140,60 @@ async fn main() -> Result<()> {
 
     let app = Router::new()
         .nest("/api/status", status::router())
+        .nest("/api/health", status::health_router())
+        .route("/party/{room_id}", get(ws::ws_handler))
+        .route("/party/{room_id}/status", get(ws::room_status))
+        .route(
+            "/api/v1/turn/credentials",
+            get(turn::turn_credentials_handler),
+        )
         .nest("/signal", signaling::router())
         .with_state(state)
         .layer(cors);
 
     let addr = format!("{}:{}", cfg.host, cfg.http_port);
-    let listener = TcpListener::bind(&addr)
-        .await
-        .map_err(|e| anyhow!("Failed to bind {}: {}", addr, e))?;
-
     tracing::info!(
-        "rendezvous signaling http listening on {} (libp2p on tcp/{})",
+        "rendezvous http listening on {} (libp2p on tcp/{})",
         addr,
         cfg.ipfs_listen_port
     );
 
     let shutdown_manager = Arc::clone(&manager);
-    let serve = axum::serve(listener, app).with_graceful_shutdown(async move {
-        let _ = tokio::signal::ctrl_c().await;
-        tracing::info!("shutting down rendezvous");
-        shutdown_manager.shutdown().await;
-    });
 
-    serve.await.map_err(|e| anyhow!("server error: {}", e))?;
+    match (&cfg.tls_cert, &cfg.tls_key) {
+        (Some(cert), Some(key)) => {
+            tracing::info!("tls enabled (cert={}, key={})", cert, key);
+            let tls_config = axum_server::tls_rustls::RustlsConfig::from_pem_file(cert, key)
+                .await
+                .map_err(|e| anyhow!("TLS config error: {}", e))?;
+            let listener = std::net::TcpListener::bind(&addr)
+                .map_err(|e| anyhow!("Bind error: {}", e))?;
+            // axum_server doesn't expose a graceful-shutdown hook that fits
+            // our need to drain the IPFS node, so we install a ctrl_c watcher
+            // that tears down the IPFS node before exiting the process.
+            tokio::spawn(async move {
+                let _ = tokio::signal::ctrl_c().await;
+                tracing::info!("shutting down rendezvous");
+                shutdown_manager.shutdown().await;
+                std::process::exit(0);
+            });
+            axum_server::from_tcp_rustls(listener, tls_config)
+                .serve(app.into_make_service())
+                .await
+                .map_err(|e| anyhow!("Server error: {}", e))?;
+        }
+        _ => {
+            let listener = tokio::net::TcpListener::bind(&addr)
+                .await
+                .map_err(|e| anyhow!("Failed to bind {}: {}", addr, e))?;
+            let serve = axum::serve(listener, app).with_graceful_shutdown(async move {
+                let _ = tokio::signal::ctrl_c().await;
+                tracing::info!("shutting down rendezvous");
+                shutdown_manager.shutdown().await;
+            });
+            serve.await.map_err(|e| anyhow!("server error: {}", e))?;
+        }
+    }
     Ok(())
 }
 

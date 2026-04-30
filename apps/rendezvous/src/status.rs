@@ -7,12 +7,17 @@ pub fn router() -> Router<RendezvousState> {
     Router::new().route("/", get(status))
 }
 
+pub fn health_router() -> Router<RendezvousState> {
+    Router::new().route("/", get(health))
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StatusBody {
     role: &'static str,
     ipfs: mhaol_ipfs::IpfsStats,
     bootstrap_multiaddrs: Vec<String>,
+    turn_configured: bool,
 }
 
 async fn status(State(state): State<RendezvousState>) -> Json<StatusBody> {
@@ -34,5 +39,13 @@ async fn status(State(state): State<RendezvousState>) -> Json<StatusBody> {
         role: "rendezvous",
         ipfs,
         bootstrap_multiaddrs,
+        turn_configured: state.turn.is_configured(),
     })
+}
+
+async fn health() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok",
+        "service": "mhaol-rendezvous",
+    }))
 }
