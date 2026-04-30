@@ -1,3 +1,8 @@
+import type { YouTubeStreamFormat, YouTubeStreamUrlResult } from 'addons/youtube/types';
+import { extractVideoId } from 'addons/youtube/types';
+import { playerService } from 'ui-lib/services/player.service';
+import type { PlayableFile } from 'ui-lib/types/player.type';
+
 export interface YouTubeSearchItem {
 	videoId: string;
 	url: string;
@@ -91,4 +96,52 @@ export async function resolveYouTubeUrlForTrack(
 	const items = await searchYouTube(query);
 	const match = pickBestYouTubeMatch(items, trackTitle, artist, albumTitle, trackDurationMs);
 	return match?.url ?? null;
+}
+
+function pickAudioFormat(result: YouTubeStreamUrlResult): YouTubeStreamFormat | null {
+	const muxed = result.formats.filter((f) => !f.isAudioOnly && !f.isVideoOnly);
+	if (muxed.length > 0) {
+		muxed.sort((a, b) => {
+			const heightDiff = (b.height ?? 0) - (a.height ?? 0);
+			if (heightDiff !== 0) return heightDiff;
+			return b.bitrate - a.bitrate;
+		});
+		return muxed[0];
+	}
+	const audioOnly = result.formats.filter((f) => f.isAudioOnly);
+	const mp4Audio = audioOnly.filter((f) => f.container === 'mp4');
+	const sortedByBitrate = (list: YouTubeStreamFormat[]) =>
+		[...list].sort((a, b) => b.bitrate - a.bitrate);
+	return sortedByBitrate(mp4Audio)[0] ?? sortedByBitrate(audioOnly)[0] ?? null;
+}
+
+export async function playYouTubeAudio(
+	youtubeUrl: string,
+	title: string,
+	thumbnailUrl: string | null = null,
+	durationSeconds: number | null = null
+): Promise<void> {
+	const res = await fetch(`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`);
+	if (!res.ok) {
+		const body = await res.text();
+		throw new Error(body || `HTTP ${res.status}`);
+	}
+	const result = (await res.json()) as YouTubeStreamUrlResult;
+	const format = pickAudioFormat(result);
+	if (!format) throw new Error('No playable audio format');
+	const videoId = extractVideoId(youtubeUrl) ?? youtubeUrl;
+	const file: PlayableFile = {
+		id: `youtube:${videoId}:audio`,
+		type: 'youtube',
+		name: title,
+		outputPath: '',
+		mode: 'audio',
+		format: null,
+		videoFormat: null,
+		thumbnailUrl,
+		durationSeconds,
+		size: format.contentLength ?? 0,
+		completedAt: ''
+	};
+	await playerService.playUrl(file, format.url, format.mimeType, 'sidebar');
 }

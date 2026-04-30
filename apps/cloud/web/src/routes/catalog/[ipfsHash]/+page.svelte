@@ -18,7 +18,7 @@
 		searchTorrents,
 		type TorrentResultItem
 	} from '$lib/search.service';
-	import { resolveYouTubeUrlForTrack } from '$lib/youtube-match.service';
+	import { playYouTubeAudio, resolveYouTubeUrlForTrack } from '$lib/youtube-match.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 
@@ -525,6 +525,25 @@
 		return `${m}:${s.toString().padStart(2, '0')}`;
 	}
 
+	let playingTrackIndex = $state<number | null>(null);
+	let trackPlayError = $state<string | null>(null);
+
+	async function playTrack(index: number) {
+		const t = tracks[index];
+		if (!t || !t.youtubeUrl || playingTrackIndex !== null) return;
+		playingTrackIndex = index;
+		trackPlayError = null;
+		try {
+			const durationSeconds = t.lengthMs ? Math.round(t.lengthMs / 1000) : null;
+			const thumb = firkin.images[0]?.url ?? null;
+			await playYouTubeAudio(t.youtubeUrl, t.title, thumb, durationSeconds);
+		} catch (err) {
+			trackPlayError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			playingTrackIndex = null;
+		}
+	}
+
 	$effect(() => {
 		if (!hasMagnetFiles || hasIpfsFiles) return;
 		const id = firkin.id;
@@ -990,33 +1009,53 @@
 					{:else if tracks.length === 0}
 						<p class="text-sm text-base-content/60">No tracks found.</p>
 					{:else}
+						{#if trackPlayError}
+							<div class="mb-2 alert alert-error">
+								<span>{trackPlayError}</span>
+							</div>
+						{/if}
 						<ol class="flex flex-col gap-1">
-							{#each tracks as track (track.id || `${track.position}-${track.title}`)}
-								<li
-									class="flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-xs"
-								>
-									<span class="w-6 shrink-0 text-right font-mono text-base-content/60"
-										>{track.position}</span
+							{#each tracks as track, idx (track.id || `${track.position}-${track.title}`)}
+								{@const playable =
+									(track.youtubeStatus === 'found' || track.youtubeStatus === 'idle') &&
+									!!track.youtubeUrl}
+								{@const isPlaying = playingTrackIndex === idx}
+								<li>
+									<button
+										type="button"
+										class={classNames(
+											'flex w-full flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs',
+											{
+												'cursor-pointer hover:bg-base-100': playable && !isPlaying,
+												'opacity-60': isPlaying,
+												'cursor-default': !playable
+											}
+										)}
+										disabled={!playable || playingTrackIndex !== null}
+										onclick={() => playTrack(idx)}
+										title={playable ? `Play "${track.title}"` : track.title}
 									>
-									<span class="flex-1 truncate" title={track.title}>{track.title}</span>
-									<span class="text-base-content/60">{formatDuration(track.lengthMs)}</span>
-									{#if track.youtubeStatus === 'pending'}
-										<span class="badge badge-ghost badge-xs">YT queued</span>
-									{:else if track.youtubeStatus === 'searching'}
-										<span class="badge badge-ghost badge-xs">YT…</span>
-									{:else if (track.youtubeStatus === 'found' || track.youtubeStatus === 'idle') && track.youtubeUrl}
-										<a
-											class="link truncate text-[11px] link-primary"
-											href={track.youtubeUrl}
-											target="_blank"
-											rel="noopener noreferrer"
-											title={track.youtubeUrl}>YouTube</a
+										<span class="w-6 shrink-0 text-right font-mono text-base-content/60"
+											>{track.position}</span
 										>
-									{:else if track.youtubeStatus === 'missing'}
-										<span class="badge badge-xs badge-warning">no match</span>
-									{:else if track.youtubeStatus === 'error'}
-										<span class="badge badge-xs badge-error">error</span>
-									{/if}
+										<span class="flex-1 truncate">{track.title}</span>
+										<span class="text-base-content/60">{formatDuration(track.lengthMs)}</span>
+										{#if track.youtubeStatus === 'pending'}
+											<span class="badge badge-ghost badge-xs">YT queued</span>
+										{:else if track.youtubeStatus === 'searching'}
+											<span class="badge badge-ghost badge-xs">YT…</span>
+										{:else if playable}
+											{#if isPlaying}
+												<span class="badge badge-primary badge-xs">starting…</span>
+											{:else}
+												<span class="badge badge-primary badge-xs">▶ Play</span>
+											{/if}
+										{:else if track.youtubeStatus === 'missing'}
+											<span class="badge badge-xs badge-warning">no match</span>
+										{:else if track.youtubeStatus === 'error'}
+											<span class="badge badge-xs badge-error">error</span>
+										{/if}
+									</button>
 								</li>
 							{/each}
 						</ol>
