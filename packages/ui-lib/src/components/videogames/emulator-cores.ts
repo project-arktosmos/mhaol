@@ -1,8 +1,7 @@
 // Mapping from console / ROM extension to the EmulatorJS core name.
 // EmulatorJS core ids documented at https://emulatorjs.org/docs4devs/cores.
-//
-// Only Game Boy Color is wired up for now (gambatte) — the other entries
-// are scaffolding so the modal can be reused as more consoles are tested.
+// Status per console is tracked in `addons/retroachievements/types`'s
+// `CONSOLE_WASM_STATUS`; see `docs/wasm-emulators.md` for the research.
 
 export type EmulatorCore =
 	| 'gambatte' // Game Boy / Game Boy Color
@@ -12,16 +11,65 @@ export type EmulatorCore =
 	| 'mupen64plus_next' // Nintendo 64
 	| 'genesis_plus_gx' // Mega Drive / Master System / Game Gear
 	| 'melonds' // Nintendo DS
-	| 'pcsx_rearmed'; // PlayStation
+	| 'pcsx_rearmed' // PlayStation
+	| 'stella2014' // Atari 2600
+	| 'prosystem' // Atari 7800
+	| 'handy' // Atari Lynx
+	| 'mednafen_pce' // PC Engine / TurboGrafx-16
+	| 'mednafen_ngp' // Neo Geo Pocket
+	| 'virtualjaguar'; // Atari Jaguar
 
 const CONSOLE_NAME_TO_CORE: Record<string, EmulatorCore> = {
 	'game boy': 'gambatte',
-	'game boy color': 'gambatte'
+	'game boy color': 'gambatte',
+	'game boy advance': 'mgba',
+	'nes/famicom': 'fceumm',
+	'snes/super famicom': 'snes9x',
+	'nintendo 64': 'mupen64plus_next',
+	'genesis/mega drive': 'genesis_plus_gx',
+	'master system': 'genesis_plus_gx',
+	'nintendo ds': 'melonds',
+	playstation: 'pcsx_rearmed',
+	'atari 2600': 'stella2014',
+	'atari 7800': 'prosystem',
+	'atari lynx': 'handy',
+	'pc engine/turbografx-16': 'mednafen_pce',
+	'neo geo pocket': 'mednafen_ngp',
+	'atari jaguar': 'virtualjaguar'
 };
 
 const EXTENSION_TO_CORE: Record<string, EmulatorCore> = {
 	gb: 'gambatte',
-	gbc: 'gambatte'
+	gbc: 'gambatte',
+	gba: 'mgba',
+	nes: 'fceumm',
+	smc: 'snes9x',
+	sfc: 'snes9x',
+	n64: 'mupen64plus_next',
+	z64: 'mupen64plus_next',
+	v64: 'mupen64plus_next',
+	md: 'genesis_plus_gx',
+	gen: 'genesis_plus_gx',
+	smd: 'genesis_plus_gx',
+	sms: 'genesis_plus_gx',
+	gg: 'genesis_plus_gx',
+	nds: 'melonds',
+	// PS1 disc images. `.bin` is intentionally omitted because it overlaps
+	// with raw Genesis dumps and naked PS1 `.bin` files (without their
+	// `.cue` sheet) won't load anyway.
+	cue: 'pcsx_rearmed',
+	chd: 'pcsx_rearmed',
+	pbp: 'pcsx_rearmed',
+	iso: 'pcsx_rearmed',
+	a26: 'stella2014',
+	a78: 'prosystem',
+	lnx: 'handy',
+	lyx: 'handy',
+	pce: 'mednafen_pce',
+	ngp: 'mednafen_ngp',
+	ngc: 'mednafen_ngp',
+	j64: 'virtualjaguar',
+	jag: 'virtualjaguar'
 };
 
 export function coreForConsoleName(name: string | null | undefined): EmulatorCore | null {
@@ -33,7 +81,10 @@ export function coreForRomFilename(filename: string | null | undefined): Emulato
 	if (!filename) return null;
 	const idx = filename.lastIndexOf('.');
 	if (idx < 0) return null;
-	const ext = filename.slice(idx + 1).trim().toLowerCase();
+	const ext = filename
+		.slice(idx + 1)
+		.trim()
+		.toLowerCase();
 	if (!ext) return null;
 	return EXTENSION_TO_CORE[ext] ?? null;
 }
@@ -57,7 +108,10 @@ export function isRomArchive(filename: string | null | undefined): boolean {
 	if (!filename) return false;
 	const idx = filename.lastIndexOf('.');
 	if (idx < 0) return false;
-	const ext = filename.slice(idx + 1).trim().toLowerCase();
+	const ext = filename
+		.slice(idx + 1)
+		.trim()
+		.toLowerCase();
 	return ARCHIVE_EXTS.has(ext);
 }
 

@@ -1,5 +1,6 @@
 import type { CatalogItem, CatalogCardData, CatalogBadge } from 'ui-lib/types/catalog.type';
 import { formatAuthors } from 'ui-lib/types/catalog.type';
+import { CONSOLE_WASM_STATUS } from 'addons/retroachievements/types';
 
 function getSubtitle(item: CatalogItem): string | null {
 	switch (item.kind) {
@@ -59,7 +60,13 @@ function getBadges(item: CatalogItem): CatalogBadge[] {
 				badges.push({ label: item.metadata.primaryType, variant: 'ghost' });
 			}
 			break;
-		case 'game':
+		case 'game': {
+			const wasm = CONSOLE_WASM_STATUS[item.metadata.consoleId];
+			if (wasm === 'yes') {
+				badges.push({ label: 'Play', variant: 'success' });
+			} else if (wasm === 'experimental') {
+				badges.push({ label: 'Play (beta)', variant: 'warning' });
+			}
 			if (item.metadata.numAchievements > 0) {
 				badges.push({
 					label: `${item.metadata.numAchievements} achievements`,
@@ -67,6 +74,7 @@ function getBadges(item: CatalogItem): CatalogBadge[] {
 				});
 			}
 			break;
+		}
 		case 'iptv_channel':
 			for (const c of item.metadata.categories.slice(0, 1)) {
 				badges.push({ label: c, variant: 'info' });

@@ -40,7 +40,7 @@ src/
 │   ├── tmdb-browse/          # TMDB pagination (TmdbPagination — used by movies/TV pages)
 │   ├── torrent/              # Torrent management (TorrentProgressOverlay, TorrentSettings, etc.)
 │   ├── ed2k/                 # ed2k/eDonkey client UI (Ed2kModalContent, Ed2kSearch, Ed2kFileList, Ed2kStatusBar)
-│   ├── videogames/           # Videogame WASM emulator components (EmulatorModal mounts EmulatorJS from cdn.emulatorjs.org; emulator-cores.ts maps console name + ROM extension to a core id — currently `gambatte` for Game Boy / Game Boy Color)
+│   ├── videogames/           # Videogame WASM emulator components (EmulatorModal mounts EmulatorJS from cdn.emulatorjs.org; emulator-cores.ts maps ROM extensions to a core id — gambatte/mgba/fceumm/snes9x/mupen64plus_next/genesis_plus_gx/melonds/pcsx_rearmed/stella2014/prosystem/handy/mednafen_pce/mednafen_ngp/virtualjaguar — covers GB/GBC, GBA, NES, SNES, N64, Genesis/MD/MS/GG, NDS, PS1, A2600, A7800, Lynx, PCE, Neo Geo Pocket, Jaguar)
 │   ├── youtube/              # YouTube download (queue, settings, preview, RightPanel)
 │   └── youtube-search/       # YouTube search (input, results, channel cards)
 ├── services/                 # State management + API calls (singleton services)
