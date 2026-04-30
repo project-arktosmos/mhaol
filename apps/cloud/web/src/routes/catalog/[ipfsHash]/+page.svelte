@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import FirkinArtistsSection from 'ui-lib/components/firkins/FirkinArtistsSection.svelte';
 	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
 	import {
 		firkinTorrentsService,
@@ -90,6 +91,81 @@
 	const hasStreamUrl = $derived(firstStreamUrl !== null);
 	let ipfsStarting = $state(false);
 	let ipfsError = $state<string | null>(null);
+
+	type ArtistsBackfillStatus = 'idle' | 'loading' | 'done' | 'error';
+	let artistsBackfillStatus = $state<ArtistsBackfillStatus>('idle');
+	let artistsBackfillError = $state<string | null>(null);
+	let artistsBackfillForFirkinId: string | null = null;
+
+	$effect(() => {
+		const fid = firkin.id;
+		if (artistsBackfillForFirkinId === fid) return;
+		// Only backfill when we have an upstream handle to query and the
+		// stored array is empty. Currently the only handle persisted on a
+		// firkin body is the MusicBrainz release-group URL — other addons
+		// will be enrichable once we persist their ids on bookmark.
+		if (firkin.artists.length > 0) {
+			artistsBackfillForFirkinId = fid;
+			return;
+		}
+		const upstreamId = firkin.addon === 'musicbrainz' ? musicBrainzReleaseGroupId : null;
+		if (!upstreamId) {
+			artistsBackfillForFirkinId = fid;
+			return;
+		}
+		artistsBackfillForFirkinId = fid;
+		void backfillArtists(fid, firkin.addon, upstreamId);
+	});
+
+	async function backfillArtists(firkinId: string, addon: string, upstreamId: string) {
+		artistsBackfillStatus = 'loading';
+		artistsBackfillError = null;
+		try {
+			const res = await fetch(
+				`/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(upstreamId)}/artists`,
+				{ cache: 'no-store' }
+			);
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const fetched = (await res.json()) as Firkin['artists'];
+			if (!Array.isArray(fetched) || fetched.length === 0) {
+				artistsBackfillStatus = 'done';
+				return;
+			}
+			// Persist via PUT so the in-system page stays consistent across
+			// reloads. The id stays the same (PUT mutates in place); see the
+			// /api/firkins/:id docs in apps/cloud/CLAUDE.md.
+			const putRes = await fetch(`/api/firkins/${encodeURIComponent(firkinId)}`, {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ artists: fetched })
+			});
+			if (!putRes.ok) {
+				let message = `HTTP ${putRes.status}`;
+				try {
+					const body = await putRes.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const updated = (await putRes.json()) as Firkin;
+			data.firkin = updated;
+			artistsBackfillStatus = 'done';
+		} catch (err) {
+			artistsBackfillError = err instanceof Error ? err.message : 'Unknown error';
+			artistsBackfillStatus = 'error';
+		}
+	}
 
 	async function startIpfsPlay(): Promise<void> {
 		if (!firstIpfsCid || ipfsStarting) return;
@@ -318,9 +394,10 @@
 	const isRetroAchievementsConsole = $derived(firkin.addon === 'retroachievements');
 
 	type RomReport = {
+		firkin_id: string;
 		torrent_paths: string[];
 		archives: { name: string; relative_path: string; status: string; error?: string }[];
-		roms: { name: string; relative_path: string; size: number }[];
+		roms: { name: string; relative_path: string; size: number; cid: string }[];
 	};
 	type RomsStatus = 'idle' | 'loading' | 'done' | 'error';
 	let romsStatus = $state<RomsStatus>('idle');
@@ -338,6 +415,7 @@
 		romsError = null;
 		try {
 			const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}/roms`, {
+				method: 'POST',
 				cache: 'no-store'
 			});
 			if (myRun !== romsRun) return;
@@ -355,6 +433,9 @@
 			if (myRun !== romsRun) return;
 			roms = body;
 			romsStatus = 'done';
+			if (body.firkin_id && body.firkin_id !== firkin.id) {
+				await goto(`${base}/catalog/${encodeURIComponent(body.firkin_id)}`);
+			}
 		} catch (err) {
 			if (myRun !== romsRun) return;
 			romsError = err instanceof Error ? err.message : 'Unknown error';
@@ -1040,38 +1121,12 @@
 				</div>
 			{/if}
 
-			{#if firkin.artists.length > 0}
-				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-						Artists ({firkin.artists.length})
-					</h2>
-					<ul class="flex flex-col gap-3">
-						{#each firkin.artists as artist, i (i)}
-							<li class="flex items-center gap-3">
-								{#if artist.imageUrl}
-									<img
-										src={cachedImageUrl(artist.imageUrl)}
-										alt={artist.name}
-										class="h-12 w-12 rounded-full object-cover"
-										loading="lazy"
-									/>
-								{/if}
-								<div class="flex flex-col">
-									<span class="text-sm font-medium">{artist.name}</span>
-									{#if artist.url}
-										<a
-											class="link text-xs break-all link-primary"
-											href={artist.url}
-											target="_blank"
-											rel="noopener noreferrer">{artist.url}</a
-										>
-									{/if}
-								</div>
-							</li>
-						{/each}
-					</ul>
-				</div>
-			{/if}
+			<FirkinArtistsSection
+				artists={firkin.artists}
+				loading={artistsBackfillStatus === 'loading'}
+				error={artistsBackfillStatus === 'error' ? artistsBackfillError : null}
+				emptyLabel="No people or groups attached. Re-bookmark from the catalog to enrich."
+			/>
 
 			{#if firkin.images.length > 0}
 				<div class="card border border-base-content/10 bg-base-200 p-4">
@@ -1228,6 +1283,7 @@
 										<tr>
 											<th>File</th>
 											<th>Path</th>
+											<th>CID</th>
 											<th class="text-right">Size</th>
 										</tr>
 									</thead>
@@ -1238,6 +1294,7 @@
 												<td class="font-mono text-xs [overflow-wrap:anywhere]"
 													>{rom.relative_path}</td
 												>
+												<td class="font-mono text-xs [overflow-wrap:anywhere]">{rom.cid}</td>
 												<td class="text-right text-xs">{formatBytes(rom.size)}</td>
 											</tr>
 										{/each}

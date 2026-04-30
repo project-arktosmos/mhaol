@@ -185,6 +185,7 @@ pub fn router() -> Router<CloudState> {
         .route("/sources", get(list_sources))
         .route("/{addon}/popular", get(popular))
         .route("/{addon}/genres", get(genres))
+        .route("/{addon}/{id}/artists", get(artists_for_item))
         .route(
             "/musicbrainz/release-groups/{id}/tracks",
             get(musicbrainz_tracks),
@@ -224,6 +225,27 @@ struct CatalogTrack {
     title: String,
     #[serde(rename = "lengthMs")]
     length_ms: Option<i64>,
+}
+
+/// Universal "person/group attached to a media item" record. Matches the
+/// `Artist` shape persisted on firkins so the bookmark / torrent-pick flows
+/// can copy the array verbatim. Each addon's handler maps its upstream cast,
+/// crew, authors, developers, channels, etc. into this shape.
+#[derive(Serialize)]
+struct CatalogArtist {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(rename = "imageUrl", skip_serializing_if = "Option::is_none")]
+    image_url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -322,6 +344,33 @@ fn empty_page(page: i64) -> CatalogPage {
         page,
         total_pages: 1,
     }
+}
+
+/// `GET /api/catalog/{addon}/{id}/artists` — fetches the people / groups /
+/// studios / channels associated with an upstream catalog item, mapped into
+/// the universal `CatalogArtist` shape. Used by the `/catalog/virtual` page
+/// to populate the firkin's artists array on bookmark, and by the
+/// `/catalog/[ipfsHash]` page to backfill missing artist data on first
+/// visit. Unknown / unsupported addons return an empty array (200) so the
+/// frontend can call this unconditionally.
+async fn artists_for_item(
+    State(_state): State<CloudState>,
+    Path((addon, id)): Path<(String, String)>,
+) -> Result<Json<Vec<CatalogArtist>>, (StatusCode, Json<serde_json::Value>)> {
+    if id.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "id is required"));
+    }
+    let artists = match addon.as_str() {
+        "musicbrainz" => musicbrainz_artists(&id).await?,
+        "tmdb-movie" => tmdb_credits(false, &id).await?,
+        "tmdb-tv" => tmdb_credits(true, &id).await?,
+        "openlibrary" => openlibrary_authors(&id).await?,
+        "retroachievements" => retroachievements_credits(&id).await?,
+        "youtube-video" => youtube_video_artists(&id).await?,
+        "youtube-channel" => youtube_channel_artists(&id).await?,
+        _ => Vec::new(),
+    };
+    Ok(Json(artists))
 }
 
 // ---------- TMDB ----------
@@ -450,6 +499,120 @@ async fn tmdb_genres(
         })
         .unwrap_or_default();
     Ok(genres)
+}
+
+const TMDB_TOP_CAST: usize = 12;
+/// Crew jobs we surface (everything else from the credits payload is dropped
+/// to keep the artists array short and meaningful on the firkin).
+const TMDB_CREW_JOBS: &[&str] = &[
+    "Director",
+    "Writer",
+    "Screenplay",
+    "Story",
+    "Producer",
+    "Executive Producer",
+    "Original Music Composer",
+    "Director of Photography",
+];
+
+async fn tmdb_credits(
+    is_tv: bool,
+    id: &str,
+) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
+    let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "TMDB_API_KEY env var is not set on the cloud server",
+        ));
+    }
+    let kind = if is_tv { "tv" } else { "movie" };
+    let url = format!(
+        "{}/{}/{}/credits?api_key={}",
+        TMDB_BASE,
+        kind,
+        urlencoding(id),
+        api_key
+    );
+    let payload: serde_json::Value = http_get_json(&url, &[("Accept", "application/json")]).await?;
+
+    let mut out: Vec<CatalogArtist> = Vec::new();
+    if let Some(cast) = payload.get("cast").and_then(|v| v.as_array()) {
+        for member in cast.iter().take(TMDB_TOP_CAST) {
+            let Some(name) = member.get("name").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let person_id = member.get("id").map(|v| v.to_string());
+            let character = member
+                .get("character")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| format!("as {s}"));
+            let image_url = member
+                .get("profile_path")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|p| format!("{}/w185{}", TMDB_IMG_BASE, p));
+            let url = person_id
+                .as_deref()
+                .map(|pid| format!("https://www.themoviedb.org/person/{pid}"));
+            out.push(CatalogArtist {
+                id: person_id,
+                name: name.to_string(),
+                role: Some("Actor".to_string()),
+                description: character,
+                kind: Some("Person".to_string()),
+                url,
+                image_url,
+            });
+        }
+    }
+    if let Some(crew) = payload.get("crew").and_then(|v| v.as_array()) {
+        // Dedup by (person_id, job): TMDB sometimes lists the same person
+        // multiple times if they had several roles in the same job category.
+        let mut seen: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+        for member in crew {
+            let Some(job) = member.get("job").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if !TMDB_CREW_JOBS.contains(&job) {
+                continue;
+            }
+            let Some(name) = member.get("name").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let person_id_str = member
+                .get("id")
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| name.to_string());
+            if !seen.insert((person_id_str.clone(), job.to_string())) {
+                continue;
+            }
+            let image_url = member
+                .get("profile_path")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|p| format!("{}/w185{}", TMDB_IMG_BASE, p));
+            let url = member
+                .get("id")
+                .map(|pid| format!("https://www.themoviedb.org/person/{pid}"));
+            out.push(CatalogArtist {
+                id: member.get("id").map(|v| v.to_string()),
+                name: name.to_string(),
+                role: Some(job.to_string()),
+                description: None,
+                kind: Some("Person".to_string()),
+                url,
+                image_url,
+            });
+        }
+    }
+    if is_tv {
+        // TMDB TV detail (the /tv/{id} endpoint, not credits) carries
+        // `created_by` — but a separate request just for that is too costly
+        // here. The cast/crew above is enough for first cut.
+    }
+    Ok(out)
 }
 
 // ---------- MusicBrainz ----------
@@ -587,6 +750,67 @@ async fn musicbrainz_tracks(
         }
     }
     Ok(Json(out))
+}
+
+async fn musicbrainz_artists(
+    release_group_id: &str,
+) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
+    let url = format!(
+        "{}/release-group/{}?inc=artist-credits&fmt=json",
+        MUSICBRAINZ_BASE,
+        urlencoding(release_group_id)
+    );
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+
+    let mut out: Vec<CatalogArtist> = Vec::new();
+    let credits = payload
+        .get("artist-credit")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    for credit in credits {
+        let artist = credit.get("artist").cloned().unwrap_or_default();
+        let id = artist
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let name = credit
+            .get("name")
+            .and_then(|v| v.as_str())
+            .or_else(|| artist.get("name").and_then(|v| v.as_str()))
+            .unwrap_or("")
+            .to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let kind = artist
+            .get("type")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let disambiguation = artist
+            .get("disambiguation")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let url = id
+            .as_deref()
+            .map(|i| format!("https://musicbrainz.org/artist/{i}"));
+        out.push(CatalogArtist {
+            id,
+            name,
+            role: Some("Artist".to_string()),
+            description: disambiguation,
+            kind,
+            url,
+            image_url: None,
+        });
+    }
+    Ok(out)
 }
 
 fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
@@ -759,6 +983,82 @@ fn openlibrary_to_item(w: &serde_json::Value) -> CatalogItem {
     }
 }
 
+async fn openlibrary_authors(
+    work_id: &str,
+) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
+    let key = work_id.trim_start_matches("/works/").trim_start_matches('/');
+    let url = format!("{}/works/{}.json", OPENLIBRARY_BASE, urlencoding(key));
+    let work: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+
+    let mut out: Vec<CatalogArtist> = Vec::new();
+    let authors = work
+        .get("authors")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    for entry in authors {
+        let author_key = entry
+            .get("author")
+            .and_then(|a| a.get("key"))
+            .and_then(|v| v.as_str())
+            .or_else(|| entry.get("key").and_then(|v| v.as_str()));
+        let Some(author_key) = author_key else {
+            continue;
+        };
+        let trimmed = author_key.trim_start_matches('/').to_string();
+        let id = trimmed.trim_start_matches("authors/").to_string();
+        // Per-author fetch for name + bio + photo. OpenLibrary's response
+        // shape is forgiving: missing name/bio are simply None.
+        let detail_url = format!("{}/{}.json", OPENLIBRARY_BASE, urlencoding(&trimmed));
+        let detail = match http_get_json(
+            &detail_url,
+            &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+        )
+        .await
+        {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let name = detail
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let description = detail
+            .get("bio")
+            .and_then(|v| {
+                v.as_str()
+                    .map(|s| s.to_string())
+                    .or_else(|| v.get("value").and_then(|x| x.as_str()).map(|s| s.to_string()))
+            })
+            .filter(|s| !s.is_empty());
+        let photo_id = detail
+            .get("photos")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.iter().filter_map(|p| p.as_i64()).find(|id| *id > 0));
+        let image_url =
+            photo_id.map(|pid| format!("{}/a/id/{}-M.jpg", OPENLIBRARY_COVERS, pid));
+        let url = Some(format!("{}/authors/{}", OPENLIBRARY_BASE, id));
+        out.push(CatalogArtist {
+            id: Some(id),
+            name,
+            role: Some("Author".to_string()),
+            description,
+            kind: Some("Person".to_string()),
+            url,
+            image_url,
+        });
+    }
+    Ok(out)
+}
+
 // ---------- RetroAchievements ----------
 
 const RA_CONSOLES: &[(i64, &str)] = &[
@@ -922,6 +1222,78 @@ fn retroachievements_to_item(g: &serde_json::Value) -> CatalogItem {
     }
 }
 
+async fn retroachievements_credits(
+    game_id: &str,
+) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
+    let user = std::env::var("RA_API_USER")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("RA_USERNAME").ok().filter(|s| !s.is_empty()))
+        .or_else(|| std::env::var("RA_USER").ok().filter(|s| !s.is_empty()));
+    let key = std::env::var("RA_API_KEY").ok().filter(|s| !s.is_empty());
+    let (Some(user), Some(key)) = (user, key) else {
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "RA_API_USER and RA_API_KEY env vars must be set on the cloud server",
+        ));
+    };
+    let url = format!(
+        "{}/API_GetGame.php?z={}&y={}&i={}",
+        RA_BASE,
+        urlencoding(&user),
+        urlencoding(&key),
+        urlencoding(game_id)
+    );
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+
+    let mut out: Vec<CatalogArtist> = Vec::new();
+    let push_role = |out: &mut Vec<CatalogArtist>, role: &str, kind: &str, value: Option<&str>| {
+        if let Some(v) = value.and_then(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }) {
+            for piece in v.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()) {
+                out.push(CatalogArtist {
+                    id: None,
+                    name: piece.to_string(),
+                    role: Some(role.to_string()),
+                    description: None,
+                    kind: Some(kind.to_string()),
+                    url: None,
+                    image_url: None,
+                });
+            }
+        }
+    };
+    push_role(
+        &mut out,
+        "Developer",
+        "Studio",
+        payload.get("Developer").and_then(|v| v.as_str()),
+    );
+    push_role(
+        &mut out,
+        "Publisher",
+        "Publisher",
+        payload.get("Publisher").and_then(|v| v.as_str()),
+    );
+    push_role(
+        &mut out,
+        "Genre",
+        "Genre",
+        payload.get("Genre").and_then(|v| v.as_str()),
+    );
+    Ok(out)
+}
+
 // ---------- YouTube ----------
 
 const YOUTUBE_REGIONS: &[(&str, &str)] = &[
@@ -1052,6 +1424,93 @@ fn youtube_to_item(item: &serde_json::Value, want_channel: bool) -> CatalogItem 
         poster_url,
         backdrop_url: None,
     }
+}
+
+async fn youtube_video_artists(
+    video_id: &str,
+) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
+    let url = format!("{}/streams/{}", PIPED_BASE, urlencoding(video_id));
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+    let name = payload
+        .get("uploader")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if name.is_empty() {
+        return Ok(Vec::new());
+    }
+    let channel_url = payload
+        .get("uploaderUrl")
+        .and_then(|v| v.as_str())
+        .map(|s| {
+            if s.starts_with("http") {
+                s.to_string()
+            } else {
+                format!("https://www.youtube.com{}", s)
+            }
+        });
+    let id = payload
+        .get("uploaderUrl")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.split('/').next_back().map(|x| x.to_string()));
+    let image_url = payload
+        .get("uploaderAvatar")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    Ok(vec![CatalogArtist {
+        id,
+        name,
+        role: Some("Channel".to_string()),
+        description: None,
+        kind: Some("Channel".to_string()),
+        url: channel_url,
+        image_url,
+    }])
+}
+
+async fn youtube_channel_artists(
+    channel_id: &str,
+) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
+    let url = format!("{}/channel/{}", PIPED_BASE, urlencoding(channel_id));
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+    let name = payload
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if name.is_empty() {
+        return Ok(Vec::new());
+    }
+    let description = payload
+        .get("description")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let image_url = payload
+        .get("avatarUrl")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let url = Some(format!(
+        "https://www.youtube.com/channel/{}",
+        urlencoding(channel_id)
+    ));
+    Ok(vec![CatalogArtist {
+        id: Some(channel_id.to_string()),
+        name,
+        role: Some("Channel".to_string()),
+        description,
+        kind: Some("Channel".to_string()),
+        url,
+        image_url,
+    }])
 }
 
 // ---------- IPTV ----------

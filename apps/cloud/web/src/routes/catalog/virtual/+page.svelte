@@ -1,6 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import FirkinArtistsSection from 'ui-lib/components/firkins/FirkinArtistsSection.svelte';
 	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import { cachedImageUrl } from '$lib/image-cache';
 	import {
@@ -8,7 +9,8 @@
 		addonKind,
 		type FirkinAddon,
 		type Firkin,
-		type ImageMeta
+		type ImageMeta,
+		type Artist
 	} from '$lib/firkins.service';
 	import {
 		formatSizeBytes,
@@ -42,10 +44,55 @@
 			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }))
 	);
 
+	type ArtistsStatus = 'idle' | 'loading' | 'done' | 'error';
+	let artists = $state<Artist[]>([]);
+	let artistsStatus = $state<ArtistsStatus>('idle');
+	let artistsError = $state<string | null>(null);
+	let artistsRun = 0;
+	let artistsInitForKey: string | null = null;
+
+	$effect(() => {
+		if (!addon || !itemId) return;
+		const key = `${addon}:${itemId}`;
+		if (artistsInitForKey === key) return;
+		artistsInitForKey = key;
+		void loadArtists(addon, itemId, ++artistsRun);
+	});
+
+	async function loadArtists(addon: string, id: string, myRun: number) {
+		artistsStatus = 'loading';
+		artistsError = null;
+		artists = [];
+		try {
+			const res = await fetch(
+				`/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(id)}/artists`,
+				{ cache: 'no-store' }
+			);
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const body = (await res.json()) as Artist[];
+			if (myRun !== artistsRun) return;
+			artists = Array.isArray(body) ? body : [];
+			artistsStatus = 'done';
+		} catch (err) {
+			if (myRun !== artistsRun) return;
+			artistsError = err instanceof Error ? err.message : 'Unknown error';
+			artistsStatus = 'error';
+		}
+	}
+
 	const virtualFirkin = $derived<CloudFirkin>({
 		id: `virtual:${addon}:${itemId}`,
 		title,
-		artists: [],
+		artists,
 		description,
 		images,
 		files: [],
@@ -88,7 +135,7 @@
 					: [];
 			const created: Firkin = await firkinsService.create({
 				title,
-				artists: [],
+				artists,
 				description,
 				images,
 				files: sourceFiles,
@@ -276,7 +323,7 @@
 		try {
 			const created: Firkin = await firkinsService.create({
 				title,
-				artists: [],
+				artists,
 				description,
 				images,
 				files: [{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }],
@@ -367,6 +414,13 @@
 					<p class="text-sm [overflow-wrap:anywhere] whitespace-pre-wrap">{description}</p>
 				</div>
 			{/if}
+
+			<FirkinArtistsSection
+				artists={artists}
+				loading={artistsStatus === 'loading'}
+				error={artistsStatus === 'error' ? artistsError : null}
+				emptyLabel="No people or groups attached to this item upstream."
+			/>
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>
