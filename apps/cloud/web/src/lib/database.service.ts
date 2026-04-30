@@ -113,6 +113,22 @@ class DatabaseService {
 	clearTable(): void {
 		this.records.set(initialRecordsState);
 	}
+
+	async clearAll(): Promise<void> {
+		this.state.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			const res = await fetch('/api/database/tables', {
+				method: 'DELETE',
+				cache: 'no-store'
+			});
+			if (!res.ok) throw new Error(await parseError(res));
+			this.records.set(initialRecordsState);
+			await this.refresh();
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Unknown error';
+			this.state.update((s) => ({ ...s, loading: false, error: message }));
+		}
+	}
 }
 
 export const databaseService = new DatabaseService();

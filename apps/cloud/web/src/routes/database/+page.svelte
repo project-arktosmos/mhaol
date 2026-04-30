@@ -7,10 +7,22 @@
 	const recordsStore = databaseService.records;
 
 	let pageSize = $state(100);
+	let confirmingClear = $state(false);
+	let clearing = $state(false);
 
 	onMount(() => {
 		databaseService.refresh();
 	});
+
+	async function clearDatabase() {
+		clearing = true;
+		try {
+			await databaseService.clearAll();
+		} finally {
+			clearing = false;
+			confirmingClear = false;
+		}
+	}
 
 	function selectTable(name: string) {
 		databaseService.loadTable(name, pageSize, 0);
@@ -97,8 +109,46 @@
 			>
 				{$tablesStore.loading ? 'Refreshing…' : 'Refresh tables'}
 			</button>
+			<button
+				class="btn btn-error btn-sm"
+				onclick={() => (confirmingClear = true)}
+				disabled={$tablesStore.loading || clearing || $tablesStore.tables.length === 0}
+			>
+				Clear DB
+			</button>
 		</div>
 	</header>
+
+	{#if confirmingClear}
+		<div
+			class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+			role="dialog"
+			aria-modal="true"
+		>
+			<div class="w-full max-w-md rounded-box border border-base-content/10 bg-base-100 p-5 shadow-xl">
+				<h2 class="text-lg font-semibold">Clear entire database?</h2>
+				<p class="mt-2 text-sm text-base-content/70">
+					This will remove every table from the
+					<span class="font-mono">{$tablesStore.namespace}</span> /
+					<span class="font-mono">{$tablesStore.database}</span> store
+					({$tablesStore.tables.length}
+					{$tablesStore.tables.length === 1 ? 'table' : 'tables'}). This cannot be undone.
+				</p>
+				<div class="mt-4 flex justify-end gap-2">
+					<button
+						class="btn btn-ghost btn-sm"
+						onclick={() => (confirmingClear = false)}
+						disabled={clearing}
+					>
+						Cancel
+					</button>
+					<button class="btn btn-error btn-sm" onclick={clearDatabase} disabled={clearing}>
+						{clearing ? 'Clearing…' : 'Clear database'}
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	{#if $tablesStore.error}
 		<div class="alert alert-error">

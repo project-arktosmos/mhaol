@@ -11,8 +11,8 @@ use surrealdb::sql::Thing;
 
 pub fn router() -> Router<CloudState> {
     Router::new()
-        .route("/tables", get(list_tables))
-        .route("/tables/{table}", get(list_records))
+        .route("/tables", get(list_tables).delete(clear_all))
+        .route("/tables/{table}", get(list_records).delete(clear_table))
 }
 
 fn err_response(
@@ -168,6 +168,75 @@ impl GenericRecord {
         }
         serde_json::Value::Object(map)
     }
+}
+
+#[derive(Serialize)]
+struct ClearResponse {
+    cleared: Vec<String>,
+}
+
+async fn clear_all(
+    State(state): State<CloudState>,
+) -> Result<Json<ClearResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let mut response = state.db.query("INFO FOR DB").await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("INFO FOR DB failed: {e}"),
+        )
+    })?;
+
+    let info: Option<serde_json::Value> = response.take(0).map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("INFO FOR DB parse failed: {e}"),
+        )
+    })?;
+
+    let names: Vec<String> = info
+        .as_ref()
+        .and_then(|v| v.get("tables"))
+        .and_then(|v| v.as_object())
+        .map(|o| o.keys().cloned().collect())
+        .unwrap_or_default();
+
+    let mut cleared = Vec::with_capacity(names.len());
+    for name in names {
+        if !is_valid_table_name(&name) {
+            continue;
+        }
+        let q = format!("REMOVE TABLE {name}");
+        state.db.query(q).await.map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("REMOVE TABLE {name} failed: {e}"),
+            )
+        })?;
+        cleared.push(name);
+    }
+
+    Ok(Json(ClearResponse { cleared }))
+}
+
+async fn clear_table(
+    State(state): State<CloudState>,
+    Path(table): Path<String>,
+) -> Result<Json<ClearResponse>, (StatusCode, Json<serde_json::Value>)> {
+    if !is_valid_table_name(&table) {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "invalid table name (only alphanumeric and underscore allowed)",
+        ));
+    }
+    let q = format!("REMOVE TABLE {table}");
+    state.db.query(q).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("REMOVE TABLE {table} failed: {e}"),
+        )
+    })?;
+    Ok(Json(ClearResponse {
+        cleared: vec![table],
+    }))
 }
 
 fn is_valid_table_name(name: &str) -> bool {
