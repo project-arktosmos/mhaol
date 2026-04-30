@@ -14,6 +14,9 @@ const COVERART_BASE: &str = "https://coverartarchive.org";
 const OPENLIBRARY_BASE: &str = "https://openlibrary.org";
 const OPENLIBRARY_COVERS: &str = "https://covers.openlibrary.org";
 const RA_BASE: &str = "https://retroachievements.org/API";
+const PIPED_BASE: &str = "https://pipedapi.kavin.rocks";
+const IPTV_ORG_BASE: &str = "https://iptv-org.github.io/api";
+const RADIO_BROWSER_BASE: &str = "https://de1.api.radio-browser.info/json";
 const USER_AGENT: &str = "Mhaol/0.0.1 (https://github.com/project-arktosmos/mhaol)";
 
 pub fn router() -> Router<CloudState> {
@@ -80,6 +83,18 @@ async fn list_sources() -> Json<Vec<CatalogSource>> {
                     id: "tv",
                     label: "TV Shows",
                 },
+                CatalogTypeInfo {
+                    id: "tv_season",
+                    label: "TV Seasons",
+                },
+                CatalogTypeInfo {
+                    id: "tv_episode",
+                    label: "TV Episodes",
+                },
+                CatalogTypeInfo {
+                    id: "image",
+                    label: "Images",
+                },
             ],
             filter_label: "Genre",
             has_filter: true,
@@ -87,12 +102,54 @@ async fn list_sources() -> Json<Vec<CatalogSource>> {
         CatalogSource {
             id: "musicbrainz",
             label: "MusicBrainz",
-            types: vec![CatalogTypeInfo {
-                id: "album",
-                label: "Albums",
-            }],
+            types: vec![
+                CatalogTypeInfo {
+                    id: "album",
+                    label: "Albums",
+                },
+                CatalogTypeInfo {
+                    id: "track",
+                    label: "Tracks",
+                },
+            ],
             filter_label: "Genre",
             has_filter: true,
+        },
+        CatalogSource {
+            id: "retroachievements",
+            label: "RetroAchievements",
+            types: vec![CatalogTypeInfo {
+                id: "game",
+                label: "Games",
+            }],
+            filter_label: "Console",
+            has_filter: true,
+        },
+        CatalogSource {
+            id: "youtube",
+            label: "YouTube",
+            types: vec![
+                CatalogTypeInfo {
+                    id: "video",
+                    label: "Videos",
+                },
+                CatalogTypeInfo {
+                    id: "channel",
+                    label: "Channels",
+                },
+            ],
+            filter_label: "Region",
+            has_filter: true,
+        },
+        CatalogSource {
+            id: "lrclib",
+            label: "LRCLIB",
+            types: vec![CatalogTypeInfo {
+                id: "track",
+                label: "Tracks",
+            }],
+            filter_label: "Filter",
+            has_filter: false,
         },
         CatalogSource {
             id: "openlibrary",
@@ -105,13 +162,39 @@ async fn list_sources() -> Json<Vec<CatalogSource>> {
             has_filter: true,
         },
         CatalogSource {
-            id: "retroachievements",
-            label: "RetroAchievements",
+            id: "wyzie-subs",
+            label: "Wyzie Subs",
+            types: vec![
+                CatalogTypeInfo {
+                    id: "movie",
+                    label: "Movies",
+                },
+                CatalogTypeInfo {
+                    id: "tv_episode",
+                    label: "TV Episodes",
+                },
+            ],
+            filter_label: "Filter",
+            has_filter: false,
+        },
+        CatalogSource {
+            id: "iptv",
+            label: "IPTV",
             types: vec![CatalogTypeInfo {
-                id: "game",
-                label: "Games",
+                id: "channel",
+                label: "Channels",
             }],
-            filter_label: "Console",
+            filter_label: "Category",
+            has_filter: true,
+        },
+        CatalogSource {
+            id: "radio",
+            label: "Radio",
+            types: vec![CatalogTypeInfo {
+                id: "station",
+                label: "Stations",
+            }],
+            filter_label: "Tag",
             has_filter: true,
         },
     ])
@@ -145,9 +228,13 @@ async fn popular(
     let page = q.page.unwrap_or(1).max(1);
     match addon.as_str() {
         "tmdb" => tmdb_popular(q.r#type.as_deref(), q.filter.as_deref(), page).await,
-        "musicbrainz" => musicbrainz_popular(q.filter.as_deref(), page).await,
+        "musicbrainz" => musicbrainz_popular(q.r#type.as_deref(), q.filter.as_deref(), page).await,
         "openlibrary" => openlibrary_popular(q.filter.as_deref(), page).await,
         "retroachievements" => retroachievements_popular(q.filter.as_deref(), page).await,
+        "youtube" => youtube_popular(q.r#type.as_deref(), q.filter.as_deref(), page).await,
+        "iptv" => iptv_popular(q.filter.as_deref(), page).await,
+        "radio" => radio_popular(q.filter.as_deref(), page).await,
+        "lrclib" | "wyzie-subs" => Ok(empty_page(page)),
         _ => Err(err(
             StatusCode::NOT_FOUND,
             format!("addon \"{addon}\" is not supported"),
@@ -166,12 +253,24 @@ async fn genres(
         "musicbrainz" => Ok(static_music_genres()),
         "openlibrary" => Ok(static_openlibrary_subjects()),
         "retroachievements" => Ok(static_ra_consoles()),
+        "youtube" => Ok(static_youtube_regions()),
+        "iptv" => Ok(static_iptv_categories()),
+        "radio" => Ok(static_radio_tags()),
+        "lrclib" | "wyzie-subs" => Ok(Vec::new()),
         _ => Err(err(
             StatusCode::NOT_FOUND,
             format!("addon \"{addon}\" is not supported"),
         )),
     }
     .map(Json)
+}
+
+fn empty_page(page: i64) -> CatalogPage {
+    CatalogPage {
+        items: Vec::new(),
+        page,
+        total_pages: 1,
+    }
 }
 
 // ---------- TMDB ----------
@@ -188,7 +287,12 @@ async fn tmdb_popular(
             "TMDB_API_KEY env var is not set on the cloud server",
         ));
     }
-    let kind = media_type.unwrap_or("movie");
+    let raw_kind = media_type.unwrap_or("movie");
+    // tv_season / tv_episode reuse the popular tv list; image reuses popular movies.
+    let kind = match raw_kind {
+        "tv" | "tv_season" | "tv_episode" => "tv",
+        _ => "movie",
+    };
     let endpoint = match kind {
         "tv" => {
             if let Some(g) = genre.filter(|s| !s.is_empty()) {
@@ -285,7 +389,11 @@ async fn tmdb_genres(
             "TMDB_API_KEY env var is not set on the cloud server",
         ));
     }
-    let kind = media_type.unwrap_or("movie");
+    let raw_kind = media_type.unwrap_or("movie");
+    let kind = match raw_kind {
+        "tv" | "tv_season" | "tv_episode" => "tv",
+        _ => "movie",
+    };
     let path = if kind == "tv" {
         "/genre/tv/list"
     } else {
@@ -343,6 +451,7 @@ fn static_music_genres() -> Vec<CatalogGenre> {
 }
 
 async fn musicbrainz_popular(
+    media_type: Option<&str>,
     genre: Option<&str>,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
@@ -350,9 +459,17 @@ async fn musicbrainz_popular(
     let offset = (page - 1) * limit;
     let tag = genre.filter(|s| !s.is_empty()).unwrap_or("rock");
     let query = format!("tag:\"{}\"", tag);
+    let kind = media_type.unwrap_or("album");
+    let (entity, results_key, mapper): (&str, &str, fn(&serde_json::Value) -> CatalogItem) =
+        if kind == "track" {
+            ("recording", "recordings", musicbrainz_recording_to_item)
+        } else {
+            ("release-group", "release-groups", musicbrainz_to_item)
+        };
     let url = format!(
-        "{}/release-group?query={}&fmt=json&limit={}&offset={}",
+        "{}/{}?query={}&fmt=json&limit={}&offset={}",
         MUSICBRAINZ_BASE,
+        entity,
         urlencoding(&query),
         limit,
         offset
@@ -369,15 +486,69 @@ async fn musicbrainz_popular(
         .unwrap_or(limit);
     let total_pages = ((count as f64) / (limit as f64)).ceil() as i64;
     let items = payload
-        .get("release-groups")
+        .get(results_key)
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().map(musicbrainz_to_item).collect())
+        .map(|arr| arr.iter().map(mapper).collect())
         .unwrap_or_default();
     Ok(CatalogPage {
         items,
         page,
         total_pages: total_pages.max(1),
     })
+}
+
+fn musicbrainz_recording_to_item(r: &serde_json::Value) -> CatalogItem {
+    let id = r
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let title = r
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let credits = r
+        .get("artist-credit")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|c| {
+                    c.get("name")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| c.get("artist").and_then(|a| a.get("name")?.as_str()))
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    let release_id = r
+        .get("releases")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|first| first.get("release-group"))
+        .and_then(|rg| rg.get("id"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let year = r
+        .get("first-release-date")
+        .and_then(|v| v.as_str())
+        .and_then(|d| d.get(0..4))
+        .and_then(|s| s.parse::<i32>().ok());
+    let poster_url =
+        release_id.map(|rid| format!("{}/release-group/{}/front", COVERART_BASE, rid));
+    CatalogItem {
+        id,
+        title,
+        year,
+        description: if credits.is_empty() {
+            None
+        } else {
+            Some(credits)
+        },
+        poster_url,
+        backdrop_url: None,
+    }
 }
 
 fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
@@ -703,6 +874,416 @@ fn retroachievements_to_item(g: &serde_json::Value) -> CatalogItem {
         id,
         title,
         year,
+        description: if description.is_empty() {
+            None
+        } else {
+            Some(description)
+        },
+        poster_url,
+        backdrop_url: None,
+    }
+}
+
+// ---------- YouTube ----------
+
+const YOUTUBE_REGIONS: &[(&str, &str)] = &[
+    ("US", "United States"),
+    ("GB", "United Kingdom"),
+    ("CA", "Canada"),
+    ("AU", "Australia"),
+    ("DE", "Germany"),
+    ("FR", "France"),
+    ("ES", "Spain"),
+    ("IT", "Italy"),
+    ("BR", "Brazil"),
+    ("MX", "Mexico"),
+    ("JP", "Japan"),
+    ("KR", "South Korea"),
+    ("IN", "India"),
+];
+
+fn static_youtube_regions() -> Vec<CatalogGenre> {
+    YOUTUBE_REGIONS
+        .iter()
+        .map(|(id, name)| CatalogGenre {
+            id: (*id).to_string(),
+            name: (*name).to_string(),
+        })
+        .collect()
+}
+
+async fn youtube_popular(
+    media_type: Option<&str>,
+    region: Option<&str>,
+    page: i64,
+) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
+    let region = region
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_uppercase())
+        .unwrap_or_else(|| "US".to_string());
+    let url = format!(
+        "{}/trending?region={}",
+        PIPED_BASE,
+        urlencoding(&region)
+    );
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+    let arr = payload.as_array().cloned().unwrap_or_default();
+    let limit: usize = 24;
+    let total_pages = ((arr.len() as f64) / (limit as f64)).ceil() as i64;
+    let offset = ((page - 1).max(0) as usize) * limit;
+    let kind = media_type.unwrap_or("video");
+    let items: Vec<CatalogItem> = arr
+        .iter()
+        .skip(offset)
+        .take(limit)
+        .map(|item| youtube_to_item(item, kind))
+        .collect();
+    Ok(CatalogPage {
+        items,
+        page,
+        total_pages: total_pages.max(1),
+    })
+}
+
+fn youtube_to_item(item: &serde_json::Value, kind: &str) -> CatalogItem {
+    let want_channel = kind == "channel";
+    let raw_id = if want_channel {
+        item.get("uploaderUrl").and_then(|v| v.as_str()).map(|s| {
+            s.trim_start_matches('/')
+                .trim_start_matches("channel/")
+                .to_string()
+        })
+    } else {
+        item.get("url").and_then(|v| v.as_str()).map(|s| {
+            s.split_once("v=")
+                .map(|(_, rest)| rest.to_string())
+                .unwrap_or_else(|| s.trim_start_matches('/').to_string())
+        })
+    };
+    let id = raw_id.unwrap_or_default();
+    let title = if want_channel {
+        item.get("uploaderName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    } else {
+        item.get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    let description = if want_channel {
+        item.get("uploaderDescription")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    } else {
+        let uploader = item
+            .get("uploaderName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let views = item.get("views").and_then(|v| v.as_i64());
+        let mut parts: Vec<String> = Vec::new();
+        if !uploader.is_empty() {
+            parts.push(uploader.to_string());
+        }
+        if let Some(v) = views {
+            parts.push(format!("{} views", v));
+        }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(" · "))
+        }
+    };
+    let poster_url = if want_channel {
+        item.get("uploaderAvatar")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    } else {
+        item.get("thumbnail")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    };
+    CatalogItem {
+        id,
+        title,
+        year: None,
+        description,
+        poster_url,
+        backdrop_url: None,
+    }
+}
+
+// ---------- IPTV ----------
+
+const IPTV_CATEGORIES: &[&str] = &[
+    "general",
+    "news",
+    "sports",
+    "movies",
+    "music",
+    "kids",
+    "documentary",
+    "entertainment",
+    "education",
+    "religious",
+    "lifestyle",
+    "business",
+    "weather",
+    "travel",
+    "comedy",
+    "auto",
+    "outdoor",
+    "animation",
+    "cooking",
+    "science",
+    "family",
+    "classic",
+    "legislative",
+    "culture",
+];
+
+fn static_iptv_categories() -> Vec<CatalogGenre> {
+    IPTV_CATEGORIES
+        .iter()
+        .map(|c| CatalogGenre {
+            id: (*c).to_string(),
+            name: capitalize_words(c),
+        })
+        .collect()
+}
+
+async fn iptv_popular(
+    category: Option<&str>,
+    page: i64,
+) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
+    let channels_url = format!("{}/channels.json", IPTV_ORG_BASE);
+    let payload: serde_json::Value = http_get_json(
+        &channels_url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+    let arr = payload.as_array().cloned().unwrap_or_default();
+    let category = category
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_lowercase());
+    let mut filtered: Vec<&serde_json::Value> = arr
+        .iter()
+        .filter(|ch| {
+            let cats = ch
+                .get("categories")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|c| c.as_str().map(|s| s.to_lowercase()))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            match &category {
+                Some(c) => cats.iter().any(|x| x == c),
+                None => true,
+            }
+        })
+        .collect();
+    filtered.sort_by(|a, b| {
+        let an = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let bn = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        an.cmp(bn)
+    });
+    let limit: usize = 24;
+    let total_pages = ((filtered.len() as f64) / (limit as f64)).ceil() as i64;
+    let offset = ((page - 1).max(0) as usize) * limit;
+    let items: Vec<CatalogItem> = filtered
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .map(iptv_to_item)
+        .collect();
+    Ok(CatalogPage {
+        items,
+        page,
+        total_pages: total_pages.max(1),
+    })
+}
+
+fn iptv_to_item(ch: &serde_json::Value) -> CatalogItem {
+    let id = ch
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let title = ch
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let country = ch
+        .get("country")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let cats = ch
+        .get("categories")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|c| c.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    let mut description = String::new();
+    if !country.is_empty() {
+        description.push_str(&country);
+    }
+    if !cats.is_empty() {
+        if !description.is_empty() {
+            description.push_str(" · ");
+        }
+        description.push_str(&cats);
+    }
+    let poster_url = ch
+        .get("logo")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    CatalogItem {
+        id,
+        title,
+        year: None,
+        description: if description.is_empty() {
+            None
+        } else {
+            Some(description)
+        },
+        poster_url,
+        backdrop_url: None,
+    }
+}
+
+// ---------- Radio ----------
+
+const RADIO_TAGS: &[&str] = &[
+    "pop",
+    "rock",
+    "news",
+    "classical",
+    "jazz",
+    "country",
+    "electronic",
+    "hip hop",
+    "talk",
+    "dance",
+    "metal",
+    "indie",
+    "folk",
+    "blues",
+    "reggae",
+    "latin",
+    "ambient",
+    "oldies",
+    "alternative",
+    "sports",
+];
+
+fn static_radio_tags() -> Vec<CatalogGenre> {
+    RADIO_TAGS
+        .iter()
+        .map(|t| CatalogGenre {
+            id: (*t).to_string(),
+            name: capitalize_words(t),
+        })
+        .collect()
+}
+
+async fn radio_popular(
+    tag: Option<&str>,
+    page: i64,
+) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
+    let limit: i64 = 24;
+    let offset = (page - 1).max(0) * limit;
+    let mut params: Vec<(&str, String)> = vec![
+        ("limit", limit.to_string()),
+        ("offset", offset.to_string()),
+        ("order", "clickcount".to_string()),
+        ("reverse", "true".to_string()),
+        ("hidebroken", "true".to_string()),
+    ];
+    if let Some(t) = tag.filter(|s| !s.is_empty()) {
+        params.push(("tag", t.to_string()));
+    }
+    let qs = params
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, urlencoding(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    let url = format!("{}/stations/search?{}", RADIO_BROWSER_BASE, qs);
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+    let arr = payload.as_array().cloned().unwrap_or_default();
+    // Radio Browser doesn't return a total count for /stations/search; assume more pages
+    // exist while the current page is full.
+    let total_pages = if (arr.len() as i64) < limit {
+        page
+    } else {
+        page + 1
+    };
+    let items: Vec<CatalogItem> = arr.iter().map(radio_to_item).collect();
+    Ok(CatalogPage {
+        items,
+        page,
+        total_pages: total_pages.max(1),
+    })
+}
+
+fn radio_to_item(s: &serde_json::Value) -> CatalogItem {
+    let id = s
+        .get("stationuuid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let title = s
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let country = s
+        .get("country")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let tags = s
+        .get("tags")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let mut description = String::new();
+    if !country.is_empty() {
+        description.push_str(&country);
+    }
+    if !tags.is_empty() {
+        if !description.is_empty() {
+            description.push_str(" · ");
+        }
+        description.push_str(&tags);
+    }
+    let poster_url = s
+        .get("favicon")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    CatalogItem {
+        id,
+        title,
+        year: None,
         description: if description.is_empty() {
             None
         } else {
