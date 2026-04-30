@@ -97,7 +97,7 @@ pnpm build:cloud
 - `HOST` — Bind address (default: 0.0.0.0; `pnpm app:cloud` / `pnpm dev:cloud` / `pnpm dev` set it to 127.0.0.1)
 - `DB_PATH` — SurrealDB store path (default: `<home>/mhaol/cloud-rocksdb/`, resolved per-OS via `dirs::home_dir()`)
 - `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-rocksdb/`
-- `SIGNALING_URL` — PartyKit signaling URL (default: hosted instance)
+- `SIGNALING_URL` — Base URL of the rendezvous WebSocket signaling server (default: `http://localhost:14080`). The cloud bakes this into passport metadata and propagates it to the GStreamer worker so `/api/p2p-stream/sessions` can return it to the player.
 - `IPFS_SWARM_KEY_FILE` — Path to the IPFS pre-shared swarm key. Default: `<DATA_DIR>/swarm.key` (or `<home>/mhaol/swarm.key` when `DATA_DIR` is unset), auto-generated on first boot when missing. The rendezvous app defaults to the same path, so a single-machine setup shares the key out of the box. All nodes on the same private swarm must share this file byte-for-byte.
 - `RENDEZVOUS_BOOTSTRAP` — Newline- or comma-separated rendezvous multiaddrs to dial on startup (e.g. `/ip4/192.168.1.10/tcp/14001/p2p/12D3...`). Takes precedence over the bootstrap file.
 - `RENDEZVOUS_BOOTSTRAP_FILE` — Path to the rendezvous-written bootstrap multiaddr file. Default: `<DATA_DIR>/rendezvous/bootstrap.multiaddr` (or `<home>/mhaol/rendezvous/bootstrap.multiaddr`).

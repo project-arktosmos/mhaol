@@ -15,14 +15,12 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 mhaol.git/
 ├── apps/
 │   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud")
-│   ├── rendezvous/                   # Rust IPFS bootstrap node for the private Mhaol swarm + DHT-backed WebRTC signaling (mhaol-rendezvous, HTTP 14080, libp2p 14001)
-│   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
-│   └── signaling/                    # Rust signaling server (self-hosted alternative to PartyKit)
+│   ├── rendezvous/                   # Rust IPFS bootstrap node + DHT/WebSocket WebRTC signaling + TURN credential server (mhaol-rendezvous, HTTP 14080, libp2p 14001)
+│   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, OpenLibrary, Wyzie subtitles, torrent search)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
-│   ├── signaling/                    # PartyKit signaling service
 │   ├── p2p-stream/                   # Rust P2P streaming library
 │   ├── torrent/                      # Rust torrent implementation
 │   ├── ed2k/                         # Rust eDonkey/ed2k network client (search + add)
@@ -202,12 +200,10 @@ pnpm app:shepperd:build   # Shepperd production build
 pnpm app:tauri:cloud         # Mhaol Cloud desktop shell (apps/cloud/src-tauri)
 pnpm app:tauri:cloud:build   # Mhaol Cloud release build
 
-# Rendezvous (private-swarm IPFS bootstrap node + DHT-backed WebRTC signaling)
-pnpm app:rendezvous   # Run mhaol-rendezvous (HTTP 14080, libp2p TCP 14001)
-
-# Signaling
-pnpm signaling:dev    # PartyKit local dev
-pnpm signaling:deploy # Deploy PartyKit
+# Rendezvous (private-swarm IPFS bootstrap + WebRTC signaling + TURN)
+pnpm app:rendezvous          # Run mhaol-rendezvous (HTTP 14080, libp2p TCP 14001)
+pnpm app:rendezvous:setup    # Linux deployment wizard (coturn + Let's Encrypt + systemd)
+pnpm build:rendezvous        # Release build of mhaol-rendezvous
 
 # Cleanup
 pnpm clean            # Clean build artifacts, cargo clean, remove SQLite DBs

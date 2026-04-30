@@ -119,23 +119,16 @@ pnpm app:shepperd:build
 
 Load the built extension from `apps/shepperd/dist/` in your browser's extension manager (enable developer mode).
 
-### Signaling (self-hosted)
+### Rendezvous (private-swarm IPFS bootstrap + WebRTC signaling + TURN)
 
-For self-hosted signaling instead of the default PartyKit instance:
-
-```bash
-# Interactive setup wizard (creates config)
-pnpm signaling:setup
-
-# Start the signaling server
-pnpm signaling:serve
-```
-
-For PartyKit cloud signaling (development):
+Rendezvous bundles the private-swarm IPFS bootstrap node, the WebSocket WebRTC signaling relay, and the TURN credential server into a single binary. It replaces the previous PartyKit/`mhaol-signaling` stack.
 
 ```bash
-pnpm signaling:dev      # Local dev
-pnpm signaling:deploy   # Deploy to PartyKit
+# Run rendezvous (HTTP 14080, libp2p TCP 14001)
+pnpm app:rendezvous
+
+# Linux deployment wizard (coturn + Let's Encrypt + systemd)
+pnpm app:rendezvous:setup
 ```
 
 ---
@@ -150,13 +143,13 @@ pnpm build:cloud
 
 Builds the cloud WebUI and the release binary at `target/release/mhaol-cloud` (the WebUI is embedded into the binary).
 
-### Signaling
+### Rendezvous
 
 ```bash
-pnpm build:signaling
+pnpm build:rendezvous
 ```
 
-Builds to `target/release/mhaol-signaling`.
+Builds to `target/release/mhaol-rendezvous`.
 
 ---
 
