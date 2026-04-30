@@ -63,14 +63,12 @@
 	}
 
 	const catalogTypeButtons = $derived<CatalogTypeButton[]>(
-		sources.flatMap((src) =>
-			src.types.map((t) => ({
-				firkinType: mapToFirkinType(src.id, t.id),
-				label: t.label,
-				addonId: src.id,
-				catalogType: t.id
-			}))
-		)
+		(currentSource?.types ?? []).map((t) => ({
+			firkinType: mapToFirkinType(currentSource!.id, t.id),
+			label: t.label,
+			addonId: currentSource!.id,
+			catalogType: t.id
+		}))
 	);
 
 	function mapToFirkinType(addonId: string, typeId: string): FirkinType {
@@ -196,6 +194,16 @@
 		}
 	}
 
+	async function selectAddon(source: CatalogSource) {
+		if (addon === source.id) return;
+		addon = source.id;
+		type = source.types[0]?.id ?? '';
+		page = 1;
+		filter = '';
+		await refreshGenres();
+		await refreshItems();
+	}
+
 	async function selectType(button: CatalogTypeButton) {
 		if (addon === button.addonId && type === button.catalogType) return;
 		addon = button.addonId;
@@ -253,6 +261,26 @@
 		<div class="overflow-x-auto rounded-box border border-base-content/10">
 			<table class="table table-sm">
 				<tbody>
+					<tr>
+						<th class="w-32 align-middle">Addon</th>
+						<td>
+							<div class="flex flex-wrap gap-2">
+								{#each sources as source (source.id)}
+									{@const active = addon === source.id}
+									<button
+										type="button"
+										class={classNames('btn btn-sm', {
+											'btn-primary': active,
+											'btn-outline': !active
+										})}
+										onclick={() => selectAddon(source)}
+									>
+										{source.label}
+									</button>
+								{/each}
+							</div>
+						</td>
+					</tr>
 					<tr>
 						<th class="w-32 align-middle">Type</th>
 						<td>
