@@ -178,30 +178,47 @@ async fn main() {
         let manager = Arc::new(IpfsManager::new());
         let manager_clone = Arc::clone(&manager);
         let repo_path = downloads_dir().join("ipfs");
-        let default_swarm_key_path = repo_path.join("swarm.key");
         tokio::spawn(async move {
             // The IPFS node always runs on a private network: read an
-            // existing swarm key off disk or generate one on first boot. Copy
-            // `<repo>/swarm.key` to any other node that should join the same
-            // swarm. Override the path with `IPFS_SWARM_KEY_FILE`.
+            // existing swarm key off disk or generate one on first boot. The
+            // shared default location is `<DATA_DIR>/swarm.key` (or
+            // `<home>/mhaol/swarm.key`) so the cloud, the rendezvous app and
+            // any other Mhaol process converge on the same key without
+            // explicit configuration. Override with `IPFS_SWARM_KEY_FILE`.
             std::fs::create_dir_all(&repo_path).ok();
             let key_path = std::env::var("IPFS_SWARM_KEY_FILE")
                 .map(std::path::PathBuf::from)
-                .unwrap_or(default_swarm_key_path);
+                .unwrap_or_else(|_| mhaol_ipfs::default_swarm_key_path());
+            if let Some(parent) = key_path.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
             let swarm_key = match mhaol_ipfs::ensure_swarm_key(&key_path) {
-                Ok(k) => Some(k),
+                Ok(k) => k,
                 Err(e) => {
-                    tracing::warn!(
-                        "[ipfs] swarm key bootstrap failed at {}: {} — running on the public swarm",
+                    tracing::error!(
+                        "[ipfs] swarm key bootstrap failed at {}: {} — refusing to start IPFS on the public swarm",
                         key_path.display(),
                         e
                     );
-                    None
+                    return;
                 }
             };
+            // Discover bootstrap multiaddrs for the rendezvous node:
+            // `RENDEZVOUS_BOOTSTRAP` (newline- or comma-separated) takes
+            // precedence, then the bootstrap file written by the rendezvous
+            // app, then a localhost fallback so single-machine setups work
+            // out of the box. Non-PSK peers cannot complete the libp2p
+            // handshake, so this list is the only path the cloud uses to
+            // discover other private-swarm peers.
+            let extra_bootstrap = resolve_rendezvous_bootstrap();
             let config = IpfsConfig {
                 repo_path,
-                swarm_key,
+                swarm_key: Some(swarm_key),
+                // mDNS would still be filtered by the pnet handshake but
+                // adds no value when we have a known rendezvous bootstrap.
+                enable_mdns: false,
+                bootstrap_on_start: true,
+                extra_bootstrap,
                 ..IpfsConfig::default()
             };
             if let Err(e) = manager_clone.initialize(config).await {
@@ -299,6 +316,60 @@ fn downloads_dir() -> PathBuf {
     let p = manifest_dir.join("downloads");
     std::fs::create_dir_all(&p).ok();
     p
+}
+
+/// Build the bootstrap multiaddr list for the rendezvous IPFS node.
+///
+/// Sources, in order of precedence:
+/// 1. `RENDEZVOUS_BOOTSTRAP` env var (newline- or comma-separated multiaddrs).
+/// 2. The bootstrap file written by the rendezvous binary, default
+///    `<DATA_DIR>/rendezvous/bootstrap.multiaddr` (or
+///    `<home>/mhaol/rendezvous/bootstrap.multiaddr`). Override with
+///    `RENDEZVOUS_BOOTSTRAP_FILE`.
+/// 3. A localhost default (`/ip4/127.0.0.1/tcp/14001`) so a single-machine
+///    setup works without configuration. The peer-id portion is stripped, so
+///    libp2p will dial-and-discover the actual peer id at runtime.
+#[cfg(not(target_os = "android"))]
+fn resolve_rendezvous_bootstrap() -> Vec<String> {
+    if let Ok(raw) = std::env::var("RENDEZVOUS_BOOTSTRAP") {
+        let entries: Vec<String> = raw
+            .split(|c: char| c == '\n' || c == ',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !entries.is_empty() {
+            return entries;
+        }
+    }
+
+    let bootstrap_file = std::env::var("RENDEZVOUS_BOOTSTRAP_FILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            if let Ok(dir) = std::env::var("DATA_DIR") {
+                PathBuf::from(dir).join("rendezvous").join("bootstrap.multiaddr")
+            } else if let Some(home) = dirs::home_dir() {
+                home.join("mhaol").join("rendezvous").join("bootstrap.multiaddr")
+            } else {
+                PathBuf::from("rendezvous").join("bootstrap.multiaddr")
+            }
+        });
+
+    if let Ok(contents) = std::fs::read_to_string(&bootstrap_file) {
+        let entries: Vec<String> = contents
+            .lines()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !entries.is_empty() {
+            return entries;
+        }
+    }
+
+    // Localhost fallback. libp2p will dial this address and learn the peer
+    // id from the noise handshake. The pnet layer rejects any peer that
+    // doesn't carry the same swarm key, so even a wrong host on this port
+    // cannot enter the swarm.
+    vec!["/ip4/127.0.0.1/tcp/14001".to_string()]
 }
 
 /// Load .env from the workspace root into process environment variables.
