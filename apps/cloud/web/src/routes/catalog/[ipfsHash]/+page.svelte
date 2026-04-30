@@ -315,6 +315,59 @@
 		return out;
 	});
 
+	const isRetroAchievementsConsole = $derived(firkin.addon === 'retroachievements');
+
+	type RomReport = {
+		torrent_paths: string[];
+		archives: { name: string; relative_path: string; status: string; error?: string }[];
+		roms: { name: string; relative_path: string; size: number }[];
+	};
+	type RomsStatus = 'idle' | 'loading' | 'done' | 'error';
+	let romsStatus = $state<RomsStatus>('idle');
+	let romsError = $state<string | null>(null);
+	let roms = $state<RomReport | null>(null);
+	let romsRun = 0;
+	let romsLoadedForKey: string | null = null;
+
+	async function loadRoms(force = false): Promise<void> {
+		const key = `${firkin.id}:${completedTorrents.map((t) => t.hash).join(',')}`;
+		if (!force && romsLoadedForKey === key) return;
+		romsLoadedForKey = key;
+		const myRun = ++romsRun;
+		romsStatus = 'loading';
+		romsError = null;
+		try {
+			const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}/roms`, {
+				cache: 'no-store'
+			});
+			if (myRun !== romsRun) return;
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const body = (await res.json()) as RomReport;
+			if (myRun !== romsRun) return;
+			roms = body;
+			romsStatus = 'done';
+		} catch (err) {
+			if (myRun !== romsRun) return;
+			romsError = err instanceof Error ? err.message : 'Unknown error';
+			romsStatus = 'error';
+		}
+	}
+
+	$effect(() => {
+		if (!isRetroAchievementsConsole) return;
+		if (completedTorrents.length === 0) return;
+		void loadRoms(false);
+	});
+
 	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0 || hasStreamUrl);
 
 	let finalizing = $state(false);
@@ -1111,6 +1164,87 @@
 								</li>
 							{/each}
 						</ol>
+					{/if}
+				</div>
+			{/if}
+
+			{#if isRetroAchievementsConsole && completedTorrents.length > 0}
+				<div class="card border border-base-content/10 bg-base-200 p-4">
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+							ROMs{roms && roms.roms.length > 0 ? ` (${roms.roms.length})` : ''}
+						</h2>
+						<button
+							type="button"
+							class="btn btn-outline btn-xs"
+							onclick={() => loadRoms(true)}
+							disabled={romsStatus === 'loading'}
+						>
+							{romsStatus === 'loading' ? 'Scanning…' : 'Rescan'}
+						</button>
+					</div>
+					{#if romsStatus === 'loading' && !roms}
+						<p class="text-sm text-base-content/60">Extracting archives and scanning for ROMs…</p>
+					{:else if romsStatus === 'error'}
+						<p class="text-sm text-error">{romsError ?? 'Failed'}</p>
+					{:else if roms}
+						{#if roms.archives.length > 0}
+							<div class="mb-3 flex flex-col gap-1">
+								<h3 class="text-xs font-semibold text-base-content/60 uppercase">
+									Archives ({roms.archives.length})
+								</h3>
+								<ul class="flex flex-col gap-1">
+									{#each roms.archives as archive (archive.relative_path)}
+										<li class="flex flex-wrap items-center gap-2 text-xs">
+											<span
+												class={classNames('badge badge-sm', {
+													'badge-success': archive.status === 'extracted',
+													'badge-ghost':
+														archive.status === 'already_extracted' || archive.status === 'skipped',
+													'badge-error': archive.status === 'failed'
+												})}
+											>
+												{archive.status === 'already_extracted' ? 'extracted' : archive.status}
+											</span>
+											<span class="font-mono [overflow-wrap:anywhere]">{archive.relative_path}</span
+											>
+											{#if archive.error}
+												<span class="text-error">— {archive.error}</span>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+						{#if roms.roms.length === 0}
+							<p class="text-sm text-base-content/60">
+								No ROM files found yet. If the torrent contains a compressed archive, extraction may
+								still be in progress — try Rescan.
+							</p>
+						{:else}
+							<div class="overflow-x-auto rounded-box border border-base-content/10">
+								<table class="table table-sm">
+									<thead>
+										<tr>
+											<th>File</th>
+											<th>Path</th>
+											<th class="text-right">Size</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each roms.roms as rom (rom.relative_path)}
+											<tr>
+												<td class="text-xs [overflow-wrap:anywhere]">{rom.name}</td>
+												<td class="font-mono text-xs [overflow-wrap:anywhere]"
+													>{rom.relative_path}</td
+												>
+												<td class="text-right text-xs">{formatBytes(rom.size)}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						{/if}
 					{/if}
 				</div>
 			{/if}

@@ -46,3 +46,5 @@ mhaol-yt-dlp = { path = "../../packages/yt-dlp" }
 mhaol-torrent = { path = "../../packages/torrent" }
 mhaol-ed2k = { path = "../../packages/ed2k" }
 mhaol-ipfs = { path = "../../packages/ipfs" }
+zip = { version = "2", default-features = false, features = ["deflate", "bzip2"] }
+sevenz-rust2 = "0.13"

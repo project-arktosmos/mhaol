@@ -23,7 +23,15 @@ const ALLOWED_FILE_TYPES: &[&str] = &["ipfs", "torrent magnet", "url"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Artist {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     #[serde(rename = "imageUrl", default, skip_serializing_if = "Option::is_none")]
@@ -215,6 +223,7 @@ pub fn router() -> Router<CloudState> {
         .route("/", get(list).post(create))
         .route("/{id}", put(update).delete(delete).get(get_one))
         .route("/{id}/finalize", post(finalize))
+        .route("/{id}/roms", get(roms))
 }
 
 fn err_response(
@@ -626,5 +635,35 @@ async fn finalize(
     Err(err_response(
         StatusCode::NOT_IMPLEMENTED,
         "finalize is not supported on this platform",
+    ))
+}
+
+#[cfg(not(target_os = "android"))]
+async fn roms(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<crate::rom_extract::RomsResponse>, (StatusCode, Json<serde_json::Value>)> {
+    crate::rom_extract::extract_roms_for_firkin(&state, &id)
+        .await
+        .map(Json)
+        .map_err(|e| {
+            let msg = e.to_string();
+            let status = if msg.contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            err_response(status, msg)
+        })
+}
+
+#[cfg(target_os = "android")]
+async fn roms(
+    State(_state): State<CloudState>,
+    Path(_id): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    Err(err_response(
+        StatusCode::NOT_IMPLEMENTED,
+        "rom extraction is not supported on this platform",
     ))
 }

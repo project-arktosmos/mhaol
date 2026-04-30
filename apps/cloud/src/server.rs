@@ -15,6 +15,8 @@ mod library_scan;
 mod p2p_stream;
 mod paths;
 mod player;
+#[cfg(not(target_os = "android"))]
+mod rom_extract;
 mod search;
 mod state;
 mod torrent;
