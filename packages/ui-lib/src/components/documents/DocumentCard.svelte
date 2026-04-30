@@ -264,4 +264,10 @@
 			{/if}
 		</footer>
 	{/if}
+	<footer class="grid grid-cols-4 gap-1 border-t border-base-content/10 px-2 py-2">
+		<button type="button" class="btn text-lg btn-ghost btn-sm" aria-label="Thumbs down">👎</button>
+		<button type="button" class="btn text-lg btn-ghost btn-sm" aria-label="Thumbs up">👍</button>
+		<button type="button" class="btn text-lg btn-ghost btn-sm" aria-label="Love">❤️</button>
+		<button type="button" class="btn text-lg btn-ghost btn-sm" aria-label="Favorite">⭐</button>
+	</footer>
 </article>
