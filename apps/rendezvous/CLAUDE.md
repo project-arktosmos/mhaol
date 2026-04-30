@@ -139,3 +139,7 @@ pnpm build:rendezvous      # Release build
 ```
 
 Once it is running, start the cloud (`pnpm app:cloud`) — the cloud auto-discovers rendezvous via the bootstrap file and joins the same private swarm, and resolves `SIGNALING_URL` to `http://localhost:14080` by default.
+
+## Logs
+
+`pnpm app:rendezvous` tees full stdout+stderr (cargo build noise, panics, `tracing` events) to `<repo-root>/logs/rendezvous.log`. When debugging, read it directly — don't ask the user to paste output. The file is overwritten on the next run.

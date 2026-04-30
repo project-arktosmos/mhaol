@@ -213,6 +213,21 @@ Never cd into a package directory to run scripts — use the root workspace scri
 
 ---
 
+## Logs
+
+The dev scripts tee full stdout+stderr (cargo build noise, panics, `tracing` events, Vite output — everything) into `./logs/` at the repo root. **When debugging anything related to the cloud or rendezvous apps, check these files first instead of asking the user to paste output.**
+
+| Script | Log file |
+|---|---|
+| `pnpm app:rendezvous` | `logs/rendezvous.log` |
+| `pnpm dev` (cloud strand) | `logs/cloud.log` |
+| `pnpm dev` (web strand) | `logs/web.log` |
+| `pnpm dev` (tauri strand) | `logs/tauri.log` |
+
+Each file is overwritten on the next run, so it always reflects the latest run. The `logs/` directory is gitignored.
+
+---
+
 ## Git Workflow
 
 After every change, immediately commit the affected files:

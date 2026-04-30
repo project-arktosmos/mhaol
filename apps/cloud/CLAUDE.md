@@ -173,3 +173,13 @@ Whenever the document is updated programmatically (currently only the torrent-co
 5. Roll the version forward (push old CID onto `version_hashes`, bump `version`), recompute the CID, delete the old record, create the new one at the new CID. `created_at` is preserved; `updated_at` is set to now.
 
 Failures are logged and retried on the next tick; successes (including "no matching document") are remembered in-memory for the lifetime of the process so the same torrent isn't reprocessed.
+
+## Logs
+
+Dev runs tee full stdout+stderr to `<repo-root>/logs/`:
+
+- `pnpm dev` cloud strand → `logs/cloud.log`
+- `pnpm dev` web (Vite) strand → `logs/web.log`
+- `pnpm dev` tauri strand → `logs/tauri.log`
+
+When debugging the cloud, read these files directly — don't ask the user to paste output. Each file is overwritten on the next run.
