@@ -30,12 +30,10 @@
 	});
 
 	let creatorAddress = $derived(firkin.creator ?? '');
-	let creatorIdenticon = $derived(
-		creatorAddress ? blo(creatorAddress as `0x${string}`) : null
-	);
+	let creatorIdenticon = $derived(creatorAddress ? blo(creatorAddress as `0x${string}`) : null);
 </script>
 
-<article class={classNames('group card bg-base-200 shadow-sm', classes)}>
+<article class={classNames('group card overflow-hidden bg-base-200 shadow-sm', classes)}>
 	{#if !coverImage}
 		<header
 			class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
