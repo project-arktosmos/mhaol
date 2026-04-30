@@ -435,8 +435,9 @@
 			void resolveYouTubeForAllTracks(myRun);
 		} else if (musicBrainzReleaseGroupId) {
 			void loadByReleaseGroupId(musicBrainzReleaseGroupId, myRun);
-		} else if (firkin.title) {
-			void loadAndResolve(firkin.title, myRun);
+		} else {
+			tracksError = 'No MusicBrainz release-group id stored on this firkin. Re-bookmark from the catalog to attach one.';
+			tracksStatus = 'error';
 		}
 	});
 
@@ -473,59 +474,6 @@
 				lengthMs: t.lengthMs,
 				youtubeUrl: null,
 				youtubeStatus: 'pending' as const
-			}));
-			tracksStatus = 'done';
-			void resolveYouTubeForAllTracks(myRun);
-		} catch (err) {
-			if (myRun !== tracksRun) return;
-			tracksError = err instanceof Error ? err.message : 'Unknown error';
-			tracksStatus = 'error';
-		}
-	}
-
-	async function loadAndResolve(albumTitle: string, myRun: number) {
-		tracksStatus = 'loading';
-		tracksError = null;
-		tracks = [];
-		try {
-			const searchUrl = `https://musicbrainz.org/ws/2/release-group?query=${encodeURIComponent(albumTitle)}&fmt=json&limit=1`;
-			const searchRes = await fetch(searchUrl, { headers: { Accept: 'application/json' } });
-			if (!searchRes.ok) throw new Error(`MusicBrainz returned ${searchRes.status}`);
-			const searchBody = (await searchRes.json()) as { 'release-groups'?: { id: string }[] };
-			const releaseGroupId = searchBody['release-groups']?.[0]?.id;
-			if (myRun !== tracksRun) return;
-			if (!releaseGroupId) {
-				tracksStatus = 'done';
-				return;
-			}
-			const res = await fetch(
-				`/api/catalog/musicbrainz/release-groups/${encodeURIComponent(releaseGroupId)}/tracks`,
-				{ cache: 'no-store' }
-			);
-			if (!res.ok) {
-				let message = `HTTP ${res.status}`;
-				try {
-					const body = await res.json();
-					if (body && typeof body.error === 'string') message = body.error;
-				} catch {
-					// ignore
-				}
-				throw new Error(message);
-			}
-			const body = (await res.json()) as {
-				id: string;
-				position: number;
-				title: string;
-				lengthMs: number | null;
-			}[];
-			if (myRun !== tracksRun) return;
-			tracks = body.map((t) => ({
-				id: t.id,
-				position: t.position,
-				title: t.title,
-				lengthMs: t.lengthMs,
-				youtubeUrl: null,
-				youtubeStatus: 'pending'
 			}));
 			tracksStatus = 'done';
 			void resolveYouTubeForAllTracks(myRun);
