@@ -12,12 +12,7 @@
 		type CatalogGenre,
 		type CatalogSource
 	} from '$lib/catalog.service';
-	import {
-		firkinsService,
-		type Firkin,
-		type FirkinSource,
-		type FirkinType
-	} from '$lib/firkins.service';
+	import { firkinsService, type Firkin } from '$lib/firkins.service';
 
 	const firkinsStore = firkinsService.state;
 
@@ -25,7 +20,6 @@
 	let sourcesError = $state<string | null>(null);
 
 	let addon = $state<string>('');
-	let type = $state<string>('');
 	let filter = $state<string>('');
 	let page = $state<number>(1);
 
@@ -41,88 +35,37 @@
 	const currentSource = $derived(sources.find((s) => s.id === addon));
 	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
-
-	const currentFirkinType = $derived<FirkinType | null>(
-		addon && type ? mapToFirkinType(addon, type) : null
+	const isRetroAchievements = $derived(addon === 'retroachievements');
+	let consoleViewActive = $state<boolean>(false);
+	const showConsoleGrid = $derived(isRetroAchievements && consoleViewActive);
+	const showFilterRow = $derived(hasFilter && !showConsoleGrid);
+	const selectedConsoleName = $derived(
+		isRetroAchievements ? (genres.find((g) => g.id === filter)?.name ?? null) : null
 	);
+
 	const libraryFirkins = $derived<Firkin[]>(
-		currentFirkinType
+		addon
 			? $firkinsStore.firkins
-					.filter((d) => d.type === currentFirkinType)
+					.filter((d) => d.addon === addon)
 					.slice()
 					.sort((a, b) => b.created_at.localeCompare(a.created_at))
 					.slice(0, 6)
 			: []
 	);
 
-	interface CatalogTypeButton {
-		firkinType: FirkinType;
-		label: string;
-		addonId: string;
-		catalogType: string;
-	}
-
-	const catalogTypeButtons = $derived<CatalogTypeButton[]>(
-		(currentSource?.types ?? []).map((t) => ({
-			firkinType: mapToFirkinType(currentSource!.id, t.id),
-			label: t.label,
-			addonId: currentSource!.id,
-			catalogType: t.id
-		}))
-	);
-
-	function mapToFirkinType(addonId: string, typeId: string): FirkinType {
-		if (addonId === 'tmdb') {
-			if (typeId === 'tv') return 'tv show';
-			if (typeId === 'image') return 'image';
-			return 'movie';
-		}
-		if (addonId === 'musicbrainz') return 'album';
-		if (addonId === 'retroachievements') return 'game';
-		if (addonId === 'youtube') {
-			if (typeId === 'channel') return 'youtube channel';
-			return 'youtube video';
-		}
-		if (addonId === 'lrclib') return 'album';
-		if (addonId === 'openlibrary') return 'book';
-		if (addonId === 'wyzie-subs') {
-			if (typeId === 'tv') return 'tv show';
-			return 'movie';
-		}
-		if (addonId === 'iptv') return 'iptv channel';
-		if (addonId === 'radio') return 'radio station';
-		return 'movie';
-	}
-
-	function mapToFirkinSource(addonId: string): FirkinSource {
-		if (addonId === 'tmdb') return 'tmdb';
-		if (addonId === 'musicbrainz') return 'musicbrainz';
-		if (addonId === 'retroachievements') return 'retroachievements';
-		if (addonId === 'youtube') return 'youtube';
-		if (addonId === 'lrclib') return 'lrclib';
-		if (addonId === 'openlibrary') return 'openlibrary';
-		if (addonId === 'wyzie-subs') return 'wyzie-subs';
-		if (addonId === 'iptv') return 'iptv';
-		if (addonId === 'radio') return 'radio';
-		return 'tmdb';
-	}
-
 	function virtualFirkin(item: CatalogItem): CloudFirkin {
-		const firkinType = mapToFirkinType(addon, type);
-		const firkinSource = mapToFirkinSource(addon);
 		const images = [item.posterUrl, item.backdropUrl]
 			.filter((url): url is string => Boolean(url))
 			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
 		return {
-			id: `virtual:${addon}:${type}:${item.id}`,
+			id: `virtual:${addon}:${item.id}`,
 			title: item.title,
 			artists: [],
 			description: item.description ?? '',
 			images,
 			files: [],
 			year: item.year,
-			type: firkinType,
-			source: firkinSource,
+			addon,
 			created_at: '',
 			updated_at: '',
 			version: 0,
@@ -133,7 +76,6 @@
 	function virtualHref(item: CatalogItem): string {
 		const params = new URLSearchParams();
 		params.set('addon', addon);
-		if (type) params.set('type', type);
 		params.set('id', item.id);
 		params.set('title', item.title);
 		if (item.year !== null && item.year !== undefined) params.set('year', String(item.year));
@@ -152,7 +94,7 @@
 		genresLoading = true;
 		genresError = null;
 		try {
-			genres = await loadGenres(addon, type || undefined);
+			genres = await loadGenres(addon);
 			if (!genres.some((g) => g.id === filter)) {
 				filter = genres[0]?.id ?? '';
 			}
@@ -173,7 +115,6 @@
 		itemsError = null;
 		try {
 			const result = await loadPopular(addon, {
-				type: type || undefined,
 				filter: filter || undefined,
 				page
 			});
@@ -192,26 +133,36 @@
 	async function selectAddon(source: CatalogSource) {
 		if (addon === source.id) return;
 		addon = source.id;
-		type = source.types[0]?.id ?? '';
 		page = 1;
 		filter = '';
+		consoleViewActive = source.id === 'retroachievements';
 		await refreshGenres();
-		await refreshItems();
-	}
-
-	async function selectType(button: CatalogTypeButton) {
-		if (addon === button.addonId && type === button.catalogType) return;
-		addon = button.addonId;
-		type = button.catalogType;
-		page = 1;
-		filter = '';
-		await refreshGenres();
-		await refreshItems();
+		if (consoleViewActive) {
+			items = [];
+			totalPages = 1;
+		} else {
+			await refreshItems();
+		}
 	}
 
 	async function onFilterChange() {
 		page = 1;
 		await refreshItems();
+	}
+
+	async function selectConsole(consoleId: string) {
+		filter = consoleId;
+		page = 1;
+		consoleViewActive = false;
+		await refreshItems();
+	}
+
+	function backToConsoles() {
+		consoleViewActive = true;
+		filter = '';
+		page = 1;
+		items = [];
+		totalPages = 1;
 	}
 
 	async function goToPage(next: number) {
@@ -227,9 +178,11 @@
 				sources = await listSources();
 				if (sources.length > 0) {
 					addon = sources[0].id;
-					type = sources[0].types[0]?.id ?? '';
+					consoleViewActive = addon === 'retroachievements';
 					await refreshGenres();
-					await refreshItems();
+					if (!consoleViewActive) {
+						await refreshItems();
+					}
 				}
 			} catch (err) {
 				sourcesError = err instanceof Error ? err.message : 'Unknown error';
@@ -269,6 +222,7 @@
 											'btn-outline': !active
 										})}
 										onclick={() => selectAddon(source)}
+										title={source.kind}
 									>
 										{source.label}
 									</button>
@@ -276,28 +230,7 @@
 							</div>
 						</td>
 					</tr>
-					<tr>
-						<th class="w-32 align-middle">Type</th>
-						<td>
-							<div class="flex flex-wrap gap-2">
-								{#each catalogTypeButtons as button (button.addonId + ':' + button.catalogType)}
-									{@const active = addon === button.addonId && type === button.catalogType}
-									<button
-										type="button"
-										class={classNames('btn btn-sm', {
-											'btn-primary': active,
-											'btn-outline': !active
-										})}
-										onclick={() => selectType(button)}
-										disabled={catalogTypeButtons.length === 0}
-									>
-										{button.label}
-									</button>
-								{/each}
-							</div>
-						</td>
-					</tr>
-					{#if hasFilter}
+					{#if showFilterRow}
 						<tr>
 							<th class="w-32 align-middle">{filterLabel}</th>
 							<td>
@@ -351,62 +284,102 @@
 		{/if}
 	</section>
 
-	<section class="flex flex-col gap-3">
-		<div class="flex items-center justify-between gap-4">
-			<h2 class="text-lg font-semibold">Popular</h2>
-			<div class="flex items-center gap-2">
-				<button
-					class="btn btn-outline btn-xs"
-					onclick={() => goToPage(page - 1)}
-					disabled={itemsLoading || page <= 1}
+	{#if showConsoleGrid}
+		<section class="flex flex-col gap-3">
+			<h2 class="text-lg font-semibold">Consoles</h2>
+			{#if genresLoading}
+				<p class="text-sm text-base-content/60">Loading consoles…</p>
+			{:else if genresError}
+				<div class="alert alert-error">
+					<span>{genresError}</span>
+				</div>
+			{:else if genres.length === 0}
+				<p class="text-sm text-base-content/60">No consoles available.</p>
+			{:else}
+				<div
+					class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 				>
-					Prev
-				</button>
-				<span class="text-xs text-base-content/60">Page {page} / {totalPages}</span>
-				<button
-					class="btn btn-outline btn-xs"
-					onclick={() => goToPage(page + 1)}
-					disabled={itemsLoading || page >= totalPages}
-				>
-					Next
-				</button>
-				<button class="btn btn-outline btn-xs" onclick={refreshItems} disabled={itemsLoading}>
-					Refresh
-				</button>
-			</div>
-		</div>
-
-		{#if itemsError}
-			<div class="alert alert-error">
-				<span>{itemsError}</span>
-			</div>
-		{/if}
-
-		{#if itemsLoading && items.length === 0}
-			<p class="text-sm text-base-content/60">Loading…</p>
-		{:else if items.length === 0}
-			<p class="text-sm text-base-content/60">No items.</p>
-		{:else}
-			<div
-				class={classNames(
-					'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
-					{ 'opacity-60': itemsLoading }
-				)}
-			>
-				{#each items as item (item.id)}
-					<a
-						href={virtualHref(item)}
-						class="block no-underline"
-						onclick={(e) => {
-							if ((e.target as HTMLElement).closest('button, summary')) {
-								e.preventDefault();
-							}
-						}}
+					{#each genres as console (console.id)}
+						<button
+							type="button"
+							class="card flex aspect-square items-center justify-center border border-base-content/10 bg-base-200 p-4 text-center transition hover:bg-base-300"
+							onclick={() => selectConsole(console.id)}
+						>
+							<span class="text-sm font-semibold">{console.name}</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{:else}
+		<section class="flex flex-col gap-3">
+			<div class="flex items-center justify-between gap-4">
+				<div class="flex items-center gap-3">
+					{#if isRetroAchievements}
+						<button class="btn btn-ghost btn-xs" onclick={backToConsoles}>← Consoles</button>
+					{/if}
+					<h2 class="text-lg font-semibold">
+						{#if isRetroAchievements && selectedConsoleName}
+							{selectedConsoleName}
+						{:else}
+							Popular
+						{/if}
+					</h2>
+				</div>
+				<div class="flex items-center gap-2">
+					<button
+						class="btn btn-outline btn-xs"
+						onclick={() => goToPage(page - 1)}
+						disabled={itemsLoading || page <= 1}
 					>
-						<FirkinCard firkin={virtualFirkin(item)} />
-					</a>
-				{/each}
+						Prev
+					</button>
+					<span class="text-xs text-base-content/60">Page {page} / {totalPages}</span>
+					<button
+						class="btn btn-outline btn-xs"
+						onclick={() => goToPage(page + 1)}
+						disabled={itemsLoading || page >= totalPages}
+					>
+						Next
+					</button>
+					<button class="btn btn-outline btn-xs" onclick={refreshItems} disabled={itemsLoading}>
+						Refresh
+					</button>
+				</div>
 			</div>
-		{/if}
-	</section>
+
+			{#if itemsError}
+				<div class="alert alert-error">
+					<span>{itemsError}</span>
+				</div>
+			{/if}
+
+			{#if itemsLoading && items.length === 0}
+				<p class="text-sm text-base-content/60">Loading…</p>
+			{:else if items.length === 0}
+				<p class="text-sm text-base-content/60">No items.</p>
+			{:else}
+				<div
+					class={classNames(
+						'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+						{ 'opacity-60': itemsLoading }
+					)}
+				>
+					{#each items as item (item.id)}
+						<a
+							href={virtualHref(item)}
+							class="block no-underline"
+							onclick={(e) => {
+								if ((e.target as HTMLElement).closest('button, summary')) {
+									e.preventDefault();
+								}
+							}}
+						>
+							<FirkinCard firkin={virtualFirkin(item)} />
+						</a>
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/if}
 </div>
