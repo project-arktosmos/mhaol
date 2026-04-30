@@ -11,7 +11,8 @@ export const FIRKIN_TYPES = [
 	'youtube video',
 	'youtube channel',
 	'book',
-	'game'
+	'game',
+	'iptv channel'
 ] as const;
 
 export type FirkinType = (typeof FIRKIN_TYPES)[number];
@@ -23,7 +24,8 @@ export const FIRKIN_SOURCES = [
 	'youtube',
 	'lrclib',
 	'openlibrary',
-	'wyzie-subs'
+	'wyzie-subs',
+	'iptv'
 ] as const;
 
 export type FirkinSource = (typeof FIRKIN_SOURCES)[number];
@@ -35,7 +37,8 @@ export const TYPES_BY_SOURCE: Record<FirkinSource, readonly FirkinType[]> = {
 	youtube: ['youtube video', 'youtube channel'],
 	lrclib: ['track'],
 	openlibrary: ['book'],
-	'wyzie-subs': ['movie', 'tv episode']
+	'wyzie-subs': ['movie', 'tv episode'],
+	iptv: ['iptv channel']
 };
 
 export interface Artist {

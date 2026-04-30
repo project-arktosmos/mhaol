@@ -1,5 +1,7 @@
 import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/musicbrainz';
 import { searchBooks } from 'addons/openlibrary';
+import { searchChannels as searchIptvChannels, getStreams as getIptvStreams } from 'addons/iptv';
+import type { DisplayIptvChannel } from 'addons/iptv/types';
 import { TorrentCategory } from 'addons/torrent-search-thepiratebay/types';
 import type { Artist, FirkinSource, FirkinType, FileEntry, ImageMeta } from './firkins.service';
 
@@ -131,12 +133,18 @@ export async function searchSource(
 			return searchMusicBrainz(type, trimmed);
 		case 'openlibrary':
 			return searchOpenLibrary(trimmed);
+		case 'iptv':
+			return searchIptv(trimmed);
 		default:
 			throw new Error(`search not yet supported for source "${source}"`);
 	}
 }
 
-function tpbCategoryFor(type: FirkinType): TorrentCategory {
+export function isTorrentSearchableType(type: FirkinType): boolean {
+	return type !== 'iptv channel';
+}
+
+function tpbCategoryFor(type: FirkinType): TorrentCategory | null {
 	switch (type) {
 		case 'album':
 		case 'track':
@@ -153,6 +161,8 @@ function tpbCategoryFor(type: FirkinType): TorrentCategory {
 			return TorrentCategory.Games;
 		case 'book':
 			return TorrentCategory.Other;
+		case 'iptv channel':
+			return null;
 	}
 }
 
@@ -199,6 +209,7 @@ export async function searchTorrents(
 	const trimmed = query.trim();
 	if (!trimmed) return [];
 	const category = tpbCategoryFor(type);
+	if (category === null) return [];
 	const key = torrentCacheKey(category, trimmed);
 	const now = Date.now();
 	const cache = loadTorrentCache();
@@ -365,6 +376,41 @@ function mbArtistCreditsToArtists(credits: MbArtistCredit[]): Artist[] {
 		out.push(artist);
 	}
 	return out;
+}
+
+async function searchIptv(query: string): Promise<SearchResultItem[]> {
+	const result = await searchIptvChannels(query, { limit: 50 });
+	const channels = result.channels;
+	const streamsLookup = await Promise.all(
+		channels.map(async (ch) => ({ id: ch.id, streams: await getIptvStreams(ch.id) }))
+	);
+	const streamsById = new Map(streamsLookup.map((s) => [s.id, s.streams]));
+	return channels.map((ch: DisplayIptvChannel) => {
+		const streams = streamsById.get(ch.id) ?? [];
+		const files: FileEntry[] = streams
+			.filter((s) => Boolean(s.url))
+			.map((s) => ({
+				type: 'url' as const,
+				value: s.url,
+				title: [ch.name, s.quality].filter(Boolean).join(' · ')
+			}));
+		const images: ImageMeta[] = ch.logo
+			? [{ url: ch.logo, mimeType: 'image/png', fileSize: 0, width: 0, height: 0 }]
+			: [];
+		const description = [ch.country, ch.categories.join(', '), ch.hasEpg ? 'EPG' : null]
+			.filter((s): s is string => Boolean(s))
+			.join(' · ');
+		return {
+			title: ch.name,
+			description,
+			artists: [],
+			images,
+			files,
+			year: null,
+			externalId: ch.id,
+			raw: ch
+		};
+	});
 }
 
 async function searchOpenLibrary(query: string): Promise<SearchResultItem[]> {
