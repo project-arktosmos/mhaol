@@ -398,14 +398,16 @@
 		new Set(firkin.files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
 	);
 
-	$effect(() => {
-		const id = firkin.id;
-		const title = firkin.title;
-		const addon = firkin.addon;
-		const year = firkin.year;
-		if (addon === 'musicbrainz') return;
-		void runTorrentSearch(id, title, addon, year);
-	});
+	let torrentSearchOpen = $state(false);
+	let torrentSearchInitForFirkinId: string | null = null;
+
+	function toggleTorrentSearch() {
+		torrentSearchOpen = !torrentSearchOpen;
+		if (torrentSearchOpen && torrentSearchInitForFirkinId !== firkin.id) {
+			torrentSearchInitForFirkinId = firkin.id;
+			void runTorrentSearch(firkin.id, firkin.title, firkin.addon, firkin.year);
+		}
+	}
 
 	type Track = {
 		id: string;
@@ -442,7 +444,8 @@
 		} else if (musicBrainzReleaseGroupId) {
 			void loadByReleaseGroupId(musicBrainzReleaseGroupId, myRun);
 		} else {
-			tracksError = 'No MusicBrainz release-group id stored on this firkin. Re-bookmark from the catalog to attach one.';
+			tracksError =
+				'No MusicBrainz release-group id stored on this firkin. Re-bookmark from the catalog to attach one.';
 			tracksStatus = 'error';
 		}
 	});
@@ -1095,9 +1098,9 @@
 											<span class="badge badge-ghost badge-xs">YT…</span>
 										{:else if playable}
 											{#if isPlaying}
-												<span class="badge badge-primary badge-xs">starting…</span>
+												<span class="badge badge-xs badge-primary">starting…</span>
 											{:else}
-												<span class="badge badge-primary badge-xs">▶ Play</span>
+												<span class="badge badge-xs badge-primary">▶ Play</span>
 											{/if}
 										{:else if track.youtubeStatus === 'missing'}
 											<span class="badge badge-xs badge-warning">no match</span>
@@ -1110,110 +1113,130 @@
 						</ol>
 					{/if}
 				</div>
-			{:else}
+			{/if}
+
+			{#if hasMagnetFiles}
 				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<div class="mb-2 flex items-center justify-between gap-2">
-						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
-							Torrent search{torrentMatches.length > 0 ? ` (${torrentMatches.length})` : ''}
-						</h2>
+					<div class="flex items-center justify-between gap-2">
 						<button
 							type="button"
-							class="btn btn-outline btn-xs"
-							onclick={() => runTorrentSearch(firkin.id, firkin.title, firkin.addon, firkin.year)}
-							disabled={torrentStatus === 'searching'}
+							class="flex flex-1 items-center gap-2 text-left"
+							onclick={toggleTorrentSearch}
+							aria-expanded={torrentSearchOpen}
 						>
-							{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
+							<span class="text-base-content/60" aria-hidden="true"
+								>{torrentSearchOpen ? '▼' : '▶'}</span
+							>
+							<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+								Torrent search{torrentSearchOpen && torrentMatches.length > 0
+									? ` (${torrentMatches.length})`
+									: ''}
+							</h2>
 						</button>
+						{#if torrentSearchOpen}
+							<button
+								type="button"
+								class="btn btn-outline btn-xs"
+								onclick={() => runTorrentSearch(firkin.id, firkin.title, firkin.addon, firkin.year)}
+								disabled={torrentStatus === 'searching'}
+							>
+								{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
+							</button>
+						{/if}
 					</div>
-					{#if assignError}
-						<div class="mb-2 alert alert-error">
-							<span>{assignError}</span>
-						</div>
-					{/if}
-					{#if torrentStatus === 'searching' && torrentMatches.length === 0}
-						<p class="text-sm text-base-content/60">Searching…</p>
-					{:else if torrentStatus === 'error'}
-						<p class="text-sm text-error">{torrentError ?? 'Failed'}</p>
-					{:else if torrentMatches.length === 0}
-						<p class="text-sm text-base-content/60">No matching torrents.</p>
-					{:else}
-						<div class="flex flex-col gap-1">
-							{#each torrentMatches as torrent (torrent.infoHash)}
-								{@const added = existingHashes.has(torrent.magnetLink)}
-								{@const adding = addingHash === torrent.magnetLink}
-								{@const streamEvalRow: TorrentRowEval = torrent.magnetLink
+					{#if torrentSearchOpen}
+						<div class="mt-2">
+							{#if assignError}
+								<div class="mb-2 alert alert-error">
+									<span>{assignError}</span>
+								</div>
+							{/if}
+							{#if torrentStatus === 'searching' && torrentMatches.length === 0}
+								<p class="text-sm text-base-content/60">Searching…</p>
+							{:else if torrentStatus === 'error'}
+								<p class="text-sm text-error">{torrentError ?? 'Failed'}</p>
+							{:else if torrentMatches.length === 0}
+								<p class="text-sm text-base-content/60">No matching torrents.</p>
+							{:else}
+								<div class="flex flex-col gap-1">
+									{#each torrentMatches as torrent (torrent.infoHash)}
+										{@const added = existingHashes.has(torrent.magnetLink)}
+										{@const adding = addingHash === torrent.magnetLink}
+										{@const streamEvalRow: TorrentRowEval = torrent.magnetLink
 									? (resultEvals[torrent.magnetLink] ?? ({ kind: 'pending' } as TorrentRowEval))
 									: ({ kind: 'not-streamable', reason: 'no magnet' } as TorrentRowEval)}
-								<button
-									type="button"
-									class={classNames(
-										'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
-										{ 'opacity-60': added || adding }
-									)}
-									onclick={() => assignTorrent(torrent)}
-									disabled={addingHash !== null || added}
-									title={streamEvalRow.kind === 'streamable'
-										? `Streamable — ${streamEvalRow.fileName} · ${torrent.title}`
-										: streamEvalRow.kind === 'not-streamable'
-											? `Not streamable: ${streamEvalRow.reason} · ${torrent.title}`
-											: torrent.title}
-								>
-									{#if streamEvalRow.kind === 'pending' || streamEvalRow.kind === 'evaluating'}
-										<span
-											class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
-											aria-label="Probing torrent metadata"
-										></span>
-									{:else if streamEvalRow.kind === 'streamable'}
-										<span
-											class="shrink-0 text-success"
-											aria-label="Streamable"
-											title={`Streamable — ${streamEvalRow.fileName}`}
+										<button
+											type="button"
+											class={classNames(
+												'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
+												{ 'opacity-60': added || adding }
+											)}
+											onclick={() => assignTorrent(torrent)}
+											disabled={addingHash !== null || added}
+											title={streamEvalRow.kind === 'streamable'
+												? `Streamable — ${streamEvalRow.fileName} · ${torrent.title}`
+												: streamEvalRow.kind === 'not-streamable'
+													? `Not streamable: ${streamEvalRow.reason} · ${torrent.title}`
+													: torrent.title}
 										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												viewBox="0 0 24 24"
-												fill="currentColor"
-												class="h-3.5 w-3.5"
-												aria-hidden="true"
+											{#if streamEvalRow.kind === 'pending' || streamEvalRow.kind === 'evaluating'}
+												<span
+													class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
+													aria-label="Probing torrent metadata"
+												></span>
+											{:else if streamEvalRow.kind === 'streamable'}
+												<span
+													class="shrink-0 text-success"
+													aria-label="Streamable"
+													title={`Streamable — ${streamEvalRow.fileName}`}
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														viewBox="0 0 24 24"
+														fill="currentColor"
+														class="h-3.5 w-3.5"
+														aria-hidden="true"
+													>
+														<polygon points="6 4 20 12 6 20 6 4" />
+													</svg>
+												</span>
+											{:else}
+												<span
+													class="shrink-0 text-base-content/30"
+													aria-label="Not streamable"
+													title={`Not streamable: ${streamEvalRow.reason}`}
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2.5"
+														stroke-linecap="round"
+														class="h-3.5 w-3.5"
+														aria-hidden="true"
+													>
+														<line x1="5" y1="5" x2="19" y2="19" />
+														<line x1="19" y1="5" x2="5" y2="19" />
+													</svg>
+												</span>
+											{/if}
+											<span class="font-medium">{torrent.quality ?? '—'}</span>
+											<span class="text-success">↑{torrent.seeders}</span>
+											<span class="text-warning">↓{torrent.leechers}</span>
+											<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
+											<span class="truncate text-base-content/70"
+												>{torrent.parsedTitle || torrent.title}</span
 											>
-												<polygon points="6 4 20 12 6 20 6 4" />
-											</svg>
-										</span>
-									{:else}
-										<span
-											class="shrink-0 text-base-content/30"
-											aria-label="Not streamable"
-											title={`Not streamable: ${streamEvalRow.reason}`}
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												stroke-linecap="round"
-												class="h-3.5 w-3.5"
-												aria-hidden="true"
-											>
-												<line x1="5" y1="5" x2="19" y2="19" />
-												<line x1="19" y1="5" x2="5" y2="19" />
-											</svg>
-										</span>
-									{/if}
-									<span class="font-medium">{torrent.quality ?? '—'}</span>
-									<span class="text-success">↑{torrent.seeders}</span>
-									<span class="text-warning">↓{torrent.leechers}</span>
-									<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
-									<span class="truncate text-base-content/70"
-										>{torrent.parsedTitle || torrent.title}</span
-									>
-									{#if added}
-										<span class="ml-auto">✓</span>
-									{:else if adding}
-										<span class="ml-auto">…</span>
-									{/if}
-								</button>
-							{/each}
+											{#if added}
+												<span class="ml-auto">✓</span>
+											{:else if adding}
+												<span class="ml-auto">…</span>
+											{/if}
+										</button>
+									{/each}
+								</div>
+							{/if}
 						</div>
 					{/if}
 				</div>
