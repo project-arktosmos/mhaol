@@ -252,7 +252,28 @@ async fn list(
         .select(TABLE)
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
-    let mut dtos: Vec<FirkinDto> = docs.into_iter().map(Into::into).collect();
+
+    // A firkin is "superseded" if its id appears in another firkin's
+    // `version_hashes` (i.e. some newer record has rolled it forward).
+    // Hide superseded ones so list consumers (e.g. the /catalog Library
+    // section) only ever see the current head of each version chain —
+    // even when a previous rollforward attempt left the old record in
+    // place after creating the new one.
+    let mut superseded: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for d in &docs {
+        for h in &d.version_hashes {
+            superseded.insert(h.clone());
+        }
+    }
+
+    let mut dtos: Vec<FirkinDto> = docs
+        .into_iter()
+        .filter(|d| {
+            let id = d.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
+            !superseded.contains(&id)
+        })
+        .map(Into::into)
+        .collect();
     dtos.sort_by(|a, b| a.created_at.cmp(&b.created_at));
     Ok(Json(dtos))
 }

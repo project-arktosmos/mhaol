@@ -208,11 +208,30 @@ async fn rollforward(
         .db
         .delete((FIRKIN_TABLE, old_id.as_str()))
         .await?;
-    let _: Option<Firkin> = state
+    let create_result: Result<Option<Firkin>, _> = state
         .db
         .create((FIRKIN_TABLE, new_id.as_str()))
         .content(new_record)
-        .await?;
+        .await;
+    match create_result {
+        Ok(_) => {}
+        Err(e) => {
+            // Concurrent rollforward attempts (watcher + manual finalize) can
+            // both compute the same `new_id`. Whichever runs second sees the
+            // record already in place; treat that as success — the desired
+            // state is already on disk.
+            let msg = e.to_string();
+            if msg.contains("already exists") {
+                tracing::info!(
+                    "[torrent-completion] {} → {} already created by a concurrent attempt",
+                    old_id,
+                    new_id,
+                );
+                return Ok(true);
+            }
+            return Err(e.into());
+        }
+    }
 
     tracing::info!(
         "[torrent-completion] {} → {} (v{}, +{} file(s))",
