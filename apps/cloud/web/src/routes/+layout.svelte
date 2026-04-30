@@ -25,6 +25,11 @@
 
 	const playbackState = firkinPlaybackService.state;
 	const playerState = playerService.state;
+	const identityState = userIdentityService.state;
+
+	// `/access` lives on the right side of the navbar (as the identity menu),
+	// so hide it from the auto-generated central menu.
+	const centralNavItems = NAV_ITEMS.filter((item) => item.href !== '/access');
 
 	const triggerClass = (item: NavItem) =>
 		classNames('btn btn-outline btn-sm', { 'btn-disabled': !item.hasOwnPage });
@@ -44,7 +49,7 @@
 	<Navbar brand={{ label: 'Mhaol', highlight: 'Cloud' }} classes="!bg-base-300">
 		{#snippet center()}
 			<div class="flex flex-wrap items-center gap-1">
-				{#each NAV_ITEMS as item (item.href)}
+				{#each centralNavItems as item (item.href)}
 					{#if item.children.length === 0}
 						<a href="{base}{item.href}" class="btn btn-outline btn-sm">{item.label}</a>
 					{:else}
@@ -71,6 +76,17 @@
 		{/snippet}
 		{#snippet end()}
 			<div class="flex items-center gap-1">
+				{#if $identityState.identity}
+					<a
+						href="{base}/access"
+						class="btn font-mono normal-case btn-ghost btn-sm"
+						title="Manage identity"
+					>
+						{$identityState.identity.username}
+					</a>
+				{:else if $identityState.loading}
+					<span class="loading loading-xs loading-spinner"></span>
+				{/if}
 				<ThemeToggle />
 			</div>
 		{/snippet}
