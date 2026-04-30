@@ -31,6 +31,10 @@ pub struct TorrentManager {
     config: RwLock<TorrentConfig>,
     tracking_info: RwLock<HashMap<String, TrackingInfo>>,
     completed_torrents: RwLock<HashSet<String>>,
+    /// Info hashes that were added by `start_stream`. These live in the
+    /// dedicated `stream_path` and get wiped (torrent + on-disk files) the
+    /// next time a new stream is started.
+    stream_info_hashes: RwLock<HashSet<String>>,
 }
 
 impl TorrentManager {
@@ -40,6 +44,7 @@ impl TorrentManager {
             config: RwLock::new(TorrentConfig::default()),
             tracking_info: RwLock::new(HashMap::new()),
             completed_torrents: RwLock::new(HashSet::new()),
+            stream_info_hashes: RwLock::new(HashSet::new()),
         }
     }
 
@@ -131,6 +136,21 @@ impl TorrentManager {
 
     pub fn set_download_path(&self, path: PathBuf) {
         self.config.write().download_path = path;
+    }
+
+    /// On-disk directory used for "torrent stream" sessions. Falls back to
+    /// `<download_path>/streams` if not explicitly configured.
+    pub fn stream_path(&self) -> PathBuf {
+        let cfg = self.config.read();
+        if cfg.stream_path.as_os_str().is_empty() {
+            cfg.download_path.join("streams")
+        } else {
+            cfg.stream_path.clone()
+        }
+    }
+
+    pub fn set_stream_path(&self, path: PathBuf) {
+        self.config.write().stream_path = path;
     }
 
     pub fn is_initialized(&self) -> bool {
@@ -834,18 +854,82 @@ impl TorrentManager {
         })
     }
 
-    /// Begin (or reuse) a streaming download of `magnet`, restricting the
-    /// download to the single video file picked by [`evaluate_magnet`]. Safe
-    /// to call repeatedly; librqbit dedupes by info hash.
+    /// Delete every torrent previously started via `start_stream`, including
+    /// its on-disk files. Stream payloads are intentionally ephemeral —
+    /// each fresh `start_stream` call wipes prior streams so they don't pile
+    /// up on disk.
+    pub async fn clear_streams(&self) -> Result<()> {
+        let api = self
+            .api()
+            .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
+
+        let hashes: Vec<String> = self.stream_info_hashes.read().iter().cloned().collect();
+        for hash in &hashes {
+            let id = match TorrentIdOrHash::parse(hash) {
+                Ok(id) => id,
+                Err(e) => {
+                    log::warn!("[torrent stream] skip invalid hash {}: {}", hash, e);
+                    continue;
+                }
+            };
+            if let Err(e) = api.api_torrent_action_delete(id).await {
+                log::warn!(
+                    "[torrent stream] delete {} failed (may already be gone): {}",
+                    hash,
+                    e
+                );
+            }
+            self.remove_tracking_info(hash);
+        }
+        self.stream_info_hashes.write().clear();
+
+        // Best-effort wipe of any leftover files in the stream root that the
+        // session didn't know about (e.g. left behind by a previous process
+        // that crashed before bookkeeping caught up). The `.rqbit` persistence
+        // folder is preserved.
+        let stream_path = self.stream_path();
+        if stream_path.exists() {
+            if let Ok(entries) = std::fs::read_dir(&stream_path) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.file_name().map(|n| n == ".rqbit").unwrap_or(false) {
+                        continue;
+                    }
+                    let res = if path.is_dir() {
+                        std::fs::remove_dir_all(&path)
+                    } else {
+                        std::fs::remove_file(&path)
+                    };
+                    if let Err(e) = res {
+                        log::warn!("[torrent stream] failed to remove {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Wipe any prior stream torrents (and their on-disk files), then start
+    /// a new stream session for `magnet`, restricted to the single video file
+    /// picked by [`evaluate_magnet`]. Stream payloads land in a dedicated
+    /// `stream_path` so they never mingle with regular downloads.
     pub async fn start_stream(&self, magnet: &str) -> Result<TorrentStreamInfo> {
         let api = self
             .api()
             .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
 
+        // Wipe any prior streams before kicking off a new one. We do this
+        // before evaluating the magnet so the user-visible "Resolving…"
+        // window covers the cleanup too.
+        if let Err(e) = self.clear_streams().await {
+            log::warn!("[torrent stream] clear_streams failed: {}", e);
+        }
+
         let probe = self.evaluate_magnet(magnet).await?;
 
-        let download_path = self.download_path();
-        let output_folder = download_path.to_string_lossy().to_string();
+        let stream_path = self.stream_path();
+        std::fs::create_dir_all(&stream_path).ok();
+        let output_folder = stream_path.to_string_lossy().to_string();
         let opts = AddTorrentOptions {
             overwrite: true,
             only_files: Some(vec![probe.file.index]),
@@ -863,6 +947,9 @@ impl TorrentManager {
                 download_dir: Some(output_folder),
             },
         );
+        self.stream_info_hashes
+            .write()
+            .insert(probe.info_hash.clone());
 
         Ok(probe)
     }
@@ -1262,6 +1349,7 @@ mod tests {
         let mgr = TorrentManager::new();
         let config = TorrentConfig {
             download_path: tmp.path().to_path_buf(),
+            stream_path: tmp.path().join("streams"),
             listen_port_range: 0..1, // port 0 lets the OS assign an available port
             enable_upnp: false,
             fast_resume: false,
@@ -1438,6 +1526,7 @@ mod tests {
         let mgr = TorrentManager::new();
         let config = TorrentConfig {
             download_path: tmp.path().to_path_buf(),
+            stream_path: tmp.path().join("streams"),
             listen_port_range: 0..1,
             enable_upnp: false,
             fast_resume: false,
@@ -1457,6 +1546,7 @@ mod tests {
         let mgr = TorrentManager::new();
         let config = TorrentConfig {
             download_path: tmp.path().to_path_buf(),
+            stream_path: tmp.path().join("streams"),
             listen_port_range: 0..1,
             enable_upnp: false,
             fast_resume: false,
@@ -1491,5 +1581,48 @@ mod tests {
     fn tracking_info_none_download_dir() {
         let info = TrackingInfo { download_dir: None };
         assert!(info.download_dir.is_none());
+    }
+
+    // ── stream_path / clear_streams ────────────────────────────────
+
+    #[test]
+    fn stream_path_falls_back_to_download_subdir_when_unset() {
+        let mgr = TorrentManager::new();
+        mgr.set_download_path(PathBuf::from("/tmp/dl"));
+        // stream_path is empty by default → falls back to <download>/streams
+        assert_eq!(mgr.stream_path(), PathBuf::from("/tmp/dl/streams"));
+    }
+
+    #[test]
+    fn stream_path_uses_explicit_setting_when_set() {
+        let mgr = TorrentManager::new();
+        mgr.set_download_path(PathBuf::from("/tmp/dl"));
+        mgr.set_stream_path(PathBuf::from("/tmp/streams-elsewhere"));
+        assert_eq!(mgr.stream_path(), PathBuf::from("/tmp/streams-elsewhere"));
+    }
+
+    #[tokio::test]
+    async fn clear_streams_fails_when_not_initialized() {
+        let mgr = TorrentManager::new();
+        let res = mgr.clear_streams().await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn clear_streams_wipes_stray_files_when_session_has_no_streams() {
+        let (mgr, tmp) = create_initialized_manager().await;
+        let stream_dir = tmp.path().join("streams");
+        std::fs::create_dir_all(&stream_dir).unwrap();
+        let stray = stream_dir.join("leftover.mp4");
+        std::fs::write(&stray, b"junk").unwrap();
+        // Mark a fake .rqbit folder so we can verify it's preserved.
+        let rqbit = stream_dir.join(".rqbit");
+        std::fs::create_dir_all(&rqbit).unwrap();
+        std::fs::write(rqbit.join("state.json"), b"{}").unwrap();
+
+        mgr.clear_streams().await.unwrap();
+
+        assert!(!stray.exists());
+        assert!(rqbit.exists());
     }
 }
