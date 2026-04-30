@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm clean:ports && concurrently --kill-others-on-fail --names rendezvous,cloud,web,tauri --prefix-colors yellow,blue,green,magenta \"pnpm run app:rendezvous\" \"pnpm run app:cloud\" \"pnpm run app:cloud:web\" \"pnpm run app:tauri:cloud\"",
+		"dev": "pnpm clean:ports && concurrently --kill-others-on-fail --names cloud,web,tauri --prefix-colors blue,green,magenta \"pnpm run app:cloud\" \"pnpm run app:cloud:web\" \"pnpm run app:tauri:cloud\"",
 		"dev:cloud:web": "pnpm --filter cloud dev",
 		"build": "pnpm run build:cloud && pnpm run build:rendezvous",
 		"build:cloud:web": "pnpm --filter cloud build",
