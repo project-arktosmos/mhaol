@@ -55,9 +55,13 @@ struct SessionDto {
 pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/sessions", post(start_session).get(list_sessions))
-        .route("/sessions/:id", delete(stop_session))
-        .route("/sessions/:id/playlist.m3u8", get(serve_playlist))
-        .route("/sessions/:id/segments/:filename", get(serve_segment))
+        .route("/sessions/{id}", delete(stop_session))
+        // Both the playlist and the segments live in the same on-disk dir
+        // and the m3u8 references segments by relative filename. Serving
+        // them at the same path level lets `hls.js` resolve segment URLs
+        // correctly against the playlist URL without rewriting the m3u8.
+        .route("/sessions/{id}/playlist.m3u8", get(serve_playlist))
+        .route("/sessions/{id}/{filename}", get(serve_segment))
 }
 
 fn err(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
