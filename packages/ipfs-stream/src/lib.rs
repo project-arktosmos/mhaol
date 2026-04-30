@@ -8,10 +8,14 @@
 //! Pipeline topology:
 //!
 //! ```text
-//! filesrc -> decodebin -+-> videoconvert -> x264enc ----+-> mpegtsmux -> hlssink2
-//!                       \                                /
-//!                        +-> audioconvert -> aacenc ----+
+//! filesrc -> decodebin -+-> videoconvert -> x264enc -> h264parse ----> hlssink2.video
+//!                       \
+//!                        +-> audioconvert -> audioresample -> aacenc -> aacparse -> hlssink2.audio
 //! ```
+//!
+//! `hlssink2` does its own MPEG-TS muxing internally, so the encoded H.264
+//! and AAC streams are wired straight into its `video` and `audio` request
+//! pads instead of running through a separate `mpegtsmux`.
 //!
 //! The "source" of every stream is a CID that the cloud has already pinned
 //! locally (i.e. the file is on disk). Conceptually the bytes flow from the
@@ -50,7 +54,6 @@ const REQUIRED_ELEMENTS: &[&str] = &[
     "audioconvert",
     "audioresample",
     "aacparse",
-    "mpegtsmux",
     "hlssink2",
 ];
 

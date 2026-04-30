@@ -100,15 +100,14 @@ impl Drop for HlsPipeline {
 /// Build the HLS transcoding pipeline:
 ///
 /// ```text
-/// filesrc -> decodebin -+-> videoconvert -> x264enc ----+-> mpegtsmux -> hlssink2
-///                       \                                /
-///                        +-> audioconvert -> aacenc ----+
+/// filesrc -> decodebin -+-> videoconvert -> x264enc -> h264parse ----> hlssink2.video
+///                       \
+///                        +-> audioconvert -> audioresample -> aacenc -> aacparse -> hlssink2.audio
 /// ```
 ///
-/// The `decodebin` dynamically wires its source pads to the video/audio
-/// branches as it identifies streams. Both branches feed a single
-/// `mpegtsmux` whose output goes through `hlssink2`, which writes
-/// `playlist.m3u8` plus segment files into `config.output_dir`.
+/// `hlssink2` does its own MPEG-TS muxing internally, so we feed it raw
+/// encoded H.264 on its `video` request pad and AAC on its `audio` request
+/// pad rather than wrapping the streams in `mpegtsmux` first.
 pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
     if !config.source_path.exists() {
         return Err(Error::SourceNotFound(
@@ -128,7 +127,6 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
             .ok_or_else(|| Error::PipelineConstruction("non-utf8 source path".into()))?,
     );
     let decodebin = make_element("decodebin", Some("decodebin"))?;
-    let mux = make_element("mpegtsmux", Some("muxer"))?;
     let hlssink = make_element("hlssink2", Some("hlssink"))?;
 
     let playlist_path = config.output_dir.join(&config.playlist_name);
@@ -151,12 +149,9 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
     // Keep every segment on disk for VOD-style playback. Without this
     // hlssink2 deletes old segments once the playlist rotates.
     hlssink.set_property("max-files", 0u32);
-    // Tell hlssink2 to author a VOD-style playlist with `#EXT-X-PLAYLIST-TYPE:VOD`
-    // and an `#EXT-X-ENDLIST` tag once EOS arrives. send-keyframe-requests is on
-    // by default and forces keyframes on segment boundaries.
 
     pipeline
-        .add_many([&filesrc, &decodebin, &mux, &hlssink])
+        .add_many([&filesrc, &decodebin, &hlssink])
         .map_err(|e| Error::PipelineConstruction(e.to_string()))?;
     filesrc
         .link(&decodebin)
@@ -165,25 +160,8 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
             sink_element: "decodebin".into(),
         })?;
 
-    // hlssink2 exposes "video" and "audio" request pads. We connect the
-    // muxer's `src` pad to hlssink2's `video` pad below if a video branch
-    // is added. mpegtsmux already handles A/V mux so we only need to wire
-    // its src to hlssink2's video sink.
-    let mux_src = mux
-        .static_pad("src")
-        .ok_or_else(|| Error::PipelineConstruction("mpegtsmux has no src pad".into()))?;
-    let hls_video_sink = hlssink
-        .request_pad_simple("video")
-        .ok_or_else(|| Error::PipelineConstruction("hlssink2 video pad request failed".into()))?;
-    mux_src
-        .link(&hls_video_sink)
-        .map_err(|_| Error::ElementLinkFailed {
-            source_element: "mpegtsmux".into(),
-            sink_element: "hlssink2".into(),
-        })?;
-
     let pipeline_weak = pipeline.downgrade();
-    let mux_weak = mux.downgrade();
+    let hlssink_weak = hlssink.downgrade();
     let video_linked = Arc::new(AtomicBool::new(false));
     let audio_linked = Arc::new(AtomicBool::new(false));
 
@@ -191,7 +169,7 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
         let Some(pipeline) = pipeline_weak.upgrade() else {
             return;
         };
-        let Some(mux) = mux_weak.upgrade() else {
+        let Some(hlssink) = hlssink_weak.upgrade() else {
             return;
         };
 
@@ -207,7 +185,7 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
             if video_linked.swap(true, Ordering::SeqCst) {
                 return;
             }
-            if let Err(e) = link_video_branch(&pipeline, src_pad, &mux) {
+            if let Err(e) = link_video_branch(&pipeline, src_pad, &hlssink) {
                 tracing::error!("[ipfs-stream] failed to link video branch: {e}");
                 video_linked.store(false, Ordering::SeqCst);
             }
@@ -215,7 +193,7 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
             if audio_linked.swap(true, Ordering::SeqCst) {
                 return;
             }
-            if let Err(e) = link_audio_branch(&pipeline, src_pad, &mux) {
+            if let Err(e) = link_audio_branch(&pipeline, src_pad, &hlssink) {
                 tracing::error!("[ipfs-stream] failed to link audio branch: {e}");
                 audio_linked.store(false, Ordering::SeqCst);
             }
@@ -232,7 +210,7 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
 fn link_video_branch(
     pipeline: &gst::Pipeline,
     src_pad: &gst::Pad,
-    mux: &gst::Element,
+    hlssink: &gst::Element,
 ) -> Result<()> {
     let queue = make_element("queue", Some("video_queue"))?;
     let convert = make_element("videoconvert", Some("video_convert"))?;
@@ -254,10 +232,19 @@ fn link_video_branch(
             sink_element: "video chain".into(),
         }
     })?;
-    h264parse.link(mux).map_err(|_| Error::ElementLinkFailed {
-        source_element: "h264parse".into(),
-        sink_element: "mpegtsmux".into(),
-    })?;
+
+    let hls_video_sink = hlssink
+        .request_pad_simple("video")
+        .ok_or_else(|| Error::PipelineConstruction("hlssink2 video pad request failed".into()))?;
+    let parse_src = h264parse
+        .static_pad("src")
+        .ok_or_else(|| Error::PipelineConstruction("h264parse has no src pad".into()))?;
+    parse_src
+        .link(&hls_video_sink)
+        .map_err(|_| Error::ElementLinkFailed {
+            source_element: "h264parse".into(),
+            sink_element: "hlssink2.video".into(),
+        })?;
 
     for el in [&queue, &convert, &encoder, &h264parse] {
         el.sync_state_with_parent()
@@ -279,7 +266,7 @@ fn link_video_branch(
 fn link_audio_branch(
     pipeline: &gst::Pipeline,
     src_pad: &gst::Pad,
-    mux: &gst::Element,
+    hlssink: &gst::Element,
 ) -> Result<()> {
     let queue = make_element("queue", Some("audio_queue"))?;
     let convert = make_element("audioconvert", Some("audio_convert"))?;
@@ -296,10 +283,19 @@ fn link_audio_branch(
             sink_element: "audio chain".into(),
         }
     })?;
-    aacparse.link(mux).map_err(|_| Error::ElementLinkFailed {
-        source_element: "aacparse".into(),
-        sink_element: "mpegtsmux".into(),
-    })?;
+
+    let hls_audio_sink = hlssink
+        .request_pad_simple("audio")
+        .ok_or_else(|| Error::PipelineConstruction("hlssink2 audio pad request failed".into()))?;
+    let parse_src = aacparse
+        .static_pad("src")
+        .ok_or_else(|| Error::PipelineConstruction("aacparse has no src pad".into()))?;
+    parse_src
+        .link(&hls_audio_sink)
+        .map_err(|_| Error::ElementLinkFailed {
+            source_element: "aacparse".into(),
+            sink_element: "hlssink2.audio".into(),
+        })?;
 
     for el in [&queue, &convert, &resample, &encoder, &aacparse] {
         el.sync_state_with_parent()
