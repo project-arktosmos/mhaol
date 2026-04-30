@@ -40,6 +40,9 @@
 		},
 		"iptv": {
 			"source": "addon"
+		},
+		"radio": {
+			"source": "addon"
 		}
 	},
 	"exports": {
@@ -73,6 +76,8 @@
 		"./wyzie-subs/types": "./wyzie-subs/src/types.ts",
 		"./iptv": "./iptv/src/index.ts",
 		"./iptv/types": "./iptv/src/types.ts",
+		"./radio": "./radio/src/index.ts",
+		"./radio/types": "./radio/src/types.ts",
 		"./common/rate-limiter": "./common/src/rate-limiter.ts",
 		"./common/utils": "./common/src/utils.ts",
 		"./common/addon-cache": "./common/src/addon-cache.ts"

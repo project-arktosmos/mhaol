@@ -19,9 +19,10 @@ mhaol.git/
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
-│   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, OpenLibrary, Wyzie subtitles, IPTV, torrent search)
+│   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, OpenLibrary, Wyzie subtitles, IPTV, Radio, torrent search)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
-│   ├── p2p-stream/                   # Rust P2P streaming library
+│   ├── p2p-stream/                   # Rust P2P streaming library (GStreamer + WebRTC)
+│   ├── ipfs-stream/                  # Rust HLS-over-IPFS streaming (GStreamer hlssink2)
 │   ├── torrent/                      # Rust torrent implementation
 │   ├── ed2k/                         # Rust eDonkey/ed2k network client (search + add)
 │   ├── ipfs/                         # Rust IPFS node (libp2p + Bitswap + Kademlia DHT, embedded)
