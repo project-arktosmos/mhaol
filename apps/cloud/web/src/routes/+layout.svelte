@@ -2,6 +2,7 @@
 	import '../css/app.css';
 	import 'ui-lib/services/i18n';
 	import classNames from 'classnames';
+	import Identicon from 'ui-lib/components/core/Identicon.svelte';
 	import Navbar from 'ui-lib/components/core/Navbar.svelte';
 	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
 	import ToastOutlet from 'ui-lib/components/core/ToastOutlet.svelte';
@@ -79,9 +80,14 @@
 				{#if $identityState.identity}
 					<a
 						href="{base}/profile"
-						class="btn font-mono normal-case btn-ghost btn-sm"
+						class="btn gap-2 font-mono normal-case btn-ghost btn-sm"
 						title="Manage identity"
 					>
+						<Identicon
+							address={$identityState.identity.address}
+							title={`Identity: ${$identityState.identity.address}`}
+							classes="h-5 w-5 shrink-0"
+						/>
 						{$identityState.identity.username}
 					</a>
 				{:else if $identityState.loading}
