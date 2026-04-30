@@ -4,13 +4,25 @@
   "version": "0.1.0",
   "identifier": "com.arktosmos.mhaol.cloud",
   "build": {
-    "frontendDist": "../../tauri/web/dist-static",
-    "devUrl": "http://localhost:1571",
-    "beforeDevCommand": "(lsof -i:1571 >/dev/null 2>&1) || pnpm --filter tauri-web dev",
-    "beforeBuildCommand": "pnpm --filter tauri-web build"
+    "frontendDist": "../web/dist-static",
+    "devUrl": "http://localhost:9898",
+    "beforeDevCommand": "(lsof -i:9898 >/dev/null 2>&1) || pnpm --filter cloud dev",
+    "beforeBuildCommand": "pnpm --filter cloud build"
   },
   "app": {
-    "windows": [],
+    "windows": [
+      {
+        "label": "main",
+        "title": "Mhaol Cloud",
+        "url": "http://localhost:9898",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
     "security": {
       "csp": null
     }
