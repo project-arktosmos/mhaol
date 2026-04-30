@@ -1,5 +1,21 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Map a filename's extension to a streaming mime type.
+/// Returns `None` for files we don't consider streamable in a `<video>` element.
+pub fn streamable_mime_type(name: &str) -> Option<&'static str> {
+    let ext = name.rsplit('.').next()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "mp4" | "m4v" => Some("video/mp4"),
+        "webm" => Some("video/webm"),
+        "mkv" => Some("video/x-matroska"),
+        "mov" => Some("video/quicktime"),
+        "avi" => Some("video/x-msvideo"),
+        "ogv" => Some("video/ogg"),
+        "ts" => Some("video/mp2t"),
+        _ => None,
+    }
+}
+
 pub fn get_unix_timestamp() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -55,6 +55,25 @@ pub struct TorrentFile {
     pub size: u64,
 }
 
+/// File picked for streaming inside a torrent.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamFile {
+    pub index: usize,
+    pub name: String,
+    pub size: u64,
+    pub mime_type: Option<String>,
+}
+
+/// Result of evaluating / starting a torrent stream.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TorrentStreamInfo {
+    pub info_hash: String,
+    pub name: String,
+    pub file: StreamFile,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

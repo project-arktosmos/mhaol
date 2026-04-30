@@ -1,13 +1,20 @@
 use anyhow::Result;
-use librqbit::{AddTorrent, AddTorrentOptions, Api, Session, SessionOptions, SessionPersistenceConfig};
+use librqbit::{
+    api::TorrentIdOrHash, AddTorrent, AddTorrentOptions, Api, Session, SessionOptions,
+    SessionPersistenceConfig,
+};
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::io::{AsyncRead, AsyncSeek};
 
 use crate::config::{TorrentConfig, DEFAULT_TRACKERS};
-use crate::types::{AddTorrentRequest, TorrentFile, TorrentInfo, TorrentState, TorrentStats};
-use crate::util::{get_unix_timestamp, parse_magnet_uri};
+use crate::types::{
+    AddTorrentRequest, StreamFile, TorrentFile, TorrentInfo, TorrentState, TorrentStats,
+    TorrentStreamInfo,
+};
+use crate::util::{get_unix_timestamp, parse_magnet_uri, streamable_mime_type};
 
 #[derive(Debug, Clone)]
 pub struct TrackingInfo {
@@ -767,6 +774,117 @@ impl TorrentManager {
             .collect();
 
         Ok(files)
+    }
+
+    /// Resolve magnet metadata without committing to a download. Returns the
+    /// best streamable file (largest video/* by size) along with its index in
+    /// the torrent's file list.
+    pub async fn evaluate_magnet(&self, magnet: &str) -> Result<TorrentStreamInfo> {
+        if !magnet.starts_with("magnet:") {
+            anyhow::bail!("magnet URI required");
+        }
+        let api = self
+            .api()
+            .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
+
+        let add = AddTorrent::from_url(magnet);
+        let opts = AddTorrentOptions {
+            list_only: true,
+            ..Default::default()
+        };
+        let response = api
+            .api_add_torrent(add, Some(opts))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to resolve magnet metadata: {}", e))?;
+
+        let info_hash = response.details.info_hash.to_lowercase();
+        let name = response
+            .details
+            .name
+            .clone()
+            .unwrap_or_else(|| info_hash.clone());
+        let files = response
+            .details
+            .files
+            .ok_or_else(|| anyhow::anyhow!("torrent has no file list"))?;
+
+        let (idx, file) = files
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, f)| streamable_mime_type(&f.name).map(|m| (idx, f, m)))
+            .max_by_key(|(_, f, _)| f.length)
+            .map(|(idx, f, mime)| {
+                (
+                    idx,
+                    StreamFile {
+                        index: idx,
+                        name: f.name.clone(),
+                        size: f.length,
+                        mime_type: Some(mime.to_string()),
+                    },
+                )
+            })
+            .ok_or_else(|| anyhow::anyhow!("no streamable video file in torrent"))?;
+        let _ = idx; // silence unused
+
+        Ok(TorrentStreamInfo {
+            info_hash,
+            name,
+            file,
+        })
+    }
+
+    /// Begin (or reuse) a streaming download of `magnet`, restricting the
+    /// download to the single video file picked by [`evaluate_magnet`]. Safe
+    /// to call repeatedly; librqbit dedupes by info hash.
+    pub async fn start_stream(&self, magnet: &str) -> Result<TorrentStreamInfo> {
+        let api = self
+            .api()
+            .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
+
+        let probe = self.evaluate_magnet(magnet).await?;
+
+        let download_path = self.download_path();
+        let output_folder = download_path.to_string_lossy().to_string();
+        let opts = AddTorrentOptions {
+            overwrite: true,
+            only_files: Some(vec![probe.file.index]),
+            output_folder: Some(output_folder.clone()),
+            ..Default::default()
+        };
+
+        api.api_add_torrent(AddTorrent::from_url(magnet), Some(opts))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to start torrent stream: {}", e))?;
+
+        self.set_tracking_info(
+            probe.info_hash.clone(),
+            TrackingInfo {
+                download_dir: Some(output_folder),
+            },
+        );
+
+        Ok(probe)
+    }
+
+    /// Open a seekable byte stream over a single file inside an already-added
+    /// torrent. Returns the file length and a reader implementing
+    /// `AsyncRead + AsyncSeek`.
+    pub fn open_file_stream(
+        &self,
+        info_hash: &str,
+        file_id: usize,
+    ) -> Result<(u64, impl AsyncRead + AsyncSeek + Send + Unpin + 'static)> {
+        let api = self
+            .api()
+            .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
+        let id = TorrentIdOrHash::parse(info_hash)
+            .map_err(|e| anyhow::anyhow!("Invalid info hash: {}", e))?;
+        let stream = api
+            .api_stream(id, file_id)
+            .map_err(|e| anyhow::anyhow!("Failed to open file stream: {}", e))?;
+        let len = stream.len();
+        Ok((len, stream))
     }
 
     pub fn complete_download(&self, info_hash: String, output_path: String) -> Result<()> {

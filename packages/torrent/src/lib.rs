@@ -6,7 +6,10 @@ pub mod util;
 
 pub use config::{TorrentConfig, DEFAULT_TRACKERS};
 pub use manager::TorrentManager;
-pub use types::{AddTorrentRequest, TorrentFile, TorrentInfo, TorrentState, TorrentStats};
+pub use types::{
+    AddTorrentRequest, StreamFile, TorrentFile, TorrentInfo, TorrentState, TorrentStats,
+    TorrentStreamInfo,
+};
 
 #[cfg(test)]
 mod tests {
