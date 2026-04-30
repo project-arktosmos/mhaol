@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm clean:ports && export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$(( ( $(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) + 1 ) / 2 ))} && cargo build -p mhaol-cloud --bin mhaol-cloud && concurrently --kill-others-on-fail --names cloud,web,tauri --prefix-colors blue,green,magenta \"pnpm run app:cloud\" \"pnpm run app:cloud:web\" \"pnpm run app:tauri:cloud\"",
+		"dev": "pnpm clean:ports:cloud && export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$(( ( $(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) + 1 ) / 2 ))} && cargo build -p mhaol-cloud --bin mhaol-cloud && concurrently --kill-others-on-fail --names cloud,web,tauri --prefix-colors blue,green,magenta \"pnpm run app:cloud\" \"pnpm run app:cloud:web\" \"pnpm run app:tauri:cloud\"",
 		"dev:cloud:web": "pnpm --filter cloud dev",
 		"build": "pnpm run build:cloud && pnpm run build:rendezvous",
 		"build:cloud:web": "pnpm --filter cloud build",
@@ -13,6 +13,7 @@
 		"lint": "pnpm -r run lint",
 		"format": "pnpm -r run format",
 		"check": "pnpm -r run check && cargo check -p mhaol-cloud && cargo check -p mhaol-rendezvous",
+		"clean:ports:cloud": "for p in 9898 9899; do lsof -ti:$p 2>/dev/null | xargs kill -9 2>/dev/null; done; pgrep -f 'mhaol-cloud worker' 2>/dev/null | xargs kill -9 2>/dev/null; true",
 		"clean:ports": "for p in 9898 9899 14080 14001; do lsof -ti:$p 2>/dev/null | xargs kill -9 2>/dev/null; done; pgrep -f 'mhaol-cloud worker' 2>/dev/null | xargs kill -9 2>/dev/null; true",
 		"clean": "pkill -9 -x mhaol-rendezvous 2>/dev/null; pkill -9 -x mhaol-cloud-shell 2>/dev/null; pkill -9 -x mhaol-cloud 2>/dev/null; pnpm clean:ports; pnpm -r run clean && cargo clean && rm -f mhaol.db mhaol.db-wal mhaol.db-shm",
 		"reset": "rm -rf \"${DATA_DIR:-$HOME/Documents/mhaol}\"",
