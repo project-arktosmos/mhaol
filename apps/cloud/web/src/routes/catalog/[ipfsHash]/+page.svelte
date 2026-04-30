@@ -398,47 +398,31 @@
 		return out;
 	});
 
-	const isRetroAchievementsConsole = $derived(firkin.addon === 'retroachievements');
-
-	// Scanning the firkin's torrent extracts archives in place, pins each
-	// ROM to IPFS and rolls the firkin forward — afterwards `firkin.files`
-	// contains the new `ipfs` entries and the Files table renders play
-	// buttons for them via `resolveRomForFile`. Status is surfaced
-	// per-archive inline in each row (not as a global "Scanning…" label)
-	// because archive extraction is the slow step the user wants to see.
+	// Scanning a single archive on the firkin extracts it in place, pins
+	// every ROM inside to IPFS and rolls the firkin forward — afterwards
+	// `firkin.files` contains the new `ipfs` entries and the row's play
+	// button lights up via `resolveRomForFile`. We do this one archive at
+	// a time on user click so the request returns quickly: a No-Intro
+	// torrent has hundreds of `.7z` files; scanning all of them in one
+	// shot took minutes and made the page look frozen.
 	type ArchiveStatus = 'scanning' | 'extracted' | 'already_extracted' | 'failed' | 'skipped';
 	type ArchiveStatusInfo = { status: ArchiveStatus; error?: string };
 	type RomScanResponse = {
 		firkin_id: string;
 		archives: { name: string; relative_path: string; status: string; error?: string }[];
 	};
-	type RomsStatus = 'idle' | 'loading' | 'done' | 'error';
-	let romsStatus = $state<RomsStatus>('idle');
 	let archiveStatuses = $state<Record<string, ArchiveStatusInfo>>({});
-	let romsRun = 0;
-	let romsLoadedForKey: string | null = null;
 
-	async function loadRoms(force = false): Promise<void> {
-		const key = `${firkin.id}:${completedTorrents.map((t) => t.hash).join(',')}`;
-		if (!force && romsLoadedForKey === key) return;
-		romsLoadedForKey = key;
-		const myRun = ++romsRun;
-		romsStatus = 'loading';
-		// Mark every archive entry on the firkin as 'scanning' so each row
-		// shows its own spinner while the backend works.
-		const initial: Record<string, ArchiveStatusInfo> = {};
-		for (const f of firkin.files) {
-			if (f.type === 'ipfs' && f.title && isRomArchive(f.title)) {
-				initial[f.title] = { status: 'scanning' };
-			}
-		}
-		archiveStatuses = { ...archiveStatuses, ...initial };
+	async function scanArchive(archiveTitle: string): Promise<void> {
+		// Don't re-trigger while the same archive is mid-scan.
+		if (archiveStatuses[archiveTitle]?.status === 'scanning') return;
+		archiveStatuses = {
+			...archiveStatuses,
+			[archiveTitle]: { status: 'scanning' }
+		};
 		try {
-			const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}/roms`, {
-				method: 'POST',
-				cache: 'no-store'
-			});
-			if (myRun !== romsRun) return;
+			const url = `/api/firkins/${encodeURIComponent(firkin.id)}/roms?archive=${encodeURIComponent(archiveTitle)}`;
+			const res = await fetch(url, { method: 'POST', cache: 'no-store' });
 			if (!res.ok) {
 				let message = `HTTP ${res.status}`;
 				try {
@@ -450,8 +434,8 @@
 				throw new Error(message);
 			}
 			const body = (await res.json()) as RomScanResponse;
-			if (myRun !== romsRun) return;
 			const next = { ...archiveStatuses };
+			let recorded = false;
 			for (const a of body.archives) {
 				const status: ArchiveStatus =
 					a.status === 'extracted' ||
@@ -461,24 +445,26 @@
 						? a.status
 						: 'failed';
 				next[a.relative_path] = { status, error: a.error };
+				if (a.relative_path === archiveTitle) recorded = true;
+			}
+			if (!recorded) {
+				next[archiveTitle] = {
+					status: 'failed',
+					error: 'archive not found on disk yet'
+				};
 			}
 			archiveStatuses = next;
-			romsStatus = 'done';
 			if (body.firkin_id && body.firkin_id !== firkin.id) {
 				await goto(`${base}/catalog/${encodeURIComponent(body.firkin_id)}`);
 			}
 		} catch (err) {
-			if (myRun !== romsRun) return;
-			// Roll any still-'scanning' rows back to a failed marker so the
-			// user can see the request itself failed rather than a per-row
-			// extraction outcome.
-			const next = { ...archiveStatuses };
-			for (const [k, v] of Object.entries(next)) {
-				if (v.status === 'scanning')
-					next[k] = { status: 'failed', error: err instanceof Error ? err.message : undefined };
-			}
-			archiveStatuses = next;
-			romsStatus = 'error';
+			archiveStatuses = {
+				...archiveStatuses,
+				[archiveTitle]: {
+					status: 'failed',
+					error: err instanceof Error ? err.message : 'Unknown error'
+				}
+			};
 		}
 	}
 
@@ -502,12 +488,6 @@
 	function closeEmulator() {
 		emulatorTarget = null;
 	}
-
-	$effect(() => {
-		if (!isRetroAchievementsConsole) return;
-		if (completedTorrents.length === 0) return;
-		void loadRoms(false);
-	});
 
 	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0 || hasStreamUrl);
 
@@ -1412,22 +1392,9 @@
 			{/if}
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
-				<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-					<h2 class="text-sm font-semibold text-base-content/70 uppercase">
-						Files ({firkin.files.length})
-					</h2>
-					{#if isRetroAchievementsConsole && completedTorrents.length > 0}
-						<button
-							type="button"
-							class="btn btn-outline btn-xs"
-							onclick={() => loadRoms(true)}
-							disabled={romsStatus === 'loading'}
-							title="Extract archives in the torrent's download dir, pin each ROM to IPFS, and append them as files on this firkin"
-						>
-							Scan ROMs
-						</button>
-					{/if}
-				</div>
+				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
+					Files ({firkin.files.length})
+				</h2>
 				{#if firkin.files.length === 0}
 					<p class="text-sm text-base-content/60">No files attached.</p>
 				{:else}
@@ -1444,10 +1411,9 @@
 							<tbody>
 								{#each firkin.files as file, i (i)}
 									{@const resolved = resolveRomForFile(file, firkin.files)}
-									{@const archiveStatus =
-										file.type === 'ipfs' && file.title && isRomArchive(file.title)
-											? archiveStatuses[file.title]
-											: undefined}
+									{@const isArchiveRow =
+										file.type === 'ipfs' && !!file.title && isRomArchive(file.title)}
+									{@const archiveStatus = isArchiveRow ? archiveStatuses[file.title!] : undefined}
 									<tr>
 										<td class="w-12">
 											{#if resolved}
@@ -1480,6 +1446,15 @@
 													class="loading loading-xs loading-spinner text-base-content/50"
 													aria-label="Scanning archive"
 												></span>
+											{:else if isArchiveRow}
+												<button
+													type="button"
+													class="btn btn-outline btn-xs"
+													onclick={() => scanArchive(file.title!)}
+													title="Extract this archive and pin every ROM inside to IPFS"
+												>
+													Scan
+												</button>
 											{/if}
 										</td>
 										<td class={classNames('text-xs font-semibold')}>

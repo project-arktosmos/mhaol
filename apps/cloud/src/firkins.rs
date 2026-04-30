@@ -1,3 +1,4 @@
+use crate::artists::{self, ArtistDto, UpsertArtistRequest};
 use crate::catalog::is_known_addon;
 use crate::state::CloudState;
 use axum::{
@@ -20,23 +21,6 @@ const SHA2_256_CODE: u64 = 0x12;
 const RAW_CODEC: u64 = 0x55;
 
 const ALLOWED_FILE_TYPES: &[&str] = &["ipfs", "torrent magnet", "url"];
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct Artist {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub role: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-    pub kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
-    #[serde(rename = "imageUrl", default, skip_serializing_if = "Option::is_none")]
-    pub image_url: Option<String>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ImageMeta {
@@ -64,11 +48,19 @@ pub struct FileEntry {
 struct FirkinPayloadView<'a> {
     title: &'a str,
     description: &'a str,
-    artists: &'a [Artist],
+    /// Artist CIDs only — the artist bodies are content-addressed
+    /// `artist` records (see [`crate::artists`]). The firkin's CID
+    /// therefore depends on the canonical CIDs of its referenced artists,
+    /// not on their mutable presentation fields.
+    artists: &'a [String],
     images: &'a [ImageMeta],
     files: &'a [FileEntry],
     year: Option<i32>,
     addon: &'a str,
+    /// EVM address of the account that created the firkin. Empty string when
+    /// the firkin was synthesised by a server-side flow without user context
+    /// (e.g. the library scanner).
+    creator: &'a str,
     version: u32,
     version_hashes: &'a [String],
 }
@@ -76,22 +68,24 @@ struct FirkinPayloadView<'a> {
 pub fn serialize_firkin_payload(
     title: &str,
     description: &str,
-    artists: &[Artist],
+    artist_cids: &[String],
     images: &[ImageMeta],
     files: &[FileEntry],
     year: Option<i32>,
     addon: &str,
+    creator: &str,
     version: u32,
     version_hashes: &[String],
 ) -> String {
     let view = FirkinPayloadView {
         title,
         description,
-        artists,
+        artists: artist_cids,
         images,
         files,
         year,
         addon,
+        creator,
         version,
         version_hashes,
     };
@@ -101,22 +95,24 @@ pub fn serialize_firkin_payload(
 pub fn compute_firkin_cid(
     title: &str,
     description: &str,
-    artists: &[Artist],
+    artist_cids: &[String],
     images: &[ImageMeta],
     files: &[FileEntry],
     year: Option<i32>,
     addon: &str,
+    creator: &str,
     version: u32,
     version_hashes: &[String],
 ) -> String {
     let json = serialize_firkin_payload(
         title,
         description,
-        artists,
+        artist_cids,
         images,
         files,
         year,
         addon,
+        creator,
         version,
         version_hashes,
     );
@@ -131,8 +127,12 @@ pub struct Firkin {
     pub id: Option<Thing>,
     #[serde(alias = "name")]
     pub title: String,
+    /// CIDs of the `artist` records this firkin references. The artist
+    /// bodies live in their own table + IPFS pins; the firkin only stores
+    /// the content-addressed handles so its own CID stays stable across
+    /// presentation-only edits to an artist (e.g. a new image URL).
     #[serde(default)]
-    pub artists: Vec<Artist>,
+    pub artists: Vec<String>,
     pub description: String,
     #[serde(default)]
     pub images: Vec<ImageMeta>,
@@ -144,6 +144,11 @@ pub struct Firkin {
     /// Replaces the prior split between `type` and `source`.
     #[serde(default, alias = "source")]
     pub addon: String,
+    /// EVM address of the account that created the firkin. Filled from the
+    /// browser-resident user identity on user-initiated creates; empty for
+    /// server-side auto-creates (library scan).
+    #[serde(default)]
+    pub creator: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
@@ -156,20 +161,30 @@ pub struct Firkin {
 pub struct FirkinDto {
     pub id: String,
     pub title: String,
-    pub artists: Vec<Artist>,
+    /// Artist CIDs as persisted on the firkin record. Drives version
+    /// hashing and lets clients re-fetch artist docs by CID.
+    #[serde(rename = "artistIds")]
+    pub artist_ids: Vec<String>,
+    /// Resolved artist bodies, in the same order as `artist_ids`. CIDs
+    /// that no longer have a backing record are dropped — the order of
+    /// the resolved entries still matches the surviving subset of CIDs.
+    pub artists: Vec<ArtistDto>,
     pub description: String,
     pub images: Vec<ImageMeta>,
     pub files: Vec<FileEntry>,
     pub year: Option<i32>,
     pub addon: String,
+    /// EVM address of the account that created the firkin. Empty when the
+    /// record predates the field or was created by a server-side flow.
+    pub creator: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub version: u32,
     pub version_hashes: Vec<String>,
 }
 
-impl From<Firkin> for FirkinDto {
-    fn from(doc: Firkin) -> Self {
+impl FirkinDto {
+    fn from_doc_with_artists(doc: Firkin, artists: Vec<ArtistDto>) -> Self {
         let id = doc
             .id
             .as_ref()
@@ -178,12 +193,14 @@ impl From<Firkin> for FirkinDto {
         Self {
             id,
             title: doc.title,
-            artists: doc.artists,
+            artist_ids: doc.artists,
+            artists,
             description: doc.description,
             images: doc.images,
             files: doc.files,
             year: doc.year,
             addon: doc.addon,
+            creator: doc.creator,
             created_at: doc.created_at,
             updated_at: doc.updated_at,
             version: doc.version,
@@ -195,8 +212,13 @@ impl From<Firkin> for FirkinDto {
 #[derive(Debug, Deserialize)]
 pub struct CreateFirkinRequest {
     pub title: String,
+    /// Inline artist objects — the server creates the underlying `artist`
+    /// records (or reuses existing ones with the same content-address)
+    /// before computing the firkin CID. Callers must always speak in
+    /// objects, never in raw CIDs, so the same upstream catalog item maps
+    /// to the same firkin CID regardless of which client created it.
     #[serde(default)]
-    pub artists: Vec<Artist>,
+    pub artists: Vec<UpsertArtistRequest>,
     pub description: Option<String>,
     #[serde(default)]
     pub images: Vec<ImageMeta>,
@@ -205,12 +227,17 @@ pub struct CreateFirkinRequest {
     #[serde(default)]
     pub year: Option<i32>,
     pub addon: String,
+    /// Optional creator address. Defaults to empty when omitted; the WebUI
+    /// fills it from the browser-resident user identity (see the profile
+    /// page) so every user-created firkin is attributable.
+    #[serde(default)]
+    pub creator: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateFirkinRequest {
     pub title: Option<String>,
-    pub artists: Option<Vec<Artist>>,
+    pub artists: Option<Vec<UpsertArtistRequest>>,
     pub description: Option<String>,
     pub images: Option<Vec<ImageMeta>>,
     pub files: Option<Vec<FileEntry>>,
@@ -236,6 +263,79 @@ fn err_response(
     )
 }
 
+/// Materialise inline artist requests into stable artist CIDs. Each
+/// request is sanitised, deduped against the `artist` table, and pinned to
+/// IPFS via [`artists::upsert`]. The returned `(cids, dtos)` are aligned
+/// 1-1 — the dtos are used for the response body, the cids for the firkin's
+/// `artists` field (and so its CID).
+async fn materialise_artists(
+    state: &CloudState,
+    requests: Vec<UpsertArtistRequest>,
+) -> Result<(Vec<String>, Vec<ArtistDto>), (StatusCode, Json<serde_json::Value>)> {
+    let mut cids: Vec<String> = Vec::with_capacity(requests.len());
+    let mut dtos: Vec<ArtistDto> = Vec::with_capacity(requests.len());
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for req in requests {
+        let Some(body) = artists::sanitize(req) else {
+            continue;
+        };
+        let dto = artists::upsert(state, body).await?;
+        if !seen.insert(dto.id.clone()) {
+            // Same artist provided twice (e.g. cast list duplicates) —
+            // keep first occurrence only so the firkin body stays stable.
+            continue;
+        }
+        cids.push(dto.id.clone());
+        dtos.push(dto);
+    }
+    Ok((cids, dtos))
+}
+
+async fn assemble_firkin_dto(
+    state: &CloudState,
+    doc: Firkin,
+) -> Result<FirkinDto, (StatusCode, Json<serde_json::Value>)> {
+    let artists = artists::fetch_many(state, &doc.artists)
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("artist fetch failed: {e}")))?;
+    Ok(FirkinDto::from_doc_with_artists(doc, artists))
+}
+
+async fn assemble_firkin_dtos(
+    state: &CloudState,
+    docs: Vec<Firkin>,
+) -> Result<Vec<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    // Resolve all referenced artists in one pass (deduped) so listing is
+    // O(unique-artists) DB hits rather than O(firkins * artists).
+    let mut unique_ids: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for doc in &docs {
+        for cid in &doc.artists {
+            if seen.insert(cid.as_str()) {
+                unique_ids.push(cid.clone());
+            }
+        }
+    }
+    let resolved = artists::fetch_many(state, &unique_ids)
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("artist fetch failed: {e}")))?;
+    let by_id: std::collections::HashMap<String, ArtistDto> = resolved
+        .into_iter()
+        .map(|d| (d.id.clone(), d))
+        .collect();
+    let mut out: Vec<FirkinDto> = Vec::with_capacity(docs.len());
+    for doc in docs {
+        let artists: Vec<ArtistDto> = doc
+            .artists
+            .iter()
+            .filter_map(|cid| by_id.get(cid).cloned())
+            .collect();
+        out.push(FirkinDto::from_doc_with_artists(doc, artists));
+    }
+    Ok(out)
+}
+
+
 async fn list(
     State(state): State<CloudState>,
 ) -> Result<Json<Vec<FirkinDto>>, (StatusCode, Json<serde_json::Value>)> {
@@ -258,14 +358,14 @@ async fn list(
         }
     }
 
-    let mut dtos: Vec<FirkinDto> = docs
+    let docs: Vec<Firkin> = docs
         .into_iter()
         .filter(|d| {
             let id = d.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
             !superseded.contains(&id)
         })
-        .map(Into::into)
         .collect();
+    let mut dtos = assemble_firkin_dtos(&state, docs).await?;
     dtos.sort_by(|a, b| a.created_at.cmp(&b.created_at));
     Ok(Json(dtos))
 }
@@ -280,7 +380,7 @@ async fn get_one(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
     match doc {
-        Some(d) => Ok(Json(d.into())),
+        Some(d) => Ok(Json(assemble_firkin_dto(&state, d).await?)),
         None => Err(err_response(StatusCode::NOT_FOUND, "firkin not found")),
     }
 }
@@ -309,24 +409,7 @@ async fn create(
             format!("invalid addon: {addon}"),
         ));
     }
-    let artists: Vec<Artist> = req
-        .artists
-        .into_iter()
-        .filter_map(|a| {
-            let name = a.name.trim().to_string();
-            if name.is_empty() {
-                return None;
-            }
-            Some(Artist {
-                name,
-                url: a.url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
-                image_url: a
-                    .image_url
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty()),
-            })
-        })
-        .collect();
+    let (artist_cids, artist_dtos) = materialise_artists(&state, req.artists).await?;
     let images: Vec<ImageMeta> = req
         .images
         .into_iter()
@@ -364,6 +447,10 @@ async fn create(
     }
 
     let year = req.year.filter(|y| (1000..=9999).contains(y));
+    let creator = req
+        .creator
+        .map(|c| c.trim().to_string())
+        .unwrap_or_default();
 
     let now = Utc::now();
     let version: u32 = 0;
@@ -371,11 +458,12 @@ async fn create(
     let body_json = serialize_firkin_payload(
         title,
         &description,
-        &artists,
+        &artist_cids,
         &images,
         &files,
         year,
         addon,
+        &creator,
         version,
         &version_hashes,
     );
@@ -390,18 +478,19 @@ async fn create(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
     if let Some(existing) = existing {
-        return Ok((StatusCode::OK, Json(existing.into())));
+        return Ok((StatusCode::OK, Json(assemble_firkin_dto(&state, existing).await?)));
     }
 
     let record = Firkin {
         id: None,
         title: title.to_string(),
-        artists,
+        artists: artist_cids,
         description,
         images,
         files,
         year,
         addon: addon.to_string(),
+        creator,
         created_at: now,
         updated_at: now,
         version,
@@ -415,9 +504,9 @@ async fn create(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db create failed: {e}")))?;
 
-    let dto: FirkinDto = created
-        .ok_or_else(|| err_response(StatusCode::INTERNAL_SERVER_ERROR, "firkin was not persisted"))?
-        .into();
+    let created_doc = created
+        .ok_or_else(|| err_response(StatusCode::INTERNAL_SERVER_ERROR, "firkin was not persisted"))?;
+    let dto = FirkinDto::from_doc_with_artists(created_doc, artist_dtos);
 
     pin_firkin_body(&state, &new_id, body_json).await;
 
@@ -480,23 +569,8 @@ async fn update(
     }
 
     if let Some(artists) = req.artists {
-        current.artists = artists
-            .into_iter()
-            .filter_map(|a| {
-                let name = a.name.trim().to_string();
-                if name.is_empty() {
-                    return None;
-                }
-                Some(Artist {
-                    name,
-                    url: a.url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
-                    image_url: a
-                        .image_url
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty()),
-                })
-            })
-            .collect();
+        let (cids, _) = materialise_artists(&state, artists).await?;
+        current.artists = cids;
     }
 
     if let Some(images) = req.images {
@@ -575,10 +649,8 @@ async fn update(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db update failed: {e}")))?;
 
-    let dto: FirkinDto = updated
-        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?
-        .into();
-    Ok(Json(dto))
+    let updated_doc = updated.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+    Ok(Json(assemble_firkin_dto(&state, updated_doc).await?))
 }
 
 async fn delete(
@@ -622,7 +694,7 @@ async fn finalize(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
     match doc {
-        Some(d) => Ok(Json(d.into())),
+        Some(d) => Ok(Json(assemble_firkin_dto(&state, d).await?)),
         None => Err(err_response(StatusCode::NOT_FOUND, "firkin not found")),
     }
 }
@@ -639,22 +711,33 @@ async fn finalize(
 }
 
 #[cfg(not(target_os = "android"))]
+#[derive(Debug, serde::Deserialize, Default)]
+struct RomsQuery {
+    /// When set, restrict extraction to a single archive identified by its
+    /// firkin file `title` (which is the relative path under the torrent
+    /// output dir). When unset, scan every archive on the firkin.
+    archive: Option<String>,
+}
+
+#[cfg(not(target_os = "android"))]
 async fn roms(
     State(state): State<CloudState>,
     Path(id): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<RomsQuery>,
 ) -> Result<Json<crate::rom_extract::RomsResponse>, (StatusCode, Json<serde_json::Value>)> {
-    crate::rom_extract::extract_roms_for_firkin(&state, &id)
-        .await
-        .map(Json)
-        .map_err(|e| {
-            let msg = e.to_string();
-            let status = if msg.contains("not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            err_response(status, msg)
-        })
+    let result = match query.archive {
+        Some(rel) => crate::rom_extract::extract_single_archive(&state, &id, &rel).await,
+        None => crate::rom_extract::extract_roms_for_firkin(&state, &id).await,
+    };
+    result.map(Json).map_err(|e| {
+        let msg = e.to_string();
+        let status = if msg.contains("not found") {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        err_response(status, msg)
+    })
 }
 
 #[cfg(target_os = "android")]

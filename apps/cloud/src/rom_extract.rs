@@ -271,6 +271,221 @@ pub async fn extract_roms_for_firkin(
     Ok(response)
 }
 
+/// Extract a single archive identified by its firkin-relative title
+/// (e.g. `roms/Foo.7z`). Walks the firkin's torrents to find the archive
+/// on disk, extracts it if not already, pins every resulting ROM and
+/// rolls the firkin forward. The response only contains entries for that
+/// one archive — callers can scan archives one at a time without
+/// blocking on the full pack (a No-Intro torrent has hundreds of `.7z`
+/// files; doing them all in one request takes ages).
+pub async fn extract_single_archive(
+    state: &CloudState,
+    firkin_id: &str,
+    archive_relative: &str,
+) -> anyhow::Result<RomsResponse> {
+    let mut current: Firkin = match state.db.select((FIRKIN_TABLE, firkin_id)).await? {
+        Some(d) => d,
+        None => anyhow::bail!("firkin not found"),
+    };
+    let mut current_id = firkin_id.to_string();
+
+    let mut response = RomsResponse {
+        firkin_id: current_id.clone(),
+        ..RomsResponse::default()
+    };
+
+    if !state.torrent_manager.is_initialized() {
+        return Ok(response);
+    }
+
+    let hashes: Vec<String> = current
+        .files
+        .iter()
+        .filter(|f| f.kind == "torrent magnet")
+        .filter_map(|f| btih_from_magnet(&f.value))
+        .collect();
+    if hashes.is_empty() {
+        return Ok(response);
+    }
+
+    let torrents = state.torrent_manager.list().await?;
+
+    let mut new_entries: Vec<FileEntry> = Vec::new();
+    let mut roms_acc: Vec<RomEntry> = Vec::new();
+    let mut found_archive = false;
+
+    for hash in &hashes {
+        let torrent = match torrents.iter().find(|t| t.info_hash.to_lowercase() == *hash) {
+            Some(t) => t,
+            None => continue,
+        };
+        let finished = matches!(torrent.state, mhaol_torrent::TorrentState::Seeding)
+            || torrent.progress >= 1.0;
+        if !finished {
+            continue;
+        }
+        let output_path = match torrent.output_path.as_deref() {
+            Some(p) => PathBuf::from(p),
+            None => continue,
+        };
+        if !output_path.exists() {
+            continue;
+        }
+
+        let archive_path = output_path.join(archive_relative);
+        if !archive_path.is_file() {
+            continue;
+        }
+        found_archive = true;
+        response
+            .torrent_paths
+            .push(output_path.to_string_lossy().into_owned());
+
+        let name = archive_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let dest = extracted_dir_for(&archive_path);
+        let ext = archive_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_default();
+        if dest.exists() {
+            response.archives.push(ArchiveReport {
+                name,
+                relative_path: archive_relative.to_string(),
+                status: "already_extracted".to_string(),
+                error: None,
+            });
+        } else {
+            let result = match ext.as_str() {
+                "zip" => extract_zip(&archive_path, &dest),
+                "7z" => extract_7z(&archive_path, &dest),
+                "rar" => Err(anyhow::anyhow!("rar extraction is not supported yet")),
+                _ => Err(anyhow::anyhow!("unsupported archive type: {ext}")),
+            };
+            match result {
+                Ok(()) => response.archives.push(ArchiveReport {
+                    name,
+                    relative_path: archive_relative.to_string(),
+                    status: "extracted".to_string(),
+                    error: None,
+                }),
+                Err(e) => {
+                    let _ = std::fs::remove_dir_all(&dest);
+                    response.archives.push(ArchiveReport {
+                        name,
+                        relative_path: archive_relative.to_string(),
+                        status: "failed".to_string(),
+                        error: Some(e.to_string()),
+                    });
+                    response.firkin_id = current_id;
+                    return Ok(response);
+                }
+            }
+        }
+
+        // Pin every ROM that landed in this archive's `.extracted/` dir.
+        let existing_titles: HashSet<String> = current
+            .files
+            .iter()
+            .filter(|f| f.kind == "ipfs")
+            .filter_map(|f| f.title.clone())
+            .collect();
+        let existing_by_title: std::collections::HashMap<String, String> = current
+            .files
+            .iter()
+            .filter(|f| f.kind == "ipfs")
+            .filter_map(|f| f.title.clone().map(|t| (t, f.value.clone())))
+            .collect();
+
+        for rom_path in find_roms(&dest) {
+            let relative_path = rom_path
+                .strip_prefix(&output_path)
+                .unwrap_or(&rom_path)
+                .to_string_lossy()
+                .into_owned();
+            let rom_name = rom_path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let size = std::fs::metadata(&rom_path).map(|m| m.len()).unwrap_or(0);
+
+            let cid = if let Some(cid) = existing_by_title.get(&relative_path) {
+                cid.clone()
+            } else {
+                let req = mhaol_ipfs::AddIpfsRequest {
+                    source: rom_path.to_string_lossy().to_string(),
+                    pin: Some(true),
+                };
+                let info = match state.ipfs_manager.add(req).await {
+                    Ok(i) => i,
+                    Err(e) => {
+                        tracing::warn!(
+                            "[rom-extract] skip {}: ipfs add failed: {e}",
+                            rom_path.display()
+                        );
+                        continue;
+                    }
+                };
+                let mime = mime_guess::from_path(&rom_path)
+                    .first()
+                    .map(|m| m.essence_str().to_string())
+                    .unwrap_or_default();
+                let _ = crate::ipfs_pins::record_pin(
+                    state,
+                    info.cid.clone(),
+                    rom_path.to_string_lossy().to_string(),
+                    mime,
+                    info.size,
+                )
+                .await;
+                if !existing_titles.contains(&relative_path) {
+                    new_entries.push(FileEntry {
+                        kind: "ipfs".to_string(),
+                        value: info.cid.clone(),
+                        title: Some(relative_path.clone()),
+                    });
+                }
+                info.cid
+            };
+
+            roms_acc.push(RomEntry {
+                name: rom_name,
+                relative_path,
+                size,
+                cid,
+            });
+        }
+        break;
+    }
+
+    if !found_archive {
+        anyhow::bail!(
+            "archive {} not found under any completed torrent for this firkin",
+            archive_relative
+        );
+    }
+
+    if !new_entries.is_empty() {
+        current_id = rollforward(state, &current, new_entries).await?;
+        if let Some(refreshed) = state
+            .db
+            .select((FIRKIN_TABLE, current_id.as_str()))
+            .await?
+        {
+            current = refreshed;
+            let _ = current;
+        }
+    }
+
+    roms_acc.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    response.firkin_id = current_id;
+    response.roms = roms_acc;
+    Ok(response)
+}
+
 /// Roll the firkin forward with `new_entries` appended to `files`. Returns the
 /// new firkin id (the new CID).
 async fn rollforward(
