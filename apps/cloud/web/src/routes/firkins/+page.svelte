@@ -18,6 +18,7 @@
 		fetchAlbumTrackTitles,
 		fetchTmdbEpisodeTitles,
 		formatSizeBytes,
+		isTorrentSearchableType,
 		matchTorrentsForResult,
 		searchSource,
 		searchTorrents,
@@ -48,6 +49,10 @@
 	let deletingId = $state<string | null>(null);
 	let showAdvanced = $state(false);
 	let activeTab = $state<'covers' | 'results' | 'torrents'>('covers');
+	const torrentSearchable = $derived(isTorrentSearchableType(type));
+	$effect(() => {
+		if (!torrentSearchable && activeTab === 'torrents') activeTab = 'covers';
+	});
 
 	let searching = $state(false);
 	let searchError = $state<string | null>(null);
@@ -151,9 +156,13 @@
 		torrentError = null;
 		selectedResultIndex = null;
 
-		const [sourceOutcome, torrentOutcome] = await Promise.allSettled([
+		const tasks: [Promise<SearchResultItem[]>, Promise<TorrentResultItem[]> | null] = [
 			searchSource(source, type, trimmed),
-			searchTorrents(type, trimmed)
+			torrentSearchable ? searchTorrents(type, trimmed) : null
+		];
+		const [sourceOutcome, torrentOutcome] = await Promise.allSettled([
+			tasks[0],
+			tasks[1] ?? Promise.resolve([] as TorrentResultItem[])
 		]);
 
 		if (sourceOutcome.status === 'fulfilled') {
@@ -163,7 +172,10 @@
 			searchError =
 				sourceOutcome.reason instanceof Error ? sourceOutcome.reason.message : 'Unknown error';
 		}
-		if (torrentOutcome.status === 'fulfilled') {
+		if (!torrentSearchable) {
+			torrentResults = [];
+			torrentError = null;
+		} else if (torrentOutcome.status === 'fulfilled') {
 			torrentResults = torrentOutcome.value;
 		} else {
 			torrentResults = [];
@@ -672,14 +684,16 @@
 				>
 					Search results
 				</button>
-				<button
-					type="button"
-					role="tab"
-					class={classNames('tab', { 'tab-active': activeTab === 'torrents' })}
-					onclick={() => (activeTab = 'torrents')}
-				>
-					Torrents
-				</button>
+				{#if torrentSearchable}
+					<button
+						type="button"
+						role="tab"
+						class={classNames('tab', { 'tab-active': activeTab === 'torrents' })}
+						onclick={() => (activeTab = 'torrents')}
+					>
+						Torrents
+					</button>
+				{/if}
 			</div>
 
 			{#if activeTab === 'covers'}
@@ -691,7 +705,9 @@
 					<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
 						{#each searchResults as result, i (result.externalId ?? i)}
 							{@const cover = result.images[0]?.url}
-							{@const matches = matchTorrentsForResult(result, torrentResults)}
+							{@const matches = torrentSearchable
+								? matchTorrentsForResult(result, torrentResults)
+								: []}
 							<div
 								class={classNames(
 									'flex overflow-hidden rounded-box border bg-base-100 transition',
@@ -730,38 +746,51 @@
 										{/if}
 									</div>
 								</button>
-								<div class="flex flex-1 flex-col border-l border-base-content/10 p-2">
-									<span class="mb-1 text-xs font-semibold text-base-content/60 uppercase">
-										Torrents{matches.length > 0 ? ` (${matches.length})` : ''}
-									</span>
-									{#if matches.length === 0}
-										<p class="text-xs text-base-content/50">No matching torrents.</p>
-									{:else}
-										<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
-											{#each matches as torrent (torrent.infoHash)}
-												<button
-													type="button"
-													class={classNames(
-														'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-200',
-														{ 'opacity-60': addedHashes.has(torrent.magnetLink) }
-													)}
-													onclick={() => pickResultTorrent(result, i, torrent)}
-													title={torrent.title}
-												>
-													<span class="font-medium">{torrent.quality ?? '—'}</span>
-													<span class="text-success">↑{torrent.seeders}</span>
-													<span class="text-warning">↓{torrent.leechers}</span>
-													<span class="text-base-content/60"
-														>{formatSizeBytes(torrent.sizeBytes)}</span
+								{#if torrentSearchable}
+									<div class="flex flex-1 flex-col border-l border-base-content/10 p-2">
+										<span class="mb-1 text-xs font-semibold text-base-content/60 uppercase">
+											Torrents{matches.length > 0 ? ` (${matches.length})` : ''}
+										</span>
+										{#if matches.length === 0}
+											<p class="text-xs text-base-content/50">No matching torrents.</p>
+										{:else}
+											<div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
+												{#each matches as torrent (torrent.infoHash)}
+													<button
+														type="button"
+														class={classNames(
+															'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-200',
+															{ 'opacity-60': addedHashes.has(torrent.magnetLink) }
+														)}
+														onclick={() => pickResultTorrent(result, i, torrent)}
+														title={torrent.title}
 													>
-													{#if addedHashes.has(torrent.magnetLink)}
-														<span class="ml-auto">✓</span>
-													{/if}
-												</button>
-											{/each}
-										</div>
-									{/if}
-								</div>
+														<span class="font-medium">{torrent.quality ?? '—'}</span>
+														<span class="text-success">↑{torrent.seeders}</span>
+														<span class="text-warning">↓{torrent.leechers}</span>
+														<span class="text-base-content/60"
+															>{formatSizeBytes(torrent.sizeBytes)}</span
+														>
+														{#if addedHashes.has(torrent.magnetLink)}
+															<span class="ml-auto">✓</span>
+														{/if}
+													</button>
+												{/each}
+											</div>
+										{/if}
+									</div>
+								{:else}
+									<div
+										class="flex flex-1 flex-col gap-1 border-l border-base-content/10 p-2 text-xs text-base-content/70"
+									>
+										<span class="font-semibold text-base-content/60 uppercase"
+											>Streams ({result.files.length})</span
+										>
+										{#if result.description}
+											<span>{result.description}</span>
+										{/if}
+									</div>
+								{/if}
 							</div>
 						{/each}
 					</div>
@@ -779,41 +808,95 @@
 						No results yet — type a title and click Search.
 					</p>
 				{:else}
-					<div class="overflow-x-auto rounded-box border border-base-content/10">
-						<table class="table table-sm">
-							<thead>
-								<tr>
-									<th>Title</th>
-									<th>Year</th>
-									<th>Artists</th>
-									<th>Images</th>
-									<th>Files</th>
-									<th>Description</th>
-									<th>External ID</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each searchResults as result, i (result.externalId ?? i)}
-									<tr
-										class={classNames('cursor-pointer hover:bg-base-300', {
-											'bg-base-300': selectedResultIndex === i
-										})}
-										onclick={() => applyResult(result, i)}
-									>
-										<td class="font-medium">{result.title}</td>
-										<td class="text-xs">{result.year ?? ''}</td>
-										<td class="text-xs">{result.artists.map((a) => a.name).join(', ')}</td>
-										<td class="text-xs">{result.images.length}</td>
-										<td class="text-xs">{result.files.length}</td>
-										<td class="max-w-md text-xs whitespace-pre-wrap text-base-content/80"
-											>{result.description}</td
+					<div class="flex flex-col gap-3">
+						{#each searchResults as result, i (result.externalId ?? i)}
+							{@const cover = result.images[0]?.url}
+							<button
+								type="button"
+								class={classNames(
+									'flex w-full gap-3 rounded-box border bg-base-100 p-3 text-left transition hover:bg-base-200',
+									{
+										'border-primary': selectedResultIndex === i,
+										'border-base-content/10': selectedResultIndex !== i
+									}
+								)}
+								onclick={() => applyResult(result, i)}
+							>
+								<div class="aspect-[2/3] w-16 shrink-0 overflow-hidden rounded bg-base-300">
+									{#if cover}
+										<img
+											src={cachedImageUrl(cover)}
+											alt={result.title}
+											class="h-full w-full object-cover"
+											loading="lazy"
+										/>
+									{:else}
+										<div
+											class="flex h-full w-full items-center justify-center text-[10px] text-base-content/40"
 										>
-										<td class="font-mono text-xs text-base-content/70">{result.externalId ?? ''}</td
-										>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
+											No image
+										</div>
+									{/if}
+								</div>
+								<div class="flex min-w-0 flex-1 flex-col gap-2">
+									<div class="flex items-baseline gap-2">
+										<span class="truncate text-sm font-semibold">{result.title}</span>
+										{#if result.year}
+											<span class="text-xs text-base-content/60">({result.year})</span>
+										{/if}
+										<span class="ml-auto font-mono text-xs text-base-content/50">
+											{result.externalId ?? ''}
+										</span>
+									</div>
+									{#if result.description}
+										<p class="line-clamp-2 text-xs text-base-content/70">
+											{result.description}
+										</p>
+									{/if}
+									<div class="flex flex-wrap gap-3 text-xs text-base-content/60">
+										<span>
+											{result.images.length}
+											image{result.images.length === 1 ? '' : 's'}
+										</span>
+										<span>
+											{result.files.length}
+											file{result.files.length === 1 ? '' : 's'}
+										</span>
+										<span>
+											{result.artists.length}
+											artist{result.artists.length === 1 ? '' : 's'}
+										</span>
+									</div>
+									{#if result.artists.length > 0}
+										<div class="flex flex-wrap gap-1.5">
+											{#each result.artists as artist (artist.url ?? artist.name)}
+												<span
+													class="inline-flex items-center gap-1.5 rounded-full border border-base-content/10 bg-base-200 py-0.5 pr-2 pl-0.5 text-xs"
+												>
+													{#if artist.imageUrl}
+														<img
+															src={cachedImageUrl(artist.imageUrl)}
+															alt={artist.name}
+															class="h-5 w-5 rounded-full object-cover"
+															loading="lazy"
+														/>
+													{:else}
+														<span
+															class="flex h-5 w-5 items-center justify-center rounded-full bg-base-300 text-[10px] font-semibold text-base-content/60"
+														>
+															{artist.name.charAt(0).toUpperCase()}
+														</span>
+													{/if}
+													<span>{artist.name}</span>
+												</span>
+											{/each}
+										</div>
+									{:else}
+										<p class="text-xs text-base-content/40 italic">No artists extracted.</p>
+									{/if}
+								</div>
+							</button>
+						{/each}
 					</div>
 				{/if}
 			{:else if activeTab === 'torrents'}
