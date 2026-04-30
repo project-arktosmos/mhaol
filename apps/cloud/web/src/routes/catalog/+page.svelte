@@ -288,7 +288,17 @@
 		{:else}
 			<div class="grid grid-cols-6 gap-4">
 				{#each libraryDocuments as doc (doc.id)}
-					<DocumentCard document={doc as CloudDocument} />
+					<a
+						href={`${base}/catalog/${encodeURIComponent(doc.id)}`}
+						class="block no-underline"
+						onclick={(e) => {
+							if ((e.target as HTMLElement).closest('button, summary')) {
+								e.preventDefault();
+							}
+						}}
+					>
+						<DocumentCard document={doc as CloudDocument} />
+					</a>
 				{/each}
 			</div>
 		{/if}
