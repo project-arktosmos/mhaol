@@ -34,6 +34,10 @@
 	const firstIpfsCid = $derived(firkin.files.find((f) => f.type === 'ipfs')?.value ?? null);
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
 	const firkinKind = $derived(addonKind(firkin.addon));
+	const isMusicBrainz = $derived(firkin.addon === 'musicbrainz');
+	const trackFiles = $derived(
+		firkin.files.filter((f) => f.type === 'url' && (f.title ?? '').trim().length > 0)
+	);
 	const isStreamUrlKind = $derived(firkinKind === 'iptv channel' || firkinKind === 'radio station');
 	const firstStreamUrl = $derived(
 		isStreamUrlKind ? (firkin.files.find((f) => f.type === 'url')?.value ?? null) : null
@@ -346,8 +350,86 @@
 		const title = firkin.title;
 		const addon = firkin.addon;
 		const year = firkin.year;
+		if (addon === 'musicbrainz') return;
 		void runTorrentSearch(id, title, addon, year);
 	});
+
+	type Track = { id: string; position: number; title: string; lengthMs: number | null };
+	type TracksStatus = 'idle' | 'loading' | 'done' | 'error';
+	let tracksStatus = $state<TracksStatus>('idle');
+	let tracksError = $state<string | null>(null);
+	let fetchedTracks = $state<Track[]>([]);
+	let tracksRun = 0;
+
+	const displayTracks = $derived.by<Track[]>(() => {
+		if (!isMusicBrainz) return [];
+		if (trackFiles.length > 0) {
+			return trackFiles.map((f, i) => ({
+				id: `file-${i}`,
+				position: i + 1,
+				title: f.title ?? '',
+				lengthMs: null
+			}));
+		}
+		return fetchedTracks;
+	});
+
+	$effect(() => {
+		if (!isMusicBrainz) return;
+		if (trackFiles.length > 0) return;
+		const t = firkin.title;
+		if (!t) return;
+		void loadMusicBrainzTracks(t);
+	});
+
+	async function loadMusicBrainzTracks(albumTitle: string) {
+		const myRun = ++tracksRun;
+		tracksStatus = 'loading';
+		tracksError = null;
+		fetchedTracks = [];
+		try {
+			const searchUrl = `https://musicbrainz.org/ws/2/release-group?query=${encodeURIComponent(albumTitle)}&fmt=json&limit=1`;
+			const searchRes = await fetch(searchUrl, { headers: { Accept: 'application/json' } });
+			if (!searchRes.ok) throw new Error(`MusicBrainz returned ${searchRes.status}`);
+			const searchBody = (await searchRes.json()) as { 'release-groups'?: { id: string }[] };
+			const releaseGroupId = searchBody['release-groups']?.[0]?.id;
+			if (myRun !== tracksRun) return;
+			if (!releaseGroupId) {
+				tracksStatus = 'done';
+				return;
+			}
+			const res = await fetch(
+				`/api/catalog/musicbrainz/release-groups/${encodeURIComponent(releaseGroupId)}/tracks`,
+				{ cache: 'no-store' }
+			);
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const body = (await res.json()) as Track[];
+			if (myRun !== tracksRun) return;
+			fetchedTracks = body;
+			tracksStatus = 'done';
+		} catch (err) {
+			if (myRun !== tracksRun) return;
+			tracksError = err instanceof Error ? err.message : 'Unknown error';
+			tracksStatus = 'error';
+		}
+	}
+
+	function formatDuration(ms: number | null): string {
+		if (!ms || !Number.isFinite(ms) || ms <= 0) return '—';
+		const total = Math.round(ms / 1000);
+		const m = Math.floor(total / 60);
+		const s = total % 60;
+		return `${m}:${s.toString().padStart(2, '0')}`;
+	}
 
 	$effect(() => {
 		if (!hasMagnetFiles || hasIpfsFiles) return;
@@ -735,63 +817,104 @@
 				</div>
 			{/if}
 
-			<div class="card border border-base-content/10 bg-base-200 p-4">
-				<div class="mb-2 flex items-center justify-between gap-2">
-					<h2 class="text-sm font-semibold text-base-content/70 uppercase">
-						Torrent search{torrentMatches.length > 0 ? ` (${torrentMatches.length})` : ''}
-					</h2>
-					<button
-						type="button"
-						class="btn btn-outline btn-xs"
-						onclick={() => runTorrentSearch(firkin.id, firkin.title, firkin.addon, firkin.year)}
-						disabled={torrentStatus === 'searching'}
-					>
-						{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
-					</button>
-				</div>
-				{#if assignError}
-					<div class="mb-2 alert alert-error">
-						<span>{assignError}</span>
-					</div>
-				{/if}
-				{#if torrentStatus === 'searching' && torrentMatches.length === 0}
-					<p class="text-sm text-base-content/60">Searching…</p>
-				{:else if torrentStatus === 'error'}
-					<p class="text-sm text-error">{torrentError ?? 'Failed'}</p>
-				{:else if torrentMatches.length === 0}
-					<p class="text-sm text-base-content/60">No matching torrents.</p>
-				{:else}
-					<div class="flex flex-col gap-1">
-						{#each torrentMatches as torrent (torrent.infoHash)}
-							{@const added = existingHashes.has(torrent.magnetLink)}
-							{@const adding = addingHash === torrent.magnetLink}
+			{#if isMusicBrainz}
+				<div class="card border border-base-content/10 bg-base-200 p-4">
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+							Tracks{displayTracks.length > 0 ? ` (${displayTracks.length})` : ''}
+						</h2>
+						{#if trackFiles.length === 0}
 							<button
 								type="button"
-								class={classNames(
-									'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
-									{ 'opacity-60': added || adding }
-								)}
-								onclick={() => assignTorrent(torrent)}
-								disabled={addingHash !== null || added}
-								title={torrent.title}
+								class="btn btn-outline btn-xs"
+								onclick={() => loadMusicBrainzTracks(firkin.title)}
+								disabled={tracksStatus === 'loading'}
 							>
-								<span class="font-medium">{torrent.quality ?? '—'}</span>
-								<span class="text-success">↑{torrent.seeders}</span>
-								<span class="text-warning">↓{torrent.leechers}</span>
-								<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
-								<span class="truncate text-base-content/70"
-									>{torrent.parsedTitle || torrent.title}</span
-								>
-								{#if added}
-									<span class="ml-auto">✓</span>
-								{:else if adding}
-									<span class="ml-auto">…</span>
-								{/if}
+								{tracksStatus === 'loading' ? 'Loading…' : 'Refresh'}
 							</button>
-						{/each}
+						{/if}
 					</div>
-				{/if}
-			</div>
+					{#if trackFiles.length === 0 && tracksStatus === 'loading' && displayTracks.length === 0}
+						<p class="text-sm text-base-content/60">Loading…</p>
+					{:else if trackFiles.length === 0 && tracksStatus === 'error'}
+						<p class="text-sm text-error">{tracksError ?? 'Failed'}</p>
+					{:else if displayTracks.length === 0}
+						<p class="text-sm text-base-content/60">No tracks found.</p>
+					{:else}
+						<ol class="flex flex-col gap-1">
+							{#each displayTracks as track (track.id || `${track.position}-${track.title}`)}
+								<li
+									class="flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-xs"
+								>
+									<span class="w-6 shrink-0 text-right font-mono text-base-content/60"
+										>{track.position}</span
+									>
+									<span class="flex-1 truncate" title={track.title}>{track.title}</span>
+									<span class="text-base-content/60">{formatDuration(track.lengthMs)}</span>
+								</li>
+							{/each}
+						</ol>
+					{/if}
+				</div>
+			{:else}
+				<div class="card border border-base-content/10 bg-base-200 p-4">
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+							Torrent search{torrentMatches.length > 0 ? ` (${torrentMatches.length})` : ''}
+						</h2>
+						<button
+							type="button"
+							class="btn btn-outline btn-xs"
+							onclick={() => runTorrentSearch(firkin.id, firkin.title, firkin.addon, firkin.year)}
+							disabled={torrentStatus === 'searching'}
+						>
+							{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
+						</button>
+					</div>
+					{#if assignError}
+						<div class="mb-2 alert alert-error">
+							<span>{assignError}</span>
+						</div>
+					{/if}
+					{#if torrentStatus === 'searching' && torrentMatches.length === 0}
+						<p class="text-sm text-base-content/60">Searching…</p>
+					{:else if torrentStatus === 'error'}
+						<p class="text-sm text-error">{torrentError ?? 'Failed'}</p>
+					{:else if torrentMatches.length === 0}
+						<p class="text-sm text-base-content/60">No matching torrents.</p>
+					{:else}
+						<div class="flex flex-col gap-1">
+							{#each torrentMatches as torrent (torrent.infoHash)}
+								{@const added = existingHashes.has(torrent.magnetLink)}
+								{@const adding = addingHash === torrent.magnetLink}
+								<button
+									type="button"
+									class={classNames(
+										'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
+										{ 'opacity-60': added || adding }
+									)}
+									onclick={() => assignTorrent(torrent)}
+									disabled={addingHash !== null || added}
+									title={torrent.title}
+								>
+									<span class="font-medium">{torrent.quality ?? '—'}</span>
+									<span class="text-success">↑{torrent.seeders}</span>
+									<span class="text-warning">↓{torrent.leechers}</span>
+									<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
+									<span class="truncate text-base-content/70"
+										>{torrent.parsedTitle || torrent.title}</span
+									>
+									{#if added}
+										<span class="ml-auto">✓</span>
+									{:else if adding}
+										<span class="ml-auto">…</span>
+									{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{/if}
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">

@@ -19,11 +19,176 @@ const IPTV_ORG_BASE: &str = "https://iptv-org.github.io/api";
 const RADIO_BROWSER_BASE: &str = "https://de1.api.radio-browser.info/json";
 const USER_AGENT: &str = "Mhaol/0.0.1 (https://github.com/project-arktosmos/mhaol)";
 
+/// Every addon known to the cloud. Each addon represents a single content
+/// kind — the kind is implicit in the addon id, so callers no longer need a
+/// separate `type` parameter. `kind` is the firkin kind label this addon
+/// produces (and the `addon` value persisted on a firkin record references
+/// this id directly).
+pub const ADDONS: &[Addon] = &[
+    Addon {
+        id: "tmdb-movie",
+        label: "TMDB Movies",
+        kind: "movie",
+        filter_label: "Genre",
+        has_filter: true,
+        browsable: true,
+    },
+    Addon {
+        id: "tmdb-tv",
+        label: "TMDB TV Shows",
+        kind: "tv show",
+        filter_label: "Genre",
+        has_filter: true,
+        browsable: true,
+    },
+    Addon {
+        id: "musicbrainz",
+        label: "MusicBrainz",
+        kind: "album",
+        filter_label: "Genre",
+        has_filter: true,
+        browsable: true,
+    },
+    Addon {
+        id: "retroachievements",
+        label: "RetroAchievements",
+        kind: "game",
+        filter_label: "Console",
+        has_filter: true,
+        browsable: true,
+    },
+    Addon {
+        id: "youtube-video",
+        label: "YouTube Videos",
+        kind: "youtube video",
+        filter_label: "Region",
+        has_filter: true,
+        browsable: true,
+    },
+    Addon {
+        id: "youtube-channel",
+        label: "YouTube Channels",
+        kind: "youtube channel",
+        filter_label: "Region",
+        has_filter: true,
+        browsable: true,
+    },
+    Addon {
+        id: "openlibrary",
+        label: "OpenLibrary",
+        kind: "book",
+        filter_label: "Subject",
+        has_filter: true,
+        browsable: true,
+    },
+    Addon {
+        id: "iptv",
+        label: "IPTV",
+        kind: "iptv channel",
+        filter_label: "Category",
+        has_filter: true,
+        browsable: true,
+    },
+    Addon {
+        id: "radio",
+        label: "Radio",
+        kind: "radio station",
+        filter_label: "Tag",
+        has_filter: true,
+        browsable: true,
+    },
+    // Subtitle / lyric lookups — valid firkin addons but not browsable.
+    Addon {
+        id: "wyzie-subs-movie",
+        label: "Wyzie Subs (Movies)",
+        kind: "movie",
+        filter_label: "Filter",
+        has_filter: false,
+        browsable: false,
+    },
+    Addon {
+        id: "wyzie-subs-tv",
+        label: "Wyzie Subs (TV)",
+        kind: "tv show",
+        filter_label: "Filter",
+        has_filter: false,
+        browsable: false,
+    },
+    Addon {
+        id: "lrclib",
+        label: "LRCLIB",
+        kind: "album",
+        filter_label: "Filter",
+        has_filter: false,
+        browsable: false,
+    },
+    // Local addons — used by libraries to declare which media kinds they
+    // contain, and as the addon value on firkins created by library scans.
+    Addon {
+        id: "local-movie",
+        label: "Local Movies",
+        kind: "movie",
+        filter_label: "Filter",
+        has_filter: false,
+        browsable: false,
+    },
+    Addon {
+        id: "local-tv",
+        label: "Local TV Shows",
+        kind: "tv show",
+        filter_label: "Filter",
+        has_filter: false,
+        browsable: false,
+    },
+    Addon {
+        id: "local-album",
+        label: "Local Albums",
+        kind: "album",
+        filter_label: "Filter",
+        has_filter: false,
+        browsable: false,
+    },
+    Addon {
+        id: "local-book",
+        label: "Local Books",
+        kind: "book",
+        filter_label: "Filter",
+        has_filter: false,
+        browsable: false,
+    },
+    Addon {
+        id: "local-game",
+        label: "Local Games",
+        kind: "game",
+        filter_label: "Filter",
+        has_filter: false,
+        browsable: false,
+    },
+];
+
+#[derive(Clone)]
+pub struct Addon {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub kind: &'static str,
+    pub filter_label: &'static str,
+    pub has_filter: bool,
+    pub browsable: bool,
+}
+
+pub fn is_known_addon(id: &str) -> bool {
+    ADDONS.iter().any(|a| a.id == id)
+}
+
 pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/sources", get(list_sources))
         .route("/{addon}/popular", get(popular))
         .route("/{addon}/genres", get(genres))
+        .route(
+            "/musicbrainz/release-groups/{id}/tracks",
+            get(musicbrainz_tracks),
+        )
 }
 
 #[derive(Serialize)]
@@ -53,16 +218,19 @@ struct CatalogGenre {
 }
 
 #[derive(Serialize)]
-struct CatalogTypeInfo {
-    id: &'static str,
-    label: &'static str,
+struct CatalogTrack {
+    id: String,
+    position: i64,
+    title: String,
+    #[serde(rename = "lengthMs")]
+    length_ms: Option<i64>,
 }
 
 #[derive(Serialize)]
 struct CatalogSource {
     id: &'static str,
     label: &'static str,
-    types: Vec<CatalogTypeInfo>,
+    kind: &'static str,
     #[serde(rename = "filterLabel")]
     filter_label: &'static str,
     #[serde(rename = "hasFilter")]
@@ -70,126 +238,23 @@ struct CatalogSource {
 }
 
 async fn list_sources() -> Json<Vec<CatalogSource>> {
-    Json(vec![
-        CatalogSource {
-            id: "tmdb",
-            label: "TMDB",
-            types: vec![
-                CatalogTypeInfo {
-                    id: "movie",
-                    label: "Movies",
-                },
-                CatalogTypeInfo {
-                    id: "tv",
-                    label: "TV Shows",
-                },
-                CatalogTypeInfo {
-                    id: "image",
-                    label: "Images",
-                },
-            ],
-            filter_label: "Genre",
-            has_filter: true,
-        },
-        CatalogSource {
-            id: "musicbrainz",
-            label: "MusicBrainz",
-            types: vec![CatalogTypeInfo {
-                id: "album",
-                label: "Albums",
-            }],
-            filter_label: "Genre",
-            has_filter: true,
-        },
-        CatalogSource {
-            id: "retroachievements",
-            label: "RetroAchievements",
-            types: vec![CatalogTypeInfo {
-                id: "game",
-                label: "Games",
-            }],
-            filter_label: "Console",
-            has_filter: true,
-        },
-        CatalogSource {
-            id: "youtube",
-            label: "YouTube",
-            types: vec![
-                CatalogTypeInfo {
-                    id: "video",
-                    label: "Videos",
-                },
-                CatalogTypeInfo {
-                    id: "channel",
-                    label: "Channels",
-                },
-            ],
-            filter_label: "Region",
-            has_filter: true,
-        },
-        CatalogSource {
-            id: "lrclib",
-            label: "LRCLIB",
-            types: vec![CatalogTypeInfo {
-                id: "album",
-                label: "Albums",
-            }],
-            filter_label: "Filter",
-            has_filter: false,
-        },
-        CatalogSource {
-            id: "openlibrary",
-            label: "OpenLibrary",
-            types: vec![CatalogTypeInfo {
-                id: "book",
-                label: "Books",
-            }],
-            filter_label: "Subject",
-            has_filter: true,
-        },
-        CatalogSource {
-            id: "wyzie-subs",
-            label: "Wyzie Subs",
-            types: vec![
-                CatalogTypeInfo {
-                    id: "movie",
-                    label: "Movies",
-                },
-                CatalogTypeInfo {
-                    id: "tv",
-                    label: "TV Shows",
-                },
-            ],
-            filter_label: "Filter",
-            has_filter: false,
-        },
-        CatalogSource {
-            id: "iptv",
-            label: "IPTV",
-            types: vec![CatalogTypeInfo {
-                id: "channel",
-                label: "Channels",
-            }],
-            filter_label: "Category",
-            has_filter: true,
-        },
-        CatalogSource {
-            id: "radio",
-            label: "Radio",
-            types: vec![CatalogTypeInfo {
-                id: "station",
-                label: "Stations",
-            }],
-            filter_label: "Tag",
-            has_filter: true,
-        },
-    ])
+    Json(
+        ADDONS
+            .iter()
+            .filter(|a| a.browsable)
+            .map(|a| CatalogSource {
+                id: a.id,
+                label: a.label,
+                kind: a.kind,
+                filter_label: a.filter_label,
+                has_filter: a.has_filter,
+            })
+            .collect(),
+    )
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PopularQuery {
-    #[serde(default)]
-    pub r#type: Option<String>,
     #[serde(default)]
     pub filter: Option<String>,
     #[serde(default)]
@@ -197,10 +262,7 @@ pub struct PopularQuery {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GenresQuery {
-    #[serde(default)]
-    pub r#type: Option<String>,
-}
+pub struct GenresQuery {}
 
 fn err(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
     (status, Json(serde_json::json!({ "error": message.into() })))
@@ -213,14 +275,16 @@ async fn popular(
 ) -> Result<Json<CatalogPage>, (StatusCode, Json<serde_json::Value>)> {
     let page = q.page.unwrap_or(1).max(1);
     match addon.as_str() {
-        "tmdb" => tmdb_popular(q.r#type.as_deref(), q.filter.as_deref(), page).await,
-        "musicbrainz" => musicbrainz_popular(q.r#type.as_deref(), q.filter.as_deref(), page).await,
+        "tmdb-movie" => tmdb_popular(false, q.filter.as_deref(), page).await,
+        "tmdb-tv" => tmdb_popular(true, q.filter.as_deref(), page).await,
+        "musicbrainz" => musicbrainz_popular(q.filter.as_deref(), page).await,
         "openlibrary" => openlibrary_popular(q.filter.as_deref(), page).await,
         "retroachievements" => retroachievements_popular(q.filter.as_deref(), page).await,
-        "youtube" => youtube_popular(q.r#type.as_deref(), q.filter.as_deref(), page).await,
+        "youtube-video" => youtube_popular(false, q.filter.as_deref(), page).await,
+        "youtube-channel" => youtube_popular(true, q.filter.as_deref(), page).await,
         "iptv" => iptv_popular(q.filter.as_deref(), page).await,
         "radio" => radio_popular(q.filter.as_deref(), page).await,
-        "lrclib" | "wyzie-subs" => Ok(empty_page(page)),
+        "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page)),
         _ => Err(err(
             StatusCode::NOT_FOUND,
             format!("addon \"{addon}\" is not supported"),
@@ -232,17 +296,18 @@ async fn popular(
 async fn genres(
     State(_state): State<CloudState>,
     Path(addon): Path<String>,
-    Query(q): Query<GenresQuery>,
+    Query(_q): Query<GenresQuery>,
 ) -> Result<Json<Vec<CatalogGenre>>, (StatusCode, Json<serde_json::Value>)> {
     match addon.as_str() {
-        "tmdb" => tmdb_genres(q.r#type.as_deref()).await,
+        "tmdb-movie" => tmdb_genres(false).await,
+        "tmdb-tv" => tmdb_genres(true).await,
         "musicbrainz" => Ok(static_music_genres()),
         "openlibrary" => Ok(static_openlibrary_subjects()),
         "retroachievements" => Ok(static_ra_consoles()),
-        "youtube" => Ok(static_youtube_regions()),
+        "youtube-video" | "youtube-channel" => Ok(static_youtube_regions()),
         "iptv" => Ok(static_iptv_categories()),
         "radio" => Ok(static_radio_tags()),
-        "lrclib" | "wyzie-subs" => Ok(Vec::new()),
+        "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(Vec::new()),
         _ => Err(err(
             StatusCode::NOT_FOUND,
             format!("addon \"{addon}\" is not supported"),
@@ -262,7 +327,7 @@ fn empty_page(page: i64) -> CatalogPage {
 // ---------- TMDB ----------
 
 async fn tmdb_popular(
-    media_type: Option<&str>,
+    is_tv: bool,
     genre: Option<&str>,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
@@ -273,37 +338,26 @@ async fn tmdb_popular(
             "TMDB_API_KEY env var is not set on the cloud server",
         ));
     }
-    let raw_kind = media_type.unwrap_or("movie");
-    // image reuses popular movies.
-    let kind = match raw_kind {
-        "tv" => "tv",
-        _ => "movie",
-    };
-    let endpoint = match kind {
-        "tv" => {
-            if let Some(g) = genre.filter(|s| !s.is_empty()) {
-                format!(
-                    "/discover/tv?api_key={}&page={}&with_genres={}&include_adult=false",
-                    api_key,
-                    page,
-                    urlencoding(g)
-                )
-            } else {
-                format!("/tv/popular?api_key={}&page={}", api_key, page)
-            }
+    let endpoint = if is_tv {
+        if let Some(g) = genre.filter(|s| !s.is_empty()) {
+            format!(
+                "/discover/tv?api_key={}&page={}&with_genres={}&include_adult=false",
+                api_key,
+                page,
+                urlencoding(g)
+            )
+        } else {
+            format!("/tv/popular?api_key={}&page={}", api_key, page)
         }
-        _ => {
-            if let Some(g) = genre.filter(|s| !s.is_empty()) {
-                format!(
-                    "/discover/movie?api_key={}&page={}&with_genres={}&include_adult=false",
-                    api_key,
-                    page,
-                    urlencoding(g)
-                )
-            } else {
-                format!("/movie/popular?api_key={}&page={}", api_key, page)
-            }
-        }
+    } else if let Some(g) = genre.filter(|s| !s.is_empty()) {
+        format!(
+            "/discover/movie?api_key={}&page={}&with_genres={}&include_adult=false",
+            api_key,
+            page,
+            urlencoding(g)
+        )
+    } else {
+        format!("/movie/popular?api_key={}&page={}", api_key, page)
     };
     let url = format!("{}{}", TMDB_BASE, endpoint);
     let payload: serde_json::Value = http_get_json(&url, &[("Accept", "application/json")]).await?;
@@ -366,7 +420,7 @@ fn tmdb_to_item(r: &serde_json::Value) -> CatalogItem {
 }
 
 async fn tmdb_genres(
-    media_type: Option<&str>,
+    is_tv: bool,
 ) -> Result<Vec<CatalogGenre>, (StatusCode, Json<serde_json::Value>)> {
     let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
@@ -375,12 +429,7 @@ async fn tmdb_genres(
             "TMDB_API_KEY env var is not set on the cloud server",
         ));
     }
-    let raw_kind = media_type.unwrap_or("movie");
-    let kind = match raw_kind {
-        "tv" => "tv",
-        _ => "movie",
-    };
-    let path = if kind == "tv" {
+    let path = if is_tv {
         "/genre/tv/list"
     } else {
         "/genre/movie/list"
@@ -437,7 +486,6 @@ fn static_music_genres() -> Vec<CatalogGenre> {
 }
 
 async fn musicbrainz_popular(
-    _media_type: Option<&str>,
     genre: Option<&str>,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
@@ -473,6 +521,72 @@ async fn musicbrainz_popular(
         page,
         total_pages: total_pages.max(1),
     })
+}
+
+async fn musicbrainz_tracks(
+    Path(id): Path<String>,
+) -> Result<Json<Vec<CatalogTrack>>, (StatusCode, Json<serde_json::Value>)> {
+    if id.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "release-group id is required"));
+    }
+    let url = format!(
+        "{}/release?release-group={}&inc=recordings&fmt=json&limit=1",
+        MUSICBRAINZ_BASE,
+        urlencoding(&id)
+    );
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+
+    let mut out: Vec<CatalogTrack> = Vec::new();
+    if let Some(release) = payload
+        .get("releases")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+    {
+        if let Some(media) = release.get("media").and_then(|v| v.as_array()) {
+            for medium in media {
+                let Some(tracks) = medium.get("tracks").and_then(|v| v.as_array()) else {
+                    continue;
+                };
+                for t in tracks {
+                    let track_id = t
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let position = t.get("position").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let title = t
+                        .get("title")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| {
+                            t.get("recording")
+                                .and_then(|r| r.get("title"))
+                                .and_then(|v| v.as_str())
+                        })
+                        .unwrap_or("")
+                        .to_string();
+                    let length_ms = t
+                        .get("length")
+                        .and_then(|v| v.as_i64())
+                        .or_else(|| {
+                            t.get("recording")
+                                .and_then(|r| r.get("length"))
+                                .and_then(|v| v.as_i64())
+                        });
+                    out.push(CatalogTrack {
+                        id: track_id,
+                        position,
+                        title,
+                        length_ms,
+                    });
+                }
+            }
+        }
+    }
+    Ok(Json(out))
 }
 
 fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
@@ -837,7 +951,7 @@ fn static_youtube_regions() -> Vec<CatalogGenre> {
 }
 
 async fn youtube_popular(
-    media_type: Option<&str>,
+    want_channel: bool,
     region: Option<&str>,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
@@ -859,12 +973,11 @@ async fn youtube_popular(
     let limit: usize = 24;
     let total_pages = ((arr.len() as f64) / (limit as f64)).ceil() as i64;
     let offset = ((page - 1).max(0) as usize) * limit;
-    let kind = media_type.unwrap_or("video");
     let items: Vec<CatalogItem> = arr
         .iter()
         .skip(offset)
         .take(limit)
-        .map(|item| youtube_to_item(item, kind))
+        .map(|item| youtube_to_item(item, want_channel))
         .collect();
     Ok(CatalogPage {
         items,
@@ -873,8 +986,7 @@ async fn youtube_popular(
     })
 }
 
-fn youtube_to_item(item: &serde_json::Value, kind: &str) -> CatalogItem {
-    let want_channel = kind == "channel";
+fn youtube_to_item(item: &serde_json::Value, want_channel: bool) -> CatalogItem {
     let raw_id = if want_channel {
         item.get("uploaderUrl").and_then(|v| v.as_str()).map(|s| {
             s.trim_start_matches('/')

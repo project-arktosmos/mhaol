@@ -5,9 +5,9 @@
 	import { cachedImageUrl } from '$lib/image-cache';
 	import {
 		firkinsService,
+		addonKind,
+		type FirkinAddon,
 		type Firkin,
-		type FirkinSource,
-		type FirkinType,
 		type ImageMeta
 	} from '$lib/firkins.service';
 	import {
@@ -20,45 +20,8 @@
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
 
-	function mapToFirkinType(addonId: string, typeId: string): FirkinType {
-		if (addonId === 'tmdb') {
-			if (typeId === 'tv') return 'tv show';
-			if (typeId === 'image') return 'image';
-			return 'movie';
-		}
-		if (addonId === 'musicbrainz') return 'album';
-		if (addonId === 'retroachievements') return 'game';
-		if (addonId === 'youtube') {
-			if (typeId === 'channel') return 'youtube channel';
-			return 'youtube video';
-		}
-		if (addonId === 'lrclib') return 'album';
-		if (addonId === 'openlibrary') return 'book';
-		if (addonId === 'wyzie-subs') {
-			if (typeId === 'tv') return 'tv show';
-			return 'movie';
-		}
-		if (addonId === 'iptv') return 'iptv channel';
-		if (addonId === 'radio') return 'radio station';
-		return 'movie';
-	}
-
-	function mapToFirkinSource(addonId: string): FirkinSource {
-		if (addonId === 'tmdb') return 'tmdb';
-		if (addonId === 'musicbrainz') return 'musicbrainz';
-		if (addonId === 'retroachievements') return 'retroachievements';
-		if (addonId === 'youtube') return 'youtube';
-		if (addonId === 'lrclib') return 'lrclib';
-		if (addonId === 'openlibrary') return 'openlibrary';
-		if (addonId === 'wyzie-subs') return 'wyzie-subs';
-		if (addonId === 'iptv') return 'iptv';
-		if (addonId === 'radio') return 'radio';
-		return 'tmdb';
-	}
-
 	const params = $derived(pageStore.url.searchParams);
 	const addon = $derived(params.get('addon') ?? '');
-	const catalogType = $derived(params.get('type') ?? '');
 	const itemId = $derived(params.get('id') ?? '');
 	const title = $derived(params.get('title') ?? '');
 	const yearParam = $derived(params.get('year'));
@@ -69,8 +32,8 @@
 	const posterUrl = $derived(params.get('posterUrl'));
 	const backdropUrl = $derived(params.get('backdropUrl'));
 
-	const firkinType = $derived<FirkinType>(mapToFirkinType(addon, catalogType));
-	const firkinSource = $derived<FirkinSource>(mapToFirkinSource(addon));
+	const kindLabel = $derived(addonKind(addon) ?? '');
+	const isMusicBrainz = $derived(addon === 'musicbrainz');
 
 	const images = $derived<ImageMeta[]>(
 		[posterUrl, backdropUrl]
@@ -79,15 +42,14 @@
 	);
 
 	const virtualFirkin = $derived<CloudFirkin>({
-		id: `virtual:${addon}:${catalogType}:${itemId}`,
+		id: `virtual:${addon}:${itemId}`,
 		title,
 		artists: [],
 		description,
 		images,
 		files: [],
 		year,
-		type: firkinType,
-		source: firkinSource,
+		addon,
 		created_at: '',
 		updated_at: '',
 		version: 0,
@@ -102,21 +64,76 @@
 	let assignError = $state<string | null>(null);
 	let searchRun = 0;
 
+	type Track = { id: string; position: number; title: string; lengthMs: number | null };
+	type TracksStatus = 'idle' | 'loading' | 'done' | 'error';
+	let tracksStatus = $state<TracksStatus>('idle');
+	let tracksError = $state<string | null>(null);
+	let tracks = $state<Track[]>([]);
+	let tracksRun = 0;
+
 	$effect(() => {
 		if (!title) return;
+		if (isMusicBrainz) {
+			const id = itemId;
+			void loadMusicBrainzTracks(id);
+			return;
+		}
 		const t = title;
-		const k = firkinType;
+		const a = addon;
 		const y = year;
-		void runTorrentSearch(t, k, y);
+		void runTorrentSearch(t, a, y);
 	});
 
-	async function runTorrentSearch(title: string, kind: FirkinType, year: number | null) {
+	async function loadMusicBrainzTracks(releaseGroupId: string) {
+		const myRun = ++tracksRun;
+		tracksStatus = 'loading';
+		tracksError = null;
+		tracks = [];
+		if (!releaseGroupId) {
+			tracksStatus = 'done';
+			return;
+		}
+		try {
+			const res = await fetch(
+				`/api/catalog/musicbrainz/release-groups/${encodeURIComponent(releaseGroupId)}/tracks`,
+				{ cache: 'no-store' }
+			);
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const body = (await res.json()) as Track[];
+			if (myRun !== tracksRun) return;
+			tracks = body;
+			tracksStatus = 'done';
+		} catch (err) {
+			if (myRun !== tracksRun) return;
+			tracksError = err instanceof Error ? err.message : 'Unknown error';
+			tracksStatus = 'error';
+		}
+	}
+
+	function formatDuration(ms: number | null): string {
+		if (!ms || !Number.isFinite(ms) || ms <= 0) return '—';
+		const total = Math.round(ms / 1000);
+		const m = Math.floor(total / 60);
+		const s = total % 60;
+		return `${m}:${s.toString().padStart(2, '0')}`;
+	}
+
+	async function runTorrentSearch(title: string, addon: string, year: number | null) {
 		const myRun = ++searchRun;
 		torrentStatus = 'searching';
 		torrentError = null;
 		torrentMatches = [];
 		try {
-			const torrents = await searchTorrents(kind, title);
+			const torrents = await searchTorrents(addon, title);
 			if (myRun !== searchRun) return;
 			const matches = matchTorrentsForResult(
 				{ title, description: '', artists: [], images: [], files: [], year, raw: null },
@@ -162,8 +179,7 @@
 				images,
 				files: [{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }],
 				year,
-				type: firkinType,
-				source: firkinSource
+				addon: addon as FirkinAddon
 			});
 			await startTorrentDownload(torrent.magnetLink);
 			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
@@ -197,8 +213,10 @@
 			<a class="text-xs text-base-content/60 hover:underline" href="{base}/catalog">← Catalog</a>
 			<h1 class="text-2xl font-bold [overflow-wrap:anywhere]">{title}</h1>
 			<p class="text-sm text-base-content/70">
-				<span class="badge badge-outline badge-sm">{firkinType}</span>
-				<span class="badge badge-outline badge-sm">{firkinSource}</span>
+				<span class="badge badge-outline badge-sm">{addon}</span>
+				{#if kindLabel}
+					<span class="badge badge-outline badge-sm">{kindLabel}</span>
+				{/if}
 				{#if year !== null && year !== undefined && Number.isFinite(year)}
 					<span class="badge badge-outline badge-sm">{year}</span>
 				{/if}
@@ -256,60 +274,99 @@
 				</div>
 			{/if}
 
-			<div class="card border border-base-content/10 bg-base-200 p-4">
-				<div class="mb-2 flex items-center justify-between gap-2">
-					<h2 class="text-sm font-semibold text-base-content/70 uppercase">
-						Torrent search{torrentMatches.length > 0 ? ` (${torrentMatches.length})` : ''}
-					</h2>
-					<button
-						type="button"
-						class="btn btn-outline btn-xs"
-						onclick={() => runTorrentSearch(title, firkinType, year)}
-						disabled={torrentStatus === 'searching'}
-					>
-						{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
-					</button>
-				</div>
-				{#if assignError}
-					<div class="mb-2 alert alert-error">
-						<span>{assignError}</span>
+			{#if isMusicBrainz}
+				<div class="card border border-base-content/10 bg-base-200 p-4">
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+							Tracks{tracks.length > 0 ? ` (${tracks.length})` : ''}
+						</h2>
+						<button
+							type="button"
+							class="btn btn-outline btn-xs"
+							onclick={() => loadMusicBrainzTracks(itemId)}
+							disabled={tracksStatus === 'loading'}
+						>
+							{tracksStatus === 'loading' ? 'Loading…' : 'Refresh'}
+						</button>
 					</div>
-				{/if}
-				{#if torrentStatus === 'searching' && torrentMatches.length === 0}
-					<p class="text-sm text-base-content/60">Searching…</p>
-				{:else if torrentStatus === 'error'}
-					<p class="text-sm text-error">{torrentError ?? 'Failed'}</p>
-				{:else if torrentMatches.length === 0}
-					<p class="text-sm text-base-content/60">No matching torrents.</p>
-				{:else}
-					<div class="flex flex-col gap-1">
-						{#each torrentMatches as torrent (torrent.infoHash)}
-							{@const adding = addingHash === torrent.magnetLink}
-							<button
-								type="button"
-								class={classNames(
-									'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
-									{ 'opacity-60': adding }
-								)}
-								onclick={() => assignTorrent(torrent)}
-								disabled={addingHash !== null}
-								title={torrent.title}
-							>
-								<span class="font-medium">{torrent.quality ?? '—'}</span>
-								<span class="text-success">↑{torrent.seeders}</span>
-								<span class="text-warning">↓{torrent.leechers}</span>
-								<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
-								<span class="truncate text-base-content/70"
-									>{torrent.parsedTitle || torrent.title}</span
+					{#if tracksStatus === 'loading' && tracks.length === 0}
+						<p class="text-sm text-base-content/60">Loading…</p>
+					{:else if tracksStatus === 'error'}
+						<p class="text-sm text-error">{tracksError ?? 'Failed'}</p>
+					{:else if tracks.length === 0}
+						<p class="text-sm text-base-content/60">No tracks found.</p>
+					{:else}
+						<ol class="flex flex-col gap-1">
+							{#each tracks as track (track.id || `${track.position}-${track.title}`)}
+								<li
+									class="flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-xs"
 								>
-								{#if adding}
-									<span class="ml-auto">…</span>
-								{/if}
-							</button>
-						{/each}
+									<span class="w-6 shrink-0 text-right font-mono text-base-content/60"
+										>{track.position}</span
+									>
+									<span class="flex-1 truncate" title={track.title}>{track.title}</span>
+									<span class="text-base-content/60">{formatDuration(track.lengthMs)}</span>
+								</li>
+							{/each}
+						</ol>
+					{/if}
+				</div>
+			{:else}
+				<div class="card border border-base-content/10 bg-base-200 p-4">
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+							Torrent search{torrentMatches.length > 0 ? ` (${torrentMatches.length})` : ''}
+						</h2>
+						<button
+							type="button"
+							class="btn btn-outline btn-xs"
+							onclick={() => runTorrentSearch(title, addon, year)}
+							disabled={torrentStatus === 'searching'}
+						>
+							{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
+						</button>
 					</div>
-				{/if}
-			</div>
+					{#if assignError}
+						<div class="mb-2 alert alert-error">
+							<span>{assignError}</span>
+						</div>
+					{/if}
+					{#if torrentStatus === 'searching' && torrentMatches.length === 0}
+						<p class="text-sm text-base-content/60">Searching…</p>
+					{:else if torrentStatus === 'error'}
+						<p class="text-sm text-error">{torrentError ?? 'Failed'}</p>
+					{:else if torrentMatches.length === 0}
+						<p class="text-sm text-base-content/60">No matching torrents.</p>
+					{:else}
+						<div class="flex flex-col gap-1">
+							{#each torrentMatches as torrent (torrent.infoHash)}
+								{@const adding = addingHash === torrent.magnetLink}
+								<button
+									type="button"
+									class={classNames(
+										'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
+										{ 'opacity-60': adding }
+									)}
+									onclick={() => assignTorrent(torrent)}
+									disabled={addingHash !== null}
+									title={torrent.title}
+								>
+									<span class="font-medium">{torrent.quality ?? '—'}</span>
+									<span class="text-success">↑{torrent.seeders}</span>
+									<span class="text-warning">↓{torrent.leechers}</span>
+									<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
+									<span class="truncate text-base-content/70"
+										>{torrent.parsedTitle || torrent.title}</span
+									>
+									{#if adding}
+										<span class="ml-auto">…</span>
+									{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{/if}
 		</section>
 	</div>
 </div>
