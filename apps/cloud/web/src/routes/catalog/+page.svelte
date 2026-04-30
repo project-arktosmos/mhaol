@@ -347,12 +347,17 @@
 				)}
 			>
 				{#each items as item (item.id)}
-					<div class="flex flex-col gap-2">
+					<a
+						href={virtualHref(item)}
+						class="block no-underline"
+						onclick={(e) => {
+							if ((e.target as HTMLElement).closest('button, summary')) {
+								e.preventDefault();
+							}
+						}}
+					>
 						<DocumentCard document={virtualDocument(item)} />
-						<a class="link text-center text-xs link-primary" href={virtualHref(item)}>
-							View details →
-						</a>
-					</div>
+					</a>
 				{/each}
 			</div>
 		{/if}
