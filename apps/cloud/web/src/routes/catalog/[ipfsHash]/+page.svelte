@@ -11,7 +11,13 @@
 	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import type { PlayableFile } from 'ui-lib/types/player.type';
 	import { cachedImageUrl } from '$lib/image-cache';
-	import { firkinsService, addonKind, type Firkin, type FirkinAddon } from '$lib/firkins.service';
+	import {
+		firkinsService,
+		addonKind,
+		type Firkin,
+		type FirkinAddon,
+		type FileEntry
+	} from '$lib/firkins.service';
 	import {
 		formatSizeBytes,
 		matchTorrentsForResult,
@@ -490,6 +496,13 @@
 			.map((a) => a.name)
 			.filter((n) => n && n.length > 0)
 			.join(', ');
+		// Snapshot the firkin's files once and thread the accumulator through
+		// the loop. Re-reading `firkin.files` between sequential PUTs is
+		// unsafe: the previous iteration's `data.firkin = updated` does not
+		// reliably propagate through the `$derived` before the next snapshot,
+		// so each PUT was being built from stale files and clobbering the
+		// previous PUT — leaving only the last-resolved track on the firkin.
+		let workingFiles: FileEntry[] = firkin.files.map((f) => ({ ...f }));
 		for (let i = 0; i < tracks.length; i++) {
 			if (myRun !== tracksRun) return;
 			const t = tracks[i];
@@ -511,7 +524,7 @@
 			}
 			if (url) {
 				try {
-					await persistTrackUrl(t.title, url);
+					workingFiles = await persistTrackUrl(workingFiles, t.title, url);
 				} catch (err) {
 					console.warn('[catalog detail] failed to persist track url', err);
 				}
@@ -519,8 +532,12 @@
 		}
 	}
 
-	async function persistTrackUrl(trackTitle: string, url: string): Promise<void> {
-		const next = firkin.files.map((f) => ({ ...f }));
+	async function persistTrackUrl(
+		currentFiles: FileEntry[],
+		trackTitle: string,
+		url: string
+	): Promise<FileEntry[]> {
+		const next = currentFiles.map((f) => ({ ...f }));
 		const idx = next.findIndex(
 			(f) => f.type === 'url' && (f.title ?? '').trim() === trackTitle.trim()
 		);
@@ -546,6 +563,7 @@
 		}
 		const updated = (await res.json()) as Firkin;
 		data.firkin = updated;
+		return updated.files;
 	}
 
 	function formatDuration(ms: number | null): string {
