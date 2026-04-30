@@ -95,7 +95,8 @@ export async function resolveYouTubeUrlForTrack(
 	const query = parts.join(' ');
 	const items = await searchYouTube(query);
 	const match = pickBestYouTubeMatch(items, trackTitle, artist, albumTitle, trackDurationMs);
-	return match?.url ?? null;
+	if (!match) return null;
+	return match.videoId ? `https://www.youtube.com/watch?v=${match.videoId}` : null;
 }
 
 function pickAudioFormat(result: YouTubeStreamUrlResult): YouTubeStreamFormat | null {
