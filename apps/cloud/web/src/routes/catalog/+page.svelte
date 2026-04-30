@@ -4,6 +4,7 @@
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import { CONSOLE_IMAGES } from 'assets/game-consoles';
 	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import {
 		listSources,
@@ -283,11 +284,20 @@
 					class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 				>
 					{#each genres as console (console.id)}
+						{@const consoleImage = CONSOLE_IMAGES[Number(console.id)]}
 						<button
 							type="button"
-							class="card flex aspect-square items-center justify-center border border-base-content/10 bg-base-200 p-4 text-center transition hover:bg-base-300"
+							class="card flex aspect-square flex-col items-center justify-center gap-2 border border-base-content/10 bg-base-200 p-4 text-center transition hover:bg-base-300"
 							onclick={() => selectConsole(console.id)}
 						>
+							{#if consoleImage}
+								<img
+									src={consoleImage}
+									alt={console.name}
+									class="h-2/3 w-full object-contain"
+									loading="lazy"
+								/>
+							{/if}
 							<span class="text-sm font-semibold">{console.name}</span>
 						</button>
 					{/each}

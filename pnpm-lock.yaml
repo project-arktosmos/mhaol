@@ -23,6 +23,9 @@ importers:
       addons:
         specifier: workspace:*
         version: link:../../../packages/addons
+      assets:
+        specifier: workspace:*
+        version: link:../../../packages/assets
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
