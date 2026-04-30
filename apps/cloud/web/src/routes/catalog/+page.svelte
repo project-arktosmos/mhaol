@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
 	import { CONSOLE_IMAGES } from 'assets/game-consoles';
+	import { CONSOLE_WASM_STATUS } from 'addons/retroachievements/types';
 	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import {
 		listSources,
@@ -285,11 +286,27 @@
 				>
 					{#each genres as console (console.id)}
 						{@const consoleImage = CONSOLE_IMAGES[Number(console.id)]}
+						{@const wasmStatus = CONSOLE_WASM_STATUS[Number(console.id)]}
 						<button
 							type="button"
-							class="card flex aspect-square flex-col items-center justify-center gap-2 border border-base-content/10 bg-base-200 p-4 text-center transition hover:bg-base-300"
+							class="card relative flex aspect-square flex-col items-center justify-center gap-2 border border-base-content/10 bg-base-200 p-4 text-center transition hover:bg-base-300"
 							onclick={() => selectConsole(console.id)}
 						>
+							<span
+								class={classNames('absolute top-2 right-2 h-2.5 w-2.5 rounded-full', {
+									'bg-success': wasmStatus === 'yes',
+									'bg-warning': wasmStatus === 'experimental',
+									'bg-error': wasmStatus === 'no',
+									'bg-base-content/20': !wasmStatus
+								})}
+								title={wasmStatus === 'yes'
+									? 'WASM emulator available'
+									: wasmStatus === 'experimental'
+										? 'WASM emulator (experimental)'
+										: wasmStatus === 'no'
+											? 'No WASM emulator'
+											: 'WASM emulator status unknown'}
+							></span>
 							{#if consoleImage}
 								<img
 									src={consoleImage}
