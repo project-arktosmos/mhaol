@@ -129,11 +129,16 @@ async fn start_session(
     let manager_for_dur = manager.clone();
     let session_for_dur = session_id.clone();
     let duration_seconds = tokio::task::spawn_blocking(move || {
-        manager_for_dur.query_source_duration(&session_for_dur, Duration::from_secs(2))
+        manager_for_dur.query_source_duration(&session_for_dur, Duration::from_secs(5))
     })
     .await
     .ok()
     .flatten();
+
+    tracing::info!(
+        "[ipfs-stream] session {session_id} cid={cid} ready={ready} duration={:?}s",
+        duration_seconds
+    );
 
     Ok(Json(StartSessionResponse {
         session_id: session_id.clone(),
