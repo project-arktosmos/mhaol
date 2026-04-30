@@ -304,17 +304,31 @@ impl IpfsManager {
             .unwrap_or_else(|| request.source.clone());
         let size = path_size_bytes(&path);
 
-        let ipfs_path: IpfsPath = ipfs
-            .add_unixfs(path.as_path())
-            .pin(pin)
-            .await
-            .map_err(|e| anyhow!("Failed to add to IPFS: {}", e))?;
-
-        let cid_str = ipfs_path
-            .root()
-            .cid()
-            .map(|c| c.to_string())
-            .unwrap_or_else(|| ipfs_path.to_string());
+        let cid_str = if path.is_file() {
+            // Bypass `ipfs.add_unixfs` for files because `rust-ipfs 0.14.1`
+            // has a bug where single-chunk files (any file ≤ 256 KiB,
+            // which includes every GBC ROM) end with `last_cid = None`
+            // and bail with "InvalidData": the push loop never tracks
+            // the leaf CID and `finish()` returns 0 blocks for a single
+            // pending link. Instead we drive rust-unixfs's FileAdder
+            // ourselves and put each block directly via the public Repo
+            // API. Result is the same UnixFS leaf/tree the upstream
+            // adder would produce, just without the buggy gating.
+            add_file_via_repo(&ipfs, path.as_path(), pin).await?
+        } else {
+            // Directories still go through the high-level adder; their
+            // multi-block layout always populates `last_cid` correctly.
+            let ipfs_path: IpfsPath = ipfs
+                .add_unixfs(path.as_path())
+                .pin(pin)
+                .await
+                .map_err(|e| anyhow!("Failed to add to IPFS: {}", e))?;
+            ipfs_path
+                .root()
+                .cid()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| ipfs_path.to_string())
+        };
 
         let info = IpfsFileInfo {
             cid: cid_str.clone(),
@@ -496,6 +510,73 @@ impl Default for IpfsManager {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Drive `rust-unixfs::FileAdder` directly, write each emitted block
+/// through the public `repo.put_block` API and recursively pin the
+/// final CID. This sidesteps the `add_unixfs` bug in rust-ipfs 0.14.1
+/// (`InvalidData` for any single-chunk file).
+///
+/// We track every CID `FileAdder` emits — both from the per-chunk
+/// `push()` calls and from the final `finish()` flush — and use the
+/// last one as the file's CID. For single-chunk files that's the
+/// leaf's CID (which equals the file's content hash); for multi-chunk
+/// files it's the root link block's CID, identical to what upstream
+/// would have produced.
+async fn add_file_via_repo(
+    ipfs: &Ipfs,
+    path: &std::path::Path,
+    pin: bool,
+) -> Result<String> {
+    use rust_ipfs::Block;
+    use rust_unixfs::file::adder::FileAdder;
+
+    let bytes = tokio::fs::read(path)
+        .await
+        .map_err(|e| anyhow!("read {}: {e}", path.display()))?;
+
+    let mut adder = FileAdder::default();
+    let repo = ipfs.repo();
+    let mut last_cid: Option<cid::Cid> = None;
+
+    let mut total = 0;
+    while total < bytes.len() {
+        let (blocks, consumed) = adder.push(&bytes[total..]);
+        for (cid, block_bytes) in blocks {
+            let block = Block::new(cid, block_bytes)
+                .map_err(|e| anyhow!("block construct: {e}"))?;
+            repo.put_block(&block)
+                .await
+                .map_err(|e| anyhow!("put_block: {e}"))?;
+            last_cid = Some(cid);
+        }
+        if consumed == 0 {
+            // Defensive: an adder that refuses to consume input would
+            // otherwise spin forever.
+            break;
+        }
+        total += consumed;
+    }
+    for (cid, block_bytes) in adder.finish() {
+        let block = Block::new(cid, block_bytes)
+            .map_err(|e| anyhow!("block construct: {e}"))?;
+        repo.put_block(&block)
+            .await
+            .map_err(|e| anyhow!("put_block: {e}"))?;
+        last_cid = Some(cid);
+    }
+
+    let cid = last_cid
+        .ok_or_else(|| anyhow!("FileAdder produced no blocks for {}", path.display()))?;
+
+    if pin && !repo.is_pinned(&cid).await.unwrap_or(false) {
+        repo.pin(cid)
+            .recursive()
+            .await
+            .map_err(|e| anyhow!("pin {cid}: {e}"))?;
+    }
+
+    Ok(cid.to_string())
 }
 
 #[cfg(test)]

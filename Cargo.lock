@@ -6469,6 +6469,7 @@ dependencies = [
  "parking_lot",
  "rand 0.8.5",
  "rust-ipfs",
+ "rust-unixfs",
  "serde",
  "serde_json",
  "tempfile",

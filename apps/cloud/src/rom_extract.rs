@@ -61,11 +61,8 @@ pub async fn extract_roms_for_firkin(
     state: &CloudState,
     firkin_id: &str,
 ) -> anyhow::Result<RomsResponse> {
-    let mut current: Firkin = match state.db.select((FIRKIN_TABLE, firkin_id)).await? {
-        Some(d) => d,
-        None => anyhow::bail!("firkin not found"),
-    };
-    let mut current_id = firkin_id.to_string();
+    let (mut current, mut current_id) =
+        resolve_head_firkin(state, firkin_id).await?;
 
     let mut response = RomsResponse {
         firkin_id: current_id.clone(),
@@ -283,11 +280,12 @@ pub async fn extract_single_archive(
     firkin_id: &str,
     archive_relative: &str,
 ) -> anyhow::Result<RomsResponse> {
-    let mut current: Firkin = match state.db.select((FIRKIN_TABLE, firkin_id)).await? {
-        Some(d) => d,
-        None => anyhow::bail!("firkin not found"),
-    };
-    let mut current_id = firkin_id.to_string();
+    // If the user clicked Scan against an already-rolled-forward firkin
+    // (e.g. `torrent_completion` rolled it while the page was open and
+    // the auto-poller hasn't caught up yet), walk forward to the head
+    // of the version chain instead of failing.
+    let (mut current, mut current_id) =
+        resolve_head_firkin(state, firkin_id).await?;
 
     let mut response = RomsResponse {
         firkin_id: current_id.clone(),
@@ -583,6 +581,36 @@ async fn rollforward(
     );
 
     Ok(new_id)
+}
+
+/// Walk the version chain forward from `firkin_id` to the latest
+/// existing record. Falls back to `firkin_id` if it's still the head.
+/// Bails when the id can't be resolved at all (truly deleted firkin).
+async fn resolve_head_firkin(
+    state: &CloudState,
+    firkin_id: &str,
+) -> anyhow::Result<(Firkin, String)> {
+    if let Some(doc) = state
+        .db
+        .select::<Option<Firkin>>((FIRKIN_TABLE, firkin_id))
+        .await?
+    {
+        return Ok((doc, firkin_id.to_string()));
+    }
+    let docs: Vec<Firkin> = state.db.select(FIRKIN_TABLE).await?;
+    let successor = docs
+        .into_iter()
+        .find(|d| d.version_hashes.iter().any(|h| h == firkin_id));
+    match successor {
+        Some(doc) => {
+            let id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
+            if id.is_empty() {
+                anyhow::bail!("firkin not found");
+            }
+            Ok((doc, id))
+        }
+        None => anyhow::bail!("firkin not found"),
+    }
 }
 
 fn btih_from_magnet(value: &str) -> Option<String> {
