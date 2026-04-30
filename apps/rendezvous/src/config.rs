@@ -36,10 +36,16 @@ impl RendezvousConfig {
             .and_then(|s| toml::from_str::<TomlConfig>(&s).ok())
             .unwrap_or_default();
 
+        // Dual-stack default. Binding on `::` accepts both IPv4 and IPv6
+        // connections on Linux/macOS (where `IPV6_V6ONLY` defaults to false).
+        // The previous `0.0.0.0` default was IPv4-only; macOS resolves
+        // `localhost` to `::1` first, and Firefox WebSockets don't fall back
+        // to IPv4, which presented as `NS_ERROR_WEBSOCKET_CONNECTION_REFUSED`
+        // even though tokio-based clients connected fine.
         let host = std::env::var("RENDEZVOUS_HOST")
             .ok()
             .or(file.server.as_ref().and_then(|s| s.host.clone()))
-            .unwrap_or_else(|| "0.0.0.0".to_string());
+            .unwrap_or_else(|| "::".to_string());
 
         let http_port: u16 = std::env::var("RENDEZVOUS_HTTP_PORT")
             .ok()

@@ -143,6 +143,49 @@ async fn rejects_connection_with_invalid_signature() {
 }
 
 #[tokio::test]
+async fn dual_stack_bind_is_reachable_on_ipv4_and_ipv6_loopback() {
+    // Regression: rendezvous used to bind `0.0.0.0:14080` (IPv4 only).
+    // macOS resolves `localhost` to `::1` first and Firefox WebSockets
+    // refuse the connection without falling back to IPv4, which presented
+    // as "stuck at negotiating WebRTC connection". Binding `::` accepts
+    // both stacks; this test fails fast if the dual-stack bind regresses.
+    let port = pick_free_port().await;
+    let listener = tokio::net::TcpListener::bind(format!("[::]:{port}"))
+        .await
+        .expect("dual-stack bind must succeed for the regression to stay fixed");
+
+    let state = RendezvousState {
+        ipfs: Arc::new(mhaol_ipfs::IpfsManager::new()),
+        rooms: Arc::new(RoomManager::new()),
+        turn: Arc::new(TurnConfig::default()),
+    };
+    let app = build_router(state);
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.ok();
+    });
+    tokio::task::yield_now().await;
+
+    // Both loopback families must hit /api/health.
+    for host in ["127.0.0.1", "[::1]"] {
+        let url = format!("http://{host}:{port}/api/health");
+        let body = reqwest::get(&url)
+            .await
+            .unwrap_or_else(|e| panic!("GET {url} failed (dual-stack regression?): {e}"))
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        assert_eq!(body.get("status").and_then(|v| v.as_str()), Some("ok"));
+    }
+}
+
+async fn pick_free_port() -> u16 {
+    let probe = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = probe.local_addr().unwrap().port();
+    drop(probe);
+    port
+}
+
+#[tokio::test]
 async fn turn_credentials_endpoint_returns_metered_format() {
     let addr = boot_rendezvous_with_turn(TurnConfig {
         domain: "turn.example.com".to_string(),

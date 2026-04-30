@@ -156,9 +156,7 @@ async fn serve(config_path: Option<PathBuf>) -> Result<()> {
                 .map_err(|e| anyhow!("Server error: {}", e))?;
         }
         _ => {
-            let listener = tokio::net::TcpListener::bind(&addr)
-                .await
-                .map_err(|e| anyhow!("Failed to bind {}: {}", addr, e))?;
+            let listener = bind_dual_stack(&cfg.host, cfg.http_port).await?;
             let serve = axum::serve(listener, app).with_graceful_shutdown(async move {
                 let _ = tokio::signal::ctrl_c().await;
                 tracing::info!("shutting down rendezvous");
@@ -168,6 +166,34 @@ async fn serve(config_path: Option<PathBuf>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Bind the rendezvous HTTP listener with a sensible IPv6/IPv4 fallback.
+///
+/// `localhost` resolves to `::1` first on macOS, and browser WebSocket
+/// clients (Firefox in particular) don't fall back to IPv4 when the IPv6
+/// loopback connection is refused. Binding on `::` (dual-stack) makes the
+/// server reachable from both stacks on Linux/macOS where `IPV6_V6ONLY`
+/// defaults to false. Hosts that don't support dual-stack (some restricted
+/// container setups) fall through to the explicit address the user
+/// configured, then to IPv4 wildcard as a last resort.
+async fn bind_dual_stack(host: &str, port: u16) -> Result<tokio::net::TcpListener> {
+    let primary = format!("{host}:{port}");
+    match tokio::net::TcpListener::bind(&primary).await {
+        Ok(listener) => return Ok(listener),
+        Err(e) => {
+            tracing::warn!(
+                "failed to bind rendezvous on {}: {} — retrying on 0.0.0.0:{}",
+                primary,
+                e,
+                port
+            );
+        }
+    }
+    let fallback = format!("0.0.0.0:{port}");
+    tokio::net::TcpListener::bind(&fallback)
+        .await
+        .map_err(|e| anyhow!("Failed to bind {} or {}: {}", primary, fallback, e))
 }
 
 fn build_advertised_multiaddrs(listen_addrs: &[String], peer_id: &str) -> Vec<String> {
