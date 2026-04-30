@@ -199,7 +199,11 @@ pub async fn extract_roms_for_firkin(
             let size = std::fs::metadata(&rom_path).map(|m| m.len()).unwrap_or(0);
 
             // Reuse the CID from the firkin if this rom was already pinned in
-            // a prior pass; otherwise pin it now and append a new entry.
+            // a prior pass; otherwise pin it now and append a new entry. A
+            // single failing file (e.g. rust-ipfs's add_unixfs returning
+            // "invalid data" on a 0-byte or symlink-like entry) used to
+            // bubble out via `?` and bail the entire scan — log + skip
+            // instead so the rest of the ROMs still land in the firkin.
             let cid = if let Some(cid) = existing_by_title.get(&relative_path) {
                 cid.clone()
             } else {
@@ -207,7 +211,16 @@ pub async fn extract_roms_for_firkin(
                     source: rom_path.to_string_lossy().to_string(),
                     pin: Some(true),
                 };
-                let info = state.ipfs_manager.add(req).await?;
+                let info = match state.ipfs_manager.add(req).await {
+                    Ok(i) => i,
+                    Err(e) => {
+                        tracing::warn!(
+                            "[rom-extract] skip {}: ipfs add failed: {e}",
+                            rom_path.display()
+                        );
+                        continue;
+                    }
+                };
                 let mime = mime_guess::from_path(&rom_path)
                     .first()
                     .map(|m| m.essence_str().to_string())
@@ -285,6 +298,7 @@ async fn rollforward(
         &updated_files,
         doc.year,
         &doc.addon,
+        &doc.creator,
         new_version,
         &new_hashes,
     );
@@ -301,6 +315,7 @@ async fn rollforward(
         &updated_files,
         doc.year,
         &doc.addon,
+        &doc.creator,
         new_version,
         &new_hashes,
     );
@@ -314,6 +329,7 @@ async fn rollforward(
         files: updated_files,
         year: doc.year,
         addon: doc.addon.clone(),
+        creator: doc.creator.clone(),
         created_at: doc.created_at,
         updated_at: Utc::now(),
         version: new_version,

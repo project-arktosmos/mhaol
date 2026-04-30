@@ -137,7 +137,22 @@ async fn rollforward(
             source: file.path.to_string_lossy().to_string(),
             pin: Some(true),
         };
-        let info = state.ipfs_manager.add(req).await?;
+        // A single bad file (e.g. rust-ipfs's add_unixfs returning
+        // "invalid data" on a 0-byte or symlink entry inside the torrent)
+        // used to bubble through `?` and abort the rollforward — which
+        // meant the watcher retried the same torrent forever, the firkin
+        // never gained any IPFS files, and the ROM scan fell back on a
+        // half-pinned tree. Log + skip per file instead so the rest land.
+        let info = match state.ipfs_manager.add(req).await {
+            Ok(i) => i,
+            Err(e) => {
+                tracing::warn!(
+                    "[torrent-completion] skip {}: ipfs add failed: {e}",
+                    file.path.display()
+                );
+                continue;
+            }
+        };
         let mime = mime_guess::from_path(&file.path)
             .first()
             .map(|m| m.essence_str().to_string())
@@ -181,6 +196,7 @@ async fn rollforward(
         &updated_files,
         doc.year,
         &doc.addon,
+        &doc.creator,
         new_version,
         &new_hashes,
     );
@@ -198,6 +214,7 @@ async fn rollforward(
         &updated_files,
         doc.year,
         &doc.addon,
+        &doc.creator,
         new_version,
         &new_hashes,
     );
@@ -211,6 +228,7 @@ async fn rollforward(
         files: updated_files,
         year: doc.year,
         addon: doc.addon.clone(),
+        creator: doc.creator.clone(),
         created_at: doc.created_at,
         updated_at: chrono::Utc::now(),
         version: new_version,
