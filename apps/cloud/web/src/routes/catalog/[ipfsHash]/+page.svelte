@@ -3,6 +3,8 @@
 	import classNames from 'classnames';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
 	import FirkinArtistsSection from 'ui-lib/components/firkins/FirkinArtistsSection.svelte';
+	import EmulatorModal from 'ui-lib/components/videogames/EmulatorModal.svelte';
+	import { coreForRom, type EmulatorCore } from 'ui-lib/components/videogames/emulator-cores';
 	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
 	import {
 		firkinTorrentsService,
@@ -441,6 +443,27 @@
 			romsError = err instanceof Error ? err.message : 'Unknown error';
 			romsStatus = 'error';
 		}
+	}
+
+	type EmulatorTarget = {
+		core: EmulatorCore;
+		gameUrl: string;
+		gameName: string;
+	};
+	let emulatorTarget = $state<EmulatorTarget | null>(null);
+
+	function launchRom(rom: { name: string; relative_path: string; cid: string }) {
+		const core = coreForRom(firkin.title, rom.name);
+		if (!core) return;
+		emulatorTarget = {
+			core,
+			gameUrl: `/api/ipfs/pins/${encodeURIComponent(rom.cid)}/file`,
+			gameName: rom.name
+		};
+	}
+
+	function closeEmulator() {
+		emulatorTarget = null;
 	}
 
 	$effect(() => {
@@ -1282,6 +1305,7 @@
 								<table class="table table-sm">
 									<thead>
 										<tr>
+											<th></th>
 											<th>File</th>
 											<th>Path</th>
 											<th>CID</th>
@@ -1290,7 +1314,23 @@
 									</thead>
 									<tbody>
 										{#each roms.roms as rom (rom.relative_path)}
-											<tr>
+											{@const playableCore = coreForRom(firkin.title, rom.name)}
+											<tr
+												class={classNames({
+													'cursor-pointer hover:bg-base-100': playableCore !== null
+												})}
+												onclick={playableCore ? () => launchRom(rom) : undefined}
+												title={playableCore
+													? `Launch ${rom.name} in WASM emulator (${playableCore})`
+													: 'No emulator wired up for this ROM type yet'}
+											>
+												<td class="w-8 text-center">
+													{#if playableCore}
+														<span class="text-success" aria-hidden="true">▶</span>
+													{:else}
+														<span class="text-base-content/30" aria-hidden="true">—</span>
+													{/if}
+												</td>
 												<td class="text-xs [overflow-wrap:anywhere]">{rom.name}</td>
 												<td class="font-mono text-xs [overflow-wrap:anywhere]"
 													>{rom.relative_path}</td
@@ -1468,3 +1508,11 @@
 		</section>
 	</div>
 </div>
+
+<EmulatorModal
+	open={emulatorTarget !== null}
+	core={emulatorTarget?.core ?? null}
+	gameUrl={emulatorTarget?.gameUrl ?? null}
+	gameName={emulatorTarget?.gameName ?? 'Game'}
+	onclose={closeEmulator}
+/>

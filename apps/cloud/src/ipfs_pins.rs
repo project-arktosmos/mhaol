@@ -1,14 +1,17 @@
 use crate::state::CloudState;
 use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
+    body::Body,
+    extract::{Path, State},
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
+use tokio::fs;
+use tokio_util::io::ReaderStream;
 
 pub const TABLE: &str = "ipfs_pin";
 
@@ -51,7 +54,9 @@ impl From<IpfsPin> for IpfsPinDto {
 }
 
 pub fn router() -> Router<CloudState> {
-    Router::new().route("/pins", get(list))
+    Router::new()
+        .route("/pins", get(list))
+        .route("/pins/{cid}/file", get(serve_pin_file))
 }
 
 fn err_response(
@@ -111,4 +116,61 @@ impl IntoResponse for IpfsPinDto {
     fn into_response(self) -> axum::response::Response {
         Json(self).into_response()
     }
+}
+
+/// Stream the on-disk file for a pinned IPFS object. Used by the WASM
+/// emulator modal so the browser can fetch ROM bytes directly from the
+/// cloud after `extract_roms_for_firkin` has unpacked any archives. The
+/// file is whatever path was recorded in `ipfs_pin` at pin time, so the
+/// caller is trusting the same source that scan / torrent-completion /
+/// rom-extract trusted when they created the pin.
+async fn serve_pin_file(
+    State(state): State<CloudState>,
+    Path(cid): Path<String>,
+) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
+    let cid = cid.trim().to_string();
+    if cid.is_empty() {
+        return Err(err_response(StatusCode::BAD_REQUEST, "cid is required"));
+    }
+    let pins: Vec<IpfsPin> = state.db.select(TABLE).await.map_err(|e| {
+        err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}"))
+    })?;
+    let pin = pins
+        .into_iter()
+        .find(|p| p.cid == cid)
+        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, format!("no pin for cid {cid}")))?;
+    if pin.path.starts_with("firkin://") || pin.path.starts_with("artist://") {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "pin is a metadata pin, not a file",
+        ));
+    }
+    let path = std::path::PathBuf::from(&pin.path);
+    if !path.exists() {
+        return Err(err_response(
+            StatusCode::NOT_FOUND,
+            format!("file no longer on disk: {}", pin.path),
+        ));
+    }
+    let file = fs::File::open(&path)
+        .await
+        .map_err(|e| err_response(StatusCode::NOT_FOUND, format!("open failed: {e}")))?;
+    let stream = ReaderStream::new(file);
+    let body = Body::from_stream(stream);
+    let content_type = if pin.mime.is_empty() {
+        "application/octet-stream".to_string()
+    } else {
+        pin.mime
+    };
+    let content_length = pin.size.to_string();
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CONTENT_LENGTH, content_length),
+            (header::CACHE_CONTROL, "no-store".to_string()),
+        ],
+        body,
+    )
+        .into_response())
 }
