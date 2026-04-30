@@ -1,16 +1,24 @@
 //! ROM extraction for retroachievement console firkins.
 //!
 //! Walks the on-disk download directory of every completed torrent attached
-//! to a firkin, extracts compressed archives in place (zip / 7z), and returns
-//! the list of ROM files (plus archive status) so the WebUI can render them.
+//! to a firkin, extracts compressed archives in place (zip / 7z), pins every
+//! ROM file (whether already there or freshly extracted) to IPFS, appends
+//! them as `ipfs` file entries, and rolls the firkin's CID forward — same
+//! versioning contract as `torrent_completion::rollforward`.
 
 #![cfg(not(target_os = "android"))]
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use chrono::Utc;
 use serde::Serialize;
 
-use crate::firkins::{Firkin, TABLE as FIRKIN_TABLE};
+use crate::firkins::{
+    compute_firkin_cid, pin_firkin_body, serialize_firkin_payload, FileEntry, Firkin,
+    TABLE as FIRKIN_TABLE,
+};
+use crate::ipfs_pins;
 use crate::state::CloudState;
 
 const ROM_EXTS: &[&str] = &[
@@ -34,44 +42,58 @@ pub struct RomEntry {
     pub name: String,
     pub relative_path: String,
     pub size: u64,
+    pub cid: String,
 }
 
 #[derive(Serialize, Debug, Default)]
 pub struct RomsResponse {
+    pub firkin_id: String,
     pub torrent_paths: Vec<String>,
     pub archives: Vec<ArchiveReport>,
     pub roms: Vec<RomEntry>,
 }
 
 /// Look up the firkin, find every completed torrent attached to it, extract
-/// any archives in their download directories, and walk for ROM files.
+/// any archives in their download directories, pin every ROM to IPFS, append
+/// new ROMs as `ipfs` file entries on the firkin, and roll the firkin's CID
+/// forward when there's anything new.
 pub async fn extract_roms_for_firkin(
     state: &CloudState,
     firkin_id: &str,
 ) -> anyhow::Result<RomsResponse> {
-    let doc: Option<Firkin> = state.db.select((FIRKIN_TABLE, firkin_id)).await?;
-    let firkin = match doc {
+    let mut current: Firkin = match state.db.select((FIRKIN_TABLE, firkin_id)).await? {
         Some(d) => d,
         None => anyhow::bail!("firkin not found"),
     };
+    let mut current_id = firkin_id.to_string();
 
-    let mut response = RomsResponse::default();
+    let mut response = RomsResponse {
+        firkin_id: current_id.clone(),
+        ..RomsResponse::default()
+    };
 
     if !state.torrent_manager.is_initialized() {
         return Ok(response);
     }
 
-    let hashes: Vec<String> = firkin
+    let hashes: Vec<String> = current
         .files
         .iter()
         .filter(|f| f.kind == "torrent magnet")
         .filter_map(|f| btih_from_magnet(&f.value))
         .collect();
     if hashes.is_empty() {
+        response.firkin_id = current_id;
         return Ok(response);
     }
 
     let torrents = state.torrent_manager.list().await?;
+
+    // Aggregate every ROM we discover across all completed torrents, then do
+    // one rollforward at the end so the version chain doesn't grow by N when
+    // a firkin happens to have multiple magnets.
+    let mut new_entries: Vec<FileEntry> = Vec::new();
+    let mut roms_acc: Vec<RomEntry> = Vec::new();
 
     for hash in &hashes {
         let torrent = match torrents.iter().find(|t| t.info_hash.to_lowercase() == *hash) {
@@ -91,9 +113,10 @@ pub async fn extract_roms_for_firkin(
             continue;
         }
 
-        response.torrent_paths.push(output_path.to_string_lossy().into_owned());
+        response
+            .torrent_paths
+            .push(output_path.to_string_lossy().into_owned());
 
-        // Extract archives that haven't been extracted yet.
         for archive in find_archives(&output_path) {
             let rel = archive
                 .strip_prefix(&output_path)
@@ -146,31 +169,189 @@ pub async fn extract_roms_for_firkin(
             }
         }
 
-        // Walk every ROM file under the torrent's output directory (including
-        // any directories produced by the extraction step above).
-        for rom in find_roms(&output_path) {
-            let relative_path = rom
+        // Rebuild the "already present in firkin" set on each torrent loop so
+        // entries we just appended in this call also count as present.
+        let existing_titles: HashSet<String> = current
+            .files
+            .iter()
+            .chain(new_entries.iter())
+            .filter(|f| f.kind == "ipfs")
+            .filter_map(|f| f.title.clone())
+            .collect();
+        let existing_by_title: std::collections::HashMap<String, String> = current
+            .files
+            .iter()
+            .chain(new_entries.iter())
+            .filter(|f| f.kind == "ipfs")
+            .filter_map(|f| f.title.clone().map(|t| (t, f.value.clone())))
+            .collect();
+
+        for rom_path in find_roms(&output_path) {
+            let relative_path = rom_path
                 .strip_prefix(&output_path)
-                .unwrap_or(&rom)
+                .unwrap_or(&rom_path)
                 .to_string_lossy()
                 .into_owned();
-            let name = rom
+            let name = rom_path
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            let size = std::fs::metadata(&rom).map(|m| m.len()).unwrap_or(0);
-            response.roms.push(RomEntry {
+            let size = std::fs::metadata(&rom_path).map(|m| m.len()).unwrap_or(0);
+
+            // Reuse the CID from the firkin if this rom was already pinned in
+            // a prior pass; otherwise pin it now and append a new entry.
+            let cid = if let Some(cid) = existing_by_title.get(&relative_path) {
+                cid.clone()
+            } else {
+                let req = mhaol_ipfs::AddIpfsRequest {
+                    source: rom_path.to_string_lossy().to_string(),
+                    pin: Some(true),
+                };
+                let info = state.ipfs_manager.add(req).await?;
+                let mime = mime_guess::from_path(&rom_path)
+                    .first()
+                    .map(|m| m.essence_str().to_string())
+                    .unwrap_or_default();
+                let _ = ipfs_pins::record_pin(
+                    state,
+                    info.cid.clone(),
+                    rom_path.to_string_lossy().to_string(),
+                    mime,
+                    info.size,
+                )
+                .await;
+                if !existing_titles.contains(&relative_path) {
+                    new_entries.push(FileEntry {
+                        kind: "ipfs".to_string(),
+                        value: info.cid.clone(),
+                        title: Some(relative_path.clone()),
+                    });
+                }
+                info.cid
+            };
+
+            roms_acc.push(RomEntry {
                 name,
                 relative_path,
                 size,
+                cid,
             });
         }
     }
 
-    response
-        .roms
-        .sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    if !new_entries.is_empty() {
+        current_id = rollforward(state, &current, new_entries).await?;
+        // Refresh the in-memory copy for callers that walk version_hashes.
+        if let Some(refreshed) = state
+            .db
+            .select((FIRKIN_TABLE, current_id.as_str()))
+            .await?
+        {
+            current = refreshed;
+            let _ = current; // silence unused-assignment lint when no further reads
+        }
+    }
+
+    roms_acc.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    response.firkin_id = current_id;
+    response.roms = roms_acc;
     Ok(response)
+}
+
+/// Roll the firkin forward with `new_entries` appended to `files`. Returns the
+/// new firkin id (the new CID).
+async fn rollforward(
+    state: &CloudState,
+    doc: &Firkin,
+    new_entries: Vec<FileEntry>,
+) -> anyhow::Result<String> {
+    let old_id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
+    if old_id.is_empty() {
+        anyhow::bail!("firkin has no id");
+    }
+
+    let mut updated_files = doc.files.clone();
+    updated_files.extend(new_entries);
+
+    let new_version = doc.version.saturating_add(1);
+    let mut new_hashes = doc.version_hashes.clone();
+    new_hashes.push(old_id.clone());
+
+    let new_id = compute_firkin_cid(
+        &doc.title,
+        &doc.description,
+        &doc.artists,
+        &doc.images,
+        &updated_files,
+        doc.year,
+        &doc.addon,
+        new_version,
+        &new_hashes,
+    );
+
+    if new_id == old_id {
+        return Ok(old_id);
+    }
+
+    let new_body_json = serialize_firkin_payload(
+        &doc.title,
+        &doc.description,
+        &doc.artists,
+        &doc.images,
+        &updated_files,
+        doc.year,
+        &doc.addon,
+        new_version,
+        &new_hashes,
+    );
+
+    let new_record = Firkin {
+        id: None,
+        title: doc.title.clone(),
+        artists: doc.artists.clone(),
+        description: doc.description.clone(),
+        images: doc.images.clone(),
+        files: updated_files,
+        year: doc.year,
+        addon: doc.addon.clone(),
+        created_at: doc.created_at,
+        updated_at: Utc::now(),
+        version: new_version,
+        version_hashes: new_hashes,
+    };
+
+    let _: Option<Firkin> = state.db.delete((FIRKIN_TABLE, old_id.as_str())).await?;
+    let create_result: Result<Option<Firkin>, _> = state
+        .db
+        .create((FIRKIN_TABLE, new_id.as_str()))
+        .content(new_record)
+        .await;
+    match create_result {
+        Ok(_) => {}
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("already exists") {
+                tracing::info!(
+                    "[rom-extract] {} → {} already created by a concurrent attempt",
+                    old_id,
+                    new_id,
+                );
+                return Ok(new_id);
+            }
+            return Err(e.into());
+        }
+    }
+
+    pin_firkin_body(state, &new_id, new_body_json).await;
+
+    tracing::info!(
+        "[rom-extract] {} → {} (v{})",
+        old_id,
+        new_id,
+        new_version,
+    );
+
+    Ok(new_id)
 }
 
 fn btih_from_magnet(value: &str) -> Option<String> {
@@ -206,7 +387,6 @@ fn find_archives(root: &Path) -> Vec<PathBuf> {
             continue;
         }
         let path = entry.path().to_path_buf();
-        // Skip files that already live under an `*.extracted` directory.
         if path
             .components()
             .any(|c| match c {

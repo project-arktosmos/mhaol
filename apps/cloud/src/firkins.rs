@@ -223,7 +223,7 @@ pub fn router() -> Router<CloudState> {
         .route("/", get(list).post(create))
         .route("/{id}", put(update).delete(delete).get(get_one))
         .route("/{id}/finalize", post(finalize))
-        .route("/{id}/roms", get(roms))
+        .route("/{id}/roms", post(roms))
 }
 
 fn err_response(
