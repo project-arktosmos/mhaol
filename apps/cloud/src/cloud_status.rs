@@ -1,9 +1,10 @@
 use crate::state::CloudState;
 use axum::{extract::State, routing::get, Json, Router};
-use parking_lot::Mutex;
 use serde::Serialize;
 use std::net::UdpSocket;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+#[cfg(not(target_os = "android"))]
+use std::net::{Ipv4Addr, Ipv6Addr};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const STARTED_AT: once_cell::sync::Lazy<u64> = once_cell::sync::Lazy::new(|| {
     SystemTime::now()
@@ -11,11 +12,6 @@ const STARTED_AT: once_cell::sync::Lazy<u64> = once_cell::sync::Lazy::new(|| {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 });
-
-const PUBLIC_IP_TTL: Duration = Duration::from_secs(300);
-
-static PUBLIC_IP_CACHE: once_cell::sync::Lazy<Mutex<Option<(String, Instant)>>> =
-    once_cell::sync::Lazy::new(|| Mutex::new(None));
 
 #[derive(Serialize)]
 struct CloudStatus {
@@ -86,7 +82,10 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
         .and_then(|p| p.parse().ok())
         .unwrap_or(9898);
     let local_ip = get_local_ip();
-    let public_ip = get_public_ip().await;
+    #[cfg(not(target_os = "android"))]
+    let public_ip = get_public_ip(&state).await;
+    #[cfg(target_os = "android")]
+    let public_ip: Option<String> = None;
 
     let signaling_address = state
         .identity_manager
@@ -138,32 +137,55 @@ fn get_local_ip() -> Option<String> {
     Some(addr.ip().to_string())
 }
 
-async fn get_public_ip() -> Option<String> {
-    {
-        let cache = PUBLIC_IP_CACHE.lock();
-        if let Some((ip, fetched_at)) = cache.as_ref() {
-            if fetched_at.elapsed() < PUBLIC_IP_TTL {
-                return Some(ip.clone());
+/// Pull the public IP from libp2p observed addresses. The cloud's IPFS node
+/// runs Identify against the rendezvous bootstrap, which reports back the
+/// address it sees us at — that's our public IP without involving any
+/// external HTTP service. Returns the first globally routable IP found in
+/// the confirmed external multiaddrs.
+#[cfg(not(target_os = "android"))]
+async fn get_public_ip(state: &CloudState) -> Option<String> {
+    let addrs = state.ipfs_manager.external_addresses().await;
+    addrs.iter().find_map(|addr| extract_global_ip(addr))
+}
+
+#[cfg(not(target_os = "android"))]
+fn extract_global_ip(multiaddr: &str) -> Option<String> {
+    for component in multiaddr.split('/').filter(|s| !s.is_empty()) {
+        if let Ok(v4) = component.parse::<Ipv4Addr>() {
+            if is_global_v4(v4) {
+                return Some(v4.to_string());
+            }
+        } else if let Ok(v6) = component.parse::<Ipv6Addr>() {
+            if is_global_v6(v6) {
+                return Some(v6.to_string());
             }
         }
     }
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .build()
-        .ok()?;
-    let resp = client.get("https://api.ipify.org").send().await.ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let ip = resp.text().await.ok()?.trim().to_string();
-    if ip.is_empty() {
-        return None;
-    }
-
-    *PUBLIC_IP_CACHE.lock() = Some((ip.clone(), Instant::now()));
-    Some(ip)
+    None
 }
+
+#[cfg(not(target_os = "android"))]
+fn is_global_v4(ip: Ipv4Addr) -> bool {
+    !(ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_broadcast()
+        || ip.is_documentation()
+        || ip.is_unspecified()
+        || ip.octets()[0] == 0
+        || (ip.octets()[0] == 100 && (ip.octets()[1] & 0xc0) == 64)
+        || ip.is_multicast())
+}
+
+#[cfg(not(target_os = "android"))]
+fn is_global_v6(ip: Ipv6Addr) -> bool {
+    !(ip.is_loopback()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+        || (ip.segments()[0] & 0xfe00) == 0xfc00 // unique local fc00::/7
+        || (ip.segments()[0] & 0xffc0) == 0xfe80) // link local fe80::/10
+}
+
 
 fn p2p_stream_health() -> PackageHealth {
     #[cfg(not(target_os = "android"))]
