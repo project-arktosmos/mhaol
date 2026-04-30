@@ -74,19 +74,43 @@
 	);
 
 	function mapToFirkinType(addonId: string, typeId: string): FirkinType {
-		if (addonId === 'tmdb' && typeId === 'tv') return 'tv show';
-		if (addonId === 'tmdb') return 'movie';
-		if (addonId === 'musicbrainz') return 'album';
-		if (addonId === 'openlibrary') return 'book';
+		if (addonId === 'tmdb') {
+			if (typeId === 'tv') return 'tv show';
+			if (typeId === 'tv_season') return 'tv season';
+			if (typeId === 'tv_episode') return 'tv episode';
+			if (typeId === 'image') return 'image';
+			return 'movie';
+		}
+		if (addonId === 'musicbrainz') {
+			if (typeId === 'track') return 'track';
+			return 'album';
+		}
 		if (addonId === 'retroachievements') return 'game';
+		if (addonId === 'youtube') {
+			if (typeId === 'channel') return 'youtube channel';
+			return 'youtube video';
+		}
+		if (addonId === 'lrclib') return 'track';
+		if (addonId === 'openlibrary') return 'book';
+		if (addonId === 'wyzie-subs') {
+			if (typeId === 'tv_episode') return 'tv episode';
+			return 'movie';
+		}
+		if (addonId === 'iptv') return 'iptv channel';
+		if (addonId === 'radio') return 'radio station';
 		return 'movie';
 	}
 
 	function mapToFirkinSource(addonId: string): FirkinSource {
 		if (addonId === 'tmdb') return 'tmdb';
 		if (addonId === 'musicbrainz') return 'musicbrainz';
-		if (addonId === 'openlibrary') return 'openlibrary';
 		if (addonId === 'retroachievements') return 'retroachievements';
+		if (addonId === 'youtube') return 'youtube';
+		if (addonId === 'lrclib') return 'lrclib';
+		if (addonId === 'openlibrary') return 'openlibrary';
+		if (addonId === 'wyzie-subs') return 'wyzie-subs';
+		if (addonId === 'iptv') return 'iptv';
+		if (addonId === 'radio') return 'radio';
 		return 'tmdb';
 	}
 
