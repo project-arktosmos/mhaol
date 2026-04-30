@@ -2,7 +2,14 @@
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
-	import { librariesService, type ScanResponse, type Library } from '$lib/libraries.service';
+	import {
+		librariesService,
+		LIBRARY_KINDS,
+		LIBRARY_KIND_LABELS,
+		type LibraryKind,
+		type ScanResponse,
+		type Library
+	} from '$lib/libraries.service';
 	import type { IpfsPin } from '$lib/ipfs.service';
 	import DirectoryPicker from '../../components/DirectoryPicker.svelte';
 
@@ -11,6 +18,7 @@
 
 	let pickedDir = $state('');
 	let newSubfolder = $state('');
+	let newKinds = $state<LibraryKind[]>([]);
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
@@ -19,6 +27,46 @@
 	let scanErrors = $state<Record<string, string>>({});
 	let libPins = $state<Record<string, IpfsPin[]>>({});
 	let pinsErrors = $state<Record<string, string>>({});
+	let editingKindsFor = $state<string | null>(null);
+	let editKinds = $state<LibraryKind[]>([]);
+	let savingKinds = $state(false);
+	let kindsError = $state<string | null>(null);
+
+	function toggleNewKind(kind: LibraryKind) {
+		newKinds = newKinds.includes(kind) ? newKinds.filter((k) => k !== kind) : [...newKinds, kind];
+	}
+
+	function toggleEditKind(kind: LibraryKind) {
+		editKinds = editKinds.includes(kind)
+			? editKinds.filter((k) => k !== kind)
+			: [...editKinds, kind];
+	}
+
+	function startEditKinds(lib: Library) {
+		editingKindsFor = lib.id;
+		editKinds = [...(lib.kinds ?? [])];
+		kindsError = null;
+	}
+
+	function cancelEditKinds() {
+		editingKindsFor = null;
+		editKinds = [];
+		kindsError = null;
+	}
+
+	async function saveKinds(id: string) {
+		savingKinds = true;
+		kindsError = null;
+		try {
+			await librariesService.update(id, { kinds: editKinds });
+			editingKindsFor = null;
+			editKinds = [];
+		} catch (err) {
+			kindsError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			savingKinds = false;
+		}
+	}
 
 	onMount(async () => {
 		await librariesService.refresh();
@@ -84,8 +132,9 @@
 		}
 		creating = true;
 		try {
-			const created = await librariesService.create(finalPath);
+			const created = await librariesService.create(finalPath, newKinds);
 			newSubfolder = '';
+			newKinds = [];
 			void scan(created.id);
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
@@ -235,6 +284,34 @@
 					disabled={creating}
 				/>
 			</label>
+			<div class="form-control">
+				<span class="label-text mb-1 text-xs">
+					Kinds (which catalog types this library contains)
+				</span>
+				<div class="flex flex-wrap gap-2">
+					{#each LIBRARY_KINDS as kind (kind)}
+						<label
+							class={classNames('btn btn-sm', {
+								'btn-primary': newKinds.includes(kind),
+								'btn-outline': !newKinds.includes(kind)
+							})}
+						>
+							<input
+								type="checkbox"
+								class="hidden"
+								checked={newKinds.includes(kind)}
+								disabled={creating}
+								onchange={() => toggleNewKind(kind)}
+							/>
+							{LIBRARY_KIND_LABELS[kind]}
+						</label>
+					{/each}
+				</div>
+				<p class="mt-1 text-xs text-base-content/60">
+					Files matching the selected kinds are turned into <code>document</code> records on scan. Leave
+					empty to skip media detection.
+				</p>
+			</div>
 			<p class="text-xs text-base-content/60">
 				Library directory: <span class="font-mono">{finalPath || '—'}</span>
 			</p>
@@ -267,6 +344,7 @@
 					<thead>
 						<tr>
 							<th>Path</th>
+							<th>Kinds</th>
 							<th>Created</th>
 							<th>Last scanned</th>
 							<th class="w-24"></th>
@@ -276,6 +354,57 @@
 						{#each $libsStore.libraries as lib (lib.id)}
 							<tr>
 								<td class="font-mono text-xs break-all">{lib.path}</td>
+								<td class="text-xs">
+									{#if editingKindsFor === lib.id}
+										<div class="flex flex-wrap items-center gap-1">
+											{#each LIBRARY_KINDS as kind (kind)}
+												<label
+													class={classNames('btn btn-xs', {
+														'btn-primary': editKinds.includes(kind),
+														'btn-outline': !editKinds.includes(kind)
+													})}
+												>
+													<input
+														type="checkbox"
+														class="hidden"
+														checked={editKinds.includes(kind)}
+														disabled={savingKinds}
+														onchange={() => toggleEditKind(kind)}
+													/>
+													{LIBRARY_KIND_LABELS[kind]}
+												</label>
+											{/each}
+											<button
+												class="btn btn-xs btn-primary"
+												disabled={savingKinds}
+												onclick={() => saveKinds(lib.id)}
+											>
+												{savingKinds ? 'Saving…' : 'Save'}
+											</button>
+											<button
+												class="btn btn-ghost btn-xs"
+												disabled={savingKinds}
+												onclick={cancelEditKinds}
+											>
+												Cancel
+											</button>
+										</div>
+										{#if kindsError}
+											<p class="mt-1 text-error">{kindsError}</p>
+										{/if}
+									{:else if (lib.kinds ?? []).length === 0}
+										<button class="btn btn-ghost btn-xs" onclick={() => startEditKinds(lib)}>
+											Set kinds
+										</button>
+									{:else}
+										<button
+											class="badge flex flex-wrap gap-1 badge-outline badge-sm"
+											onclick={() => startEditKinds(lib)}
+										>
+											{(lib.kinds ?? []).map((k) => LIBRARY_KIND_LABELS[k] ?? k).join(', ')}
+										</button>
+									{/if}
+								</td>
 								<td class="text-xs text-base-content/60">{formatDate(lib.created_at)}</td>
 								<td class="text-xs text-base-content/60">
 									{lib.last_scanned_at ? formatDate(lib.last_scanned_at) : '—'}
@@ -301,7 +430,7 @@
 							</tr>
 							{#if pinsErrors[lib.id]}
 								<tr>
-									<td colspan="4" class="bg-base-100">
+									<td colspan="5" class="bg-base-100">
 										<div class="my-2 alert alert-warning">
 											<span class="text-sm">Pins: {pinsErrors[lib.id]}</span>
 										</div>
@@ -309,7 +438,7 @@
 								</tr>
 							{:else if libPins[lib.id]}
 								<tr>
-									<td colspan="4" class="bg-base-100 p-3">
+									<td colspan="5" class="bg-base-100 p-3">
 										<div class="flex flex-col gap-2">
 											<p class="text-xs text-base-content/70">
 												IPFS pins ({libPins[lib.id].length})
@@ -350,7 +479,7 @@
 							{/if}
 							{#if scanErrors[lib.id]}
 								<tr>
-									<td colspan="4" class="bg-base-100">
+									<td colspan="5" class="bg-base-100">
 										<div class="my-2 alert alert-error">
 											<span class="text-sm">{scanErrors[lib.id]}</span>
 											<button class="btn btn-ghost btn-xs" onclick={() => clearScan(lib.id)}>
@@ -361,7 +490,7 @@
 								</tr>
 							{:else if scanResults[lib.id]}
 								<tr>
-									<td colspan="4" class="bg-base-100 p-3">
+									<td colspan="5" class="bg-base-100 p-3">
 										<div class="flex flex-col gap-2">
 											<div class="flex items-center justify-between gap-2">
 												<p class="text-xs text-base-content/70">

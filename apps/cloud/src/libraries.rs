@@ -13,10 +13,18 @@ use surrealdb::sql::Thing;
 
 const TABLE: &str = "library";
 
+/// Catalog kinds a library may declare it contains. Mirrors the catalog
+/// addon type ids (`/api/catalog/sources`): `movie` + `tv` from TMDB,
+/// `album` from MusicBrainz, `book` from OpenLibrary, `game` from
+/// RetroAchievements.
+pub const LIBRARY_KINDS: &[&str] = &["movie", "tv", "album", "book", "game"];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Library {
     pub id: Option<Thing>,
     pub path: String,
+    #[serde(default)]
+    pub kinds: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
@@ -27,6 +35,7 @@ pub struct Library {
 pub struct LibraryDto {
     pub id: String,
     pub path: String,
+    pub kinds: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_scanned_at: Option<DateTime<Utc>>,
@@ -42,6 +51,7 @@ impl From<Library> for LibraryDto {
         Self {
             id,
             path: lib.path,
+            kinds: lib.kinds,
             created_at: lib.created_at,
             updated_at: lib.updated_at,
             last_scanned_at: lib.last_scanned_at,
@@ -52,11 +62,37 @@ impl From<Library> for LibraryDto {
 #[derive(Debug, Deserialize)]
 pub struct CreateLibraryRequest {
     pub path: String,
+    #[serde(default)]
+    pub kinds: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateLibraryRequest {
     pub path: String,
+    #[serde(default)]
+    pub kinds: Option<Vec<String>>,
+}
+
+fn sanitize_kinds(
+    raw: Vec<String>,
+) -> Result<Vec<String>, (StatusCode, Json<serde_json::Value>)> {
+    let mut out: Vec<String> = Vec::with_capacity(raw.len());
+    for k in raw.into_iter() {
+        let trimmed = k.trim().to_lowercase();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !LIBRARY_KINDS.contains(&trimmed.as_str()) {
+            return Err(err_response(
+                StatusCode::BAD_REQUEST,
+                format!("invalid library kind: {trimmed}"),
+            ));
+        }
+        if !out.iter().any(|x| x == &trimmed) {
+            out.push(trimmed);
+        }
+    }
+    Ok(out)
 }
 
 pub fn router() -> Router<CloudState> {
@@ -129,6 +165,7 @@ async fn create(
         ));
     }
     let normalized = normalize_path(&path.to_string_lossy());
+    let kinds = sanitize_kinds(req.kinds)?;
 
     let existing: Vec<Library> = state
         .db
@@ -147,6 +184,7 @@ async fn create(
     let record = Library {
         id: None,
         path: normalized,
+        kinds,
         created_at: now,
         updated_at: now,
         last_scanned_at: None,
@@ -206,6 +244,9 @@ async fn update(
     }
 
     current.path = normalized;
+    if let Some(kinds) = req.kinds {
+        current.kinds = sanitize_kinds(kinds)?;
+    }
     current.updated_at = Utc::now();
     current.id = None;
 
@@ -248,7 +289,7 @@ async fn delete(
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ScanEntry {
     pub path: String,
     pub relative_path: String,
@@ -343,7 +384,16 @@ async fn scan(
     }
 
     #[cfg(not(target_os = "android"))]
-    schedule_audio_pins(&state, &response.entries);
+    {
+        let kinds = lib.kinds.clone();
+        let lib_root = lib.path.clone();
+        crate::library_scan::schedule_pins_and_documents(
+            &state,
+            &response.entries,
+            kinds,
+            lib_root,
+        );
+    }
 
     Ok(Json(response))
 }
@@ -387,54 +437,14 @@ fn path_under_prefix(path: &str, prefix: &str) -> bool {
 }
 
 #[cfg(not(target_os = "android"))]
-fn is_pinnable_mime(mime: &str) -> bool {
+pub(crate) fn is_pinnable_mime(mime: &str) -> bool {
     mime.starts_with("audio/") || mime.starts_with("video/") || mime.starts_with("image/")
 }
 
 #[cfg(not(target_os = "android"))]
-fn schedule_audio_pins(state: &CloudState, entries: &[ScanEntry]) {
-    let to_pin: Vec<(String, String, u64)> = entries
-        .iter()
-        .filter(|e| is_pinnable_mime(&e.mime))
-        .map(|e| (e.path.clone(), e.mime.clone(), e.size))
-        .collect();
-    if to_pin.is_empty() {
-        tracing::info!("[libraries] scan produced no pinnable files");
-        return;
-    }
-    let ipfs = state.ipfs_manager.clone();
-    let state = state.clone();
-    let count = to_pin.len();
-    tokio::spawn(async move {
-        if !wait_for_ipfs_ready(&ipfs).await {
-            tracing::warn!(
-                "[libraries] skipping pin of {count} file(s): ipfs node never reached running state"
-            );
-            return;
-        }
-        tracing::info!("[libraries] pinning {count} scanned file(s) to ipfs");
-        for (path, mime, size) in to_pin {
-            let req = mhaol_ipfs::AddIpfsRequest {
-                source: path.clone(),
-                pin: Some(true),
-            };
-            match ipfs.add(req).await {
-                Ok(info) => {
-                    if let Err(e) =
-                        crate::ipfs_pins::record_pin(&state, info.cid, path.clone(), mime, size)
-                            .await
-                    {
-                        tracing::warn!("failed to record ipfs pin for {path}: {e}");
-                    }
-                }
-                Err(e) => tracing::warn!("failed to pin {path} to ipfs: {e}"),
-            }
-        }
-    });
-}
-
-#[cfg(not(target_os = "android"))]
-async fn wait_for_ipfs_ready(ipfs: &std::sync::Arc<mhaol_ipfs::IpfsManager>) -> bool {
+pub(crate) async fn wait_for_ipfs_ready(
+    ipfs: &std::sync::Arc<mhaol_ipfs::IpfsManager>,
+) -> bool {
     use mhaol_ipfs::IpfsState;
     // Cap the wait at ~60s so a permanently-broken node doesn't pin tasks
     // forever. Most boots reach Running within a few seconds.

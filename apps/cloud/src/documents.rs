@@ -40,6 +40,7 @@ const ALLOWED_SOURCES: &[&str] = &[
     "lrclib",
     "openlibrary",
     "wyzie-subs",
+    "local",
 ];
 
 const ALLOWED_FILE_TYPES: &[&str] = &["ipfs", "torrent magnet", "url"];

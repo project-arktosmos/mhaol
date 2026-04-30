@@ -1,9 +1,21 @@
 import { writable, type Writable } from 'svelte/store';
 import type { IpfsPin } from '$lib/ipfs.service';
 
+export const LIBRARY_KINDS = ['movie', 'tv', 'album', 'book', 'game'] as const;
+export type LibraryKind = (typeof LIBRARY_KINDS)[number];
+
+export const LIBRARY_KIND_LABELS: Record<LibraryKind, string> = {
+	movie: 'Movies',
+	tv: 'TV Shows',
+	album: 'Albums',
+	book: 'Books',
+	game: 'Games'
+};
+
 export interface Library {
 	id: string;
 	path: string;
+	kinds: LibraryKind[];
 	created_at: string;
 	updated_at: string;
 	last_scanned_at: string | null;
@@ -61,16 +73,44 @@ class LibrariesService {
 		}
 	}
 
-	async create(path: string): Promise<Library> {
+	async create(path: string, kinds: LibraryKind[] = []): Promise<Library> {
 		const res = await fetch('/api/libraries', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ path })
+			body: JSON.stringify({ path, kinds })
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const created = (await res.json()) as Library;
 		this.state.update((s) => ({ ...s, libraries: [...s.libraries, created] }));
 		return created;
+	}
+
+	async update(id: string, patch: { path?: string; kinds?: LibraryKind[] }): Promise<Library> {
+		const current = this.findInState(id);
+		const body = {
+			path: patch.path ?? current?.path ?? '',
+			...(patch.kinds === undefined ? {} : { kinds: patch.kinds })
+		};
+		const res = await fetch(`/api/libraries/${encodeURIComponent(id)}`, {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(body)
+		});
+		if (!res.ok) throw new Error(await parseError(res));
+		const updated = (await res.json()) as Library;
+		this.state.update((s) => ({
+			...s,
+			libraries: s.libraries.map((l) => (l.id === id ? updated : l))
+		}));
+		return updated;
+	}
+
+	private findInState(id: string): Library | undefined {
+		let found: Library | undefined;
+		this.state.subscribe((s) => {
+			found = s.libraries.find((l) => l.id === id);
+		})();
+		return found;
 	}
 
 	async scan(id: string): Promise<ScanResponse> {
