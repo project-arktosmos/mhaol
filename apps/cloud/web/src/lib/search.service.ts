@@ -2,6 +2,8 @@ import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/mus
 import { searchBooks } from 'addons/openlibrary';
 import { searchChannels as searchIptvChannels, getStreams as getIptvStreams } from 'addons/iptv';
 import type { DisplayIptvChannel } from 'addons/iptv/types';
+import { searchStations as searchRadioStations } from 'addons/radio';
+import type { DisplayRadioStation } from 'addons/radio/types';
 import { TorrentCategory } from 'addons/torrent-search-thepiratebay/types';
 import type { Artist, FirkinSource, FirkinType, FileEntry, ImageMeta } from './firkins.service';
 
@@ -135,13 +137,15 @@ export async function searchSource(
 			return searchOpenLibrary(trimmed);
 		case 'iptv':
 			return searchIptv(trimmed);
+		case 'radio':
+			return searchRadio(trimmed);
 		default:
 			throw new Error(`search not yet supported for source "${source}"`);
 	}
 }
 
 export function isTorrentSearchableType(type: FirkinType): boolean {
-	return type !== 'iptv channel';
+	return type !== 'iptv channel' && type !== 'radio station';
 }
 
 function tpbCategoryFor(type: FirkinType): TorrentCategory | null {
@@ -162,6 +166,7 @@ function tpbCategoryFor(type: FirkinType): TorrentCategory | null {
 		case 'book':
 			return TorrentCategory.Other;
 		case 'iptv channel':
+		case 'radio station':
 			return null;
 	}
 }
@@ -409,6 +414,44 @@ async function searchIptv(query: string): Promise<SearchResultItem[]> {
 			year: null,
 			externalId: ch.id,
 			raw: ch
+		};
+	});
+}
+
+async function searchRadio(query: string): Promise<SearchResultItem[]> {
+	const result = await searchRadioStations(query, { limit: 50, hideBroken: true });
+	return result.stations.map((s: DisplayRadioStation) => {
+		const files: FileEntry[] = s.streamUrl
+			? [
+					{
+						type: 'url' as const,
+						value: s.streamUrl,
+						title: [s.name, s.codec, s.bitrate ? `${s.bitrate}kbps` : null]
+							.filter(Boolean)
+							.join(' · ')
+					}
+				]
+			: [];
+		const images: ImageMeta[] = s.logo
+			? [{ url: s.logo, mimeType: 'image/png', fileSize: 0, width: 0, height: 0 }]
+			: [];
+		const description = [
+			s.country,
+			s.tags.slice(0, 4).join(', '),
+			s.bitrate ? `${s.bitrate}kbps ${s.codec ?? ''}`.trim() : s.codec,
+			s.isHls ? 'HLS' : null
+		]
+			.filter((v): v is string => Boolean(v))
+			.join(' · ');
+		return {
+			title: s.name,
+			description,
+			artists: s.homepage ? [{ name: s.name, url: s.homepage }] : [],
+			images,
+			files,
+			year: null,
+			externalId: s.id,
+			raw: s
 		};
 	});
 }
