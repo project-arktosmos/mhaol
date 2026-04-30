@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
-	import IpfsHlsPlayer from 'ui-lib/components/ipfs-stream/IpfsHlsPlayer.svelte';
 	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
 	import {
 		firkinTorrentsService,
@@ -46,15 +45,54 @@
 		isStreamUrlKind ? (firkin.files.find((f) => f.type === 'url')?.value ?? null) : null
 	);
 	const hasStreamUrl = $derived(firstStreamUrl !== null);
-	let ipfsPlayerCid = $state<string | null>(null);
+	let ipfsStarting = $state(false);
+	let ipfsError = $state<string | null>(null);
 
-	function startIpfsPlay(): void {
-		if (!firstIpfsCid) return;
-		ipfsPlayerCid = firstIpfsCid;
-	}
-
-	function closeIpfsPlay(): void {
-		ipfsPlayerCid = null;
+	async function startIpfsPlay(): Promise<void> {
+		if (!firstIpfsCid || ipfsStarting) return;
+		ipfsStarting = true;
+		ipfsError = null;
+		try {
+			const res = await fetch('/api/ipfs-stream/sessions', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ cid: firstIpfsCid })
+			});
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const body = (await res.json()) as { sessionId: string; playlistUrl: string };
+			const file: PlayableFile = {
+				id: `firkin:${firkin.id}:ipfs:${firstIpfsCid}`,
+				type: 'library',
+				name: firkin.title,
+				outputPath: '',
+				mode: 'video',
+				format: null,
+				videoFormat: null,
+				thumbnailUrl: firkin.images[0]?.url ?? null,
+				durationSeconds: null,
+				size: 0,
+				completedAt: ''
+			};
+			await playerService.playUrl(
+				file,
+				body.playlistUrl,
+				'application/vnd.apple.mpegurl',
+				'sidebar'
+			);
+		} catch (err) {
+			ipfsError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			ipfsStarting = false;
+		}
 	}
 
 	const torrentsState = firkinTorrentsService.state;
@@ -95,8 +133,7 @@
 				size: 0,
 				completedAt: ''
 			};
-			const mime =
-				firkin.type === 'iptv channel' ? 'application/vnd.apple.mpegurl' : null;
+			const mime = firkin.type === 'iptv channel' ? 'application/vnd.apple.mpegurl' : null;
 			await playerService.playUrl(file, firstStreamUrl, mime, 'sidebar');
 			return;
 		}
@@ -363,7 +400,7 @@
 				type="button"
 				class="btn gap-2 btn-sm btn-secondary"
 				onclick={startIpfsPlay}
-				disabled={!hasIpfsFiles}
+				disabled={!hasIpfsFiles || ipfsStarting}
 				aria-label="IPFS Play"
 				title={hasIpfsFiles
 					? 'Stream over IPFS as HLS'
@@ -379,7 +416,7 @@
 				>
 					<polygon points="6 4 20 12 6 20 6 4" />
 				</svg>
-				<span>IPFS Play</span>
+				<span>{ipfsStarting ? 'Starting…' : 'IPFS Play'}</span>
 			</button>
 			<button
 				type="button"
@@ -404,13 +441,9 @@
 		</div>
 	{/if}
 
-	{#if ipfsPlayerCid}
-		<div class="card border border-base-content/10 bg-base-200 p-4">
-			<div class="mb-2 flex items-center justify-between gap-2">
-				<h2 class="text-sm font-semibold text-base-content/70 uppercase">IPFS HLS Player</h2>
-				<span class="font-mono text-xs break-all text-base-content/60">{ipfsPlayerCid}</span>
-			</div>
-			<IpfsHlsPlayer cid={ipfsPlayerCid} onClose={closeIpfsPlay} />
+	{#if ipfsError}
+		<div class="alert alert-error">
+			<span>{ipfsError}</span>
 		</div>
 	{/if}
 
