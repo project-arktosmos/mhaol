@@ -114,9 +114,12 @@ async fn main() {
         let manager = Arc::new(TorrentManager::new());
         let manager_clone = Arc::clone(&manager);
         let download_path = paths::torrents_dir();
+        let stream_path = paths::torrent_streams_dir();
+        std::fs::create_dir_all(&stream_path).ok();
         tokio::spawn(async move {
             let config = TorrentConfig {
                 download_path,
+                stream_path,
                 ..TorrentConfig::default()
             };
             if let Err(e) = manager_clone.initialize(config).await {

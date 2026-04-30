@@ -55,6 +55,13 @@ pub fn torrents_dir() -> PathBuf {
     downloads_dir().join("torrents")
 }
 
+/// Scratch directory for "torrent stream" sessions. These are ephemeral —
+/// each new `/api/torrent/stream` request wipes prior contents — so they
+/// live separately from `torrents_dir()` to keep real downloads safe.
+pub fn torrent_streams_dir() -> PathBuf {
+    downloads_dir().join("torrent-streams")
+}
+
 pub fn ed2k_dir() -> PathBuf {
     downloads_dir().join("ed2k")
 }
