@@ -7,6 +7,12 @@
 		infoHashFromMagnet
 	} from 'ui-lib/services/document-torrents.service';
 	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
+	import { documentsService } from 'ui-lib/services/documents.service';
+	import {
+		documentReactionsService,
+		REACTION_EMOJIS,
+		type ReactionEmoji
+	} from 'ui-lib/services/document-reactions.service';
 	import { getCachedImageUrl } from 'ui-lib/services/image-cache.service';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 
@@ -45,7 +51,53 @@
 	let hasIpfsFiles = $derived(files.some((f) => f.type === 'ipfs'));
 
 	const torrentsState = documentTorrentsService.state;
+	const reactionsState = documentReactionsService.state;
 	let pendingHashes = $state<Record<string, boolean>>({});
+
+	let persistedRealIds = $state<Record<string, string>>({});
+	let effectiveId = $derived(persistedRealIds[document.id] ?? document.id);
+	let currentReaction = $derived<ReactionEmoji | null>($reactionsState[effectiveId] ?? null);
+	let persistingReaction = $state(false);
+
+	const REACTION_LABELS: Record<ReactionEmoji, string> = {
+		'👎': 'Thumbs down',
+		'⭐': 'Favorite',
+		'👍': 'Thumbs up'
+	};
+
+	async function ensureRealId(): Promise<string | null> {
+		const current = effectiveId;
+		if (!current.startsWith('virtual:')) return current;
+		try {
+			const created = await documentsService.create({
+				title: document.title,
+				artists: document.artists ?? [],
+				description: document.description ?? '',
+				images: document.images ?? [],
+				files: document.files ?? [],
+				year: document.year ?? null,
+				type: document.type,
+				source: document.source
+			});
+			persistedRealIds = { ...persistedRealIds, [document.id]: created.id };
+			return created.id;
+		} catch (err) {
+			console.error('Failed to persist virtual document', err);
+			return null;
+		}
+	}
+
+	async function reactWith(emoji: ReactionEmoji) {
+		if (persistingReaction) return;
+		persistingReaction = true;
+		try {
+			const id = await ensureRealId();
+			if (!id) return;
+			documentReactionsService.set(id, emoji);
+		} finally {
+			persistingReaction = false;
+		}
+	}
 
 	onMount(() => {
 		if (magnetFiles.length === 0) return;
@@ -265,8 +317,20 @@
 		</footer>
 	{/if}
 	<footer class="grid grid-cols-3 gap-1 border-t border-base-content/10 px-2 py-2">
-		<button type="button" class="btn text-lg btn-ghost btn-sm" aria-label="Thumbs down">👎</button>
-		<button type="button" class="btn text-lg btn-ghost btn-sm" aria-label="Favorite">⭐</button>
-		<button type="button" class="btn text-lg btn-ghost btn-sm" aria-label="Thumbs up">👍</button>
+		{#each REACTION_EMOJIS as emoji (emoji)}
+			<button
+				type="button"
+				class={classNames('btn text-lg btn-ghost btn-sm', {
+					grayscale: currentReaction !== emoji,
+					'grayscale-0': currentReaction === emoji
+				})}
+				aria-label={REACTION_LABELS[emoji]}
+				aria-pressed={currentReaction === emoji}
+				disabled={persistingReaction}
+				onclick={() => reactWith(emoji)}
+			>
+				{emoji}
+			</button>
+		{/each}
 	</footer>
 </article>

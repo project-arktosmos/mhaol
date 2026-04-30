@@ -1,7 +1,23 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { fetchJson } from 'ui-lib/transport/fetch-helpers';
-import type { CloudDocument } from 'ui-lib/types/document.type';
+import type {
+	CloudDocument,
+	DocumentArtist,
+	DocumentFile,
+	DocumentImage
+} from 'ui-lib/types/document.type';
+
+export interface CreateDocumentInput {
+	title: string;
+	artists: DocumentArtist[];
+	description: string;
+	images: DocumentImage[];
+	files: DocumentFile[];
+	year: number | null;
+	type: string;
+	source: string;
+}
 
 export interface DocumentsServiceState {
 	loading: boolean;
@@ -57,6 +73,24 @@ class DocumentsService {
 		} finally {
 			this.inFlight = false;
 		}
+	}
+
+	async create(input: CreateDocumentInput): Promise<CloudDocument> {
+		const created = await fetchJson<CloudDocument>('/api/documents', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(input)
+		});
+		this.state.update((s) => {
+			const idx = s.documents.findIndex((d) => d.id === created.id);
+			if (idx >= 0) {
+				const next = s.documents.slice();
+				next[idx] = created;
+				return { ...s, documents: next };
+			}
+			return { ...s, documents: [...s.documents, created] };
+		});
+		return created;
 	}
 }
 
