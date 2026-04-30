@@ -1,24 +1,16 @@
-mod config;
-mod health_check;
-mod rooms;
-mod setup;
-mod signaling;
-mod state;
-mod status;
-mod turn;
-mod ws;
-
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use axum::{routing::get, Router};
 use clap::{Parser, Subcommand};
-use config::RendezvousConfig;
 use mhaol_ipfs::{ensure_swarm_key, IpfsConfig, IpfsManager};
-use rooms::RoomManager;
-use state::RendezvousState;
-use tower_http::cors::{Any, CorsLayer};
+use mhaol_rendezvous::{
+    build_router,
+    config::RendezvousConfig,
+    health_check, rooms::RoomManager,
+    setup,
+    state::RendezvousState,
+};
 
 #[derive(Parser)]
 #[command(
@@ -60,11 +52,8 @@ async fn main() -> Result<()> {
 
     match cli.command.unwrap_or(Commands::Serve { config: None }) {
         Commands::Serve { config } => serve(config).await,
-        Commands::Setup => setup::run_wizard()
-            .map_err(|e| anyhow!(e)),
-        Commands::Status { url } => health_check::check(&url)
-            .await
-            .map_err(|e| anyhow!(e)),
+        Commands::Setup => setup::run_wizard().map_err(|e| anyhow!(e)),
+        Commands::Status { url } => health_check::check(&url).await.map_err(|e| anyhow!(e)),
     }
 }
 
@@ -133,23 +122,7 @@ async fn serve(config_path: Option<PathBuf>) -> Result<()> {
         turn: Arc::new(cfg.turn.clone()),
     };
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-
-    let app = Router::new()
-        .nest("/api/status", status::router())
-        .nest("/api/health", status::health_router())
-        .route("/party/{room_id}", get(ws::ws_handler))
-        .route("/party/{room_id}/status", get(ws::room_status))
-        .route(
-            "/api/v1/turn/credentials",
-            get(turn::turn_credentials_handler),
-        )
-        .nest("/signal", signaling::router())
-        .with_state(state)
-        .layer(cors);
+    let app = build_router(state);
 
     let addr = format!("{}:{}", cfg.host, cfg.http_port);
     tracing::info!(
