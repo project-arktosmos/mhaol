@@ -6,6 +6,7 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `packages/ui-lib/CLAUDE.md` — UI components, services, types, adapters, utils, CSS/themes, transport layer
 - `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
 - `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`)
+- `apps/rendezvous/CLAUDE.md` — Private-swarm IPFS bootstrap node + DHT-backed WebRTC signaling
 ---
 
 ## Monorepo Overview
@@ -14,6 +15,7 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 mhaol.git/
 ├── apps/
 │   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud")
+│   ├── rendezvous/                   # Rust IPFS bootstrap node for the private Mhaol swarm + DHT-backed WebRTC signaling (mhaol-rendezvous, HTTP 14080, libp2p 14001)
 │   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 │   └── signaling/                    # Rust signaling server (self-hosted alternative to PartyKit)
 ├── packages/
@@ -181,9 +183,10 @@ pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): Rust loop
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
 
 # Building
-pnpm build            # Build cloud WebUI + mhaol-cloud release binary
+pnpm build            # Build cloud (WebUI + binary) and rendezvous binary
 pnpm build:cloud:web  # Build cloud WebUI static assets only
 pnpm build:cloud      # Build cloud WebUI then build mhaol-cloud release binary (embeds the WebUI)
+pnpm build:rendezvous # Build mhaol-rendezvous release binary
 
 # Quality
 pnpm lint             # Lint all packages
@@ -198,6 +201,9 @@ pnpm app:shepperd:build   # Shepperd production build
 # Tauri shell
 pnpm app:tauri:cloud         # Mhaol Cloud desktop shell (apps/cloud/src-tauri)
 pnpm app:tauri:cloud:build   # Mhaol Cloud release build
+
+# Rendezvous (private-swarm IPFS bootstrap node + DHT-backed WebRTC signaling)
+pnpm app:rendezvous   # Run mhaol-rendezvous (HTTP 14080, libp2p TCP 14001)
 
 # Signaling
 pnpm signaling:dev    # PartyKit local dev

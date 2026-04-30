@@ -53,7 +53,7 @@ The cloud crate directly depends on these mhaol packages and reports their healt
 - `mhaol-yt-dlp` — YouTube download manager (cfg(not(target_os = "android"))).
 - `mhaol-torrent` — `librqbit`-backed torrent session, initialized in the background on startup so the server can bind quickly (cfg(not(target_os = "android"))).
 - `mhaol-ed2k` — eDonkey/ed2k client (cfg(not(target_os = "android"))).
-- `mhaol-ipfs` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT, optional mDNS), initialized in the background on startup. The blockstore lives at `<DATA_DIR>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node always runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<DATA_DIR>/downloads/ipfs/swarm.key` (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped, and the transport stack is constrained to TCP+pnet+noise+yamux. Copy the file to every other node that should join the network.
+- `mhaol-ipfs` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT), initialized in the background on startup. The blockstore lives at `<DATA_DIR>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node **always** runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<DATA_DIR>/swarm.key` — the same default location that `apps/rendezvous` uses (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped, mDNS is off, and the transport stack is constrained to TCP+pnet+noise+yamux. Non-PSK peers fail at the libp2p `pnet` handshake before anything reaches Kademlia or the application — that is the only enforcement layer needed. If the swarm key cannot be loaded or generated the IPFS subsystem refuses to start (no fallback to the public swarm). The cloud bootstraps against the rendezvous node: precedence is `RENDEZVOUS_BOOTSTRAP` env var (newline- or comma-separated multiaddrs), then `<DATA_DIR>/rendezvous/bootstrap.multiaddr` (override with `RENDEZVOUS_BOOTSTRAP_FILE`), then a localhost default of `/ip4/127.0.0.1/tcp/14001`.
 
 Default download paths land under `<DATA_DIR>/downloads/{torrents,ed2k,ipfs}` (or `<crate>/downloads/...` if `DATA_DIR` is unset). yt-dlp honors `YTDL_OUTPUT_DIR`/`YTDL_PO_TOKEN`/`YTDL_VISITOR_DATA`/`YTDL_COOKIES` via `YtDownloadConfig::from_env()`.
 
@@ -98,7 +98,9 @@ pnpm build:cloud
 - `DB_PATH` — SurrealDB store path (default: `<home>/mhaol/cloud-rocksdb/`, resolved per-OS via `dirs::home_dir()`)
 - `DATA_DIR` — If set and `DB_PATH` is unset, the store goes to `<DATA_DIR>/cloud-rocksdb/`
 - `SIGNALING_URL` — PartyKit signaling URL (default: hosted instance)
-- `IPFS_SWARM_KEY_FILE` — Path to the IPFS pre-shared swarm key. Default: `<DATA_DIR>/downloads/ipfs/swarm.key` (auto-generated on first boot when missing). All nodes on the same private swarm must share this file byte-for-byte.
+- `IPFS_SWARM_KEY_FILE` — Path to the IPFS pre-shared swarm key. Default: `<DATA_DIR>/swarm.key` (or `<home>/mhaol/swarm.key` when `DATA_DIR` is unset), auto-generated on first boot when missing. The rendezvous app defaults to the same path, so a single-machine setup shares the key out of the box. All nodes on the same private swarm must share this file byte-for-byte.
+- `RENDEZVOUS_BOOTSTRAP` — Newline- or comma-separated rendezvous multiaddrs to dial on startup (e.g. `/ip4/192.168.1.10/tcp/14001/p2p/12D3...`). Takes precedence over the bootstrap file.
+- `RENDEZVOUS_BOOTSTRAP_FILE` — Path to the rendezvous-written bootstrap multiaddr file. Default: `<DATA_DIR>/rendezvous/bootstrap.multiaddr` (or `<home>/mhaol/rendezvous/bootstrap.multiaddr`).
 
 ## Worker subcommand
 
