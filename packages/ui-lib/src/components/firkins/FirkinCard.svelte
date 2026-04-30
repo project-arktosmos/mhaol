@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
+	import { blo } from 'blo';
 	import type { CloudFirkin, FirkinFile } from 'ui-lib/types/firkin.type';
 	import {
 		firkinTorrentsService,
@@ -87,12 +88,10 @@
 		}
 	}
 
-	function shortAddress(addr: string): string {
-		if (!addr) return '';
-		return addr.length > 10 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
-	}
-
-	let creatorBadge = $derived(shortAddress(firkin.creator ?? ''));
+	let creatorAddress = $derived(firkin.creator ?? '');
+	let creatorIdenticon = $derived(
+		creatorAddress ? blo(creatorAddress as `0x${string}`) : null
+	);
 
 	async function reactWith(emoji: ReactionEmoji) {
 		if (persistingReaction) return;
@@ -171,14 +170,14 @@
 			</h3>
 		{/if}
 		<span class="text-xs text-base-content/70">{hasYear ? firkin.year : ''}</span>
-		{#if creatorBadge}
-			<span
-				class="badge font-mono badge-ghost badge-sm"
-				title={`Creator: ${firkin.creator}`}
-				aria-label={`Creator: ${firkin.creator}`}
-			>
-				{creatorBadge}
-			</span>
+		{#if creatorIdenticon}
+			<img
+				src={creatorIdenticon}
+				alt=""
+				class="h-6 w-6 shrink-0 rounded-full"
+				title={`Creator: ${creatorAddress}`}
+				aria-label={`Creator: ${creatorAddress}`}
+			/>
 		{/if}
 		{#if onRemove}
 			<button
