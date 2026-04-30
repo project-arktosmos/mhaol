@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm clean:ports && cargo build -p mhaol-cloud --bin mhaol-cloud && concurrently --kill-others-on-fail --names cloud,web,tauri --prefix-colors blue,green,magenta \"pnpm run app:cloud\" \"pnpm run app:cloud:web\" \"pnpm run app:tauri:cloud\"",
+		"dev": "pnpm clean:ports && export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$(( ( $(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) + 1 ) / 2 ))} && cargo build -p mhaol-cloud --bin mhaol-cloud && concurrently --kill-others-on-fail --names cloud,web,tauri --prefix-colors blue,green,magenta \"pnpm run app:cloud\" \"pnpm run app:cloud:web\" \"pnpm run app:tauri:cloud\"",
 		"dev:cloud:web": "pnpm --filter cloud dev",
 		"build": "pnpm run build:cloud && pnpm run build:rendezvous",
 		"build:cloud:web": "pnpm --filter cloud build",
