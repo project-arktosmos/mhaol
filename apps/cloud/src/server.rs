@@ -19,6 +19,7 @@ mod search;
 mod state;
 mod torrent;
 mod torrent_completion;
+mod users;
 mod worker_bridge;
 #[cfg(not(target_os = "android"))]
 mod ytdl;
@@ -277,6 +278,7 @@ async fn main() {
     let mut app = Router::new()
         .nest("/api/health", health::router())
         .nest("/api/cloud", cloud_status::router())
+        .nest("/api/users", users::router())
         .nest("/api/libraries", libraries::router())
         .nest("/api/firkins", firkins::router())
         .nest("/api/database", database::router())

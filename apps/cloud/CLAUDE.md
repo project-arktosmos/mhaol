@@ -18,6 +18,7 @@ src/
 ├── db.rs                # SurrealDB connection helper (RocksDB engine)
 ├── state.rs             # CloudState: { db, identity_manager, ytdl_manager, torrent_manager, ed2k_manager, ipfs_manager }
 ├── cloud_status.rs      # GET /api/cloud/status
+├── users.rs             # /api/users — secp256k1 user registry (id = lowercased EVM address); register/login require an EIP-191 signature over a fresh `Mhaol Cloud auth at <RFC3339>` message
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir; carries a list of catalog `kinds` (movie / tv / album / book / game)
 ├── library_scan.rs      # Scan-time media detection + firkin persistence (cfg(not(target_os = "android")))
 ├── firkins.rs         # /api/firkins CRUD — SurrealDB-backed firkin records (id is a CIDv1-raw of the body); create also pins the body JSON to the embedded IPFS node and records an `ipfs_pin` row keyed `firkin://<id>`
@@ -142,6 +143,11 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 ## Public WebUI endpoints
 
 - `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, signaling/client wallet addresses, db engine/namespace/version, and a `packages` block reporting health for `p2pStream`, `ytDlp`, `torrent`, `ed2k`, and `ipfs`. No auth required (used by the embedded WebUI).
+- `GET /api/users` — list registered users (`{ address, username, created_at, updated_at, last_login_at }`).
+- `GET /api/users/:address` — fetch one user by lowercased EVM address.
+- `POST /api/users/register` — body `{ address, username, message, signature }`. Username is `[A-Za-z0-9-]{1,32}` (case-insensitively unique). The signature must be EIP-191 over the literal message `Mhaol Cloud auth at <RFC3339 timestamp>` (timestamp must be within ±5 minutes of the server's clock); the recovered address must equal `address`. Conflicts on duplicate address or username return `409`. The WebUI auto-registers a fresh keypair on first visit when `localStorage["mhaol-cloud-identity"]` is missing.
+- `POST /api/users/login` — same auth shape as register; updates `last_login_at`. Returns `404` if the user has not registered yet.
+- `PUT /api/users/:address` — body `{ username, message, signature }` rotates the username; the signature must come from the user's own private key.
 - `GET /api/libraries` — list libraries persisted in SurrealDB (`library` table). Libraries have no name; each is identified by its directory path. Each record carries an `addons: string[]` field listing which `local-*` addons it serves (any subset of `local-movie`, `local-tv`, `local-album`, `local-book`, `local-game`). Records persisted under the prior schema (`kinds: ["movie", ...]`) are migrated automatically on read via a serde alias, but the values themselves don't change — set the addons explicitly via `PUT` to migrate to the new ids.
 - `POST /api/libraries` — create a library `{ path, addons? }`. `addons` is an optional list of `local-*` addon ids; unknown ids are rejected with `400`. The directory is created on disk if it does not exist; duplicate paths are rejected with `409`.
 - `GET /api/libraries/:id` — fetch one library.

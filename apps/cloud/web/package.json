@@ -19,7 +19,8 @@
 		"addons": "workspace:*",
 		"classnames": "^2.5.1",
 		"svelte-i18n": "^4.0.1",
-		"ui-lib": "workspace:*"
+		"ui-lib": "workspace:*",
+		"viem": "^2.46.3"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.2",
