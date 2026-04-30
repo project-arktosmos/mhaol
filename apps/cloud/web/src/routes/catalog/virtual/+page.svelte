@@ -64,6 +64,31 @@
 	let assignError = $state<string | null>(null);
 	let searchRun = 0;
 
+	let bookmarking = $state(false);
+	let bookmarkError = $state<string | null>(null);
+
+	async function bookmark() {
+		if (bookmarking || !title) return;
+		bookmarkError = null;
+		bookmarking = true;
+		try {
+			const created: Firkin = await firkinsService.create({
+				title,
+				artists: [],
+				description,
+				images,
+				files: [],
+				year,
+				addon: addon as FirkinAddon
+			});
+			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
+		} catch (err) {
+			bookmarkError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			bookmarking = false;
+		}
+	}
+
 	type Track = { id: string; position: number; title: string; lengthMs: number | null };
 	type TracksStatus = 'idle' | 'loading' | 'done' | 'error';
 	let tracksStatus = $state<TracksStatus>('idle');
@@ -223,7 +248,35 @@
 				<span class="badge badge-sm badge-warning">virtual</span>
 			</p>
 		</div>
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				class="btn gap-2 btn-sm btn-primary"
+				onclick={bookmark}
+				disabled={bookmarking || !title}
+				aria-label="Bookmark"
+				title="Persist this virtual item as a firkin in the catalog"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+					stroke="none"
+					class="h-4 w-4 shrink-0"
+					aria-hidden="true"
+				>
+					<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
+				</svg>
+				<span>{bookmarking ? 'Bookmarking…' : 'Bookmark'}</span>
+			</button>
+		</div>
 	</header>
+
+	{#if bookmarkError}
+		<div class="alert alert-error">
+			<span>{bookmarkError}</span>
+		</div>
+	{/if}
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
 		<aside class="flex flex-col gap-4">
