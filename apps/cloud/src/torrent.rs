@@ -1,6 +1,6 @@
 use crate::state::CloudState;
 use axum::{
-    extract::State,
+    extract::{Path as AxumPath, State},
     http::StatusCode,
     routing::{get, post},
     Json, Router,
@@ -8,18 +8,52 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 
+#[cfg(target_os = "android")]
+use axum::response::IntoResponse;
 #[cfg(not(target_os = "android"))]
-use mhaol_torrent::{AddTorrentRequest, TorrentInfo};
+use serde::Serialize;
+
+#[cfg(not(target_os = "android"))]
+use axum::{
+    body::Body,
+    http::{header, HeaderMap, HeaderValue, Response},
+};
+#[cfg(not(target_os = "android"))]
+use mhaol_torrent::{AddTorrentRequest, TorrentInfo, TorrentStreamInfo};
+#[cfg(not(target_os = "android"))]
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
+#[cfg(not(target_os = "android"))]
+use tokio_util::io::ReaderStream;
 
 #[derive(Debug, Deserialize)]
 pub struct AddRequest {
     pub magnet: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct StreamRequest {
+    pub magnet: String,
+}
+
+#[cfg(not(target_os = "android"))]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StreamStartResponse {
+    info_hash: String,
+    name: String,
+    file_index: usize,
+    file_name: String,
+    file_size: u64,
+    mime_type: Option<String>,
+    stream_url: String,
+}
+
 pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/list", get(list))
         .route("/add", post(add))
+        .route("/stream", post(stream_start))
+        .route("/stream/{info_hash}/{file_index}", get(stream_serve))
 }
 
 fn err(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
@@ -85,3 +119,167 @@ async fn add(
         "torrent client unavailable on this platform",
     ))
 }
+
+#[cfg(not(target_os = "android"))]
+async fn stream_start(
+    State(state): State<CloudState>,
+    Json(req): Json<StreamRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let magnet = req.magnet.trim();
+    if !magnet.starts_with("magnet:") {
+        return Err(err(StatusCode::BAD_REQUEST, "magnet URI required"));
+    }
+    if !state.torrent_manager.is_initialized() {
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "torrent client not ready",
+        ));
+    }
+
+    let TorrentStreamInfo {
+        info_hash,
+        name,
+        file,
+    } = state
+        .torrent_manager
+        .start_stream(magnet)
+        .await
+        .map_err(|e| err(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    let stream_url = format!("/api/torrent/stream/{}/{}", info_hash, file.index);
+    let body = StreamStartResponse {
+        info_hash,
+        name,
+        file_index: file.index,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.mime_type,
+        stream_url,
+    };
+    Ok(Json(serde_json::to_value(body).unwrap_or_default()))
+}
+
+#[cfg(target_os = "android")]
+async fn stream_start(
+    State(_state): State<CloudState>,
+    Json(_req): Json<StreamRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    Err(err(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "torrent streaming unavailable on this platform",
+    ))
+}
+
+#[cfg(not(target_os = "android"))]
+fn parse_range(value: &HeaderValue, file_len: u64) -> Option<(u64, u64)> {
+    let s = value.to_str().ok()?;
+    let s = s.strip_prefix("bytes=")?;
+    // Only honor the first range; tail-range "bytes=-N" is supported.
+    let first = s.split(',').next()?.trim();
+    let (start_s, end_s) = first.split_once('-')?;
+    if start_s.is_empty() {
+        let suffix: u64 = end_s.parse().ok()?;
+        if suffix == 0 || file_len == 0 {
+            return None;
+        }
+        let suffix = suffix.min(file_len);
+        return Some((file_len - suffix, file_len - 1));
+    }
+    let start: u64 = start_s.parse().ok()?;
+    let end: u64 = if end_s.is_empty() {
+        file_len.saturating_sub(1)
+    } else {
+        end_s.parse().ok()?
+    };
+    if start > end || start >= file_len {
+        return None;
+    }
+    Some((start, end.min(file_len.saturating_sub(1))))
+}
+
+#[cfg(not(target_os = "android"))]
+async fn stream_serve(
+    State(state): State<CloudState>,
+    AxumPath((info_hash, file_index)): AxumPath<(String, usize)>,
+    headers: HeaderMap,
+) -> Result<Response<Body>, (StatusCode, Json<serde_json::Value>)> {
+    if !state.torrent_manager.is_initialized() {
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "torrent client not ready",
+        ));
+    }
+
+    let (file_len, mut stream) = state
+        .torrent_manager
+        .open_file_stream(&info_hash, file_index)
+        .map_err(|e| err(StatusCode::NOT_FOUND, e.to_string()))?;
+
+    let mime = headers
+        .get("x-mhaol-mime")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+
+    let range_header = headers.get(header::RANGE).cloned();
+    if let Some(value) = range_header {
+        let (start, end) = parse_range(&value, file_len).ok_or_else(|| {
+            (
+                StatusCode::RANGE_NOT_SATISFIABLE,
+                Json(json!({ "error": "invalid Range header" })),
+            )
+        })?;
+        let length = end - start + 1;
+        stream
+            .seek(std::io::SeekFrom::Start(start))
+            .await
+            .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("seek: {e}")))?;
+        let limited = stream.take(length);
+        let body = Body::from_stream(ReaderStream::new(limited));
+        let mut resp = Response::builder()
+            .status(StatusCode::PARTIAL_CONTENT)
+            .body(body)
+            .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let h = resp.headers_mut();
+        if let Ok(v) = HeaderValue::from_str(&mime) {
+            h.insert(header::CONTENT_TYPE, v);
+        }
+        if let Ok(v) = HeaderValue::from_str(&length.to_string()) {
+            h.insert(header::CONTENT_LENGTH, v);
+        }
+        if let Ok(v) = HeaderValue::from_str(&format!("bytes {start}-{end}/{file_len}")) {
+            h.insert(header::CONTENT_RANGE, v);
+        }
+        h.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        return Ok(resp);
+    }
+
+    let body = Body::from_stream(ReaderStream::new(stream));
+    let mut resp = Response::builder()
+        .status(StatusCode::OK)
+        .body(body)
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let h = resp.headers_mut();
+    if let Ok(v) = HeaderValue::from_str(&mime) {
+        h.insert(header::CONTENT_TYPE, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&file_len.to_string()) {
+        h.insert(header::CONTENT_LENGTH, v);
+    }
+    h.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    Ok(resp)
+}
+
+#[cfg(target_os = "android")]
+async fn stream_serve(
+    State(_state): State<CloudState>,
+    AxumPath((_info_hash, _file_index)): AxumPath<(String, usize)>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    Err(err(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "torrent streaming unavailable on this platform",
+    ))
+}
+
