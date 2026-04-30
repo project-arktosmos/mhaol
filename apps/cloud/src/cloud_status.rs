@@ -1,8 +1,9 @@
 use crate::state::CloudState;
 use axum::{extract::State, routing::get, Json, Router};
+use parking_lot::Mutex;
 use serde::Serialize;
 use std::net::UdpSocket;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const STARTED_AT: once_cell::sync::Lazy<u64> = once_cell::sync::Lazy::new(|| {
     SystemTime::now()
@@ -10,6 +11,11 @@ const STARTED_AT: once_cell::sync::Lazy<u64> = once_cell::sync::Lazy::new(|| {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 });
+
+const PUBLIC_IP_TTL: Duration = Duration::from_secs(300);
+
+static PUBLIC_IP_CACHE: once_cell::sync::Lazy<Mutex<Option<(String, Instant)>>> =
+    once_cell::sync::Lazy::new(|| Mutex::new(None));
 
 #[derive(Serialize)]
 struct CloudStatus {
@@ -21,6 +27,7 @@ struct CloudStatus {
     host: String,
     port: u16,
     local_ip: Option<String>,
+    public_ip: Option<String>,
     signaling_address: Option<String>,
     client_address: Option<String>,
     db: DbStatus,
@@ -79,6 +86,7 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
         .and_then(|p| p.parse().ok())
         .unwrap_or(9898);
     let local_ip = get_local_ip();
+    let public_ip = get_public_ip().await;
 
     let signaling_address = state
         .identity_manager
@@ -115,6 +123,7 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
         host,
         port,
         local_ip,
+        public_ip,
         signaling_address,
         client_address,
         db,
@@ -127,6 +136,33 @@ fn get_local_ip() -> Option<String> {
     socket.connect("8.8.8.8:80").ok()?;
     let addr = socket.local_addr().ok()?;
     Some(addr.ip().to_string())
+}
+
+async fn get_public_ip() -> Option<String> {
+    {
+        let cache = PUBLIC_IP_CACHE.lock();
+        if let Some((ip, fetched_at)) = cache.as_ref() {
+            if fetched_at.elapsed() < PUBLIC_IP_TTL {
+                return Some(ip.clone());
+            }
+        }
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .ok()?;
+    let resp = client.get("https://api.ipify.org").send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let ip = resp.text().await.ok()?.trim().to_string();
+    if ip.is_empty() {
+        return None;
+    }
+
+    *PUBLIC_IP_CACHE.lock() = Some((ip.clone(), Instant::now()));
+    Some(ip)
 }
 
 fn p2p_stream_health() -> PackageHealth {

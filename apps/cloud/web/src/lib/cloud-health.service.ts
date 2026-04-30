@@ -35,6 +35,7 @@ export interface CloudStatus {
 	host: string;
 	port: number;
 	local_ip: string | null;
+	public_ip: string | null;
 	signaling_address: string | null;
 	client_address: string | null;
 	db: CloudDbStatus;

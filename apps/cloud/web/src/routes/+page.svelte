@@ -184,6 +184,12 @@
 			mono
 		/>
 		<HealthCard
+			label="Public IP"
+			value={$state.status?.public_ip ?? '—'}
+			hint={$state.status?.public_ip ? 'Resolved via api.ipify.org' : 'Unavailable'}
+			mono
+		/>
+		<HealthCard
 			label="Database"
 			value={$state.status?.db.engine ?? '—'}
 			tone={$state.status?.db.connected === false ? 'error' : 'success'}
