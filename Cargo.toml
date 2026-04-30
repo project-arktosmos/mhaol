@@ -1,20 +1,16 @@
 [workspace]
 resolver = "2"
 members = [
-    "apps/frontend/src-tauri",
-    "apps/node",
     "apps/cloud",
     "apps/cloud/src-tauri",
-    "apps/player/src-tauri",
+    "apps/rendezvous",
     "apps/signaling",
     "packages/identity",
-    "packages/queue",
     "packages/yt-dlp",
     "packages/torrent",
     "packages/ed2k",
     "packages/ipfs",
     "packages/p2p-stream",
-    "packages/recommendations",
 ]
 
 # `core2 0.4.0` is the only published version and was yanked from crates.io.

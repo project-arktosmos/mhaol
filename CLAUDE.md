@@ -5,10 +5,7 @@ This document guides Claude (and developers) on implementing features in this mo
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `packages/ui-lib/CLAUDE.md` — UI components, services, types, adapters, utils, CSS/themes, transport layer
 - `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
-- `apps/node/CLAUDE.md` — Rust API modules, AppState, sub-crate dependencies
 - `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`)
-- `apps/player/CLAUDE.md` — Player SPA + player desktop Tauri shell (`mhaol-player-shell`) and mobile shell
-- `apps/tauri/CLAUDE.md` — Shared health UI (`tauri-web`) loaded by both per-app desktop Tauri shells
 ---
 
 ## Monorepo Overview
@@ -16,20 +13,15 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 ```
 mhaol.git/
 ├── apps/
-│   ├── frontend/                     # Unified SPA (landing + connect + media, port 1570)
-│   ├── player/                       # Player SPA (port 9595) + per-app Tauri shell at player/src-tauri (mhaol-player-shell, "Mhaol Player")
-│   ├── node/                         # Rust Axum server (standalone, port 1530)
-│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + per-app Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud")
+│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud")
 │   ├── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
-│   └── tauri/                        # Shared assets only — `web/` is the health UI both desktop Tauri shells load
+│   └── signaling/                    # Rust signaling server (self-hosted alternative to PartyKit)
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, OpenLibrary, Wyzie subtitles, torrent search)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── signaling/                    # PartyKit signaling service
-│   ├── queue/                        # Rust task queue (SQLite + broadcast)
 │   ├── p2p-stream/                   # Rust P2P streaming library
-│   ├── recommendations/              # Rust TMDB recommendations (queue worker + SQLite storage)
 │   ├── torrent/                      # Rust torrent implementation
 │   ├── ed2k/                         # Rust eDonkey/ed2k network client (search + add)
 │   ├── ipfs/                         # Rust IPFS node (libp2p + Bitswap + Kademlia DHT, embedded)
@@ -42,61 +34,45 @@ mhaol.git/
 
 ---
 
-## App Architecture: Import & Assemble
+## App Architecture
 
-Apps under `apps/` are **thin wrappers** that import everything from `packages/ui-lib`, then assemble them. They contain **only**:
+The cloud SPA at `apps/cloud/web/` is a thin wrapper that imports everything from `packages/ui-lib`. It contains **only**:
 
 - `src/routes/` — SvelteKit route files (+page.svelte, +layout.svelte)
 - `src/css/app.css` — CSS entry point (imports Tailwind, DaisyUI, scans ui-lib)
 - `src/app.html`, `src/app.d.ts` — SvelteKit boilerplate
 - Config files (svelte.config.js, vite.config.ts, package.json, tsconfig.json)
 
-Apps **never** implement their own components, services, adapters, types, or utils. Everything lives in `packages/ui-lib`.
-
-### Node
-
-The node is a standalone Rust Axum server at `apps/node/`. Crate name `mhaol-node`, binary `mhaol-node`. Runs headless on port 1530 and exposes its API via HTTP and WebRTC RPC.
-
-- `apps/node/Cargo.toml` — Crate manifest
-- `apps/node/src/lib.rs` — AppState, modules, database layer
-- `apps/node/src/server.rs` — Binary entry point (HTTP server)
-- `apps/node/src/peer_service/rpc_handler.rs` — WebRTC RPC handler (routes data channel messages through Axum router)
+It **never** implements its own components, services, adapters, types, or utils. Everything lives in `packages/ui-lib`.
 
 ### Cloud
 
-The cloud is a Rust Axum server at `apps/cloud/` that depends on the `mhaol-node` library to start the same services (database, identity, queue, recommendations workers, peer service) and additionally hosts a Svelte WebUI that displays node health. Crate name `mhaol-cloud`, binary `mhaol-cloud`, default port 9898 (in dev, the binary binds 127.0.0.1:9899 and the Vite dev server takes 9898 as the public port).
+The cloud is a Rust Axum server at `apps/cloud/` that bootstraps an embedded SurrealDB store, an identity manager, and the desktop-only managers (`mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, `mhaol-ipfs`, `mhaol-p2p-stream`). It hosts a nested Svelte WebUI that displays cloud health and library/IPFS state. Crate name `mhaol-cloud`, binary `mhaol-cloud`, default port 9898 (in dev, the binary binds 127.0.0.1:9899 and the Vite dev server takes 9898 as the public port).
 
-- `apps/cloud/Cargo.toml` — Crate manifest (depends on `mhaol-node` as a library)
-- `apps/cloud/src/server.rs` — Binary entry point; bootstraps `AppState`, spawns the same workers as `mhaol-node`, and serves the embedded WebUI as a fallback to `/api/*`
+- `apps/cloud/Cargo.toml` — Crate manifest
+- `apps/cloud/src/server.rs` — Binary entry point; opens SurrealDB, spawns workers, serves the embedded WebUI as a fallback to `/api/*`
 - `apps/cloud/src/cloud_status.rs` — Public `/api/cloud/status` route used by the WebUI for health polling
 - `apps/cloud/src/libraries.rs` — `/api/libraries` CRUD; library records are stored in SurrealDB and identified by their on-disk directory path
 - `apps/cloud/src/frontend.rs` — Embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it as the fallback handler
-- `apps/cloud/web/` — SvelteKit static SPA (pnpm package `cloud`) built with the same `ui-lib` components as the player. Builds to `apps/cloud/web/dist-static/`, which is what the cloud crate embeds at compile time.
+- `apps/cloud/web/` — SvelteKit static SPA (pnpm package `cloud`). Builds to `apps/cloud/web/dist-static/`, which is what the cloud crate embeds at compile time.
 
-### Tauri shells
+### Tauri shell
 
-There are two desktop Tauri shells, one per app, each in its own crate so they have independent cargo targets and can run side by side without colliding:
+`apps/cloud/src-tauri/` — crate `mhaol-cloud-shell`, binary `mhaol-cloud-shell`. `productName: "Mhaol Cloud"`, identifier `com.arktosmos.mhaol.cloud`. **Tray-only**: `app.windows: []`, no window is ever created. macOS sets `ActivationPolicy::Accessory` (no dock icon), `RunEvent::ExitRequested` calls `prevent_exit()` so the process stays alive without windows. The system tray icon (id `mhaol-cloud-tray`, tooltip "Mhaol Cloud") has two items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`. `tauri.conf.json` keeps `frontendDist: ../web/dist-static` / `devUrl: http://localhost:9898` so build/dev tooling resolves cleanly; nothing actually renders the assets at runtime.
 
-- **`apps/cloud/src-tauri/`** — crate `mhaol-cloud-shell`, binary `mhaol-cloud-shell`. `productName: "Mhaol Cloud"`, identifier `com.arktosmos.mhaol.cloud`. **Tray-only**: `app.windows: []`, no window is ever created. macOS sets `ActivationPolicy::Accessory` (no dock icon), `RunEvent::ExitRequested` calls `prevent_exit()` so the process stays alive without windows. The system tray icon (id `mhaol-cloud-tray`, tooltip "Mhaol Cloud") has two items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`.
-- **`apps/player/src-tauri/`** — crate `mhaol-player-shell`, binary `mhaol-player-shell`. `productName: "Mhaol Player"`, identifier `com.arktosmos.mhaol.player`, window title `Mhaol Player`. Carries `tauri.android.conf.json` and `tauri.ios.conf.json` overrides so the mobile shell wraps the player SPA directly (`frontendDist: ../dist-static`, `devUrl: http://localhost:9595`).
+The cloud WebUI stays browser-accessible at `http://localhost:9898`.
 
-The **player** shell points at the shared health UI under `apps/tauri/web/` (pnpm package `tauri-web`, dev port 1571) — a minimal Svelte SPA that polls `http://localhost:9898/api/cloud/status` and `http://localhost:9595/` and renders one panel per app. `VITE_MHAOL_HEALTH_APPS` (`cloud`, `player`, `cloud,player`) selects which panels are shown. The player shell's `beforeDevCommand` is idempotent: `(lsof -i:1571 >/dev/null 2>&1) || pnpm --filter tauri-web dev`. tauri-web's Vite config uses `strictPort: true` to make port collisions fail loudly. The cloud shell does **not** load this UI — it's tray-only and has no window — but `apps/cloud/src-tauri/tauri.conf.json` still references `frontendDist`/`devUrl`/`beforeDevCommand` so build/dev tooling resolves cleanly; nothing actually renders the assets.
-
-The player Tauri webview shows the health UI, never an app's frontend directly. The cloud and player frontends stay browser-accessible at `http://localhost:9898` and `http://localhost:9595`. The cloud shell only contributes a system tray entry.
-
-Layout per shell (cloud and player are structurally identical):
-- `apps/<app>/src-tauri/Cargo.toml` — crate manifest
-- `apps/<app>/src-tauri/src/{lib.rs,main.rs}` — Tauri entry point (uses `mobile_entry_point` cfg for Android/iOS)
-- `apps/<app>/src-tauri/tauri.conf.json` — desktop config (frontendDist `../../tauri/web/dist-static`, devUrl `http://localhost:1571`)
-- `apps/<app>/src-tauri/capabilities/default.json`, `icons/`, `build.rs`
-- (player only) `tauri.android.conf.json`, `tauri.ios.conf.json` — mobile overrides
-- `apps/tauri/web/` — shared health UI; static SPA, builds to `apps/tauri/web/dist-static/`
+Layout:
+- `apps/cloud/src-tauri/Cargo.toml` — crate manifest
+- `apps/cloud/src-tauri/src/{lib.rs,main.rs}` — Tauri entry point
+- `apps/cloud/src-tauri/tauri.conf.json` — desktop config
+- `apps/cloud/src-tauri/capabilities/default.json`, `icons/`, `build.rs`
 
 The cloud frontend has these screens:
 - **Health** (`/`) — polls `/api/cloud/status` every 5 seconds and renders status, latency, uptime, bind, package health, and identities.
-- **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. The form lets you pick an existing directory, or browse to a parent and create a new subfolder; each library is identified by its directory path. Each row has a `Scan` button that walks the directory recursively, reports file size + MIME, and asynchronously pins audio, video, and image files to IPFS. The row also shows the IPFS pins (CID, path, MIME, size) recorded for that library, and on page load any library whose `last_scanned_at` is missing or older than 1 hour is rescanned automatically.
+- **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. The form lets you pick an existing directory, or browse to a parent and create a new subfolder; each library is identified by its directory path and carries a `kinds` list selecting which catalog types it contains (`movie`, `tv`, `album`, `book`, `game` — same ids as `/api/catalog/sources`). Each row has a `Scan` button that walks the directory recursively, reports file size + MIME, asynchronously pins media to IPFS, and (when `kinds` is non-empty) groups files into `document` records per detected media item — TV shows aware of nested season directories, albums grouped by directory, books/games per file. The row also shows the IPFS pins (CID, path, MIME, size) recorded for that library, and on page load any library whose `last_scanned_at` is missing or older than 1 hour is rescanned automatically.
 - **IPFS** (`/ipfs`) — reads `/api/ipfs/pins` and lists every pin recorded by library scans (CID, path, MIME, size).
-- **Catalog** (`/catalog`) — pick an addon (TMDB, MusicBrainz, OpenLibrary, RetroAchievements), optionally narrow by type (movie/tv) and genre/subject/console, and browse popular items. The Rust server proxies upstream calls via `/api/catalog/*` so addon API keys (`TMDB_API_KEY`, `RA_USERNAME` + `RA_API_KEY`) stay server-side.
+- **Catalog** (`/catalog`) — pick an addon (TMDB, MusicBrainz, OpenLibrary, RetroAchievements), optionally narrow by type (movie/tv) and genre/subject/console, and browse popular items. The Rust server proxies upstream calls via `/api/catalog/*` so addon API keys (`TMDB_API_KEY`, `RA_USERNAME` + `RA_API_KEY`) stay server-side. Grid items are **virtual** — nothing is written to SurrealDB and nothing is pinned to IPFS while browsing. Clicking "View details →" navigates to `/catalog/virtual?...` (a virtual detail synthesised from URL query params) which immediately runs a torrent search. Picking a torrent is the first persistence event: it `POST`s `/api/documents` with the magnet attached, then redirects to `/catalog/[ipfsHash]` (the real, content-addressed detail page). The torrent-completion background task on the server takes over from there to pin the resulting files to IPFS and roll the document version forward.
 
 ### Transport Layer
 
@@ -108,9 +84,9 @@ All frontend-to-backend communication goes through `packages/ui-lib/src/transpor
 - `transport-context.ts` — Module-level singleton (`setTransport`/`getTransport`)
 - `rpc.type.ts` — RPC message protocol types
 
-### How apps wire up
+### How the cloud SPA wires up
 
-Each app's `+layout.svelte` assembles the shared components:
+`apps/cloud/web/src/routes/+layout.svelte` assembles the shared components:
 
 ```svelte
 <script>
@@ -138,28 +114,28 @@ Each app's `+layout.svelte` assembles the shared components:
 <ModalOutlet {modals} />
 ```
 
-### App alias configuration
+### Alias configuration
 
-Every app's `svelte.config.js` points aliases to `packages/ui-lib`:
+The cloud SPA's `svelte.config.js` points aliases to `packages/ui-lib`:
 
 ```javascript
 alias: {
-  $components: '../../packages/ui-lib/src/components',
-  $services: '../../packages/ui-lib/src/services',
-  $types: '../../packages/ui-lib/src/types',
-  $adapters: '../../packages/ui-lib/src/adapters',
-  $utils: '../../packages/ui-lib/src/utils',
-  $data: '../../packages/ui-lib/src/data',
-  'ui-lib': '../../packages/ui-lib/src'
+  $components: '../../../packages/ui-lib/src/components',
+  $services: '../../../packages/ui-lib/src/services',
+  $types: '../../../packages/ui-lib/src/types',
+  $adapters: '../../../packages/ui-lib/src/adapters',
+  $utils: '../../../packages/ui-lib/src/utils',
+  $data: '../../../packages/ui-lib/src/data',
+  'ui-lib': '../../../packages/ui-lib/src'
 }
 ```
 
-Every app's `src/css/app.css` scans ui-lib for Tailwind classes:
+Its `src/css/app.css` scans ui-lib for Tailwind classes:
 
 ```css
 @import 'tailwindcss';
 @plugin 'daisyui';
-@source '../../packages/ui-lib/src';
+@source '../../../packages/ui-lib/src';
 @import 'ui-lib/css/themes.css';
 ```
 
@@ -201,38 +177,27 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Full desktop stack: pre-starts tauri-web (1571) with VITE_MHAOL_HEALTH_APPS=cloud,player, then runs dev:cloud and dev:player concurrently — Mhaol Player shows the shared health UI, Mhaol Cloud is tray-only.
-pnpm dev:apps         # Same backends without any Tauri shell — cloud + player Vite servers only, browser-based workflow
-pnpm dev:node         # Rust node server only (PORT=1530)
-pnpm dev:cloud        # Cloud + its tray-only Tauri shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + tray icon (no window)
+pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + tray icon (no window)
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
-pnpm dev:frontend     # Frontend dev server only (port 1570)
-pnpm dev:player       # Player + its named Tauri shell ("Mhaol Player"): Vite :9595 (browser-accessible) + tauri-web :1571 + Mhaol Player window
 
 # Building
-pnpm build            # Frontend build
-pnpm build:node       # Rust node release build
+pnpm build            # Build cloud WebUI + mhaol-cloud release binary
 pnpm build:cloud:web  # Build cloud WebUI static assets only
 pnpm build:cloud      # Build cloud WebUI then build mhaol-cloud release binary (embeds the WebUI)
 
 # Quality
 pnpm lint             # Lint all packages
 pnpm check            # svelte-check + cargo check
-pnpm test             # vitest + cargo test
+pnpm test             # vitest
 pnpm format           # Prettier write
 
 # Browser extension
 pnpm app:shepperd         # Shepperd dev (watch mode)
 pnpm app:shepperd:build   # Shepperd production build
 
-# Tauri shells (per app)
+# Tauri shell
 pnpm app:tauri:cloud         # Mhaol Cloud desktop shell (apps/cloud/src-tauri)
 pnpm app:tauri:cloud:build   # Mhaol Cloud release build
-pnpm app:tauri:player        # Mhaol Player desktop shell (apps/player/src-tauri)
-pnpm app:tauri:player:build  # Mhaol Player release build
-pnpm app:tauri:web           # Shared health UI Vite dev server only (apps/tauri/web, port 1571)
-pnpm tauri:android:dev       # adb reverse :9595 then run the mobile player shell (apps/player/src-tauri, mobile overrides wrap player directly)
-pnpm tauri:android:build     # Mobile release build (bundles player/dist-static)
 
 # Signaling
 pnpm signaling:dev    # PartyKit local dev
@@ -271,11 +236,11 @@ git commit -m "add thumbnail fallback to MediaCard"
 
 When adding a new feature that spans the full stack:
 
-**Node (`apps/node`)**
-- [ ] Create API module in `src/api/{feature}.rs`
-- [ ] Add `pub mod {feature};` to `src/api/mod.rs`
-- [ ] Register route in `build_router()`: `.nest("/api/{feature}", {feature}::router())`
-- [ ] Add any new repos to `AppState`
+**Cloud (`apps/cloud`)**
+- [ ] Create API module in `src/{feature}.rs` exposing a `pub fn router() -> Router<CloudState>`
+- [ ] Add `mod {feature};` to `src/server.rs`
+- [ ] Register route in `server.rs`: `.nest("/api/{feature}", {feature}::router())`
+- [ ] Add any new managers/repos to `CloudState`
 
 **Shared Frontend (`packages/ui-lib`)**
 - [ ] Define types in `src/types/{feature}.type.ts`
@@ -288,7 +253,7 @@ When adding a new feature that spans the full stack:
 - [ ] Components use callback props, contain no business logic
 - [ ] Write tests in `test/`
 
-**Apps (if the feature needs UI wiring)**
+**Cloud WebUI (`apps/cloud/web`, if the feature needs UI wiring)**
 - [ ] Import components from `ui-lib/components/...`
 - [ ] Import services/types from `ui-lib/services/...`, `ui-lib/types/...`
 - [ ] Add to navbar items and/or modal outlet if needed
@@ -306,5 +271,4 @@ When making significant structural changes (new packages, new component director
 
 - **Root CLAUDE.md** — Monorepo structure, app architecture, workspace scripts
 - **packages/ui-lib/CLAUDE.md** — Components, services, adapters, types, utils, CSS/themes
-- **App CLAUDE.md files** — Which features the app uses, how it assembles them
-- **apps/node/CLAUDE.md** — API modules, routes
+- **apps/cloud/CLAUDE.md** — API modules, routes

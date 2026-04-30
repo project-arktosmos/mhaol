@@ -5,7 +5,7 @@
 **Crate:** `mhaol-cloud`
 **Binary:** `mhaol-cloud` (default port 9898)
 
-The cloud server runs an embedded SurrealDB store, an identity manager, the shared `mhaol-queue` task manager (on a separate `cloud-queue.db` SQLite file), and the desktop-only managers from `mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, and `mhaol-ipfs`. It loads `mhaol-p2p-stream` for the GStreamer worker, and serves the Svelte WebUI from the nested `web/` directory. It is **independent** from `mhaol-node` — node still uses its own SQLite layer, cloud has its own state.
+The cloud server runs an embedded SurrealDB store, an identity manager, and the desktop-only managers from `mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, and `mhaol-ipfs`. It loads `mhaol-p2p-stream` for the GStreamer worker, and serves the Svelte WebUI from the nested `web/` directory.
 
 The cloud also ships a desktop Tauri shell at `apps/cloud/src-tauri/` (crate `mhaol-cloud-shell`, productName "Mhaol Cloud"). The shell is **tray-only** — it never opens a window. `tauri.conf.json` has `app.windows: []`, on macOS the activation policy is set to `Accessory` (no dock icon), and `RunEvent::ExitRequested` is intercepted via `prevent_exit()` so the app stays alive without any windows. It registers a system tray icon (id `mhaol-cloud-tray`) on macOS/Windows/Linux with two menu items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`. The cloud WebUI itself remains browser-accessible at `http://localhost:9898`.
 
@@ -15,9 +15,10 @@ The cloud also ships a desktop Tauri shell at `apps/cloud/src-tauri/` (crate `mh
 src/
 ├── server.rs            # Binary entry point — opens SurrealDB, builds router
 ├── db.rs                # SurrealDB connection helper (RocksDB engine)
-├── state.rs             # CloudState: { db, identity_manager, queue, ytdl_manager, torrent_manager, ed2k_manager, ipfs_manager }
+├── state.rs             # CloudState: { db, identity_manager, ytdl_manager, torrent_manager, ed2k_manager, ipfs_manager }
 ├── cloud_status.rs      # GET /api/cloud/status
-├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir
+├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir; carries a list of catalog `kinds` (movie / tv / album / book / game)
+├── library_scan.rs      # Scan-time media detection + document persistence (cfg(not(target_os = "android")))
 ├── documents.rs         # /api/documents CRUD — SurrealDB-backed document records (name, author, description)
 ├── database.rs          # /api/database/tables{,/:table} — read-only SurrealDB explorer (lists tables, paginates records)
 ├── ipfs_pins.rs         # /api/ipfs/pins — lists pins recorded when libraries are scanned; exposes record_pin() used by the scan handler
@@ -48,7 +49,6 @@ web/                     # SvelteKit static SPA (pnpm package `cloud`); builds t
 
 The cloud crate directly depends on these mhaol packages and reports their health on `/api/cloud/status`:
 
-- `mhaol-queue` — task queue, backed by a dedicated `cloud-queue.db` SQLite file (sibling of the SurrealDB store).
 - `mhaol-p2p-stream` — GStreamer worker subprocess + WebRTC streaming (cfg(not(target_os = "android"))).
 - `mhaol-yt-dlp` — YouTube download manager (cfg(not(target_os = "android"))).
 - `mhaol-torrent` — `librqbit`-backed torrent session, initialized in the background on startup so the server can bind quickly (cfg(not(target_os = "android"))).
@@ -56,10 +56,6 @@ The cloud crate directly depends on these mhaol packages and reports their healt
 - `mhaol-ipfs` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT, optional mDNS), initialized in the background on startup. The blockstore lives at `<DATA_DIR>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node always runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<DATA_DIR>/downloads/ipfs/swarm.key` (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped, and the transport stack is constrained to TCP+pnet+noise+yamux. Copy the file to every other node that should join the network.
 
 Default download paths land under `<DATA_DIR>/downloads/{torrents,ed2k,ipfs}` (or `<crate>/downloads/...` if `DATA_DIR` is unset). yt-dlp honors `YTDL_OUTPUT_DIR`/`YTDL_PO_TOKEN`/`YTDL_VISITOR_DATA`/`YTDL_COOKIES` via `YtDownloadConfig::from_env()`.
-
-## What is NOT here (yet)
-
-The cloud binary used to depend on `mhaol-node` and spawn its recommendation workers, peer service, library scanner, hub, etc. Those are still SQLite-backed and stay in node. When equivalent features are needed in cloud, they get re-implemented on top of SurrealDB.
 
 ## WebUI
 
@@ -110,13 +106,13 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 
 ## Public WebUI endpoints
 
-- `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, signaling/client wallet addresses, db engine/namespace/version, and a `packages` block reporting health for `p2pStream`, `queue`, `ytDlp`, `torrent`, `ed2k`, and `ipfs`. No auth required (used by the embedded WebUI).
-- `GET /api/libraries` — list libraries persisted in SurrealDB (`library` table). Libraries have no name; each is identified by its directory path.
-- `POST /api/libraries` — create a library `{ path }`. The directory is created on disk if it does not exist; duplicate paths are rejected with `409`.
+- `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, signaling/client wallet addresses, db engine/namespace/version, and a `packages` block reporting health for `p2pStream`, `ytDlp`, `torrent`, `ed2k`, and `ipfs`. No auth required (used by the embedded WebUI).
+- `GET /api/libraries` — list libraries persisted in SurrealDB (`library` table). Libraries have no name; each is identified by its directory path. Each record carries a `kinds: string[]` field listing which catalog types it contains (any subset of `movie`, `tv`, `album`, `book`, `game` — the same ids exposed by `/api/catalog/sources`). Records persisted before this field existed deserialize as an empty list.
+- `POST /api/libraries` — create a library `{ path, kinds? }`. `kinds` is an optional list of catalog kind ids; unknown kinds are rejected with `400`. The directory is created on disk if it does not exist; duplicate paths are rejected with `409`.
 - `GET /api/libraries/:id` — fetch one library.
-- `PUT /api/libraries/:id` — update the path. The new path is created on disk if missing; duplicates are rejected with `409`.
+- `PUT /api/libraries/:id` — update `path` (required) and optionally `kinds`. The new path is created on disk if missing; duplicates are rejected with `409`. Omitting `kinds` leaves the existing list untouched.
 - `DELETE /api/libraries/:id` — remove the library record. Every `ipfs_pin` whose `path` lies under the library directory is unpinned from the embedded IPFS node and deleted from SurrealDB; the on-disk files and directory are left untouched.
-- `GET /api/libraries/:id/scan` — recursively walk the library directory and return `{ root, total_files, total_size, entries }` where each entry is `{ path, relative_path, size, mime }`. MIME types are resolved by extension via `mime_guess`; the scan response itself is not persisted, but every entry whose mime starts with `audio/`, `video/`, or `image/` is asynchronously added to the embedded IPFS node (recursive pin) and recorded in the `ipfs_pin` table. The pin task waits for the IPFS node to reach `Running` state (up to ~60s) before it starts so the very first scan after server boot doesn't race the IPFS init. The library's `last_scanned_at` is updated on the record once the walk completes.
+- `GET /api/libraries/:id/scan` — recursively walk the library directory and return `{ root, total_files, total_size, entries }` where each entry is `{ path, relative_path, size, mime }`. MIME types are resolved by extension via `mime_guess`. The scan response itself is not persisted; the library's `last_scanned_at` is updated once the walk completes. After the walk, the scan handler hands off to `library_scan::schedule_pins_and_documents` (see "Library scan → documents" below). The pin task waits for the IPFS node to reach `Running` state (up to ~60s) before it starts so the very first scan after server boot doesn't race the IPFS init.
 - `GET /api/libraries/:id/pins` — list pins from `ipfs_pin` whose `path` lies under this library's directory. Same shape as `GET /api/ipfs/pins`.
 - `GET /api/ipfs/pins` — list every pin recorded by the cloud (`ipfs_pin` table). Each row is `{ id, cid, path, mime, size, created_at }`. Records are deduplicated by `(cid, path)` so re-scans don't create duplicates.
 - `GET /api/documents` — list documents persisted in SurrealDB (`document` table).
@@ -137,6 +133,23 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/player/stream-status` — returns `{ available: false }`. The cloud has no local stream server; this stub keeps `playerService.initialize()` from rendering an error toast.
 - `GET /api/player/playable` — returns `[]`. Cloud doesn't enumerate playable files like node does.
 - `/api/ytdl/*` — full surface from `mhaol_yt_dlp::build_router(state.ytdl_manager)` mounted directly under the cloud router via `nest_service`. Includes `GET /search`, `GET /info/video`, `GET /info/stream-urls{,-browser}`, `GET /info/playlist`, `GET /downloads`, `POST /downloads`, `POST /downloads/playlist`, `GET /downloads/events` (SSE), `DELETE /downloads/{id}`, `DELETE /downloads/completed`, `DELETE /downloads/queue`, `GET|PUT /config`, `GET /status`, `GET /ytdlp/status`. The WebUI's `/youtube` page talks directly to this surface via plain `fetch('/api/ytdl/...')` (no transport layer). cfg(not(target_os = "android")).
+
+## Library scan → documents
+
+`apps/cloud/src/library_scan.rs` runs after every `/api/libraries/:id/scan` and turns the walked entries into `document` records. Behavior depends on the library's `kinds`:
+
+- Empty `kinds`: legacy behavior. Every entry whose mime starts with `audio/`, `video/`, or `image/` is pinned to IPFS and recorded in `ipfs_pin`. No documents are created.
+- Non-empty `kinds`: the entries are classified per kind and grouped into media items. Each group's files are pinned to IPFS, recorded in `ipfs_pin`, and persisted as a `document` whose `files` are the `ipfs` entries (`{ type: "ipfs", value: <cid>, title: <relative_path-or-display-title> }`). Files that are pinnable but didn't fall into any group are still pinned (kept reachable for `/api/libraries/:id/pins`).
+
+Detection rules (one-doc-per-group; `source` is always `local`):
+
+- `movie` (`document.kind = "movie"`): one document per video file. Title is taken from the parent directory name (or the filename if the file sits at the library root). A trailing `(YYYY)` tag is parsed into `year`. Video files that the TV detector consumed are skipped to avoid double-counting.
+- `tv` (`document.kind = "tv show"`): one document per show. Detection looks for either a parent directory matching `Season N` / `S01` (the show name is the directory above it) or a `S<season>E<episode>` / `<season>x<episode>` token in the filename (the show name is the top-level directory under the library, or the filename if it sits at the root). All matched episodes are appended as `ipfs` file entries with titles formatted `S01E02 - <filename>`. Re-scans append new episodes via the document version-roll (see "Document versioning") so existing CIDs are preserved as `version_hashes`.
+- `album` (`document.kind = "album"`): one document per directory containing audio files. Album title is the directory name; loose audio at the library root is grouped under `Singles`. Tracks are sorted by leading number prefix (`01 - …`) when available.
+- `book` (`document.kind = "book"`): one document per file matching a book extension (epub, pdf, mobi, azw3, cbz, cbr, djvu, fb2). Title from the filename, with `(YYYY)` parsed out.
+- `game` (`document.kind = "game"`): one document per file matching a game/ROM extension (iso, rom, smc, sfc, gba, nes, gb, gbc, n64, z64, v64, md, sms, gg, nds, 3ds, wad, cue, chd, gcm).
+
+Re-running a scan is idempotent: existing documents with the same `(title, kind, source="local")` are matched and version-rolled forward with any new file entries; files already present (matched by their `title`) are skipped.
 
 ## Document versioning
 

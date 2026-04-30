@@ -44,11 +44,7 @@
 		if (pkg.message) return pkg.message;
 		const d = pkg.details ?? {};
 		const parts: string[] = [];
-		if (pkg.name === 'queue') {
-			parts.push(`${d.total ?? 0} tasks`);
-			if (typeof d.running === 'number') parts.push(`${d.running} running`);
-			if (typeof d.failed === 'number' && d.failed > 0) parts.push(`${d.failed} failed`);
-		} else if (pkg.name === 'yt-dlp') {
+		if (pkg.name === 'yt-dlp') {
 			if (d.ytdlpVersion) parts.push(`v${d.ytdlpVersion}`);
 			if (typeof d.active === 'number') parts.push(`${d.active} active`);
 			if (typeof d.queued === 'number' && d.queued > 0) parts.push(`${d.queued} queued`);
@@ -210,7 +206,7 @@
 		<section class="flex flex-col gap-3">
 			<h2 class="text-lg font-semibold">Packages</h2>
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-				{#each [{ key: 'p2p-stream', pkg: $state.status.packages.p2pStream }, { key: 'queue', pkg: $state.status.packages.queue }, { key: 'yt-dlp', pkg: $state.status.packages.ytDlp }, { key: 'torrent', pkg: $state.status.packages.torrent }, { key: 'ed2k', pkg: $state.status.packages.ed2k }, { key: 'ipfs', pkg: $state.status.packages.ipfs }] as { key, pkg } (key)}
+				{#each [{ key: 'p2p-stream', pkg: $state.status.packages.p2pStream }, { key: 'yt-dlp', pkg: $state.status.packages.ytDlp }, { key: 'torrent', pkg: $state.status.packages.torrent }, { key: 'ed2k', pkg: $state.status.packages.ed2k }, { key: 'ipfs', pkg: $state.status.packages.ipfs }] as { key, pkg } (key)}
 					<HealthCard
 						label={key}
 						value={packageValue(pkg)}

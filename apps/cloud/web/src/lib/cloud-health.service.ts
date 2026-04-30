@@ -20,7 +20,6 @@ export interface PackageHealth {
 
 export interface PackagesHealth {
 	p2pStream: PackageHealth;
-	queue: PackageHealth;
 	ytDlp: PackageHealth;
 	torrent: PackageHealth;
 	ed2k: PackageHealth;

@@ -40,7 +40,6 @@ struct DbStatus {
 #[serde(rename_all = "camelCase")]
 struct PackagesHealth {
     p2p_stream: PackageHealth,
-    queue: PackageHealth,
     yt_dlp: PackageHealth,
     torrent: PackageHealth,
     ed2k: PackageHealth,
@@ -101,7 +100,6 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
 
     let packages = PackagesHealth {
         p2p_stream: p2p_stream_health(),
-        queue: queue_health(&state),
         yt_dlp: yt_dlp_health(&state),
         torrent: torrent_health(&state).await,
         ed2k: ed2k_health(&state),
@@ -173,32 +171,6 @@ fn p2p_stream_health() -> PackageHealth {
             message: Some("Not built for this target".to_string()),
             details: serde_json::json!({}),
         }
-    }
-}
-
-fn queue_health(state: &CloudState) -> PackageHealth {
-    let pending = state.queue.list(Some("pending"), None).len();
-    let running = state.queue.list(Some("running"), None).len();
-    let completed = state.queue.list(Some("completed"), None).len();
-    let failed = state.queue.list(Some("failed"), None).len();
-    let cancelled = state.queue.list(Some("cancelled"), None).len();
-    let total = pending + running + completed + failed + cancelled;
-
-    let status = if failed > 0 { "warning" } else { "ok" };
-
-    PackageHealth {
-        name: "queue",
-        status,
-        available: true,
-        message: None,
-        details: serde_json::json!({
-            "total": total,
-            "pending": pending,
-            "running": running,
-            "completed": completed,
-            "failed": failed,
-            "cancelled": cancelled,
-        }),
     }
 }
 

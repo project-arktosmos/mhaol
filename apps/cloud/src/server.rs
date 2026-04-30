@@ -9,6 +9,8 @@ mod health;
 mod image_cache;
 mod ipfs_pins;
 mod libraries;
+#[cfg(not(target_os = "android"))]
+mod library_scan;
 mod p2p_stream;
 mod player;
 mod search;
@@ -21,11 +23,9 @@ mod ytdl;
 
 use axum::Router;
 use mhaol_identity::IdentityManager;
-use mhaol_queue::QueueManager;
-use parking_lot::Mutex;
-use rusqlite::Connection;
 use state::CloudState;
 use std::path::PathBuf;
+#[cfg(not(target_os = "android"))]
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
@@ -113,8 +113,6 @@ async fn main() {
         );
     }
 
-    let queue = init_queue(&db_path);
-
     #[cfg(not(target_os = "android"))]
     let ytdl_manager = Arc::new(DownloadManager::new(YtDownloadConfig::from_env()));
 
@@ -147,6 +145,31 @@ async fn main() {
         if let Err(e) = manager.initialize(config) {
             tracing::warn!("[ed2k] init failed: {}", e);
         }
+        let manager_clone = Arc::clone(&manager);
+        tokio::spawn(async move {
+            loop {
+                match manager_clone.connect_any_server().await {
+                    Ok(server) => {
+                        tracing::info!(
+                            "[ed2k] connected to server {} ({}:{}), users={} files={}",
+                            server.name,
+                            server.host,
+                            server.port,
+                            server.user_count,
+                            server.file_count
+                        );
+                        break;
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "[ed2k] no servers reachable: {} — retrying in 30s",
+                            e
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                    }
+                }
+            }
+        });
         manager
     };
 
@@ -194,7 +217,6 @@ async fn main() {
     let state = CloudState::new(
         surreal,
         identity_manager,
-        queue,
         #[cfg(not(target_os = "android"))]
         ytdl_manager,
         #[cfg(not(target_os = "android"))]
@@ -264,21 +286,6 @@ async fn main() {
     tracing::info!("Cloud server (SurrealDB + web UI) listening on {}", addr);
 
     axum::serve(listener, app).await.expect("Server error");
-}
-
-fn init_queue(db_dir: &std::path::Path) -> Arc<QueueManager> {
-    let queue_path = db_dir
-        .parent()
-        .map(|p| p.join("cloud-queue.db"))
-        .unwrap_or_else(|| PathBuf::from("cloud-queue.db"));
-    if let Some(parent) = queue_path.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
-    let conn = Connection::open(&queue_path).expect("Failed to open queue SQLite");
-    let pool = Arc::new(Mutex::new(conn));
-    let manager = QueueManager::new(pool);
-    manager.create_table();
-    Arc::new(manager)
 }
 
 #[cfg(not(target_os = "android"))]
