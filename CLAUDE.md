@@ -237,11 +237,11 @@ After every change, immediately commit the affected files:
 - **What**: stage only the files actually modified in that change
 - **Message**: a single short phrase in plain English, no emoji, no period, no conventional-commit prefixes
 - **When**: one commit per logical change — never batch unrelated edits
-- **Before committing**: all CI checks must pass locally. Run `pnpm lint`, `pnpm check`, `pnpm build`, and `pnpm test` and fix any errors before committing.
+- **Before committing**: run `pnpm lint`, `pnpm check`, and `pnpm test` and fix any errors. `pnpm check` runs `svelte-check` + `cargo check` which is enough to confirm everything compiles. **Do NOT run release builds** (`pnpm build`, `pnpm build:cloud`, `pnpm build:rendezvous`, `cargo build --release`, Tauri release bundles) during active development unless the user explicitly asks — they are slow, heavy, and not part of the normal verification loop.
 
 ```bash
-# Verify checks pass
-pnpm lint && pnpm check && pnpm build && pnpm test
+# Verify checks pass (no release builds)
+pnpm lint && pnpm check && pnpm test
 
 # Then commit
 git add packages/ui-lib/src/components/media/MediaCard.svelte
