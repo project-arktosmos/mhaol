@@ -399,16 +399,15 @@
 
 	const isRetroAchievementsConsole = $derived(firkin.addon === 'retroachievements');
 
-	type RomReport = {
-		firkin_id: string;
-		torrent_paths: string[];
-		archives: { name: string; relative_path: string; status: string; error?: string }[];
-		roms: { name: string; relative_path: string; size: number; cid: string }[];
-	};
+	// Scanning the firkin's torrent extracts archives in place, pins each
+	// ROM to IPFS and rolls the firkin forward — afterwards `firkin.files`
+	// contains the new `ipfs` entries and the Files table renders play
+	// buttons for them via `resolveRomForFile`. The status + error are
+	// surfaced inline next to the Files heading.
+	type RomScanResponse = { firkin_id: string };
 	type RomsStatus = 'idle' | 'loading' | 'done' | 'error';
 	let romsStatus = $state<RomsStatus>('idle');
 	let romsError = $state<string | null>(null);
-	let roms = $state<RomReport | null>(null);
 	let romsRun = 0;
 	let romsLoadedForKey: string | null = null;
 
@@ -435,9 +434,8 @@
 				}
 				throw new Error(message);
 			}
-			const body = (await res.json()) as RomReport;
+			const body = (await res.json()) as RomScanResponse;
 			if (myRun !== romsRun) return;
-			roms = body;
 			romsStatus = 'done';
 			if (body.firkin_id && body.firkin_id !== firkin.id) {
 				await goto(`${base}/catalog/${encodeURIComponent(body.firkin_id)}`);
@@ -1251,106 +1249,6 @@
 				</div>
 			{/if}
 
-			{#if isRetroAchievementsConsole && completedTorrents.length > 0}
-				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<div class="mb-2 flex items-center justify-between gap-2">
-						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
-							ROMs{roms && roms.roms.length > 0 ? ` (${roms.roms.length})` : ''}
-						</h2>
-						<button
-							type="button"
-							class="btn btn-outline btn-xs"
-							onclick={() => loadRoms(true)}
-							disabled={romsStatus === 'loading'}
-						>
-							{romsStatus === 'loading' ? 'Scanning…' : 'Rescan'}
-						</button>
-					</div>
-					{#if romsStatus === 'loading' && !roms}
-						<p class="text-sm text-base-content/60">Extracting archives and scanning for ROMs…</p>
-					{:else if romsStatus === 'error'}
-						<p class="text-sm text-error">{romsError ?? 'Failed'}</p>
-					{:else if roms}
-						{#if roms.archives.length > 0}
-							<div class="mb-3 flex flex-col gap-1">
-								<h3 class="text-xs font-semibold text-base-content/60 uppercase">
-									Archives ({roms.archives.length})
-								</h3>
-								<ul class="flex flex-col gap-1">
-									{#each roms.archives as archive (archive.relative_path)}
-										<li class="flex flex-wrap items-center gap-2 text-xs">
-											<span
-												class={classNames('badge badge-sm', {
-													'badge-success': archive.status === 'extracted',
-													'badge-ghost':
-														archive.status === 'already_extracted' || archive.status === 'skipped',
-													'badge-error': archive.status === 'failed'
-												})}
-											>
-												{archive.status === 'already_extracted' ? 'extracted' : archive.status}
-											</span>
-											<span class="font-mono [overflow-wrap:anywhere]">{archive.relative_path}</span
-											>
-											{#if archive.error}
-												<span class="text-error">— {archive.error}</span>
-											{/if}
-										</li>
-									{/each}
-								</ul>
-							</div>
-						{/if}
-						{#if roms.roms.length === 0}
-							<p class="text-sm text-base-content/60">
-								No ROM files found yet. If the torrent contains a compressed archive, extraction may
-								still be in progress — try Rescan.
-							</p>
-						{:else}
-							<div class="overflow-x-auto rounded-box border border-base-content/10">
-								<table class="table table-sm">
-									<thead>
-										<tr>
-											<th></th>
-											<th>File</th>
-											<th>Path</th>
-											<th>CID</th>
-											<th class="text-right">Size</th>
-										</tr>
-									</thead>
-									<tbody>
-										{#each roms.roms as rom (rom.relative_path)}
-											{@const playableCore = coreForRom(firkin.title, rom.name)}
-											<tr
-												class={classNames({
-													'cursor-pointer hover:bg-base-100': playableCore !== null
-												})}
-												onclick={playableCore ? () => launchRom(rom) : undefined}
-												title={playableCore
-													? `Launch ${rom.name} in WASM emulator (${playableCore})`
-													: 'No emulator wired up for this ROM type yet'}
-											>
-												<td class="w-8 text-center">
-													{#if playableCore}
-														<span class="text-success" aria-hidden="true">▶</span>
-													{:else}
-														<span class="text-base-content/30" aria-hidden="true">—</span>
-													{/if}
-												</td>
-												<td class="text-xs [overflow-wrap:anywhere]">{rom.name}</td>
-												<td class="font-mono text-xs [overflow-wrap:anywhere]"
-													>{rom.relative_path}</td
-												>
-												<td class="font-mono text-xs [overflow-wrap:anywhere]">{rom.cid}</td>
-												<td class="text-right text-xs">{formatBytes(rom.size)}</td>
-											</tr>
-										{/each}
-									</tbody>
-								</table>
-							</div>
-						{/if}
-					{/if}
-				</div>
-			{/if}
-
 			{#if hasMagnetFiles}
 				<div class="card border border-base-content/10 bg-base-200 p-4">
 					<div class="flex items-center justify-between gap-2">
@@ -1479,9 +1377,27 @@
 			{/if}
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
-				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-					Files ({firkin.files.length})
-				</h2>
+				<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+					<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+						Files ({firkin.files.length})
+					</h2>
+					{#if isRetroAchievementsConsole && completedTorrents.length > 0}
+						<div class="flex items-center gap-2">
+							{#if romsStatus === 'error' && romsError}
+								<span class="text-xs [overflow-wrap:anywhere] text-error">{romsError}</span>
+							{/if}
+							<button
+								type="button"
+								class="btn btn-outline btn-xs"
+								onclick={() => loadRoms(true)}
+								disabled={romsStatus === 'loading'}
+								title="Extract archives in the torrent's download dir, pin each ROM to IPFS, and append them as files on this firkin"
+							>
+								{romsStatus === 'loading' ? 'Scanning…' : 'Scan ROMs'}
+							</button>
+						</div>
+					{/if}
+				</div>
 				{#if firkin.files.length === 0}
 					<p class="text-sm text-base-content/60">No files attached.</p>
 				{:else}
