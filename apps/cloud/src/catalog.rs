@@ -84,14 +84,6 @@ async fn list_sources() -> Json<Vec<CatalogSource>> {
                     label: "TV Shows",
                 },
                 CatalogTypeInfo {
-                    id: "tv_season",
-                    label: "TV Seasons",
-                },
-                CatalogTypeInfo {
-                    id: "tv_episode",
-                    label: "TV Episodes",
-                },
-                CatalogTypeInfo {
                     id: "image",
                     label: "Images",
                 },
@@ -102,16 +94,10 @@ async fn list_sources() -> Json<Vec<CatalogSource>> {
         CatalogSource {
             id: "musicbrainz",
             label: "MusicBrainz",
-            types: vec![
-                CatalogTypeInfo {
-                    id: "album",
-                    label: "Albums",
-                },
-                CatalogTypeInfo {
-                    id: "track",
-                    label: "Tracks",
-                },
-            ],
+            types: vec![CatalogTypeInfo {
+                id: "album",
+                label: "Albums",
+            }],
             filter_label: "Genre",
             has_filter: true,
         },
@@ -145,8 +131,8 @@ async fn list_sources() -> Json<Vec<CatalogSource>> {
             id: "lrclib",
             label: "LRCLIB",
             types: vec![CatalogTypeInfo {
-                id: "track",
-                label: "Tracks",
+                id: "album",
+                label: "Albums",
             }],
             filter_label: "Filter",
             has_filter: false,
@@ -170,8 +156,8 @@ async fn list_sources() -> Json<Vec<CatalogSource>> {
                     label: "Movies",
                 },
                 CatalogTypeInfo {
-                    id: "tv_episode",
-                    label: "TV Episodes",
+                    id: "tv",
+                    label: "TV Shows",
                 },
             ],
             filter_label: "Filter",
@@ -288,9 +274,9 @@ async fn tmdb_popular(
         ));
     }
     let raw_kind = media_type.unwrap_or("movie");
-    // tv_season / tv_episode reuse the popular tv list; image reuses popular movies.
+    // image reuses popular movies.
     let kind = match raw_kind {
-        "tv" | "tv_season" | "tv_episode" => "tv",
+        "tv" => "tv",
         _ => "movie",
     };
     let endpoint = match kind {
@@ -391,7 +377,7 @@ async fn tmdb_genres(
     }
     let raw_kind = media_type.unwrap_or("movie");
     let kind = match raw_kind {
-        "tv" | "tv_season" | "tv_episode" => "tv",
+        "tv" => "tv",
         _ => "movie",
     };
     let path = if kind == "tv" {
@@ -451,7 +437,7 @@ fn static_music_genres() -> Vec<CatalogGenre> {
 }
 
 async fn musicbrainz_popular(
-    media_type: Option<&str>,
+    _media_type: Option<&str>,
     genre: Option<&str>,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
@@ -459,17 +445,9 @@ async fn musicbrainz_popular(
     let offset = (page - 1) * limit;
     let tag = genre.filter(|s| !s.is_empty()).unwrap_or("rock");
     let query = format!("tag:\"{}\"", tag);
-    let kind = media_type.unwrap_or("album");
-    let (entity, results_key, mapper): (&str, &str, fn(&serde_json::Value) -> CatalogItem) =
-        if kind == "track" {
-            ("recording", "recordings", musicbrainz_recording_to_item)
-        } else {
-            ("release-group", "release-groups", musicbrainz_to_item)
-        };
     let url = format!(
-        "{}/{}?query={}&fmt=json&limit={}&offset={}",
+        "{}/release-group?query={}&fmt=json&limit={}&offset={}",
         MUSICBRAINZ_BASE,
-        entity,
         urlencoding(&query),
         limit,
         offset
@@ -486,69 +464,15 @@ async fn musicbrainz_popular(
         .unwrap_or(limit);
     let total_pages = ((count as f64) / (limit as f64)).ceil() as i64;
     let items = payload
-        .get(results_key)
+        .get("release-groups")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().map(mapper).collect())
+        .map(|arr| arr.iter().map(musicbrainz_to_item).collect())
         .unwrap_or_default();
     Ok(CatalogPage {
         items,
         page,
         total_pages: total_pages.max(1),
     })
-}
-
-fn musicbrainz_recording_to_item(r: &serde_json::Value) -> CatalogItem {
-    let id = r
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let title = r
-        .get("title")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let credits = r
-        .get("artist-credit")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|c| {
-                    c.get("name")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| c.get("artist").and_then(|a| a.get("name")?.as_str()))
-                })
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
-        .unwrap_or_default();
-    let release_id = r
-        .get("releases")
-        .and_then(|v| v.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|first| first.get("release-group"))
-        .and_then(|rg| rg.get("id"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let year = r
-        .get("first-release-date")
-        .and_then(|v| v.as_str())
-        .and_then(|d| d.get(0..4))
-        .and_then(|s| s.parse::<i32>().ok());
-    let poster_url =
-        release_id.map(|rid| format!("{}/release-group/{}/front", COVERART_BASE, rid));
-    CatalogItem {
-        id,
-        title,
-        year,
-        description: if credits.is_empty() {
-            None
-        } else {
-            Some(credits)
-        },
-        poster_url,
-        backdrop_url: None,
-    }
 }
 
 fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {

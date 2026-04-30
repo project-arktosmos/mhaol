@@ -2,11 +2,8 @@ import { writable, type Writable } from 'svelte/store';
 
 export const FIRKIN_TYPES = [
 	'movie',
-	'tv season',
-	'tv episode',
 	'tv show',
 	'album',
-	'track',
 	'image',
 	'youtube video',
 	'youtube channel',
@@ -33,13 +30,13 @@ export const FIRKIN_SOURCES = [
 export type FirkinSource = (typeof FIRKIN_SOURCES)[number];
 
 export const TYPES_BY_SOURCE: Record<FirkinSource, readonly FirkinType[]> = {
-	tmdb: ['movie', 'tv show', 'tv season', 'tv episode', 'image'],
-	musicbrainz: ['album', 'track'],
+	tmdb: ['movie', 'tv show', 'image'],
+	musicbrainz: ['album'],
 	retroachievements: ['game'],
 	youtube: ['youtube video', 'youtube channel'],
-	lrclib: ['track'],
+	lrclib: ['album'],
 	openlibrary: ['book'],
-	'wyzie-subs': ['movie', 'tv episode'],
+	'wyzie-subs': ['movie', 'tv show'],
 	iptv: ['iptv channel'],
 	radio: ['radio station']
 };

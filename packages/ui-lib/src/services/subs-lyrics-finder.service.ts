@@ -13,7 +13,7 @@ interface SubsLyricsFinderState {
 }
 
 const initialState: SubsLyricsFinderState = {
-	type: 'track',
+	type: 'album',
 	query: '',
 	externalId: '',
 	searching: false,
@@ -49,7 +49,7 @@ class SubsLyricsFinderService {
 		const current = get(this.state);
 		const query = current.query.trim();
 		const externalIds = current.externalId.trim() ? [current.externalId.trim()] : [];
-		const isMusic = current.type === 'album' || current.type === 'track';
+		const isMusic = current.type === 'album';
 
 		if (isMusic && !query) {
 			this.state.update((s) => ({ ...s, error: 'Enter a query to search lyrics', results: [] }));

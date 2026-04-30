@@ -20,11 +20,8 @@ const RAW_CODEC: u64 = 0x55;
 
 const ALLOWED_TYPES: &[&str] = &[
     "movie",
-    "tv season",
-    "tv episode",
     "tv show",
     "album",
-    "track",
     "image",
     "youtube video",
     "youtube channel",

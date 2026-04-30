@@ -24,10 +24,4 @@ export interface SubsLyricsItem {
 	sourceExternalId?: string;
 }
 
-export type SubsLyricsSearchType =
-	| 'movie'
-	| 'tv show'
-	| 'tv season'
-	| 'tv episode'
-	| 'album'
-	| 'track';
+export type SubsLyricsSearchType = 'movie' | 'tv show' | 'album';

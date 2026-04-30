@@ -8,11 +8,9 @@
 	const finderState = subsLyricsFinderService.state;
 
 	const SEARCH_TYPES: { id: SubsLyricsSearchType; label: string }[] = [
-		{ id: 'track', label: 'Track' },
 		{ id: 'album', label: 'Album' },
 		{ id: 'movie', label: 'Movie' },
-		{ id: 'tv show', label: 'TV show' },
-		{ id: 'tv episode', label: 'TV episode' }
+		{ id: 'tv show', label: 'TV show' }
 	];
 
 	let lastFileId: string | null = $state(null);
@@ -28,7 +26,7 @@
 		}
 		if (file.id === lastFileId) return;
 		lastFileId = file.id;
-		const guessedType: SubsLyricsSearchType = file.mode === 'audio' ? 'track' : 'movie';
+		const guessedType: SubsLyricsSearchType = file.mode === 'audio' ? 'album' : 'movie';
 		subsLyricsFinderService.setType(guessedType);
 		subsLyricsFinderService.setQuery(file.name ?? '');
 		subsLyricsFinderService.setExternalId('');
@@ -99,7 +97,7 @@
 			oninput={(e) => subsLyricsFinderService.setQuery(e.currentTarget.value)}
 		/>
 
-		{#if $finderState.type === 'movie' || $finderState.type === 'tv show' || $finderState.type === 'tv season' || $finderState.type === 'tv episode'}
+		{#if $finderState.type === 'movie' || $finderState.type === 'tv show'}
 			<input
 				type="text"
 				class="input-bordered input input-sm w-full"

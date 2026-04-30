@@ -65,7 +65,7 @@ async fn search_tmdb(
         ));
     }
 
-    let is_tv = matches!(req.kind.as_str(), "tv show" | "tv season" | "tv episode");
+    let is_tv = req.kind.as_str() == "tv show";
     let endpoint = if is_tv { "/search/tv" } else { "/search/movie" };
 
     let url = format!(
@@ -586,14 +586,14 @@ async fn search_subs_lyrics(
     let query = req.query.trim();
     let kind = req.kind.trim();
 
-    if matches!(kind, "album" | "track") {
+    if kind == "album" {
         if query.is_empty() {
             return Ok(Json(Vec::new()));
         }
         return search_lrclib(query).await.map(Json);
     }
 
-    if matches!(kind, "movie" | "tv show" | "tv season" | "tv episode") {
+    if matches!(kind, "movie" | "tv show") {
         if req.external_ids.is_empty() {
             return Ok(Json(Vec::new()));
         }

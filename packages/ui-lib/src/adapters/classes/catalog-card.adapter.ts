@@ -9,8 +9,6 @@ function getSubtitle(item: CatalogItem): string | null {
 			return item.metadata.status;
 		case 'album':
 			return formatAuthors(item.metadata.authors, 'artist') || null;
-		case 'track':
-			return formatAuthors(item.metadata.authors, 'artist') || null;
 		case 'book':
 			return formatAuthors(item.metadata.authors, 'author') || null;
 		case 'game':
@@ -32,7 +30,6 @@ function getAspectRatio(item: CatalogItem): 'poster' | 'square' | 'landscape' {
 	switch (item.kind) {
 		case 'movie':
 		case 'tv_show':
-		case 'tv_season':
 		case 'book':
 			return 'poster';
 		case 'album':
@@ -42,8 +39,6 @@ function getAspectRatio(item: CatalogItem): 'poster' | 'square' | 'landscape' {
 		case 'youtube_video':
 		case 'youtube_channel':
 		case 'iptv_channel':
-		case 'tv_episode':
-		case 'track':
 			return 'landscape';
 		default:
 			return 'poster';

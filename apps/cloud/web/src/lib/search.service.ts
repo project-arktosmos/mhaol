@@ -1,4 +1,4 @@
-import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/musicbrainz';
+import { searchReleaseGroups } from 'addons/musicbrainz';
 import { searchBooks } from 'addons/openlibrary';
 import { searchChannels as searchIptvChannels, getStreams as getIptvStreams } from 'addons/iptv';
 import type { DisplayIptvChannel } from 'addons/iptv/types';
@@ -151,12 +151,9 @@ export function isTorrentSearchableType(type: FirkinType): boolean {
 function tpbCategoryFor(type: FirkinType): TorrentCategory | null {
 	switch (type) {
 		case 'album':
-		case 'track':
 			return TorrentCategory.Audio;
 		case 'movie':
 		case 'tv show':
-		case 'tv season':
-		case 'tv episode':
 		case 'youtube video':
 		case 'youtube channel':
 		case 'image':
@@ -302,67 +299,28 @@ export async function fetchAlbumTrackTitles(releaseGroupId: string): Promise<str
 	return titles;
 }
 
-async function searchMusicBrainz(type: FirkinType, query: string): Promise<SearchResultItem[]> {
-	if (type === 'track') {
-		const res = await searchRecordings(query);
-		return res.recordings.map((rec) => {
-			const recAny = rec as unknown as { 'first-release-date'?: string };
-			return {
-				title: rec.title,
-				description: rec.disambiguation ?? '',
-				artists: mbArtistCreditsToArtists(rec['artist-credit'] ?? []),
-				images: [],
-				files: [],
-				year: parseYear(recAny['first-release-date']),
-				externalId: rec.id,
-				raw: rec
-			};
-		});
-	}
-	if (type === 'album') {
-		const res = await searchReleaseGroups(query);
-		return res['release-groups'].map((rg) => ({
-			title: rg.title,
-			description: [rg['primary-type'], rg['first-release-date']]
-				.filter((s): s is string => Boolean(s))
-				.join(' · '),
-			artists: mbArtistCreditsToArtists(rg['artist-credit'] ?? []),
-			images: [
-				{
-					url: `https://coverartarchive.org/release-group/${rg.id}/front`,
-					mimeType: 'image/jpeg',
-					fileSize: 0,
-					width: 0,
-					height: 0
-				}
-			],
-			files: [],
-			year: parseYear(rg['first-release-date']),
-			externalId: rg.id,
-			raw: rg
-		}));
-	}
-	const res = await searchArtists(query);
-	return res.artists.map((a) => {
-		const aAny = a as unknown as { 'life-span'?: { begin?: string } };
-		return {
-			title: a.name,
-			description: [a.disambiguation, a.country, a.type]
-				.filter((s): s is string => Boolean(s))
-				.join(' · '),
-			artists: [
-				{
-					name: a.name,
-					url: `https://musicbrainz.org/artist/${a.id}`
-				}
-			],
-			images: [],
-			files: [],
-			year: parseYear(aAny['life-span']?.begin),
-			externalId: a.id,
-			raw: a
-		};
-	});
+async function searchMusicBrainz(_type: FirkinType, query: string): Promise<SearchResultItem[]> {
+	const res = await searchReleaseGroups(query);
+	return res['release-groups'].map((rg) => ({
+		title: rg.title,
+		description: [rg['primary-type'], rg['first-release-date']]
+			.filter((s): s is string => Boolean(s))
+			.join(' · '),
+		artists: mbArtistCreditsToArtists(rg['artist-credit'] ?? []),
+		images: [
+			{
+				url: `https://coverartarchive.org/release-group/${rg.id}/front`,
+				mimeType: 'image/jpeg',
+				fileSize: 0,
+				width: 0,
+				height: 0
+			}
+		],
+		files: [],
+		year: parseYear(rg['first-release-date']),
+		externalId: rg.id,
+		raw: rg
+	}));
 }
 
 interface MbArtistCredit {

@@ -3,10 +3,7 @@
 export type CatalogKind =
 	| 'movie'
 	| 'tv_show'
-	| 'tv_season'
-	| 'tv_episode'
 	| 'album'
-	| 'track'
 	| 'book'
 	| 'game'
 	| 'youtube_video'
@@ -148,19 +145,6 @@ export interface CatalogTvSeasonSummary {
 	seasonNumber: number;
 }
 
-export interface CatalogTvSeason extends CatalogItemBase {
-	kind: 'tv_season';
-	metadata: TvSeasonMetadata;
-}
-
-export interface TvSeasonMetadata {
-	tmdbId: number;
-	seasonNumber: number;
-	episodeCount: number;
-	airDate: string | null;
-	episodes: CatalogTvEpisodeSummary[];
-}
-
 export interface CatalogTvEpisodeSummary {
 	id: number;
 	name: string;
@@ -171,20 +155,6 @@ export interface CatalogTvEpisodeSummary {
 	stillUrl: string | null;
 	runtime: number | null;
 	voteAverage: number;
-}
-
-export interface CatalogTvEpisode extends CatalogItemBase {
-	kind: 'tv_episode';
-	metadata: TvEpisodeMetadata;
-}
-
-export interface TvEpisodeMetadata {
-	tmdbId: number;
-	seasonNumber: number;
-	episodeNumber: number;
-	airDate: string | null;
-	runtime: number | null;
-	stillUrl: string | null;
 }
 
 export interface CatalogAlbum extends CatalogItemBase {
@@ -221,20 +191,6 @@ export interface AlbumTrack {
 	duration: string | null;
 	durationMs: number | null;
 	authors: CatalogAuthor[];
-}
-
-export interface CatalogTrack extends CatalogItemBase {
-	kind: 'track';
-	metadata: TrackMetadata;
-}
-
-export interface TrackMetadata {
-	musicbrainzId: string;
-	number: string;
-	duration: string | null;
-	durationMs: number | null;
-	authors: CatalogAuthor[];
-	disambiguation: string | null;
 }
 
 export interface CatalogBook extends CatalogItemBase {
@@ -370,10 +326,7 @@ export interface CatalogImage {
 export type CatalogItem =
 	| CatalogMovie
 	| CatalogTvShow
-	| CatalogTvSeason
-	| CatalogTvEpisode
 	| CatalogAlbum
-	| CatalogTrack
 	| CatalogBook
 	| CatalogGame
 	| CatalogYoutubeVideo
@@ -389,17 +342,8 @@ export function isMovie(item: CatalogItem): item is CatalogMovie {
 export function isTvShow(item: CatalogItem): item is CatalogTvShow {
 	return item.kind === 'tv_show';
 }
-export function isTvSeason(item: CatalogItem): item is CatalogTvSeason {
-	return item.kind === 'tv_season';
-}
-export function isTvEpisode(item: CatalogItem): item is CatalogTvEpisode {
-	return item.kind === 'tv_episode';
-}
 export function isAlbum(item: CatalogItem): item is CatalogAlbum {
 	return item.kind === 'album';
-}
-export function isTrack(item: CatalogItem): item is CatalogTrack {
-	return item.kind === 'track';
 }
 export function isBook(item: CatalogItem): item is CatalogBook {
 	return item.kind === 'book';
@@ -504,5 +448,5 @@ export const STREAMABLE_KINDS: CatalogKind[] = [
 	'youtube_video',
 	'iptv_channel',
 	'movie',
-	'tv_episode'
+	'tv_show'
 ];
