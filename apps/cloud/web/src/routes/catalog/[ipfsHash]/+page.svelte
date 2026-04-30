@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import IpfsHlsPlayer from 'ui-lib/components/ipfs-stream/IpfsHlsPlayer.svelte';
 	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
 	import {
 		firkinTorrentsService,
@@ -34,7 +35,18 @@
 	let removeError = $state<string | null>(null);
 
 	const hasIpfsFiles = $derived(firkin.files.some((f) => f.type === 'ipfs'));
+	const firstIpfsCid = $derived(firkin.files.find((f) => f.type === 'ipfs')?.value ?? null);
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
+	let ipfsPlayerCid = $state<string | null>(null);
+
+	function startIpfsPlay(): void {
+		if (!firstIpfsCid) return;
+		ipfsPlayerCid = firstIpfsCid;
+	}
+
+	function closeIpfsPlay(): void {
+		ipfsPlayerCid = null;
+	}
 
 	const torrentsState = firkinTorrentsService.state;
 	onMount(() => firkinTorrentsService.start());
@@ -320,6 +332,28 @@
 			{/if}
 			<button
 				type="button"
+				class="btn gap-2 btn-sm btn-secondary"
+				onclick={startIpfsPlay}
+				disabled={!hasIpfsFiles}
+				aria-label="IPFS Play"
+				title={hasIpfsFiles
+					? 'Stream over IPFS as HLS'
+					: 'Available once at least one file is pinned to IPFS'}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+					stroke="none"
+					class="h-4 w-4 shrink-0"
+					aria-hidden="true"
+				>
+					<polygon points="6 4 20 12 6 20 6 4" />
+				</svg>
+				<span>IPFS Play</span>
+			</button>
+			<button
+				type="button"
 				class="btn btn-outline btn-sm btn-error"
 				onclick={remove}
 				disabled={removing}
@@ -338,6 +372,16 @@
 	{#if finalizeError}
 		<div class="alert alert-error">
 			<span>{finalizeError}</span>
+		</div>
+	{/if}
+
+	{#if ipfsPlayerCid}
+		<div class="card border border-base-content/10 bg-base-200 p-4">
+			<div class="mb-2 flex items-center justify-between gap-2">
+				<h2 class="text-sm font-semibold text-base-content/70 uppercase">IPFS HLS Player</h2>
+				<span class="font-mono text-xs break-all text-base-content/60">{ipfsPlayerCid}</span>
+			</div>
+			<IpfsHlsPlayer cid={ipfsPlayerCid} onClose={closeIpfsPlay} />
 		</div>
 	{/if}
 

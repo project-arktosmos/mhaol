@@ -6326,6 +6326,7 @@ dependencies = [
  "mhaol-ed2k",
  "mhaol-identity",
  "mhaol-ipfs",
+ "mhaol-ipfs-stream",
  "mhaol-p2p-stream",
  "mhaol-torrent",
  "mhaol-yt-dlp",
@@ -6343,6 +6344,7 @@ dependencies = [
  "surrealdb",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tower-http",
  "tracing",
  "tracing-subscriber",
@@ -6422,6 +6424,24 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "url",
+]
+
+[[package]]
+name = "mhaol-ipfs-stream"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gstreamer",
+ "gstreamer-app",
+ "mhaol-ipfs",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

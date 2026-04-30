@@ -8,6 +8,7 @@ mod fs_browse;
 mod health;
 mod image_cache;
 mod ipfs_pins;
+mod ipfs_stream;
 mod libraries;
 #[cfg(not(target_os = "android"))]
 mod library_scan;
@@ -230,6 +231,16 @@ async fn main() {
     #[cfg(not(target_os = "android"))]
     let worker_bridge = Arc::new(worker_bridge::WorkerBridge::new());
 
+    #[cfg(not(target_os = "android"))]
+    let ipfs_stream_manager = {
+        if let Err(e) = mhaol_ipfs_stream::init() {
+            tracing::warn!("[ipfs-stream] gstreamer init failed: {}", e);
+        }
+        let base_dir = downloads_dir().join("ipfs-stream");
+        std::fs::create_dir_all(&base_dir).ok();
+        Arc::new(mhaol_ipfs_stream::manager::IpfsStreamManager::new(base_dir))
+    };
+
     let state = CloudState::new(
         surreal,
         identity_manager,
@@ -243,6 +254,8 @@ async fn main() {
         ipfs_manager,
         #[cfg(not(target_os = "android"))]
         Arc::clone(&worker_bridge),
+        #[cfg(not(target_os = "android"))]
+        Arc::clone(&ipfs_stream_manager),
         #[cfg(not(target_os = "android"))]
         signaling_url.clone(),
     );
@@ -282,6 +295,7 @@ async fn main() {
         .nest("/api/catalog", catalog::router())
         .nest("/api/torrent", torrent::router())
         .nest("/api/p2p-stream", p2p_stream::router())
+        .nest("/api/ipfs-stream", ipfs_stream::router())
         .nest("/api/player", player::router());
 
     #[cfg(not(target_os = "android"))]

@@ -9,6 +9,7 @@ members = [
     "packages/torrent",
     "packages/ed2k",
     "packages/ipfs",
+    "packages/ipfs-stream",
     "packages/p2p-stream",
 ]
 

@@ -9,6 +9,8 @@ use mhaol_ed2k::Ed2kManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_ipfs::IpfsManager;
 #[cfg(not(target_os = "android"))]
+use mhaol_ipfs_stream::manager::IpfsStreamManager;
+#[cfg(not(target_os = "android"))]
 use mhaol_torrent::TorrentManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_yt_dlp::DownloadManager;
@@ -33,6 +35,8 @@ pub struct CloudState {
     #[cfg(not(target_os = "android"))]
     pub worker_bridge: Arc<WorkerBridge>,
     #[cfg(not(target_os = "android"))]
+    pub ipfs_stream_manager: Arc<IpfsStreamManager>,
+    #[cfg(not(target_os = "android"))]
     pub signaling_url: String,
 }
 
@@ -46,6 +50,7 @@ impl CloudState {
         #[cfg(not(target_os = "android"))] ed2k_manager: Arc<Ed2kManager>,
         #[cfg(not(target_os = "android"))] ipfs_manager: Arc<IpfsManager>,
         #[cfg(not(target_os = "android"))] worker_bridge: Arc<WorkerBridge>,
+        #[cfg(not(target_os = "android"))] ipfs_stream_manager: Arc<IpfsStreamManager>,
         #[cfg(not(target_os = "android"))] signaling_url: String,
     ) -> Self {
         Self {
@@ -61,6 +66,8 @@ impl CloudState {
             ipfs_manager,
             #[cfg(not(target_os = "android"))]
             worker_bridge,
+            #[cfg(not(target_os = "android"))]
+            ipfs_stream_manager,
             #[cfg(not(target_os = "android"))]
             signaling_url,
         }
