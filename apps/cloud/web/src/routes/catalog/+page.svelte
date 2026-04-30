@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
 	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import {
@@ -36,12 +37,7 @@
 	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
 	const isRetroAchievements = $derived(addon === 'retroachievements');
-	let consoleViewActive = $state<boolean>(false);
-	const showConsoleGrid = $derived(isRetroAchievements && consoleViewActive);
-	const showFilterRow = $derived(hasFilter && !showConsoleGrid);
-	const selectedConsoleName = $derived(
-		isRetroAchievements ? (genres.find((g) => g.id === filter)?.name ?? null) : null
-	);
+	const showFilterRow = $derived(hasFilter && !isRetroAchievements);
 
 	const libraryFirkins = $derived<Firkin[]>(
 		addon
@@ -135,9 +131,8 @@
 		addon = source.id;
 		page = 1;
 		filter = '';
-		consoleViewActive = source.id === 'retroachievements';
 		await refreshGenres();
-		if (consoleViewActive) {
+		if (source.id === 'retroachievements') {
 			items = [];
 			totalPages = 1;
 		} else {
@@ -150,19 +145,8 @@
 		await refreshItems();
 	}
 
-	async function selectConsole(consoleId: string) {
-		filter = consoleId;
-		page = 1;
-		consoleViewActive = false;
-		await refreshItems();
-	}
-
-	function backToConsoles() {
-		consoleViewActive = true;
-		filter = '';
-		page = 1;
-		items = [];
-		totalPages = 1;
+	function selectConsole(consoleId: string) {
+		void goto(`${base}/catalog/console/${encodeURIComponent(consoleId)}`);
 	}
 
 	async function goToPage(next: number) {
@@ -178,9 +162,8 @@
 				sources = await listSources();
 				if (sources.length > 0) {
 					addon = sources[0].id;
-					consoleViewActive = addon === 'retroachievements';
 					await refreshGenres();
-					if (!consoleViewActive) {
+					if (addon !== 'retroachievements') {
 						await refreshItems();
 					}
 				}
@@ -284,7 +267,7 @@
 		{/if}
 	</section>
 
-	{#if showConsoleGrid}
+	{#if isRetroAchievements}
 		<section class="flex flex-col gap-3">
 			<h2 class="text-lg font-semibold">Consoles</h2>
 			{#if genresLoading}
@@ -314,18 +297,7 @@
 	{:else}
 		<section class="flex flex-col gap-3">
 			<div class="flex items-center justify-between gap-4">
-				<div class="flex items-center gap-3">
-					{#if isRetroAchievements}
-						<button class="btn btn-ghost btn-xs" onclick={backToConsoles}>← Consoles</button>
-					{/if}
-					<h2 class="text-lg font-semibold">
-						{#if isRetroAchievements && selectedConsoleName}
-							{selectedConsoleName}
-						{:else}
-							Popular
-						{/if}
-					</h2>
-				</div>
+				<h2 class="text-lg font-semibold">Popular</h2>
 				<div class="flex items-center gap-2">
 					<button
 						class="btn btn-outline btn-xs"
