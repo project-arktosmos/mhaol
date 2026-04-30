@@ -4,7 +4,11 @@
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
 	import FirkinArtistsSection from 'ui-lib/components/firkins/FirkinArtistsSection.svelte';
 	import EmulatorModal from 'ui-lib/components/videogames/EmulatorModal.svelte';
-	import { coreForRom, type EmulatorCore } from 'ui-lib/components/videogames/emulator-cores';
+	import {
+		coreForRom,
+		resolveRomForFile,
+		type EmulatorCore
+	} from 'ui-lib/components/videogames/emulator-cores';
 	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
 	import {
 		firkinTorrentsService,
@@ -1493,21 +1497,22 @@
 							</thead>
 							<tbody>
 								{#each firkin.files as file, i (i)}
-									{@const fileCore =
-										file.type === 'ipfs' ? coreForRom(firkin.title, file.title) : null}
+									{@const resolved = resolveRomForFile(file, firkin.files)}
 									<tr>
 										<td class="w-12">
-											{#if fileCore}
+											{#if resolved}
 												<button
 													type="button"
 													class="btn btn-xs btn-primary"
 													onclick={() =>
 														launchRom({
-															name: file.title ?? '',
-															relative_path: file.title ?? '',
-															cid: file.value
+															name: resolved.title,
+															relative_path: resolved.title,
+															cid: resolved.cid
 														})}
-													title={`Launch in WASM emulator (${fileCore})`}
+													title={resolved.cid === file.value
+														? `Launch in WASM emulator (${resolved.core})`
+														: `Launch ${resolved.title} in WASM emulator (${resolved.core})`}
 													aria-label="Play"
 												>
 													<svg
