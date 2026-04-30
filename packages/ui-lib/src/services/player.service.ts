@@ -667,7 +667,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	/// Register a callback for when the worker reports the current track has
 	/// ended (sent via the data channel as `{"type":"TrackEnded"}`). Returns
-	/// an unsubscribe function. This is the hook the document playback
+	/// an unsubscribe function. This is the hook the firkin playback
 	/// service uses to auto-advance to the next track in an album.
 	onTrackEnded(callback: () => void): () => void {
 		this.trackEndedListeners.add(callback);

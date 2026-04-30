@@ -5,11 +5,11 @@
 	import Navbar from 'ui-lib/components/core/Navbar.svelte';
 	import ThemeToggle from 'ui-lib/components/core/ThemeToggle.svelte';
 	import ToastOutlet from 'ui-lib/components/core/ToastOutlet.svelte';
-	import DocumentFilesPanel from 'ui-lib/components/documents/DocumentFilesPanel.svelte';
+	import FirkinFilesPanel from 'ui-lib/components/firkins/FirkinFilesPanel.svelte';
 	import PlayerVideo from 'ui-lib/components/player/PlayerVideo.svelte';
 	import SubsLyricsFinder from 'ui-lib/components/player/SubsLyricsFinder.svelte';
-	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
-	import { documentStreamService } from 'ui-lib/services/document-stream.service';
+	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
+	import { firkinStreamService } from 'ui-lib/services/firkin-stream.service';
 	import { playerService } from 'ui-lib/services/player.service';
 	import { themeService } from 'ui-lib/services/theme.service';
 	import { setBrowserImageCacheResolver } from 'ui-lib/services/image-cache.service';
@@ -22,7 +22,7 @@
 
 	let { children } = $props();
 
-	const playbackState = documentPlaybackService.state;
+	const playbackState = firkinPlaybackService.state;
 	const playerState = playerService.state;
 
 	const triggerClass = (item: NavItem) =>
@@ -81,8 +81,8 @@
 		<aside
 			class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
 		>
-			{#if $playbackState.document}
-				<DocumentFilesPanel onPlayFile={(file) => documentStreamService.play(file)} />
+			{#if $playbackState.firkin}
+				<FirkinFilesPanel onPlayFile={(file) => firkinStreamService.play(file)} />
 			{/if}
 			<PlayerVideo
 				file={$playerState.currentFile}

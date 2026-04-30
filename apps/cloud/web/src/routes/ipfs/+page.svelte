@@ -2,15 +2,15 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { ipfsService, type IpfsPin } from '$lib/ipfs.service';
-	import { documentsService } from '$lib/documents.service';
+	import { firkinsService } from '$lib/firkins.service';
 	import { parseTorrentName } from '$lib/search.service';
 
 	const pinsStore = ipfsService.state;
-	const docsStore = documentsService.state;
+	const firkinsStore = firkinsService.state;
 
 	const usedCids = $derived(
 		new Set(
-			$docsStore.documents.flatMap((d) =>
+			$firkinsStore.firkins.flatMap((d) =>
 				(d.files ?? []).filter((f) => f.type === 'ipfs' && f.value).map((f) => f.value)
 			)
 		)
@@ -18,7 +18,7 @@
 
 	onMount(() => {
 		ipfsService.refresh();
-		documentsService.refresh();
+		firkinsService.refresh();
 	});
 
 	function formatBytes(bytes: number): string {
@@ -58,7 +58,7 @@
 		return { source: 'tmdb', type: 'movie' };
 	}
 
-	function addAsDocumentHref(pin: IpfsPin): string {
+	function addAsFirkinHref(pin: IpfsPin): string {
 		const filename = basename(pin.path);
 		const stripped = stripExt(filename);
 		const parsed = parseTorrentName(stripped);
@@ -71,7 +71,7 @@
 			filename
 		});
 		if (parsed.year) params.set('year', String(parsed.year));
-		return `${base}/documents?${params.toString()}`;
+		return `${base}/firkins?${params.toString()}`;
 	}
 </script>
 
@@ -92,7 +92,7 @@
 			class="btn btn-outline btn-sm"
 			onclick={() => {
 				ipfsService.refresh();
-				documentsService.refresh();
+				firkinsService.refresh();
 			}}
 			disabled={$pinsStore.loading}
 		>
@@ -135,10 +135,10 @@
 							<td class="text-xs text-base-content/60">{formatDate(pin.created_at)}</td>
 							<td class="text-right">
 								{#if usedCids.has(pin.cid)}
-									<span class="text-xs text-base-content/40">In document</span>
+									<span class="text-xs text-base-content/40">In firkin</span>
 								{:else}
-									<a href={addAsDocumentHref(pin)} class="btn btn-outline btn-xs btn-primary">
-										Add as document
+									<a href={addAsFirkinHref(pin)} class="btn btn-outline btn-xs btn-primary">
+										Add as firkin
 									</a>
 								{/if}
 							</td>

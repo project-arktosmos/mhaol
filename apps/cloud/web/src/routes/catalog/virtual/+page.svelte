@@ -1,15 +1,15 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
-	import type { CloudDocument } from 'ui-lib/types/document.type';
+	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import { cachedImageUrl } from '$lib/image-cache';
 	import {
-		documentsService,
-		type Document,
-		type DocumentSource,
-		type DocumentType,
+		firkinsService,
+		type Firkin,
+		type FirkinSource,
+		type FirkinType,
 		type ImageMeta
-	} from '$lib/documents.service';
+	} from '$lib/firkins.service';
 	import {
 		formatSizeBytes,
 		matchTorrentsForResult,
@@ -20,7 +20,7 @@
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
 
-	function mapToDocumentType(addonId: string, typeId: string): DocumentType {
+	function mapToFirkinType(addonId: string, typeId: string): FirkinType {
 		if (addonId === 'tmdb' && typeId === 'tv') return 'tv show';
 		if (addonId === 'tmdb') return 'movie';
 		if (addonId === 'musicbrainz') return 'album';
@@ -29,7 +29,7 @@
 		return 'movie';
 	}
 
-	function mapToDocumentSource(addonId: string): DocumentSource {
+	function mapToFirkinSource(addonId: string): FirkinSource {
 		if (addonId === 'tmdb') return 'tmdb';
 		if (addonId === 'musicbrainz') return 'musicbrainz';
 		if (addonId === 'openlibrary') return 'openlibrary';
@@ -50,8 +50,8 @@
 	const posterUrl = $derived(params.get('posterUrl'));
 	const backdropUrl = $derived(params.get('backdropUrl'));
 
-	const docType = $derived<DocumentType>(mapToDocumentType(addon, catalogType));
-	const docSource = $derived<DocumentSource>(mapToDocumentSource(addon));
+	const firkinType = $derived<FirkinType>(mapToFirkinType(addon, catalogType));
+	const firkinSource = $derived<FirkinSource>(mapToFirkinSource(addon));
 
 	const images = $derived<ImageMeta[]>(
 		[posterUrl, backdropUrl]
@@ -59,7 +59,7 @@
 			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }))
 	);
 
-	const virtualDoc = $derived<CloudDocument>({
+	const virtualFirkin = $derived<CloudFirkin>({
 		id: `virtual:${addon}:${catalogType}:${itemId}`,
 		title,
 		artists: [],
@@ -67,8 +67,8 @@
 		images,
 		files: [],
 		year,
-		type: docType,
-		source: docSource,
+		type: firkinType,
+		source: firkinSource,
 		created_at: '',
 		updated_at: '',
 		version: 0,
@@ -86,12 +86,12 @@
 	$effect(() => {
 		if (!title) return;
 		const t = title;
-		const k = docType;
+		const k = firkinType;
 		const y = year;
 		void runTorrentSearch(t, k, y);
 	});
 
-	async function runTorrentSearch(title: string, kind: DocumentType, year: number | null) {
+	async function runTorrentSearch(title: string, kind: FirkinType, year: number | null) {
 		const myRun = ++searchRun;
 		torrentStatus = 'searching';
 		torrentError = null;
@@ -136,15 +136,15 @@
 		assignError = null;
 		addingHash = torrent.magnetLink;
 		try {
-			const created: Document = await documentsService.create({
+			const created: Firkin = await firkinsService.create({
 				title,
 				artists: [],
 				description,
 				images,
 				files: [{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }],
 				year,
-				type: docType,
-				source: docSource
+				type: firkinType,
+				source: firkinSource
 			});
 			await startTorrentDownload(torrent.magnetLink);
 			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
@@ -178,8 +178,8 @@
 			<a class="text-xs text-base-content/60 hover:underline" href="{base}/catalog">← Catalog</a>
 			<h1 class="text-2xl font-bold [overflow-wrap:anywhere]">{title}</h1>
 			<p class="text-sm text-base-content/70">
-				<span class="badge badge-outline badge-sm">{docType}</span>
-				<span class="badge badge-outline badge-sm">{docSource}</span>
+				<span class="badge badge-outline badge-sm">{firkinType}</span>
+				<span class="badge badge-outline badge-sm">{firkinSource}</span>
 				{#if year !== null && year !== undefined && Number.isFinite(year)}
 					<span class="badge badge-outline badge-sm">{year}</span>
 				{/if}
@@ -190,7 +190,7 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
 		<aside class="flex flex-col gap-4">
-			<DocumentCard document={virtualDoc} />
+			<FirkinCard firkin={virtualFirkin} />
 		</aside>
 
 		<section class="flex flex-col gap-6">
@@ -205,8 +205,8 @@
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>
 				<p class="text-xs text-base-content/70">
 					This item is virtual — no record exists in the database yet, and nothing is pinned to
-					IPFS. Picking a torrent below will create the document, pin its files, and bring it into
-					the catalog properly.
+					IPFS. Picking a torrent below will create the firkin, pin its files, and bring it into the
+					catalog properly.
 				</p>
 			</div>
 
@@ -245,7 +245,7 @@
 					<button
 						type="button"
 						class="btn btn-outline btn-xs"
-						onclick={() => runTorrentSearch(title, docType, year)}
+						onclick={() => runTorrentSearch(title, firkinType, year)}
 						disabled={torrentStatus === 'searching'}
 					>
 						{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}

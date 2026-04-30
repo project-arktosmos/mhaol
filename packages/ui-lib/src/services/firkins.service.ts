@@ -1,40 +1,35 @@
 import { writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { fetchJson } from 'ui-lib/transport/fetch-helpers';
-import type {
-	CloudDocument,
-	DocumentArtist,
-	DocumentFile,
-	DocumentImage
-} from 'ui-lib/types/document.type';
+import type { CloudFirkin, FirkinArtist, FirkinFile, FirkinImage } from 'ui-lib/types/firkin.type';
 
-export interface CreateDocumentInput {
+export interface CreateFirkinInput {
 	title: string;
-	artists: DocumentArtist[];
+	artists: FirkinArtist[];
 	description: string;
-	images: DocumentImage[];
-	files: DocumentFile[];
+	images: FirkinImage[];
+	files: FirkinFile[];
 	year: number | null;
 	type: string;
 	source: string;
 }
 
-export interface DocumentsServiceState {
+export interface FirkinsServiceState {
 	loading: boolean;
-	documents: CloudDocument[];
+	firkins: CloudFirkin[];
 	error: string | null;
 }
 
-const initialState: DocumentsServiceState = {
+const initialState: FirkinsServiceState = {
 	loading: false,
-	documents: [],
+	firkins: [],
 	error: null
 };
 
 const POLL_INTERVAL_MS = 4000;
 
-class DocumentsService {
-	public state: Writable<DocumentsServiceState> = writable(initialState);
+class FirkinsService {
+	public state: Writable<FirkinsServiceState> = writable(initialState);
 
 	private subscribers = 0;
 	private timer: ReturnType<typeof setInterval> | null = null;
@@ -65,8 +60,8 @@ class DocumentsService {
 		this.inFlight = true;
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const documents = await fetchJson<CloudDocument[]>('/api/documents');
-			this.state.set({ loading: false, documents, error: null });
+			const firkins = await fetchJson<CloudFirkin[]>('/api/firkins');
+			this.state.set({ loading: false, firkins, error: null });
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Unknown error';
 			this.state.update((s) => ({ ...s, loading: false, error: message }));
@@ -75,23 +70,23 @@ class DocumentsService {
 		}
 	}
 
-	async create(input: CreateDocumentInput): Promise<CloudDocument> {
-		const created = await fetchJson<CloudDocument>('/api/documents', {
+	async create(input: CreateFirkinInput): Promise<CloudFirkin> {
+		const created = await fetchJson<CloudFirkin>('/api/firkins', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(input)
 		});
 		this.state.update((s) => {
-			const idx = s.documents.findIndex((d) => d.id === created.id);
+			const idx = s.firkins.findIndex((d) => d.id === created.id);
 			if (idx >= 0) {
-				const next = s.documents.slice();
+				const next = s.firkins.slice();
 				next[idx] = created;
-				return { ...s, documents: next };
+				return { ...s, firkins: next };
 			}
-			return { ...s, documents: [...s.documents, created] };
+			return { ...s, firkins: [...s.firkins, created] };
 		});
 		return created;
 	}
 }
 
-export const documentsService = new DocumentsService();
+export const firkinsService = new FirkinsService();

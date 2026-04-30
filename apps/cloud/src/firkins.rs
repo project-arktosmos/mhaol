@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use surrealdb::sql::Thing;
 
-pub const TABLE: &str = "document";
+pub const TABLE: &str = "firkin";
 
 const SHA2_256_CODE: u64 = 0x12;
 const RAW_CODEC: u64 = 0x55;
@@ -77,7 +77,7 @@ pub struct FileEntry {
 }
 
 #[derive(Serialize)]
-struct DocumentPayloadView<'a> {
+struct FirkinPayloadView<'a> {
     title: &'a str,
     description: &'a str,
     artists: &'a [Artist],
@@ -92,7 +92,7 @@ struct DocumentPayloadView<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn compute_document_cid(
+pub fn compute_firkin_cid(
     title: &str,
     description: &str,
     artists: &[Artist],
@@ -104,7 +104,7 @@ pub fn compute_document_cid(
     version: u32,
     version_hashes: &[String],
 ) -> String {
-    let view = DocumentPayloadView {
+    let view = FirkinPayloadView {
         title,
         description,
         artists,
@@ -117,7 +117,7 @@ pub fn compute_document_cid(
         version_hashes,
     };
     let json = serde_json::to_string_pretty(&view)
-        .expect("DocumentPayloadView serializes to JSON");
+        .expect("FirkinPayloadView serializes to JSON");
     let digest = Sha256::digest(json.as_bytes());
     let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
         .expect("sha2-256 digest fits in multihash");
@@ -125,7 +125,7 @@ pub fn compute_document_cid(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Document {
+pub struct Firkin {
     pub id: Option<Thing>,
     #[serde(alias = "name")]
     pub title: String,
@@ -151,7 +151,7 @@ pub struct Document {
 }
 
 #[derive(Debug, Serialize)]
-pub struct DocumentDto {
+pub struct FirkinDto {
     pub id: String,
     pub title: String,
     pub artists: Vec<Artist>,
@@ -168,8 +168,8 @@ pub struct DocumentDto {
     pub version_hashes: Vec<String>,
 }
 
-impl From<Document> for DocumentDto {
-    fn from(doc: Document) -> Self {
+impl From<Firkin> for FirkinDto {
+    fn from(doc: Firkin) -> Self {
         let id = doc
             .id
             .as_ref()
@@ -194,7 +194,7 @@ impl From<Document> for DocumentDto {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateDocumentRequest {
+pub struct CreateFirkinRequest {
     pub title: String,
     #[serde(default)]
     pub artists: Vec<Artist>,
@@ -211,7 +211,7 @@ pub struct CreateDocumentRequest {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UpdateDocumentRequest {
+pub struct UpdateFirkinRequest {
     pub title: Option<String>,
     pub artists: Option<Vec<Artist>>,
     pub description: Option<String>,
@@ -242,13 +242,13 @@ fn err_response(
 
 async fn list(
     State(state): State<CloudState>,
-) -> Result<Json<Vec<DocumentDto>>, (StatusCode, Json<serde_json::Value>)> {
-    let docs: Vec<Document> = state
+) -> Result<Json<Vec<FirkinDto>>, (StatusCode, Json<serde_json::Value>)> {
+    let docs: Vec<Firkin> = state
         .db
         .select(TABLE)
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
-    let mut dtos: Vec<DocumentDto> = docs.into_iter().map(Into::into).collect();
+    let mut dtos: Vec<FirkinDto> = docs.into_iter().map(Into::into).collect();
     dtos.sort_by(|a, b| a.created_at.cmp(&b.created_at));
     Ok(Json(dtos))
 }
@@ -256,22 +256,22 @@ async fn list(
 async fn get_one(
     State(state): State<CloudState>,
     Path(id): Path<String>,
-) -> Result<Json<DocumentDto>, (StatusCode, Json<serde_json::Value>)> {
-    let doc: Option<Document> = state
+) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    let doc: Option<Firkin> = state
         .db
         .select((TABLE, id.as_str()))
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
     match doc {
         Some(d) => Ok(Json(d.into())),
-        None => Err(err_response(StatusCode::NOT_FOUND, "document not found")),
+        None => Err(err_response(StatusCode::NOT_FOUND, "firkin not found")),
     }
 }
 
 async fn create(
     State(state): State<CloudState>,
-    Json(req): Json<CreateDocumentRequest>,
-) -> Result<(StatusCode, Json<DocumentDto>), (StatusCode, Json<serde_json::Value>)> {
+    Json(req): Json<CreateFirkinRequest>,
+) -> Result<(StatusCode, Json<FirkinDto>), (StatusCode, Json<serde_json::Value>)> {
     let title = req.title.trim();
     if title.is_empty() {
         return Err(err_response(StatusCode::BAD_REQUEST, "title is required"));
@@ -361,7 +361,7 @@ async fn create(
     let now = Utc::now();
     let version: u32 = 0;
     let version_hashes: Vec<String> = Vec::new();
-    let new_id = compute_document_cid(
+    let new_id = compute_firkin_cid(
         title,
         &description,
         &artists,
@@ -374,7 +374,7 @@ async fn create(
         &version_hashes,
     );
 
-    let existing: Option<Document> = state
+    let existing: Option<Firkin> = state
         .db
         .select((TABLE, new_id.as_str()))
         .await
@@ -383,7 +383,7 @@ async fn create(
         return Ok((StatusCode::OK, Json(existing.into())));
     }
 
-    let record = Document {
+    let record = Firkin {
         id: None,
         title: title.to_string(),
         artists,
@@ -399,15 +399,15 @@ async fn create(
         version_hashes,
     };
 
-    let created: Option<Document> = state
+    let created: Option<Firkin> = state
         .db
         .create((TABLE, new_id.as_str()))
         .content(record)
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db create failed: {e}")))?;
 
-    let dto: DocumentDto = created
-        .ok_or_else(|| err_response(StatusCode::INTERNAL_SERVER_ERROR, "document was not persisted"))?
+    let dto: FirkinDto = created
+        .ok_or_else(|| err_response(StatusCode::INTERNAL_SERVER_ERROR, "firkin was not persisted"))?
         .into();
     Ok((StatusCode::CREATED, Json(dto)))
 }
@@ -415,15 +415,15 @@ async fn create(
 async fn update(
     State(state): State<CloudState>,
     Path(id): Path<String>,
-    Json(req): Json<UpdateDocumentRequest>,
-) -> Result<Json<DocumentDto>, (StatusCode, Json<serde_json::Value>)> {
-    let existing: Option<Document> = state
+    Json(req): Json<UpdateFirkinRequest>,
+) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    let existing: Option<Firkin> = state
         .db
         .select((TABLE, id.as_str()))
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
     let mut current = existing
-        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "document not found"))?;
+        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
 
     if let Some(title) = req.title.as_ref().map(|t| t.trim()) {
         if title.is_empty() {
@@ -534,15 +534,15 @@ async fn update(
     current.updated_at = Utc::now();
     current.id = None;
 
-    let updated: Option<Document> = state
+    let updated: Option<Firkin> = state
         .db
         .update((TABLE, id.as_str()))
         .content(current)
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db update failed: {e}")))?;
 
-    let dto: DocumentDto = updated
-        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "document not found"))?
+    let dto: FirkinDto = updated
+        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?
         .into();
     Ok(Json(dto))
 }
@@ -551,18 +551,18 @@ async fn delete(
     State(state): State<CloudState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    let removed: Option<Document> = state
+    let removed: Option<Firkin> = state
         .db
         .delete((TABLE, id.as_str()))
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db delete failed: {e}")))?;
     match removed {
         Some(_) => Ok(StatusCode::NO_CONTENT),
-        None => Err(err_response(StatusCode::NOT_FOUND, "document not found")),
+        None => Err(err_response(StatusCode::NOT_FOUND, "firkin not found")),
     }
 }
 
-impl IntoResponse for DocumentDto {
+impl IntoResponse for FirkinDto {
     fn into_response(self) -> axum::response::Response {
         Json(self).into_response()
     }
@@ -572,8 +572,8 @@ impl IntoResponse for DocumentDto {
 async fn finalize(
     State(state): State<CloudState>,
     Path(id): Path<String>,
-) -> Result<Json<DocumentDto>, (StatusCode, Json<serde_json::Value>)> {
-    let latest_id = crate::torrent_completion::finalize_document(&state, &id)
+) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    let latest_id = crate::torrent_completion::finalize_firkin(&state, &id)
         .await
         .map_err(|e| {
             err_response(
@@ -581,15 +581,15 @@ async fn finalize(
                 format!("finalize failed: {e}"),
             )
         })?;
-    let latest_id = latest_id.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "document not found"))?;
-    let doc: Option<Document> = state
+    let latest_id = latest_id.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+    let doc: Option<Firkin> = state
         .db
         .select((TABLE, latest_id.as_str()))
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
     match doc {
         Some(d) => Ok(Json(d.into())),
-        None => Err(err_response(StatusCode::NOT_FOUND, "document not found")),
+        None => Err(err_response(StatusCode::NOT_FOUND, "firkin not found")),
     }
 }
 
@@ -597,7 +597,7 @@ async fn finalize(
 async fn finalize(
     State(_state): State<CloudState>,
     Path(_id): Path<String>,
-) -> Result<Json<DocumentDto>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
     Err(err_response(
         StatusCode::NOT_IMPLEMENTED,
         "finalize is not supported on this platform",

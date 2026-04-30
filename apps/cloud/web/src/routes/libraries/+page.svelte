@@ -308,7 +308,7 @@
 					{/each}
 				</div>
 				<p class="mt-1 text-xs text-base-content/60">
-					Files matching the selected kinds are turned into <code>document</code> records on scan. Leave
+					Files matching the selected kinds are turned into <code>firkin</code> records on scan. Leave
 					empty to skip media detection.
 				</p>
 			</div>

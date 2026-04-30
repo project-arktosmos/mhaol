@@ -4,7 +4,7 @@ import { browser } from '$app/environment';
 export const REACTION_EMOJIS = ['👎', '⭐', '👍'] as const;
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
 
-const STORAGE_KEY = 'mhaol:document-reactions';
+const STORAGE_KEY = 'mhaol:firkin-reactions';
 
 function load(): Record<string, ReactionEmoji> {
 	if (!browser) return {};
@@ -34,30 +34,30 @@ function persist(state: Record<string, ReactionEmoji>): void {
 	}
 }
 
-class DocumentReactionsService {
+class FirkinReactionsService {
 	state: Writable<Record<string, ReactionEmoji>> = writable(load());
 
-	set(documentId: string, emoji: ReactionEmoji): void {
+	set(firkinId: string, emoji: ReactionEmoji): void {
 		this.state.update((s) => {
-			const next = { ...s, [documentId]: emoji };
+			const next = { ...s, [firkinId]: emoji };
 			persist(next);
 			return next;
 		});
 	}
 
-	clear(documentId: string): void {
+	clear(firkinId: string): void {
 		this.state.update((s) => {
-			if (!(documentId in s)) return s;
+			if (!(firkinId in s)) return s;
 			const next = { ...s };
-			delete next[documentId];
+			delete next[firkinId];
 			persist(next);
 			return next;
 		});
 	}
 
-	get(documentId: string): ReactionEmoji | null {
-		return get(this.state)[documentId] ?? null;
+	get(firkinId: string): ReactionEmoji | null {
+		return get(this.state)[firkinId] ?? null;
 	}
 }
 
-export const documentReactionsService = new DocumentReactionsService();
+export const firkinReactionsService = new FirkinReactionsService();

@@ -1,10 +1,10 @@
-export interface DocumentArtist {
+export interface FirkinArtist {
 	name: string;
 	url?: string;
 	imageUrl?: string;
 }
 
-export interface DocumentImage {
+export interface FirkinImage {
 	url: string;
 	mimeType: string;
 	fileSize: number;
@@ -12,21 +12,21 @@ export interface DocumentImage {
 	height: number;
 }
 
-export type DocumentFileType = 'ipfs' | 'torrent magnet' | 'url';
+export type FirkinFileType = 'ipfs' | 'torrent magnet' | 'url';
 
-export interface DocumentFile {
-	type: DocumentFileType;
+export interface FirkinFile {
+	type: FirkinFileType;
 	value: string;
 	title?: string;
 }
 
-export interface CloudDocument {
+export interface CloudFirkin {
 	id: string;
 	title: string;
-	artists: DocumentArtist[];
+	artists: FirkinArtist[];
 	description: string;
-	images: DocumentImage[];
-	files: DocumentFile[];
+	images: FirkinImage[];
+	files: FirkinFile[];
 	year: number | null;
 	type: string;
 	source: string;

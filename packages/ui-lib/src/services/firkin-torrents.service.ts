@@ -3,13 +3,13 @@ import { browser } from '$app/environment';
 import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 
-export interface DocumentTorrentsState {
+export interface FirkinTorrentsState {
 	byHash: Record<string, TorrentInfo>;
 	loading: boolean;
 	error: string | null;
 }
 
-const initialState: DocumentTorrentsState = {
+const initialState: FirkinTorrentsState = {
 	byHash: {},
 	loading: false,
 	error: null
@@ -27,8 +27,8 @@ export function infoHashFromMagnet(magnet: string): string | null {
 	return raw ? raw.toLowerCase() : null;
 }
 
-class DocumentTorrentsService {
-	state: Writable<DocumentTorrentsState> = writable(initialState);
+class FirkinTorrentsService {
+	state: Writable<FirkinTorrentsState> = writable(initialState);
 
 	private subscribers = 0;
 	private timer: ReturnType<typeof setInterval> | null = null;
@@ -91,4 +91,4 @@ class DocumentTorrentsService {
 	}
 }
 
-export const documentTorrentsService = new DocumentTorrentsService();
+export const firkinTorrentsService = new FirkinTorrentsService();

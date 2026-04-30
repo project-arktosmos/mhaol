@@ -1,14 +1,14 @@
 import { error } from '@sveltejs/kit';
-import type { Document } from '$lib/documents.service';
+import type { Firkin } from '$lib/firkins.service';
 
 export const prerender = false;
 
 export const load = async ({ params, fetch }) => {
-	const res = await fetch(`/api/documents/${encodeURIComponent(params.ipfsHash)}`, {
+	const res = await fetch(`/api/firkins/${encodeURIComponent(params.ipfsHash)}`, {
 		cache: 'no-store'
 	});
 	if (res.status === 404) {
-		throw error(404, 'document not found');
+		throw error(404, 'firkin not found');
 	}
 	if (!res.ok) {
 		let message = `HTTP ${res.status}`;
@@ -20,6 +20,6 @@ export const load = async ({ params, fetch }) => {
 		}
 		throw error(res.status, message);
 	}
-	const document = (await res.json()) as Document;
-	return { document };
+	const firkin = (await res.json()) as Firkin;
+	return { firkin };
 };

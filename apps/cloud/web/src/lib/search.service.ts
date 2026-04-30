@@ -1,13 +1,7 @@
 import { searchRecordings, searchArtists, searchReleaseGroups } from 'addons/musicbrainz';
 import { searchBooks } from 'addons/openlibrary';
 import { TorrentCategory } from 'addons/torrent-search-thepiratebay/types';
-import type {
-	Artist,
-	DocumentSource,
-	DocumentType,
-	FileEntry,
-	ImageMeta
-} from './documents.service';
+import type { Artist, FirkinSource, FirkinType, FileEntry, ImageMeta } from './firkins.service';
 
 export interface SearchResultItem {
 	title: string;
@@ -123,8 +117,8 @@ export function parseTorrentName(name: string): {
 }
 
 export async function searchSource(
-	source: DocumentSource,
-	type: DocumentType,
+	source: FirkinSource,
+	type: FirkinType,
 	query: string
 ): Promise<SearchResultItem[]> {
 	const trimmed = query.trim();
@@ -142,7 +136,7 @@ export async function searchSource(
 	}
 }
 
-function tpbCategoryFor(type: DocumentType): TorrentCategory {
+function tpbCategoryFor(type: FirkinType): TorrentCategory {
 	switch (type) {
 		case 'album':
 		case 'track':
@@ -199,7 +193,7 @@ function torrentCacheKey(category: string, query: string): string {
 }
 
 export async function searchTorrents(
-	type: DocumentType,
+	type: FirkinType,
 	query: string
 ): Promise<TorrentResultItem[]> {
 	const trimmed = query.trim();
@@ -245,7 +239,7 @@ async function parseError(res: Response): Promise<string> {
 	return `HTTP ${res.status}`;
 }
 
-async function searchTmdb(type: DocumentType, query: string): Promise<SearchResultItem[]> {
+async function searchTmdb(type: FirkinType, query: string): Promise<SearchResultItem[]> {
 	const res = await fetch('/api/search/tmdb', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
@@ -292,7 +286,7 @@ export async function fetchAlbumTrackTitles(releaseGroupId: string): Promise<str
 	return titles;
 }
 
-async function searchMusicBrainz(type: DocumentType, query: string): Promise<SearchResultItem[]> {
+async function searchMusicBrainz(type: FirkinType, query: string): Promise<SearchResultItem[]> {
 	if (type === 'track') {
 		const res = await searchRecordings(query);
 		return res.recordings.map((rec) => {

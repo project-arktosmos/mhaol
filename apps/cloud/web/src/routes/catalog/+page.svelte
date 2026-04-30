@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { base } from '$app/paths';
-	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
-	import type { CloudDocument } from 'ui-lib/types/document.type';
+	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import {
 		listSources,
 		loadGenres,
@@ -13,13 +13,13 @@
 		type CatalogSource
 	} from '$lib/catalog.service';
 	import {
-		documentsService,
-		type Document,
-		type DocumentSource,
-		type DocumentType
-	} from '$lib/documents.service';
+		firkinsService,
+		type Firkin,
+		type FirkinSource,
+		type FirkinType
+	} from '$lib/firkins.service';
 
-	const documentsStore = documentsService.state;
+	const firkinsStore = firkinsService.state;
 
 	let sources = $state<CatalogSource[]>([]);
 	let sourcesError = $state<string | null>(null);
@@ -42,13 +42,13 @@
 	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
 
-	const currentDocType = $derived<DocumentType | null>(
-		addon && type ? mapToDocumentType(addon, type) : null
+	const currentFirkinType = $derived<FirkinType | null>(
+		addon && type ? mapToFirkinType(addon, type) : null
 	);
-	const libraryDocuments = $derived<Document[]>(
-		currentDocType
-			? $documentsStore.documents
-					.filter((d) => d.type === currentDocType)
+	const libraryFirkins = $derived<Firkin[]>(
+		currentFirkinType
+			? $firkinsStore.firkins
+					.filter((d) => d.type === currentFirkinType)
 					.slice()
 					.sort((a, b) => b.created_at.localeCompare(a.created_at))
 					.slice(0, 6)
@@ -56,7 +56,7 @@
 	);
 
 	interface CatalogTypeButton {
-		docType: DocumentType;
+		firkinType: FirkinType;
 		label: string;
 		addonId: string;
 		catalogType: string;
@@ -65,7 +65,7 @@
 	const catalogTypeButtons = $derived<CatalogTypeButton[]>(
 		sources.flatMap((src) =>
 			src.types.map((t) => ({
-				docType: mapToDocumentType(src.id, t.id),
+				firkinType: mapToFirkinType(src.id, t.id),
 				label: t.label,
 				addonId: src.id,
 				catalogType: t.id
@@ -73,7 +73,7 @@
 		)
 	);
 
-	function mapToDocumentType(addonId: string, typeId: string): DocumentType {
+	function mapToFirkinType(addonId: string, typeId: string): FirkinType {
 		if (addonId === 'tmdb' && typeId === 'tv') return 'tv show';
 		if (addonId === 'tmdb') return 'movie';
 		if (addonId === 'musicbrainz') return 'album';
@@ -82,7 +82,7 @@
 		return 'movie';
 	}
 
-	function mapToDocumentSource(addonId: string): DocumentSource {
+	function mapToFirkinSource(addonId: string): FirkinSource {
 		if (addonId === 'tmdb') return 'tmdb';
 		if (addonId === 'musicbrainz') return 'musicbrainz';
 		if (addonId === 'openlibrary') return 'openlibrary';
@@ -90,9 +90,9 @@
 		return 'tmdb';
 	}
 
-	function virtualDocument(item: CatalogItem): CloudDocument {
-		const docType = mapToDocumentType(addon, type);
-		const docSource = mapToDocumentSource(addon);
+	function virtualFirkin(item: CatalogItem): CloudFirkin {
+		const firkinType = mapToFirkinType(addon, type);
+		const firkinSource = mapToFirkinSource(addon);
 		const images = [item.posterUrl, item.backdropUrl]
 			.filter((url): url is string => Boolean(url))
 			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
@@ -104,8 +104,8 @@
 			images,
 			files: [],
 			year: item.year,
-			type: docType,
-			source: docSource,
+			type: firkinType,
+			source: firkinSource,
 			created_at: '',
 			updated_at: '',
 			version: 0,
@@ -194,7 +194,7 @@
 	}
 
 	onMount(() => {
-		const stopDocs = documentsService.start();
+		const stopFirkins = firkinsService.start();
 		void (async () => {
 			try {
 				sources = await listSources();
@@ -209,7 +209,7 @@
 			}
 		})();
 		return () => {
-			stopDocs();
+			stopFirkins();
 		};
 	});
 </script>
@@ -283,11 +283,11 @@
 
 	<section class="flex flex-col gap-3">
 		<h2 class="text-lg font-semibold">Library</h2>
-		{#if libraryDocuments.length === 0}
+		{#if libraryFirkins.length === 0}
 			<p class="text-sm text-base-content/60">No library items yet.</p>
 		{:else}
 			<div class="grid grid-cols-6 gap-4">
-				{#each libraryDocuments as doc (doc.id)}
+				{#each libraryFirkins as doc (doc.id)}
 					<a
 						href={`${base}/catalog/${encodeURIComponent(doc.id)}`}
 						class="block no-underline"
@@ -297,7 +297,7 @@
 							}
 						}}
 					>
-						<DocumentCard document={doc as CloudDocument} />
+						<FirkinCard firkin={doc as CloudFirkin} />
 					</a>
 				{/each}
 			</div>
@@ -356,7 +356,7 @@
 							}
 						}}
 					>
-						<DocumentCard document={virtualDocument(item)} />
+						<FirkinCard firkin={virtualFirkin(item)} />
 					</a>
 				{/each}
 			</div>

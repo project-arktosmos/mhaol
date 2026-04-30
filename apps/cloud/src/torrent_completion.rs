@@ -1,5 +1,5 @@
 //! Background watcher that detects finished torrents and rolls the matching
-//! document forward by pinning each downloaded file to IPFS, appending them as
+//! firkin forward by pinning each downloaded file to IPFS, appending them as
 //! `ipfs` file entries, and re-creating the SurrealDB record at its new CID.
 //!
 //! Versioning: each completion bumps `version` and pushes the prior CID onto
@@ -19,7 +19,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 
 #[cfg(not(target_os = "android"))]
-use crate::documents::{compute_document_cid, Document, FileEntry, TABLE as DOCUMENT_TABLE};
+use crate::firkins::{compute_firkin_cid, Firkin, FileEntry, TABLE as FIRKIN_TABLE};
 #[cfg(not(target_os = "android"))]
 use crate::ipfs_pins;
 #[cfg(not(target_os = "android"))]
@@ -80,7 +80,7 @@ pub async fn run(state: CloudState) {
 
 #[cfg(not(target_os = "android"))]
 async fn handle_completion(state: &CloudState, torrent: &TorrentInfo) -> anyhow::Result<bool> {
-    let docs: Vec<Document> = state.db.select(DOCUMENT_TABLE).await?;
+    let docs: Vec<Firkin> = state.db.select(FIRKIN_TABLE).await?;
     let needle = format!("btih:{}", torrent.info_hash.to_lowercase());
     let target = match docs
         .into_iter()
@@ -94,12 +94,12 @@ async fn handle_completion(state: &CloudState, torrent: &TorrentInfo) -> anyhow:
 }
 
 /// Pin every downloaded file from `torrent` into IPFS, append them to `doc`'s
-/// files, and roll the document forward to a new CID. Returns `Ok(true)` when
-/// the document was rolled forward, `Ok(false)` when nothing changed.
+/// files, and roll the firkin forward to a new CID. Returns `Ok(true)` when
+/// the firkin was rolled forward, `Ok(false)` when nothing changed.
 #[cfg(not(target_os = "android"))]
 async fn rollforward(
     state: &CloudState,
-    doc: &Document,
+    doc: &Firkin,
     torrent: &TorrentInfo,
 ) -> anyhow::Result<bool> {
     let output_path = match torrent.output_path.as_deref() {
@@ -170,7 +170,7 @@ async fn rollforward(
     let mut new_hashes = doc.version_hashes.clone();
     new_hashes.push(old_id.clone());
 
-    let new_id = compute_document_cid(
+    let new_id = compute_firkin_cid(
         &doc.title,
         &doc.description,
         &doc.artists,
@@ -188,7 +188,7 @@ async fn rollforward(
         return Ok(false);
     }
 
-    let new_record = Document {
+    let new_record = Firkin {
         id: None,
         title: doc.title.clone(),
         artists: doc.artists.clone(),
@@ -204,13 +204,13 @@ async fn rollforward(
         version_hashes: new_hashes,
     };
 
-    let _: Option<Document> = state
+    let _: Option<Firkin> = state
         .db
-        .delete((DOCUMENT_TABLE, old_id.as_str()))
+        .delete((FIRKIN_TABLE, old_id.as_str()))
         .await?;
-    let _: Option<Document> = state
+    let _: Option<Firkin> = state
         .db
-        .create((DOCUMENT_TABLE, new_id.as_str()))
+        .create((FIRKIN_TABLE, new_id.as_str()))
         .content(new_record)
         .await?;
 
@@ -233,15 +233,15 @@ fn matches_magnet(files: &[FileEntry], needle: &str) -> bool {
 }
 
 /// On-demand rollforward: pin every completed torrent attached to `doc_id`
-/// and roll the document forward. Returns the latest document id (the new
+/// and roll the firkin forward. Returns the latest firkin id (the new
 /// CID after rollforward, or `doc_id` unchanged if nothing was finalized).
-/// `Ok(None)` means the document does not exist.
+/// `Ok(None)` means the firkin does not exist.
 #[cfg(not(target_os = "android"))]
-pub async fn finalize_document(
+pub async fn finalize_firkin(
     state: &CloudState,
     doc_id: &str,
 ) -> anyhow::Result<Option<String>> {
-    let mut current: Document = match state.db.select((DOCUMENT_TABLE, doc_id)).await? {
+    let mut current: Firkin = match state.db.select((FIRKIN_TABLE, doc_id)).await? {
         Some(d) => d,
         None => return Ok(None),
     };
@@ -282,7 +282,7 @@ pub async fn finalize_document(
         }
         match rollforward(state, &current, torrent).await {
             Ok(true) => {
-                let docs: Vec<Document> = state.db.select(DOCUMENT_TABLE).await?;
+                let docs: Vec<Firkin> = state.db.select(FIRKIN_TABLE).await?;
                 if let Some(next) = docs
                     .into_iter()
                     .find(|d| d.version_hashes.iter().any(|h| h == &current_id))

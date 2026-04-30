@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
-import type { CloudDocument, DocumentFile } from '../../src/types/document.type';
+import type { CloudFirkin, FirkinFile } from '../../src/types/firkin.type';
 
 // `vi.mock` is hoisted to the top of the file, so anything it captures must
 // be created via `vi.hoisted` to exist at hoist time. Both the spy and the
@@ -13,11 +13,11 @@ const mocks = vi.hoisted(() => ({
 }));
 const playMock = mocks.playMock;
 
-vi.mock('../../src/services/document-stream.service', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('../../src/services/document-stream.service')>();
+vi.mock('../../src/services/firkin-stream.service', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../../src/services/firkin-stream.service')>();
 	return {
 		...actual,
-		documentStreamService: { play: mocks.playMock }
+		firkinStreamService: { play: mocks.playMock }
 	};
 });
 
@@ -34,15 +34,15 @@ vi.mock('../../src/services/player.service', () => ({
 
 const fireTrackEnded = () => mocks.registeredCallback?.();
 
-import { documentPlaybackService } from '../../src/services/document-playback.service';
+import { firkinPlaybackService } from '../../src/services/firkin-playback.service';
 
-function track(title: string, value = `cid-${title}`): DocumentFile {
+function track(title: string, value = `cid-${title}`): FirkinFile {
 	return { type: 'ipfs', value, title };
 }
 
-function album(files: DocumentFile[]): CloudDocument {
+function album(files: FirkinFile[]): CloudFirkin {
 	return {
-		id: 'doc-album',
+		id: 'firkin-album',
 		title: 'Album Under Test',
 		artists: [],
 		description: '',
@@ -56,25 +56,25 @@ function album(files: DocumentFile[]): CloudDocument {
 	};
 }
 
-describe('documentPlaybackService auto-advance', () => {
+describe('firkinPlaybackService auto-advance', () => {
 	beforeEach(() => {
 		playMock.mockReset();
-		documentPlaybackService.clear();
+		firkinPlaybackService.clear();
 	});
 
 	it('plays the first audio track when an album is selected', () => {
 		const doc = album([track('01.mp3'), track('02.mp3'), track('03.mp3')]);
 
-		documentPlaybackService.select(doc);
+		firkinPlaybackService.select(doc);
 
 		expect(playMock).toHaveBeenCalledTimes(1);
 		expect(playMock.mock.calls[0][0]).toMatchObject({ value: 'cid-01.mp3' });
-		expect(get(documentPlaybackService.state).currentFile).toBe('cid-01.mp3');
+		expect(get(firkinPlaybackService.state).currentFile).toBe('cid-01.mp3');
 	});
 
 	it('advances to the next track when the worker reports TrackEnded', () => {
 		const doc = album([track('01.mp3'), track('02.mp3'), track('03.mp3')]);
-		documentPlaybackService.select(doc);
+		firkinPlaybackService.select(doc);
 		expect(playMock).toHaveBeenCalledTimes(1);
 
 		// Fire the TrackEnded callback the playback service registered with
@@ -85,18 +85,18 @@ describe('documentPlaybackService auto-advance', () => {
 
 		expect(playMock).toHaveBeenCalledTimes(2);
 		expect(playMock.mock.calls[1][0]).toMatchObject({ value: 'cid-02.mp3' });
-		expect(get(documentPlaybackService.state).currentFile).toBe('cid-02.mp3');
+		expect(get(firkinPlaybackService.state).currentFile).toBe('cid-02.mp3');
 	});
 
 	it('stops advancing past the last track', () => {
 		const doc = album([track('01.mp3'), track('02.mp3')]);
-		documentPlaybackService.select(doc);
+		firkinPlaybackService.select(doc);
 		fireTrackEnded(); // → 02
 		fireTrackEnded(); // no-op (last track)
 
 		expect(playMock).toHaveBeenCalledTimes(2);
 		// currentFile sticks at the last played track (02.mp3), not cleared.
-		expect(get(documentPlaybackService.state).currentFile).toBe('cid-02.mp3');
+		expect(get(firkinPlaybackService.state).currentFile).toBe('cid-02.mp3');
 	});
 
 	it('skips non-playable files when advancing (e.g. cover.jpg between tracks)', () => {
@@ -105,7 +105,7 @@ describe('documentPlaybackService auto-advance', () => {
 			{ type: 'ipfs', value: 'cid-cover.jpg', title: 'cover.jpg' },
 			track('02.mp3')
 		]);
-		documentPlaybackService.select(doc);
+		firkinPlaybackService.select(doc);
 		expect(playMock.mock.calls[0][0]).toMatchObject({ value: 'cid-01.mp3' });
 
 		fireTrackEnded();
@@ -116,14 +116,14 @@ describe('documentPlaybackService auto-advance', () => {
 		expect(playMock.mock.calls[1][0]).toMatchObject({ value: 'cid-02.mp3' });
 	});
 
-	it('does not advance for non-album documents (e.g. movies)', () => {
-		const movie: CloudDocument = {
+	it('does not advance for non-album firkins (e.g. movies)', () => {
+		const movie: CloudFirkin = {
 			...album([track('movie.mp4', 'cid-movie')]),
 			type: 'movie'
 		};
 		movie.files = [{ type: 'ipfs', value: 'cid-movie', title: 'movie.mp4' }];
 
-		documentPlaybackService.select(movie);
+		firkinPlaybackService.select(movie);
 
 		// Single video file → autoplays.
 		expect(playMock).toHaveBeenCalledTimes(1);
@@ -134,13 +134,11 @@ describe('documentPlaybackService auto-advance', () => {
 	});
 
 	it('does not autoplay when album has no audio files', () => {
-		const doc: CloudDocument = album([
-			{ type: 'ipfs', value: 'cid-cover.jpg', title: 'cover.jpg' }
-		]);
+		const doc: CloudFirkin = album([{ type: 'ipfs', value: 'cid-cover.jpg', title: 'cover.jpg' }]);
 
-		documentPlaybackService.select(doc);
+		firkinPlaybackService.select(doc);
 
 		expect(playMock).not.toHaveBeenCalled();
-		expect(get(documentPlaybackService.state).currentFile).toBeNull();
+		expect(get(firkinPlaybackService.state).currentFile).toBeNull();
 	});
 });

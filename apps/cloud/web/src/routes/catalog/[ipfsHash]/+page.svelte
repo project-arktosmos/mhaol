@@ -1,20 +1,20 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
-	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
+	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
 	import {
-		documentTorrentsService,
+		firkinTorrentsService,
 		infoHashFromMagnet
-	} from 'ui-lib/services/document-torrents.service';
-	import type { CloudDocument } from 'ui-lib/types/document.type';
+	} from 'ui-lib/services/firkin-torrents.service';
+	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import { cachedImageUrl } from '$lib/image-cache';
 	import {
-		documentsService,
-		type Document,
-		type DocumentSource,
-		type DocumentType
-	} from '$lib/documents.service';
+		firkinsService,
+		type Firkin,
+		type FirkinSource,
+		type FirkinType
+	} from '$lib/firkins.service';
 	import {
 		formatSizeBytes,
 		matchTorrentsForResult,
@@ -25,23 +25,23 @@
 	import { goto } from '$app/navigation';
 
 	interface Props {
-		data: { document: Document };
+		data: { firkin: Firkin };
 	}
 
 	let { data }: Props = $props();
-	const document = $derived<Document>(data.document);
+	const firkin = $derived<Firkin>(data.firkin);
 	let removing = $state(false);
 	let removeError = $state<string | null>(null);
 
-	const hasIpfsFiles = $derived(document.files.some((f) => f.type === 'ipfs'));
-	const hasMagnetFiles = $derived(document.files.some((f) => f.type === 'torrent magnet'));
+	const hasIpfsFiles = $derived(firkin.files.some((f) => f.type === 'ipfs'));
+	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
 
-	const torrentsState = documentTorrentsService.state;
-	onMount(() => documentTorrentsService.start());
+	const torrentsState = firkinTorrentsService.state;
+	onMount(() => firkinTorrentsService.start());
 
 	const completedTorrents = $derived.by(() => {
 		const out: { hash: string; title: string }[] = [];
-		for (const f of document.files) {
+		for (const f of firkin.files) {
 			if (f.type !== 'torrent magnet' || !f.value) continue;
 			const hash = infoHashFromMagnet(f.value);
 			if (!hash) continue;
@@ -60,14 +60,14 @@
 
 	async function play() {
 		if (hasIpfsFiles) {
-			documentPlaybackService.select(document as CloudDocument);
+			firkinPlaybackService.select(firkin as CloudFirkin);
 			return;
 		}
 		if (finalizing) return;
 		finalizeError = null;
 		finalizing = true;
 		try {
-			const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/finalize`, {
+			const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}/finalize`, {
 				method: 'POST'
 			});
 			if (!res.ok) {
@@ -80,14 +80,14 @@
 				}
 				throw new Error(message);
 			}
-			const next = (await res.json()) as Document;
-			if (next.id !== document.id) {
+			const next = (await res.json()) as Firkin;
+			if (next.id !== firkin.id) {
 				await goto(`${base}/catalog/${encodeURIComponent(next.id)}`);
 			} else {
-				data.document = next;
+				data.firkin = next;
 			}
 			if (next.files.some((f) => f.type === 'ipfs')) {
-				documentPlaybackService.select(next as unknown as CloudDocument);
+				firkinPlaybackService.select(next as unknown as CloudFirkin);
 			}
 		} catch (err) {
 			finalizeError = err instanceof Error ? err.message : 'Unknown error';
@@ -106,34 +106,32 @@
 	let startedHashes = $state<Set<string>>(new Set());
 
 	const existingHashes = $derived(
-		new Set(
-			document.files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value)
-		)
+		new Set(firkin.files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
 	);
 
 	$effect(() => {
-		const id = document.id;
-		const title = document.title;
-		const kind = document.type as DocumentType;
-		const year = document.year;
+		const id = firkin.id;
+		const title = firkin.title;
+		const kind = firkin.type as FirkinType;
+		const year = firkin.year;
 		void runTorrentSearch(id, title, kind, year);
 	});
 
 	$effect(() => {
 		if (!hasMagnetFiles || hasIpfsFiles) return;
-		const id = document.id;
+		const id = firkin.id;
 		let cancelled = false;
 		const tick = async () => {
 			if (cancelled) return;
 			try {
-				const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
+				const res = await fetch(`/api/firkins/${encodeURIComponent(id)}`, {
 					cache: 'no-store'
 				});
 				if (cancelled) return;
 				if (res.status === 404) {
-					const listRes = await fetch('/api/documents', { cache: 'no-store' });
+					const listRes = await fetch('/api/firkins', { cache: 'no-store' });
 					if (!listRes.ok) return;
-					const list = (await listRes.json()) as Document[];
+					const list = (await listRes.json()) as Firkin[];
 					if (cancelled) return;
 					const successor = list.find((d) => (d.version_hashes ?? []).includes(id));
 					if (successor) {
@@ -142,10 +140,10 @@
 					return;
 				}
 				if (!res.ok) return;
-				const fresh = (await res.json()) as Document;
+				const fresh = (await res.json()) as Firkin;
 				if (cancelled) return;
 				if (fresh.files.some((f) => f.type === 'ipfs')) {
-					data.document = fresh;
+					data.firkin = fresh;
 				}
 			} catch {
 				// swallow — try again on next tick
@@ -159,7 +157,7 @@
 	});
 
 	$effect(() => {
-		const magnets = document.files
+		const magnets = firkin.files
 			.filter((f) => f.type === 'torrent magnet' && f.value)
 			.map((f) => f.value);
 		for (const magnet of magnets) {
@@ -174,7 +172,7 @@
 	async function runTorrentSearch(
 		_id: string,
 		title: string,
-		kind: DocumentType,
+		kind: FirkinType,
 		year: number | null
 	) {
 		const myRun = ++searchRun;
@@ -223,21 +221,21 @@
 		assignError = null;
 		addingHash = torrent.magnetLink;
 		try {
-			const created = await documentsService.create({
-				title: document.title,
-				artists: document.artists,
-				description: document.description,
-				images: document.images,
+			const created = await firkinsService.create({
+				title: firkin.title,
+				artists: firkin.artists,
+				description: firkin.description,
+				images: firkin.images,
 				files: [
-					...document.files,
+					...firkin.files,
 					{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
 				],
-				year: document.year,
-				type: document.type as DocumentType,
-				source: document.source as DocumentSource
+				year: firkin.year,
+				type: firkin.type as FirkinType,
+				source: firkin.source as FirkinSource
 			});
 			await startTorrentDownload(torrent.magnetLink);
-			if (created.id !== document.id) {
+			if (created.id !== firkin.id) {
 				await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
 			}
 		} catch (err) {
@@ -272,7 +270,7 @@
 		removing = true;
 		removeError = null;
 		try {
-			await documentsService.remove(document.id);
+			await firkinsService.remove(firkin.id);
 			window.location.href = `${base}/catalog`;
 		} catch (err) {
 			removeError = err instanceof Error ? err.message : 'Unknown error';
@@ -282,19 +280,19 @@
 </script>
 
 <svelte:head>
-	<title>Mhaol Cloud — {document.title}</title>
+	<title>Mhaol Cloud — {firkin.title}</title>
 </svelte:head>
 
 <div class="flex min-h-full flex-col gap-6 p-6">
 	<header class="flex flex-wrap items-start justify-between gap-3">
 		<div class="flex flex-col gap-1">
 			<a class="text-xs text-base-content/60 hover:underline" href="{base}/catalog">← Catalog</a>
-			<h1 class="text-2xl font-bold [overflow-wrap:anywhere]">{document.title}</h1>
+			<h1 class="text-2xl font-bold [overflow-wrap:anywhere]">{firkin.title}</h1>
 			<p class="text-sm text-base-content/70">
-				<span class="badge badge-outline badge-sm">{document.type}</span>
-				<span class="badge badge-outline badge-sm">{document.source}</span>
-				{#if document.year !== null && document.year !== undefined}
-					<span class="badge badge-outline badge-sm">{document.year}</span>
+				<span class="badge badge-outline badge-sm">{firkin.type}</span>
+				<span class="badge badge-outline badge-sm">{firkin.source}</span>
+				{#if firkin.year !== null && firkin.year !== undefined}
+					<span class="badge badge-outline badge-sm">{firkin.year}</span>
 				{/if}
 			</p>
 		</div>
@@ -326,7 +324,7 @@
 				onclick={remove}
 				disabled={removing}
 			>
-				{removing ? 'Deleting…' : 'Delete document'}
+				{removing ? 'Deleting…' : 'Delete firkin'}
 			</button>
 		</div>
 	</header>
@@ -345,14 +343,14 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
 		<aside class="flex flex-col gap-4">
-			<DocumentCard document={document as CloudDocument} />
+			<FirkinCard firkin={firkin as CloudFirkin} />
 		</aside>
 
 		<section class="flex flex-col gap-6">
-			{#if document.description}
+			{#if firkin.description}
 				<div class="card border border-base-content/10 bg-base-200 p-4">
 					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Description</h2>
-					<p class="text-sm [overflow-wrap:anywhere] whitespace-pre-wrap">{document.description}</p>
+					<p class="text-sm [overflow-wrap:anywhere] whitespace-pre-wrap">{firkin.description}</p>
 				</div>
 			{/if}
 
@@ -362,31 +360,31 @@
 					<tbody>
 						<tr>
 							<th class="w-32 align-top">CID</th>
-							<td class="font-mono text-xs break-all">{document.id}</td>
+							<td class="font-mono text-xs break-all">{firkin.id}</td>
 						</tr>
 						<tr>
 							<th class="w-32 align-top">Created</th>
-							<td class="text-xs">{formatDate(document.created_at)}</td>
+							<td class="text-xs">{formatDate(firkin.created_at)}</td>
 						</tr>
 						<tr>
 							<th class="w-32 align-top">Updated</th>
-							<td class="text-xs">{formatDate(document.updated_at)}</td>
+							<td class="text-xs">{formatDate(firkin.updated_at)}</td>
 						</tr>
 						<tr>
 							<th class="w-32 align-top">Version</th>
-							<td class="text-xs">{document.version ?? 0}</td>
+							<td class="text-xs">{firkin.version ?? 0}</td>
 						</tr>
 					</tbody>
 				</table>
 			</div>
 
-			{#if document.version_hashes && document.version_hashes.length > 0}
+			{#if firkin.version_hashes && firkin.version_hashes.length > 0}
 				<div class="card border border-base-content/10 bg-base-200 p-4">
 					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-						Version history ({document.version_hashes.length})
+						Version history ({firkin.version_hashes.length})
 					</h2>
 					<ol class="list-decimal pl-6 text-xs">
-						{#each document.version_hashes as cid, i (i)}
+						{#each firkin.version_hashes as cid, i (i)}
 							<li class="font-mono break-all">
 								<a class="link" href="{base}/catalog/{encodeURIComponent(cid)}">{cid}</a>
 							</li>
@@ -395,13 +393,13 @@
 				</div>
 			{/if}
 
-			{#if document.artists.length > 0}
+			{#if firkin.artists.length > 0}
 				<div class="card border border-base-content/10 bg-base-200 p-4">
 					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-						Artists ({document.artists.length})
+						Artists ({firkin.artists.length})
 					</h2>
 					<ul class="flex flex-col gap-3">
-						{#each document.artists as artist, i (i)}
+						{#each firkin.artists as artist, i (i)}
 							<li class="flex items-center gap-3">
 								{#if artist.imageUrl}
 									<img
@@ -428,13 +426,13 @@
 				</div>
 			{/if}
 
-			{#if document.images.length > 0}
+			{#if firkin.images.length > 0}
 				<div class="card border border-base-content/10 bg-base-200 p-4">
 					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-						Images ({document.images.length})
+						Images ({firkin.images.length})
 					</h2>
 					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-						{#each document.images as image, i (i)}
+						{#each firkin.images as image, i (i)}
 							<figure
 								class="flex flex-col gap-1 overflow-hidden rounded-box border border-base-content/10 bg-base-300"
 							>
@@ -464,12 +462,7 @@
 						type="button"
 						class="btn btn-outline btn-xs"
 						onclick={() =>
-							runTorrentSearch(
-								document.id,
-								document.title,
-								document.type as DocumentType,
-								document.year
-							)}
+							runTorrentSearch(firkin.id, firkin.title, firkin.type as FirkinType, firkin.year)}
 						disabled={torrentStatus === 'searching'}
 					>
 						{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
@@ -521,9 +514,9 @@
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-					Files ({document.files.length})
+					Files ({firkin.files.length})
 				</h2>
-				{#if document.files.length === 0}
+				{#if firkin.files.length === 0}
 					<p class="text-sm text-base-content/60">No files attached.</p>
 				{:else}
 					<div class="overflow-x-auto rounded-box border border-base-content/10">
@@ -536,7 +529,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each document.files as file, i (i)}
+								{#each firkin.files as file, i (i)}
 									<tr>
 										<td class={classNames('text-xs font-semibold')}>
 											<span class="badge badge-outline badge-sm">{file.type}</span>

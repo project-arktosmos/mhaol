@@ -1,14 +1,14 @@
 //! Detects movies, TV shows, music albums, books, and games from a scanned
-//! library directory and persists them as `document` records (one per movie,
+//! library directory and persists them as `firkin` records (one per movie,
 //! show, album, book, or game).
 //!
 //! For each library, the scan task uses the library's `kinds` to decide which
 //! detectors to run. Files matched by a detector are pinned to IPFS (so the
-//! resulting documents have content-addressed file entries) and grouped under
-//! a single `document` whose `files` list mirrors the IPFS pins.
+//! resulting firkins have content-addressed file entries) and grouped under
+//! a single `firkin` whose `files` list mirrors the IPFS pins.
 //!
 //! Re-running the scan is idempotent: existing files (matched by relative
-//! path under the library) are skipped, and existing documents (matched by
+//! path under the library) are skipped, and existing firkins (matched by
 //! `(title, kind, source="local")`) are version-rolled forward with the new
 //! file entries.
 
@@ -21,19 +21,19 @@ use chrono::Utc;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::documents::{
-    compute_document_cid, Document, FileEntry, TABLE as DOCUMENT_TABLE,
+use crate::firkins::{
+    compute_firkin_cid, FileEntry, Firkin, TABLE as FIRKIN_TABLE,
 };
 use crate::ipfs_pins;
 use crate::libraries::{is_pinnable_mime, wait_for_ipfs_ready, ScanEntry};
 use crate::state::CloudState;
 
-const DOC_SOURCE_LOCAL: &str = "local";
-const DOC_KIND_MOVIE: &str = "movie";
-const DOC_KIND_TV_SHOW: &str = "tv show";
-const DOC_KIND_ALBUM: &str = "album";
-const DOC_KIND_BOOK: &str = "book";
-const DOC_KIND_GAME: &str = "game";
+const FIRKIN_SOURCE_LOCAL: &str = "local";
+const FIRKIN_KIND_MOVIE: &str = "movie";
+const FIRKIN_KIND_TV_SHOW: &str = "tv show";
+const FIRKIN_KIND_ALBUM: &str = "album";
+const FIRKIN_KIND_BOOK: &str = "book";
+const FIRKIN_KIND_GAME: &str = "game";
 
 const VIDEO_EXTS: &[&str] = &[
     "mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v", "ts", "mpg", "mpeg",
@@ -75,7 +75,7 @@ struct MediaGroup {
     files: Vec<GroupFile>,
 }
 
-pub fn schedule_pins_and_documents(
+pub fn schedule_pins_and_firkins(
     state: &CloudState,
     entries: &[ScanEntry],
     kinds: Vec<String>,
@@ -187,18 +187,18 @@ async fn pin_and_persist_group(
         return Ok(());
     }
 
-    let docs: Vec<Document> = state.db.select(DOCUMENT_TABLE).await?;
+    let docs: Vec<Firkin> = state.db.select(FIRKIN_TABLE).await?;
     let existing = docs.into_iter().find(|d| {
-        d.kind == group.kind && d.source == DOC_SOURCE_LOCAL && d.title == group.title
+        d.kind == group.kind && d.source == FIRKIN_SOURCE_LOCAL && d.title == group.title
     });
 
     match existing {
-        Some(existing) => upsert_document_with_files(state, existing, new_entries).await,
-        None => create_document(state, group, new_entries).await,
+        Some(existing) => upsert_firkin_with_files(state, existing, new_entries).await,
+        None => create_firkin(state, group, new_entries).await,
     }
 }
 
-async fn create_document(
+async fn create_firkin(
     state: &CloudState,
     group: &MediaGroup,
     files: Vec<FileEntry>,
@@ -206,7 +206,7 @@ async fn create_document(
     let now = Utc::now();
     let version: u32 = 0;
     let version_hashes: Vec<String> = Vec::new();
-    let new_id = compute_document_cid(
+    let new_id = compute_firkin_cid(
         &group.title,
         &group.description,
         &[],
@@ -214,17 +214,17 @@ async fn create_document(
         &files,
         group.year,
         group.kind,
-        DOC_SOURCE_LOCAL,
+        FIRKIN_SOURCE_LOCAL,
         version,
         &version_hashes,
     );
 
-    let already: Option<Document> = state.db.select((DOCUMENT_TABLE, new_id.as_str())).await?;
+    let already: Option<Firkin> = state.db.select((FIRKIN_TABLE, new_id.as_str())).await?;
     if already.is_some() {
         return Ok(());
     }
 
-    let record = Document {
+    let record = Firkin {
         id: None,
         title: group.title.clone(),
         artists: Vec::new(),
@@ -233,20 +233,20 @@ async fn create_document(
         files,
         year: group.year,
         kind: group.kind.to_string(),
-        source: DOC_SOURCE_LOCAL.to_string(),
+        source: FIRKIN_SOURCE_LOCAL.to_string(),
         created_at: now,
         updated_at: now,
         version,
         version_hashes,
     };
 
-    let _: Option<Document> = state
+    let _: Option<Firkin> = state
         .db
-        .create((DOCUMENT_TABLE, new_id.as_str()))
+        .create((FIRKIN_TABLE, new_id.as_str()))
         .content(record)
         .await?;
     tracing::info!(
-        "[library-scan] created document {} ({}, {} file(s))",
+        "[library-scan] created firkin {} ({}, {} file(s))",
         new_id,
         group.kind,
         group.files.len()
@@ -254,9 +254,9 @@ async fn create_document(
     Ok(())
 }
 
-async fn upsert_document_with_files(
+async fn upsert_firkin_with_files(
     state: &CloudState,
-    existing: Document,
+    existing: Firkin,
     new_entries: Vec<FileEntry>,
 ) -> anyhow::Result<()> {
     let existing_titles: std::collections::HashSet<String> = existing
@@ -294,7 +294,7 @@ async fn upsert_document_with_files(
     let mut new_hashes = existing.version_hashes.clone();
     new_hashes.push(old_id.clone());
 
-    let new_id = compute_document_cid(
+    let new_id = compute_firkin_cid(
         &existing.title,
         &existing.description,
         &existing.artists,
@@ -311,7 +311,7 @@ async fn upsert_document_with_files(
         return Ok(());
     }
 
-    let new_record = Document {
+    let new_record = Firkin {
         id: None,
         title: existing.title.clone(),
         artists: existing.artists.clone(),
@@ -327,13 +327,13 @@ async fn upsert_document_with_files(
         version_hashes: new_hashes,
     };
 
-    let _: Option<Document> = state
+    let _: Option<Firkin> = state
         .db
-        .delete((DOCUMENT_TABLE, old_id.as_str()))
+        .delete((FIRKIN_TABLE, old_id.as_str()))
         .await?;
-    let _: Option<Document> = state
+    let _: Option<Firkin> = state
         .db
-        .create((DOCUMENT_TABLE, new_id.as_str()))
+        .create((FIRKIN_TABLE, new_id.as_str()))
         .content(new_record)
         .await?;
     tracing::info!(
@@ -605,7 +605,7 @@ fn detect_tv_shows(entries: &[ScanEntry]) -> Vec<MediaGroup> {
         let files: Vec<GroupFile> = eps.into_iter().map(|(_, _, f)| f).collect();
         let description = format!("{} episode(s) detected from local files", files.len());
         out.push(MediaGroup {
-            kind: DOC_KIND_TV_SHOW,
+            kind: FIRKIN_KIND_TV_SHOW,
             title: show,
             description,
             year,
@@ -646,7 +646,7 @@ fn detect_movies(
             title
         };
         out.push(MediaGroup {
-            kind: DOC_KIND_MOVIE,
+            kind: FIRKIN_KIND_MOVIE,
             title,
             description: String::new(),
             year,
@@ -717,7 +717,7 @@ fn detect_albums(entries: &[ScanEntry]) -> Vec<MediaGroup> {
         };
         let description = format!("{} track(s) detected from local files", files.len());
         out.push(MediaGroup {
-            kind: DOC_KIND_ALBUM,
+            kind: FIRKIN_KIND_ALBUM,
             title,
             description,
             year,
@@ -740,7 +740,7 @@ fn detect_books(entries: &[ScanEntry]) -> Vec<MediaGroup> {
                 title
             };
             MediaGroup {
-                kind: DOC_KIND_BOOK,
+                kind: FIRKIN_KIND_BOOK,
                 title,
                 description: String::new(),
                 year,
@@ -772,7 +772,7 @@ fn detect_games(entries: &[ScanEntry]) -> Vec<MediaGroup> {
                 title
             };
             MediaGroup {
-                kind: DOC_KIND_GAME,
+                kind: FIRKIN_KIND_GAME,
                 title,
                 description: String::new(),
                 year,
@@ -813,7 +813,7 @@ mod tests {
         ];
         let groups = detect_media_groups(&entries, &["tv".to_string()]);
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].kind, DOC_KIND_TV_SHOW);
+        assert_eq!(groups[0].kind, FIRKIN_KIND_TV_SHOW);
         assert_eq!(groups[0].title, "Breaking Bad");
         assert_eq!(groups[0].files.len(), 3);
     }
@@ -840,8 +840,8 @@ mod tests {
             &entries,
             &["tv".to_string(), "movie".to_string()],
         );
-        let movies: Vec<&MediaGroup> = groups.iter().filter(|g| g.kind == DOC_KIND_MOVIE).collect();
-        let shows: Vec<&MediaGroup> = groups.iter().filter(|g| g.kind == DOC_KIND_TV_SHOW).collect();
+        let movies: Vec<&MediaGroup> = groups.iter().filter(|g| g.kind == FIRKIN_KIND_MOVIE).collect();
+        let shows: Vec<&MediaGroup> = groups.iter().filter(|g| g.kind == FIRKIN_KIND_TV_SHOW).collect();
         assert_eq!(shows.len(), 1);
         assert_eq!(movies.len(), 1);
         assert_eq!(movies[0].title, "Inception");
@@ -860,7 +860,7 @@ mod tests {
         titles.sort();
         assert_eq!(titles, vec!["Animals", "The Wall"]);
         for g in &groups {
-            assert_eq!(g.kind, DOC_KIND_ALBUM);
+            assert_eq!(g.kind, FIRKIN_KIND_ALBUM);
         }
     }
 

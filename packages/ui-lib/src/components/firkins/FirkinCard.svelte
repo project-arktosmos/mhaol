@@ -1,31 +1,31 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import type { CloudDocument, DocumentFile } from 'ui-lib/types/document.type';
+	import type { CloudFirkin, FirkinFile } from 'ui-lib/types/firkin.type';
 	import {
-		documentTorrentsService,
+		firkinTorrentsService,
 		infoHashFromMagnet
-	} from 'ui-lib/services/document-torrents.service';
-	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
-	import { documentsService } from 'ui-lib/services/documents.service';
+	} from 'ui-lib/services/firkin-torrents.service';
+	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
+	import { firkinsService } from 'ui-lib/services/firkins.service';
 	import {
-		documentReactionsService,
+		firkinReactionsService,
 		REACTION_EMOJIS,
 		type ReactionEmoji
-	} from 'ui-lib/services/document-reactions.service';
+	} from 'ui-lib/services/firkin-reactions.service';
 	import { getCachedImageUrl } from 'ui-lib/services/image-cache.service';
 	import type { TorrentInfo } from 'ui-lib/types/torrent.type';
 
 	interface Props {
-		document: CloudDocument;
+		firkin: CloudFirkin;
 		classes?: string;
 		onRemove?: (id: string) => void;
 		removing?: boolean;
 	}
 
-	let { document, classes = '', onRemove, removing = false }: Props = $props();
+	let { firkin, classes = '', onRemove, removing = false }: Props = $props();
 
-	let coverImage = $derived(document.images?.[0] ?? null);
+	let coverImage = $derived(firkin.images?.[0] ?? null);
 	let resolvedCoverUrl = $state<string | null>(null);
 
 	$effect(() => {
@@ -43,19 +43,19 @@
 		};
 	});
 
-	let hasYear = $derived(document.year !== null && document.year !== undefined);
+	let hasYear = $derived(firkin.year !== null && firkin.year !== undefined);
 
-	let files = $derived(document.files ?? []);
+	let files = $derived(firkin.files ?? []);
 	let magnetFiles = $derived(files.filter((f) => f.type === 'torrent magnet'));
 	let tableFiles = $derived(files.filter((f) => f.type !== 'torrent magnet'));
 	let hasIpfsFiles = $derived(files.some((f) => f.type === 'ipfs'));
 
-	const torrentsState = documentTorrentsService.state;
-	const reactionsState = documentReactionsService.state;
+	const torrentsState = firkinTorrentsService.state;
+	const reactionsState = firkinReactionsService.state;
 	let pendingHashes = $state<Record<string, boolean>>({});
 
 	let persistedRealIds = $state<Record<string, string>>({});
-	let effectiveId = $derived(persistedRealIds[document.id] ?? document.id);
+	let effectiveId = $derived(persistedRealIds[firkin.id] ?? firkin.id);
 	let currentReaction = $derived<ReactionEmoji | null>($reactionsState[effectiveId] ?? null);
 	let persistingReaction = $state(false);
 
@@ -69,20 +69,20 @@
 		const current = effectiveId;
 		if (!current.startsWith('virtual:')) return current;
 		try {
-			const created = await documentsService.create({
-				title: document.title,
-				artists: document.artists ?? [],
-				description: document.description ?? '',
-				images: document.images ?? [],
-				files: document.files ?? [],
-				year: document.year ?? null,
-				type: document.type,
-				source: document.source
+			const created = await firkinsService.create({
+				title: firkin.title,
+				artists: firkin.artists ?? [],
+				description: firkin.description ?? '',
+				images: firkin.images ?? [],
+				files: firkin.files ?? [],
+				year: firkin.year ?? null,
+				type: firkin.type,
+				source: firkin.source
 			});
-			persistedRealIds = { ...persistedRealIds, [document.id]: created.id };
+			persistedRealIds = { ...persistedRealIds, [firkin.id]: created.id };
 			return created.id;
 		} catch (err) {
-			console.error('Failed to persist virtual document', err);
+			console.error('Failed to persist virtual firkin', err);
 			return null;
 		}
 	}
@@ -93,7 +93,7 @@
 		try {
 			const id = await ensureRealId();
 			if (!id) return;
-			documentReactionsService.set(id, emoji);
+			firkinReactionsService.set(id, emoji);
 		} finally {
 			persistingReaction = false;
 		}
@@ -101,32 +101,32 @@
 
 	onMount(() => {
 		if (magnetFiles.length === 0) return;
-		return documentTorrentsService.start();
+		return firkinTorrentsService.start();
 	});
 
-	function torrentFor(file: DocumentFile): TorrentInfo | null {
+	function torrentFor(file: FirkinFile): TorrentInfo | null {
 		const hash = infoHashFromMagnet(file.value);
 		if (!hash) return null;
 		return $torrentsState.byHash[hash] ?? null;
 	}
 
-	function isPending(file: DocumentFile): boolean {
+	function isPending(file: FirkinFile): boolean {
 		const hash = infoHashFromMagnet(file.value);
 		return hash ? pendingHashes[hash] === true : false;
 	}
 
-	async function downloadMagnet(file: DocumentFile) {
+	async function downloadMagnet(file: FirkinFile) {
 		const hash = infoHashFromMagnet(file.value);
 		if (!hash) return;
 		pendingHashes = { ...pendingHashes, [hash]: true };
 		try {
-			await documentTorrentsService.add(file.value);
+			await firkinTorrentsService.add(file.value);
 		} finally {
 			pendingHashes = { ...pendingHashes, [hash]: false };
 		}
 	}
 
-	function fileTooltip(file: DocumentFile): string {
+	function fileTooltip(file: FirkinFile): string {
 		return file.title ? `${file.title}\n${file.value}` : file.value;
 	}
 
@@ -157,18 +157,18 @@
 	<header
 		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
 	>
-		<span class="text-xs text-base-content/70">{document.type}</span>
+		<span class="text-xs text-base-content/70">{firkin.type}</span>
 		<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
-			{document.title}
+			{firkin.title}
 		</h3>
-		<span class="text-xs text-base-content/70">{hasYear ? document.year : ''}</span>
+		<span class="text-xs text-base-content/70">{hasYear ? firkin.year : ''}</span>
 		{#if onRemove}
 			<button
 				type="button"
 				class="btn text-error btn-ghost btn-xs"
-				onclick={() => onRemove?.(document.id)}
+				onclick={() => onRemove?.(firkin.id)}
 				disabled={removing}
-				aria-label="Remove document"
+				aria-label="Remove firkin"
 			>
 				{removing ? '…' : '×'}
 			</button>
@@ -179,26 +179,26 @@
 			{#if resolvedCoverUrl}
 				<img
 					src={resolvedCoverUrl}
-					alt={document.title}
+					alt={firkin.title}
 					width={coverImage.width || undefined}
 					height={coverImage.height || undefined}
 					class="block h-auto w-full"
 					loading="lazy"
 				/>
 			{/if}
-			{#if document.description}
+			{#if firkin.description}
 				<figcaption
 					class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/50 px-4 py-3 text-xs [overflow-wrap:anywhere] whitespace-pre-wrap text-white opacity-0 transition-opacity group-hover:opacity-100"
 				>
-					{document.description}
+					{firkin.description}
 				</figcaption>
 			{/if}
 		</figure>
-	{:else if document.description}
+	{:else if firkin.description}
 		<p
 			class="border-b border-base-content/10 px-4 py-3 text-xs [overflow-wrap:anywhere] whitespace-pre-wrap text-base-content/80"
 		>
-			{document.description}
+			{firkin.description}
 		</p>
 	{/if}
 	{#if tableFiles.length > 0}
@@ -243,7 +243,7 @@
 				<button
 					type="button"
 					class="btn justify-start gap-2 btn-sm btn-primary"
-					onclick={() => documentPlaybackService.select(document)}
+					onclick={() => firkinPlaybackService.select(firkin)}
 					aria-label="Play"
 				>
 					<svg

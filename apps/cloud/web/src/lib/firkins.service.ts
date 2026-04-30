@@ -1,6 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 
-export const DOCUMENT_TYPES = [
+export const FIRKIN_TYPES = [
 	'movie',
 	'tv season',
 	'tv episode',
@@ -14,9 +14,9 @@ export const DOCUMENT_TYPES = [
 	'game'
 ] as const;
 
-export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+export type FirkinType = (typeof FIRKIN_TYPES)[number];
 
-export const DOCUMENT_SOURCES = [
+export const FIRKIN_SOURCES = [
 	'tmdb',
 	'musicbrainz',
 	'retroachievements',
@@ -26,9 +26,9 @@ export const DOCUMENT_SOURCES = [
 	'wyzie-subs'
 ] as const;
 
-export type DocumentSource = (typeof DOCUMENT_SOURCES)[number];
+export type FirkinSource = (typeof FIRKIN_SOURCES)[number];
 
-export const TYPES_BY_SOURCE: Record<DocumentSource, readonly DocumentType[]> = {
+export const TYPES_BY_SOURCE: Record<FirkinSource, readonly FirkinType[]> = {
 	tmdb: ['movie', 'tv show', 'tv season', 'tv episode', 'image'],
 	musicbrainz: ['album', 'track'],
 	retroachievements: ['game'],
@@ -61,7 +61,7 @@ export interface FileEntry {
 	title?: string;
 }
 
-export interface Document {
+export interface Firkin {
 	id: string;
 	title: string;
 	artists: Artist[];
@@ -77,15 +77,15 @@ export interface Document {
 	version_hashes?: string[];
 }
 
-export interface DocumentsState {
+export interface FirkinsState {
 	loading: boolean;
-	documents: Document[];
+	firkins: Firkin[];
 	error: string | null;
 }
 
-const initialState: DocumentsState = {
+const initialState: FirkinsState = {
 	loading: false,
-	documents: [],
+	firkins: [],
 	error: null
 };
 
@@ -101,8 +101,8 @@ async function parseError(res: Response): Promise<string> {
 
 const POLL_INTERVAL_MS = 4000;
 
-class DocumentsService {
-	state: Writable<DocumentsState> = writable(initialState);
+class FirkinsService {
+	state: Writable<FirkinsState> = writable(initialState);
 
 	private subscribers = 0;
 	private timer: ReturnType<typeof setInterval> | null = null;
@@ -132,10 +132,10 @@ class DocumentsService {
 		this.inFlight = true;
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const res = await fetch('/api/documents', { cache: 'no-store' });
+			const res = await fetch('/api/firkins', { cache: 'no-store' });
 			if (!res.ok) throw new Error(await parseError(res));
-			const documents = (await res.json()) as Document[];
-			this.state.set({ loading: false, documents, error: null });
+			const firkins = (await res.json()) as Firkin[];
+			this.state.set({ loading: false, firkins, error: null });
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Unknown error';
 			this.state.update((s) => ({ ...s, loading: false, error: message }));
@@ -151,36 +151,36 @@ class DocumentsService {
 		images: ImageMeta[];
 		files: FileEntry[];
 		year: number | null;
-		type: DocumentType;
-		source: DocumentSource;
-	}): Promise<Document> {
-		const res = await fetch('/api/documents', {
+		type: FirkinType;
+		source: FirkinSource;
+	}): Promise<Firkin> {
+		const res = await fetch('/api/firkins', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(input)
 		});
 		if (!res.ok) throw new Error(await parseError(res));
-		const created = (await res.json()) as Document;
+		const created = (await res.json()) as Firkin;
 		this.state.update((s) => {
-			const existing = s.documents.findIndex((d) => d.id === created.id);
+			const existing = s.firkins.findIndex((d) => d.id === created.id);
 			if (existing >= 0) {
-				const next = s.documents.slice();
+				const next = s.firkins.slice();
 				next[existing] = created;
-				return { ...s, documents: next };
+				return { ...s, firkins: next };
 			}
-			return { ...s, documents: [...s.documents, created] };
+			return { ...s, firkins: [...s.firkins, created] };
 		});
 		return created;
 	}
 
 	async remove(id: string): Promise<void> {
-		const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, { method: 'DELETE' });
+		const res = await fetch(`/api/firkins/${encodeURIComponent(id)}`, { method: 'DELETE' });
 		if (!res.ok && res.status !== 204) throw new Error(await parseError(res));
 		this.state.update((s) => ({
 			...s,
-			documents: s.documents.filter((d) => d.id !== id)
+			firkins: s.firkins.filter((d) => d.id !== id)
 		}));
 	}
 }
 
-export const documentsService = new DocumentsService();
+export const firkinsService = new FirkinsService();

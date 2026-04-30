@@ -1,35 +1,35 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { documentPlaybackService } from 'ui-lib/services/document-playback.service';
-	import { isPlayableFile } from 'ui-lib/services/document-stream.service';
-	import type { DocumentFile } from 'ui-lib/types/document.type';
+	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
+	import { isPlayableFile } from 'ui-lib/services/firkin-stream.service';
+	import type { FirkinFile } from 'ui-lib/types/firkin.type';
 
 	interface Props {
-		onPlayFile?: (file: DocumentFile) => void | Promise<void>;
+		onPlayFile?: (file: FirkinFile) => void | Promise<void>;
 	}
 
 	let { onPlayFile }: Props = $props();
 
-	const state = documentPlaybackService.state;
+	const state = firkinPlaybackService.state;
 </script>
 
-{#if $state.document}
+{#if $state.firkin}
 	<section class="flex flex-col gap-2 rounded-box border border-base-content/10 bg-base-300 p-3">
 		<header class="flex items-center justify-between gap-2">
-			<h3 class="truncate text-sm font-semibold" title={$state.document.title}>
-				{$state.document.title}
+			<h3 class="truncate text-sm font-semibold" title={$state.firkin.title}>
+				{$state.firkin.title}
 			</h3>
 			<button
 				type="button"
 				class="btn btn-ghost btn-xs"
-				onclick={() => documentPlaybackService.clear()}
+				onclick={() => firkinPlaybackService.clear()}
 				aria-label="Close playback panel"
 			>
 				×
 			</button>
 		</header>
 		{#if $state.files.length === 0}
-			<p class="text-xs text-base-content/60">No IPFS files for this document yet.</p>
+			<p class="text-xs text-base-content/60">No IPFS files for this firkin yet.</p>
 		{:else}
 			<ul class="flex flex-col gap-1">
 				{#each $state.files as file (file.value)}

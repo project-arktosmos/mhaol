@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
 import { fetchJson } from 'ui-lib/transport/fetch-helpers';
 import { playerService } from 'ui-lib/services/player.service';
-import type { DocumentFile } from 'ui-lib/types/document.type';
+import type { FirkinFile } from 'ui-lib/types/firkin.type';
 
 interface StartSessionResponse {
 	sessionId: string;
@@ -12,22 +12,22 @@ interface StartSessionResponse {
 const VIDEO_EXTENSIONS = /\.(mp4|m4v|mkv|webm|mov|avi|ts|mpe?g|wmv|flv|ogv)$/i;
 const AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|aac|alac|ogg|oga|opus|wav|wma|aiff|aif|ape)$/i;
 
-export function isVideoFile(file: DocumentFile): boolean {
+export function isVideoFile(file: FirkinFile): boolean {
 	const label = file.title ?? file.value ?? '';
 	return VIDEO_EXTENSIONS.test(label);
 }
 
-export function isAudioFile(file: DocumentFile): boolean {
+export function isAudioFile(file: FirkinFile): boolean {
 	const label = file.title ?? file.value ?? '';
 	return AUDIO_EXTENSIONS.test(label);
 }
 
-export function isPlayableFile(file: DocumentFile): boolean {
+export function isPlayableFile(file: FirkinFile): boolean {
 	return isVideoFile(file) || isAudioFile(file);
 }
 
-class DocumentStreamService {
-	async play(file: DocumentFile): Promise<void> {
+class FirkinStreamService {
+	async play(file: FirkinFile): Promise<void> {
 		if (!browser) return;
 		if (file.type !== 'ipfs') return;
 
@@ -49,4 +49,4 @@ class DocumentStreamService {
 	}
 }
 
-export const documentStreamService = new DocumentStreamService();
+export const firkinStreamService = new FirkinStreamService();

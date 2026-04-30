@@ -1,19 +1,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import DocumentCard from 'ui-lib/components/documents/DocumentCard.svelte';
+	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
 	import { cachedImageUrl } from '$lib/image-cache';
 	import {
-		documentsService,
-		DOCUMENT_SOURCES,
+		firkinsService,
+		FIRKIN_SOURCES,
 		FILE_TYPES,
 		TYPES_BY_SOURCE,
 		type Artist,
-		type DocumentType,
-		type DocumentSource,
+		type FirkinType,
+		type FirkinSource,
 		type FileEntry,
 		type ImageMeta
-	} from '$lib/documents.service';
+	} from '$lib/firkins.service';
 	import {
 		fetchAlbumTrackTitles,
 		fetchTmdbEpisodeTitles,
@@ -26,7 +26,7 @@
 	} from '$lib/search.service';
 	import { computeCidV1Raw } from '$lib/cid';
 
-	const docsStore = documentsService.state;
+	const firkinsStore = firkinsService.state;
 
 	let title = $state('');
 	let description = $state('');
@@ -34,8 +34,8 @@
 	let images = $state<ImageMeta[]>([]);
 	let files = $state<FileEntry[]>([]);
 	let year = $state<number | null>(null);
-	let source = $state<DocumentSource>(DOCUMENT_SOURCES[0]);
-	let type = $state<DocumentType>(TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0]);
+	let source = $state<FirkinSource>(FIRKIN_SOURCES[0]);
+	let type = $state<FirkinType>(TYPES_BY_SOURCE[FIRKIN_SOURCES[0]][0]);
 	let prefilledFiles = $state<FileEntry[]>([]);
 	const availableTypes = $derived(TYPES_BY_SOURCE[source]);
 	$effect(() => {
@@ -86,8 +86,8 @@
 		images = [];
 		files = [];
 		year = null;
-		source = DOCUMENT_SOURCES[0];
-		type = TYPES_BY_SOURCE[DOCUMENT_SOURCES[0]][0];
+		source = FIRKIN_SOURCES[0];
+		type = TYPES_BY_SOURCE[FIRKIN_SOURCES[0]][0];
 		prefilledFiles = [];
 	}
 
@@ -214,7 +214,7 @@
 	});
 
 	onMount(() => {
-		const cleanup = documentsService.start();
+		const cleanup = firkinsService.start();
 		consumeUrlParams();
 		return cleanup;
 	});
@@ -225,12 +225,12 @@
 		if (!cidParam) return;
 
 		const sourceParam = params.get('source');
-		if (sourceParam && (DOCUMENT_SOURCES as readonly string[]).includes(sourceParam)) {
-			source = sourceParam as DocumentSource;
+		if (sourceParam && (FIRKIN_SOURCES as readonly string[]).includes(sourceParam)) {
+			source = sourceParam as FirkinSource;
 		}
 		const typeParam = params.get('type');
 		if (typeParam && (TYPES_BY_SOURCE[source] as readonly string[]).includes(typeParam)) {
-			type = typeParam as DocumentType;
+			type = typeParam as FirkinType;
 		}
 		const titleParam = params.get('title')?.trim() ?? '';
 		if (titleParam) title = titleParam;
@@ -265,7 +265,7 @@
 		}
 		creating = true;
 		try {
-			await documentsService.create({
+			await firkinsService.create({
 				title: trimmedTitle,
 				artists,
 				description: description.trim(),
@@ -298,9 +298,9 @@
 	async function remove(id: string) {
 		deletingId = id;
 		try {
-			await documentsService.remove(id);
+			await firkinsService.remove(id);
 		} catch (err) {
-			documentsService.state.update((s) => ({
+			firkinsService.state.update((s) => ({
 				...s,
 				error: err instanceof Error ? err.message : 'Unknown error'
 			}));
@@ -311,35 +311,35 @@
 </script>
 
 <svelte:head>
-	<title>Mhaol Cloud — Documents</title>
+	<title>Mhaol Cloud — Firkins</title>
 </svelte:head>
 
 <div class="flex min-h-full flex-col gap-6 p-6">
 	<header class="flex items-center justify-between gap-4">
 		<div>
-			<h1 class="text-2xl font-bold">Documents</h1>
+			<h1 class="text-2xl font-bold">Firkins</h1>
 			<p class="text-sm text-base-content/60">
-				Documents stored in the cloud's SurrealDB. Each entry has a title, artists, description,
+				Firkins stored in the cloud's SurrealDB. Each entry has a title, artists, description,
 				images, and a list of files (ipfs CIDs, torrent magnets, or direct URLs).
 			</p>
 		</div>
 		<button
 			class="btn btn-outline btn-sm"
-			onclick={() => documentsService.refresh()}
-			disabled={$docsStore.loading}
+			onclick={() => firkinsService.refresh()}
+			disabled={$firkinsStore.loading}
 		>
 			Refresh
 		</button>
 	</header>
 
-	{#if $docsStore.error}
+	{#if $firkinsStore.error}
 		<div class="alert alert-error">
-			<span>{$docsStore.error}</span>
+			<span>{$firkinsStore.error}</span>
 		</div>
 	{/if}
 
 	<section class="card border border-base-content/10 bg-base-200 p-4">
-		<h2 class="mb-3 text-lg font-semibold">Add a document</h2>
+		<h2 class="mb-3 text-lg font-semibold">Add a firkin</h2>
 		<form class="flex flex-col gap-3" onsubmit={submit}>
 			<div class="overflow-x-auto rounded-box border border-base-content/10">
 				<table class="table table-sm">
@@ -352,7 +352,7 @@
 									bind:value={source}
 									disabled={creating}
 								>
-									{#each DOCUMENT_SOURCES as option (option)}
+									{#each FIRKIN_SOURCES as option (option)}
 										<option value={option}>{option}</option>
 									{/each}
 								</select>
@@ -605,7 +605,7 @@
 									<input
 										type="text"
 										class="input-bordered input input-sm w-full"
-										placeholder="Short summary of the document"
+										placeholder="Short summary of the firkin"
 										bind:value={description}
 										disabled={creating}
 									/>
@@ -866,17 +866,17 @@
 	{/if}
 
 	<section class="flex flex-col gap-3">
-		<h2 class="text-lg font-semibold">Existing documents</h2>
-		{#if $docsStore.loading && $docsStore.documents.length === 0}
+		<h2 class="text-lg font-semibold">Existing firkins</h2>
+		{#if $firkinsStore.loading && $firkinsStore.firkins.length === 0}
 			<p class="text-sm text-base-content/60">Loading…</p>
-		{:else if $docsStore.documents.length === 0}
-			<p class="text-sm text-base-content/60">No documents yet.</p>
+		{:else if $firkinsStore.firkins.length === 0}
+			<p class="text-sm text-base-content/60">No firkins yet.</p>
 		{:else}
 			<div
 				class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
 			>
-				{#each $docsStore.documents as doc (doc.id)}
-					<DocumentCard document={doc} onRemove={remove} removing={deletingId === doc.id} />
+				{#each $firkinsStore.firkins as doc (doc.id)}
+					<FirkinCard firkin={doc} onRemove={remove} removing={deletingId === doc.id} />
 				{/each}
 			</div>
 		{/if}

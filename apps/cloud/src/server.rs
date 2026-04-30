@@ -2,7 +2,7 @@ mod catalog;
 mod cloud_status;
 mod database;
 mod db;
-mod documents;
+mod firkins;
 mod frontend;
 mod fs_browse;
 mod health;
@@ -273,7 +273,7 @@ async fn main() {
         .nest("/api/health", health::router())
         .nest("/api/cloud", cloud_status::router())
         .nest("/api/libraries", libraries::router())
-        .nest("/api/documents", documents::router())
+        .nest("/api/firkins", firkins::router())
         .nest("/api/database", database::router())
         .nest("/api/ipfs", ipfs_pins::router())
         .nest("/api/fs", fs_browse::router())

@@ -387,7 +387,7 @@ async fn scan(
     {
         let kinds = lib.kinds.clone();
         let lib_root = lib.path.clone();
-        crate::library_scan::schedule_pins_and_documents(
+        crate::library_scan::schedule_pins_and_firkins(
             &state,
             &response.entries,
             kinds,

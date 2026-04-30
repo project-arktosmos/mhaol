@@ -18,8 +18,8 @@ src/
 ├── state.rs             # CloudState: { db, identity_manager, ytdl_manager, torrent_manager, ed2k_manager, ipfs_manager }
 ├── cloud_status.rs      # GET /api/cloud/status
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir; carries a list of catalog `kinds` (movie / tv / album / book / game)
-├── library_scan.rs      # Scan-time media detection + document persistence (cfg(not(target_os = "android")))
-├── documents.rs         # /api/documents CRUD — SurrealDB-backed document records (name, author, description)
+├── library_scan.rs      # Scan-time media detection + firkin persistence (cfg(not(target_os = "android")))
+├── firkins.rs         # /api/firkins CRUD — SurrealDB-backed firkin records (name, author, description)
 ├── database.rs          # /api/database/tables{,/:table} — read-only SurrealDB explorer (lists tables, paginates records)
 ├── ipfs_pins.rs         # /api/ipfs/pins — lists pins recorded when libraries are scanned; exposes record_pin() used by the scan handler
 ├── fs_browse.rs         # /api/fs/browse — list subdirectories under a path (defaults to home), used by the WebUI directory picker
@@ -66,7 +66,7 @@ The Svelte app lives at `apps/cloud/web/` (pnpm package name `cloud`). The user-
 
 ### Right-side aside
 
-`apps/cloud/web/src/routes/+layout.svelte` mounts a fixed-width right-side aside that mirrors the player app's: `DocumentFilesPanel` (rendered when `documentPlaybackService` has a document selected), `PlayerVideo` (the playback surface — drives both yt-dlp direct streams and IPFS-pinned WebRTC sessions), and `SubsLyricsFinder` (talks to `/api/search/subs-lyrics`). The layout calls `playerService.initialize()` on mount so the aside's stores wake up; the `/api/player/stream-status` and `/api/player/playable` stubs let initialize settle without errors.
+`apps/cloud/web/src/routes/+layout.svelte` mounts a fixed-width right-side aside that mirrors the player app's: `FirkinFilesPanel` (rendered when `firkinPlaybackService` has a firkin selected), `PlayerVideo` (the playback surface — drives both yt-dlp direct streams and IPFS-pinned WebRTC sessions), and `SubsLyricsFinder` (talks to `/api/search/subs-lyrics`). The layout calls `playerService.initialize()` on mount so the aside's stores wake up; the `/api/player/stream-status` and `/api/player/playable` stubs let initialize settle without errors.
 
 ### `/youtube` route
 
@@ -114,21 +114,21 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/libraries/:id` — fetch one library.
 - `PUT /api/libraries/:id` — update `path` (required) and optionally `kinds`. The new path is created on disk if missing; duplicates are rejected with `409`. Omitting `kinds` leaves the existing list untouched.
 - `DELETE /api/libraries/:id` — remove the library record. Every `ipfs_pin` whose `path` lies under the library directory is unpinned from the embedded IPFS node and deleted from SurrealDB; the on-disk files and directory are left untouched.
-- `GET /api/libraries/:id/scan` — recursively walk the library directory and return `{ root, total_files, total_size, entries }` where each entry is `{ path, relative_path, size, mime }`. MIME types are resolved by extension via `mime_guess`. The scan response itself is not persisted; the library's `last_scanned_at` is updated once the walk completes. After the walk, the scan handler hands off to `library_scan::schedule_pins_and_documents` (see "Library scan → documents" below). The pin task waits for the IPFS node to reach `Running` state (up to ~60s) before it starts so the very first scan after server boot doesn't race the IPFS init.
+- `GET /api/libraries/:id/scan` — recursively walk the library directory and return `{ root, total_files, total_size, entries }` where each entry is `{ path, relative_path, size, mime }`. MIME types are resolved by extension via `mime_guess`. The scan response itself is not persisted; the library's `last_scanned_at` is updated once the walk completes. After the walk, the scan handler hands off to `library_scan::schedule_pins_and_firkins` (see "Library scan → firkins" below). The pin task waits for the IPFS node to reach `Running` state (up to ~60s) before it starts so the very first scan after server boot doesn't race the IPFS init.
 - `GET /api/libraries/:id/pins` — list pins from `ipfs_pin` whose `path` lies under this library's directory. Same shape as `GET /api/ipfs/pins`.
 - `GET /api/ipfs/pins` — list every pin recorded by the cloud (`ipfs_pin` table). Each row is `{ id, cid, path, mime, size, created_at }`. Records are deduplicated by `(cid, path)` so re-scans don't create duplicates.
-- `GET /api/documents` — list documents persisted in SurrealDB (`document` table).
-- `POST /api/documents` — create a document `{ name, author, description? }`. `name` and `author` are required.
-- `GET /api/documents/:id` — fetch one document.
-- `PUT /api/documents/:id` — update `name`, `author`, or `description` (any subset).
-- `DELETE /api/documents/:id` — remove the document record.
+- `GET /api/firkins` — list firkins persisted in SurrealDB (`firkin` table).
+- `POST /api/firkins` — create a firkin `{ name, author, description? }`. `name` and `author` are required.
+- `GET /api/firkins/:id` — fetch one firkin.
+- `PUT /api/firkins/:id` — update `name`, `author`, or `description` (any subset).
+- `DELETE /api/firkins/:id` — remove the firkin record.
 - `GET /api/database/tables` — list every table in the cloud SurrealDB database with its row count. Returns `{ namespace, database, tables: [{ name, record_count }] }`. Used by the embedded `/database` explorer.
 - `GET /api/database/tables/:table?limit=<n>&offset=<n>` — paginate records in a single table. Table names are validated as `[A-Za-z0-9_]{1,64}`. `limit` defaults to 100 (max 1000); `offset` defaults to 0. Returns `{ table, limit, offset, total, records }` where each record is JSON with the SurrealDB `id` flattened to a `<table>:<id>` string.
 - `GET /api/fs/browse?path=<optional>` — list subdirectories under `path` (defaults to the system home directory). Returns `{ path, parent, home, separator, roots, entries }` where `entries` only contains directories (hidden dot-folders are skipped). On Windows, `roots` lists available drive letters.
 - `GET /api/catalog/sources` — list addons supported by the catalog browser. Each entry is `{ id, label, types: [{ id, label }], filterLabel, hasFilter }`. Currently `tmdb` (movies + tv shows, genre filter), `musicbrainz` (albums, genre filter), `openlibrary` (books, subject filter), and `retroachievements` (games, console filter).
 - `GET /api/catalog/:addon/popular?type=<>&filter=<>&page=<>` — returns `{ items: [{ id, title, year, description, posterUrl, backdropUrl }], page, totalPages }` for the given addon. `type` is required for tmdb (`movie` or `tv`) and ignored for others. `filter` is the genre/subject/console id from `/genres`. TMDB and RetroAchievements need `TMDB_API_KEY` and `RA_USERNAME` + `RA_API_KEY` respectively; missing keys return `503`.
 - `GET /api/catalog/:addon/genres?type=<>` — returns `[{ id, name }]` for the addon's filter dimension. TMDB requires `type=movie|tv` (queries `/genre/{type}/list` upstream); MusicBrainz/OpenLibrary/RetroAchievements return a static curated list (genres / subjects / console ids).
-- `GET /api/torrent/list` — returns the cloud `TorrentManager`'s current torrents as `TorrentInfo[]` (`{ id, name, infoHash, size, progress, downloadSpeed, uploadSpeed, peers, seeds, state, addedAt, eta, outputPath }`). Returns `[]` while the session is still warming up. Used by the shared `DocumentCard` to render real-time progress.
+- `GET /api/torrent/list` — returns the cloud `TorrentManager`'s current torrents as `TorrentInfo[]` (`{ id, name, infoHash, size, progress, downloadSpeed, uploadSpeed, peers, seeds, state, addedAt, eta, outputPath }`). Returns `[]` while the session is still warming up. Used by the shared `FirkinCard` to render real-time progress.
 - `POST /api/torrent/add` — adds a magnet to the cloud torrent client. Body: `{ magnet }`. Returns the initial `TorrentInfo`. `400` if the URI is not a magnet, `503` until the session has finished initializing.
 - `POST /api/p2p-stream/sessions` — start a WebRTC streaming session for a previously pinned IPFS file. Body: `{ cid }`. Looks up the on-disk path in the `ipfs_pin` table, asks the `WorkerBridge` (a `mhaol-cloud worker` subprocess running `mhaol_p2p_stream::worker::run()`) to publish the file as a video stream into a fresh PartyKit room, and returns `{ sessionId, roomId, signalingUrl }`. The player connects to the same room and consumes the WebRTC stream via the existing `playerService.playRemote()`. `404` if the CID isn't pinned locally or the file is gone, `503` while the worker is still warming up.
 - `POST /api/search/subs-lyrics` — body `{ type, query, externalIds?, languages? }`. For `type=track|album` queries LRCLIB by free-text query; for `type=movie|tv show|tv season|tv episode` queries Wyzie keyed by TMDB id (one entry per `externalIds[]`). Returns a flat `SubsLyrics[]`. Mirrors the node `/api/search/subs-lyrics` endpoint and powers the `SubsLyricsFinder` panel in the right-side aside.
@@ -136,43 +136,43 @@ The binary still supports `mhaol-cloud worker`, which runs `mhaol_p2p_stream::wo
 - `GET /api/player/playable` — returns `[]`. Cloud doesn't enumerate playable files like node does.
 - `/api/ytdl/*` — full surface from `mhaol_yt_dlp::build_router(state.ytdl_manager)` mounted directly under the cloud router via `nest_service`. Includes `GET /search`, `GET /info/video`, `GET /info/stream-urls{,-browser}`, `GET /info/playlist`, `GET /downloads`, `POST /downloads`, `POST /downloads/playlist`, `GET /downloads/events` (SSE), `DELETE /downloads/{id}`, `DELETE /downloads/completed`, `DELETE /downloads/queue`, `GET|PUT /config`, `GET /status`, `GET /ytdlp/status`. The WebUI's `/youtube` page talks directly to this surface via plain `fetch('/api/ytdl/...')` (no transport layer). cfg(not(target_os = "android")).
 
-## Library scan → documents
+## Library scan → firkins
 
-`apps/cloud/src/library_scan.rs` runs after every `/api/libraries/:id/scan` and turns the walked entries into `document` records. Behavior depends on the library's `kinds`:
+`apps/cloud/src/library_scan.rs` runs after every `/api/libraries/:id/scan` and turns the walked entries into `firkin` records. Behavior depends on the library's `kinds`:
 
-- Empty `kinds`: legacy behavior. Every entry whose mime starts with `audio/`, `video/`, or `image/` is pinned to IPFS and recorded in `ipfs_pin`. No documents are created.
-- Non-empty `kinds`: the entries are classified per kind and grouped into media items. Each group's files are pinned to IPFS, recorded in `ipfs_pin`, and persisted as a `document` whose `files` are the `ipfs` entries (`{ type: "ipfs", value: <cid>, title: <relative_path-or-display-title> }`). Files that are pinnable but didn't fall into any group are still pinned (kept reachable for `/api/libraries/:id/pins`).
+- Empty `kinds`: legacy behavior. Every entry whose mime starts with `audio/`, `video/`, or `image/` is pinned to IPFS and recorded in `ipfs_pin`. No firkins are created.
+- Non-empty `kinds`: the entries are classified per kind and grouped into media items. Each group's files are pinned to IPFS, recorded in `ipfs_pin`, and persisted as a `firkin` whose `files` are the `ipfs` entries (`{ type: "ipfs", value: <cid>, title: <relative_path-or-display-title> }`). Files that are pinnable but didn't fall into any group are still pinned (kept reachable for `/api/libraries/:id/pins`).
 
 Detection rules (one-doc-per-group; `source` is always `local`):
 
-- `movie` (`document.kind = "movie"`): one document per video file. Title is taken from the parent directory name (or the filename if the file sits at the library root). A trailing `(YYYY)` tag is parsed into `year`. Video files that the TV detector consumed are skipped to avoid double-counting.
-- `tv` (`document.kind = "tv show"`): one document per show. Detection looks for either a parent directory matching `Season N` / `S01` (the show name is the directory above it) or a `S<season>E<episode>` / `<season>x<episode>` token in the filename (the show name is the top-level directory under the library, or the filename if it sits at the root). All matched episodes are appended as `ipfs` file entries with titles formatted `S01E02 - <filename>`. Re-scans append new episodes via the document version-roll (see "Document versioning") so existing CIDs are preserved as `version_hashes`.
-- `album` (`document.kind = "album"`): one document per directory containing audio files. Album title is the directory name; loose audio at the library root is grouped under `Singles`. Tracks are sorted by leading number prefix (`01 - …`) when available.
-- `book` (`document.kind = "book"`): one document per file matching a book extension (epub, pdf, mobi, azw3, cbz, cbr, djvu, fb2). Title from the filename, with `(YYYY)` parsed out.
-- `game` (`document.kind = "game"`): one document per file matching a game/ROM extension (iso, rom, smc, sfc, gba, nes, gb, gbc, n64, z64, v64, md, sms, gg, nds, 3ds, wad, cue, chd, gcm).
+- `movie` (`firkin.kind = "movie"`): one firkin per video file. Title is taken from the parent directory name (or the filename if the file sits at the library root). A trailing `(YYYY)` tag is parsed into `year`. Video files that the TV detector consumed are skipped to avoid double-counting.
+- `tv` (`firkin.kind = "tv show"`): one firkin per show. Detection looks for either a parent directory matching `Season N` / `S01` (the show name is the directory above it) or a `S<season>E<episode>` / `<season>x<episode>` token in the filename (the show name is the top-level directory under the library, or the filename if it sits at the root). All matched episodes are appended as `ipfs` file entries with titles formatted `S01E02 - <filename>`. Re-scans append new episodes via the firkin version-roll (see "Firkin versioning") so existing CIDs are preserved as `version_hashes`.
+- `album` (`firkin.kind = "album"`): one firkin per directory containing audio files. Album title is the directory name; loose audio at the library root is grouped under `Singles`. Tracks are sorted by leading number prefix (`01 - …`) when available.
+- `book` (`firkin.kind = "book"`): one firkin per file matching a book extension (epub, pdf, mobi, azw3, cbz, cbr, djvu, fb2). Title from the filename, with `(YYYY)` parsed out.
+- `game` (`firkin.kind = "game"`): one firkin per file matching a game/ROM extension (iso, rom, smc, sfc, gba, nes, gb, gbc, n64, z64, v64, md, sms, gg, nds, 3ds, wad, cue, chd, gcm).
 
-Re-running a scan is idempotent: existing documents with the same `(title, kind, source="local")` are matched and version-rolled forward with any new file entries; files already present (matched by their `title`) are skipped.
+Re-running a scan is idempotent: existing firkins with the same `(title, kind, source="local")` are matched and version-rolled forward with any new file entries; files already present (matched by their `title`) are skipped.
 
-## Document versioning
+## Firkin versioning
 
-Documents are content-addressed: the SurrealDB record `id` is the CIDv1-raw of the document body (title, description, artists, images, files, year, type, source, version, version_hashes). Subs/lyrics are not stored on documents; the player has a sidebar finder that hits `/api/search/subs-lyrics` on its connected node. Two fields participate in this hash:
+Firkins are content-addressed: the SurrealDB record `id` is the CIDv1-raw of the firkin body (title, description, artists, images, files, year, type, source, version, version_hashes). Subs/lyrics are not stored on firkins; the player has a sidebar finder that hits `/api/search/subs-lyrics` on its connected node. Two fields participate in this hash:
 
 - `version: u32` — rolling-forward nonce, starts at `0`. Records persisted before this field existed deserialize as `0`.
 - `version_hashes: Vec<String>` — CIDs of every prior version, oldest first. Chain integrity invariant: `version_hashes.len() == version`.
 
-Whenever the document is updated programmatically (currently only the torrent-completion flow), the prior CID is pushed onto `version_hashes`, `version` is incremented, the new CID is computed over the full new body, the old record is deleted, and a new record is created at the new CID. Verifiers walk `version_hashes` backwards to rebuild the chain.
+Whenever the firkin is updated programmatically (currently only the torrent-completion flow), the prior CID is pushed onto `version_hashes`, `version` is incremented, the new CID is computed over the full new body, the old record is deleted, and a new record is created at the new CID. Verifiers walk `version_hashes` backwards to rebuild the chain.
 
-## Torrent → document auto-update
+## Torrent → firkin auto-update
 
 `apps/cloud/src/torrent_completion.rs` runs a background task that polls `TorrentManager::list()` every 5 seconds. When a torrent reaches `Seeding` (or `progress >= 1.0`):
 
-1. Find the document whose `files` includes a `torrent magnet` whose value contains `btih:<info_hash>` (case-insensitive).
+1. Find the firkin whose `files` includes a `torrent magnet` whose value contains `btih:<info_hash>` (case-insensitive).
 2. Walk the torrent's `output_path` recursively; skip files already represented as `ipfs` entries (matched by `title == relative_path`) so re-runs are idempotent.
 3. For each remaining file: pin to the embedded IPFS node via `IpfsManager::add` and record the pin in `ipfs_pin`.
-4. Append `{ type: "ipfs", value: <cid>, title: <relative_path> }` entries to `document.files`.
+4. Append `{ type: "ipfs", value: <cid>, title: <relative_path> }` entries to `firkin.files`.
 5. Roll the version forward (push old CID onto `version_hashes`, bump `version`), recompute the CID, delete the old record, create the new one at the new CID. `created_at` is preserved; `updated_at` is set to now.
 
-Failures are logged and retried on the next tick; successes (including "no matching document") are remembered in-memory for the lifetime of the process so the same torrent isn't reprocessed.
+Failures are logged and retried on the next tick; successes (including "no matching firkin") are remembered in-memory for the lifetime of the process so the same torrent isn't reprocessed.
 
 ## Logs
 

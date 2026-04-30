@@ -26,8 +26,8 @@ export const NAV_ITEMS: NavItem[] = [
 		"children": []
 	},
 	{
-		"label": "Documents",
-		"href": "/documents",
+		"label": "Firkins",
+		"href": "/firkins",
 		"hasOwnPage": true,
 		"children": []
 	},

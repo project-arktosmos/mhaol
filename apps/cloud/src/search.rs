@@ -1,4 +1,4 @@
-use crate::documents::{Artist, FileEntry, ImageMeta};
+use crate::firkins::{Artist, FileEntry, ImageMeta};
 use crate::state::CloudState;
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
