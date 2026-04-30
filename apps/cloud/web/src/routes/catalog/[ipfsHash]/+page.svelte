@@ -1126,6 +1126,7 @@
 				loading={artistsBackfillStatus === 'loading'}
 				error={artistsBackfillStatus === 'error' ? artistsBackfillError : null}
 				emptyLabel="No people or groups attached. Re-bookmark from the catalog to enrich."
+				artistHref={(id) => `${base}/artist/${encodeURIComponent(id)}`}
 			/>
 
 			{#if firkin.images.length > 0}

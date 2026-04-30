@@ -1,5 +1,4 @@
 <script lang="ts">
-	import classNames from 'classnames';
 	import type { FirkinArtist } from 'ui-lib/types/firkin.type';
 
 	interface Props {
@@ -8,6 +7,15 @@
 		error?: string | null;
 		emptyLabel?: string;
 		title?: string;
+		/**
+		 * When provided, artist cards become links. Receives the artist's
+		 * persisted CID (the `id` field on a resolved artist) and returns
+		 * the href to navigate to. Cards for transient/un-persisted artists
+		 * (no `id`) stay rendered as plain `<li>`s. Lives outside the
+		 * component so the host app — which owns the route shape and
+		 * `$app/paths` base — drives the URL.
+		 */
+		artistHref?: (artistId: string) => string;
 	}
 
 	let {
@@ -15,7 +23,8 @@
 		loading = false,
 		error = null,
 		emptyLabel = 'No people or groups attached.',
-		title = 'Artists & credits'
+		title = 'Artists & credits',
+		artistHref
 	}: Props = $props();
 
 	function initials(name: string): string {
@@ -90,17 +99,12 @@
 					</h3>
 					<ul class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 						{#each group.people as artist, i (artist.id ?? `${group.role}-${i}-${artist.name}`)}
-							{@const card_classes = classNames(
-								'flex items-start gap-3 rounded border border-base-content/10 bg-base-100 p-2',
-								{ 'cursor-pointer hover:border-base-content/30': !!artist.url }
-							)}
-							{#if artist.url}
-								<li>
+							{@const href = artistHref && artist.id ? artistHref(artist.id) : null}
+							<li>
+								{#if href}
 									<a
-										class={card_classes}
-										href={artist.url}
-										target="_blank"
-										rel="noopener noreferrer"
+										{href}
+										class="flex items-center gap-3 rounded border border-base-content/10 bg-base-100 p-2 hover:border-base-content/30"
 									>
 										{#if artist.imageUrl}
 											<img
@@ -116,48 +120,30 @@
 												{initials(artist.name)}
 											</span>
 										{/if}
-										<div class="flex min-w-0 flex-1 flex-col">
-											<span class="truncate text-sm font-medium">{artist.name}</span>
-											{#if artist.description}
-												<span class="line-clamp-2 text-xs text-base-content/60"
-													>{artist.description}</span
-												>
-											{/if}
-											{#if artist.type}
-												<span class="text-[10px] text-base-content/50">{artist.type}</span>
-											{/if}
-										</div>
+										<span class="min-w-0 flex-1 truncate text-sm font-medium">{artist.name}</span>
 									</a>
-								</li>
-							{:else}
-								<li class={card_classes}>
-									{#if artist.imageUrl}
-										<img
-											src={artist.imageUrl}
-											alt={artist.name}
-											class="h-12 w-12 shrink-0 rounded-full object-cover"
-											loading="lazy"
-										/>
-									{:else}
-										<span
-											class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-base-300 text-xs font-semibold text-base-content/60"
-										>
-											{initials(artist.name)}
-										</span>
-									{/if}
-									<div class="flex min-w-0 flex-1 flex-col">
-										<span class="truncate text-sm font-medium">{artist.name}</span>
-										{#if artist.description}
-											<span class="line-clamp-2 text-xs text-base-content/60"
-												>{artist.description}</span
+								{:else}
+									<div
+										class="flex items-center gap-3 rounded border border-base-content/10 bg-base-100 p-2"
+									>
+										{#if artist.imageUrl}
+											<img
+												src={artist.imageUrl}
+												alt={artist.name}
+												class="h-12 w-12 shrink-0 rounded-full object-cover"
+												loading="lazy"
+											/>
+										{:else}
+											<span
+												class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-base-300 text-xs font-semibold text-base-content/60"
 											>
+												{initials(artist.name)}
+											</span>
 										{/if}
-										{#if artist.type}
-											<span class="text-[10px] text-base-content/50">{artist.type}</span>
-										{/if}
+										<span class="min-w-0 flex-1 truncate text-sm font-medium">{artist.name}</span>
 									</div>
-								</li>
-							{/if}
+								{/if}
+							</li>
 						{/each}
 					</ul>
 				</div>

@@ -19,6 +19,7 @@
 		type TorrentResultItem
 	} from '$lib/search.service';
 	import { playYouTubeAudio, resolveYouTubeUrlForTrack } from '$lib/youtube-match.service';
+	import { userIdentityService } from '$lib/user-identity.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
@@ -89,6 +90,7 @@
 		}
 	}
 
+	const userIdentityState = userIdentityService.state;
 	const virtualFirkin = $derived<CloudFirkin>({
 		id: `virtual:${addon}:${itemId}`,
 		title,
@@ -98,6 +100,7 @@
 		files: [],
 		year,
 		addon,
+		creator: $userIdentityState.identity?.address ?? '',
 		created_at: '',
 		updated_at: '',
 		version: 0,
@@ -420,6 +423,7 @@
 				loading={artistsStatus === 'loading'}
 				error={artistsStatus === 'error' ? artistsError : null}
 				emptyLabel="No people or groups attached to this item upstream."
+				artistHref={(id) => `${base}/artist/${encodeURIComponent(id)}`}
 			/>
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
