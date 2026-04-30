@@ -5,6 +5,8 @@
 		YouTubeDownloadProgress,
 		YouTubeVideoInfo,
 		DownloadMode,
+		AudioFormat,
+		AudioQuality,
 		YouTubeStreamUrlResult,
 		YouTubeStreamFormat
 	} from 'addons/youtube/types';
@@ -228,7 +230,11 @@
 		);
 	}
 
-	async function quickQueue(item: SearchItem, mode: DownloadMode) {
+	async function quickQueue(
+		item: SearchItem,
+		mode: DownloadMode,
+		opts?: { format?: AudioFormat; quality?: AudioQuality }
+	) {
 		const dlUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
 		queueing = item.videoId;
 		queueError = null;
@@ -241,6 +247,8 @@
 					videoId: item.videoId,
 					title: item.title,
 					mode,
+					format: opts?.format,
+					quality: opts?.quality,
 					thumbnailUrl: item.thumbnail,
 					durationSeconds: item.duration
 				})
@@ -513,6 +521,14 @@
 										title="Download video"
 									>
 										⇣
+									</button>
+									<button
+										class="btn btn-xs"
+										disabled={queueing === item.videoId}
+										onclick={() => quickQueue(item, 'audio', { format: 'mp3', quality: 'best' })}
+										title="Download audio (MP3 320 kbps)"
+									>
+										⇣ MP3
 									</button>
 								</div>
 							</div>
