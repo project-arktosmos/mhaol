@@ -36,24 +36,24 @@
 </script>
 
 <article class={classNames('group card bg-base-200 shadow-sm', classes)}>
-	<header
-		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
-	>
-		{#if !coverImage}
+	{#if !coverImage}
+		<header
+			class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
+		>
 			<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
 				{firkin.title}
 			</h3>
-		{/if}
-		{#if creatorIdenticon}
-			<img
-				src={creatorIdenticon}
-				alt=""
-				class="h-6 w-6 shrink-0 rounded-full"
-				title={`Creator: ${creatorAddress}`}
-				aria-label={`Creator: ${creatorAddress}`}
-			/>
-		{/if}
-	</header>
+			{#if creatorIdenticon}
+				<img
+					src={creatorIdenticon}
+					alt=""
+					class="h-6 w-6 shrink-0 rounded-full"
+					title={`Creator: ${creatorAddress}`}
+					aria-label={`Creator: ${creatorAddress}`}
+				/>
+			{/if}
+		</header>
+	{/if}
 	{#if coverImage}
 		<figure class="relative overflow-hidden bg-base-300">
 			<h3
@@ -77,6 +77,15 @@
 				>
 					{firkin.description}
 				</figcaption>
+			{/if}
+			{#if creatorIdenticon}
+				<img
+					src={creatorIdenticon}
+					alt=""
+					class="absolute right-2 bottom-2 z-10 h-8 w-8 rounded-full ring-2 ring-black/40"
+					title={`Creator: ${creatorAddress}`}
+					aria-label={`Creator: ${creatorAddress}`}
+				/>
 			{/if}
 		</figure>
 	{:else if firkin.description}
