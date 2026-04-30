@@ -20,11 +20,9 @@
 	interface Props {
 		firkin: CloudFirkin;
 		classes?: string;
-		onRemove?: (id: string) => void;
-		removing?: boolean;
 	}
 
-	let { firkin, classes = '', onRemove, removing = false }: Props = $props();
+	let { firkin, classes = '' }: Props = $props();
 
 	let coverImage = $derived(firkin.images?.[0] ?? null);
 	let resolvedCoverUrl = $state<string | null>(null);
@@ -175,17 +173,6 @@
 				title={`Creator: ${creatorAddress}`}
 				aria-label={`Creator: ${creatorAddress}`}
 			/>
-		{/if}
-		{#if onRemove}
-			<button
-				type="button"
-				class="btn text-error btn-ghost btn-xs"
-				onclick={() => onRemove?.(firkin.id)}
-				disabled={removing}
-				aria-label="Remove firkin"
-			>
-				{removing ? '…' : '×'}
-			</button>
 		{/if}
 	</header>
 	{#if coverImage}

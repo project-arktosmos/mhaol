@@ -5,12 +5,10 @@
 	import { cachedImageUrl } from '$lib/image-cache';
 	import {
 		firkinsService,
-		FIRKIN_SOURCES,
+		FIRKIN_ADDONS,
 		FILE_TYPES,
-		TYPES_BY_SOURCE,
 		type Artist,
-		type FirkinType,
-		type FirkinSource,
+		type FirkinAddon,
 		type FileEntry,
 		type ImageMeta
 	} from '$lib/firkins.service';
@@ -18,9 +16,9 @@
 		fetchAlbumTrackTitles,
 		fetchTmdbEpisodeTitles,
 		formatSizeBytes,
-		isTorrentSearchableType,
+		isTorrentSearchableAddon,
 		matchTorrentsForResult,
-		searchSource,
+		searchAddon,
 		searchTorrents,
 		type SearchResultItem,
 		type TorrentResultItem
@@ -35,21 +33,13 @@
 	let images = $state<ImageMeta[]>([]);
 	let files = $state<FileEntry[]>([]);
 	let year = $state<number | null>(null);
-	let source = $state<FirkinSource>(FIRKIN_SOURCES[0]);
-	let type = $state<FirkinType>(TYPES_BY_SOURCE[FIRKIN_SOURCES[0]][0]);
+	let addon = $state<FirkinAddon>(FIRKIN_ADDONS[0]);
 	let prefilledFiles = $state<FileEntry[]>([]);
-	const availableTypes = $derived(TYPES_BY_SOURCE[source]);
-	$effect(() => {
-		if (!availableTypes.includes(type)) {
-			type = availableTypes[0];
-		}
-	});
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
-	let deletingId = $state<string | null>(null);
 	let showAdvanced = $state(false);
 	let activeTab = $state<'covers' | 'results' | 'torrents'>('covers');
-	const torrentSearchable = $derived(isTorrentSearchableType(type));
+	const torrentSearchable = $derived(isTorrentSearchableAddon(addon));
 	$effect(() => {
 		if (!torrentSearchable && activeTab === 'torrents') activeTab = 'covers';
 	});
@@ -91,8 +81,7 @@
 		images = [];
 		files = [];
 		year = null;
-		source = FIRKIN_SOURCES[0];
-		type = TYPES_BY_SOURCE[FIRKIN_SOURCES[0]][0];
+		addon = FIRKIN_ADDONS[0];
 		prefilledFiles = [];
 	}
 
@@ -128,8 +117,8 @@
 		const externalId = result.externalId;
 		if (!externalId) return;
 
-		const wantsEpisodes = source === 'tmdb' && type === 'tv show';
-		const wantsTracks = source === 'musicbrainz' && type === 'album';
+		const wantsEpisodes = addon === 'tmdb-tv';
+		const wantsTracks = addon === 'musicbrainz';
 		if (!wantsEpisodes && !wantsTracks) return;
 
 		enrichingFiles = true;
@@ -157,8 +146,8 @@
 		selectedResultIndex = null;
 
 		const tasks: [Promise<SearchResultItem[]>, Promise<TorrentResultItem[]> | null] = [
-			searchSource(source, type, trimmed),
-			torrentSearchable ? searchTorrents(type, trimmed) : null
+			searchAddon(addon, trimmed),
+			torrentSearchable ? searchTorrents(addon, trimmed) : null
 		];
 		const [sourceOutcome, torrentOutcome] = await Promise.allSettled([
 			tasks[0],
@@ -195,8 +184,7 @@
 				images,
 				files,
 				year,
-				source,
-				type
+				addon
 			},
 			null,
 			2
@@ -236,13 +224,9 @@
 		const cidParam = params.get('cid');
 		if (!cidParam) return;
 
-		const sourceParam = params.get('source');
-		if (sourceParam && (FIRKIN_SOURCES as readonly string[]).includes(sourceParam)) {
-			source = sourceParam as FirkinSource;
-		}
-		const typeParam = params.get('type');
-		if (typeParam && (TYPES_BY_SOURCE[source] as readonly string[]).includes(typeParam)) {
-			type = typeParam as FirkinType;
+		const addonParam = params.get('addon');
+		if (addonParam && (FIRKIN_ADDONS as readonly string[]).includes(addonParam)) {
+			addon = addonParam as FirkinAddon;
 		}
 		const titleParam = params.get('title')?.trim() ?? '';
 		if (titleParam) title = titleParam;
@@ -284,8 +268,7 @@
 				images,
 				files,
 				year,
-				type,
-				source
+				addon
 			});
 			resetForm();
 			selectedResultIndex = null;
@@ -307,19 +290,6 @@
 		await commitCreate();
 	}
 
-	async function remove(id: string) {
-		deletingId = id;
-		try {
-			await firkinsService.remove(id);
-		} catch (err) {
-			firkinsService.state.update((s) => ({
-				...s,
-				error: err instanceof Error ? err.message : 'Unknown error'
-			}));
-		} finally {
-			deletingId = null;
-		}
-	}
 </script>
 
 <svelte:head>
@@ -357,28 +327,14 @@
 				<table class="table table-sm">
 					<tbody>
 						<tr>
-							<th class="w-32 align-middle">Source</th>
+							<th class="w-32 align-middle">Addon</th>
 							<td>
 								<select
 									class="select-bordered select w-full select-sm"
-									bind:value={source}
+									bind:value={addon}
 									disabled={creating}
 								>
-									{#each FIRKIN_SOURCES as option (option)}
-										<option value={option}>{option}</option>
-									{/each}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th class="w-32 align-middle">Type</th>
-							<td>
-								<select
-									class="select-bordered select w-full select-sm"
-									bind:value={type}
-									disabled={creating}
-								>
-									{#each availableTypes as option (option)}
+									{#each FIRKIN_ADDONS as option (option)}
 										<option value={option}>{option}</option>
 									{/each}
 								</select>
@@ -450,8 +406,8 @@
 												<input
 													type="text"
 													class="input-bordered input input-sm w-1/3"
-													placeholder="URL"
-													bind:value={artists[i].url}
+													placeholder="Role"
+													bind:value={artists[i].role}
 													disabled={creating}
 												/>
 												<input
@@ -869,7 +825,7 @@
 									</div>
 									{#if result.artists.length > 0}
 										<div class="flex flex-wrap gap-1.5">
-											{#each result.artists as artist (artist.url ?? artist.name)}
+											{#each result.artists as artist (artist.id ?? artist.name)}
 												<span
 													class="inline-flex items-center gap-1.5 rounded-full border border-base-content/10 bg-base-200 py-0.5 pr-2 pl-0.5 text-xs"
 												>
@@ -959,7 +915,7 @@
 				class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
 			>
 				{#each $firkinsStore.firkins as doc (doc.id)}
-					<FirkinCard firkin={doc} onRemove={remove} removing={deletingId === doc.id} />
+					<FirkinCard firkin={doc} />
 				{/each}
 			</div>
 		{/if}
