@@ -161,11 +161,36 @@
 	{#if $identityStore.identity}
 		<section class="card bg-base-200 p-4">
 			<h2 class="mb-2 text-lg font-semibold">Current identity</h2>
-			<dl class="grid grid-cols-1 gap-2 sm:grid-cols-[max-content_1fr] sm:gap-x-4">
+			<dl class="grid grid-cols-1 gap-3 sm:grid-cols-[max-content_1fr] sm:gap-x-4">
 				<dt class="text-sm text-base-content/60">Address</dt>
 				<dd class="font-mono text-sm break-all">{$identityStore.identity.address}</dd>
-				<dt class="text-sm text-base-content/60">Username</dt>
-				<dd class="font-mono text-sm break-all">{$identityStore.identity.username}</dd>
+				<dt class="text-sm text-base-content/60 sm:pt-2">Username</dt>
+				<dd>
+					<div class="flex flex-wrap items-start gap-2">
+						<input
+							type="text"
+							class={classNames('input-bordered input input-sm w-full max-w-sm', {
+								'input-error': !usernameValid && usernameDraft.length > 0
+							})}
+							bind:value={usernameDraft}
+							maxlength="32"
+							autocomplete="off"
+						/>
+						<button
+							class="btn btn-sm btn-primary"
+							disabled={!usernameDirty || !usernameValid || savingUsername}
+							onclick={saveUsername}
+						>
+							{savingUsername ? 'Saving…' : 'Save'}
+						</button>
+					</div>
+					<p class="mt-1 text-xs text-base-content/60">
+						Letters, digits, and "-" only. 1–32 characters.
+					</p>
+					{#if usernameError}
+						<p class="mt-1 text-xs text-error">{usernameError}</p>
+					{/if}
+				</dd>
 				{#if $identityStore.user}
 					<dt class="text-sm text-base-content/60">Registered</dt>
 					<dd class="text-sm">
@@ -179,34 +204,6 @@
 					</dd>
 				{/if}
 			</dl>
-		</section>
-
-		<section class="card bg-base-200 p-4">
-			<h2 class="mb-2 text-lg font-semibold">Username</h2>
-			<p class="mb-3 text-sm text-base-content/60">
-				Letters, digits, and "-" only. 1–32 characters.
-			</p>
-			<div class="flex flex-wrap items-start gap-2">
-				<input
-					type="text"
-					class={classNames('input-bordered input w-full max-w-sm', {
-						'input-error': !usernameValid && usernameDraft.length > 0
-					})}
-					bind:value={usernameDraft}
-					maxlength="32"
-					autocomplete="off"
-				/>
-				<button
-					class="btn btn-primary"
-					disabled={!usernameDirty || !usernameValid || savingUsername}
-					onclick={saveUsername}
-				>
-					{savingUsername ? 'Saving…' : 'Save'}
-				</button>
-			</div>
-			{#if usernameError}
-				<p class="mt-2 text-sm text-error">{usernameError}</p>
-			{/if}
 		</section>
 
 		<section class="card bg-base-200 p-4">
