@@ -15,7 +15,7 @@ src/
 │   ├── browse/               # Generic browse primitives (BrowseGrid, BrowseHeader, BrowseViewToggle)
 │   ├── catalog/              # Unified media catalog (CatalogCard, CatalogBrowsePage, CatalogDetailPage, PinnedFavoritesSection, TmdbCatalogGrid, MovieLibrarySection, TvLibrarySection, detail/, filters/)
 │   ├── core/                 # Shared reusable (Button, Modal, Navbar, ModalOutlet, ThemeToggle, ConnectionStatus, etc.)
-│   ├── firkins/             # Cloud firkin cards (FirkinCard)
+│   ├── firkins/             # Cloud firkin cards (FirkinCard) + FirkinMetadataLookupModal (catalog-API search → POST /api/firkins/:id/enrich; the parent owns the pick callback so the modal stays page-agnostic)
 │   ├── downloads/            # Download management
 │   ├── hub/                  # Hub dashboard (app management)
 │   ├── identity/             # Identity/wallet

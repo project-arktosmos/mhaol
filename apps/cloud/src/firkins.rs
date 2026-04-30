@@ -245,11 +245,27 @@ pub struct UpdateFirkinRequest {
     pub addon: Option<String>,
 }
 
+/// Request body for `POST /api/firkins/:id/enrich`. Carries the metadata
+/// fields we typically pull from a catalog API match (title, year,
+/// description, poster + backdrop URLs). Only present fields are applied;
+/// images are replaced wholesale with the provided poster / backdrop.
+#[derive(Debug, Deserialize)]
+pub struct EnrichFirkinRequest {
+    pub title: Option<String>,
+    pub year: Option<i32>,
+    pub description: Option<String>,
+    #[serde(rename = "posterUrl")]
+    pub poster_url: Option<String>,
+    #[serde(rename = "backdropUrl")]
+    pub backdrop_url: Option<String>,
+}
+
 pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/", get(list).post(create))
         .route("/{id}", put(update).delete(delete).get(get_one))
         .route("/{id}/finalize", post(finalize))
+        .route("/{id}/enrich", post(enrich))
         .route("/{id}/roms", post(roms))
 }
 
@@ -708,6 +724,152 @@ async fn finalize(
         StatusCode::NOT_IMPLEMENTED,
         "finalize is not supported on this platform",
     ))
+}
+
+/// Apply catalog-derived metadata (title, year, description, poster +
+/// backdrop) to a firkin and roll its version forward to a new CID.
+/// Mirrors the rollforward pattern from
+/// [`crate::torrent_completion::rollforward`]: push the old id onto
+/// `version_hashes`, increment `version`, recompute the CID, replace the
+/// record at the new id, and pin the new body JSON to IPFS. Idempotent
+/// when the supplied metadata produces the same CID.
+async fn enrich(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+    Json(req): Json<EnrichFirkinRequest>,
+) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    let existing: Option<Firkin> = state
+        .db
+        .select((TABLE, id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let mut current = existing
+        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+
+    if let Some(title) = req.title.as_ref().map(|t| t.trim()) {
+        if !title.is_empty() {
+            current.title = title.to_string();
+        }
+    }
+    if let Some(description) = req.description.as_ref() {
+        current.description = description.trim().to_string();
+    }
+    if let Some(year) = req.year {
+        if (1000..=9999).contains(&year) {
+            current.year = Some(year);
+        }
+    }
+
+    let mut new_images: Vec<ImageMeta> = Vec::new();
+    for url in [req.poster_url.as_deref(), req.backdrop_url.as_deref()]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+    {
+        new_images.push(ImageMeta {
+            url: url.to_string(),
+            mime_type: String::new(),
+            file_size: 0,
+            width: 0,
+            height: 0,
+        });
+    }
+    if !new_images.is_empty() {
+        current.images = new_images;
+    }
+
+    let old_id = id.clone();
+    let new_version = current.version.saturating_add(1);
+    let mut new_hashes = current.version_hashes.clone();
+    new_hashes.push(old_id.clone());
+
+    let new_id = compute_firkin_cid(
+        &current.title,
+        &current.description,
+        &current.artists,
+        &current.images,
+        &current.files,
+        current.year,
+        &current.addon,
+        &current.creator,
+        new_version,
+        &new_hashes,
+    );
+
+    if new_id == old_id {
+        // Defensive: caller sent a payload that didn't actually change
+        // anything (or only changed fields excluded from the CID hash).
+        return Ok(Json(assemble_firkin_dto(&state, current).await?));
+    }
+
+    let new_body_json = serialize_firkin_payload(
+        &current.title,
+        &current.description,
+        &current.artists,
+        &current.images,
+        &current.files,
+        current.year,
+        &current.addon,
+        &current.creator,
+        new_version,
+        &new_hashes,
+    );
+
+    let new_record = Firkin {
+        id: None,
+        title: current.title.clone(),
+        artists: current.artists.clone(),
+        description: current.description.clone(),
+        images: current.images.clone(),
+        files: current.files.clone(),
+        year: current.year,
+        addon: current.addon.clone(),
+        creator: current.creator.clone(),
+        created_at: current.created_at,
+        updated_at: Utc::now(),
+        version: new_version,
+        version_hashes: new_hashes,
+    };
+
+    let _: Option<Firkin> = state
+        .db
+        .delete((TABLE, old_id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db delete failed: {e}")))?;
+    let create_result: Result<Option<Firkin>, _> = state
+        .db
+        .create((TABLE, new_id.as_str()))
+        .content(new_record)
+        .await;
+    let created_doc = match create_result {
+        Ok(Some(d)) => d,
+        Ok(None) => {
+            return Err(err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "firkin was not persisted",
+            ))
+        }
+        Err(e) => {
+            // A concurrent finalize / second enrich landed first at the
+            // same new id. Adopt the existing record rather than failing.
+            let msg = e.to_string();
+            if msg.contains("already exists") {
+                let doc: Option<Firkin> = state
+                    .db
+                    .select((TABLE, new_id.as_str()))
+                    .await
+                    .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+                doc.ok_or_else(|| err_response(StatusCode::INTERNAL_SERVER_ERROR, "rolled-forward firkin missing"))?
+            } else {
+                return Err(err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db create failed: {e}")));
+            }
+        }
+    };
+
+    pin_firkin_body(&state, &new_id, new_body_json).await;
+
+    Ok(Json(assemble_firkin_dto(&state, created_doc).await?))
 }
 
 #[cfg(not(target_os = "android"))]
