@@ -44,8 +44,6 @@
 		};
 	});
 
-	let hasYear = $derived(firkin.year !== null && firkin.year !== undefined);
-
 	let files = $derived(firkin.files ?? []);
 	let magnetFiles = $derived(files.filter((f) => f.type === 'torrent magnet'));
 	let tableFiles = $derived(files.filter((f) => f.type !== 'torrent magnet'));
@@ -169,7 +167,6 @@
 				{firkin.title}
 			</h3>
 		{/if}
-		<span class="text-xs text-base-content/70">{hasYear ? firkin.year : ''}</span>
 		{#if creatorIdenticon}
 			<img
 				src={creatorIdenticon}
