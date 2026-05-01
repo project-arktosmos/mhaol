@@ -34,6 +34,18 @@ use mhaol_torrent::{TorrentInfo, TorrentState};
 const POLL_INTERVAL: Duration = Duration::from_secs(3);
 
 #[cfg(not(target_os = "android"))]
+#[derive(Debug)]
+enum CompletionResult {
+    /// At least one matching firkin was rolled forward this tick.
+    RolledForward,
+    /// One or more matching firkins existed but all were already up to date.
+    AlreadyLinked,
+    /// No firkin currently references this torrent's magnet — keep checking
+    /// in case the user bookmarks it later.
+    NoMatch,
+}
+
+#[cfg(not(target_os = "android"))]
 pub async fn run(state: CloudState) {
     let processed: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
 
@@ -62,12 +74,13 @@ pub async fn run(state: CloudState) {
             }
 
             match handle_completion(&state, &t).await {
-                Ok(true) => {
+                Ok(CompletionResult::RolledForward) | Ok(CompletionResult::AlreadyLinked) => {
                     processed.lock().insert(t.info_hash.clone());
                 }
-                Ok(false) => {
-                    // No matching doc, or already migrated — don't retry.
-                    processed.lock().insert(t.info_hash.clone());
+                Ok(CompletionResult::NoMatch) => {
+                    // Leave unmarked: a firkin may be created later that
+                    // references this torrent's magnet, and the watcher
+                    // should pick it up on a subsequent tick.
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -82,18 +95,65 @@ pub async fn run(state: CloudState) {
 }
 
 #[cfg(not(target_os = "android"))]
-async fn handle_completion(state: &CloudState, torrent: &TorrentInfo) -> anyhow::Result<bool> {
+async fn handle_completion(
+    state: &CloudState,
+    torrent: &TorrentInfo,
+) -> anyhow::Result<CompletionResult> {
     let docs: Vec<Firkin> = state.db.select(FIRKIN_TABLE).await?;
-    let needle = format!("btih:{}", torrent.info_hash.to_lowercase());
-    let target = match docs
-        .into_iter()
-        .find(|d| matches_magnet(&d.files, &needle))
-    {
-        Some(d) => d,
-        None => return Ok(false),
-    };
 
-    rollforward(state, &target, torrent).await
+    // Filter out superseded firkins (those whose id appears in another
+    // firkin's `version_hashes`) so we only roll forward the current head
+    // of each chain. Mirrors the filter in `firkins::list`.
+    let mut superseded: HashSet<String> = HashSet::new();
+    for d in &docs {
+        for h in &d.version_hashes {
+            superseded.insert(h.clone());
+        }
+    }
+
+    let needle = format!("btih:{}", torrent.info_hash.to_lowercase());
+    let matches: Vec<Firkin> = docs
+        .into_iter()
+        .filter(|d| {
+            let id = d.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
+            !superseded.contains(&id) && matches_magnet(&d.files, &needle)
+        })
+        .collect();
+
+    if matches.is_empty() {
+        return Ok(CompletionResult::NoMatch);
+    }
+
+    // Multiple firkins can legitimately reference the same magnet (e.g. the
+    // user bookmarked the same item twice, or two firkins that share a
+    // torrent). Roll each one forward independently so none are stranded
+    // without IPFS files.
+    let mut any_rolled = false;
+    let mut last_err: Option<anyhow::Error> = None;
+    for doc in &matches {
+        match rollforward(state, doc, torrent).await {
+            Ok(true) => any_rolled = true,
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "[torrent-completion] rollforward failed for firkin {} ({}): {e}",
+                    doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default(),
+                    torrent.info_hash
+                );
+                last_err = Some(e);
+            }
+        }
+    }
+
+    if let Some(e) = last_err {
+        return Err(e);
+    }
+
+    Ok(if any_rolled {
+        CompletionResult::RolledForward
+    } else {
+        CompletionResult::AlreadyLinked
+    })
 }
 
 /// Pin every downloaded file from `torrent` into IPFS, append them to `doc`'s
