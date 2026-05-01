@@ -111,13 +111,16 @@ async fn start_session(
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("start_session: {e}")))?;
     let session_id = started.session_id.clone();
 
-    // Block briefly so the first segment lands before the player starts
-    // requesting the playlist. hlssink2 only flushes the m3u8 once a
-    // segment is closed; without this wait the player would 404 the first
-    // request and bail.
+    // Block until the first segment lands so the player doesn't 404 on
+    // the playlist URL and bail. hlssink2 only flushes the m3u8 once a
+    // segment is closed, which on slow inputs can take well over the
+    // 20s budget the original code allowed for; 60s covers the common
+    // long-tail without being so high that a stuck pipeline hangs the
+    // user. `serve_playlist` also has its own short retry loop as a
+    // safety net for edge cases (e.g. session created mid-shutdown).
     let session_for_wait = session_id.clone();
     let ready = tokio::task::spawn_blocking(move || {
-        manager_for_wait.wait_for_playlist(&session_for_wait, Duration::from_secs(20))
+        manager_for_wait.wait_for_playlist(&session_for_wait, Duration::from_secs(60))
     })
     .await
     .unwrap_or(false);
@@ -214,6 +217,16 @@ async fn serve_playlist(
         .get_session(&id)
         .ok_or_else(|| err(StatusCode::NOT_FOUND, "session not found"))?;
     let playlist_path = PathBuf::from(&info.output_dir).join(&info.playlist_name);
+
+    // hlssink2 only emits the m3u8 after the first segment closes, which
+    // can take longer than `start_session`'s pre-wait on slow inputs. If
+    // the file isn't there yet, poll briefly so the player gets the
+    // playlist as soon as it appears instead of bailing on a hard 404.
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    while !playlist_path.exists() && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
     serve_file(playlist_path, "application/vnd.apple.mpegurl").await
 }
 

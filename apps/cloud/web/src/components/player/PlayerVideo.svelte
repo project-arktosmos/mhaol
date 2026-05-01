@@ -201,7 +201,17 @@
 		if (isHlsUrl(url, mime)) {
 			if (Hls.isSupported()) {
 				element.removeAttribute('src');
-				const instance = new Hls({ enableWorker: true, lowLatencyMode: true });
+				// IPFS-stream sessions warm up their hlssink2 pipeline server-side;
+				// the playlist endpoint blocks until the first segment lands. Bump
+				// hls.js's manifest timeout / retry budget so the request survives
+				// long input warm-ups instead of bailing at the default ~10s.
+				const instance = new Hls({
+					enableWorker: true,
+					lowLatencyMode: true,
+					manifestLoadingTimeOut: 60000,
+					manifestLoadingMaxRetry: 4,
+					manifestLoadingRetryDelay: 1000
+				});
 				instance.loadSource(url);
 				instance.attachMedia(element);
 				instance.on(Hls.Events.MANIFEST_PARSED, () => playElement());
