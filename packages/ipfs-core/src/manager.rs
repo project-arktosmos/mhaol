@@ -146,6 +146,13 @@ impl IpfsManager {
             builder = builder.add_listening_addr(listen);
         }
 
+        if config.ws_listen_port != 0 {
+            let ws_listen: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}/ws", config.ws_listen_port)
+                .parse()
+                .map_err(|e| anyhow!("Invalid ws listen multiaddr: {}", e))?;
+            builder = builder.add_listening_addr(ws_listen);
+        }
+
         // Public-swarm bootstrap is meaningless on a private network — those
         // peers don't have our PSK and the connection would fail anyway.
         if private_psk.is_none() {
@@ -475,25 +482,32 @@ impl IpfsManager {
     }
 }
 
-/// Build the libp2p transport pipeline for a private swarm: TCP -> pnet
-/// handshake -> noise -> yamux. Returned as the `Boxed` transport rust-ipfs
-/// expects from `with_custom_transport`. Relay is currently not supported on
-/// private networks (the public relay nodes don't carry our PSK), so the
-/// `relay` argument is intentionally ignored.
+/// Build the libp2p transport pipeline for a private swarm: TCP+WS ->
+/// pnet handshake -> noise -> yamux. Returned as the `Boxed` transport
+/// rust-ipfs expects from `with_custom_transport`. Relay is currently
+/// not supported on private networks (the public relay nodes don't carry
+/// our PSK), so the `relay` argument is intentionally ignored.
+///
+/// The WebSocket branch lets browser-side libp2p peers (the player app)
+/// dial a `/ip4/.../tcp/.../ws` listener on the same private swarm; the
+/// pnet handshake still gates membership.
 fn build_pnet_transport(
     psk: PreSharedKey,
     keypair: &libp2p::identity::Keypair,
     _relay: Option<libp2p::relay::client::Transport>,
 ) -> std::io::Result<Boxed<(libp2p::PeerId, StreamMuxerBox)>> {
-    // Two independent TCP instances: one feeds the DNS resolver (for
-    // `/dns4/...` addresses), the other handles raw `/ip4/.../tcp/...`
-    // addresses directly. `tcp::tokio::Transport` is not `Clone`, so we
-    // construct it twice instead.
+    // Independent TCP transports: each `tcp::tokio::Transport` is not
+    // `Clone`, so every branch needs its own.
     let tcp_for_dns = tcp::tokio::Transport::new(tcp::Config::new().nodelay(true));
     let tcp_raw = tcp::tokio::Transport::new(tcp::Config::new().nodelay(true));
+    let tcp_for_ws = tcp::tokio::Transport::new(tcp::Config::new().nodelay(true));
     let dns = libp2p::dns::tokio::Transport::system(tcp_for_dns)
         .map_err(std::io::Error::other)?;
-    let base = OrTransport::new(dns, tcp_raw);
+    let ws_inner = libp2p::dns::tokio::Transport::system(tcp_for_ws)
+        .map_err(std::io::Error::other)?;
+    let ws = libp2p::websocket::WsConfig::new(ws_inner);
+    let raw_or_dns = OrTransport::new(dns, tcp_raw);
+    let base = OrTransport::new(raw_or_dns, ws);
 
     let pnet_cfg = PnetConfig::new(psk);
     let noise_cfg = noise::Config::new(keypair).map_err(std::io::Error::other)?;

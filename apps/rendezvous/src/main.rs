@@ -80,6 +80,7 @@ async fn serve(config_path: Option<PathBuf>) -> Result<()> {
     let ipfs_config = IpfsConfig {
         repo_path: cfg.repo_path.clone(),
         listen_port: cfg.ipfs_listen_port,
+        ws_listen_port: cfg.ipfs_ws_listen_port,
         // mDNS discovery is unnecessary for a server-mode bootstrap node and
         // any peers it would find would still need our PSK; off by default.
         enable_mdns: false,
@@ -126,9 +127,10 @@ async fn serve(config_path: Option<PathBuf>) -> Result<()> {
 
     let addr = format!("{}:{}", cfg.host, cfg.http_port);
     tracing::info!(
-        "rendezvous http listening on {} (libp2p on tcp/{})",
+        "rendezvous http listening on {} (libp2p on tcp/{}, ws on tcp/{})",
         addr,
-        cfg.ipfs_listen_port
+        cfg.ipfs_listen_port,
+        cfg.ipfs_ws_listen_port
     );
 
     let shutdown_manager = Arc::clone(&manager);

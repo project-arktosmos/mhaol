@@ -8,6 +8,11 @@ use crate::turn::TurnConfig;
 /// app can default-bootstrap against `127.0.0.1:14001` without configuration.
 pub const DEFAULT_LISTEN_PORT: u16 = 14001;
 
+/// Default WebSocket-over-TCP port the rendezvous exposes for browser-side
+/// libp2p clients (the player app). One above the raw-TCP port so the two
+/// don't collide in default configurations.
+pub const DEFAULT_WS_LISTEN_PORT: u16 = 14002;
+
 /// Default HTTP port the signaling API binds to.
 pub const DEFAULT_HTTP_PORT: u16 = 14080;
 
@@ -16,6 +21,7 @@ pub struct RendezvousConfig {
     pub host: String,
     pub http_port: u16,
     pub ipfs_listen_port: u16,
+    pub ipfs_ws_listen_port: u16,
     pub repo_path: PathBuf,
     pub swarm_key_path: PathBuf,
     pub bootstrap_file: PathBuf,
@@ -59,6 +65,12 @@ impl RendezvousConfig {
             .or(file.server.as_ref().and_then(|s| s.ipfs_listen_port))
             .unwrap_or(DEFAULT_LISTEN_PORT);
 
+        let ipfs_ws_listen_port: u16 = std::env::var("RENDEZVOUS_WS_LISTEN_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .or(file.server.as_ref().and_then(|s| s.ipfs_ws_listen_port))
+            .unwrap_or(DEFAULT_WS_LISTEN_PORT);
+
         let base = base_dir();
         let repo_path = std::env::var("RENDEZVOUS_REPO_DIR")
             .map(PathBuf::from)
@@ -96,6 +108,7 @@ impl RendezvousConfig {
             host,
             http_port,
             ipfs_listen_port,
+            ipfs_ws_listen_port,
             repo_path,
             swarm_key_path,
             bootstrap_file,
@@ -129,6 +142,7 @@ struct TomlServer {
     host: Option<String>,
     http_port: Option<u16>,
     ipfs_listen_port: Option<u16>,
+    ipfs_ws_listen_port: Option<u16>,
     tls_cert: Option<String>,
     tls_key: Option<String>,
 }

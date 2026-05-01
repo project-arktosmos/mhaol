@@ -18,6 +18,13 @@ pub struct IpfsConfig {
     pub repo_path: PathBuf,
     /// TCP port to listen on for libp2p (`0` lets the OS pick).
     pub listen_port: u16,
+    /// WebSocket-over-TCP port to listen on for browser-dialable libp2p
+    /// connections. `0` disables the WS listener — when non-zero the node
+    /// also binds `/ip4/0.0.0.0/tcp/<ws_listen_port>/ws`. The transport
+    /// stack still goes through `pnet`+`noise`+`yamux`, so browser peers
+    /// must present the same swarm key. Used by the rendezvous app to
+    /// expose itself to the browser-side player.
+    pub ws_listen_port: u16,
     /// Whether to enable mDNS local-network peer discovery.
     pub enable_mdns: bool,
     /// Whether to enable the Kademlia DHT.
@@ -46,6 +53,7 @@ impl Default for IpfsConfig {
         Self {
             repo_path: PathBuf::new(),
             listen_port: 0,
+            ws_listen_port: 0,
             enable_mdns: true,
             enable_kad_dht: true,
             bootstrap_on_start: true,

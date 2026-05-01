@@ -14,7 +14,7 @@ multihash-codetable = { version = "0.1", default-features = false, features = ["
 # Pull libp2p with the `pnet` and `tcp`+`tokio`+`noise`+`yamux`+`dns` features
 # enabled. Cargo unifies these with rust-ipfs's libp2p dep so the
 # `libp2p::pnet` re-export becomes available without a version mismatch.
-libp2p = { version = "0.54", default-features = false, features = ["pnet", "tcp", "tokio", "noise", "yamux", "dns"] }
+libp2p = { version = "0.54", default-features = false, features = ["pnet", "tcp", "tokio", "noise", "yamux", "dns", "websocket"] }
 cid = "0.11"
 bytes = "1"
 # rust-ipfs 0.14.1 has a bug in `add_unixfs` where single-chunk files (every

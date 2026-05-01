@@ -3,7 +3,7 @@
 **Location:** `apps/rendezvous/`
 **Framework:** Rust — Axum 0.8 + Tokio + `mhaol-ipfs-core` + `mhaol-identity`
 **Crate:** `mhaol-rendezvous`
-**Binary:** `mhaol-rendezvous` (default HTTP port 14080, libp2p TCP port 14001)
+**Binary:** `mhaol-rendezvous` (default HTTP port 14080, libp2p TCP port 14001, libp2p WebSocket port 14002 for browser peers)
 
 The rendezvous app is the **only** signaling/bootstrap server in the monorepo. It absorbs everything the previous `apps/signaling` (Rust) and `packages/signaling` (PartyKit) packages did and adds the private-swarm IPFS bootstrap node on top:
 
@@ -123,6 +123,7 @@ api_keys = ["..."]
 | `RENDEZVOUS_HOST` | HTTP bind host (default: `0.0.0.0`) |
 | `RENDEZVOUS_HTTP_PORT` | HTTP signaling port (default: `14080`) |
 | `RENDEZVOUS_LISTEN_PORT` | libp2p TCP listen port (default: `14001`) |
+| `RENDEZVOUS_WS_LISTEN_PORT` | libp2p WebSocket-over-TCP listen port for browser peers (default: `14002`). The transport stack still goes through `pnet`+`noise`+`yamux`, so browser peers must present the swarm key. |
 | `RENDEZVOUS_REPO_DIR` | IPFS repo directory (default: `<DATA_DIR>/rendezvous/ipfs`) |
 | `RENDEZVOUS_BOOTSTRAP_FILE` | Where to write advertised bootstrap multiaddrs |
 | `IPFS_SWARM_KEY_FILE` | Shared private-swarm PSK path (default: `<DATA_DIR>/swarm.key`) |
