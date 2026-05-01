@@ -1,7 +1,9 @@
 import { base } from '$app/paths';
 import { playYouTubeAudio, resolveYouTubeUrlForTrack } from '$lib/youtube-match.service';
+import { resolveLyricsForTrack } from '$lib/lrclib-match.service';
 import type { FileEntry } from '$lib/firkins.service';
 import type { ResolutionStatus, TrackEntry } from '$services/catalog/types';
+import type { SubsLyricsItem } from '$types/subs-lyrics.type';
 
 export interface TrackResolverOptions {
 	persistTrackUrls?: (resolved: { title: string; url: string }[]) => Promise<void>;
@@ -45,7 +47,9 @@ export class TrackResolver {
 			title: f.title ?? '',
 			lengthMs: null,
 			youtubeUrl: f.value || null,
-			youtubeStatus: f.value ? 'idle' : 'pending'
+			youtubeStatus: f.value ? 'idle' : 'pending',
+			lyricsStatus: 'pending',
+			lyrics: null
 		}));
 		this.status = 'done';
 		this.error = null;
@@ -71,11 +75,16 @@ export class TrackResolver {
 					title: t.title,
 					lengthMs: t.lengthMs,
 					youtubeUrl: savedUrl,
-					youtubeStatus: (savedUrl ? 'idle' : 'pending') as TrackEntry['youtubeStatus']
+					youtubeStatus: (savedUrl ? 'idle' : 'pending') as TrackEntry['youtubeStatus'],
+					lyricsStatus: 'pending' as TrackEntry['lyricsStatus'],
+					lyrics: null
 				};
 			});
 			this.status = 'done';
-			await this.resolveAllYouTube(myRun, resolveArgs);
+			await Promise.all([
+				this.resolveAllYouTube(myRun, resolveArgs),
+				this.resolveAllLyrics(myRun, resolveArgs)
+			]);
 		} catch (err) {
 			if (myRun !== this.run) return;
 			this.error = err instanceof Error ? err.message : 'Unknown error';
@@ -85,7 +94,10 @@ export class TrackResolver {
 
 	async resolveAllForCurrent(resolveArgs: ResolveArgs): Promise<void> {
 		const myRun = ++this.run;
-		await this.resolveAllYouTube(myRun, resolveArgs);
+		await Promise.all([
+			this.resolveAllYouTube(myRun, resolveArgs),
+			this.resolveAllLyrics(myRun, resolveArgs)
+		]);
 	}
 
 	resolvedTrackFiles(): FileEntry[] {
@@ -111,6 +123,30 @@ export class TrackResolver {
 			this.playError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
 			this.playingIndex = null;
+		}
+	}
+
+	private async resolveAllLyrics(myRun: number, args: ResolveArgs): Promise<void> {
+		for (let i = 0; i < this.tracks.length; i++) {
+			if (myRun !== this.run) return;
+			const t = this.tracks[i];
+			if (t.lyricsStatus !== 'pending') continue;
+			this.tracks = this.tracks.map((tr, idx) =>
+				idx === i ? { ...tr, lyricsStatus: 'searching' } : tr
+			);
+			let lyrics: SubsLyricsItem | null = null;
+			try {
+				lyrics = await resolveLyricsForTrack(t.title, args.artist, args.albumTitle, t.lengthMs);
+				if (myRun !== this.run) return;
+				this.tracks = this.tracks.map((tr, idx) =>
+					idx === i ? { ...tr, lyrics, lyricsStatus: lyrics ? 'found' : 'missing' } : tr
+				);
+			} catch {
+				if (myRun !== this.run) return;
+				this.tracks = this.tracks.map((tr, idx) =>
+					idx === i ? { ...tr, lyrics: null, lyricsStatus: 'error' } : tr
+				);
+			}
 		}
 	}
 

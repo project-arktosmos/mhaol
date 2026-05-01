@@ -1,4 +1,5 @@
 import type { Trailer } from '$lib/firkins.service';
+import type { SubsLyricsItem } from '$types/subs-lyrics.type';
 
 export type ResolutionStatus = 'idle' | 'loading' | 'done' | 'error';
 export type EntryStatus = 'idle' | 'pending' | 'searching' | 'found' | 'missing' | 'error';
@@ -20,6 +21,8 @@ export interface TrackEntry {
 	lengthMs: number | null;
 	youtubeUrl: string | null;
 	youtubeStatus: EntryStatus;
+	lyricsStatus: EntryStatus;
+	lyrics: SubsLyricsItem | null;
 }
 
 export type PersistTrailers = (resolved: Trailer[]) => Promise<void>;

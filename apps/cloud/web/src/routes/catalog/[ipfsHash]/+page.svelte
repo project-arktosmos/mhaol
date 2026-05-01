@@ -680,33 +680,23 @@
 	});
 
 	const subsLyricsResolver = new SubsLyricsResolver();
-	const subsLyricsKind = $derived<'lyrics' | 'subs' | null>(
-		isMusicBrainz ? 'lyrics' : isTmdbMovie || isTmdbTv ? 'subs' : null
-	);
+	const subsLyricsKind = $derived<'subs' | null>(isTmdbMovie || isTmdbTv ? 'subs' : null);
 	let subsLyricsInitForFirkinId: string | null = null;
 
 	function runSubsLyricsSearch() {
 		if (!subsLyricsKind) return;
-		if (subsLyricsKind === 'lyrics') {
-			const names: string[] = firkin.artists.map((a: Firkin['artists'][number]) => a.name);
-			const artistQuery = names.filter((n: string) => n.length > 0).join(', ');
-			const query = [artistQuery, firkin.title].filter(Boolean).join(' ').trim();
-			if (!query) return;
-			void subsLyricsResolver.search({ addon: firkin.addon, query });
-		} else {
-			const externalId = isTmdbMovie ? tmdbMovieId : tmdbTvId;
-			if (!externalId) return;
-			void subsLyricsResolver.search({
-				addon: firkin.addon,
-				query: firkin.title,
-				externalIds: [externalId]
-			});
-		}
+		const externalId = isTmdbMovie ? tmdbMovieId : tmdbTvId;
+		if (!externalId) return;
+		void subsLyricsResolver.search({
+			addon: firkin.addon,
+			query: firkin.title,
+			externalIds: [externalId]
+		});
 	}
 
 	$effect(() => {
 		if (!subsLyricsKind) return;
-		if (subsLyricsKind === 'subs' && !(isTmdbMovie ? tmdbMovieId : tmdbTvId)) return;
+		if (!(isTmdbMovie ? tmdbMovieId : tmdbTvId)) return;
 		const fid = firkin.id;
 		if (subsLyricsInitForFirkinId === fid) return;
 		subsLyricsInitForFirkinId = fid;
