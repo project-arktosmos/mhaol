@@ -760,7 +760,11 @@ pub struct LrclibHit {
 
 pub async fn lrclib_search_raw(query: &str) -> Result<Vec<LrclibHit>, String> {
     let url = format!("{}/search?q={}", LRCLIB_BASE, urlencoding(query));
-    let res = reqwest::Client::new()
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("http client failed: {e}"))?;
+    let res = client
         .get(&url)
         .header("Accept", "application/json")
         .header(

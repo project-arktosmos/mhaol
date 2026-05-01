@@ -114,7 +114,10 @@ pub async fn search_query(
         body["query"] = serde_json::Value::String(q.to_string());
     }
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
     let resp = client
         .post(INNERTUBE_URL)
         .header("Content-Type", "application/json")

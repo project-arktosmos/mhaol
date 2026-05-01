@@ -1149,9 +1149,19 @@ pub(crate) async fn resolve_album_tracks(
             "firkin is missing a MusicBrainz release-group url in `files`".to_string(),
         ))?;
 
+    tracing::info!(
+        firkin_id = %id,
+        release_group_id = %release_group_id,
+        "fetching musicbrainz tracklist"
+    );
     let tracks = track_resolve::fetch_release_group_tracks(&release_group_id)
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, e))?;
+    tracing::info!(
+        firkin_id = %id,
+        track_count = tracks.len(),
+        "starting per-track resolution"
+    );
 
     let artist_dtos = artists::fetch_many(state, &current.artists)
         .await
@@ -1262,6 +1272,7 @@ pub(crate) async fn resolve_album_tracks(
 /// effect will pick up the rolled-forward firkin once the task finishes.
 #[cfg(not(target_os = "android"))]
 pub(crate) fn spawn_resolve_album_tracks(state: CloudState, id: String) {
+    tracing::info!(firkin_id = %id, "spawning background album resolution");
     tokio::spawn(async move {
         match resolve_album_tracks(&state, &id).await {
             Ok(updated) => {

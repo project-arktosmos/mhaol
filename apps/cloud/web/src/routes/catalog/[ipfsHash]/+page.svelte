@@ -605,7 +605,6 @@
 
 	const trackResolver = new TrackResolver();
 	let tracksInitForFirkinId: string | null = null;
-	let tracksMissingAny = $state(false);
 
 	$effect(() => {
 		if (!isMusicBrainz) return;
@@ -613,17 +612,26 @@
 		if (tracksInitForFirkinId === fid) return;
 		tracksInitForFirkinId = fid;
 		if (musicBrainzReleaseGroupId) {
-			void initTracksFromFirkin(musicBrainzReleaseGroupId);
+			void trackResolver.loadFromFirkin({
+				releaseGroupId: musicBrainzReleaseGroupId,
+				files: firkin.files
+			});
 		}
 	});
 
-	async function initTracksFromFirkin(releaseGroupId: string): Promise<void> {
-		const result = await trackResolver.loadFromFirkin({
-			releaseGroupId,
-			files: firkin.files
-		});
-		tracksMissingAny = result.missingAny;
-	}
+	// Heuristic the polling effect uses to decide whether the server's
+	// background album-resolution task is still running. Any musicbrainz
+	// firkin with a release-group url but no `lyrics`-typed file entries
+	// is treated as "not yet resolved" and polled. Keying off
+	// `firkin.files` directly (rather than `loadFromFirkin`'s missingAny)
+	// makes polling robust to MusicBrainz being slow / rate-limited —
+	// even if the WebUI can't render the tracklist, the server is still
+	// processing and we still want to navigate to the rollforward.
+	const tracksLikelyUnresolved = $derived(
+		isMusicBrainz &&
+			Boolean(musicBrainzReleaseGroupId) &&
+			firkin.files.filter((f) => f.type === 'lyrics').length === 0
+	);
 
 	// While the server's background album-resolution task is still
 	// running, poll the firkin every few seconds. When it rolls forward
@@ -631,7 +639,7 @@
 	// back at the same id with new files (rare — only when no rollforward
 	// was needed), refresh the in-memory copy and re-project tracks.
 	$effect(() => {
-		if (!isMusicBrainz || !tracksMissingAny) return;
+		if (!tracksLikelyUnresolved) return;
 		const id = firkin.id;
 		const releaseGroupId = musicBrainzReleaseGroupId;
 		let cancelled = false;
@@ -665,11 +673,10 @@
 				if (freshHasMore) {
 					data.firkin = fresh;
 					if (releaseGroupId) {
-						const result = await trackResolver.loadFromFirkin({
+						void trackResolver.loadFromFirkin({
 							releaseGroupId,
 							files: fresh.files
 						});
-						tracksMissingAny = result.missingAny;
 					}
 				}
 			} catch {
