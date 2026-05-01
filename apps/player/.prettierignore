@@ -1,0 +1,4 @@
+.svelte-kit
+dist-static
+node_modules
+CLAUDE.md
