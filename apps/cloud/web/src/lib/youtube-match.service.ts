@@ -252,7 +252,8 @@ export async function playYouTubeVideo(
 	youtubeUrl: string,
 	title: string,
 	thumbnailUrl: string | null = null,
-	durationSeconds: number | null = null
+	durationSeconds: number | null = null,
+	options: { autoplay?: boolean } = {}
 ): Promise<void> {
 	const res = await fetch(
 		`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`
@@ -282,5 +283,7 @@ export async function playYouTubeVideo(
 		size: format.contentLength ?? 0,
 		completedAt: ''
 	};
-	await playerService.playUrl(file, format.url, format.mimeType, 'sidebar');
+	await playerService.playUrl(file, format.url, format.mimeType, 'sidebar', null, {
+		autoplay: options.autoplay !== false
+	});
 }

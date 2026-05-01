@@ -63,6 +63,12 @@ export interface PlayerState {
 	// consumption tracker — heartbeats only accumulate while this is set
 	// (set by playUrl callers that have a firkin context).
 	firkinId: string | null;
+	// True when a source has been loaded into the player but the caller
+	// asked us NOT to start playback automatically (e.g. trailer auto-load).
+	// PlayerVideo renders a big centered play overlay in this state; the
+	// flag clears as soon as the user clicks it (or playback otherwise
+	// begins via `playing` event).
+	awaitingPlay: boolean;
 }
 
 // ===== Player Settings (localStorage) =====

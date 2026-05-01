@@ -25,6 +25,7 @@
 		subtitleSearchContext = null,
 		directStreamUrl = null,
 		directStreamMimeType = null,
+		awaitingPlay = false,
 		onprev,
 		onnext
 	}: {
@@ -38,6 +39,7 @@
 		subtitleSearchContext?: SubtitleSearchContext | null;
 		directStreamUrl?: string | null;
 		directStreamMimeType?: string | null;
+		awaitingPlay?: boolean;
 		onprev?: () => void;
 		onnext?: () => void;
 	} = $props();
@@ -199,13 +201,22 @@
 				playerService.state.update((s) => ({ ...s, error: mediaError }));
 			});
 
+		// Read `awaitingPlay` outside the reactive graph: when the user
+		// presses the deferred-play overlay and clears the flag, we don't
+		// want this effect to re-fire (it would short-circuit on the
+		// `attachedDirectUrl === url` check anyway, but reading reactively
+		// would still re-run the body once).
+		const deferred = untrack(() => awaitingPlay);
+
 		if (isHlsUrl(url, mime)) {
 			if (Hls.isSupported()) {
 				element.removeAttribute('src');
 				const instance = new Hls({ enableWorker: true, lowLatencyMode: true });
 				instance.loadSource(url);
 				instance.attachMedia(element);
-				instance.on(Hls.Events.MANIFEST_PARSED, () => playElement());
+				instance.on(Hls.Events.MANIFEST_PARSED, () => {
+					if (!deferred) playElement();
+				});
 				instance.on(Hls.Events.ERROR, (_event, data) => {
 					if (data.fatal) {
 						console.error('[PlayerVideo] hls fatal error', data);
@@ -218,7 +229,7 @@
 			} else if (element.canPlayType('application/vnd.apple.mpegurl')) {
 				element.src = url;
 				element.load();
-				playElement();
+				if (!deferred) playElement();
 			} else {
 				mediaError = 'HLS playback is not supported in this browser';
 				playerService.state.update((s) => ({ ...s, error: mediaError }));
@@ -226,7 +237,7 @@
 		} else {
 			element.src = url;
 			element.load();
-			playElement();
+			if (!deferred) playElement();
 		}
 	});
 
@@ -450,6 +461,16 @@
 		}
 	}
 
+	function handleStartDeferredPlay(): void {
+		if (!videoElement) return;
+		playerService.state.update((s) => ({ ...s, awaitingPlay: false }));
+		videoElement.play().catch((err: Error) => {
+			console.error('[PlayerVideo] deferred play() rejected', err);
+			mediaError = `Playback failed: ${err.message}`;
+			playerService.state.update((s) => ({ ...s, error: mediaError }));
+		});
+	}
+
 	function handleSelectSubtitle(e: Event): void {
 		const value = (e.currentTarget as HTMLSelectElement).value;
 		activeSubUrl = value === '' ? null : value;
@@ -583,6 +604,29 @@
 			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
 				<span class="loading loading-lg loading-spinner text-primary"></span>
 			</div>
+		{/if}
+
+		{#if awaitingPlay && directStreamUrl && !mediaError}
+			<button
+				type="button"
+				class="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-black/40 transition-colors hover:bg-black/55"
+				aria-label="Play"
+				onclick={handleStartDeferredPlay}
+			>
+				<span
+					class="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform hover:scale-110"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						class="h-10 w-10 translate-x-0.5"
+						aria-hidden="true"
+					>
+						<polygon points="6 4 20 12 6 20 6 4" />
+					</svg>
+				</span>
+			</button>
 		{/if}
 
 		{#if mediaError}

@@ -32,7 +32,8 @@ const initialState: PlayerState = {
 	buffering: false,
 	directStreamUrl: null,
 	directStreamMimeType: null,
-	firkinId: null
+	firkinId: null,
+	awaitingPlay: false
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -64,13 +65,16 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		streamUrl: string,
 		mimeType?: string | null,
 		displayMode?: PlayerDisplayMode,
-		firkinId?: string | null
+		firkinId?: string | null,
+		options?: { autoplay?: boolean }
 	): Promise<void> {
 		if (!browser) return;
 
 		await this.stop();
 		this.playGeneration++;
 		if (displayMode) this.displayMode.set(displayMode);
+
+		const autoplay = options?.autoplay !== false;
 
 		this.state.update((s) => ({
 			...s,
@@ -79,11 +83,12 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			error: null,
 			positionSecs: 0,
 			durationSecs: file.durationSeconds,
-			isPaused: false,
+			isPaused: !autoplay,
 			buffering: false,
 			directStreamUrl: streamUrl,
 			directStreamMimeType: mimeType ?? null,
-			firkinId: firkinId ?? null
+			firkinId: firkinId ?? null,
+			awaitingPlay: !autoplay
 		}));
 	}
 
@@ -155,7 +160,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			buffering: false,
 			directStreamUrl: null,
 			directStreamMimeType: null,
-			firkinId: null
+			firkinId: null,
+			awaitingPlay: false
 		}));
 		this.displayMode.set('fullscreen');
 	}

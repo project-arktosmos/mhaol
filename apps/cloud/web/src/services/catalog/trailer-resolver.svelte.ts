@@ -254,7 +254,7 @@ export class TrailerResolver {
 
 	async play(
 		entry: TrailerEntry,
-		opts: { firkinTitle: string; thumb: string | null }
+		opts: { firkinTitle: string; thumb: string | null; autoplay?: boolean }
 	): Promise<void> {
 		if (!entry.youtubeUrl || this.playingKey !== null) return;
 		this.playingKey = entry.key;
@@ -263,7 +263,9 @@ export class TrailerResolver {
 			const playTitle = entry.label
 				? `${opts.firkinTitle} — ${entry.label} trailer`
 				: `${opts.firkinTitle} trailer`;
-			await playYouTubeVideo(entry.youtubeUrl, playTitle, opts.thumb, null);
+			await playYouTubeVideo(entry.youtubeUrl, playTitle, opts.thumb, null, {
+				autoplay: opts.autoplay !== false
+			});
 		} catch (err) {
 			this.playError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -290,7 +292,10 @@ export class TrailerResolver {
 		const ctx = this.autoPlayContext();
 		if (!ctx) return;
 		this.autoPlayedRun = myRun;
-		void this.play(first, ctx);
+		// Load the trailer into the right-side player but defer the actual
+		// playback — `PlayerVideo` renders a big centered play overlay
+		// while `awaitingPlay` is set so the user can press play.
+		void this.play(first, { ...ctx, autoplay: false });
 	}
 }
 

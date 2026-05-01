@@ -117,6 +117,7 @@
 				poster={$playerState.currentFile?.thumbnailUrl}
 				directStreamUrl={$playerState.directStreamUrl}
 				directStreamMimeType={$playerState.directStreamMimeType}
+				awaitingPlay={$playerState.awaitingPlay}
 			/>
 			<SubsLyricsFinder />
 		</aside>
