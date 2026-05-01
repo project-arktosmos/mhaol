@@ -21,7 +21,8 @@
 		metadataSearchAddon,
 		type Firkin,
 		type FirkinAddon,
-		type FileEntry
+		type FileEntry,
+		type Trailer
 	} from '$lib/firkins.service';
 	import {
 		formatSizeBytes,
@@ -29,7 +30,13 @@
 		searchTorrents,
 		type TorrentResultItem
 	} from '$lib/search.service';
-	import { playYouTubeAudio, resolveYouTubeUrlForTrack } from '$lib/youtube-match.service';
+	import {
+		playYouTubeAudio,
+		playYouTubeVideo,
+		resolveYouTubeTrailerForMovie,
+		resolveYouTubeTrailerForSeason,
+		resolveYouTubeUrlForTrack
+	} from '$lib/youtube-match.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 
@@ -47,14 +54,14 @@
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
 	const firkinKind = $derived(addonKind(firkin.addon));
 	const isMusicBrainz = $derived(firkin.addon === 'musicbrainz');
+	const isTmdbMovie = $derived(firkin.addon === 'tmdb-movie');
+	const isTmdbTv = $derived(firkin.addon === 'tmdb-tv');
 
 	// "Needs metadata" mirrors the catalog grid: missing description OR no
 	// images. Year alone isn't enough — local-* scanners parse `(YYYY)` out
 	// of filenames so a freshly-scanned firkin can have a year but otherwise
 	// be empty.
-	const needsMetadata = $derived(
-		firkin.description.trim() === '' || firkin.images.length === 0
-	);
+	const needsMetadata = $derived(firkin.description.trim() === '' || firkin.images.length === 0);
 	const lookupAddon = $derived(metadataSearchAddon(firkin.addon));
 	let metadataLookupOpen = $state(false);
 
@@ -115,6 +122,60 @@
 			.map((f) => (f.type === 'url' ? parseMusicBrainzReleaseGroupId(f.value) : null))
 			.find((id): id is string => Boolean(id)) ?? null
 	);
+
+	function parseTmdbId(value: string, kind: 'tv' | 'movie'): string | null {
+		try {
+			const u = new URL(value);
+			if (u.hostname.toLowerCase() !== 'www.themoviedb.org') return null;
+			const re = new RegExp(`^/${kind}/([^/]+)`);
+			const m = u.pathname.match(re);
+			return m?.[1] ?? null;
+		} catch {
+			return null;
+		}
+	}
+
+	// Tracking the upstream TMDB id lets us refetch metadata (credits +
+	// official trailers) from TMDB on the fly. For TV we also need it to
+	// enumerate seasons for per-season YouTube fallback.
+	const tmdbTvId = $derived(
+		firkin.files
+			.map((f) => (f.type === 'url' ? parseTmdbId(f.value, 'tv') : null))
+			.find((id): id is string => Boolean(id)) ?? null
+	);
+	const tmdbMovieId = $derived(
+		firkin.files
+			.map((f) => (f.type === 'url' ? parseTmdbId(f.value, 'movie') : null))
+			.find((id): id is string => Boolean(id)) ?? null
+	);
+
+	async function fetchCatalogMetadata(
+		addon: string,
+		id: string
+	): Promise<{ artists: Firkin['artists']; trailers: Trailer[] }> {
+		const res = await fetch(
+			`/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(id)}/metadata`,
+			{ cache: 'no-store' }
+		);
+		if (!res.ok) {
+			let message = `HTTP ${res.status}`;
+			try {
+				const body = await res.json();
+				if (body && typeof body.error === 'string') message = body.error;
+			} catch {
+				// ignore
+			}
+			throw new Error(message);
+		}
+		const body = (await res.json()) as {
+			artists?: Firkin['artists'];
+			trailers?: Trailer[];
+		};
+		return {
+			artists: Array.isArray(body.artists) ? body.artists : [],
+			trailers: Array.isArray(body.trailers) ? body.trailers : []
+		};
+	}
 	let ipfsStarting = $state(false);
 	let ipfsError = $state<string | null>(null);
 
@@ -147,22 +208,8 @@
 		artistsBackfillStatus = 'loading';
 		artistsBackfillError = null;
 		try {
-			const res = await fetch(
-				`/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(upstreamId)}/artists`,
-				{ cache: 'no-store' }
-			);
-			if (!res.ok) {
-				let message = `HTTP ${res.status}`;
-				try {
-					const body = await res.json();
-					if (body && typeof body.error === 'string') message = body.error;
-				} catch {
-					// ignore
-				}
-				throw new Error(message);
-			}
-			const fetched = (await res.json()) as Firkin['artists'];
-			if (!Array.isArray(fetched) || fetched.length === 0) {
+			const { artists: fetched } = await fetchCatalogMetadata(addon, upstreamId);
+			if (fetched.length === 0) {
 				artistsBackfillStatus = 'done';
 				return;
 			}
@@ -187,6 +234,9 @@
 			const updated = (await putRes.json()) as Firkin;
 			data.firkin = updated;
 			artistsBackfillStatus = 'done';
+			if (updated.id !== firkinId) {
+				void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
+			}
 		} catch (err) {
 			artistsBackfillError = err instanceof Error ? err.message : 'Unknown error';
 			artistsBackfillStatus = 'error';
@@ -417,8 +467,6 @@
 		return out;
 	});
 
-
-
 	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0);
 
 	let finalizing = $state(false);
@@ -515,7 +563,18 @@
 		if (tracksInitForFirkinId === fid) return;
 		tracksInitForFirkinId = fid;
 		const myRun = ++tracksRun;
-		if (trackFiles.length > 0) {
+		// Saved YouTube URLs from a previous bookmark — keyed by normalized
+		// title so we can merge them onto the freshly-fetched MB tracklist and
+		// skip the yt-dlp roundtrip for tracks we already resolved.
+		const savedUrls: Record<string, string> = {};
+		for (const f of trackFiles) {
+			const key = (f.title ?? '').trim().toLowerCase();
+			if (key && f.value) savedUrls[key] = f.value;
+		}
+		if (musicBrainzReleaseGroupId) {
+			void loadByReleaseGroupId(musicBrainzReleaseGroupId, myRun, savedUrls);
+		} else if (trackFiles.length > 0) {
+			// Legacy bookmarks without an upstream id — render saved files as-is.
 			tracks = trackFiles.map((f, i) => ({
 				id: `file-${i}`,
 				position: i + 1,
@@ -526,8 +585,6 @@
 			}));
 			tracksStatus = 'done';
 			void resolveYouTubeForAllTracks(myRun);
-		} else if (musicBrainzReleaseGroupId) {
-			void loadByReleaseGroupId(musicBrainzReleaseGroupId, myRun);
 		} else {
 			tracksError =
 				'No MusicBrainz release-group id stored on this firkin. Re-bookmark from the catalog to attach one.';
@@ -535,7 +592,11 @@
 		}
 	});
 
-	async function loadByReleaseGroupId(releaseGroupId: string, myRun: number) {
+	async function loadByReleaseGroupId(
+		releaseGroupId: string,
+		myRun: number,
+		savedUrls?: Record<string, string>
+	) {
 		tracksStatus = 'loading';
 		tracksError = null;
 		tracks = [];
@@ -561,14 +622,17 @@
 				lengthMs: number | null;
 			}[];
 			if (myRun !== tracksRun) return;
-			tracks = body.map((t) => ({
-				id: t.id,
-				position: t.position,
-				title: t.title,
-				lengthMs: t.lengthMs,
-				youtubeUrl: null,
-				youtubeStatus: 'pending' as const
-			}));
+			tracks = body.map((t) => {
+				const savedUrl = savedUrls?.[t.title.trim().toLowerCase()] ?? null;
+				return {
+					id: t.id,
+					position: t.position,
+					title: t.title,
+					lengthMs: t.lengthMs,
+					youtubeUrl: savedUrl,
+					youtubeStatus: (savedUrl ? 'idle' : 'pending') as Track['youtubeStatus']
+				};
+			});
 			tracksStatus = 'done';
 			void resolveYouTubeForAllTracks(myRun);
 		} catch (err) {
@@ -584,13 +648,13 @@
 			.map((a) => a.name)
 			.filter((n) => n && n.length > 0)
 			.join(', ');
-		// Snapshot the firkin's files once and thread the accumulator through
-		// the loop. Re-reading `firkin.files` between sequential PUTs is
-		// unsafe: the previous iteration's `data.firkin = updated` does not
-		// reliably propagate through the `$derived` before the next snapshot,
-		// so each PUT was being built from stale files and clobbering the
-		// previous PUT — leaving only the last-resolved track on the firkin.
+		// Accumulate resolved URLs locally; the server-side PUT now rolls the
+		// firkin forward to a new content-addressed id and re-pins the body
+		// JSON to IPFS. Persisting per-iteration would mint N intermediate
+		// CIDs (one per track) and N orphan IPFS pins, so we batch into one
+		// PUT at the end of the loop.
 		let workingFiles: FileEntry[] = firkin.files.map((f) => ({ ...f }));
+		let dirty = false;
 		for (let i = 0; i < tracks.length; i++) {
 			if (myRun !== tracksRun) return;
 			const t = tracks[i];
@@ -611,20 +675,19 @@
 				continue;
 			}
 			if (url) {
-				try {
-					workingFiles = await persistTrackUrl(workingFiles, t.title, url);
-				} catch (err) {
-					console.warn('[catalog detail] failed to persist track url', err);
-				}
+				workingFiles = mergeTrackUrl(workingFiles, t.title, url);
+				dirty = true;
 			}
+		}
+		if (myRun !== tracksRun || !dirty) return;
+		try {
+			await persistFiles(workingFiles);
+		} catch (err) {
+			console.warn('[catalog detail] failed to persist resolved track urls', err);
 		}
 	}
 
-	async function persistTrackUrl(
-		currentFiles: FileEntry[],
-		trackTitle: string,
-		url: string
-	): Promise<FileEntry[]> {
+	function mergeTrackUrl(currentFiles: FileEntry[], trackTitle: string, url: string): FileEntry[] {
 		const next = currentFiles.map((f) => ({ ...f }));
 		const idx = next.findIndex(
 			(f) => f.type === 'url' && (f.title ?? '').trim() === trackTitle.trim()
@@ -634,6 +697,10 @@
 		} else {
 			next.push({ type: 'url', value: url, title: trackTitle });
 		}
+		return next;
+	}
+
+	async function persistFiles(next: FileEntry[]): Promise<void> {
 		const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}`, {
 			method: 'PUT',
 			headers: { 'content-type': 'application/json' },
@@ -651,7 +718,12 @@
 		}
 		const updated = (await res.json()) as Firkin;
 		data.firkin = updated;
-		return updated.files;
+		// PUT now rolls forward to a new content-addressed id whenever any
+		// body field changes, so the URL has to follow the firkin to its
+		// new CID — otherwise a refresh hits the now-deleted old id.
+		if (updated.id !== firkin.id) {
+			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
+		}
 	}
 
 	function formatDuration(ms: number | null): string {
@@ -678,6 +750,289 @@
 			trackPlayError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
 			playingTrackIndex = null;
+		}
+	}
+
+	type TrailerEntry = {
+		key: string;
+		label: string | null;
+		seasonNumber: number | null;
+		airYear: number | null;
+		youtubeUrl: string | null;
+		status: 'idle' | 'pending' | 'searching' | 'found' | 'missing' | 'error';
+	};
+	let trailers = $state<TrailerEntry[]>([]);
+	let trailersStatus = $state<'idle' | 'loading' | 'done' | 'error'>('idle');
+	let trailersError = $state<string | null>(null);
+	let trailersRun = 0;
+	let trailersInitForFirkinId: string | null = null;
+	let playingTrailerKey = $state<string | null>(null);
+	let trailerPlayError = $state<string | null>(null);
+
+	$effect(() => {
+		if (!isTmdbMovie && !isTmdbTv) return;
+		const fid = firkin.id;
+		if (trailersInitForFirkinId === fid) return;
+		trailersInitForFirkinId = fid;
+		const myRun = ++trailersRun;
+		const stored = firkin.trailers ?? [];
+		if (isTmdbMovie) {
+			void initMovieTrailers(myRun, stored);
+		} else {
+			void initTvTrailers(myRun, stored);
+		}
+	});
+
+	async function initMovieTrailers(myRun: number, stored: Trailer[]) {
+		trailersStatus = 'loading';
+		trailersError = null;
+		const existing = stored.find((t) => Boolean(t.youtubeUrl));
+		if (existing) {
+			trailers = [
+				{
+					key: 'movie',
+					label: existing.label ?? null,
+					seasonNumber: null,
+					airYear: firkin.year,
+					youtubeUrl: existing.youtubeUrl,
+					status: 'idle'
+				}
+			];
+			trailersStatus = 'done';
+			return;
+		}
+		// Prefer TMDB's official trailer (returned alongside credits by the
+		// /metadata endpoint via append_to_response) and only fall back to
+		// the fuzzy YouTube search if TMDB has nothing.
+		if (tmdbMovieId) {
+			try {
+				const { trailers: tmdb } = await fetchCatalogMetadata(firkin.addon, tmdbMovieId);
+				if (myRun !== trailersRun) return;
+				const first = tmdb[0];
+				if (first) {
+					trailers = [
+						{
+							key: 'movie',
+							label: first.label ?? null,
+							seasonNumber: null,
+							airYear: firkin.year,
+							youtubeUrl: first.youtubeUrl,
+							status: 'idle'
+						}
+					];
+					trailersStatus = 'done';
+					try {
+						await persistTrailers([first]);
+					} catch (err) {
+						console.warn('[catalog detail] failed to persist tmdb movie trailer', err);
+					}
+					return;
+				}
+			} catch (err) {
+				console.warn('[catalog detail] tmdb metadata fetch failed; falling back to youtube', err);
+			}
+		}
+		// Resolve fresh and persist on the firkin so subsequent visits don't
+		// re-search.
+		trailers = [
+			{
+				key: 'movie',
+				label: null,
+				seasonNumber: null,
+				airYear: firkin.year,
+				youtubeUrl: null,
+				status: 'searching'
+			}
+		];
+		try {
+			const url = await resolveYouTubeTrailerForMovie(firkin.title, firkin.year);
+			if (myRun !== trailersRun) return;
+			trailers = trailers.map((t) =>
+				t.key === 'movie' ? { ...t, youtubeUrl: url, status: url ? 'found' : 'missing' } : t
+			);
+			trailersStatus = 'done';
+			if (url) {
+				try {
+					await persistTrailers([{ youtubeUrl: url }]);
+				} catch (err) {
+					console.warn('[catalog detail] failed to persist movie trailer', err);
+				}
+			}
+		} catch (err) {
+			if (myRun !== trailersRun) return;
+			trailers = trailers.map((t) => (t.key === 'movie' ? { ...t, status: 'error' } : t));
+			trailersError = err instanceof Error ? err.message : 'Unknown error';
+			trailersStatus = 'error';
+		}
+	}
+
+	async function initTvTrailers(myRun: number, stored: Trailer[]) {
+		trailersStatus = 'loading';
+		trailersError = null;
+		// If we already have stored trailers, render them and skip fresh
+		// resolution. The user can re-bookmark from the catalog if the
+		// upstream season list changes (e.g. a new season aired).
+		if (stored.length > 0) {
+			trailers = stored.map((t, i) => ({
+				key: t.label ? `season-${t.label}` : `trailer-${i}`,
+				label: t.label ?? null,
+				seasonNumber: parseSeasonNumberFromLabel(t.label ?? ''),
+				airYear: null,
+				youtubeUrl: t.youtubeUrl,
+				status: 'idle' as const
+			}));
+			trailersStatus = 'done';
+			return;
+		}
+		if (!tmdbTvId) {
+			trailersError =
+				'No TMDB id stored on this firkin. Re-bookmark from the catalog to attach one.';
+			trailersStatus = 'error';
+			return;
+		}
+		// Pull TMDB-sourced show-level trailers from /metadata (single TMDB
+		// request that also carries credits). Per-season trailers still come
+		// from the YouTube fallback below since TMDB's show-level /videos
+		// block doesn't differentiate them.
+		let tmdbShowTrailers: Trailer[] = [];
+		try {
+			const meta = await fetchCatalogMetadata(firkin.addon, tmdbTvId);
+			if (myRun !== trailersRun) return;
+			tmdbShowTrailers = meta.trailers;
+		} catch (err) {
+			console.warn('[catalog detail] tmdb tv metadata fetch failed', err);
+		}
+		let seasons: { seasonNumber: number; name: string; airYear: number | null }[] = [];
+		try {
+			const res = await fetch(`/api/catalog/tmdb-tv/${encodeURIComponent(tmdbTvId)}/seasons`, {
+				cache: 'no-store'
+			});
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const body = (await res.json()) as {
+				seasonNumber: number;
+				name: string;
+				airYear?: number | null;
+			}[];
+			if (myRun !== trailersRun) return;
+			seasons = body.map((s) => ({
+				seasonNumber: s.seasonNumber,
+				name: s.name,
+				airYear: s.airYear ?? null
+			}));
+		} catch (err) {
+			if (myRun !== trailersRun) return;
+			trailersError = err instanceof Error ? err.message : 'Unknown error';
+			trailersStatus = 'error';
+			return;
+		}
+		const tmdbEntries: TrailerEntry[] = tmdbShowTrailers.map((t, i) => ({
+			key: `tmdb-${i}`,
+			label: t.label ?? 'Trailer',
+			seasonNumber: null,
+			airYear: null,
+			youtubeUrl: t.youtubeUrl,
+			status: 'idle' as const
+		}));
+		const seasonEntries: TrailerEntry[] = seasons.map((s) => ({
+			key: `season-${s.seasonNumber}`,
+			label: s.name,
+			seasonNumber: s.seasonNumber,
+			airYear: s.airYear,
+			youtubeUrl: null,
+			status: 'pending' as const
+		}));
+		trailers = [...tmdbEntries, ...seasonEntries];
+		trailersStatus = 'done';
+		const resolved: Trailer[] = tmdbShowTrailers
+			.filter((t): t is Trailer & { youtubeUrl: string } => Boolean(t.youtubeUrl))
+			.map((t) => ({ youtubeUrl: t.youtubeUrl, label: t.label }));
+		for (let i = 0; i < trailers.length; i++) {
+			if (myRun !== trailersRun) return;
+			const entry = trailers[i];
+			// Skip TMDB-sourced entries — already resolved at the top.
+			if (entry.status === 'idle') continue;
+			trailers = trailers.map((t, idx) => (idx === i ? { ...t, status: 'searching' } : t));
+			try {
+				const url = await resolveYouTubeTrailerForSeason(
+					firkin.title,
+					entry.seasonNumber ?? 0,
+					entry.airYear
+				);
+				if (myRun !== trailersRun) return;
+				trailers = trailers.map((t, idx) =>
+					idx === i ? { ...t, youtubeUrl: url, status: url ? 'found' : 'missing' } : t
+				);
+				if (url && entry.label) {
+					resolved.push({ youtubeUrl: url, label: entry.label });
+				}
+			} catch {
+				if (myRun !== trailersRun) return;
+				trailers = trailers.map((t, idx) => (idx === i ? { ...t, status: 'error' } : t));
+			}
+		}
+		if (resolved.length > 0) {
+			try {
+				await persistTrailers(resolved);
+			} catch (err) {
+				console.warn('[catalog detail] failed to persist tv trailers', err);
+			}
+		}
+	}
+
+	function parseSeasonNumberFromLabel(label: string): number | null {
+		const m = label.match(/season\s+(\d+)/i);
+		if (!m) return null;
+		const n = Number.parseInt(m[1], 10);
+		return Number.isFinite(n) ? n : null;
+	}
+
+	async function persistTrailers(next: Trailer[]): Promise<void> {
+		const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}`, {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ trailers: next })
+		});
+		if (!res.ok) {
+			let message = `HTTP ${res.status}`;
+			try {
+				const body = await res.json();
+				if (body && typeof body.error === 'string') message = body.error;
+			} catch {
+				// ignore
+			}
+			throw new Error(message);
+		}
+		const updated = (await res.json()) as Firkin;
+		const oldId = firkin.id;
+		data.firkin = updated;
+		if (updated.id !== oldId) {
+			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
+		}
+	}
+
+	async function playTrailer(entry: TrailerEntry) {
+		if (!entry.youtubeUrl || playingTrailerKey !== null) return;
+		playingTrailerKey = entry.key;
+		trailerPlayError = null;
+		try {
+			const thumb = firkin.images[0]?.url ?? null;
+			const playTitle = entry.label
+				? `${firkin.title} — ${entry.label} trailer`
+				: `${firkin.title} trailer`;
+			await playYouTubeVideo(entry.youtubeUrl, playTitle, thumb, null);
+		} catch (err) {
+			trailerPlayError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			playingTrailerKey = null;
 		}
 	}
 
@@ -1114,6 +1469,73 @@
 							</figure>
 						{/each}
 					</div>
+				</div>
+			{/if}
+
+			{#if isTmdbMovie || isTmdbTv}
+				<div class="card border border-base-content/10 bg-base-200 p-4">
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+							Trailers{trailers.length > 0 ? ` (${trailers.length})` : ''}
+						</h2>
+					</div>
+					{#if trailerPlayError}
+						<div class="mb-2 alert alert-error">
+							<span>{trailerPlayError}</span>
+						</div>
+					{/if}
+					{#if trailersStatus === 'loading' && trailers.length === 0}
+						<p class="text-sm text-base-content/60">Loading…</p>
+					{:else if trailersStatus === 'error' && trailers.length === 0}
+						<p class="text-sm text-error">{trailersError ?? 'Failed'}</p>
+					{:else if trailers.length === 0}
+						<p class="text-sm text-base-content/60">No trailers found.</p>
+					{:else}
+						<ol class="flex flex-col gap-1">
+							{#each trailers as trailer (trailer.key)}
+								{@const playable =
+									(trailer.status === 'found' || trailer.status === 'idle') && !!trailer.youtubeUrl}
+								{@const isPlaying = playingTrailerKey === trailer.key}
+								<li>
+									<button
+										type="button"
+										class={classNames(
+											'flex w-full flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs',
+											{
+												'cursor-pointer hover:bg-base-100': playable && !isPlaying,
+												'opacity-60': isPlaying,
+												'cursor-default': !playable
+											}
+										)}
+										disabled={!playable || playingTrailerKey !== null}
+										onclick={() => playTrailer(trailer)}
+										title={playable
+											? `Play ${trailer.label ?? 'trailer'}`
+											: (trailer.label ?? 'Trailer')}
+									>
+										<span class="flex-1 truncate">
+											{trailer.label ?? 'Trailer'}
+										</span>
+										{#if trailer.status === 'pending'}
+											<span class="badge badge-ghost badge-xs">YT queued</span>
+										{:else if trailer.status === 'searching'}
+											<span class="badge badge-ghost badge-xs">YT…</span>
+										{:else if playable}
+											{#if isPlaying}
+												<span class="badge badge-xs badge-primary">starting…</span>
+											{:else}
+												<span class="badge badge-xs badge-primary">▶ Play</span>
+											{/if}
+										{:else if trailer.status === 'missing'}
+											<span class="badge badge-xs badge-warning">no match</span>
+										{:else if trailer.status === 'error'}
+											<span class="badge badge-xs badge-error">error</span>
+										{/if}
+									</button>
+								</li>
+							{/each}
+						</ol>
+					{/if}
 				</div>
 			{/if}
 

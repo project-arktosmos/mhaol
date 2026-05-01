@@ -10,7 +10,9 @@
 		type FirkinAddon,
 		type Firkin,
 		type ImageMeta,
-		type Artist
+		type Artist,
+		type Trailer,
+		type FileEntry
 	} from '$lib/firkins.service';
 	import {
 		formatSizeBytes,
@@ -18,7 +20,13 @@
 		searchTorrents,
 		type TorrentResultItem
 	} from '$lib/search.service';
-	import { playYouTubeAudio, resolveYouTubeUrlForTrack } from '$lib/youtube-match.service';
+	import {
+		playYouTubeAudio,
+		playYouTubeVideo,
+		resolveYouTubeTrailerForMovie,
+		resolveYouTubeTrailerForSeason,
+		resolveYouTubeUrlForTrack
+	} from '$lib/youtube-match.service';
 	import { userIdentityService } from '$lib/user-identity.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
@@ -38,6 +46,8 @@
 
 	const kindLabel = $derived(addonKind(addon) ?? '');
 	const isMusicBrainz = $derived(addon === 'musicbrainz');
+	const isTmdbMovie = $derived(addon === 'tmdb-movie');
+	const isTmdbTv = $derived(addon === 'tmdb-tv');
 
 	const images = $derived<ImageMeta[]>(
 		[posterUrl, backdropUrl]
@@ -51,22 +61,28 @@
 	let artistsError = $state<string | null>(null);
 	let artistsRun = 0;
 	let artistsInitForKey: string | null = null;
+	// TMDB-sourced trailers for the current item, populated by /metadata.
+	// Movies usually carry one official trailer here; TV shows carry the
+	// show-level trailer(s). Per-season trailers (TV) still come from the
+	// YouTube fallback below.
+	let tmdbTrailers = $state<Trailer[]>([]);
 
 	$effect(() => {
 		if (!addon || !itemId) return;
 		const key = `${addon}:${itemId}`;
 		if (artistsInitForKey === key) return;
 		artistsInitForKey = key;
-		void loadArtists(addon, itemId, ++artistsRun);
+		void loadMetadata(addon, itemId, ++artistsRun);
 	});
 
-	async function loadArtists(addon: string, id: string, myRun: number) {
+	async function loadMetadata(addon: string, id: string, myRun: number) {
 		artistsStatus = 'loading';
 		artistsError = null;
 		artists = [];
+		tmdbTrailers = [];
 		try {
 			const res = await fetch(
-				`/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(id)}/artists`,
+				`/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(id)}/metadata`,
 				{ cache: 'no-store' }
 			);
 			if (!res.ok) {
@@ -79,9 +95,10 @@
 				}
 				throw new Error(message);
 			}
-			const body = (await res.json()) as Artist[];
+			const body = (await res.json()) as { artists?: Artist[]; trailers?: Trailer[] };
 			if (myRun !== artistsRun) return;
-			artists = Array.isArray(body) ? body : [];
+			artists = Array.isArray(body.artists) ? body.artists : [];
+			tmdbTrailers = Array.isArray(body.trailers) ? body.trailers : [];
 			artistsStatus = 'done';
 		} catch (err) {
 			if (myRun !== artistsRun) return;
@@ -123,27 +140,20 @@
 		bookmarkError = null;
 		bookmarking = true;
 		try {
-			// Persist the upstream MusicBrainz release-group id so the detail
-			// page can deterministically refetch the same tracks instead of
-			// doing a fuzzy search by title that returns a different release.
-			const sourceFiles =
-				isMusicBrainz && itemId
-					? [
-							{
-								type: 'url' as const,
-								value: `https://musicbrainz.org/release-group/${itemId}`,
-								title: 'MusicBrainz Release Group'
-							}
-						]
-					: [];
+			// Persist the upstream catalog id alongside the firkin so the detail
+			// page can deterministically refetch upstream data (musicbrainz
+			// tracks; tmdb-tv seasons for trailer rebuild) instead of doing a
+			// fuzzy search by title that may return a different upstream item.
+			const sourceFiles = buildUpstreamSourceFiles();
 			const created: Firkin = await firkinsService.create({
 				title,
 				artists,
 				description,
 				images,
-				files: sourceFiles,
+				files: [...sourceFiles, ...resolvedTrackFiles()],
 				year,
-				addon: addon as FirkinAddon
+				addon: addon as FirkinAddon,
+				trailers: resolvedTrailers()
 			});
 			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
 		} catch (err) {
@@ -151,6 +161,52 @@
 		} finally {
 			bookmarking = false;
 		}
+	}
+
+	// Carry the YouTube URLs already resolved on this virtual page into the
+	// firkin body so the detail page does not have to re-run yt-dlp searches
+	// for tracks we just looked up. Only `found` tracks contribute — pending /
+	// missing / errored tracks fall through to the detail page's resolver.
+	function resolvedTrackFiles(): FileEntry[] {
+		if (!isMusicBrainz) return [];
+		return tracks
+			.filter(
+				(t): t is Track & { youtubeUrl: string } =>
+					t.youtubeStatus === 'found' && Boolean(t.youtubeUrl) && Boolean(t.title.trim())
+			)
+			.map((t) => ({ type: 'url', value: t.youtubeUrl, title: t.title }));
+	}
+
+	function buildUpstreamSourceFiles() {
+		if (!itemId) return [];
+		if (isMusicBrainz) {
+			return [
+				{
+					type: 'url' as const,
+					value: `https://musicbrainz.org/release-group/${itemId}`,
+					title: 'MusicBrainz Release Group'
+				}
+			];
+		}
+		if (isTmdbTv) {
+			return [
+				{
+					type: 'url' as const,
+					value: `https://www.themoviedb.org/tv/${itemId}`,
+					title: 'TMDB TV Show'
+				}
+			];
+		}
+		if (isTmdbMovie) {
+			return [
+				{
+					type: 'url' as const,
+					value: `https://www.themoviedb.org/movie/${itemId}`,
+					title: 'TMDB Movie'
+				}
+			];
+		}
+		return [];
 	}
 
 	type Track = {
@@ -161,6 +217,193 @@
 		youtubeUrl: string | null;
 		youtubeStatus: 'pending' | 'searching' | 'found' | 'missing' | 'error';
 	};
+
+	type TrailerEntry = {
+		key: string;
+		label: string | null;
+		seasonNumber: number | null;
+		airYear: number | null;
+		youtubeUrl: string | null;
+		status: 'pending' | 'searching' | 'found' | 'missing' | 'error';
+	};
+	let trailers = $state<TrailerEntry[]>([]);
+	let trailersStatus = $state<'idle' | 'loading' | 'done' | 'error'>('idle');
+	let trailersError = $state<string | null>(null);
+	let trailersRun = 0;
+	let trailersInitForKey: string | null = null;
+	let playingTrailerKey = $state<string | null>(null);
+	let trailerPlayError = $state<string | null>(null);
+
+	$effect(() => {
+		if (!title) return;
+		if (!isTmdbMovie && !isTmdbTv) return;
+		// Wait for /metadata to settle so resolve* can prefer TMDB-sourced
+		// trailers over a YouTube fuzzy search.
+		if (artistsStatus !== 'done' && artistsStatus !== 'error') return;
+		const key = `${addon}:${itemId}:${title}:${year ?? ''}:${artistsStatus}`;
+		if (trailersInitForKey === key) return;
+		trailersInitForKey = key;
+		const myRun = ++trailersRun;
+		if (isTmdbMovie) {
+			void resolveMovieTrailer(myRun);
+		} else if (isTmdbTv) {
+			void resolveTvTrailers(myRun);
+		}
+	});
+
+	async function resolveMovieTrailer(myRun: number) {
+		trailersStatus = 'loading';
+		trailersError = null;
+		// Prefer the official TMDB trailer when /metadata returned one;
+		// only fall back to a fuzzy YouTube search if TMDB has nothing.
+		const tmdb = tmdbTrailers[0];
+		if (tmdb) {
+			trailers = [
+				{
+					key: 'movie',
+					label: tmdb.label ?? null,
+					seasonNumber: null,
+					airYear: year,
+					youtubeUrl: tmdb.youtubeUrl,
+					status: 'found'
+				}
+			];
+			trailersStatus = 'done';
+			return;
+		}
+		trailers = [
+			{
+				key: 'movie',
+				label: null,
+				seasonNumber: null,
+				airYear: year,
+				youtubeUrl: null,
+				status: 'searching'
+			}
+		];
+		try {
+			const url = await resolveYouTubeTrailerForMovie(title, year);
+			if (myRun !== trailersRun) return;
+			trailers = trailers.map((t) =>
+				t.key === 'movie' ? { ...t, youtubeUrl: url, status: url ? 'found' : 'missing' } : t
+			);
+			trailersStatus = 'done';
+		} catch (err) {
+			if (myRun !== trailersRun) return;
+			trailers = trailers.map((t) => (t.key === 'movie' ? { ...t, status: 'error' } : t));
+			trailersError = err instanceof Error ? err.message : 'Unknown error';
+			trailersStatus = 'error';
+		}
+	}
+
+	async function resolveTvTrailers(myRun: number) {
+		trailersStatus = 'loading';
+		trailersError = null;
+		trailers = [];
+		if (!itemId) {
+			trailersStatus = 'done';
+			return;
+		}
+		let seasons: { seasonNumber: number; name: string; airYear: number | null }[] = [];
+		try {
+			const res = await fetch(`/api/catalog/tmdb-tv/${encodeURIComponent(itemId)}/seasons`, {
+				cache: 'no-store'
+			});
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const body = (await res.json()) as {
+				seasonNumber: number;
+				name: string;
+				airYear?: number | null;
+			}[];
+			if (myRun !== trailersRun) return;
+			seasons = body.map((s) => ({
+				seasonNumber: s.seasonNumber,
+				name: s.name,
+				airYear: s.airYear ?? null
+			}));
+		} catch (err) {
+			if (myRun !== trailersRun) return;
+			trailersError = err instanceof Error ? err.message : 'Unknown error';
+			trailersStatus = 'error';
+			return;
+		}
+		// TMDB-sourced show-level trailers come from /metadata; per-season
+		// trailers are still resolved by the YouTube fallback because TMDB's
+		// show-level /videos block doesn't differentiate them.
+		const tmdbEntries: TrailerEntry[] = tmdbTrailers.map((t, i) => ({
+			key: `tmdb-${i}`,
+			label: t.label ?? 'Trailer',
+			seasonNumber: null,
+			airYear: null,
+			youtubeUrl: t.youtubeUrl,
+			status: 'found'
+		}));
+		const seasonEntries: TrailerEntry[] = seasons.map((s) => ({
+			key: `season-${s.seasonNumber}`,
+			label: s.name,
+			seasonNumber: s.seasonNumber,
+			airYear: s.airYear,
+			youtubeUrl: null,
+			status: 'pending'
+		}));
+		trailers = [...tmdbEntries, ...seasonEntries];
+		trailersStatus = 'done';
+		// Resolve sequentially so we don't pin too many concurrent yt-dlp
+		// search requests at once (mirrors the per-track flow). Skip TMDB
+		// entries — they're already 'found' from the metadata response.
+		for (let i = 0; i < trailers.length; i++) {
+			if (myRun !== trailersRun) return;
+			const entry = trailers[i];
+			if (entry.status === 'found') continue;
+			trailers = trailers.map((t, idx) => (idx === i ? { ...t, status: 'searching' } : t));
+			try {
+				const url = await resolveYouTubeTrailerForSeason(
+					title,
+					entry.seasonNumber ?? 0,
+					entry.airYear
+				);
+				if (myRun !== trailersRun) return;
+				trailers = trailers.map((t, idx) =>
+					idx === i ? { ...t, youtubeUrl: url, status: url ? 'found' : 'missing' } : t
+				);
+			} catch {
+				if (myRun !== trailersRun) return;
+				trailers = trailers.map((t, idx) =>
+					idx === i ? { ...t, youtubeUrl: null, status: 'error' } : t
+				);
+			}
+		}
+	}
+
+	function resolvedTrailers(): Trailer[] {
+		return trailers
+			.filter((t): t is TrailerEntry & { youtubeUrl: string } => Boolean(t.youtubeUrl))
+			.map((t) => ({ youtubeUrl: t.youtubeUrl, label: t.label ?? undefined }));
+	}
+
+	async function playTrailer(entry: TrailerEntry) {
+		if (!entry.youtubeUrl || playingTrailerKey !== null) return;
+		playingTrailerKey = entry.key;
+		trailerPlayError = null;
+		try {
+			const thumb = images[0]?.url ?? null;
+			const playTitle = entry.label ? `${title} — ${entry.label} trailer` : `${title} trailer`;
+			await playYouTubeVideo(entry.youtubeUrl, playTitle, thumb, null);
+		} catch (err) {
+			trailerPlayError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			playingTrailerKey = null;
+		}
+	}
 	type TracksStatus = 'idle' | 'loading' | 'done' | 'error';
 	let tracksStatus = $state<TracksStatus>('idle');
 	let tracksError = $state<string | null>(null);
@@ -329,9 +572,13 @@
 				artists,
 				description,
 				images,
-				files: [{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }],
+				files: [
+					...buildUpstreamSourceFiles(),
+					{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
+				],
 				year,
-				addon: addon as FirkinAddon
+				addon: addon as FirkinAddon,
+				trailers: resolvedTrailers()
 			});
 			await startTorrentDownload(torrent.magnetLink);
 			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
@@ -419,7 +666,7 @@
 			{/if}
 
 			<FirkinArtistsSection
-				artists={artists}
+				{artists}
 				loading={artistsStatus === 'loading'}
 				error={artistsStatus === 'error' ? artistsError : null}
 				emptyLabel="No people or groups attached to this item upstream."
@@ -459,6 +706,72 @@
 							</figure>
 						{/each}
 					</div>
+				</div>
+			{/if}
+
+			{#if isTmdbMovie || isTmdbTv}
+				<div class="card border border-base-content/10 bg-base-200 p-4">
+					<div class="mb-2 flex items-center justify-between gap-2">
+						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
+							Trailers{trailers.length > 0 ? ` (${trailers.length})` : ''}
+						</h2>
+					</div>
+					{#if trailerPlayError}
+						<div class="mb-2 alert alert-error">
+							<span>{trailerPlayError}</span>
+						</div>
+					{/if}
+					{#if trailersStatus === 'loading' && trailers.length === 0}
+						<p class="text-sm text-base-content/60">Loading…</p>
+					{:else if trailersStatus === 'error' && trailers.length === 0}
+						<p class="text-sm text-error">{trailersError ?? 'Failed'}</p>
+					{:else if trailers.length === 0}
+						<p class="text-sm text-base-content/60">No trailers found.</p>
+					{:else}
+						<ol class="flex flex-col gap-1">
+							{#each trailers as trailer (trailer.key)}
+								{@const playable = trailer.status === 'found' && !!trailer.youtubeUrl}
+								{@const isPlaying = playingTrailerKey === trailer.key}
+								<li>
+									<button
+										type="button"
+										class={classNames(
+											'flex w-full flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs',
+											{
+												'cursor-pointer hover:bg-base-100': playable && !isPlaying,
+												'opacity-60': isPlaying,
+												'cursor-default': !playable
+											}
+										)}
+										disabled={!playable || playingTrailerKey !== null}
+										onclick={() => playTrailer(trailer)}
+										title={playable
+											? `Play ${trailer.label ?? 'trailer'}`
+											: (trailer.label ?? 'Trailer')}
+									>
+										<span class="flex-1 truncate">
+											{trailer.label ?? 'Trailer'}
+										</span>
+										{#if trailer.status === 'pending'}
+											<span class="badge badge-ghost badge-xs">YT queued</span>
+										{:else if trailer.status === 'searching'}
+											<span class="badge badge-ghost badge-xs">YT…</span>
+										{:else if playable}
+											{#if isPlaying}
+												<span class="badge badge-xs badge-primary">starting…</span>
+											{:else}
+												<span class="badge badge-xs badge-primary">▶ Play</span>
+											{/if}
+										{:else if trailer.status === 'missing'}
+											<span class="badge badge-xs badge-warning">no match</span>
+										{:else if trailer.status === 'error'}
+											<span class="badge badge-xs badge-error">error</span>
+										{/if}
+									</button>
+								</li>
+							{/each}
+						</ol>
+					{/if}
 				</div>
 			{/if}
 
@@ -519,9 +832,9 @@
 											<span class="badge badge-ghost badge-xs">YT…</span>
 										{:else if playable}
 											{#if isPlaying}
-												<span class="badge badge-primary badge-xs">starting…</span>
+												<span class="badge badge-xs badge-primary">starting…</span>
 											{:else}
-												<span class="badge badge-primary badge-xs">▶ Play</span>
+												<span class="badge badge-xs badge-primary">▶ Play</span>
 											{/if}
 										{:else if track.youtubeStatus === 'missing'}
 											<span class="badge badge-xs badge-warning">no match</span>

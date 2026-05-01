@@ -149,11 +149,12 @@ pub fn router() -> Router<CloudState> {
         .route("/{addon}/popular", get(popular))
         .route("/{addon}/search", get(search))
         .route("/{addon}/genres", get(genres))
-        .route("/{addon}/{id}/artists", get(artists_for_item))
+        .route("/{addon}/{id}/metadata", get(metadata_for_item))
         .route(
             "/musicbrainz/release-groups/{id}/tracks",
             get(musicbrainz_tracks),
         )
+        .route("/tmdb-tv/{id}/seasons", get(tmdb_tv_seasons))
 }
 
 #[derive(Clone, Serialize)]
@@ -191,6 +192,21 @@ struct CatalogTrack {
     length_ms: Option<i64>,
 }
 
+/// One TV-show season as returned by `GET /api/catalog/tmdb-tv/{id}/seasons`.
+/// Used by the WebUI to enumerate seasons for trailer resolution: each
+/// season is searched against YouTube as `"{showTitle} season {n} trailer"`
+/// and the best match is kept on the firkin's `trailers` array.
+#[derive(Serialize)]
+struct CatalogSeason {
+    #[serde(rename = "seasonNumber")]
+    season_number: i64,
+    name: String,
+    #[serde(rename = "airYear", skip_serializing_if = "Option::is_none")]
+    air_year: Option<i32>,
+    #[serde(rename = "episodeCount", skip_serializing_if = "Option::is_none")]
+    episode_count: Option<i64>,
+}
+
 /// Three-field "person/group attached to a media item" record matching the
 /// persisted `artist` doc shape. Each addon's handler maps its upstream
 /// cast, crew, authors, developers, channels, etc. into this shape; the
@@ -204,6 +220,31 @@ struct CatalogArtist {
     role: Option<String>,
     #[serde(rename = "imageUrl", skip_serializing_if = "Option::is_none")]
     image_url: Option<String>,
+}
+
+/// One trailer attached to a catalog item. Mirrors the persisted
+/// `Trailer` shape on a firkin so the frontend can hand the array
+/// verbatim to `POST /api/firkins` (or `PUT /api/firkins/:id`). For
+/// TMDB this is sourced from the `videos` block of the detail
+/// response (`append_to_response=videos`); for non-TMDB addons it
+/// is currently always empty.
+#[derive(Serialize)]
+struct CatalogTrailer {
+    #[serde(rename = "youtubeUrl")]
+    youtube_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label: Option<String>,
+}
+
+/// Combined metadata payload for a single catalog item. Returned by
+/// `GET /api/catalog/{addon}/{id}/metadata`. Lets the frontend pull
+/// artists and trailers in one call so each upstream provider can
+/// satisfy them in a single request (TMDB's `append_to_response`
+/// merges credits and videos into one HTTP call).
+#[derive(Serialize)]
+struct CatalogMetadata {
+    artists: Vec<CatalogArtist>,
+    trailers: Vec<CatalogTrailer>,
 }
 
 #[derive(Serialize)]
@@ -332,29 +373,32 @@ fn empty_page(page: i64) -> CatalogPage {
     }
 }
 
-/// `GET /api/catalog/{addon}/{id}/artists` — fetches the people / groups /
-/// studios / channels associated with an upstream catalog item, mapped into
-/// the universal `CatalogArtist` shape. Used by the `/catalog/virtual` page
-/// to populate the firkin's artists array on bookmark, and by the
-/// `/catalog/[ipfsHash]` page to backfill missing artist data on first
-/// visit. Unknown / unsupported addons return an empty array (200) so the
+/// `GET /api/catalog/{addon}/{id}/metadata` — fetches the people /
+/// groups / studios / channels associated with an upstream catalog item
+/// (mapped into the universal `CatalogArtist` shape) AND any trailers
+/// the upstream provider exposes for the item, in a single call. For
+/// TMDB this collapses to one upstream HTTP request via
+/// `append_to_response=credits,videos`. Used by the `/catalog/virtual`
+/// page to populate the firkin's artists + trailers on bookmark, and by
+/// the `/catalog/[ipfsHash]` page to backfill missing data on first
+/// visit. Unknown / unsupported addons return empty arrays (200) so the
 /// frontend can call this unconditionally.
-async fn artists_for_item(
+async fn metadata_for_item(
     State(_state): State<CloudState>,
     Path((addon, id)): Path<(String, String)>,
-) -> Result<Json<Vec<CatalogArtist>>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<CatalogMetadata>, (StatusCode, Json<serde_json::Value>)> {
     if id.trim().is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, "id is required"));
     }
-    let artists = match addon.as_str() {
-        "musicbrainz" => musicbrainz_artists(&id).await?,
-        "tmdb-movie" => tmdb_credits(false, &id).await?,
-        "tmdb-tv" => tmdb_credits(true, &id).await?,
-        "youtube-video" => youtube_video_artists(&id).await?,
-        "youtube-channel" => youtube_channel_artists(&id).await?,
-        _ => Vec::new(),
+    let (artists, trailers) = match addon.as_str() {
+        "musicbrainz" => (musicbrainz_artists(&id).await?, Vec::new()),
+        "tmdb-movie" => tmdb_metadata(false, &id).await?,
+        "tmdb-tv" => tmdb_metadata(true, &id).await?,
+        "youtube-video" => (youtube_video_artists(&id).await?, Vec::new()),
+        "youtube-channel" => (youtube_channel_artists(&id).await?, Vec::new()),
+        _ => (Vec::new(), Vec::new()),
     };
-    Ok(Json(artists))
+    Ok(Json(CatalogMetadata { artists, trailers }))
 }
 
 // ---------- TMDB ----------
@@ -537,10 +581,15 @@ const TMDB_CREW_JOBS: &[&str] = &[
     "Director of Photography",
 ];
 
-async fn tmdb_credits(
+/// Fetch credits + videos for a TMDB movie or TV show in a single
+/// upstream HTTP request via `append_to_response=credits,videos`. The
+/// detail endpoint (`/movie/{id}` or `/tv/{id}`) carries both blocks in
+/// one response, so callers don't pay two round-trips when the
+/// `/metadata` endpoint is hit.
+async fn tmdb_metadata(
     is_tv: bool,
     id: &str,
-) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<(Vec<CatalogArtist>, Vec<CatalogTrailer>), (StatusCode, Json<serde_json::Value>)> {
     let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
         return Err(err(
@@ -550,7 +599,7 @@ async fn tmdb_credits(
     }
     let kind = if is_tv { "tv" } else { "movie" };
     let url = format!(
-        "{}/{}/{}/credits?api_key={}",
+        "{}/{}/{}?api_key={}&append_to_response=credits,videos",
         TMDB_BASE,
         kind,
         urlencoding(id),
@@ -558,8 +607,16 @@ async fn tmdb_credits(
     );
     let payload: serde_json::Value = http_get_json(&url, &[("Accept", "application/json")]).await?;
 
+    let credits = payload.get("credits").cloned().unwrap_or(serde_json::Value::Null);
+    let artists = parse_tmdb_credits(&credits);
+    let videos = payload.get("videos").cloned().unwrap_or(serde_json::Value::Null);
+    let trailers = parse_tmdb_videos(&videos);
+    Ok((artists, trailers))
+}
+
+fn parse_tmdb_credits(credits: &serde_json::Value) -> Vec<CatalogArtist> {
     let mut out: Vec<CatalogArtist> = Vec::new();
-    if let Some(cast) = payload.get("cast").and_then(|v| v.as_array()) {
+    if let Some(cast) = credits.get("cast").and_then(|v| v.as_array()) {
         for member in cast.iter().take(TMDB_TOP_CAST) {
             let Some(name) = member.get("name").and_then(|v| v.as_str()) else {
                 continue;
@@ -585,7 +642,7 @@ async fn tmdb_credits(
             });
         }
     }
-    if let Some(crew) = payload.get("crew").and_then(|v| v.as_array()) {
+    if let Some(crew) = credits.get("crew").and_then(|v| v.as_array()) {
         // Dedup by (person_id, job): TMDB sometimes lists the same person
         // multiple times if they had several roles in the same job category.
         let mut seen: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
@@ -618,8 +675,110 @@ async fn tmdb_credits(
             });
         }
     }
-    let _ = is_tv;
-    Ok(out)
+    out
+}
+
+/// Map TMDB's `videos` block into our universal trailer shape. We keep
+/// only YouTube videos whose `type` is `Trailer` (the official trailer
+/// is what the firkin's `trailers` array is for; teasers, clips, and
+/// behind-the-scenes are filtered out). When the upstream entry is
+/// flagged `official`, it sorts ahead of fan/redistributed cuts.
+fn parse_tmdb_videos(videos: &serde_json::Value) -> Vec<CatalogTrailer> {
+    let Some(arr) = videos.get("results").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    let mut scored: Vec<(i32, CatalogTrailer)> = Vec::new();
+    for v in arr {
+        let site = v.get("site").and_then(|s| s.as_str()).unwrap_or("");
+        if !site.eq_ignore_ascii_case("YouTube") {
+            continue;
+        }
+        let kind = v.get("type").and_then(|s| s.as_str()).unwrap_or("");
+        if !kind.eq_ignore_ascii_case("Trailer") {
+            continue;
+        }
+        let Some(key) = v
+            .get("key")
+            .and_then(|s| s.as_str())
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        let name = v
+            .get("name")
+            .and_then(|s| s.as_str())
+            .map(|s| s.to_string());
+        let official = v
+            .get("official")
+            .and_then(|s| s.as_bool())
+            .unwrap_or(false);
+        // Higher score = better match. Official trailers always beat
+        // unofficial ones; ties broken by the order TMDB returned them.
+        let score = if official { 10 } else { 0 } - (scored.len() as i32);
+        scored.push((
+            score,
+            CatalogTrailer {
+                youtube_url: format!("https://www.youtube.com/watch?v={key}"),
+                label: name,
+            },
+        ));
+    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0));
+    scored.into_iter().map(|(_, t)| t).collect()
+}
+
+async fn tmdb_tv_seasons(
+    State(_state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<CatalogSeason>>, (StatusCode, Json<serde_json::Value>)> {
+    if id.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "id is required"));
+    }
+    let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "TMDB_API_KEY env var is not set on the cloud server",
+        ));
+    }
+    let url = format!(
+        "{}/tv/{}?api_key={}",
+        TMDB_BASE,
+        urlencoding(id.trim()),
+        api_key
+    );
+    let payload: serde_json::Value = http_get_json(&url, &[("Accept", "application/json")]).await?;
+    let mut out: Vec<CatalogSeason> = Vec::new();
+    if let Some(arr) = payload.get("seasons").and_then(|v| v.as_array()) {
+        for s in arr {
+            let season_number = s.get("season_number").and_then(|v| v.as_i64()).unwrap_or(0);
+            // TMDB exposes a virtual "season 0" for specials; skip it so we
+            // don't fan out a search query for behind-the-scenes/specials
+            // when the user really wants per-season trailers.
+            if season_number <= 0 {
+                continue;
+            }
+            let name = s
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("Season {season_number}"));
+            let air_year = s
+                .get("air_date")
+                .and_then(|v| v.as_str())
+                .and_then(|d| d.get(0..4))
+                .and_then(|y| y.parse::<i32>().ok());
+            let episode_count = s.get("episode_count").and_then(|v| v.as_i64());
+            out.push(CatalogSeason {
+                season_number,
+                name,
+                air_year,
+                episode_count,
+            });
+        }
+    }
+    out.sort_by_key(|s| s.season_number);
+    Ok(Json(out))
 }
 
 // ---------- MusicBrainz ----------
