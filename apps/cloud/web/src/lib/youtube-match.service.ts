@@ -248,12 +248,33 @@ export async function playYouTubeAudio(
 	await playerService.playUrl(file, format.url, format.mimeType, 'sidebar');
 }
 
+/**
+ * Fetch the browser-safe stream URLs for a YouTube video and pick the best
+ * playable format (same picker the play helpers use). Returns `null` if the
+ * call fails or no playable format is exposed.
+ */
+export async function resolveYouTubeStreamUrl(
+	youtubeUrl: string
+): Promise<{ url: string; mimeType: string | null } | null> {
+	try {
+		const res = await fetch(
+			`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`
+		);
+		if (!res.ok) return null;
+		const result = (await res.json()) as YouTubeStreamUrlResult;
+		const format = pickAudioFormat(result);
+		if (!format) return null;
+		return { url: format.url, mimeType: format.mimeType ?? null };
+	} catch {
+		return null;
+	}
+}
+
 export async function playYouTubeVideo(
 	youtubeUrl: string,
 	title: string,
 	thumbnailUrl: string | null = null,
-	durationSeconds: number | null = null,
-	options: { autoplay?: boolean } = {}
+	durationSeconds: number | null = null
 ): Promise<void> {
 	const res = await fetch(
 		`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`
@@ -283,7 +304,5 @@ export async function playYouTubeVideo(
 		size: format.contentLength ?? 0,
 		completedAt: ''
 	};
-	await playerService.playUrl(file, format.url, format.mimeType, 'sidebar', null, {
-		autoplay: options.autoplay !== false
-	});
+	await playerService.playUrl(file, format.url, format.mimeType, 'sidebar');
 }

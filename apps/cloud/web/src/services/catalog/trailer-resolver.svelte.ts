@@ -9,13 +9,6 @@ import type { ResolutionStatus, TrailerEntry } from '$services/catalog/types';
 
 export interface TrailerResolverOptions {
 	persist?: (resolved: Trailer[]) => Promise<void>;
-	/**
-	 * When set, the resolver auto-plays the first playable trailer through
-	 * the right-side player once per resolution run. The callback supplies
-	 * the playback context (firkin title + thumb); returning `null` skips
-	 * auto-play for this run.
-	 */
-	autoPlay?: () => { firkinTitle: string; thumb: string | null } | null;
 }
 
 interface MovieArgs {
@@ -41,16 +34,10 @@ export class TrailerResolver {
 	playError = $state<string | null>(null);
 
 	private run = 0;
-	private autoPlayedRun = -1;
 	private readonly persist?: (resolved: Trailer[]) => Promise<void>;
-	private readonly autoPlayContext?: () => {
-		firkinTitle: string;
-		thumb: string | null;
-	} | null;
 
 	constructor(options: TrailerResolverOptions = {}) {
 		this.persist = options.persist;
-		this.autoPlayContext = options.autoPlay;
 	}
 
 	cancel(): void {
@@ -78,7 +65,6 @@ export class TrailerResolver {
 				}
 			];
 			this.status = 'done';
-			this.maybeAutoPlay(myRun);
 			return;
 		}
 
@@ -101,7 +87,6 @@ export class TrailerResolver {
 					];
 					this.status = 'done';
 					await this.maybePersist([first]);
-					this.maybeAutoPlay(myRun);
 					return;
 				}
 			} catch (err) {
@@ -127,10 +112,7 @@ export class TrailerResolver {
 				t.key === 'movie' ? { ...t, youtubeUrl: url, status: url ? 'found' : 'missing' } : t
 			);
 			this.status = 'done';
-			if (url) {
-				await this.maybePersist([{ youtubeUrl: url }]);
-				this.maybeAutoPlay(myRun);
-			}
+			if (url) await this.maybePersist([{ youtubeUrl: url }]);
 		} catch (err) {
 			if (myRun !== this.run) return;
 			this.trailers = this.trailers.map((t) => (t.key === 'movie' ? { ...t, status: 'error' } : t));
@@ -157,7 +139,6 @@ export class TrailerResolver {
 				status: 'idle' as const
 			}));
 			this.status = 'done';
-			this.maybeAutoPlay(myRun);
 			return;
 		}
 
@@ -206,7 +187,6 @@ export class TrailerResolver {
 		}));
 		this.trailers = [...tmdbEntries, ...seasonEntries];
 		this.status = 'done';
-		this.maybeAutoPlay(myRun);
 
 		const resolved: Trailer[] = tmdbShowTrailers
 			.filter((t): t is Trailer & { youtubeUrl: string } => Boolean(t.youtubeUrl))
@@ -232,7 +212,6 @@ export class TrailerResolver {
 				if (url && entry.label) {
 					resolved.push({ youtubeUrl: url, label: entry.label });
 				}
-				this.maybeAutoPlay(myRun);
 			} catch {
 				if (myRun !== this.run) return;
 				this.trailers = this.trailers.map((t, idx) => (idx === i ? { ...t, status: 'error' } : t));
@@ -254,7 +233,7 @@ export class TrailerResolver {
 
 	async play(
 		entry: TrailerEntry,
-		opts: { firkinTitle: string; thumb: string | null; autoplay?: boolean }
+		opts: { firkinTitle: string; thumb: string | null }
 	): Promise<void> {
 		if (!entry.youtubeUrl || this.playingKey !== null) return;
 		this.playingKey = entry.key;
@@ -263,9 +242,7 @@ export class TrailerResolver {
 			const playTitle = entry.label
 				? `${opts.firkinTitle} — ${entry.label} trailer`
 				: `${opts.firkinTitle} trailer`;
-			await playYouTubeVideo(entry.youtubeUrl, playTitle, opts.thumb, null, {
-				autoplay: opts.autoplay !== false
-			});
+			await playYouTubeVideo(entry.youtubeUrl, playTitle, opts.thumb, null);
 		} catch (err) {
 			this.playError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -280,22 +257,6 @@ export class TrailerResolver {
 		} catch (err) {
 			console.warn('[trailer-resolver] persist failed', err);
 		}
-	}
-
-	private maybeAutoPlay(myRun: number): void {
-		if (!this.autoPlayContext) return;
-		if (myRun !== this.run) return;
-		if (this.autoPlayedRun === myRun) return;
-		if (this.playingKey !== null) return;
-		const first = this.trailers.find((t) => Boolean(t.youtubeUrl));
-		if (!first) return;
-		const ctx = this.autoPlayContext();
-		if (!ctx) return;
-		this.autoPlayedRun = myRun;
-		// Load the trailer into the right-side player but defer the actual
-		// playback — `PlayerVideo` renders a big centered play overlay
-		// while `awaitingPlay` is set so the user can press play.
-		void this.play(first, { ...ctx, autoplay: false });
 	}
 }
 

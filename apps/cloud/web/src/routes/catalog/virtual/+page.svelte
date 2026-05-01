@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
 	import CatalogDescriptionCard from '$components/catalog/CatalogDescriptionCard.svelte';
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
+	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
@@ -20,7 +20,6 @@
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
 	import { TrackResolver } from '$services/catalog/track-resolver.svelte';
 	import { TorrentSearch, startTorrentDownload } from '$services/catalog/torrent-search.svelte';
-	import { playerService } from '$services/player.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
@@ -100,19 +99,13 @@
 		}
 	}
 
-	const trailerResolver = new TrailerResolver({
-		autoPlay: () => ({ firkinTitle: title, thumb: trailerThumb })
-	});
-
-	// Seed the right-side player with the trailer poster as soon as the
-	// page knows it, so the still image paints from page load rather than
-	// after the YouTube URL resolves. Cleared on unmount.
-	$effect(() => {
-		if (!isTmdbMovie && !isTmdbTv) return;
-		if (!trailerThumb) return;
-		playerService.setPosterOverride(trailerThumb);
-	});
-	onMount(() => () => playerService.setPosterOverride(null));
+	const trailerResolver = new TrailerResolver();
+	// First playable trailer URL — drives the inline `CatalogTrailerPlayer`
+	// above the description (replacing the second image). Stays null until
+	// the resolver finds a YouTube URL.
+	const firstTrailerUrl = $derived(
+		trailerResolver.trailers.find((t) => Boolean(t.youtubeUrl))?.youtubeUrl ?? null
+	);
 	let trailersInitForKey: string | null = null;
 
 	$effect(() => {
@@ -320,7 +313,13 @@
 		</aside>
 
 		<section class="flex flex-col gap-6">
-			{#if images[1]}
+			{#if isTmdbMovie || isTmdbTv}
+				<CatalogTrailerPlayer
+					posterUrl={trailerThumb}
+					youtubeUrl={firstTrailerUrl}
+					{title}
+				/>
+			{:else if images[1]}
 				<img
 					src={images[1].url}
 					alt={title}

@@ -114,10 +114,9 @@
 				positionSecs={$playerState.positionSecs}
 				durationSecs={$playerState.durationSecs}
 				buffering={$playerState.buffering}
-				poster={$playerState.currentFile?.thumbnailUrl ?? $playerState.posterOverride}
+				poster={$playerState.currentFile?.thumbnailUrl}
 				directStreamUrl={$playerState.directStreamUrl}
 				directStreamMimeType={$playerState.directStreamMimeType}
-				awaitingPlay={$playerState.awaitingPlay}
 			/>
 			<SubsLyricsFinder />
 		</aside>

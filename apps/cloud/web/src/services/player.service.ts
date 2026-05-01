@@ -32,9 +32,7 @@ const initialState: PlayerState = {
 	buffering: false,
 	directStreamUrl: null,
 	directStreamMimeType: null,
-	firkinId: null,
-	awaitingPlay: false,
-	posterOverride: null
+	firkinId: null
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -66,16 +64,13 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		streamUrl: string,
 		mimeType?: string | null,
 		displayMode?: PlayerDisplayMode,
-		firkinId?: string | null,
-		options?: { autoplay?: boolean }
+		firkinId?: string | null
 	): Promise<void> {
 		if (!browser) return;
 
 		await this.stop();
 		this.playGeneration++;
 		if (displayMode) this.displayMode.set(displayMode);
-
-		const autoplay = options?.autoplay !== false;
 
 		this.state.update((s) => ({
 			...s,
@@ -84,29 +79,16 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			error: null,
 			positionSecs: 0,
 			durationSecs: file.durationSeconds,
-			isPaused: !autoplay,
+			isPaused: false,
 			buffering: false,
 			directStreamUrl: streamUrl,
 			directStreamMimeType: mimeType ?? null,
-			firkinId: firkinId ?? null,
-			awaitingPlay: !autoplay
+			firkinId: firkinId ?? null
 		}));
 	}
 
 	setBuffering(buffering: boolean): void {
 		this.state.update((s) => ({ ...s, buffering }));
-	}
-
-	/**
-	 * Pre-seed a poster on the player area before any stream is loaded.
-	 * Used by catalog detail pages so the trailer's still image paints
-	 * from page load, not after the YouTube URL resolves. Pass `null` to
-	 * clear (typically on page unmount). The override is ignored when an
-	 * actual stream is already playing — `currentFile?.thumbnailUrl`
-	 * takes precedence in the layout.
-	 */
-	setPosterOverride(posterOverride: string | null): void {
-		this.state.update((s) => ({ ...s, posterOverride }));
 	}
 
 	// ===== Seeking — direct URL playback drives the element directly via PlayerVideo =====
@@ -173,8 +155,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			buffering: false,
 			directStreamUrl: null,
 			directStreamMimeType: null,
-			firkinId: null,
-			awaitingPlay: false
+			firkinId: null
 		}));
 		this.displayMode.set('fullscreen');
 	}

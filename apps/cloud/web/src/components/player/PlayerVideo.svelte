@@ -25,7 +25,6 @@
 		subtitleSearchContext = null,
 		directStreamUrl = null,
 		directStreamMimeType = null,
-		awaitingPlay = false,
 		onprev,
 		onnext
 	}: {
@@ -39,7 +38,6 @@
 		subtitleSearchContext?: SubtitleSearchContext | null;
 		directStreamUrl?: string | null;
 		directStreamMimeType?: string | null;
-		awaitingPlay?: boolean;
 		onprev?: () => void;
 		onnext?: () => void;
 	} = $props();
@@ -59,13 +57,6 @@
 	let mediaError = $state<string | null>(null);
 	let hlsInstance: Hls | null = null;
 	let attachedDirectUrl: string | null = null;
-	// Tracks whether the poster overlay has been hidden for the current
-	// stream. Reset whenever the source URL changes so each new trailer /
-	// track gets its own poster pass; flipped to true once playback
-	// actually begins (or the user dismisses the deferred-play overlay).
-	let posterDismissed = $state(false);
-	let posterTrackingUrl: string | null = null;
-
 	function isHlsUrl(url: string, mime: string | null): boolean {
 		if (mime && /mpegurl/i.test(mime)) return true;
 		const path = url.split('?')[0];
@@ -207,22 +198,13 @@
 				playerService.state.update((s) => ({ ...s, error: mediaError }));
 			});
 
-		// Read `awaitingPlay` outside the reactive graph: when the user
-		// presses the deferred-play overlay and clears the flag, we don't
-		// want this effect to re-fire (it would short-circuit on the
-		// `attachedDirectUrl === url` check anyway, but reading reactively
-		// would still re-run the body once).
-		const deferred = untrack(() => awaitingPlay);
-
 		if (isHlsUrl(url, mime)) {
 			if (Hls.isSupported()) {
 				element.removeAttribute('src');
 				const instance = new Hls({ enableWorker: true, lowLatencyMode: true });
 				instance.loadSource(url);
 				instance.attachMedia(element);
-				instance.on(Hls.Events.MANIFEST_PARSED, () => {
-					if (!deferred) playElement();
-				});
+				instance.on(Hls.Events.MANIFEST_PARSED, () => playElement());
 				instance.on(Hls.Events.ERROR, (_event, data) => {
 					if (data.fatal) {
 						console.error('[PlayerVideo] hls fatal error', data);
@@ -235,7 +217,7 @@
 			} else if (element.canPlayType('application/vnd.apple.mpegurl')) {
 				element.src = url;
 				element.load();
-				if (!deferred) playElement();
+				playElement();
 			} else {
 				mediaError = 'HLS playback is not supported in this browser';
 				playerService.state.update((s) => ({ ...s, error: mediaError }));
@@ -243,7 +225,7 @@
 		} else {
 			element.src = url;
 			element.load();
-			if (!deferred) playElement();
+			playElement();
 		}
 	});
 
@@ -300,7 +282,6 @@
 			playerService.setBuffering(true);
 		};
 		const onPlaying = () => {
-			posterDismissed = true;
 			playerService.setBuffering(false);
 			playerService.setPaused(false);
 		};
@@ -341,8 +322,6 @@
 		if (connectionState === 'idle') {
 			isFullscreen = false;
 			mediaError = null;
-			posterTrackingUrl = null;
-			posterDismissed = false;
 			if (videoElement) {
 				videoElement.srcObject = null;
 				videoElement.removeAttribute('src');
@@ -350,24 +329,6 @@
 			}
 		}
 	});
-
-	// Reset the poster overlay each time the poster URL changes so a new
-	// trailer / track gets its own pre-play poster pass. Once the element
-	// fires `playing` (or the user dismisses the deferred-play overlay),
-	// `posterDismissed` flips to true and the overlay fades out. Tracked
-	// against the poster URL (not the stream URL) so the overlay shows
-	// from page load — before any trailer URL has resolved.
-	$effect(() => {
-		if (poster && poster !== posterTrackingUrl) {
-			posterTrackingUrl = poster;
-			posterDismissed = false;
-		}
-	});
-
-	const showPoster = $derived(!!poster && !posterDismissed);
-	// True when we have a poster to paint but no stream URL yet — used to
-	// give the player container a 16:9 box so the overlay has dimensions.
-	const showPosterOnlyBox = $derived(isVideo && !!poster && !directStreamUrl);
 
 	// Sync the player's subtitle search context with the service.
 	$effect(() => {
@@ -488,17 +449,6 @@
 		}
 	}
 
-	function handleStartDeferredPlay(): void {
-		if (!videoElement) return;
-		posterDismissed = true;
-		playerService.state.update((s) => ({ ...s, awaitingPlay: false }));
-		videoElement.play().catch((err: Error) => {
-			console.error('[PlayerVideo] deferred play() rejected', err);
-			mediaError = `Playback failed: ${err.message}`;
-			playerService.state.update((s) => ({ ...s, error: mediaError }));
-		});
-	}
-
 	function handleSelectSubtitle(e: Event): void {
 		const value = (e.currentTarget as HTMLSelectElement).value;
 		activeSubUrl = value === '' ? null : value;
@@ -539,39 +489,19 @@
 		'flex h-full flex-col': !isFullscreen && fullscreen
 	})}
 >
-	<div
-		class={classNames(
-			effectiveFullscreen ? 'relative min-h-0 flex-1' : 'relative w-full',
-			// Force a 16:9 box on the player container while we're showing a
-			// poster but no stream is loaded yet — without it the empty
-			// `<video>` element collapses to its tiny default size and the
-			// absolutely-positioned poster overlay has nothing to fill.
-			{ 'aspect-video': !effectiveFullscreen && showPosterOnlyBox }
-		)}
-	>
+	<div class={effectiveFullscreen ? 'relative min-h-0 flex-1' : 'relative'}>
 		<video
 			bind:this={videoElement}
 			class={classNames(
 				effectiveFullscreen
 					? 'h-full w-full cursor-pointer bg-black object-contain'
 					: 'w-full cursor-pointer rounded-lg bg-black',
-				{ 'h-20': !isVideo && !effectiveFullscreen, 'h-full': showPosterOnlyBox }
+				{ 'h-20': !isVideo && !effectiveFullscreen }
 			)}
 			playsinline
 			poster={poster ?? undefined}
 			onclick={handleVideoClick}
 		></video>
-
-		{#if poster && isVideo}
-			<div
-				class={classNames(
-					'pointer-events-none absolute inset-0 z-10 rounded-lg bg-cover bg-center transition-opacity duration-500',
-					showPoster ? 'opacity-100' : 'opacity-0'
-				)}
-				style:background-image={`url(${poster})`}
-				aria-hidden="true"
-			></div>
-		{/if}
 
 		{#if !isVideo}
 			<div
@@ -652,29 +582,6 @@
 			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
 				<span class="loading loading-lg loading-spinner text-primary"></span>
 			</div>
-		{/if}
-
-		{#if awaitingPlay && directStreamUrl && !mediaError}
-			<button
-				type="button"
-				class="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-black/40 transition-colors hover:bg-black/55"
-				aria-label="Play"
-				onclick={handleStartDeferredPlay}
-			>
-				<span
-					class="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform hover:scale-110"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="currentColor"
-						class="h-10 w-10 translate-x-0.5"
-						aria-hidden="true"
-					>
-						<polygon points="6 4 20 12 6 20 6 4" />
-					</svg>
-				</span>
-			</button>
 		{/if}
 
 		{#if mediaError}

@@ -7,6 +7,7 @@
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
 	import CatalogDescriptionCard from '$components/catalog/CatalogDescriptionCard.svelte';
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
+	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
@@ -532,19 +533,15 @@
 	}
 
 	const trailerResolver = new TrailerResolver({
-		persist: (resolved) => persistFirkinPatch({ trailers: resolved }),
-		autoPlay: () => ({ firkinTitle: firkin.title, thumb: trailerThumb })
+		persist: (resolved) => persistFirkinPatch({ trailers: resolved })
 	});
-
-	// Seed the right-side player with the trailer poster as soon as the
-	// page knows it, so the still image paints from page load rather than
-	// after the YouTube URL resolves. Cleared on unmount.
-	$effect(() => {
-		if (!isTmdbMovie && !isTmdbTv) return;
-		if (!trailerThumb) return;
-		playerService.setPosterOverride(trailerThumb);
-	});
-	onMount(() => () => playerService.setPosterOverride(null));
+	// First playable trailer URL — drives the inline `CatalogTrailerPlayer`
+	// above the description (replacing the second image). Stays null until
+	// the resolver finds a YouTube URL; the player keeps showing the poster
+	// in the meantime so the area never appears blank.
+	const firstTrailerUrl = $derived(
+		trailerResolver.trailers.find((t) => Boolean(t.youtubeUrl))?.youtubeUrl ?? null
+	);
 	let trailersInitForFirkinId: string | null = null;
 
 	$effect(() => {
@@ -875,7 +872,13 @@
 		</aside>
 
 		<section class="flex flex-col gap-6">
-			{#if firkin.images[1]}
+			{#if isTmdbMovie || isTmdbTv}
+				<CatalogTrailerPlayer
+					posterUrl={trailerThumb}
+					youtubeUrl={firstTrailerUrl}
+					title={firkin.title}
+				/>
+			{:else if firkin.images[1]}
 				<img
 					src={firkin.images[1].url}
 					alt={firkin.title}

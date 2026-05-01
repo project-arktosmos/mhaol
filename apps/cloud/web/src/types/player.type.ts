@@ -63,17 +63,6 @@ export interface PlayerState {
 	// consumption tracker — heartbeats only accumulate while this is set
 	// (set by playUrl callers that have a firkin context).
 	firkinId: string | null;
-	// True when a source has been loaded into the player but the caller
-	// asked us NOT to start playback automatically (e.g. trailer auto-load).
-	// PlayerVideo renders a big centered play overlay in this state; the
-	// flag clears as soon as the user clicks it (or playback otherwise
-	// begins via `playing` event).
-	awaitingPlay: boolean;
-	// Poster URL the player should paint immediately, before any stream is
-	// loaded. Pages set this on mount when they know a trailer is about to
-	// be resolved so the right-side player has something visible from page
-	// load. Falls back to `currentFile?.thumbnailUrl` once playback begins.
-	posterOverride: string | null;
 }
 
 // ===== Player Settings (localStorage) =====
