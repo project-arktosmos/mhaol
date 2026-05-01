@@ -2,7 +2,6 @@
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
 	import CatalogDescriptionCard from '$components/catalog/CatalogDescriptionCard.svelte';
-	import CatalogImagesCard from '$components/catalog/CatalogImagesCard.svelte';
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
@@ -309,8 +308,6 @@
 					catalog properly.
 				</p>
 			</div>
-
-			<CatalogImagesCard {images} />
 
 			{#if isTmdbMovie || isTmdbTv}
 				<CatalogTrailersCard resolver={trailerResolver} firkinTitle={title} {thumb} />

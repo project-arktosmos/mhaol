@@ -6,7 +6,6 @@
 	} from '$components/firkins/FirkinMetadataLookupModal.svelte';
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
 	import CatalogDescriptionCard from '$components/catalog/CatalogDescriptionCard.svelte';
-	import CatalogImagesCard from '$components/catalog/CatalogImagesCard.svelte';
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
@@ -854,8 +853,6 @@
 			/>
 
 			<CatalogVersionHistoryCard versionHashes={firkin.version_hashes ?? []} />
-
-			<CatalogImagesCard images={firkin.images} />
 
 			{#if isTmdbMovie || isTmdbTv}
 				<CatalogTrailersCard resolver={trailerResolver} firkinTitle={firkin.title} {thumb} />
