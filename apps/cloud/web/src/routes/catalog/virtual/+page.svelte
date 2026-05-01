@@ -1,5 +1,4 @@
 <script lang="ts">
-	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
 	import CatalogDescriptionCard from '$components/catalog/CatalogDescriptionCard.svelte';
@@ -8,7 +7,6 @@
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
-	import type { CloudFirkin } from '$types/firkin.type';
 	import {
 		firkinsService,
 		addonKind,
@@ -22,7 +20,6 @@
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
 	import { TrackResolver } from '$services/catalog/track-resolver.svelte';
 	import { TorrentSearch, startTorrentDownload } from '$services/catalog/torrent-search.svelte';
-	import { userIdentityService } from '$lib/user-identity.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
@@ -98,23 +95,6 @@
 			artistsStatus = 'error';
 		}
 	}
-
-	const userIdentityState = userIdentityService.state;
-	const virtualFirkin = $derived<CloudFirkin>({
-		id: `virtual:${addon}:${itemId}`,
-		title,
-		artists,
-		description,
-		images,
-		files: [],
-		year,
-		addon,
-		creator: $userIdentityState.identity?.address ?? '',
-		created_at: '',
-		updated_at: '',
-		version: 0,
-		version_hashes: []
-	});
 
 	const trailerResolver = new TrailerResolver();
 	let trailersInitForKey: string | null = null;
@@ -304,7 +284,9 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
 		<aside class="flex flex-col gap-4">
-			<FirkinCard firkin={virtualFirkin} />
+			{#each images as image, i (image.url || i)}
+				<img src={image.url} alt={title} loading="lazy" class="w-full rounded-md object-cover" />
+			{/each}
 		</aside>
 
 		<section class="flex flex-col gap-6">

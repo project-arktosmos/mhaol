@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
@@ -825,7 +824,14 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
 		<aside class="flex flex-col gap-4">
-			<FirkinCard firkin={firkin as CloudFirkin} />
+			{#each firkin.images as image, i (image.url || i)}
+				<img
+					src={image.url}
+					alt={firkin.title}
+					loading="lazy"
+					class="w-full rounded-md object-cover"
+				/>
+			{/each}
 		</aside>
 
 		<section class="flex flex-col gap-6">
