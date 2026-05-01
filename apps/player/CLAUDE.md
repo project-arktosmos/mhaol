@@ -23,6 +23,8 @@ apps/player/
 ├── tsconfig.json
 ├── eslint.config.js
 ├── .prettierrc / .prettierignore
+├── scripts/
+│   └── run-vite.mjs          # Dev/build wrapper: reads swarm.key + bootstrap.multiaddr from disk and injects them as VITE_* env vars before spawning Vite
 └── src/
     ├── app.html
     ├── app.d.ts
@@ -33,14 +35,16 @@ apps/player/
     │   ├── +layout.ts        # ssr=false, prerender=false
     │   ├── +page.ts          # Redirects "/" to "/player"
     │   └── player/
-    │       ├── +page.svelte  # CID input → fetch firkin → render shared cloud-ui catalog cards → play media
+    │       ├── +page.svelte  # Auto-connects on mount → CID input → fetch firkin → render shared cloud-ui catalog cards → play media
     │       └── +page.ts      # static-only flags
     ├── components/
-    │   ├── IpfsConfigPanel.svelte    # Modal for editing bootstrap multiaddrs + swarm key
     │   └── FirkinIpfsPlayer.svelte   # Per-firkin file picker + IPFS-fetched <video>/<audio>
-    └── ipfs/
-        ├── client.ts                  # createPlayerIpfsClient: Helia + libp2p (WebSockets + WebTransport + pnet + noise + yamux)
-        └── config.svelte.ts           # localStorage-backed runes store for bootstrap addrs + swarm key
+    ├── ipfs/
+    │   ├── client.ts                  # createPlayerIpfsClient: Helia + libp2p (WebSockets + WebTransport + pnet + noise + yamux)
+    │   ├── config.ts                  # Reads playerIpfsConfig from import.meta.env.VITE_RENDEZVOUS_BOOTSTRAP / VITE_SWARM_KEY
+    │   └── stream-player.ts           # MSE-fed streaming pipeline (mp4 via mp4box, webm direct, blob fallback)
+    └── types/
+        └── mp4box.d.ts                # Local type surface for the untyped `mp4box` package
 ```
 
 Shared UI is imported from the workspace package `cloud-ui`:
@@ -66,10 +70,16 @@ The cloud WebUI's local catalog components are now thin wrappers around these sa
 
 The browser cannot speak raw TCP, so the player can only dial **WebSocket** / **WebTransport** multiaddrs. The rendezvous app exposes a `/ws` listener on `RENDEZVOUS_WS_LISTEN_PORT` (default `14002`); the transport stack on top is still `pnet → noise → yamux`, so browser peers must carry the same swarm key.
 
-- `apps/rendezvous` writes its full bootstrap multiaddrs (including the `/ws` ones) to `<DATA_DIR>/rendezvous/bootstrap.multiaddr`. Pick any line ending in `/ws/p2p/<peer_id>` for the player config.
-- The swarm-key value is the literal contents of `<DATA_DIR>/swarm.key` (start with `/key/swarm/psk/1.0.0/`).
+There is **no manual configuration UI** in the player. `scripts/run-vite.mjs` reads two files at startup and bakes their contents into the bundle as `VITE_*` env vars:
 
-Both values are stored in `localStorage` under `mhaol-player:ipfs-config` and edited via the **IPFS settings** modal on the `/player` page.
+| Source | Resolution order | What it becomes |
+|---|---|---|
+| Swarm key | `IPFS_SWARM_KEY_FILE` → `${DATA_DIR}/swarm.key` → `~/mhaol/swarm.key` → `~/mhaol-cloud/swarm.key` | `VITE_SWARM_KEY` |
+| Bootstrap | `RENDEZVOUS_BOOTSTRAP` (env, newline/comma-separated) → `RENDEZVOUS_BOOTSTRAP_FILE` → `${DATA_DIR}/rendezvous/bootstrap.multiaddr` → `~/mhaol/rendezvous/bootstrap.multiaddr` | `VITE_RENDEZVOUS_BOOTSTRAP` (filtered to `/ws` / `/wss` / `/webtransport` only) |
+
+`src/ipfs/config.ts` reads those at module load and exposes `playerIpfsConfig`, `playerIpfsConfigured`, and `playerIpfsDiagnostic`. The `/player` page calls `getPlayerIpfsClient(playerIpfsConfig)` on mount when configured, and otherwise renders an inline error explaining what's missing.
+
+If you change either file (e.g. restart the rendezvous so it writes a new peer id) you have to **restart `pnpm dev:player`** — the values are baked in at Vite startup, not re-read on hot reload.
 
 ## Playback model
 
