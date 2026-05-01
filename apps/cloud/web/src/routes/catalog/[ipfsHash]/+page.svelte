@@ -832,6 +832,15 @@
 					class="w-full rounded-md object-cover"
 				/>
 			{/each}
+
+			<FirkinArtistsSection
+				artists={firkin.artists}
+				loading={artistsBackfillStatus === 'loading'}
+				error={artistsBackfillStatus === 'error' ? artistsBackfillError : null}
+				emptyLabel="No people or groups attached. Re-bookmark from the catalog to enrich."
+				artistHref={(id) => `${base}/artist/${encodeURIComponent(id)}`}
+				singleColumn
+			/>
 		</aside>
 
 		<section class="flex flex-col gap-6">
@@ -845,14 +854,6 @@
 			/>
 
 			<CatalogVersionHistoryCard versionHashes={firkin.version_hashes ?? []} />
-
-			<FirkinArtistsSection
-				artists={firkin.artists}
-				loading={artistsBackfillStatus === 'loading'}
-				error={artistsBackfillStatus === 'error' ? artistsBackfillError : null}
-				emptyLabel="No people or groups attached. Re-bookmark from the catalog to enrich."
-				artistHref={(id) => `${base}/artist/${encodeURIComponent(id)}`}
-			/>
 
 			<CatalogImagesCard images={firkin.images} />
 

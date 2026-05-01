@@ -287,10 +287,6 @@
 			{#each images as image, i (image.url || i)}
 				<img src={image.url} alt={title} loading="lazy" class="w-full rounded-md object-cover" />
 			{/each}
-		</aside>
-
-		<section class="flex flex-col gap-6">
-			<CatalogDescriptionCard {description} />
 
 			<FirkinArtistsSection
 				{artists}
@@ -298,7 +294,12 @@
 				error={artistsStatus === 'error' ? artistsError : null}
 				emptyLabel="No people or groups attached to this item upstream."
 				artistHref={(id) => `${base}/artist/${encodeURIComponent(id)}`}
+				singleColumn
 			/>
+		</aside>
+
+		<section class="flex flex-col gap-6">
+			<CatalogDescriptionCard {description} />
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>

@@ -16,6 +16,11 @@
 		 * `$app/paths` base — drives the URL.
 		 */
 		artistHref?: (artistId: string) => string;
+		/**
+		 * When true, render the artists as a single-column list instead of
+		 * the default responsive grid. Useful inside narrow asides.
+		 */
+		singleColumn?: boolean;
 	}
 
 	let {
@@ -24,7 +29,8 @@
 		error = null,
 		emptyLabel = 'No people or groups attached.',
 		title = 'Artists & credits',
-		artistHref
+		artistHref,
+		singleColumn = false
 	}: Props = $props();
 
 	function initials(name: string): string {
@@ -58,7 +64,7 @@
 	{:else if artists.length === 0}
 		<p class="text-sm text-base-content/60">{emptyLabel}</p>
 	{:else}
-		<ul class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+		<ul class={singleColumn ? 'flex flex-col gap-2' : 'grid grid-cols-1 gap-2 sm:grid-cols-2'}>
 			{#each artists as artist, i (artist.id ?? `${i}-${artist.name}`)}
 				{@const href = artistHref && artist.id ? artistHref(artist.id) : null}
 				{@const roles = rolesFor(artist)}
