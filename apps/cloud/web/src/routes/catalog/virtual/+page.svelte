@@ -46,6 +46,9 @@
 			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }))
 	);
 	const thumb = $derived(images[0]?.url ?? null);
+	// Trailers prefer the last image (typically the backdrop / wide art) so
+	// the right-side player surfaces a 16:9 still rather than the poster.
+	const trailerThumb = $derived(images[images.length - 1]?.url ?? thumb);
 
 	type ArtistsStatus = 'idle' | 'loading' | 'done' | 'error';
 	let artists = $state<Artist[]>([]);
@@ -96,7 +99,7 @@
 	}
 
 	const trailerResolver = new TrailerResolver({
-		autoPlay: () => ({ firkinTitle: title, thumb })
+		autoPlay: () => ({ firkinTitle: title, thumb: trailerThumb })
 	});
 	let trailersInitForKey: string | null = null;
 

@@ -59,6 +59,9 @@
 	const isTmdbMovie = $derived(firkin.addon === 'tmdb-movie');
 	const isTmdbTv = $derived(firkin.addon === 'tmdb-tv');
 	const thumb = $derived(firkin.images[0]?.url ?? null);
+	// Trailers prefer the last image (typically the backdrop / wide art) so
+	// the right-side player surfaces a 16:9 still rather than the poster.
+	const trailerThumb = $derived(firkin.images[firkin.images.length - 1]?.url ?? thumb);
 
 	const userIdentityState = userIdentityService.state;
 	let recommendationsIngestedFor: string | null = null;
@@ -530,7 +533,7 @@
 
 	const trailerResolver = new TrailerResolver({
 		persist: (resolved) => persistFirkinPatch({ trailers: resolved }),
-		autoPlay: () => ({ firkinTitle: firkin.title, thumb })
+		autoPlay: () => ({ firkinTitle: firkin.title, thumb: trailerThumb })
 	});
 	let trailersInitForFirkinId: string | null = null;
 
