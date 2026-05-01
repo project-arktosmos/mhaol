@@ -652,10 +652,8 @@ async fn tmdb_metadata(
 /// Fetch a single page of TMDB's recommendations for the given movie /
 /// TV show. The recommendations endpoint returns the same item shape as
 /// `/popular`, so we reuse `tmdb_to_item` to map it into our universal
-/// `CatalogItem`. The credits for each related item are then fetched in
-/// parallel via `JoinSet` and merged into `item.artists`, so the WebUI's
-/// related grid can render the same "artists & credits" column shown on
-/// the parent page.
+/// `CatalogItem`. Per-item credits are intentionally not fetched here —
+/// the related grid only renders title / year / poster.
 async fn tmdb_related(
     is_tv: bool,
     id: &str,
@@ -676,46 +674,11 @@ async fn tmdb_related(
         api_key
     );
     let payload: serde_json::Value = http_get_json(&url, &[("Accept", "application/json")]).await?;
-    let mut items: Vec<CatalogItem> = payload
+    let items: Vec<CatalogItem> = payload
         .get("results")
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().map(tmdb_to_item).collect())
         .unwrap_or_default();
-
-    // Fan-out per-item credits lookups. TMDB's recommendations payload
-    // doesn't carry credits, so we have to ask `/credits` per result.
-    // Doing it in parallel keeps the worst case bounded by one round
-    // trip; failures on a single item just leave its artists empty.
-    let mut set: tokio::task::JoinSet<(usize, Vec<CatalogArtist>)> = tokio::task::JoinSet::new();
-    for (idx, item) in items.iter().enumerate() {
-        let item_id = item.id.clone();
-        if item_id.is_empty() {
-            continue;
-        }
-        let api_key = api_key.clone();
-        let kind = kind.to_string();
-        set.spawn(async move {
-            let url = format!(
-                "{}/{}/{}/credits?api_key={}",
-                TMDB_BASE,
-                kind,
-                urlencoding(&item_id),
-                api_key
-            );
-            let artists = http_get_json(&url, &[("Accept", "application/json")])
-                .await
-                .map(|payload| parse_tmdb_credits(&payload))
-                .unwrap_or_default();
-            (idx, artists)
-        });
-    }
-    while let Some(joined) = set.join_next().await {
-        if let Ok((idx, artists)) = joined {
-            if let Some(slot) = items.get_mut(idx) {
-                slot.artists = artists;
-            }
-        }
-    }
     Ok(items)
 }
 
@@ -1170,45 +1133,16 @@ async fn musicbrainz_related(
         .map(|arr| {
             arr.iter()
                 .filter_map(|rg| {
-                    let mut item = musicbrainz_to_item(rg);
+                    let item = musicbrainz_to_item(rg);
                     if item.id == release_group_id {
                         return None;
                     }
-                    // The browse endpoint already returned `artist-credit`
-                    // on each release-group, so extracting the same shape
-                    // we use elsewhere is free here — no extra HTTP call.
-                    item.artists = parse_musicbrainz_artist_credits(rg);
                     Some(item)
                 })
                 .collect()
         })
         .unwrap_or_default();
     Ok(items)
-}
-
-fn parse_musicbrainz_artist_credits(rg: &serde_json::Value) -> Vec<CatalogArtist> {
-    let Some(credits) = rg.get("artist-credit").and_then(|v| v.as_array()) else {
-        return Vec::new();
-    };
-    let mut out: Vec<CatalogArtist> = Vec::new();
-    for credit in credits {
-        let artist = credit.get("artist").cloned().unwrap_or_default();
-        let name = credit
-            .get("name")
-            .and_then(|v| v.as_str())
-            .or_else(|| artist.get("name").and_then(|v| v.as_str()))
-            .unwrap_or("")
-            .to_string();
-        if name.is_empty() {
-            continue;
-        }
-        out.push(CatalogArtist {
-            name,
-            role: Some("Artist".to_string()),
-            image_url: None,
-        });
-    }
-    out
 }
 
 fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {

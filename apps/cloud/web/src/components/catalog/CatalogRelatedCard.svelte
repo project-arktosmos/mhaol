@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { loadRelated, type CatalogArtist, type CatalogItem } from '$lib/catalog.service';
+	import { loadRelated, type CatalogItem } from '$lib/catalog.service';
 
 	interface Props {
 		addon: string;
@@ -64,18 +64,6 @@
 		return `${base}/catalog/virtual?${params.toString()}`;
 	}
 
-	function initials(name: string): string {
-		return name
-			.split(/\s+/)
-			.filter((p) => p.length > 0)
-			.map((p) => p[0]!.toUpperCase())
-			.slice(0, 2)
-			.join('');
-	}
-
-	function topArtists(artists: CatalogArtist[] | undefined, max: number): CatalogArtist[] {
-		return (artists ?? []).slice(0, max);
-	}
 </script>
 
 {#if upstreamId}
@@ -97,7 +85,6 @@
 			{:else if items.length > 0}
 				<ul class="grid grid-cols-1 gap-2 lg:grid-cols-2 xl:grid-cols-3">
 					{#each items as item (item.id)}
-						{@const credits = topArtists(item.artists, 6)}
 						<li>
 							<a
 								href={virtualHref(item)}
@@ -128,40 +115,6 @@
 									<h3 class="truncate text-sm font-medium" title={item.title}>{item.title}</h3>
 									{#if item.year}
 										<span class="text-xs text-base-content/60">{item.year}</span>
-									{/if}
-
-									{#if credits.length > 0}
-										<ul class="mt-1 flex flex-col gap-1">
-											{#each credits as artist, i (`${i}-${artist.name}`)}
-												<li class="flex items-center gap-1.5">
-													{#if artist.imageUrl}
-														<img
-															src={artist.imageUrl}
-															alt={artist.name}
-															class="h-5 w-5 shrink-0 rounded-full object-cover"
-															loading="lazy"
-														/>
-													{:else}
-														<span
-															class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-base-300 text-[8px] font-semibold text-base-content/60"
-														>
-															{initials(artist.name)}
-														</span>
-													{/if}
-													<span class="truncate text-[11px]" title={artist.name}>
-														{artist.name}
-													</span>
-													{#if artist.role}
-														<span
-															class="ml-auto shrink-0 truncate text-[10px] text-base-content/50"
-															title={artist.role}
-														>
-															{artist.role}
-														</span>
-													{/if}
-												</li>
-											{/each}
-										</ul>
 									{/if}
 								</div>
 							</a>
