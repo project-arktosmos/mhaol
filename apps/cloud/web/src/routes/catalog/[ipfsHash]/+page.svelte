@@ -50,6 +50,10 @@
 	const hasIpfsFiles = $derived(firkin.files.some((f) => f.type === 'ipfs'));
 	const firstIpfsCid = $derived(firkin.files.find((f) => f.type === 'ipfs')?.value ?? null);
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
+	// "Real" files = anything playable on its own. URL-typed entries (TMDB
+	// source URL, MusicBrainz release-group URL, persisted YouTube track
+	// URLs) are pure metadata pointers and don't qualify.
+	const hasNoRealFiles = $derived(!hasIpfsFiles && !hasMagnetFiles);
 	const firkinKind = $derived(addonKind(firkin.addon));
 	const isMusicBrainz = $derived(firkin.addon === 'musicbrainz');
 	const isTmdbMovie = $derived(firkin.addon === 'tmdb-movie');
@@ -617,6 +621,19 @@
 		}
 	}
 
+	// When the firkin is just bookmarked metadata (no IPFS files, no
+	// magnets), kick the torrent search off automatically so the user can
+	// pick a source without having to click into a collapsed card. Mirrors
+	// the auto-search the virtual page already does. MusicBrainz is
+	// excluded because albums get the tracks card, not torrents.
+	$effect(() => {
+		if (isMusicBrainz) return;
+		if (!hasNoRealFiles) return;
+		if (torrentSearchInitForFirkinId === firkin.id) return;
+		torrentSearchInitForFirkinId = firkin.id;
+		void torrentSearch.search({ addon: firkin.addon, title: firkin.title, year: firkin.year });
+	});
+
 	$effect(() => {
 		if (!hasMagnetFiles || hasIpfsFiles) return;
 		const id = firkin.id;
@@ -882,6 +899,20 @@
 					collapsible
 					open={torrentSearchOpen}
 					onToggle={toggleTorrentSearch}
+					onRefresh={() =>
+						torrentSearch.search({
+							addon: firkin.addon,
+							title: firkin.title,
+							year: firkin.year
+						})}
+				/>
+			{:else if hasNoRealFiles && !isMusicBrainz}
+				<CatalogTorrentSearchCard
+					search={torrentSearch}
+					onAssign={assignTorrent}
+					{addingHash}
+					{assignError}
+					{existingHashes}
 					onRefresh={() =>
 						torrentSearch.search({
 							addon: firkin.addon,
