@@ -73,16 +73,20 @@ Both values are stored in `localStorage` under `mhaol-player:ipfs-config` and ed
 
 ## Playback model
 
-For each `ipfs`-typed `FirkinFile`:
+`apps/player/src/ipfs/stream-player.ts` drives an MSE-fed pipeline so playback starts as soon as the first segment is decodable, rather than waiting for the full file to download. Three modes, picked by file extension:
 
-1. The browser libp2p / Helia stack fetches the UnixFS root via the bootstrap peer (and any other private-swarm peers it discovers via Bitswap / Kademlia).
-2. Bytes are concatenated into a single `Uint8Array` and wrapped as a typed `Blob`.
-3. `URL.createObjectURL(blob)` becomes the `src` of a `<video>` or `<audio>` element.
+| Mode | Trigger | How it works |
+|---|---|---|
+| `mse-mp4` | `.mp4` / `.m4v` | Drives `mp4box.js` to re-mux the incoming UnixFS chunks into fragmented MP4 segments, which are appended to a `MediaSource` `SourceBuffer`. Required because most `.mp4` files (torrent rippers, yt-dlp, etc.) are *unfragmented*, and `appendBuffer` rejects them outright. The init segment is produced as soon as `mp4box` parses the moov box. |
+| `mse-webm` | `.webm` | Direct-feed: each Helia chunk goes straight into a `video/webm; codecs="vp9,opus"` (or `vp8,vorbis` fallback) `SourceBuffer`. |
+| `blob` | everything else (`.mkv`, `.mov`, `.avi`, audio, unknown) | Old buffered fallback: fetch all bytes, wrap in a `Blob`, hand a `URL.createObjectURL` to `<video>`/`<audio>`. Used for containers the browser can't play through MSE anyway. |
 
-Limitations of this approach (not yet addressed):
+`startStream({ client, cid, title, onProgress, signal })` returns a `StreamPlayerHandle` with the `src` URL, the chosen `mode`, a `done` promise, and a `cancel()` that aborts the in-flight UnixFS read, tears down the `MediaSource`, and revokes the URL. `FirkinIpfsPlayer.svelte` calls this on Play and surfaces the running byte counter + the chosen mode under the controls.
 
-- **No streaming MSE** — the entire file must finish downloading before playback starts. Suitable for short clips and audio, slow for long videos. Future work: feed Helia chunks into a `MediaSource` `SourceBuffer` for `mp4` / `webm`.
-- **Container compatibility** — the browser only plays containers/codecs it understands natively (mp4/H.264, webm/VP8/VP9, opus, etc.). `mkv`, `avi`, `mov`-with-uncommon-codecs are out of scope; the cloud's `ipfs-stream` HLS transmux pipeline is server-side and not invoked by the player.
+Limitations to be aware of:
+
+- **`mp4` files without `faststart`**: `mp4box` can't produce an init segment until it has parsed the `moov` box, and tools like ffmpeg place `moov` at the *end* of the file by default. Such files end up effectively buffered (mp4box won't fire `onReady` until everything has arrived). To make these stream, re-encode with `-movflags +faststart` on the source.
+- **`mkv` / `avi` / `mov`**: not supported by `MediaSource` in any browser, so streaming wouldn't change the outcome — `blob` mode is what those get. Real fix is a server-side transmux (the cloud already has `mhaol-ipfs-stream` for this; the player intentionally skips it because it would require talking to the cloud).
 
 ## Running
 
