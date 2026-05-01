@@ -3,6 +3,7 @@
 	import classNames from 'classnames';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { page as pageStore } from '$app/state';
 	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
@@ -24,7 +25,15 @@
 	let sources = $state<CatalogSource[]>([]);
 	let sourcesError = $state<string | null>(null);
 
-	let addon = $state<string>('');
+	// Selected addon flows from the URL `?addon=<id>` query param. When sources
+	// have loaded but the URL has no addon (or names an unknown one), fall back
+	// to the first available source so the page is never in a no-selection state.
+	const addon = $derived.by(() => {
+		const fromUrl = pageStore.url.searchParams.get('addon') ?? '';
+		if (sources.length === 0) return fromUrl;
+		if (fromUrl && sources.some((s) => s.id === fromUrl)) return fromUrl;
+		return sources[0]?.id ?? '';
+	});
 	let filter = $state<string>('');
 	let page = $state<number>(1);
 
@@ -204,18 +213,9 @@
 
 	async function selectAddon(source: CatalogSource) {
 		if (addon === source.id) return;
-		addon = source.id;
-		page = 1;
-		filter = '';
-		query = '';
-		searchToken++;
-		searchItems = [];
-		searchTotalPages = 1;
-		searchPage = 1;
-		searchError = null;
-		searchLoading = false;
-		await refreshGenres();
-		await refreshItems();
+		const url = new URL(pageStore.url);
+		url.searchParams.set('addon', source.id);
+		await goto(`${url.pathname}${url.search}`, { keepFocus: true, noScroll: true });
 	}
 
 	async function onFilterChange() {
@@ -272,11 +272,6 @@
 			try {
 				const fetched = await listSources();
 				sources = fetched.filter((s) => s.id !== 'youtube-video' && s.id !== 'youtube-channel');
-				if (sources.length > 0) {
-					addon = sources[0].id;
-					await refreshGenres();
-					await refreshItems();
-				}
 			} catch (err) {
 				sourcesError = err instanceof Error ? err.message : 'Unknown error';
 			}
@@ -284,6 +279,26 @@
 		return () => {
 			stopFirkins();
 		};
+	});
+
+	// Whenever the URL-driven `addon` changes (initial load, addon click, or
+	// browser back/forward), reset per-addon state and refetch genres + items.
+	$effect(() => {
+		const current = addon;
+		if (!current) return;
+		filter = '';
+		query = '';
+		searchToken++;
+		searchItems = [];
+		searchTotalPages = 1;
+		searchPage = 1;
+		searchError = null;
+		searchLoading = false;
+		page = 1;
+		void (async () => {
+			await refreshGenres();
+			await refreshItems();
+		})();
 	});
 </script>
 
