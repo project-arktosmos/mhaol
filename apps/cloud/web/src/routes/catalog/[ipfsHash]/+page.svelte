@@ -524,7 +524,8 @@
 	}
 
 	const trailerResolver = new TrailerResolver({
-		persist: (resolved) => persistFirkinPatch({ trailers: resolved })
+		persist: (resolved) => persistFirkinPatch({ trailers: resolved }),
+		autoPlay: () => ({ firkinTitle: firkin.title, thumb })
 	});
 	let trailersInitForFirkinId: string | null = null;
 

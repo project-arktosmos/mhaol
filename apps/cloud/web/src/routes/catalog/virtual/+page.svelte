@@ -95,7 +95,9 @@
 		}
 	}
 
-	const trailerResolver = new TrailerResolver();
+	const trailerResolver = new TrailerResolver({
+		autoPlay: () => ({ firkinTitle: title, thumb })
+	});
 	let trailersInitForKey: string | null = null;
 
 	$effect(() => {
