@@ -13,6 +13,7 @@ mod ipfs_stream;
 mod libraries;
 #[cfg(not(target_os = "android"))]
 mod library_scan;
+mod media_trackers;
 #[cfg(not(target_os = "android"))]
 mod metadata_enrich;
 mod p2p_stream;
@@ -286,6 +287,7 @@ async fn main() {
         .nest("/api/users", users::router())
         .nest("/api/libraries", libraries::router())
         .nest("/api/firkins", firkins::router())
+        .nest("/api/media-trackers", media_trackers::router())
         .nest("/api/artists", artists::router())
         .nest("/api/database", database::router())
         .nest("/api/ipfs", ipfs_pins::router())
