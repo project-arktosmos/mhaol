@@ -1,42 +1,36 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import classNames from 'classnames';
-	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
-	import FirkinArtistsSection from 'ui-lib/components/firkins/FirkinArtistsSection.svelte';
+	import FirkinCard from '$components/firkins/FirkinCard.svelte';
+	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
-	} from 'ui-lib/components/firkins/FirkinMetadataLookupModal.svelte';
-	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
-	import {
-		firkinTorrentsService,
-		infoHashFromMagnet
-	} from 'ui-lib/services/firkin-torrents.service';
-	import { playerService } from 'ui-lib/services/player.service';
-	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
-	import type { PlayableFile } from 'ui-lib/types/player.type';
-	import { cachedImageUrl } from '$lib/image-cache';
+	} from '$components/firkins/FirkinMetadataLookupModal.svelte';
+	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
+	import CatalogDescriptionCard from '$components/catalog/CatalogDescriptionCard.svelte';
+	import CatalogImagesCard from '$components/catalog/CatalogImagesCard.svelte';
+	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
+	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
+	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
+	import CatalogIdentityCard from '$components/catalog/CatalogIdentityCard.svelte';
+	import CatalogVersionHistoryCard from '$components/catalog/CatalogVersionHistoryCard.svelte';
+	import CatalogFilesTable from '$components/catalog/CatalogFilesTable.svelte';
+	import { firkinPlaybackService } from '$services/firkin-playback.service';
+	import { firkinTorrentsService, infoHashFromMagnet } from '$services/firkin-torrents.service';
+	import { playerService } from '$services/player.service';
+	import type { CloudFirkin } from '$types/firkin.type';
+	import type { PlayableFile } from '$types/player.type';
 	import {
 		firkinsService,
 		addonKind,
 		metadataSearchAddon,
 		type Firkin,
 		type FirkinAddon,
-		type FileEntry,
-		type Trailer
+		type FileEntry
 	} from '$lib/firkins.service';
-	import {
-		formatSizeBytes,
-		matchTorrentsForResult,
-		searchTorrents,
-		type TorrentResultItem
-	} from '$lib/search.service';
-	import {
-		playYouTubeAudio,
-		playYouTubeVideo,
-		resolveYouTubeTrailerForMovie,
-		resolveYouTubeTrailerForSeason,
-		resolveYouTubeUrlForTrack
-	} from '$lib/youtube-match.service';
+	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
+	import { TrackResolver } from '$services/catalog/track-resolver.svelte';
+	import { TorrentSearch, startTorrentDownload } from '$services/catalog/torrent-search.svelte';
+	import type { TorrentResultItem } from '$lib/search.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 
@@ -56,11 +50,8 @@
 	const isMusicBrainz = $derived(firkin.addon === 'musicbrainz');
 	const isTmdbMovie = $derived(firkin.addon === 'tmdb-movie');
 	const isTmdbTv = $derived(firkin.addon === 'tmdb-tv');
+	const thumb = $derived(firkin.images[0]?.url ?? null);
 
-	// "Needs metadata" mirrors the catalog grid: missing description OR no
-	// images. Year alone isn't enough — local-* scanners parse `(YYYY)` out
-	// of filenames so a freshly-scanned firkin can have a year but otherwise
-	// be empty.
 	const needsMetadata = $derived(firkin.description.trim() === '' || firkin.images.length === 0);
 	const lookupAddon = $derived(metadataSearchAddon(firkin.addon));
 	let metadataLookupOpen = $state(false);
@@ -74,9 +65,6 @@
 			backdropUrl: item.backdropUrl
 		});
 		metadataLookupOpen = false;
-		// The detail page is content-addressed, so a successful enrich
-		// changes the URL. Navigate to the new id; the previous one is
-		// already replaced in the firkins store by `enrich()`.
 		if (updated.id !== firkin.id) {
 			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
 		}
@@ -108,9 +96,6 @@
 		}
 	}
 
-	// Track entries are persisted as `url` files whose value points at YouTube.
-	// Other `url` files (e.g. the MusicBrainz release-group source URL stored
-	// at bookmark time) must be excluded so they don't render as fake tracks.
 	const trackFiles = $derived(
 		firkin.files.filter(
 			(f) => f.type === 'url' && (f.title ?? '').trim().length > 0 && isYouTubeUrl(f.value)
@@ -135,9 +120,6 @@
 		}
 	}
 
-	// Tracking the upstream TMDB id lets us refetch metadata (credits +
-	// official trailers) from TMDB on the fly. For TV we also need it to
-	// enumerate seasons for per-season YouTube fallback.
 	const tmdbTvId = $derived(
 		firkin.files
 			.map((f) => (f.type === 'url' ? parseTmdbId(f.value, 'tv') : null))
@@ -149,33 +131,6 @@
 			.find((id): id is string => Boolean(id)) ?? null
 	);
 
-	async function fetchCatalogMetadata(
-		addon: string,
-		id: string
-	): Promise<{ artists: Firkin['artists']; trailers: Trailer[] }> {
-		const res = await fetch(
-			`/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(id)}/metadata`,
-			{ cache: 'no-store' }
-		);
-		if (!res.ok) {
-			let message = `HTTP ${res.status}`;
-			try {
-				const body = await res.json();
-				if (body && typeof body.error === 'string') message = body.error;
-			} catch {
-				// ignore
-			}
-			throw new Error(message);
-		}
-		const body = (await res.json()) as {
-			artists?: Firkin['artists'];
-			trailers?: Trailer[];
-		};
-		return {
-			artists: Array.isArray(body.artists) ? body.artists : [],
-			trailers: Array.isArray(body.trailers) ? body.trailers : []
-		};
-	}
 	let ipfsStarting = $state(false);
 	let ipfsError = $state<string | null>(null);
 
@@ -187,10 +142,6 @@
 	$effect(() => {
 		const fid = firkin.id;
 		if (artistsBackfillForFirkinId === fid) return;
-		// Only backfill when we have an upstream handle to query and the
-		// stored array is empty. Currently the only handle persisted on a
-		// firkin body is the MusicBrainz release-group URL — other addons
-		// will be enrichable once we persist their ids on bookmark.
 		if (firkin.artists.length > 0) {
 			artistsBackfillForFirkinId = fid;
 			return;
@@ -208,15 +159,18 @@
 		artistsBackfillStatus = 'loading';
 		artistsBackfillError = null;
 		try {
-			const { artists: fetched } = await fetchCatalogMetadata(addon, upstreamId);
+			const res = await fetch(
+				`${base}/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(upstreamId)}/metadata`,
+				{ cache: 'no-store' }
+			);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const body = (await res.json()) as { artists?: Firkin['artists'] };
+			const fetched = Array.isArray(body.artists) ? body.artists : [];
 			if (fetched.length === 0) {
 				artistsBackfillStatus = 'done';
 				return;
 			}
-			// Persist via PUT so the in-system page stays consistent across
-			// reloads. The id stays the same (PUT mutates in place); see the
-			// /api/firkins/:id docs in apps/cloud/CLAUDE.md.
-			const putRes = await fetch(`/api/firkins/${encodeURIComponent(firkinId)}`, {
+			const putRes = await fetch(`${base}/api/firkins/${encodeURIComponent(firkinId)}`, {
 				method: 'PUT',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ artists: fetched })
@@ -224,8 +178,8 @@
 			if (!putRes.ok) {
 				let message = `HTTP ${putRes.status}`;
 				try {
-					const body = await putRes.json();
-					if (body && typeof body.error === 'string') message = body.error;
+					const bb = await putRes.json();
+					if (bb && typeof bb.error === 'string') message = bb.error;
 				} catch {
 					// ignore
 				}
@@ -248,7 +202,7 @@
 		ipfsStarting = true;
 		ipfsError = null;
 		try {
-			const res = await fetch('/api/ipfs-stream/sessions', {
+			const res = await fetch(`${base}/api/ipfs-stream/sessions`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ cid: firstIpfsCid })
@@ -280,14 +234,11 @@
 				mode: 'video',
 				format: null,
 				videoFormat: null,
-				thumbnailUrl: firkin.images[0]?.url ?? null,
+				thumbnailUrl: thumb,
 				durationSeconds: durationSecs,
 				size: 0,
 				completedAt: ''
 			};
-			// The rolling HLS playlist has no #EXT-X-ENDLIST until transcode
-			// completes, so videoElement.duration stays Infinity — seed
-			// durationSecs from the server-probed source duration instead.
 			await playerService.playUrl(
 				file,
 				body.playlistUrl,
@@ -314,12 +265,7 @@
 	type StreamEvalState =
 		| { kind: 'idle' }
 		| { kind: 'evaluating' }
-		| {
-				kind: 'streamable';
-				fileName: string;
-				fileSize: number;
-				mimeType: string | null;
-		  }
+		| { kind: 'streamable'; fileName: string; fileSize: number; mimeType: string | null }
 		| { kind: 'not-streamable'; reason: string };
 	let streamEval = $state<StreamEvalState>({ kind: 'idle' });
 	let evalRun = 0;
@@ -334,7 +280,7 @@
 		streamEval = { kind: 'evaluating' };
 		void (async () => {
 			try {
-				const res = await fetch('/api/torrent/evaluate', {
+				const res = await fetch(`${base}/api/torrent/evaluate`, {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
 					body: JSON.stringify({ magnet })
@@ -408,7 +354,7 @@
 		torrentStreamStarting = true;
 		torrentStreamError = null;
 		try {
-			const res = await fetch('/api/torrent/stream', {
+			const res = await fetch(`${base}/api/torrent/stream`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ magnet: firstMagnet })
@@ -440,7 +386,7 @@
 				mode: 'video',
 				format: null,
 				videoFormat: null,
-				thumbnailUrl: firkin.images[0]?.url ?? null,
+				thumbnailUrl: thumb,
 				durationSeconds: null,
 				size: body.fileSize,
 				completedAt: ''
@@ -481,7 +427,7 @@
 		finalizeError = null;
 		finalizing = true;
 		try {
-			const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}/finalize`, {
+			const res = await fetch(`${base}/api/firkins/${encodeURIComponent(firkin.id)}/finalize`, {
 				method: 'POST'
 			});
 			if (!res.ok) {
@@ -510,51 +456,76 @@
 		}
 	}
 
-	type TorrentStatus = 'idle' | 'searching' | 'done' | 'error';
-	let torrentStatus = $state<TorrentStatus>('idle');
-	let torrentError = $state<string | null>(null);
-	let torrentMatches = $state<TorrentResultItem[]>([]);
-	let addingHash = $state<string | null>(null);
-	let assignError = $state<string | null>(null);
-	let searchRun = 0;
-	let startedHashes = $state<Set<string>>(new Set());
-
-	type TorrentRowEval =
-		| { kind: 'pending' }
-		| { kind: 'evaluating' }
-		| { kind: 'streamable'; fileName: string; fileSize: number; mimeType: string | null }
-		| { kind: 'not-streamable'; reason: string };
-	let resultEvals = $state<Record<string, TorrentRowEval>>({});
-	const EVAL_CONCURRENCY = 4;
-
-	const existingHashes = $derived(
-		new Set(firkin.files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
-	);
-
-	let torrentSearchOpen = $state(false);
-	let torrentSearchInitForFirkinId: string | null = null;
-
-	function toggleTorrentSearch() {
-		torrentSearchOpen = !torrentSearchOpen;
-		if (torrentSearchOpen && torrentSearchInitForFirkinId !== firkin.id) {
-			torrentSearchInitForFirkinId = firkin.id;
-			void runTorrentSearch(firkin.id, firkin.title, firkin.addon, firkin.year);
+	// Detail mode persists trailer/track URLs back to the firkin so they
+	// don't have to be re-resolved every visit. The PUT may roll the firkin
+	// forward to a new content-addressed id; in that case we navigate.
+	async function persistFirkinPatch(patch: Partial<Firkin>): Promise<void> {
+		const oldId = firkin.id;
+		const res = await fetch(`${base}/api/firkins/${encodeURIComponent(oldId)}`, {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(patch)
+		});
+		if (!res.ok) {
+			let message = `HTTP ${res.status}`;
+			try {
+				const body = await res.json();
+				if (body && typeof body.error === 'string') message = body.error;
+			} catch {
+				// ignore
+			}
+			throw new Error(message);
+		}
+		const updated = (await res.json()) as Firkin;
+		data.firkin = updated;
+		if (updated.id !== oldId) {
+			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
 		}
 	}
 
-	type Track = {
-		id: string;
-		position: number;
-		title: string;
-		lengthMs: number | null;
-		youtubeUrl: string | null;
-		youtubeStatus: 'idle' | 'pending' | 'searching' | 'found' | 'missing' | 'error';
-	};
-	type TracksStatus = 'idle' | 'loading' | 'done' | 'error';
-	let tracksStatus = $state<TracksStatus>('idle');
-	let tracksError = $state<string | null>(null);
-	let tracks = $state<Track[]>([]);
-	let tracksRun = 0;
+	const trailerResolver = new TrailerResolver({
+		persist: (resolved) => persistFirkinPatch({ trailers: resolved })
+	});
+	let trailersInitForFirkinId: string | null = null;
+
+	$effect(() => {
+		if (!isTmdbMovie && !isTmdbTv) return;
+		const fid = firkin.id;
+		if (trailersInitForFirkinId === fid) return;
+		trailersInitForFirkinId = fid;
+		const stored = firkin.trailers ?? [];
+		if (isTmdbMovie) {
+			void trailerResolver.resolveMovie({
+				addon: firkin.addon,
+				tmdbMovieId,
+				title: firkin.title,
+				year: firkin.year,
+				stored
+			});
+		} else {
+			void trailerResolver.resolveTv({
+				addon: firkin.addon,
+				tmdbTvId,
+				title: firkin.title,
+				stored
+			});
+		}
+	});
+
+	const trackResolver = new TrackResolver({
+		persistTrackUrls: async (resolved) => {
+			let next: FileEntry[] = firkin.files.map((f) => ({ ...f }));
+			for (const { title: tt, url } of resolved) {
+				const idx = next.findIndex((f) => f.type === 'url' && (f.title ?? '').trim() === tt.trim());
+				if (idx >= 0) {
+					next[idx] = { ...next[idx], value: url };
+				} else {
+					next = [...next, { type: 'url', value: url, title: tt }];
+				}
+			}
+			await persistFirkinPatch({ files: next });
+		}
+	});
 	let tracksInitForFirkinId: string | null = null;
 
 	$effect(() => {
@@ -562,484 +533,46 @@
 		const fid = firkin.id;
 		if (tracksInitForFirkinId === fid) return;
 		tracksInitForFirkinId = fid;
-		const myRun = ++tracksRun;
-		// Saved YouTube URLs from a previous bookmark — keyed by normalized
-		// title so we can merge them onto the freshly-fetched MB tracklist and
-		// skip the yt-dlp roundtrip for tracks we already resolved.
 		const savedUrls: Record<string, string> = {};
 		for (const f of trackFiles) {
 			const key = (f.title ?? '').trim().toLowerCase();
 			if (key && f.value) savedUrls[key] = f.value;
 		}
-		if (musicBrainzReleaseGroupId) {
-			void loadByReleaseGroupId(musicBrainzReleaseGroupId, myRun, savedUrls);
-		} else if (trackFiles.length > 0) {
-			// Legacy bookmarks without an upstream id — render saved files as-is.
-			tracks = trackFiles.map((f, i) => ({
-				id: `file-${i}`,
-				position: i + 1,
-				title: f.title ?? '',
-				lengthMs: null,
-				youtubeUrl: f.value || null,
-				youtubeStatus: f.value ? 'idle' : 'pending'
-			}));
-			tracksStatus = 'done';
-			void resolveYouTubeForAllTracks(myRun);
-		} else {
-			tracksError =
-				'No MusicBrainz release-group id stored on this firkin. Re-bookmark from the catalog to attach one.';
-			tracksStatus = 'error';
-		}
-	});
-
-	async function loadByReleaseGroupId(
-		releaseGroupId: string,
-		myRun: number,
-		savedUrls?: Record<string, string>
-	) {
-		tracksStatus = 'loading';
-		tracksError = null;
-		tracks = [];
-		try {
-			const res = await fetch(
-				`/api/catalog/musicbrainz/release-groups/${encodeURIComponent(releaseGroupId)}/tracks`,
-				{ cache: 'no-store' }
-			);
-			if (!res.ok) {
-				let message = `HTTP ${res.status}`;
-				try {
-					const body = await res.json();
-					if (body && typeof body.error === 'string') message = body.error;
-				} catch {
-					// ignore
-				}
-				throw new Error(message);
-			}
-			const body = (await res.json()) as {
-				id: string;
-				position: number;
-				title: string;
-				lengthMs: number | null;
-			}[];
-			if (myRun !== tracksRun) return;
-			tracks = body.map((t) => {
-				const savedUrl = savedUrls?.[t.title.trim().toLowerCase()] ?? null;
-				return {
-					id: t.id,
-					position: t.position,
-					title: t.title,
-					lengthMs: t.lengthMs,
-					youtubeUrl: savedUrl,
-					youtubeStatus: (savedUrl ? 'idle' : 'pending') as Track['youtubeStatus']
-				};
-			});
-			tracksStatus = 'done';
-			void resolveYouTubeForAllTracks(myRun);
-		} catch (err) {
-			if (myRun !== tracksRun) return;
-			tracksError = err instanceof Error ? err.message : 'Unknown error';
-			tracksStatus = 'error';
-		}
-	}
-
-	async function resolveYouTubeForAllTracks(myRun: number) {
-		const album = firkin.title;
 		const artist = firkin.artists
 			.map((a) => a.name)
 			.filter((n) => n && n.length > 0)
 			.join(', ');
-		// Accumulate resolved URLs locally; the server-side PUT now rolls the
-		// firkin forward to a new content-addressed id and re-pins the body
-		// JSON to IPFS. Persisting per-iteration would mint N intermediate
-		// CIDs (one per track) and N orphan IPFS pins, so we batch into one
-		// PUT at the end of the loop.
-		let workingFiles: FileEntry[] = firkin.files.map((f) => ({ ...f }));
-		let dirty = false;
-		for (let i = 0; i < tracks.length; i++) {
-			if (myRun !== tracksRun) return;
-			const t = tracks[i];
-			if (t.youtubeStatus === 'idle' || t.youtubeStatus === 'found') continue;
-			tracks = tracks.map((tr, idx) => (idx === i ? { ...tr, youtubeStatus: 'searching' } : tr));
-			let url: string | null = null;
-			try {
-				url = await resolveYouTubeUrlForTrack(t.title, artist, album, t.lengthMs);
-				if (myRun !== tracksRun) return;
-				tracks = tracks.map((tr, idx) =>
-					idx === i ? { ...tr, youtubeUrl: url, youtubeStatus: url ? 'found' : 'missing' } : tr
-				);
-			} catch {
-				if (myRun !== tracksRun) return;
-				tracks = tracks.map((tr, idx) =>
-					idx === i ? { ...tr, youtubeUrl: null, youtubeStatus: 'error' } : tr
-				);
-				continue;
-			}
-			if (url) {
-				workingFiles = mergeTrackUrl(workingFiles, t.title, url);
-				dirty = true;
-			}
-		}
-		if (myRun !== tracksRun || !dirty) return;
-		try {
-			await persistFiles(workingFiles);
-		} catch (err) {
-			console.warn('[catalog detail] failed to persist resolved track urls', err);
-		}
-	}
-
-	function mergeTrackUrl(currentFiles: FileEntry[], trackTitle: string, url: string): FileEntry[] {
-		const next = currentFiles.map((f) => ({ ...f }));
-		const idx = next.findIndex(
-			(f) => f.type === 'url' && (f.title ?? '').trim() === trackTitle.trim()
-		);
-		if (idx >= 0) {
-			next[idx] = { ...next[idx], value: url };
-		} else {
-			next.push({ type: 'url', value: url, title: trackTitle });
-		}
-		return next;
-	}
-
-	async function persistFiles(next: FileEntry[]): Promise<void> {
-		const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}`, {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ files: next })
-		});
-		if (!res.ok) {
-			let message = `HTTP ${res.status}`;
-			try {
-				const body = await res.json();
-				if (body && typeof body.error === 'string') message = body.error;
-			} catch {
-				// ignore
-			}
-			throw new Error(message);
-		}
-		const updated = (await res.json()) as Firkin;
-		data.firkin = updated;
-		// PUT now rolls forward to a new content-addressed id whenever any
-		// body field changes, so the URL has to follow the firkin to its
-		// new CID — otherwise a refresh hits the now-deleted old id.
-		if (updated.id !== firkin.id) {
-			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
-		}
-	}
-
-	function formatDuration(ms: number | null): string {
-		if (!ms || !Number.isFinite(ms) || ms <= 0) return '—';
-		const total = Math.round(ms / 1000);
-		const m = Math.floor(total / 60);
-		const s = total % 60;
-		return `${m}:${s.toString().padStart(2, '0')}`;
-	}
-
-	let playingTrackIndex = $state<number | null>(null);
-	let trackPlayError = $state<string | null>(null);
-
-	async function playTrack(index: number) {
-		const t = tracks[index];
-		if (!t || !t.youtubeUrl || playingTrackIndex !== null) return;
-		playingTrackIndex = index;
-		trackPlayError = null;
-		try {
-			const durationSeconds = t.lengthMs ? Math.round(t.lengthMs / 1000) : null;
-			const thumb = firkin.images[0]?.url ?? null;
-			await playYouTubeAudio(t.youtubeUrl, t.title, thumb, durationSeconds);
-		} catch (err) {
-			trackPlayError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			playingTrackIndex = null;
-		}
-	}
-
-	type TrailerEntry = {
-		key: string;
-		label: string | null;
-		seasonNumber: number | null;
-		airYear: number | null;
-		youtubeUrl: string | null;
-		language: string | null;
-		status: 'idle' | 'pending' | 'searching' | 'found' | 'missing' | 'error';
-	};
-	let trailers = $state<TrailerEntry[]>([]);
-	let trailersStatus = $state<'idle' | 'loading' | 'done' | 'error'>('idle');
-	let trailersError = $state<string | null>(null);
-	let trailersRun = 0;
-	let trailersInitForFirkinId: string | null = null;
-	let playingTrailerKey = $state<string | null>(null);
-	let trailerPlayError = $state<string | null>(null);
-
-	$effect(() => {
-		if (!isTmdbMovie && !isTmdbTv) return;
-		const fid = firkin.id;
-		if (trailersInitForFirkinId === fid) return;
-		trailersInitForFirkinId = fid;
-		const myRun = ++trailersRun;
-		const stored = firkin.trailers ?? [];
-		if (isTmdbMovie) {
-			void initMovieTrailers(myRun, stored);
-		} else {
-			void initTvTrailers(myRun, stored);
+		if (musicBrainzReleaseGroupId) {
+			void trackResolver.loadByReleaseGroup(
+				{ releaseGroupId: musicBrainzReleaseGroupId, savedUrls },
+				{ albumTitle: firkin.title, artist, thumb }
+			);
+		} else if (trackFiles.length > 0) {
+			trackResolver.seedFromFiles(firkin.files);
+			void trackResolver.resolveAllForCurrent({
+				albumTitle: firkin.title,
+				artist,
+				thumb
+			});
 		}
 	});
 
-	async function initMovieTrailers(myRun: number, stored: Trailer[]) {
-		trailersStatus = 'loading';
-		trailersError = null;
-		const existing = stored.find((t) => Boolean(t.youtubeUrl));
-		if (existing) {
-			trailers = [
-				{
-					key: 'movie',
-					label: existing.label ?? null,
-					seasonNumber: null,
-					airYear: firkin.year,
-					youtubeUrl: existing.youtubeUrl,
-					language: existing.language ?? null,
-					status: 'idle'
-				}
-			];
-			trailersStatus = 'done';
-			return;
-		}
-		// Prefer TMDB's official trailer (returned alongside credits by the
-		// /metadata endpoint via append_to_response) and only fall back to
-		// the fuzzy YouTube search if TMDB has nothing.
-		if (tmdbMovieId) {
-			try {
-				const { trailers: tmdb } = await fetchCatalogMetadata(firkin.addon, tmdbMovieId);
-				if (myRun !== trailersRun) return;
-				const first = tmdb[0];
-				if (first) {
-					trailers = [
-						{
-							key: 'movie',
-							label: first.label ?? null,
-							seasonNumber: null,
-							airYear: firkin.year,
-							youtubeUrl: first.youtubeUrl,
-							language: first.language ?? null,
-							status: 'idle'
-						}
-					];
-					trailersStatus = 'done';
-					try {
-						await persistTrailers([first]);
-					} catch (err) {
-						console.warn('[catalog detail] failed to persist tmdb movie trailer', err);
-					}
-					return;
-				}
-			} catch (err) {
-				console.warn('[catalog detail] tmdb metadata fetch failed; falling back to youtube', err);
-			}
-		}
-		// Resolve fresh and persist on the firkin so subsequent visits don't
-		// re-search.
-		trailers = [
-			{
-				key: 'movie',
-				label: null,
-				seasonNumber: null,
-				airYear: firkin.year,
-				youtubeUrl: null,
-				language: null,
-				status: 'searching'
-			}
-		];
-		try {
-			const url = await resolveYouTubeTrailerForMovie(firkin.title, firkin.year);
-			if (myRun !== trailersRun) return;
-			trailers = trailers.map((t) =>
-				t.key === 'movie' ? { ...t, youtubeUrl: url, status: url ? 'found' : 'missing' } : t
-			);
-			trailersStatus = 'done';
-			if (url) {
-				try {
-					await persistTrailers([{ youtubeUrl: url }]);
-				} catch (err) {
-					console.warn('[catalog detail] failed to persist movie trailer', err);
-				}
-			}
-		} catch (err) {
-			if (myRun !== trailersRun) return;
-			trailers = trailers.map((t) => (t.key === 'movie' ? { ...t, status: 'error' } : t));
-			trailersError = err instanceof Error ? err.message : 'Unknown error';
-			trailersStatus = 'error';
-		}
-	}
+	const torrentSearch = new TorrentSearch({ evaluate: true });
+	let addingHash = $state<string | null>(null);
+	let assignError = $state<string | null>(null);
+	let startedHashes = $state<Set<string>>(new Set());
+	let torrentSearchOpen = $state(false);
+	let torrentSearchInitForFirkinId: string | null = null;
 
-	async function initTvTrailers(myRun: number, stored: Trailer[]) {
-		trailersStatus = 'loading';
-		trailersError = null;
-		// If we already have stored trailers, render them and skip fresh
-		// resolution. The user can re-bookmark from the catalog if the
-		// upstream season list changes (e.g. a new season aired).
-		if (stored.length > 0) {
-			trailers = stored.map((t, i) => ({
-				key: t.label ? `season-${t.label}` : `trailer-${i}`,
-				label: t.label ?? null,
-				seasonNumber: parseSeasonNumberFromLabel(t.label ?? ''),
-				airYear: null,
-				youtubeUrl: t.youtubeUrl,
-				language: t.language ?? null,
-				status: 'idle' as const
-			}));
-			trailersStatus = 'done';
-			return;
-		}
-		if (!tmdbTvId) {
-			trailersError =
-				'No TMDB id stored on this firkin. Re-bookmark from the catalog to attach one.';
-			trailersStatus = 'error';
-			return;
-		}
-		// Pull TMDB-sourced show-level trailers from /metadata (single TMDB
-		// request that also carries credits). Per-season trailers still come
-		// from the YouTube fallback below since TMDB's show-level /videos
-		// block doesn't differentiate them.
-		let tmdbShowTrailers: Trailer[] = [];
-		try {
-			const meta = await fetchCatalogMetadata(firkin.addon, tmdbTvId);
-			if (myRun !== trailersRun) return;
-			tmdbShowTrailers = meta.trailers;
-		} catch (err) {
-			console.warn('[catalog detail] tmdb tv metadata fetch failed', err);
-		}
-		let seasons: { seasonNumber: number; name: string; airYear: number | null }[] = [];
-		try {
-			const res = await fetch(`/api/catalog/tmdb-tv/${encodeURIComponent(tmdbTvId)}/seasons`, {
-				cache: 'no-store'
-			});
-			if (!res.ok) {
-				let message = `HTTP ${res.status}`;
-				try {
-					const body = await res.json();
-					if (body && typeof body.error === 'string') message = body.error;
-				} catch {
-					// ignore
-				}
-				throw new Error(message);
-			}
-			const body = (await res.json()) as {
-				seasonNumber: number;
-				name: string;
-				airYear?: number | null;
-			}[];
-			if (myRun !== trailersRun) return;
-			seasons = body.map((s) => ({
-				seasonNumber: s.seasonNumber,
-				name: s.name,
-				airYear: s.airYear ?? null
-			}));
-		} catch (err) {
-			if (myRun !== trailersRun) return;
-			trailersError = err instanceof Error ? err.message : 'Unknown error';
-			trailersStatus = 'error';
-			return;
-		}
-		const tmdbEntries: TrailerEntry[] = tmdbShowTrailers.map((t, i) => ({
-			key: `tmdb-${i}`,
-			label: t.label ?? 'Trailer',
-			seasonNumber: null,
-			airYear: null,
-			youtubeUrl: t.youtubeUrl,
-			language: t.language ?? null,
-			status: 'idle' as const
-		}));
-		const seasonEntries: TrailerEntry[] = seasons.map((s) => ({
-			key: `season-${s.seasonNumber}`,
-			label: s.name,
-			seasonNumber: s.seasonNumber,
-			airYear: s.airYear,
-			youtubeUrl: null,
-			language: null,
-			status: 'pending' as const
-		}));
-		trailers = [...tmdbEntries, ...seasonEntries];
-		trailersStatus = 'done';
-		const resolved: Trailer[] = tmdbShowTrailers
-			.filter((t): t is Trailer & { youtubeUrl: string } => Boolean(t.youtubeUrl))
-			.map((t) => ({ youtubeUrl: t.youtubeUrl, label: t.label, language: t.language }));
-		for (let i = 0; i < trailers.length; i++) {
-			if (myRun !== trailersRun) return;
-			const entry = trailers[i];
-			// Skip TMDB-sourced entries — already resolved at the top.
-			if (entry.status === 'idle') continue;
-			trailers = trailers.map((t, idx) => (idx === i ? { ...t, status: 'searching' } : t));
-			try {
-				const url = await resolveYouTubeTrailerForSeason(
-					firkin.title,
-					entry.seasonNumber ?? 0,
-					entry.airYear
-				);
-				if (myRun !== trailersRun) return;
-				trailers = trailers.map((t, idx) =>
-					idx === i ? { ...t, youtubeUrl: url, status: url ? 'found' : 'missing' } : t
-				);
-				if (url && entry.label) {
-					resolved.push({ youtubeUrl: url, label: entry.label });
-				}
-			} catch {
-				if (myRun !== trailersRun) return;
-				trailers = trailers.map((t, idx) => (idx === i ? { ...t, status: 'error' } : t));
-			}
-		}
-		if (resolved.length > 0) {
-			try {
-				await persistTrailers(resolved);
-			} catch (err) {
-				console.warn('[catalog detail] failed to persist tv trailers', err);
-			}
-		}
-	}
+	const existingHashes = $derived(
+		new Set(firkin.files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
+	);
 
-	function parseSeasonNumberFromLabel(label: string): number | null {
-		const m = label.match(/season\s+(\d+)/i);
-		if (!m) return null;
-		const n = Number.parseInt(m[1], 10);
-		return Number.isFinite(n) ? n : null;
-	}
-
-	async function persistTrailers(next: Trailer[]): Promise<void> {
-		const res = await fetch(`/api/firkins/${encodeURIComponent(firkin.id)}`, {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ trailers: next })
-		});
-		if (!res.ok) {
-			let message = `HTTP ${res.status}`;
-			try {
-				const body = await res.json();
-				if (body && typeof body.error === 'string') message = body.error;
-			} catch {
-				// ignore
-			}
-			throw new Error(message);
-		}
-		const updated = (await res.json()) as Firkin;
-		const oldId = firkin.id;
-		data.firkin = updated;
-		if (updated.id !== oldId) {
-			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
-		}
-	}
-
-	async function playTrailer(entry: TrailerEntry) {
-		if (!entry.youtubeUrl || playingTrailerKey !== null) return;
-		playingTrailerKey = entry.key;
-		trailerPlayError = null;
-		try {
-			const thumb = firkin.images[0]?.url ?? null;
-			const playTitle = entry.label
-				? `${firkin.title} — ${entry.label} trailer`
-				: `${firkin.title} trailer`;
-			await playYouTubeVideo(entry.youtubeUrl, playTitle, thumb, null);
-		} catch (err) {
-			trailerPlayError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			playingTrailerKey = null;
+	function toggleTorrentSearch() {
+		torrentSearchOpen = !torrentSearchOpen;
+		if (torrentSearchOpen && torrentSearchInitForFirkinId !== firkin.id) {
+			torrentSearchInitForFirkinId = firkin.id;
+			void torrentSearch.search({ addon: firkin.addon, title: firkin.title, year: firkin.year });
 		}
 	}
 
@@ -1050,12 +583,12 @@
 		const tick = async () => {
 			if (cancelled) return;
 			try {
-				const res = await fetch(`/api/firkins/${encodeURIComponent(id)}`, {
+				const res = await fetch(`${base}/api/firkins/${encodeURIComponent(id)}`, {
 					cache: 'no-store'
 				});
 				if (cancelled) return;
 				if (res.status === 404) {
-					const listRes = await fetch('/api/firkins', { cache: 'no-store' });
+					const listRes = await fetch(`${base}/api/firkins`, { cache: 'no-store' });
 					if (!listRes.ok) return;
 					const list = (await listRes.json()) as Firkin[];
 					if (cancelled) return;
@@ -1095,111 +628,6 @@
 		}
 	});
 
-	async function runTorrentSearch(_id: string, title: string, addon: string, year: number | null) {
-		const myRun = ++searchRun;
-		torrentStatus = 'searching';
-		torrentError = null;
-		torrentMatches = [];
-		resultEvals = {};
-		try {
-			const torrents = await searchTorrents(addon, title);
-			if (myRun !== searchRun) return;
-			const matches = matchTorrentsForResult(
-				{ title, description: '', artists: [], images: [], files: [], year, raw: null },
-				torrents
-			);
-			torrentMatches = matches;
-			torrentStatus = 'done';
-			void evaluateResults(matches, myRun);
-		} catch (err) {
-			if (myRun !== searchRun) return;
-			torrentMatches = [];
-			torrentError = err instanceof Error ? err.message : 'Unknown error';
-			torrentStatus = 'error';
-		}
-	}
-
-	async function evaluateResults(matches: TorrentResultItem[], runToken: number): Promise<void> {
-		const seed: Record<string, TorrentRowEval> = {};
-		for (const t of matches) {
-			if (t.magnetLink) seed[t.magnetLink] = { kind: 'pending' };
-		}
-		resultEvals = seed;
-
-		// Sliding-window concurrency: each `/api/torrent/evaluate` call may
-		// block for up to ~60s while librqbit fetches metadata via DHT or
-		// trackers (BEP 9/10). Firing all of them at once would saturate the
-		// torrent client; cap to a small fixed pool instead.
-		let cursor = 0;
-		const next = (): TorrentResultItem | null => {
-			while (cursor < matches.length) {
-				const t = matches[cursor++];
-				if (t.magnetLink) return t;
-			}
-			return null;
-		};
-
-		const worker = async () => {
-			while (runToken === searchRun) {
-				const t = next();
-				if (!t || !t.magnetLink) break;
-				resultEvals = { ...resultEvals, [t.magnetLink]: { kind: 'evaluating' } };
-				let result: TorrentRowEval;
-				try {
-					const res = await fetch('/api/torrent/evaluate', {
-						method: 'POST',
-						headers: { 'content-type': 'application/json' },
-						body: JSON.stringify({ magnet: t.magnetLink })
-					});
-					const body = (await res.json()) as
-						| {
-								streamable: true;
-								fileName: string;
-								fileSize: number;
-								mimeType: string | null;
-						  }
-						| { streamable: false; reason: string };
-					if (body.streamable) {
-						result = {
-							kind: 'streamable',
-							fileName: body.fileName,
-							fileSize: body.fileSize,
-							mimeType: body.mimeType
-						};
-					} else {
-						result = { kind: 'not-streamable', reason: body.reason };
-					}
-				} catch (err) {
-					const reason = err instanceof Error ? err.message : 'Unknown error';
-					result = { kind: 'not-streamable', reason };
-				}
-				if (runToken !== searchRun) return;
-				resultEvals = { ...resultEvals, [t.magnetLink]: result };
-			}
-		};
-
-		const pool = Math.min(EVAL_CONCURRENCY, matches.length);
-		await Promise.all(Array.from({ length: pool }, () => worker()));
-	}
-
-	async function startTorrentDownload(magnet: string): Promise<void> {
-		const res = await fetch('/api/torrent/add', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ magnet })
-		});
-		if (!res.ok) {
-			let message = `HTTP ${res.status}`;
-			try {
-				const body = await res.json();
-				if (body && typeof body.error === 'string') message = body.error;
-			} catch {
-				// ignore
-			}
-			throw new Error(message);
-		}
-	}
-
 	async function assignTorrent(torrent: TorrentResultItem) {
 		if (!torrent.magnetLink || addingHash || existingHashes.has(torrent.magnetLink)) {
 			return;
@@ -1230,26 +658,6 @@
 		}
 	}
 
-	function formatDate(value: string): string {
-		try {
-			return new Date(value).toLocaleString();
-		} catch {
-			return value;
-		}
-	}
-
-	function formatBytes(bytes: number): string {
-		if (!Number.isFinite(bytes) || bytes <= 0) return '—';
-		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-		let value = bytes;
-		let unit = 0;
-		while (value >= 1024 && unit < units.length - 1) {
-			value /= 1024;
-			unit++;
-		}
-		return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
-	}
-
 	async function remove() {
 		if (removing) return;
 		removing = true;
@@ -1269,21 +677,13 @@
 </svelte:head>
 
 <div class="flex min-h-full flex-col gap-6 p-6">
-	<header class="flex flex-wrap items-start justify-between gap-3">
-		<div class="flex flex-col gap-1">
-			<a class="text-xs text-base-content/60 hover:underline" href="{base}/catalog">← Catalog</a>
-			<h1 class="text-2xl font-bold [overflow-wrap:anywhere]">{firkin.title}</h1>
-			<p class="text-sm text-base-content/70">
-				<span class="badge badge-outline badge-sm">{firkin.addon}</span>
-				{#if firkinKind}
-					<span class="badge badge-outline badge-sm">{firkinKind}</span>
-				{/if}
-				{#if firkin.year !== null && firkin.year !== undefined}
-					<span class="badge badge-outline badge-sm">{firkin.year}</span>
-				{/if}
-			</p>
-		</div>
-		<div class="flex items-center gap-2">
+	<CatalogPageHeader
+		title={firkin.title}
+		addon={firkin.addon}
+		kindLabel={firkinKind}
+		year={firkin.year}
+	>
+		{#snippet actions()}
 			{#if canPlay}
 				<button
 					type="button"
@@ -1365,31 +765,20 @@
 			>
 				{removing ? 'Deleting…' : 'Delete firkin'}
 			</button>
-		</div>
-	</header>
+		{/snippet}
+	</CatalogPageHeader>
 
 	{#if removeError}
-		<div class="alert alert-error">
-			<span>{removeError}</span>
-		</div>
+		<div class="alert alert-error"><span>{removeError}</span></div>
 	{/if}
-
 	{#if finalizeError}
-		<div class="alert alert-error">
-			<span>{finalizeError}</span>
-		</div>
+		<div class="alert alert-error"><span>{finalizeError}</span></div>
 	{/if}
-
 	{#if ipfsError}
-		<div class="alert alert-error">
-			<span>{ipfsError}</span>
-		</div>
+		<div class="alert alert-error"><span>{ipfsError}</span></div>
 	{/if}
-
 	{#if torrentStreamError}
-		<div class="alert alert-error">
-			<span>{torrentStreamError}</span>
-		</div>
+		<div class="alert alert-error"><span>{torrentStreamError}</span></div>
 	{/if}
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
@@ -1398,51 +787,16 @@
 		</aside>
 
 		<section class="flex flex-col gap-6">
-			{#if firkin.description}
-				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Description</h2>
-					<p class="text-sm [overflow-wrap:anywhere] whitespace-pre-wrap">{firkin.description}</p>
-				</div>
-			{/if}
+			<CatalogDescriptionCard description={firkin.description} />
 
-			<div class="card border border-base-content/10 bg-base-200 p-4">
-				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Identity</h2>
-				<table class="table table-sm">
-					<tbody>
-						<tr>
-							<th class="w-32 align-top">CID</th>
-							<td class="font-mono text-xs break-all">{firkin.id}</td>
-						</tr>
-						<tr>
-							<th class="w-32 align-top">Created</th>
-							<td class="text-xs">{formatDate(firkin.created_at)}</td>
-						</tr>
-						<tr>
-							<th class="w-32 align-top">Updated</th>
-							<td class="text-xs">{formatDate(firkin.updated_at)}</td>
-						</tr>
-						<tr>
-							<th class="w-32 align-top">Version</th>
-							<td class="text-xs">{firkin.version ?? 0}</td>
-						</tr>
-					</tbody>
-				</table>
-			</div>
+			<CatalogIdentityCard
+				cid={firkin.id}
+				createdAt={firkin.created_at}
+				updatedAt={firkin.updated_at}
+				version={firkin.version ?? 0}
+			/>
 
-			{#if firkin.version_hashes && firkin.version_hashes.length > 0}
-				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-						Version history ({firkin.version_hashes.length})
-					</h2>
-					<ol class="list-decimal pl-6 text-xs">
-						{#each firkin.version_hashes as cid, i (i)}
-							<li class="font-mono break-all">
-								<a class="link" href="{base}/catalog/{encodeURIComponent(cid)}">{cid}</a>
-							</li>
-						{/each}
-					</ol>
-				</div>
-			{/if}
+			<CatalogVersionHistoryCard versionHashes={firkin.version_hashes ?? []} />
 
 			<FirkinArtistsSection
 				artists={firkin.artists}
@@ -1452,328 +806,36 @@
 				artistHref={(id) => `${base}/artist/${encodeURIComponent(id)}`}
 			/>
 
-			{#if firkin.images.length > 0}
-				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-						Images ({firkin.images.length})
-					</h2>
-					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-						{#each firkin.images as image, i (i)}
-							<figure
-								class="flex flex-col gap-1 overflow-hidden rounded-box border border-base-content/10 bg-base-300"
-							>
-								<img
-									src={cachedImageUrl(image.url)}
-									alt={`Image ${i + 1}`}
-									class="block h-auto w-full"
-									loading="lazy"
-								/>
-								<figcaption class="px-2 py-1 text-[10px] text-base-content/70">
-									{image.width || '?'}×{image.height || '?'}
-									{#if image.fileSize}· {formatBytes(image.fileSize)}{/if}
-									{#if image.mimeType}· {image.mimeType}{/if}
-								</figcaption>
-							</figure>
-						{/each}
-					</div>
-				</div>
-			{/if}
+			<CatalogImagesCard images={firkin.images} />
 
 			{#if isTmdbMovie || isTmdbTv}
-				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<div class="mb-2 flex items-center justify-between gap-2">
-						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
-							Trailers{trailers.length > 0 ? ` (${trailers.length})` : ''}
-						</h2>
-					</div>
-					{#if trailerPlayError}
-						<div class="mb-2 alert alert-error">
-							<span>{trailerPlayError}</span>
-						</div>
-					{/if}
-					{#if trailersStatus === 'loading' && trailers.length === 0}
-						<p class="text-sm text-base-content/60">Loading…</p>
-					{:else if trailersStatus === 'error' && trailers.length === 0}
-						<p class="text-sm text-error">{trailersError ?? 'Failed'}</p>
-					{:else if trailers.length === 0}
-						<p class="text-sm text-base-content/60">No trailers found.</p>
-					{:else}
-						<ol class="flex flex-col gap-1">
-							{#each trailers as trailer (trailer.key)}
-								{@const playable =
-									(trailer.status === 'found' || trailer.status === 'idle') && !!trailer.youtubeUrl}
-								{@const isPlaying = playingTrailerKey === trailer.key}
-								<li>
-									<button
-										type="button"
-										class={classNames(
-											'flex w-full flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs',
-											{
-												'cursor-pointer hover:bg-base-100': playable && !isPlaying,
-												'opacity-60': isPlaying,
-												'cursor-default': !playable
-											}
-										)}
-										disabled={!playable || playingTrailerKey !== null}
-										onclick={() => playTrailer(trailer)}
-										title={playable
-											? `Play ${trailer.label ?? 'trailer'}`
-											: (trailer.label ?? 'Trailer')}
-									>
-										<span class="flex-1 truncate">
-											{trailer.label ?? 'Trailer'}
-										</span>
-										{#if trailer.status === 'pending'}
-											<span class="badge badge-ghost badge-xs">YT queued</span>
-										{:else if trailer.status === 'searching'}
-											<span class="badge badge-ghost badge-xs">YT…</span>
-										{:else if playable}
-											{#if isPlaying}
-												<span class="badge badge-xs badge-primary">starting…</span>
-											{:else}
-												<span class="badge badge-xs badge-primary">▶ Play</span>
-											{/if}
-										{:else if trailer.status === 'missing'}
-											<span class="badge badge-xs badge-warning">no match</span>
-										{:else if trailer.status === 'error'}
-											<span class="badge badge-xs badge-error">error</span>
-										{/if}
-									</button>
-								</li>
-							{/each}
-						</ol>
-					{/if}
-				</div>
+				<CatalogTrailersCard resolver={trailerResolver} firkinTitle={firkin.title} {thumb} />
 			{/if}
 
 			{#if isMusicBrainz}
-				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<div class="mb-2 flex items-center justify-between gap-2">
-						<h2 class="text-sm font-semibold text-base-content/70 uppercase">
-							Tracks{tracks.length > 0 ? ` (${tracks.length})` : ''}
-						</h2>
-					</div>
-					{#if tracksStatus === 'loading' && tracks.length === 0}
-						<p class="text-sm text-base-content/60">Loading…</p>
-					{:else if tracksStatus === 'error'}
-						<p class="text-sm text-error">{tracksError ?? 'Failed'}</p>
-					{:else if tracks.length === 0}
-						<p class="text-sm text-base-content/60">No tracks found.</p>
-					{:else}
-						{#if trackPlayError}
-							<div class="mb-2 alert alert-error">
-								<span>{trackPlayError}</span>
-							</div>
-						{/if}
-						<ol class="flex flex-col gap-1">
-							{#each tracks as track, idx (track.id || `${track.position}-${track.title}`)}
-								{@const playable =
-									(track.youtubeStatus === 'found' || track.youtubeStatus === 'idle') &&
-									!!track.youtubeUrl}
-								{@const isPlaying = playingTrackIndex === idx}
-								<li>
-									<button
-										type="button"
-										class={classNames(
-											'flex w-full flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs',
-											{
-												'cursor-pointer hover:bg-base-100': playable && !isPlaying,
-												'opacity-60': isPlaying,
-												'cursor-default': !playable
-											}
-										)}
-										disabled={!playable || playingTrackIndex !== null}
-										onclick={() => playTrack(idx)}
-										title={playable ? `Play "${track.title}"` : track.title}
-									>
-										<span class="w-6 shrink-0 text-right font-mono text-base-content/60"
-											>{track.position}</span
-										>
-										<span class="flex-1 truncate">{track.title}</span>
-										<span class="text-base-content/60">{formatDuration(track.lengthMs)}</span>
-										{#if track.youtubeStatus === 'pending'}
-											<span class="badge badge-ghost badge-xs">YT queued</span>
-										{:else if track.youtubeStatus === 'searching'}
-											<span class="badge badge-ghost badge-xs">YT…</span>
-										{:else if playable}
-											{#if isPlaying}
-												<span class="badge badge-xs badge-primary">starting…</span>
-											{:else}
-												<span class="badge badge-xs badge-primary">▶ Play</span>
-											{/if}
-										{:else if track.youtubeStatus === 'missing'}
-											<span class="badge badge-xs badge-warning">no match</span>
-										{:else if track.youtubeStatus === 'error'}
-											<span class="badge badge-xs badge-error">error</span>
-										{/if}
-									</button>
-								</li>
-							{/each}
-						</ol>
-					{/if}
-				</div>
+				<CatalogTracksCard resolver={trackResolver} {thumb} />
 			{/if}
 
 			{#if hasMagnetFiles}
-				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<div class="flex items-center justify-between gap-2">
-						<button
-							type="button"
-							class="flex flex-1 items-center gap-2 text-left"
-							onclick={toggleTorrentSearch}
-							aria-expanded={torrentSearchOpen}
-						>
-							<span class="text-base-content/60" aria-hidden="true"
-								>{torrentSearchOpen ? '▼' : '▶'}</span
-							>
-							<h2 class="text-sm font-semibold text-base-content/70 uppercase">
-								Torrent search{torrentSearchOpen && torrentMatches.length > 0
-									? ` (${torrentMatches.length})`
-									: ''}
-							</h2>
-						</button>
-						{#if torrentSearchOpen}
-							<button
-								type="button"
-								class="btn btn-outline btn-xs"
-								onclick={() => runTorrentSearch(firkin.id, firkin.title, firkin.addon, firkin.year)}
-								disabled={torrentStatus === 'searching'}
-							>
-								{torrentStatus === 'searching' ? 'Searching…' : 'Refresh'}
-							</button>
-						{/if}
-					</div>
-					{#if torrentSearchOpen}
-						<div class="mt-2">
-							{#if assignError}
-								<div class="mb-2 alert alert-error">
-									<span>{assignError}</span>
-								</div>
-							{/if}
-							{#if torrentStatus === 'searching' && torrentMatches.length === 0}
-								<p class="text-sm text-base-content/60">Searching…</p>
-							{:else if torrentStatus === 'error'}
-								<p class="text-sm text-error">{torrentError ?? 'Failed'}</p>
-							{:else if torrentMatches.length === 0}
-								<p class="text-sm text-base-content/60">No matching torrents.</p>
-							{:else}
-								<div class="flex flex-col gap-1">
-									{#each torrentMatches as torrent (torrent.infoHash)}
-										{@const added = existingHashes.has(torrent.magnetLink)}
-										{@const adding = addingHash === torrent.magnetLink}
-										{@const streamEvalRow: TorrentRowEval = torrent.magnetLink
-									? (resultEvals[torrent.magnetLink] ?? ({ kind: 'pending' } as TorrentRowEval))
-									: ({ kind: 'not-streamable', reason: 'no magnet' } as TorrentRowEval)}
-										<button
-											type="button"
-											class={classNames(
-												'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
-												{ 'opacity-60': added || adding }
-											)}
-											onclick={() => assignTorrent(torrent)}
-											disabled={addingHash !== null || added}
-											title={streamEvalRow.kind === 'streamable'
-												? `Streamable — ${streamEvalRow.fileName} · ${torrent.title}`
-												: streamEvalRow.kind === 'not-streamable'
-													? `Not streamable: ${streamEvalRow.reason} · ${torrent.title}`
-													: torrent.title}
-										>
-											{#if streamEvalRow.kind === 'pending' || streamEvalRow.kind === 'evaluating'}
-												<span
-													class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
-													aria-label="Probing torrent metadata"
-												></span>
-											{:else if streamEvalRow.kind === 'streamable'}
-												<span
-													class="shrink-0 text-success"
-													aria-label="Streamable"
-													title={`Streamable — ${streamEvalRow.fileName}`}
-												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														viewBox="0 0 24 24"
-														fill="currentColor"
-														class="h-3.5 w-3.5"
-														aria-hidden="true"
-													>
-														<polygon points="6 4 20 12 6 20 6 4" />
-													</svg>
-												</span>
-											{:else}
-												<span
-													class="shrink-0 text-base-content/30"
-													aria-label="Not streamable"
-													title={`Not streamable: ${streamEvalRow.reason}`}
-												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														viewBox="0 0 24 24"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2.5"
-														stroke-linecap="round"
-														class="h-3.5 w-3.5"
-														aria-hidden="true"
-													>
-														<line x1="5" y1="5" x2="19" y2="19" />
-														<line x1="19" y1="5" x2="5" y2="19" />
-													</svg>
-												</span>
-											{/if}
-											<span class="font-medium">{torrent.quality ?? '—'}</span>
-											<span class="text-success">↑{torrent.seeders}</span>
-											<span class="text-warning">↓{torrent.leechers}</span>
-											<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
-											<span class="truncate text-base-content/70"
-												>{torrent.parsedTitle || torrent.title}</span
-											>
-											{#if added}
-												<span class="ml-auto">✓</span>
-											{:else if adding}
-												<span class="ml-auto">…</span>
-											{/if}
-										</button>
-									{/each}
-								</div>
-							{/if}
-						</div>
-					{/if}
-				</div>
+				<CatalogTorrentSearchCard
+					search={torrentSearch}
+					onAssign={assignTorrent}
+					{addingHash}
+					{assignError}
+					{existingHashes}
+					collapsible
+					open={torrentSearchOpen}
+					onToggle={toggleTorrentSearch}
+					onRefresh={() =>
+						torrentSearch.search({
+							addon: firkin.addon,
+							title: firkin.title,
+							year: firkin.year
+						})}
+				/>
 			{/if}
 
-			<div class="card border border-base-content/10 bg-base-200 p-4">
-				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
-					Files ({firkin.files.length})
-				</h2>
-				{#if firkin.files.length === 0}
-					<p class="text-sm text-base-content/60">No files attached.</p>
-				{:else}
-					<div class="overflow-x-auto rounded-box border border-base-content/10">
-						<table class="table table-sm">
-							<thead>
-								<tr>
-									<th class="w-24">Type</th>
-									<th>Title</th>
-									<th>Value</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each firkin.files as file, i (i)}
-									<tr>
-										<td class={classNames('text-xs font-semibold')}>
-											<span class="badge badge-outline badge-sm">{file.type}</span>
-										</td>
-										<td class="text-xs [overflow-wrap:anywhere]">
-											{file.title ?? ''}
-										</td>
-										<td class="font-mono text-xs break-all">{file.value}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				{/if}
-			</div>
+			<CatalogFilesTable files={firkin.files} />
 		</section>
 	</div>
 </div>

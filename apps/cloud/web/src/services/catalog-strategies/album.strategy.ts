@@ -1,0 +1,107 @@
+import { fetchJson } from '$transport/fetch-helpers';
+import { releaseGroupsToDisplay } from 'addons/musicbrainz/transform';
+import type { MusicBrainzArtistCredit, MusicBrainzReleaseGroup } from 'addons/musicbrainz/types';
+import type { CatalogItem, CatalogAuthor, CatalogFilterOption } from '$types/catalog.type';
+import type { CatalogKindStrategy } from '$services/catalog.service';
+
+function mbCreditsToAuthors(credits: MusicBrainzArtistCredit[]): CatalogAuthor[] {
+	return credits.map((c) => ({
+		id: c.artist.id,
+		name: c.name,
+		role: 'artist' as const,
+		source: 'musicbrainz' as const,
+		imageUrl: null,
+		joinPhrase: c.joinphrase || undefined
+	}));
+}
+
+const GENRES: CatalogFilterOption[] = [
+	'rock',
+	'pop',
+	'electronic',
+	'hip hop',
+	'jazz',
+	'classical',
+	'r&b',
+	'metal',
+	'folk',
+	'soul',
+	'punk',
+	'blues',
+	'country',
+	'ambient',
+	'indie',
+	'alternative'
+].map((g) => ({ id: g, label: g }));
+
+function toAlbumCatalogItems(albums: ReturnType<typeof releaseGroupsToDisplay>): CatalogItem[] {
+	return albums.map((a) => ({
+		id: a.id,
+		kind: 'album' as const,
+		title: a.title,
+		sortTitle: a.title.toLowerCase(),
+		year: a.firstReleaseYear || null,
+		overview: null,
+		posterUrl: a.coverArtUrl,
+		backdropUrl: null,
+		voteAverage: null,
+		voteCount: null,
+		parentId: null,
+		position: null,
+		source: 'musicbrainz' as const,
+		sourceId: a.id,
+		createdAt: '',
+		updatedAt: '',
+		metadata: {
+			musicbrainzId: a.id,
+			primaryType: a.primaryType,
+			secondaryTypes: a.secondaryTypes,
+			authors: mbCreditsToAuthors(a.rawArtistCredits),
+			firstReleaseYear: a.firstReleaseYear,
+			coverArtUrl: a.coverArtUrl,
+			releases: []
+		}
+	}));
+}
+
+export const albumStrategy: CatalogKindStrategy = {
+	kind: 'album',
+	pinService: 'musicbrainz-album',
+	tabs: [{ id: 'popular', label: 'Popular' }],
+	filterDefinitions: {
+		genre: { label: 'Genre', loadOptions: async () => GENRES }
+	},
+
+	async search(query, _page, _filters) {
+		const data = await fetchJson<{ 'release-groups': MusicBrainzReleaseGroup[] }>(
+			`/api/musicbrainz/search/release-groups?q=${encodeURIComponent(query)}`
+		);
+		return {
+			items: toAlbumCatalogItems(releaseGroupsToDisplay(data?.['release-groups'] ?? [])),
+			totalPages: 1
+		};
+	},
+
+	async loadTab(_tabId, _page, filters) {
+		const genre = filters.genre || 'rock';
+		const data = await fetchJson<{ 'release-groups': MusicBrainzReleaseGroup[] }>(
+			`/api/musicbrainz/popular?genre=${encodeURIComponent(genre)}`
+		);
+		return {
+			items: toAlbumCatalogItems(releaseGroupsToDisplay(data?.['release-groups'] ?? [])),
+			totalPages: 1
+		};
+	},
+
+	async resolveByIds(ids) {
+		const results = await Promise.allSettled(
+			ids.map((id) => fetchJson<MusicBrainzReleaseGroup>(`/api/musicbrainz/release-group/${id}`))
+		);
+		return results
+			.filter(
+				(r): r is PromiseFulfilledResult<MusicBrainzReleaseGroup> =>
+					r.status === 'fulfilled' && r.value != null
+			)
+			.flatMap((r) => toAlbumCatalogItems(releaseGroupsToDisplay([r.value])));
+	}
+};

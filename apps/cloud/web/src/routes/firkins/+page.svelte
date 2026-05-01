@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
-	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import { cachedImageUrl } from '$lib/image-cache';
 	import {
 		firkinsService,

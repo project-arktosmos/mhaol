@@ -43,7 +43,7 @@ import type { PassportData } from 'webrtc/types';
 
 ## Integration
 
-This package has **no dependency on `packages/ui-lib`**. Apps wire it via dependency injection:
+This package has **no dependency on the cloud WebUI**. Apps wire it via dependency injection:
 
 ```typescript
 contactHandshakeService.initialize({

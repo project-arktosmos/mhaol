@@ -34,12 +34,83 @@ src/
 └── frontend.rs          # rust-embed wrapper that serves web/dist-static/
 
 web/                     # SvelteKit static SPA (pnpm package `cloud`); builds to web/dist-static/
-├── src/                 # routes, components, services, css
+├── src/
+│   ├── routes/          # SvelteKit routes
+│   ├── components/      # Svelte components, organised by feature
+│   ├── services/        # Frontend services + runes-driven service classes (`*.svelte.ts`)
+│   ├── adapters/        # Adapter classes wrapping external APIs / signaling
+│   ├── transport/       # fetch / SSE / WebRTC RPC helpers (see "WebUI: transport layer" below)
+│   ├── types/           # Shared TS types
+│   ├── utils/           # Pure helpers
+│   ├── data/            # Static data (media-registry, …)
+│   ├── lib/             # SvelteKit `$lib` files (per-page services + helpers)
+│   ├── app-shims/       # Svelte/Tauri environment shims
+│   └── css/             # Tailwind/DaisyUI entry + theme tokens
 ├── scripts/             # nav generator + Vite plugin
-├── svelte.config.js
+├── svelte.config.js     # path aliases ($components, $services, $types, $adapters, $utils, $data, $transport)
 ├── vite.config.ts
 └── package.json
 ```
+
+The cloud is the only frontend-facing app in this monorepo, so the WebUI owns its full stack — there is no separate shared UI package. Aliases are defined in `svelte.config.js` so cross-module imports stay short:
+
+```javascript
+alias: {
+  $components: 'src/components',
+  $services: 'src/services',
+  $types: 'src/types',
+  $adapters: 'src/adapters',
+  $utils: 'src/utils',
+  $data: 'src/data',
+  $transport: 'src/transport',
+  'app-shims': 'src/app-shims'
+}
+```
+
+Plus the SvelteKit-reserved `$lib` (→ `src/lib/`) and `$app/*` (SvelteKit modules).
+
+## WebUI: catalog detail routes
+
+`/catalog/virtual` and `/catalog/[ipfsHash]` share the same presentation through `$components/catalog/` and the same behaviour through resolver service classes in `$services/catalog/`. Each route only owns its route-specific wiring:
+
+| Concern | `/catalog/virtual` | `/catalog/[ipfsHash]` |
+|---|---|---|
+| Source of firkin data | URL query params (synthesised `CloudFirkin`) | `+page.ts` loader → real persisted firkin |
+| Header actions | `Bookmark` | `Play` / `IPFS Play` / `Torrent Stream` / `Find metadata` / `Delete firkin` |
+| Identity / version history / files table | omitted | rendered |
+| Resolver `persist` callbacks | none — discarded on navigate | `PUT /api/firkins/:id` (rolls the CID forward) |
+| Torrent search eval column | off | on (`/api/torrent/evaluate` per row) |
+| Torrent search collapsible | always open | collapsed by default |
+
+**Shared components** (`apps/cloud/web/src/components/catalog/`):
+- `CatalogPageHeader.svelte` — back link, title, addon/kind/year badges, optional `extraBadge`, action snippet slot
+- `CatalogDescriptionCard.svelte` — description card
+- `CatalogImagesCard.svelte` — images grid with metadata
+- `CatalogTrailersCard.svelte` — trailers list driven by a `TrailerResolver`
+- `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`
+- `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval
+- `CatalogIdentityCard.svelte` — CID / created / updated / version (detail only)
+- `CatalogVersionHistoryCard.svelte` — `version_hashes` chain (detail only)
+- `CatalogFilesTable.svelte` — firkin `files` table (detail only)
+
+**Shared resolver services** (`apps/cloud/web/src/services/catalog/`, all `.svelte.ts` so `$state` runes work):
+- `trailer-resolver.svelte.ts` — `TrailerResolver` class. `resolveMovie(...)` / `resolveTv(...)` accept TMDB-sourced trailers via `stored`, prefer them when present, and only fall back to the YouTube fuzzy search when TMDB has nothing English. Optional `persist` callback writes back via `PUT /api/firkins/:id`.
+- `track-resolver.svelte.ts` — `TrackResolver` class. `loadByReleaseGroup(...)` fetches the MB tracklist and resolves YouTube URLs in series. Optional `persistTrackUrls` batches resolved URLs into one `PUT` so each resolution doesn't mint N intermediate firkin CIDs.
+- `torrent-search.svelte.ts` — `TorrentSearch` class. Optional `evaluate: true` runs `/api/torrent/evaluate` per result with a sliding-window concurrency cap (default 4). Also exports `startTorrentDownload(magnet)`.
+
+**Pattern.** When two routes need the same UI in the cloud SPA: put the markup in `$components/<feature>/`, put the behaviour in a runes-driven service class at `$services/<feature>/<thing>.svelte.ts`, and let each route compose them with route-specific inputs and (optional) persistence callbacks. The presentational components stay free of business logic; the service classes own the state machines and side-effects.
+
+## WebUI: transport layer
+
+All frontend-to-backend communication flows through `apps/cloud/web/src/transport/`:
+- `transport.type.ts` — `Transport` interface (fetch, subscribe, resolveUrl)
+- `http-transport.ts` — HTTP implementation (wraps browser fetch)
+- `webrtc-transport.ts` — WebRTC RPC implementation (sends requests over data channels)
+- `fetch-helpers.ts` — `fetchJson()`, `fetchRaw()`, `subscribeSSE()` used by all services
+- `transport-context.ts` — Module-level singleton (`setTransport` / `getTransport`)
+- `rpc.type.ts` — RPC message protocol types
+
+Services should never call `fetch` directly when they need transport-aware behaviour — go through `fetchJson` / `fetchRaw` / `subscribeSSE` so the same code paths work over HTTP and WebRTC.
 
 ## On-disk layout
 

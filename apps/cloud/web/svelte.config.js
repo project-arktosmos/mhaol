@@ -16,13 +16,17 @@ const config = {
 			assets: 'dist-static'
 		}),
 		alias: {
-			$components: '../../../packages/ui-lib/src/components',
-			$utils: '../../../packages/ui-lib/src/utils',
-			$types: '../../../packages/ui-lib/src/types',
-			$data: '../../../packages/ui-lib/src/data',
-			$adapters: '../../../packages/ui-lib/src/adapters',
-			$services: '../../../packages/ui-lib/src/services',
-			'ui-lib': '../../../packages/ui-lib/src'
+			$components: 'src/components',
+			$utils: 'src/utils',
+			$types: 'src/types',
+			$data: 'src/data',
+			$adapters: 'src/adapters',
+			$services: 'src/services',
+			$transport: 'src/transport',
+			'app-shims': 'src/app-shims',
+			'webrtc/*': '../../../packages/webrtc/src/*',
+			'torrent-search-thepiratebay':
+				'../../../packages/addons/torrent-search-thepiratebay/src/index.ts'
 		}
 	}
 };

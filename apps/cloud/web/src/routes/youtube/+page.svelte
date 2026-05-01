@@ -11,8 +11,8 @@
 		YouTubeStreamFormat
 	} from 'addons/youtube/types';
 	import { extractVideoId } from 'addons/youtube/types';
-	import { playerService } from 'ui-lib/services/player.service';
-	import type { PlayableFile } from 'ui-lib/types/player.type';
+	import { playerService } from '$services/player.service';
+	import type { PlayableFile } from '$types/player.type';
 
 	interface SearchItem {
 		videoId: string;

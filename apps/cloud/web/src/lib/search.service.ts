@@ -319,4 +319,3 @@ function mbArtistCreditsToArtists(credits: MbArtistCredit[]): Artist[] {
 	}
 	return out;
 }
-

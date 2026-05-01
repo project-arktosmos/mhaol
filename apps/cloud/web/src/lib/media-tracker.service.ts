@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
 import { get } from 'svelte/store';
-import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
-import { playerService } from 'ui-lib/services/player.service';
+import { firkinPlaybackService } from '$services/firkin-playback.service';
+import { playerService } from '$services/player.service';
 import { userIdentityService } from '$lib/user-identity.service';
 
 const HEARTBEAT_INTERVAL_MS = 10_000;

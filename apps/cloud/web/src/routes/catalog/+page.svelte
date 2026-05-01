@@ -3,11 +3,11 @@
 	import classNames from 'classnames';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
-	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
-	} from 'ui-lib/components/firkins/FirkinMetadataLookupModal.svelte';
-	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
+	} from '$components/firkins/FirkinMetadataLookupModal.svelte';
+	import type { CloudFirkin } from '$types/firkin.type';
 	import {
 		listSources,
 		loadGenres,
@@ -271,9 +271,7 @@
 		void (async () => {
 			try {
 				const fetched = await listSources();
-				sources = fetched.filter(
-					(s) => s.id !== 'youtube-video' && s.id !== 'youtube-channel'
-				);
+				sources = fetched.filter((s) => s.id !== 'youtube-video' && s.id !== 'youtube-channel');
 				if (sources.length > 0) {
 					addon = sources[0].id;
 					await refreshGenres();
@@ -466,63 +464,63 @@
 	{/if}
 
 	<section class="flex flex-col gap-3">
-			<div class="flex items-center justify-between gap-4">
-				<h2 class="text-lg font-semibold">Popular</h2>
-				<div class="flex items-center gap-2">
-					<button
-						class="btn btn-outline btn-xs"
-						onclick={() => goToPage(page - 1)}
-						disabled={itemsLoading || page <= 1}
-					>
-						Prev
-					</button>
-					<span class="text-xs text-base-content/60">Page {page} / {totalPages}</span>
-					<button
-						class="btn btn-outline btn-xs"
-						onclick={() => goToPage(page + 1)}
-						disabled={itemsLoading || page >= totalPages}
-					>
-						Next
-					</button>
-					<button class="btn btn-outline btn-xs" onclick={refreshItems} disabled={itemsLoading}>
-						Refresh
-					</button>
-				</div>
-			</div>
-
-			{#if itemsError}
-				<div class="alert alert-error">
-					<span>{itemsError}</span>
-				</div>
-			{/if}
-
-			{#if itemsLoading && items.length === 0}
-				<p class="text-sm text-base-content/60">Loading…</p>
-			{:else if items.length === 0}
-				<p class="text-sm text-base-content/60">No items.</p>
-			{:else}
-				<div
-					class={classNames(
-						'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
-						{ 'opacity-60': itemsLoading }
-					)}
+		<div class="flex items-center justify-between gap-4">
+			<h2 class="text-lg font-semibold">Popular</h2>
+			<div class="flex items-center gap-2">
+				<button
+					class="btn btn-outline btn-xs"
+					onclick={() => goToPage(page - 1)}
+					disabled={itemsLoading || page <= 1}
 				>
-					{#each items as item (item.id)}
-						<a
-							href={virtualHref(item)}
-							class="block no-underline"
-							onclick={(e) => {
-								if ((e.target as HTMLElement).closest('button, summary')) {
-									e.preventDefault();
-								}
-							}}
-						>
-							<FirkinCard firkin={virtualFirkin(item)} />
-						</a>
-					{/each}
-				</div>
-			{/if}
-		</section>
+					Prev
+				</button>
+				<span class="text-xs text-base-content/60">Page {page} / {totalPages}</span>
+				<button
+					class="btn btn-outline btn-xs"
+					onclick={() => goToPage(page + 1)}
+					disabled={itemsLoading || page >= totalPages}
+				>
+					Next
+				</button>
+				<button class="btn btn-outline btn-xs" onclick={refreshItems} disabled={itemsLoading}>
+					Refresh
+				</button>
+			</div>
+		</div>
+
+		{#if itemsError}
+			<div class="alert alert-error">
+				<span>{itemsError}</span>
+			</div>
+		{/if}
+
+		{#if itemsLoading && items.length === 0}
+			<p class="text-sm text-base-content/60">Loading…</p>
+		{:else if items.length === 0}
+			<p class="text-sm text-base-content/60">No items.</p>
+		{:else}
+			<div
+				class={classNames(
+					'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+					{ 'opacity-60': itemsLoading }
+				)}
+			>
+				{#each items as item (item.id)}
+					<a
+						href={virtualHref(item)}
+						class="block no-underline"
+						onclick={(e) => {
+							if ((e.target as HTMLElement).closest('button, summary')) {
+								e.preventDefault();
+							}
+						}}
+					>
+						<FirkinCard firkin={virtualFirkin(item)} />
+					</a>
+				{/each}
+			</div>
+		{/if}
+	</section>
 </div>
 
 {#if metadataTarget}

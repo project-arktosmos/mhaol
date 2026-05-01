@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 @plugin 'daisyui';
-@source '../../../../../packages/ui-lib/src';
-@import 'ui-lib/css/themes.css';
+@source '../';
+@import './themes.css';
 
 body {
 	padding-top: env(safe-area-inset-top, 0px);

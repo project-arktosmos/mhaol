@@ -59,7 +59,7 @@ The cloud app reads the same `swarm.key` file by default, so the two converge on
 `GET /party/{room_id}` upgrades to a WebSocket. Required query params:
 
 - `address` — peer Ethereum address (lowercased on the wire).
-- `signature` — EIP-191 signature over `partykit-auth:{room_id}:{timestamp}`. The string literal `partykit-auth:` is preserved for wire compatibility with existing clients (`packages/ui-lib`, `packages/p2p-stream/src/worker/signaling_client.rs`); the previous PartyKit deployment is gone, but the auth message format is unchanged.
+- `signature` — EIP-191 signature over `partykit-auth:{room_id}:{timestamp}`. The string literal `partykit-auth:` is preserved for wire compatibility with existing clients (`apps/cloud/web/src/services/`, `packages/p2p-stream/src/worker/signaling_client.rs`); the previous PartyKit deployment is gone, but the auth message format is unchanged.
 - `timestamp` — Unix milliseconds; the request is rejected if it differs from server-now by more than 30s.
 - `passport_raw` (optional) — JSON `{ "name": "...", "instanceType": "..." }`.
 - `passport_signature` (optional) — EIP-191 signature over `passport_raw`. Both are required to publish a name/instance type.

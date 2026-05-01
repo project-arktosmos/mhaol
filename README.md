@@ -199,7 +199,6 @@ mhaol.git/
 │   ├── shepperd/          # Browser extension (Manifest V3)
 │   └── signaling/         # Rust signaling server
 ├── packages/
-│   ├── ui-lib/            # Shared components, services, types, CSS
 │   ├── addons/            # TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subs
 │   ├── webrtc/            # WebRTC contact handshake layer
 │   ├── signaling/         # PartyKit signaling (cloud)
@@ -217,6 +216,6 @@ mhaol.git/
 
 ### Architecture
 
-The cloud WebUI is a thin wrapper. All shared frontend code (components, services, types, adapters) lives in `packages/ui-lib`. The WebUI only contains route files and configuration — it imports and assembles, never implements.
+The cloud WebUI owns its full stack. All frontend code — components, services, adapters, types, transport, CSS — lives under `apps/cloud/web/src/`, addressed via the `$components`, `$services`, `$types`, `$adapters`, `$utils`, `$transport`, `$lib` aliases configured in its `svelte.config.js`. There is no separate shared UI package.
 
-The frontend communicates with the cloud server via a transport layer (`packages/ui-lib/src/transport/`) that abstracts over HTTP and WebRTC, making the same API calls work whether connecting locally or peer-to-peer.
+The frontend communicates with the cloud server via a transport layer (`apps/cloud/web/src/transport/`) that abstracts over HTTP and WebRTC, making the same API calls work whether connecting locally or peer-to-peer.

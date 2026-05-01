@@ -3,9 +3,8 @@
 This document guides Claude (and developers) on implementing features in this monorepo. Follow these conventions strictly to maintain consistency across all packages.
 
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
-- `packages/ui-lib/CLAUDE.md` — UI components, services, types, adapters, utils, CSS/themes, transport layer
 - `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
-- `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`)
+- `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`) + cloud WebUI (components, services, types, adapters, utils, CSS/themes, transport layer all live here)
 - `apps/rendezvous/CLAUDE.md` — Private-swarm IPFS bootstrap node + DHT-backed WebRTC signaling
 ---
 
@@ -18,7 +17,6 @@ mhaol.git/
 │   ├── rendezvous/                   # Rust IPFS bootstrap node + DHT/WebSocket WebRTC signaling + TURN credential server (mhaol-rendezvous, HTTP 14080, libp2p 14001)
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
-│   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subtitles, torrent search)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── p2p-stream/                   # Rust P2P streaming library (GStreamer + WebRTC)
@@ -37,14 +35,23 @@ mhaol.git/
 
 ## App Architecture
 
-The cloud SPA at `apps/cloud/web/` is a thin wrapper that imports everything from `packages/ui-lib`. It contains **only**:
+The cloud is the **only** frontend-facing app in this monorepo, so its WebUI owns its full stack — there is no separate shared UI package. The cloud SPA at `apps/cloud/web/` contains:
 
 - `src/routes/` — SvelteKit route files (+page.svelte, +layout.svelte)
-- `src/css/app.css` — CSS entry point (imports Tailwind, DaisyUI, scans ui-lib)
+- `src/components/` — Svelte components, organised by feature (`catalog/`, `firkins/`, `core/`, `player/`, `libraries/`, …)
+- `src/services/` — frontend services (catalog resolvers, firkin playback, player, theme, …)
+- `src/adapters/` — adapter classes that wrap external APIs / signaling
+- `src/transport/` — fetch/SSE/WebRTC RPC helpers (see "Transport Layer" below)
+- `src/types/` — shared TypeScript types
+- `src/utils/` — small pure helpers (string, smart-search, localStorageWritableStore)
+- `src/data/` — static data (`media-registry.ts`, …)
+- `src/lib/` — SvelteKit `$lib` files (per-page services + helpers like `image-cache`, `firkins.service.ts`, `youtube-match.service.ts`)
+- `src/app-shims/` — Svelte/Tauri environment shims
+- `src/css/app.css`, `src/css/themes.css` — CSS entry points (Tailwind + DaisyUI + theme tokens)
 - `src/app.html`, `src/app.d.ts` — SvelteKit boilerplate
-- Config files (svelte.config.js, vite.config.ts, package.json, tsconfig.json)
+- Config files (`svelte.config.js`, `vite.config.ts`, `package.json`, `tsconfig.json`)
 
-It **never** implements its own components, services, adapters, types, or utils. Everything lives in `packages/ui-lib`.
+Cross-module imports use the path aliases configured in `svelte.config.js` (see "Alias configuration" below): `$components`, `$services`, `$types`, `$adapters`, `$utils`, `$data`, `$transport`, plus the SvelteKit-reserved `$lib` and `$app/*`.
 
 ### Cloud
 
@@ -82,7 +89,7 @@ The cloud frontend has these screens:
 
 ### Transport Layer
 
-All frontend-to-backend communication goes through `packages/ui-lib/src/transport/`:
+All frontend-to-backend communication goes through `apps/cloud/web/src/transport/`:
 - `transport.type.ts` — `Transport` interface (fetch, subscribe, resolveUrl)
 - `http-transport.ts` — HTTP implementation (wraps browser fetch)
 - `webrtc-transport.ts` — WebRTC RPC implementation (sends requests over data channels)
@@ -92,27 +99,15 @@ All frontend-to-backend communication goes through `packages/ui-lib/src/transpor
 
 ### How the cloud SPA wires up
 
-`apps/cloud/web/src/routes/+layout.svelte` assembles the shared components:
+`apps/cloud/web/src/routes/+layout.svelte` assembles the shared components, all imported through the local aliases:
 
 ```svelte
 <script>
-  import Navbar from 'ui-lib/components/core/Navbar.svelte';
-  import ModalOutlet from 'ui-lib/components/core/ModalOutlet.svelte';
-  import TorrentModalContent from 'ui-lib/components/torrent/TorrentModalContent.svelte';
-  import { modalRouterService } from 'ui-lib/services/modal-router.service';
+  import Navbar from '$components/core/Navbar.svelte';
+  import ModalOutlet from '$components/core/ModalOutlet.svelte';
+  import TorrentModalContent from '$components/torrent/TorrentModalContent.svelte';
+  import { modalRouterService } from '$services/modal-router.service';
   // ...
-
-  // Data-driven navbar: pass items array
-  const navItems = [
-    { id: 'torrent', label: 'Torrent', classes: 'btn-primary' },
-    { id: 'downloads', label: 'Downloads', classes: 'btn-secondary' },
-  ];
-
-  // Data-driven modal outlet: map ids to components
-  const modals = {
-    torrent: { component: TorrentModalContent, maxWidth: 'max-w-5xl' },
-    downloads: { component: DownloadsModalContent, maxWidth: 'max-w-5xl' },
-  };
 </script>
 
 <Navbar brand={{ label: 'Mhaol' }} items={navItems} />
@@ -122,28 +117,57 @@ All frontend-to-backend communication goes through `packages/ui-lib/src/transpor
 
 ### Alias configuration
 
-The cloud SPA's `svelte.config.js` points aliases to `packages/ui-lib`:
+The cloud SPA's `svelte.config.js` points aliases at its own `src/`:
 
 ```javascript
 alias: {
-  $components: '../../../packages/ui-lib/src/components',
-  $services: '../../../packages/ui-lib/src/services',
-  $types: '../../../packages/ui-lib/src/types',
-  $adapters: '../../../packages/ui-lib/src/adapters',
-  $utils: '../../../packages/ui-lib/src/utils',
-  $data: '../../../packages/ui-lib/src/data',
-  'ui-lib': '../../../packages/ui-lib/src'
+  $components: 'src/components',
+  $services: 'src/services',
+  $types: 'src/types',
+  $adapters: 'src/adapters',
+  $utils: 'src/utils',
+  $data: 'src/data',
+  $transport: 'src/transport',
+  'app-shims': 'src/app-shims'
 }
 ```
 
-Its `src/css/app.css` scans ui-lib for Tailwind classes:
+(SvelteKit reserves `$lib` for `src/lib/` and `$app/*` for its own modules; both work as expected.)
+
+`src/css/app.css` scans the SPA's own `src/` for Tailwind classes:
 
 ```css
 @import 'tailwindcss';
 @plugin 'daisyui';
-@source '../../../packages/ui-lib/src';
-@import 'ui-lib/css/themes.css';
+@source '../';
+@import './themes.css';
 ```
+
+### Catalog detail routes (`/catalog/virtual` and `/catalog/[ipfsHash]`)
+
+The two catalog detail pages share their full presentation through components in `$components/catalog/` and behaviour through resolver services in `$services/catalog/`. The pages themselves only own route-specific wiring (URL params vs. loader-fed firkin, "Bookmark" vs. "Play / IPFS Play / Find metadata / Delete", and whether resolved data is persisted back to the firkin via `PUT /api/firkins/:id`).
+
+**Shared components** (`apps/cloud/web/src/components/catalog/`):
+- `CatalogPageHeader.svelte` — back link, title, addon/kind/year badges, optional `extraBadge`, action snippet slot
+- `CatalogDescriptionCard.svelte` — description card
+- `CatalogImagesCard.svelte` — images grid with metadata
+- `CatalogTrailersCard.svelte` — trailers list driven by a `TrailerResolver`
+- `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`
+- `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval
+- `CatalogIdentityCard.svelte` — CID / created / updated / version (detail only)
+- `CatalogVersionHistoryCard.svelte` — `version_hashes` chain (detail only)
+- `CatalogFilesTable.svelte` — firkin `files` table (detail only)
+
+**Shared resolver services** (`apps/cloud/web/src/services/catalog/`):
+- `trailer-resolver.svelte.ts` — `TrailerResolver` class. Holds `$state` for `trailers`, `status`, `playingKey`, `playError`. `resolveMovie(...)` / `resolveTv(...)` accept TMDB-sourced trailers via `stored`, prefer them when present, and only fall back to the YouTube fuzzy search when TMDB has nothing English. Optional `persist` callback (used by the detail page) lets each resolution write back to the firkin via `PUT /api/firkins/:id`.
+- `track-resolver.svelte.ts` — `TrackResolver` class. Holds `$state` for `tracks`, `status`, `playingIndex`, `playError`. `loadByReleaseGroup(...)` fetches the MB tracklist and resolves YouTube URLs in series; the optional `persistTrackUrls` callback batches the resolved URLs into one `PUT` so each resolution doesn't mint N intermediate firkin CIDs.
+- `torrent-search.svelte.ts` — `TorrentSearch` class. Holds `$state` for `matches`, `status`, `rowEvals`. Optional `evaluate: true` runs `/api/torrent/evaluate` per result with a sliding-window concurrency cap so the eval column on the detail page shows streamability without saturating the torrent client. Also exports `startTorrentDownload(magnet)`.
+
+**Page-specific logic**:
+- `/catalog/virtual` synthesises a `CloudFirkin` from URL params, instantiates the three resolvers without a `persist` callback, and only writes anything via the **Bookmark** button (which calls `firkinsService.create(...)` with `resolvedTrackFiles()` and `resolvedTrailers()` from the resolvers, then redirects to the new content-addressed detail URL).
+- `/catalog/[ipfsHash]` loads the firkin via `+page.ts` and instantiates the same resolvers **with** `persist` callbacks pointing at a single `persistFirkinPatch(patch)` helper that calls `PUT /api/firkins/:id` and follows the response to its (potentially new) CID. The detail page also adds the playback / IPFS-play / torrent-stream actions, the `CatalogIdentityCard` / `CatalogVersionHistoryCard` / `CatalogFilesTable` extras, the artists backfill effect, the magnet auto-start effect, and the in-place `firkinsService.enrich(...)` flow used by the **Find metadata** modal.
+
+This is the canonical pattern for cross-route reuse in the cloud SPA: shared presentation in `$components/<feature>/`, shared behaviour in `$services/<feature>/<thing>.svelte.ts` (the `.svelte.ts` extension lets `$state` runes work in service classes), and per-route wiring stays in the route's `+page.svelte`.
 
 ### Media Route Architecture
 
@@ -166,12 +190,12 @@ Media routes use slug-based routing with a data-driven registry:
 └── photos/                     # Explicit (custom UI: gallery, tagging)
 ```
 
-**Key files:**
-- `packages/ui-lib/src/data/media-registry.ts` — `MEDIA_REGISTRY` and `MUSIC_REGISTRY` mapping slugs to config (kind, label, services, features)
-- `packages/ui-lib/src/components/catalog/CatalogBrowsePage.svelte` — Unified browse with search, tabs, filters, pinned/favorites, grid
-- `packages/ui-lib/src/components/catalog/filters/CatalogFilterBar.svelte` — Switch component rendering the right filter UI per kind
-- `packages/ui-lib/src/services/catalog.service.ts` — Strategy-pattern service (`CatalogKindStrategy` interface)
-- `packages/ui-lib/src/services/catalog-strategies/` — Per-kind strategies (movie, tv, album, artist, game)
+**Key files** (all paths relative to `apps/cloud/web/`):
+- `src/data/media-registry.ts` — `MEDIA_REGISTRY` and `MUSIC_REGISTRY` mapping slugs to config (kind, label, services, features)
+- `src/components/catalog/CatalogBrowsePage.svelte` — Unified browse with search, tabs, filters, pinned/favorites, grid
+- `src/components/catalog/filters/CatalogFilterBar.svelte` — Switch component rendering the right filter UI per kind
+- `src/services/catalog.service.ts` — Strategy-pattern service (`CatalogKindStrategy` interface)
+- `src/services/catalog-strategies/` — Per-kind strategies (movie, tv, album, artist, game)
 
 **Adding a new media type:** Add an entry to `MEDIA_REGISTRY` (or `MUSIC_REGISTRY`), create a catalog strategy, a detail meta component, and add filter handling if needed. The slug routes handle everything else.
 
@@ -249,7 +273,7 @@ After every change, immediately commit the affected files:
 pnpm lint && pnpm check && pnpm test
 
 # Then commit
-git add packages/ui-lib/src/components/media/MediaCard.svelte
+git add apps/cloud/web/src/components/media/MediaCard.svelte
 git commit -m "add thumbnail fallback to MediaCard"
 ```
 
@@ -259,32 +283,25 @@ git commit -m "add thumbnail fallback to MediaCard"
 
 When adding a new feature that spans the full stack:
 
-**Cloud (`apps/cloud`)**
+**Cloud server (`apps/cloud`)**
 - [ ] Create API module in `src/{feature}.rs` exposing a `pub fn router() -> Router<CloudState>`
 - [ ] Add `mod {feature};` to `src/server.rs`
 - [ ] Register route in `server.rs`: `.nest("/api/{feature}", {feature}::router())`
 - [ ] Add any new managers/repos to `CloudState`
 
-**Shared Frontend (`packages/ui-lib`)**
+**Cloud WebUI (`apps/cloud/web`)**
 - [ ] Define types in `src/types/{feature}.type.ts`
-- [ ] Create adapter in `src/adapters/classes/{feature}.adapter.ts`
-- [ ] Create/extend service in `src/services/{feature}.service.ts`
-- [ ] Create component(s) in `src/components/{feature}/`
-- [ ] Use `ui-lib/...` import paths for all cross-module references
-- [ ] Use `classnames` for all conditional styling
-- [ ] No `<style>` tags or inline styles
-- [ ] Components use callback props, contain no business logic
+- [ ] Create adapter in `src/adapters/classes/{feature}.adapter.ts` (when wrapping an external API or signaling channel)
+- [ ] Create/extend service in `src/services/{feature}.service.ts` (or `src/services/{feature}/{thing}.svelte.ts` for runes-driven service classes)
+- [ ] Create component(s) in `src/components/{feature}/` using the `$components`, `$services`, `$types`, `$adapters`, `$utils`, `$transport`, `$lib` aliases
+- [ ] Use `classnames` for all conditional styling — never `<style>` tags or inline styles
+- [ ] Components stay presentational: callback props in, no business logic; resolvers/adapters/services own the state machines and side-effects
+- [ ] When two routes need the same UI, extract the markup into `$components/<feature>/` and the behaviour into `$services/<feature>/<thing>.svelte.ts` — see "Catalog detail routes" above for the canonical pattern
 - [ ] Write tests in `test/`
-
-**Cloud WebUI (`apps/cloud/web`, if the feature needs UI wiring)**
-- [ ] Import components from `ui-lib/components/...`
-- [ ] Import services/types from `ui-lib/services/...`, `ui-lib/types/...`
-- [ ] Add to navbar items and/or modal outlet if needed
-- [ ] The app only assembles — never implements logic
 
 **Always**
 - [ ] Commit each logical change immediately after completing it
-- [ ] Update `packages/ui-lib/CLAUDE.md` if adding new component directories, services, or adapters
+- [ ] Update `apps/cloud/CLAUDE.md` if adding new component directories, services, or adapters
 
 ---
 
@@ -293,5 +310,6 @@ When adding a new feature that spans the full stack:
 When making significant structural changes (new packages, new component directories, new services, renaming files, changing the app architecture), update the relevant CLAUDE.md files immediately:
 
 - **Root CLAUDE.md** — Monorepo structure, app architecture, workspace scripts
-- **packages/ui-lib/CLAUDE.md** — Components, services, adapters, types, utils, CSS/themes
-- **apps/cloud/CLAUDE.md** — API modules, routes
+- **apps/cloud/CLAUDE.md** — Cloud server API modules + routes, **and** the cloud WebUI: components, services, adapters, types, utils, CSS/themes, transport layer
+- **apps/rendezvous/CLAUDE.md** — Rendezvous app
+- **packages/webrtc/CLAUDE.md** — WebRTC contact handshake layer

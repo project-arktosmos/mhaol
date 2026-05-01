@@ -4,9 +4,9 @@
 	import classNames from 'classnames';
 	import {
 		librariesService,
-		LIBRARY_KINDS,
-		LIBRARY_KIND_LABELS,
-		type LibraryKind,
+		LIBRARY_ADDONS,
+		LIBRARY_ADDON_LABELS,
+		type LibraryAddon,
 		type ScanResponse,
 		type Library
 	} from '$lib/libraries.service';
@@ -18,7 +18,7 @@
 
 	let pickedDir = $state('');
 	let newSubfolder = $state('');
-	let newKinds = $state<LibraryKind[]>([]);
+	let newAddons = $state<LibraryAddon[]>([]);
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let deletingId = $state<string | null>(null);
@@ -28,41 +28,43 @@
 	let libPins = $state<Record<string, IpfsPin[]>>({});
 	let pinsErrors = $state<Record<string, string>>({});
 	let editingKindsFor = $state<string | null>(null);
-	let editKinds = $state<LibraryKind[]>([]);
+	let editAddons = $state<LibraryAddon[]>([]);
 	let savingKinds = $state(false);
-	let kindsError = $state<string | null>(null);
+	let addonsError = $state<string | null>(null);
 
-	function toggleNewKind(kind: LibraryKind) {
-		newKinds = newKinds.includes(kind) ? newKinds.filter((k) => k !== kind) : [...newKinds, kind];
+	function toggleNewAddon(addon: LibraryAddon) {
+		newAddons = newAddons.includes(addon)
+			? newAddons.filter((k) => k !== addon)
+			: [...newAddons, addon];
 	}
 
-	function toggleEditKind(kind: LibraryKind) {
-		editKinds = editKinds.includes(kind)
-			? editKinds.filter((k) => k !== kind)
-			: [...editKinds, kind];
+	function toggleEditAddon(addon: LibraryAddon) {
+		editAddons = editAddons.includes(addon)
+			? editAddons.filter((k) => k !== addon)
+			: [...editAddons, addon];
 	}
 
 	function startEditKinds(lib: Library) {
 		editingKindsFor = lib.id;
-		editKinds = [...(lib.kinds ?? [])];
-		kindsError = null;
+		editAddons = [...(lib.addons ?? [])];
+		addonsError = null;
 	}
 
 	function cancelEditKinds() {
 		editingKindsFor = null;
-		editKinds = [];
-		kindsError = null;
+		editAddons = [];
+		addonsError = null;
 	}
 
 	async function saveKinds(id: string) {
 		savingKinds = true;
-		kindsError = null;
+		addonsError = null;
 		try {
-			await librariesService.update(id, { kinds: editKinds });
+			await librariesService.update(id, { addons: editAddons });
 			editingKindsFor = null;
-			editKinds = [];
+			editAddons = [];
 		} catch (err) {
-			kindsError = err instanceof Error ? err.message : 'Unknown error';
+			addonsError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
 			savingKinds = false;
 		}
@@ -132,9 +134,9 @@
 		}
 		creating = true;
 		try {
-			const created = await librariesService.create(finalPath, newKinds);
+			const created = await librariesService.create(finalPath, newAddons);
 			newSubfolder = '';
-			newKinds = [];
+			newAddons = [];
 			void scan(created.id);
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Unknown error';
@@ -289,21 +291,21 @@
 					Kinds (which catalog types this library contains)
 				</span>
 				<div class="flex flex-wrap gap-2">
-					{#each LIBRARY_KINDS as kind (kind)}
+					{#each LIBRARY_ADDONS as kind (kind)}
 						<label
 							class={classNames('btn btn-sm', {
-								'btn-primary': newKinds.includes(kind),
-								'btn-outline': !newKinds.includes(kind)
+								'btn-primary': newAddons.includes(kind),
+								'btn-outline': !newAddons.includes(kind)
 							})}
 						>
 							<input
 								type="checkbox"
 								class="hidden"
-								checked={newKinds.includes(kind)}
+								checked={newAddons.includes(kind)}
 								disabled={creating}
-								onchange={() => toggleNewKind(kind)}
+								onchange={() => toggleNewAddon(kind)}
 							/>
-							{LIBRARY_KIND_LABELS[kind]}
+							{LIBRARY_ADDON_LABELS[kind]}
 						</label>
 					{/each}
 				</div>
@@ -357,21 +359,21 @@
 								<td class="text-xs">
 									{#if editingKindsFor === lib.id}
 										<div class="flex flex-wrap items-center gap-1">
-											{#each LIBRARY_KINDS as kind (kind)}
+											{#each LIBRARY_ADDONS as kind (kind)}
 												<label
 													class={classNames('btn btn-xs', {
-														'btn-primary': editKinds.includes(kind),
-														'btn-outline': !editKinds.includes(kind)
+														'btn-primary': editAddons.includes(kind),
+														'btn-outline': !editAddons.includes(kind)
 													})}
 												>
 													<input
 														type="checkbox"
 														class="hidden"
-														checked={editKinds.includes(kind)}
+														checked={editAddons.includes(kind)}
 														disabled={savingKinds}
-														onchange={() => toggleEditKind(kind)}
+														onchange={() => toggleEditAddon(kind)}
 													/>
-													{LIBRARY_KIND_LABELS[kind]}
+													{LIBRARY_ADDON_LABELS[kind]}
 												</label>
 											{/each}
 											<button
@@ -389,10 +391,10 @@
 												Cancel
 											</button>
 										</div>
-										{#if kindsError}
-											<p class="mt-1 text-error">{kindsError}</p>
+										{#if addonsError}
+											<p class="mt-1 text-error">{addonsError}</p>
 										{/if}
-									{:else if (lib.kinds ?? []).length === 0}
+									{:else if (lib.addons ?? []).length === 0}
 										<button class="btn btn-ghost btn-xs" onclick={() => startEditKinds(lib)}>
 											Set kinds
 										</button>
@@ -401,7 +403,7 @@
 											class="badge flex flex-wrap gap-1 badge-outline badge-sm"
 											onclick={() => startEditKinds(lib)}
 										>
-											{(lib.kinds ?? []).map((k) => LIBRARY_KIND_LABELS[k] ?? k).join(', ')}
+											{(lib.addons ?? []).map((k) => LIBRARY_ADDON_LABELS[k] ?? k).join(', ')}
 										</button>
 									{/if}
 								</td>
