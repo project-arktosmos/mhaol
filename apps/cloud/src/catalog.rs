@@ -942,8 +942,10 @@ pub(crate) async fn musicbrainz_search(
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
     let limit: i64 = 20;
     let offset = (page - 1).max(0) * limit;
-    // Escape Lucene query special chars in the user's query, then wrap as a
-    // release-group name search. MusicBrainz's `query=` param accepts Lucene
+    // Escape Lucene query special chars in the user's query, then OR across
+    // the release-group title and the artist name fields so a query like
+    // "keane" matches both albums titled Keane and every release-group whose
+    // artist credit is Keane. MusicBrainz's `query=` param accepts Lucene
     // syntax; raw quotes/colons in the user input would break the parse.
     let escaped: String = query
         .chars()
@@ -953,7 +955,7 @@ pub(crate) async fn musicbrainz_search(
             _ => vec![c],
         })
         .collect();
-    let lucene = format!("releasegroup:\"{}\"", escaped);
+    let lucene = format!("(releasegroup:\"{q}\" OR artist:\"{q}\")", q = escaped);
     let url = format!(
         "{}/release-group?query={}&fmt=json&limit={}&offset={}",
         MUSICBRAINZ_BASE,
