@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import IptvPlayer from 'ui-lib/components/iptv/IptvPlayer.svelte';
+	import HlsPlayer from 'ui-lib/components/player/HlsPlayer.svelte';
 
 	interface Props {
 		cid: string;
@@ -84,7 +84,7 @@
 	{/if}
 
 	{#if playlistUrl}
-		<IptvPlayer src={playlistUrl} />
+		<HlsPlayer src={playlistUrl} />
 	{/if}
 
 	{#if onClose}

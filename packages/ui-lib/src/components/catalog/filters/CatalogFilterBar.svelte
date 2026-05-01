@@ -47,22 +47,6 @@
 			{/each}
 		</div>
 	{/if}
-{:else if filterKind === 'subject-buttons'}
-	{#if browseState.filterOptions.subject}
-		<div class="flex flex-wrap gap-1">
-			{#each browseState.filterOptions.subject as option}
-				<button
-					class={classNames('btn btn-xs', {
-						'btn-primary': browseState.filters.subject === option.id,
-						'btn-ghost': browseState.filters.subject !== option.id
-					})}
-					onclick={() => onfilter('subject', option.id)}
-				>
-					{option.label}
-				</button>
-			{/each}
-		</div>
-	{/if}
 {:else if filterKind === 'console-selector'}
 	{#if consoles && consoleWasmStatus && consoleImages && onconsolechange}
 		<div class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9">
@@ -105,33 +89,6 @@
 					<span class="text-center text-xs leading-tight font-medium">{console.name}</span>
 				</button>
 			{/each}
-		</div>
-	{/if}
-{:else if filterKind === 'category-country'}
-	{#if browseState.filterOptions.category || browseState.filterOptions.country}
-		<div class="flex flex-wrap items-center gap-2">
-			{#if browseState.filterOptions.category}
-				<select
-					class="select-bordered select select-xs"
-					value={browseState.filters.category ?? ''}
-					onchange={(e) => onfilter('category', (e.target as HTMLSelectElement).value)}
-				>
-					{#each browseState.filterOptions.category as option}
-						<option value={option.id}>{option.label}</option>
-					{/each}
-				</select>
-			{/if}
-			{#if browseState.filterOptions.country}
-				<select
-					class="select-bordered select select-xs"
-					value={browseState.filters.country ?? ''}
-					onchange={(e) => onfilter('country', (e.target as HTMLSelectElement).value)}
-				>
-					{#each browseState.filterOptions.country as option}
-						<option value={option.id}>{option.label}</option>
-					{/each}
-				</select>
-			{/if}
 		</div>
 	{/if}
 {/if}

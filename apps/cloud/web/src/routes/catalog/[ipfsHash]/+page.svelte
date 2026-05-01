@@ -3,6 +3,9 @@
 	import classNames from 'classnames';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
 	import FirkinArtistsSection from 'ui-lib/components/firkins/FirkinArtistsSection.svelte';
+	import FirkinMetadataLookupModal, {
+		type CatalogLookupItem
+	} from 'ui-lib/components/firkins/FirkinMetadataLookupModal.svelte';
 	import EmulatorModal from 'ui-lib/components/videogames/EmulatorModal.svelte';
 	import {
 		coreForRom,
@@ -22,6 +25,7 @@
 	import {
 		firkinsService,
 		addonKind,
+		metadataSearchAddon,
 		type Firkin,
 		type FirkinAddon,
 		type FileEntry
@@ -50,6 +54,33 @@
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
 	const firkinKind = $derived(addonKind(firkin.addon));
 	const isMusicBrainz = $derived(firkin.addon === 'musicbrainz');
+
+	// "Needs metadata" mirrors the catalog grid: missing description OR no
+	// images. Year alone isn't enough — local-* scanners parse `(YYYY)` out
+	// of filenames so a freshly-scanned firkin can have a year but otherwise
+	// be empty.
+	const needsMetadata = $derived(
+		firkin.description.trim() === '' || firkin.images.length === 0
+	);
+	const lookupAddon = $derived(metadataSearchAddon(firkin.addon));
+	let metadataLookupOpen = $state(false);
+
+	async function applyMetadata(item: CatalogLookupItem) {
+		const updated = await firkinsService.enrich(firkin.id, {
+			title: item.title,
+			year: item.year,
+			description: item.description ?? '',
+			posterUrl: item.posterUrl,
+			backdropUrl: item.backdropUrl
+		});
+		metadataLookupOpen = false;
+		// The detail page is content-addressed, so a successful enrich
+		// changes the URL. Navigate to the new id; the previous one is
+		// already replaced in the firkins store by `enrich()`.
+		if (updated.id !== firkin.id) {
+			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
+		}
+	}
 
 	function isYouTubeUrl(value: string): boolean {
 		try {
@@ -91,11 +122,6 @@
 			.map((f) => (f.type === 'url' ? parseMusicBrainzReleaseGroupId(f.value) : null))
 			.find((id): id is string => Boolean(id)) ?? null
 	);
-	const isStreamUrlKind = $derived(firkinKind === 'iptv channel' || firkinKind === 'radio station');
-	const firstStreamUrl = $derived(
-		isStreamUrlKind ? (firkin.files.find((f) => f.type === 'url')?.value ?? null) : null
-	);
-	const hasStreamUrl = $derived(firstStreamUrl !== null);
 	let ipfsStarting = $state(false);
 	let ipfsError = $state<string | null>(null);
 
@@ -489,31 +515,12 @@
 		emulatorTarget = null;
 	}
 
-	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0 || hasStreamUrl);
+	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0);
 
 	let finalizing = $state(false);
 	let finalizeError = $state<string | null>(null);
 
 	async function play() {
-		if (hasStreamUrl && firstStreamUrl) {
-			const mode: 'audio' | 'video' = firkinKind === 'radio station' ? 'audio' : 'video';
-			const file: PlayableFile = {
-				id: `firkin:${firkin.id}`,
-				type: 'library',
-				name: firkin.title,
-				outputPath: '',
-				mode,
-				format: null,
-				videoFormat: null,
-				thumbnailUrl: firkin.images[0]?.url ?? null,
-				durationSeconds: null,
-				size: 0,
-				completedAt: ''
-			};
-			const mime = firkinKind === 'iptv channel' ? 'application/vnd.apple.mpegurl' : null;
-			await playerService.playUrl(file, firstStreamUrl, mime, 'sidebar');
-			return;
-		}
 		if (hasIpfsFiles) {
 			firkinPlaybackService.select(firkin as CloudFirkin);
 			return;
@@ -1074,6 +1081,16 @@
 				</svg>
 				<span>{torrentStreamButtonLabel}</span>
 			</button>
+			{#if needsMetadata && lookupAddon}
+				<button
+					type="button"
+					class="btn btn-outline btn-sm btn-info"
+					onclick={() => (metadataLookupOpen = true)}
+					title="Search {lookupAddon} and bake matching metadata into this firkin (rolls the version forward)"
+				>
+					Find metadata
+				</button>
+			{/if}
 			<button
 				type="button"
 				class="btn btn-outline btn-sm btn-error"
@@ -1504,3 +1521,14 @@
 	gameName={emulatorTarget?.gameName ?? 'Game'}
 	onclose={closeEmulator}
 />
+
+{#if lookupAddon}
+	<FirkinMetadataLookupModal
+		open={metadataLookupOpen}
+		addon={lookupAddon}
+		initialQuery={firkin.title}
+		firkinTitle={firkin.title}
+		onpick={applyMetadata}
+		onclose={() => (metadataLookupOpen = false)}
+	/>
+{/if}

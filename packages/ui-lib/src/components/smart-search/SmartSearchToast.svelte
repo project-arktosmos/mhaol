@@ -35,9 +35,7 @@
 					? 'tv'
 					: selection.type === 'music'
 						? 'music'
-						: selection.type === 'book'
-							? 'books'
-							: 'games';
+						: 'games';
 		return $configStore[key];
 	});
 
@@ -125,9 +123,6 @@
 					break;
 				case 'game':
 					subdir = 'games';
-					break;
-				case 'book':
-					subdir = 'books';
 					break;
 				default:
 					subdir = 'tv';

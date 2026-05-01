@@ -205,7 +205,7 @@ mhaol.git/
 │   └── signaling/         # Rust signaling server
 ├── packages/
 │   ├── ui-lib/            # Shared components, services, types, CSS
-│   ├── addons/            # TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, OpenLibrary
+│   ├── addons/            # TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, Wyzie subs
 │   ├── webrtc/            # WebRTC contact handshake layer
 │   ├── signaling/         # PartyKit signaling (cloud)
 │   ├── identity/          # Rust Ethereum identity (secp256k1)

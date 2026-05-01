@@ -14,7 +14,6 @@
 	let error = $state<string | null>(null);
 	let loading = $state(true);
 
-	// Non-reactive — avoids re-triggering the effect
 	let hlsInstance: Hls | null = null;
 
 	$effect(() => {

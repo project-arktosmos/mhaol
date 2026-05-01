@@ -45,7 +45,7 @@ src/
 │   └── youtube-search/       # YouTube search (input, results, channel cards)
 ├── services/                 # State management + API calls (singleton services)
 │   ├── classes/              # Base classes: ArrayServiceClass, ObjectServiceClass
-│   ├── catalog-strategies/   # Per-kind browse strategies (movie, tv, book, album, artist, game, iptv, youtube, photo)
+│   ├── catalog-strategies/   # Per-kind browse strategies (movie, tv, album, artist, game, youtube, photo)
 │   ├── i18n/                 # svelte-i18n locales (en.json, qq.json)
 │   ├── catalog.service.ts    # Unified catalog browse service with strategy pattern
 │   ├── fetch-cache.service.ts # Fetch cache for torrent download tracking on browse pages

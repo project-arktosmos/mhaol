@@ -4,21 +4,12 @@ export type CatalogKind =
 	| 'movie'
 	| 'tv_show'
 	| 'album'
-	| 'book'
 	| 'game'
 	| 'youtube_video'
 	| 'youtube_channel'
-	| 'iptv_channel'
 	| 'photo';
 
-export type CatalogSource =
-	| 'tmdb'
-	| 'musicbrainz'
-	| 'openlibrary'
-	| 'retroachievements'
-	| 'youtube'
-	| 'iptv'
-	| 'local';
+export type CatalogSource = 'tmdb' | 'musicbrainz' | 'retroachievements' | 'youtube' | 'local';
 
 // === Authors ===
 
@@ -29,7 +20,6 @@ export type AuthorRole =
 	| 'creator'
 	| 'producer'
 	| 'artist'
-	| 'author'
 	| 'developer'
 	| 'publisher'
 	| 'channel';
@@ -57,14 +47,7 @@ export function authorsByRole(authors: CatalogAuthor[], role: AuthorRole): Catal
 }
 
 export function primaryAuthor(authors: CatalogAuthor[]): CatalogAuthor | null {
-	const priority: AuthorRole[] = [
-		'director',
-		'creator',
-		'author',
-		'artist',
-		'developer',
-		'channel'
-	];
+	const priority: AuthorRole[] = ['director', 'creator', 'artist', 'developer', 'channel'];
 	for (const role of priority) {
 		const found = authors.find((a) => a.role === role);
 		if (found) return found;
@@ -193,27 +176,6 @@ export interface AlbumTrack {
 	authors: CatalogAuthor[];
 }
 
-export interface CatalogBook extends CatalogItemBase {
-	kind: 'book';
-	metadata: BookMetadata;
-}
-
-export interface BookMetadata {
-	openlibraryKey: string;
-	authors: CatalogAuthor[];
-	firstPublishYear: string;
-	coverId: number | null;
-	coverUrl: string | null;
-	subjects: string[];
-	publishers: string[];
-	pageCount: number | null;
-	editionCount: number;
-	isbn: string | null;
-	ratingsAverage: number | null;
-	ratingsCount: number;
-	description: string | null;
-}
-
 export interface CatalogGame extends CatalogItemBase {
 	kind: 'game';
 	metadata: GameMetadata;
@@ -277,21 +239,6 @@ export interface YoutubeChannelMetadata {
 	imageUrl: string | null;
 }
 
-export interface CatalogIptvChannel extends CatalogItemBase {
-	kind: 'iptv_channel';
-	metadata: IptvChannelMetadata;
-}
-
-export interface IptvChannelMetadata {
-	channelId: string;
-	country: string;
-	categories: string[];
-	logo: string | null;
-	website: string | null;
-	hasEpg: boolean;
-	isNsfw: boolean;
-}
-
 export interface CatalogPhoto extends CatalogItemBase {
 	kind: 'photo';
 	metadata: PhotoMetadata;
@@ -327,11 +274,9 @@ export type CatalogItem =
 	| CatalogMovie
 	| CatalogTvShow
 	| CatalogAlbum
-	| CatalogBook
 	| CatalogGame
 	| CatalogYoutubeVideo
 	| CatalogYoutubeChannel
-	| CatalogIptvChannel
 	| CatalogPhoto;
 
 // === Type guards ===
@@ -345,9 +290,6 @@ export function isTvShow(item: CatalogItem): item is CatalogTvShow {
 export function isAlbum(item: CatalogItem): item is CatalogAlbum {
 	return item.kind === 'album';
 }
-export function isBook(item: CatalogItem): item is CatalogBook {
-	return item.kind === 'book';
-}
 export function isGame(item: CatalogItem): item is CatalogGame {
 	return item.kind === 'game';
 }
@@ -356,9 +298,6 @@ export function isYoutubeVideo(item: CatalogItem): item is CatalogYoutubeVideo {
 }
 export function isYoutubeChannel(item: CatalogItem): item is CatalogYoutubeChannel {
 	return item.kind === 'youtube_channel';
-}
-export function isIptvChannel(item: CatalogItem): item is CatalogIptvChannel {
-	return item.kind === 'iptv_channel';
 }
 export function isPhoto(item: CatalogItem): item is CatalogPhoto {
 	return item.kind === 'photo';
@@ -435,18 +374,11 @@ export const BROWSE_KINDS: CatalogKind[] = [
 	'movie',
 	'tv_show',
 	'album',
-	'book',
 	'game',
 	'youtube_video',
-	'iptv_channel',
 	'photo'
 ];
 
-export const TORRENT_KINDS: CatalogKind[] = ['movie', 'tv_show', 'album', 'book', 'game'];
+export const TORRENT_KINDS: CatalogKind[] = ['movie', 'tv_show', 'album', 'game'];
 
-export const STREAMABLE_KINDS: CatalogKind[] = [
-	'youtube_video',
-	'iptv_channel',
-	'movie',
-	'tv_show'
-];
+export const STREAMABLE_KINDS: CatalogKind[] = ['youtube_video', 'movie', 'tv_show'];

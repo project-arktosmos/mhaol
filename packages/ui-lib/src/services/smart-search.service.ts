@@ -33,9 +33,6 @@ const defaultConfigs: SmartSearchAllConfigs = {
 	},
 	games: {
 		preferredConsole: ''
-	},
-	books: {
-		preferredFormat: 'EPUB'
 	}
 };
 
@@ -70,8 +67,6 @@ function getSubdir(selection: SmartSearchSelection): string {
 			return 'music';
 		case 'game':
 			return 'games';
-		case 'book':
-			return 'books';
 	}
 }
 
@@ -86,8 +81,6 @@ function getLibraryTypes(selectionType: SmartSearchSelection['type']): string[] 
 			return ['audio', 'music'];
 		case 'game':
 			return ['games'];
-		case 'book':
-			return ['books', 'document'];
 	}
 }
 
@@ -280,10 +273,6 @@ class SmartSearchService {
 				cat = 400;
 				queries = [`${title} ${selection.consoleName}`];
 				break;
-			case 'book':
-				cat = 601;
-				queries = [`${title} ${selection.author}`];
-				break;
 			case 'movie':
 				cat = 200;
 				queries = [`${title} ${year}`];
@@ -366,12 +355,7 @@ class SmartSearchService {
 	}
 
 	private async analyzeResults(selection: SmartSearchSelection, analyzeHashes: Set<string>) {
-		const artist =
-			selection.type === 'music'
-				? selection.artist
-				: selection.type === 'book'
-					? selection.author
-					: undefined;
+		const artist = selection.type === 'music' ? selection.artist : undefined;
 		const consoleName = selection.type === 'game' ? selection.consoleName : undefined;
 
 		this.store.update((s) => {
@@ -911,43 +895,6 @@ class SmartSearchService {
 		}
 	}
 
-	async checkBookFetchCache(openlibraryKey: string): Promise<SmartSearchTorrentResult | null> {
-		try {
-			const res = await fetchRaw(
-				`/api/catalog/fetch-cache-by-source?source=openlibrary&sourceId=${encodeURIComponent(openlibraryKey)}&kind=book&scope=default&scopeKey=`
-			);
-			if (!res.ok) return null;
-			const data = await res.json();
-			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
-			candidate.uploadedAt = new Date(candidate.uploadedAt);
-			return candidate;
-		} catch {
-			return null;
-		}
-	}
-
-	async saveBookFetchCache(
-		openlibraryKey: string,
-		candidate: SmartSearchTorrentResult
-	): Promise<void> {
-		try {
-			await fetchRaw('/api/catalog/fetch-cache-by-source', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					source: 'openlibrary',
-					sourceId: openlibraryKey,
-					kind: 'book',
-					scope: 'default',
-					scopeKey: '',
-					candidate
-				})
-			});
-		} catch {
-			// best-effort
-		}
-	}
-
 	async checkGameFetchCache(retroachievementsId: number): Promise<SmartSearchTorrentResult | null> {
 		try {
 			const res = await fetchRaw(
@@ -1164,9 +1111,6 @@ class SmartSearchService {
 					case 'game':
 						libName = 'Games';
 						break;
-					case 'book':
-						libName = 'Books';
-						break;
 				}
 				const createRes = await fetchRaw('/api/libraries', {
 					method: 'POST',
@@ -1196,11 +1140,6 @@ class SmartSearchService {
 					pendingName = `${selection.title} (${selection.consoleName})`;
 					mediaType = 'video';
 					categoryId = 'games';
-					break;
-				case 'book':
-					pendingName = `${selection.author} - ${selection.title}`;
-					mediaType = 'document';
-					categoryId = 'books';
 					break;
 				default:
 					pendingName = selection.title;
@@ -1295,16 +1234,6 @@ class SmartSearchService {
 					title: item.title,
 					year: item.year ?? '',
 					consoleName: item.metadata.consoleName,
-					mode
-				};
-				break;
-			case 'book':
-				selection = {
-					type: 'book',
-					openlibraryKey: item.metadata.openlibraryKey,
-					title: item.title,
-					year: item.year ?? '',
-					author: item.metadata.authors[0]?.name ?? '',
 					mode
 				};
 				break;

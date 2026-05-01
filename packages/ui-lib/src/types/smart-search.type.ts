@@ -7,13 +7,12 @@ export type { TorrentAnalysis } from 'addons/torrent-search-thepiratebay/types';
 
 export type SmartSearchMode = 'download' | 'stream' | 'fetch';
 
-export type SmartSearchMediaType = 'movies' | 'tv' | 'music' | 'games' | 'books';
+export type SmartSearchMediaType = 'movies' | 'tv' | 'music' | 'games';
 
 export interface SmartSearchMediaConfig {
 	preferredLanguage?: string;
 	preferredQuality?: string;
 	preferredConsole?: string;
-	preferredFormat?: string;
 }
 
 export type SmartSearchAllConfigs = Record<SmartSearchMediaType, SmartSearchMediaConfig>;
@@ -73,18 +72,11 @@ export interface SmartSearchGameSelection extends SmartSearchBaseSelection {
 	consoleName: string;
 }
 
-export interface SmartSearchBookSelection extends SmartSearchBaseSelection {
-	type: 'book';
-	openlibraryKey: string;
-	author: string;
-}
-
 export type SmartSearchSelection =
 	| SmartSearchMovieSelection
 	| SmartSearchTvSelection
 	| SmartSearchMusicSelection
-	| SmartSearchGameSelection
-	| SmartSearchBookSelection;
+	| SmartSearchGameSelection;
 
 export interface SmartSearchTorrentResult extends TorrentSearchResult {
 	searchQueries: string[];

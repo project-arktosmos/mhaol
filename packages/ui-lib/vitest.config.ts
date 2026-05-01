@@ -64,9 +64,6 @@ export default defineConfig({
 			'addons/youtube': resolve(__dirname, '../addons/youtube/src/index.ts'),
 			'addons/lrclib/types': resolve(__dirname, '../addons/lrclib/src/types.ts'),
 			'addons/lrclib': resolve(__dirname, '../addons/lrclib/src/index.ts'),
-			'addons/openlibrary/types': resolve(__dirname, '../addons/openlibrary/src/types.ts'),
-			'addons/openlibrary/transform': resolve(__dirname, '../addons/openlibrary/src/transform.ts'),
-			'addons/openlibrary': resolve(__dirname, '../addons/openlibrary/src/index.ts'),
 			'torrent-search-thepiratebay': resolve(
 				__dirname,
 				'../addons/torrent-search-thepiratebay/src/index.ts'

@@ -10,16 +10,12 @@ function getSubtitle(item: CatalogItem): string | null {
 			return item.metadata.status;
 		case 'album':
 			return formatAuthors(item.metadata.authors, 'artist') || null;
-		case 'book':
-			return formatAuthors(item.metadata.authors, 'author') || null;
 		case 'game':
 			return item.metadata.consoleName;
 		case 'youtube_video':
 			return item.metadata.authors.find((a) => a.role === 'channel')?.name ?? null;
 		case 'youtube_channel':
 			return item.metadata.subscriberText;
-		case 'iptv_channel':
-			return item.metadata.country;
 		case 'photo':
 			return item.metadata.tags.map((t) => t.tag).join(', ') || null;
 		default:
@@ -31,7 +27,6 @@ function getAspectRatio(item: CatalogItem): 'poster' | 'square' | 'landscape' {
 	switch (item.kind) {
 		case 'movie':
 		case 'tv_show':
-		case 'book':
 			return 'poster';
 		case 'album':
 		case 'game':
@@ -39,7 +34,6 @@ function getAspectRatio(item: CatalogItem): 'poster' | 'square' | 'landscape' {
 			return 'square';
 		case 'youtube_video':
 		case 'youtube_channel':
-		case 'iptv_channel':
 			return 'landscape';
 		default:
 			return 'poster';
@@ -75,19 +69,6 @@ function getBadges(item: CatalogItem): CatalogBadge[] {
 			}
 			break;
 		}
-		case 'iptv_channel':
-			for (const c of item.metadata.categories.slice(0, 1)) {
-				badges.push({ label: c, variant: 'info' });
-			}
-			if (item.metadata.hasEpg) {
-				badges.push({ label: 'EPG', variant: 'success' });
-			}
-			break;
-		case 'book':
-			for (const s of item.metadata.subjects.slice(0, 2)) {
-				badges.push({ label: s, variant: 'ghost' });
-			}
-			break;
 	}
 	return badges;
 }

@@ -1,12 +1,6 @@
 import type { CatalogKind, CatalogItem } from 'ui-lib/types/catalog.type';
-import { isBook } from 'ui-lib/types/catalog.type';
 
-export type FilterKind =
-	| 'genre-buttons'
-	| 'subject-buttons'
-	| 'console-selector'
-	| 'category-country'
-	| 'none';
+export type FilterKind = 'genre-buttons' | 'console-selector' | 'none';
 
 export interface MediaTypeConfig {
 	slug: string;
@@ -59,18 +53,6 @@ export const MEDIA_REGISTRY: Record<string, MediaTypeConfig> = {
 		},
 		selectItemId: (item) => item.sourceId
 	},
-	books: {
-		slug: 'books',
-		kind: 'book',
-		label: 'Books',
-		pinService: 'openlibrary',
-		favService: 'openlibrary',
-		filterKind: 'subject-buttons',
-		hasRecs: true,
-		recsMediaType: 'book',
-		features: {},
-		selectItemId: (item) => (isBook(item) ? item.metadata.openlibraryKey : item.sourceId)
-	},
 	videogames: {
 		slug: 'videogames',
 		kind: 'game',
@@ -81,18 +63,6 @@ export const MEDIA_REGISTRY: Record<string, MediaTypeConfig> = {
 		hasRecs: true,
 		recsMediaType: 'game',
 		features: {},
-		selectItemId: (item) => item.sourceId
-	},
-	iptv: {
-		slug: 'iptv',
-		kind: 'iptv_channel',
-		label: 'IPTV',
-		pinService: 'iptv',
-		favService: 'iptv',
-		filterKind: 'category-country',
-		hasRecs: false,
-		features: {},
-		encodeId: true,
 		selectItemId: (item) => item.sourceId
 	},
 	music: {

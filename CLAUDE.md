@@ -19,7 +19,7 @@ mhaol.git/
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
 │   ├── ui-lib/                       # Shared frontend: components, services, types, adapters, transport, CSS
-│   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, OpenLibrary, Wyzie subtitles, IPTV, Radio, torrent search)
+│   ├── addons/                       # Addon modules (TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, Wyzie subtitles, torrent search)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── p2p-stream/                   # Rust P2P streaming library (GStreamer + WebRTC)
 │   ├── ipfs-stream/                  # Rust HLS-over-IPFS streaming (GStreamer hlssink2)
@@ -74,7 +74,7 @@ The cloud frontend has these screens:
 - **Profile** (`/profile`) — manages the browser-resident user identity. The layout calls `userIdentityService.initialize()` on mount: it loads `localStorage["mhaol-cloud-identity"]` (`{ address, privateKey, username }`) or generates a fresh secp256k1 keypair via viem, signs an EIP-191 `Mhaol Cloud auth at <RFC3339>` message, and either logs in or auto-registers against `/api/users`. The page exposes the address + username, a username editor, and JSON export/import (clipboard, file download, paste-or-upload) plus a regenerate button. Linked from the navbar's right end via the current username (filtered out of the central menu).
 - **Libraries** (`/libraries`) — lists, creates, and removes library records via `/api/libraries`. The form lets you pick an existing directory, or browse to a parent and create a new subfolder; each library is identified by its directory path and carries an `addons` list of `local-*` addon ids (`local-movie`, `local-tv`, `local-album`, `local-book`, `local-game`). Each row has a `Scan` button that walks the directory recursively, reports file size + MIME, asynchronously pins media to IPFS, and (when `addons` is non-empty) groups files into `firkin` records per detected media item — TV shows aware of nested season directories, albums grouped by directory, books/games per file. The row also shows the IPFS pins (CID, path, MIME, size) recorded for that library, and on page load any library whose `last_scanned_at` is missing or older than 1 hour is rescanned automatically.
 - **IPFS** (`/ipfs`) — reads `/api/ipfs/pins` and lists every pin recorded by the cloud (library scans plus firkin-body pins from `POST /api/firkins`).
-- **Catalog** (`/catalog`) — pick an addon (each addon owns a single content kind: e.g. `tmdb-movie`, `tmdb-tv`, `musicbrainz`, `openlibrary`, `retroachievements`, `youtube-video`, `youtube-channel`, `iptv`, `radio`), optionally narrow by genre/subject/console, and browse popular items. The Rust server proxies upstream calls via `/api/catalog/*` so addon API keys (`TMDB_API_KEY`, `RA_USERNAME` + `RA_API_KEY`) stay server-side. Grid items are **virtual** — nothing is written to SurrealDB and nothing is pinned to IPFS while browsing. Clicking "View details →" navigates to `/catalog/virtual?...` (a virtual detail synthesised from URL query params) which immediately runs a torrent search. The virtual page has two persistence triggers: (1) a **Bookmark** button in the header that turns the virtual item into a firkin without attaching any files (DB store + IPFS pin of the firkin metadata), or (2) picking a torrent — same DB store + IPFS pin of metadata, plus a `torrent magnet` file entry; the torrent-completion background task takes over from there to pin the resulting files to IPFS and roll the firkin version forward. Either path redirects to `/catalog/[ipfsHash]` (the real, content-addressed detail page).
+- **Catalog** (`/catalog`) — pick an addon (each addon owns a single content kind: e.g. `tmdb-movie`, `tmdb-tv`, `musicbrainz`, `retroachievements`, `youtube-video`, `youtube-channel`), optionally narrow by genre/console, and browse popular items. The Rust server proxies upstream calls via `/api/catalog/*` so addon API keys (`TMDB_API_KEY`, `RA_USERNAME` + `RA_API_KEY`) stay server-side. Grid items are **virtual** — nothing is written to SurrealDB and nothing is pinned to IPFS while browsing. Clicking "View details →" navigates to `/catalog/virtual?...` (a virtual detail synthesised from URL query params) which immediately runs a torrent search. The virtual page has two persistence triggers: (1) a **Bookmark** button in the header that turns the virtual item into a firkin without attaching any files (DB store + IPFS pin of the firkin metadata), or (2) picking a torrent — same DB store + IPFS pin of metadata, plus a `torrent magnet` file entry; the torrent-completion background task takes over from there to pin the resulting files to IPFS and roll the firkin version forward. Either path redirects to `/catalog/[ipfsHash]` (the real, content-addressed detail page).
 
 **Bookmarking semantics.** Every `POST /api/firkins` (used by both the Bookmark button and the torrent-pick flow) does two things atomically from the WebUI's perspective: it writes the firkin record to SurrealDB under its content-addressed id, and it pins the firkin's serialized JSON body to the embedded IPFS node so the metadata is discoverable across the private swarm. The IPFS pin is recorded in the `ipfs_pin` table with a synthetic path `firkin://<id>` and mime `application/json`, alongside the file pins produced by library scans. The IPFS pin is best-effort — failures are logged and do not fail the request, so creates still succeed if the IPFS node is still warming up.
 
@@ -150,7 +150,7 @@ Media routes use slug-based routing with a data-driven registry:
 ```
 (app)/media/
 ├── +layout.svelte              # Media bar (title, controls, tabs, filters)
-├── [slug]/                     # movies, tv, books, videogames, iptv
+├── [slug]/                     # movies, tv, videogames
 │   ├── +page.ts               # Validates slug against MEDIA_REGISTRY
 │   ├── +page.svelte           # CatalogBrowsePage + per-type extras
 │   └── [id]/+page.svelte      # CatalogDetailPage + per-type meta
@@ -169,7 +169,7 @@ Media routes use slug-based routing with a data-driven registry:
 - `packages/ui-lib/src/components/catalog/CatalogBrowsePage.svelte` — Unified browse with search, tabs, filters, pinned/favorites, grid
 - `packages/ui-lib/src/components/catalog/filters/CatalogFilterBar.svelte` — Switch component rendering the right filter UI per kind
 - `packages/ui-lib/src/services/catalog.service.ts` — Strategy-pattern service (`CatalogKindStrategy` interface)
-- `packages/ui-lib/src/services/catalog-strategies/` — Per-kind strategies (movie, tv, book, album, artist, game, iptv)
+- `packages/ui-lib/src/services/catalog-strategies/` — Per-kind strategies (movie, tv, album, artist, game)
 
 **Adding a new media type:** Add an entry to `MEDIA_REGISTRY` (or `MUSIC_REGISTRY`), create a catalog strategy, a detail meta component, and add filter handling if needed. The slug routes handle everything else.
 

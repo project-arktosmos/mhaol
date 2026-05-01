@@ -1,11 +1,7 @@
 import { searchReleaseGroups } from 'addons/musicbrainz';
-import { searchBooks } from 'addons/openlibrary';
-import { searchChannels as searchIptvChannels, getStreams as getIptvStreams } from 'addons/iptv';
-import type { DisplayIptvChannel } from 'addons/iptv/types';
-import { searchStations as searchRadioStations } from 'addons/radio';
-import type { DisplayRadioStation } from 'addons/radio/types';
 import { TorrentCategory } from 'addons/torrent-search-thepiratebay/types';
-import type { Artist, FirkinSource, FirkinType, FileEntry, ImageMeta } from './firkins.service';
+import type { Artist, FirkinAddon, FileEntry, ImageMeta } from './firkins.service';
+import { addonKind } from './firkins.service';
 
 export interface SearchResultItem {
 	title: string;
@@ -120,50 +116,38 @@ export function parseTorrentName(name: string): {
 	return { parsedTitle, year, quality };
 }
 
-export async function searchSource(
-	source: FirkinSource,
-	type: FirkinType,
-	query: string
-): Promise<SearchResultItem[]> {
+export async function searchAddon(addon: string, query: string): Promise<SearchResultItem[]> {
 	const trimmed = query.trim();
 	if (!trimmed) return [];
 
-	switch (source) {
-		case 'tmdb':
-			return searchTmdb(type, trimmed);
-		case 'musicbrainz':
-			return searchMusicBrainz(type, trimmed);
-		case 'openlibrary':
-			return searchOpenLibrary(trimmed);
-		case 'iptv':
-			return searchIptv(trimmed);
-		case 'radio':
-			return searchRadio(trimmed);
-		default:
-			throw new Error(`search not yet supported for source "${source}"`);
+	if (addon === 'tmdb-movie' || addon === 'tmdb-tv') {
+		return searchTmdb(addon, trimmed);
 	}
+	if (addon === 'musicbrainz') {
+		return searchMusicBrainz(trimmed);
+	}
+	throw new Error(`search not yet supported for addon "${addon}"`);
 }
 
-export function isTorrentSearchableType(type: FirkinType): boolean {
-	return type !== 'iptv channel' && type !== 'radio station';
+export function isTorrentSearchableAddon(addon: string): boolean {
+	return tpbCategoryFor(addon) !== null;
 }
 
-function tpbCategoryFor(type: FirkinType): TorrentCategory | null {
-	switch (type) {
+function tpbCategoryFor(addon: string): TorrentCategory | null {
+	const kind = addonKind(addon);
+	switch (kind) {
 		case 'album':
 			return TorrentCategory.Audio;
 		case 'movie':
 		case 'tv show':
 		case 'youtube video':
 		case 'youtube channel':
-		case 'image':
 			return TorrentCategory.Video;
 		case 'game':
 			return TorrentCategory.Games;
 		case 'book':
 			return TorrentCategory.Other;
-		case 'iptv channel':
-		case 'radio station':
+		case null:
 			return null;
 	}
 }
@@ -204,13 +188,10 @@ function torrentCacheKey(category: string, query: string): string {
 	return `${category}::${query.toLowerCase()}`;
 }
 
-export async function searchTorrents(
-	type: FirkinType,
-	query: string
-): Promise<TorrentResultItem[]> {
+export async function searchTorrents(addon: string, query: string): Promise<TorrentResultItem[]> {
 	const trimmed = query.trim();
 	if (!trimmed) return [];
-	const category = tpbCategoryFor(type);
+	const category = tpbCategoryFor(addon);
 	if (category === null) return [];
 	const key = torrentCacheKey(category, trimmed);
 	const now = Date.now();
@@ -252,11 +233,11 @@ async function parseError(res: Response): Promise<string> {
 	return `HTTP ${res.status}`;
 }
 
-async function searchTmdb(type: FirkinType, query: string): Promise<SearchResultItem[]> {
+async function searchTmdb(addon: FirkinAddon, query: string): Promise<SearchResultItem[]> {
 	const res = await fetch('/api/search/tmdb', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ type, query })
+		body: JSON.stringify({ addon, query })
 	});
 	if (!res.ok) throw new Error(await parseError(res));
 	return (await res.json()) as SearchResultItem[];
@@ -299,7 +280,7 @@ export async function fetchAlbumTrackTitles(releaseGroupId: string): Promise<str
 	return titles;
 }
 
-async function searchMusicBrainz(_type: FirkinType, query: string): Promise<SearchResultItem[]> {
+async function searchMusicBrainz(query: string): Promise<SearchResultItem[]> {
 	const res = await searchReleaseGroups(query);
 	return res['release-groups'].map((rg) => ({
 		title: rg.title,
@@ -334,125 +315,8 @@ function mbArtistCreditsToArtists(credits: MbArtistCredit[]): Artist[] {
 	for (const c of credits) {
 		const name = c.artist?.name ?? c.name ?? '';
 		if (!name) continue;
-		const artist: Artist = { name };
-		if (c.artist?.id) artist.url = `https://musicbrainz.org/artist/${c.artist.id}`;
-		out.push(artist);
+		out.push({ name, role: 'Artist' });
 	}
 	return out;
 }
 
-async function searchIptv(query: string): Promise<SearchResultItem[]> {
-	const result = await searchIptvChannels(query, { limit: 50 });
-	const channels = result.channels;
-	const streamsLookup = await Promise.all(
-		channels.map(async (ch) => ({ id: ch.id, streams: await getIptvStreams(ch.id) }))
-	);
-	const streamsById = new Map(streamsLookup.map((s) => [s.id, s.streams]));
-	return channels.map((ch: DisplayIptvChannel) => {
-		const streams = streamsById.get(ch.id) ?? [];
-		const files: FileEntry[] = streams
-			.filter((s) => Boolean(s.url))
-			.map((s) => ({
-				type: 'url' as const,
-				value: s.url,
-				title: [ch.name, s.quality].filter(Boolean).join(' · ')
-			}));
-		const images: ImageMeta[] = ch.logo
-			? [{ url: ch.logo, mimeType: 'image/png', fileSize: 0, width: 0, height: 0 }]
-			: [];
-		const description = [ch.country, ch.categories.join(', '), ch.hasEpg ? 'EPG' : null]
-			.filter((s): s is string => Boolean(s))
-			.join(' · ');
-		return {
-			title: ch.name,
-			description,
-			artists: [],
-			images,
-			files,
-			year: null,
-			externalId: ch.id,
-			raw: ch
-		};
-	});
-}
-
-async function searchRadio(query: string): Promise<SearchResultItem[]> {
-	const result = await searchRadioStations(query, { limit: 50, hideBroken: true });
-	return result.stations.map((s: DisplayRadioStation) => {
-		const files: FileEntry[] = s.streamUrl
-			? [
-					{
-						type: 'url' as const,
-						value: s.streamUrl,
-						title: [s.name, s.codec, s.bitrate ? `${s.bitrate}kbps` : null]
-							.filter(Boolean)
-							.join(' · ')
-					}
-				]
-			: [];
-		const images: ImageMeta[] = s.logo
-			? [{ url: s.logo, mimeType: 'image/png', fileSize: 0, width: 0, height: 0 }]
-			: [];
-		const description = [
-			s.country,
-			s.tags.slice(0, 4).join(', '),
-			s.bitrate ? `${s.bitrate}kbps ${s.codec ?? ''}`.trim() : s.codec,
-			s.isHls ? 'HLS' : null
-		]
-			.filter((v): v is string => Boolean(v))
-			.join(' · ');
-		return {
-			title: s.name,
-			description,
-			artists: s.homepage ? [{ name: s.name, url: s.homepage }] : [],
-			images,
-			files,
-			year: null,
-			externalId: s.id,
-			raw: s
-		};
-	});
-}
-
-async function searchOpenLibrary(query: string): Promise<SearchResultItem[]> {
-	const res = await searchBooks(query);
-	return (res?.docs ?? []).map((doc) => {
-		const authorNames = doc.author_name ?? [];
-		const authorKeys = doc.author_key ?? [];
-		const artists: Artist[] = authorNames.map((name, i) => ({
-			name,
-			url: authorKeys[i] ? `https://openlibrary.org/authors/${authorKeys[i]}` : undefined,
-			imageUrl: authorKeys[i]
-				? `https://covers.openlibrary.org/a/olid/${authorKeys[i]}-L.jpg`
-				: undefined
-		}));
-		const images: ImageMeta[] = doc.cover_i
-			? [
-					{
-						url: `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`,
-						mimeType: 'image/jpeg',
-						fileSize: 0,
-						width: 0,
-						height: 0
-					}
-				]
-			: [];
-		const description = [
-			doc.first_publish_year ? String(doc.first_publish_year) : null,
-			doc.publisher?.[0],
-			doc.number_of_pages_median ? `${doc.number_of_pages_median}p` : null
-		]
-			.filter((s): s is string => Boolean(s))
-			.join(' · ');
-		return {
-			title: doc.title,
-			description,
-			artists,
-			images,
-			files: [],
-			year: doc.first_publish_year ?? null,
-			externalId: doc.key,
-			raw: doc
-		};
-	});
-}

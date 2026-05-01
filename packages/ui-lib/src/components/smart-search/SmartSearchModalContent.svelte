@@ -34,14 +34,11 @@
 	const videoQualities = ['4K', '2160p', '1080p', '720p', '480p'];
 	const audioQualities = ['FLAC', 'ALAC', 'Lossless', '320kbps', 'MP3', 'AAC', 'WAV', 'OGG'];
 
-	const bookFormats = ['EPUB', 'PDF', 'MOBI', 'AZW3'];
-
 	const tabs: { id: SmartSearchMediaType; label: string }[] = [
 		{ id: 'movies', label: 'Movies' },
 		{ id: 'tv', label: 'TV' },
 		{ id: 'music', label: 'Music' },
-		{ id: 'games', label: 'Games' },
-		{ id: 'books', label: 'Books' }
+		{ id: 'games', label: 'Games' }
 	];
 
 	let currentConfig = $derived($configStore[activeTab]);
@@ -127,20 +124,6 @@
 						<option value="">Any</option>
 						{#each RA_CONSOLES as console}
 							<option value={console.name}>{console.name}</option>
-						{/each}
-					</select>
-				</label>
-			{:else if activeTab === 'books'}
-				<label class="flex items-center gap-2 text-sm">
-					<span class="text-base-content/60">Format</span>
-					<select
-						class="select-bordered select select-sm"
-						value={currentConfig.preferredFormat ?? 'EPUB'}
-						onchange={(e) =>
-							smartSearchService.updateConfig(activeTab, 'preferredFormat', e.currentTarget.value)}
-					>
-						{#each bookFormats as fmt}
-							<option value={fmt}>{fmt}</option>
 						{/each}
 					</select>
 				</label>

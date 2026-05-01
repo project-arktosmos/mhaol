@@ -32,16 +32,7 @@
 		"lrclib": {
 			"source": "addon"
 		},
-		"openlibrary": {
-			"source": "addon"
-		},
 		"wyzie-subs": {
-			"source": "addon"
-		},
-		"iptv": {
-			"source": "addon"
-		},
-		"radio": {
 			"source": "addon"
 		}
 	},
@@ -69,15 +60,8 @@
 		"./youtube/helpers": "./youtube/src/helpers.ts",
 		"./lrclib": "./lrclib/src/index.ts",
 		"./lrclib/types": "./lrclib/src/types.ts",
-		"./openlibrary": "./openlibrary/src/index.ts",
-		"./openlibrary/types": "./openlibrary/src/types.ts",
-		"./openlibrary/transform": "./openlibrary/src/transform.ts",
 		"./wyzie-subs": "./wyzie-subs/src/index.ts",
 		"./wyzie-subs/types": "./wyzie-subs/src/types.ts",
-		"./iptv": "./iptv/src/index.ts",
-		"./iptv/types": "./iptv/src/types.ts",
-		"./radio": "./radio/src/index.ts",
-		"./radio/types": "./radio/src/types.ts",
 		"./common/rate-limiter": "./common/src/rate-limiter.ts",
 		"./common/utils": "./common/src/utils.ts",
 		"./common/addon-cache": "./common/src/addon-cache.ts"
