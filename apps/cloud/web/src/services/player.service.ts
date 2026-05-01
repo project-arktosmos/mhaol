@@ -31,7 +31,8 @@ const initialState: PlayerState = {
 	isPaused: true,
 	buffering: false,
 	directStreamUrl: null,
-	directStreamMimeType: null
+	directStreamMimeType: null,
+	firkinId: null
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -62,7 +63,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		file: PlayableFile,
 		streamUrl: string,
 		mimeType?: string | null,
-		displayMode?: PlayerDisplayMode
+		displayMode?: PlayerDisplayMode,
+		firkinId?: string | null
 	): Promise<void> {
 		if (!browser) return;
 
@@ -77,9 +79,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			error: null,
 			positionSecs: 0,
 			durationSecs: file.durationSeconds,
+			isPaused: false,
 			buffering: false,
 			directStreamUrl: streamUrl,
-			directStreamMimeType: mimeType ?? null
+			directStreamMimeType: mimeType ?? null,
+			firkinId: firkinId ?? null
 		}));
 	}
 
@@ -150,7 +154,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			isPaused: true,
 			buffering: false,
 			directStreamUrl: null,
-			directStreamMimeType: null
+			directStreamMimeType: null,
+			firkinId: null
 		}));
 		this.displayMode.set('fullscreen');
 	}

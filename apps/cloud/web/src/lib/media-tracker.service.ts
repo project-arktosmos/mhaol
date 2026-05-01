@@ -1,6 +1,5 @@
 import { browser } from '$app/environment';
 import { get } from 'svelte/store';
-import { firkinPlaybackService } from '$services/firkin-playback.service';
 import { playerService } from '$services/player.service';
 import { userIdentityService } from '$lib/user-identity.service';
 
@@ -46,13 +45,14 @@ class MediaTrackerService {
 		if (!browser || this.initialized) return;
 		this.initialized = true;
 
-		// One subscription drives the whole lifecycle: when the right-side
-		// player has both a firkin selected and a file picked, we're tracking;
-		// when either drops away we're not. Re-firing inside the same firkin
-		// (e.g. picking a different track on an album) keeps the same row
-		// since the tracker key is per-firkin, not per-file.
-		firkinPlaybackService.state.subscribe((s) => {
-			const firkinId = s.firkin && s.currentFile ? s.firkin.id : null;
+		// Drive the tracker off the player service: any playUrl caller that
+		// passes a firkin id (catalog detail page's IPFS HLS + torrent stream
+		// flows) sets `firkinId` on the player state. Heartbeats accumulate
+		// while that id is set and the connection is streaming; flipping to
+		// a different firkin restarts cleanly. The interval-side
+		// `sendHeartbeat` already short-circuits when paused / not streaming.
+		playerService.state.subscribe((s) => {
+			const firkinId = s.firkinId;
 			if (firkinId === this.currentFirkinId) return;
 			this.stop();
 			if (firkinId) {

@@ -231,8 +231,12 @@
 	});
 
 	// Element event listeners: error reporting + position/duration sync for
-	// the seek bar. Without these listeners `positionSecs` stays at 0 and
-	// the seek bar never moves.
+	// the seek bar + buffering toggle. All attached imperatively so the
+	// attachment timing matches the lifecycle of `directStreamUrl` /
+	// `videoElement` exactly. The inline `onwaiting=` / `onplaying=` Svelte
+	// attributes used to live on the <video> element but were unreliable on
+	// torrent streams: when Effect A re-ran `element.load()` the runtime
+	// could miss the subsequent `playing` event, leaving the spinner stuck.
 	$effect(() => {
 		if (!directStreamUrl) return;
 		const element = videoElement;
@@ -259,7 +263,14 @@
 		const onTimeUpdate = () => {
 			// Don't fight the user while they're dragging the seek bar.
 			if (get(playerService.state).isSeeking) return;
-			playerService.state.update((s) => ({ ...s, positionSecs: element.currentTime }));
+			// `timeupdate` firing means the element is actively decoding —
+			// clear buffering as a safety net in case `playing` was missed
+			// (torrent streams race element.load() with playback start).
+			playerService.state.update((s) => ({
+				...s,
+				positionSecs: element.currentTime,
+				buffering: false
+			}));
 		};
 		const onLoadedMetadata = () => {
 			if (Number.isFinite(element.duration) && element.duration > 0) {
@@ -267,10 +278,20 @@
 			}
 		};
 		const onDurationChange = onLoadedMetadata;
+		const onWaiting = () => {
+			if (isHlsStream) return;
+			playerService.setBuffering(true);
+		};
+		const onPlaying = () => {
+			playerService.setBuffering(false);
+			playerService.setPaused(false);
+		};
 		element.addEventListener('error', onError);
 		element.addEventListener('timeupdate', onTimeUpdate);
 		element.addEventListener('loadedmetadata', onLoadedMetadata);
 		element.addEventListener('durationchange', onDurationChange);
+		element.addEventListener('waiting', onWaiting);
+		element.addEventListener('playing', onPlaying);
 		// Pump the current values once in case metadata already loaded
 		// before this effect ran (common on hot-reload). Wrapped in
 		// untrack so the sync state write doesn't feed back into this
@@ -282,12 +303,19 @@
 			if (Number.isFinite(element.currentTime) && element.currentTime > 0) {
 				playerService.state.update((s) => ({ ...s, positionSecs: element.currentTime }));
 			}
+			// readyState 3 (HAVE_FUTURE_DATA) or 4 (HAVE_ENOUGH_DATA) means
+			// the element can play right now — clear any leftover buffering.
+			if (element.readyState >= 3 && !element.paused) {
+				playerService.setBuffering(false);
+			}
 		});
 		return () => {
 			element.removeEventListener('error', onError);
 			element.removeEventListener('timeupdate', onTimeUpdate);
 			element.removeEventListener('loadedmetadata', onLoadedMetadata);
 			element.removeEventListener('durationchange', onDurationChange);
+			element.removeEventListener('waiting', onWaiting);
+			element.removeEventListener('playing', onPlaying);
 		};
 	});
 
@@ -422,19 +450,6 @@
 		}
 	}
 
-	function handleWaiting(): void {
-		// hls.js drives its own buffering; native `waiting` cycles
-		// through every MSE buffer underrun and would leave the spinner
-		// flickering on top of an otherwise-playing stream.
-		if (isHlsStream) return;
-		playerService.setBuffering(true);
-	}
-
-	function handlePlaying(): void {
-		playerService.setBuffering(false);
-		playerService.setPaused(false);
-	}
-
 	function handleSelectSubtitle(e: Event): void {
 		const value = (e.currentTarget as HTMLSelectElement).value;
 		activeSubUrl = value === '' ? null : value;
@@ -487,8 +502,6 @@
 			playsinline
 			poster={poster ?? undefined}
 			onclick={handleVideoClick}
-			onwaiting={handleWaiting}
-			onplaying={handlePlaying}
 		></video>
 
 		{#if !isVideo}

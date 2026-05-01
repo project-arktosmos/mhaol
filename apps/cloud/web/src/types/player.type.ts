@@ -59,6 +59,10 @@ export interface PlayerState {
 	// the WebRTC MediaStream path (used by yt-dlp direct streams).
 	directStreamUrl: string | null;
 	directStreamMimeType: string | null;
+	// CID of the firkin currently being played, when known. Drives the
+	// consumption tracker — heartbeats only accumulate while this is set
+	// (set by playUrl callers that have a firkin context).
+	firkinId: string | null;
 }
 
 // ===== Player Settings (localStorage) =====

@@ -287,7 +287,8 @@
 				file,
 				body.playlistUrl,
 				'application/vnd.apple.mpegurl',
-				'sidebar'
+				'sidebar',
+				firkin.id
 			);
 		} catch (err) {
 			ipfsError = err instanceof Error ? err.message : 'Unknown error';
@@ -435,7 +436,7 @@
 				size: body.fileSize,
 				completedAt: ''
 			};
-			await playerService.playUrl(file, body.streamUrl, body.mimeType ?? null, 'sidebar');
+			await playerService.playUrl(file, body.streamUrl, body.mimeType ?? null, 'sidebar', firkin.id);
 		} catch (err) {
 			torrentStreamError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
