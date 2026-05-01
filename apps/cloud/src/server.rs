@@ -26,6 +26,8 @@ mod state;
 mod torrent;
 mod torrent_completion;
 #[cfg(not(target_os = "android"))]
+mod track_progress;
+#[cfg(not(target_os = "android"))]
 mod track_resolve;
 mod users;
 #[cfg(not(target_os = "android"))]

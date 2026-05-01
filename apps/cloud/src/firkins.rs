@@ -315,7 +315,9 @@ pub fn router() -> Router<CloudState> {
         .route("/{id}/enrich", post(enrich))
         .route("/{id}/roms", post(roms));
     #[cfg(not(target_os = "android"))]
-    let r = r.route("/{id}/resolve-tracks", post(resolve_tracks));
+    let r = r
+        .route("/{id}/resolve-tracks", post(resolve_tracks))
+        .route("/{id}/resolution-progress", get(resolution_progress));
     r
 }
 
@@ -1117,11 +1119,18 @@ async fn resolve_tracks(
 /// task spawned by the create handler — the loop's lifetime is tied to
 /// the spawned future, *not* the originating HTTP request, so closing
 /// the browser tab does not interrupt the resolution.
+///
+/// Publishes per-track progress to `state.track_progress` so the WebUI
+/// can render YT URL + lyrics status as soon as each track resolves,
+/// long before the firkin itself rolls forward.
 #[cfg(not(target_os = "android"))]
 pub(crate) async fn resolve_album_tracks(
     state: &CloudState,
     id: &str,
 ) -> Result<Firkin, (StatusCode, String)> {
+    use crate::track_progress::{
+        AlbumProgress, LyricsProgress, TrackProgressEntry, TrackStatus,
+    };
     use crate::track_resolve;
 
     let existing: Option<Firkin> = state
@@ -1163,6 +1172,70 @@ pub(crate) async fn resolve_album_tracks(
         "starting per-track resolution"
     );
 
+    // Seed the live progress entry with one row per MB track. Pre-mark
+    // any track that already has a YT URL or lyrics in `files` as
+    // `Found` so the WebUI picks up the existing state on first poll
+    // (idempotent re-runs don't reset the UI to "queued").
+    let now = Utc::now();
+    let initial_tracks: Vec<TrackProgressEntry> = tracks
+        .iter()
+        .map(|t| {
+            let title = t.title.trim();
+            let existing_yt = current
+                .files
+                .iter()
+                .find(|f| {
+                    f.kind == "url"
+                        && f.title
+                            .as_deref()
+                            .map(|s| s.trim().eq_ignore_ascii_case(title))
+                            .unwrap_or(false)
+                        && is_youtube_url(&f.value)
+                })
+                .map(|f| f.value.clone());
+            let existing_lyrics_value = current
+                .files
+                .iter()
+                .find(|f| {
+                    f.kind == "lyrics"
+                        && f.title
+                            .as_deref()
+                            .map(|s| s.trim().eq_ignore_ascii_case(title))
+                            .unwrap_or(false)
+                })
+                .map(|f| f.value.clone());
+            let lyrics = existing_lyrics_value.as_deref().and_then(decode_lyrics_value);
+            TrackProgressEntry {
+                position: t.position,
+                title: t.title.clone(),
+                length_ms: t.length_ms,
+                youtube_status: if existing_yt.is_some() {
+                    TrackStatus::Found
+                } else {
+                    TrackStatus::Pending
+                },
+                youtube_url: existing_yt,
+                lyrics_status: if lyrics.is_some() {
+                    TrackStatus::Found
+                } else {
+                    TrackStatus::Pending
+                },
+                lyrics,
+            }
+        })
+        .collect();
+    state.track_progress.insert(
+        id.to_string(),
+        AlbumProgress {
+            firkin_id: id.to_string(),
+            started_at: now,
+            updated_at: now,
+            completed: false,
+            completed_id: None,
+            tracks: initial_tracks,
+        },
+    );
+
     let artist_dtos = artists::fetch_many(state, &current.artists)
         .await
         .map_err(|e| {
@@ -1182,7 +1255,7 @@ pub(crate) async fn resolve_album_tracks(
 
     let mut new_files = current.files.clone();
     let mut changed = false;
-    for track in &tracks {
+    for (idx, track) in tracks.iter().enumerate() {
         let track_title = track.title.trim();
         if track_title.is_empty() {
             continue;
@@ -1207,6 +1280,20 @@ pub(crate) async fn resolve_album_tracks(
             continue;
         }
 
+        // Mark this track's pending statuses as `Searching` so the
+        // WebUI can show the spinner-style "YT…" / "Lyrics…" badges
+        // while the actual fetch is in flight.
+        state.track_progress.update(id, |p| {
+            if let Some(t) = p.tracks.get_mut(idx) {
+                if !already_yt {
+                    t.youtube_status = TrackStatus::Searching;
+                }
+                if !already_lyrics {
+                    t.lyrics_status = TrackStatus::Searching;
+                }
+            }
+        });
+
         let (yt_url, lyrics_hit) = track_resolve::resolve_track(
             track_title,
             &artist_query,
@@ -1214,6 +1301,22 @@ pub(crate) async fn resolve_album_tracks(
             track.length_ms,
         )
         .await;
+
+        // Snapshot the resolved bits for the progress map *before* we
+        // move them into the firkin's `files` (those moves consume the
+        // strings).
+        let progress_yt = if !already_yt { yt_url.clone() } else { None };
+        let progress_lyrics = if !already_lyrics {
+            lyrics_hit.as_ref().map(|h| LyricsProgress {
+                source: "lrclib".to_string(),
+                external_id: h.id.clone(),
+                synced_lyrics: h.synced_lyrics.clone(),
+                plain_lyrics: h.plain_lyrics.clone(),
+                instrumental: h.instrumental,
+            })
+        } else {
+            None
+        };
 
         if !already_yt {
             if let Some(url) = yt_url {
@@ -1242,9 +1345,39 @@ pub(crate) async fn resolve_album_tracks(
                 changed = true;
             }
         }
+
+        // Publish the resolved-or-not statuses for this track to the
+        // progress map so the WebUI's poll picks them up immediately.
+        state.track_progress.update(id, |p| {
+            if let Some(t) = p.tracks.get_mut(idx) {
+                if !already_yt {
+                    t.youtube_url = progress_yt.clone();
+                    t.youtube_status = if progress_yt.is_some() {
+                        TrackStatus::Found
+                    } else {
+                        TrackStatus::Missing
+                    };
+                }
+                if !already_lyrics {
+                    if let Some(lp) = &progress_lyrics {
+                        t.lyrics = Some(lp.clone());
+                        t.lyrics_status = TrackStatus::Found;
+                    } else {
+                        t.lyrics_status = TrackStatus::Missing;
+                    }
+                }
+            }
+        });
     }
 
     if !changed {
+        // Nothing to roll forward, but the album is "complete" from the
+        // WebUI's perspective — close the progress entry so the polling
+        // loop can stop chasing the same id.
+        state.track_progress.update(id, |p| {
+            p.completed = true;
+            p.completed_id = Some(id.to_string());
+        });
         return Ok(current);
     }
 
@@ -1252,7 +1385,7 @@ pub(crate) async fn resolve_album_tracks(
     current.updated_at = Utc::now();
     current.id = None;
 
-    rollforward_firkin(state, id, current)
+    let updated = rollforward_firkin(state, id, current)
         .await
         .map_err(|(s, j)| {
             let msg = j
@@ -1261,7 +1394,65 @@ pub(crate) async fn resolve_album_tracks(
                 .unwrap_or("rollforward failed")
                 .to_string();
             (s, msg)
-        })
+        })?;
+
+    let new_id = updated
+        .id
+        .as_ref()
+        .map(|t| t.id.to_raw())
+        .unwrap_or_default();
+    state.track_progress.update(id, |p| {
+        p.completed = true;
+        p.completed_id = Some(new_id.clone());
+    });
+    Ok(updated)
+}
+
+/// Decode the JSON value the album resolver stores under a `lyrics`
+/// `FileEntry` into a `LyricsProgress` so the progress endpoint can
+/// hand back already-resolved lyrics on the very first poll (avoids a
+/// "Pending" → "Found" flicker on idempotent re-runs).
+#[cfg(not(target_os = "android"))]
+fn decode_lyrics_value(value: &str) -> Option<crate::track_progress::LyricsProgress> {
+    use crate::track_progress::LyricsProgress;
+    let parsed: serde_json::Value = serde_json::from_str(value).ok()?;
+    Some(LyricsProgress {
+        source: parsed
+            .get("source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("lrclib")
+            .to_string(),
+        external_id: parsed
+            .get("externalId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        synced_lyrics: parsed
+            .get("syncedLyrics")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string()),
+        plain_lyrics: parsed
+            .get("plainLyrics")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string()),
+        instrumental: parsed
+            .get("instrumental")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+    })
+}
+
+#[cfg(not(target_os = "android"))]
+async fn resolution_progress(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<crate::track_progress::AlbumProgress>, (StatusCode, Json<serde_json::Value>)> {
+    match state.track_progress.get(&id) {
+        Some(p) => Ok(Json(p)),
+        None => Err(err_response(StatusCode::NOT_FOUND, "no resolution in progress")),
+    }
 }
 
 /// Spawn `resolve_album_tracks` as a fire-and-forget background task.

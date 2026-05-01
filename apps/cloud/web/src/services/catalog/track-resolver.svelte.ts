@@ -9,6 +9,53 @@ interface LoadFromFirkinArgs {
 	files: FileEntry[];
 }
 
+export interface AlbumProgressLyrics {
+	source: string;
+	externalId: string;
+	syncedLyrics?: string;
+	plainLyrics?: string;
+	instrumental: boolean;
+}
+
+export interface AlbumProgressTrack {
+	position: number;
+	title: string;
+	lengthMs?: number | null;
+	youtubeStatus: 'pending' | 'searching' | 'found' | 'missing' | 'error';
+	youtubeUrl?: string | null;
+	lyricsStatus: 'pending' | 'searching' | 'found' | 'missing' | 'error';
+	lyrics?: AlbumProgressLyrics | null;
+}
+
+export interface AlbumProgressPayload {
+	firkinId: string;
+	started_at: string;
+	updated_at: string;
+	completed: boolean;
+	completedId?: string | null;
+	tracks: AlbumProgressTrack[];
+}
+
+function mapEntryStatus(
+	s: AlbumProgressTrack['youtubeStatus']
+): 'pending' | 'searching' | 'found' | 'missing' | 'error' {
+	return s;
+}
+
+function decodeLyricsProgress(p: AlbumProgressLyrics, title: string): SubsLyricsItem {
+	const synced = p.syncedLyrics ? parseLrcText(p.syncedLyrics) : undefined;
+	return {
+		kind: 'lyrics',
+		source: p.source,
+		externalId: p.externalId,
+		trackName: title,
+		plainLyrics: p.plainLyrics,
+		syncedLyrics: synced && synced.length > 0 ? synced : undefined,
+		instrumental: p.instrumental === true,
+		format: synced && synced.length > 0 ? 'lrc' : undefined
+	};
+}
+
 /// Pure projection over a MusicBrainz album. Track YouTube URLs and
 /// lyrics live on the firkin's `files` (resolved server-side by
 /// `POST /api/firkins/:id/resolve-tracks`, also auto-spawned as a
@@ -79,6 +126,40 @@ export class TrackResolver {
 			this.status = 'error';
 			return { missingAny: false };
 		}
+	}
+
+	/// Overlay the server-side resolution progress map onto the
+	/// projected tracks. Called by the detail page each time it polls
+	/// `/api/firkins/:id/resolution-progress` while the background
+	/// album resolver is in flight, so per-track YT URL / lyrics status
+	/// updates render in real time without waiting for the firkin to
+	/// roll forward.
+	applyProgress(progress: AlbumProgressPayload): void {
+		const byTitle = new Map<string, AlbumProgressTrack>();
+		for (const t of progress.tracks) {
+			const key = t.title.trim().toLowerCase();
+			if (key) byTitle.set(key, t);
+		}
+		this.tracks = this.tracks.map((tr) => {
+			const key = tr.title.trim().toLowerCase();
+			const p = byTitle.get(key);
+			if (!p) return tr;
+			const ytStatus = mapEntryStatus(p.youtubeStatus);
+			const lyStatus = mapEntryStatus(p.lyricsStatus);
+			const next = { ...tr };
+			// Prefer the projection's URL when present (it came from
+			// firkin.files), otherwise fall back to the in-flight one
+			// from the progress map.
+			if (!next.youtubeUrl && p.youtubeUrl) {
+				next.youtubeUrl = p.youtubeUrl;
+			}
+			next.youtubeStatus = next.youtubeUrl ? 'idle' : ytStatus === 'found' ? 'found' : ytStatus;
+			if (!next.lyrics && p.lyrics) {
+				next.lyrics = decodeLyricsProgress(p.lyrics, tr.title);
+			}
+			next.lyricsStatus = next.lyrics ? 'found' : lyStatus;
+			return next;
+		});
 	}
 
 	async play(index: number, opts: { thumb: string | null }): Promise<void> {

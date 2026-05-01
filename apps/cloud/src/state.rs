@@ -3,6 +3,8 @@ use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 
 #[cfg(not(target_os = "android"))]
+use crate::track_progress::AlbumProgressMap;
+#[cfg(not(target_os = "android"))]
 use mhaol_ipfs_core::IpfsManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_ipfs_stream::manager::IpfsStreamManager;
@@ -28,6 +30,13 @@ pub struct CloudState {
     pub ipfs_manager: Arc<IpfsManager>,
     #[cfg(not(target_os = "android"))]
     pub ipfs_stream_manager: Arc<IpfsStreamManager>,
+    /// Live progress map for the per-firkin album track resolver. Keyed
+    /// by the firkin id at the time the resolver was spawned (the
+    /// bookmark id, pre-rollforward). The detail page polls this so
+    /// each track's YouTube + lyrics status updates in real time as the
+    /// background task resolves them.
+    #[cfg(not(target_os = "android"))]
+    pub track_progress: AlbumProgressMap,
 }
 
 impl CloudState {
@@ -51,6 +60,8 @@ impl CloudState {
             ipfs_manager,
             #[cfg(not(target_os = "android"))]
             ipfs_stream_manager,
+            #[cfg(not(target_os = "android"))]
+            track_progress: AlbumProgressMap::new(),
         }
     }
 }

@@ -30,7 +30,10 @@
 		type FirkinAddon
 	} from '$lib/firkins.service';
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
-	import { TrackResolver } from '$services/catalog/track-resolver.svelte';
+	import {
+		TrackResolver,
+		type AlbumProgressPayload
+	} from '$services/catalog/track-resolver.svelte';
 	import { TorrentSearch, startTorrentDownload } from '$services/catalog/torrent-search.svelte';
 	import { SubsLyricsResolver } from '$services/catalog/subs-lyrics-resolver.svelte';
 	import type { TorrentResultItem } from '$lib/search.service';
@@ -684,6 +687,44 @@
 			}
 		};
 		const timer = setInterval(tick, 4000);
+		return () => {
+			cancelled = true;
+			clearInterval(timer);
+		};
+	});
+
+	// Real-time per-track resolution progress. Independent of the
+	// firkin-rollforward poll above: this polls the in-memory progress
+	// map every second so each track's YT URL / lyrics status flips
+	// from `pending` → `searching` → `found` / `missing` as the server
+	// task works through the tracklist. Stops once `completed` flips
+	// true (the firkin poll handles the navigation to the rolled-forward
+	// id).
+	$effect(() => {
+		if (!tracksLikelyUnresolved) return;
+		const id = firkin.id;
+		let cancelled = false;
+		let stopped = false;
+		const tick = async () => {
+			if (cancelled || stopped) return;
+			try {
+				const res = await fetch(
+					`${base}/api/firkins/${encodeURIComponent(id)}/resolution-progress`,
+					{ cache: 'no-store' }
+				);
+				if (cancelled) return;
+				if (!res.ok) return;
+				const payload = (await res.json()) as AlbumProgressPayload;
+				trackResolver.applyProgress(payload);
+				if (payload.completed) {
+					stopped = true;
+				}
+			} catch {
+				// swallow — try again on next tick
+			}
+		};
+		void tick();
+		const timer = setInterval(tick, 1000);
 		return () => {
 			cancelled = true;
 			clearInterval(timer);
