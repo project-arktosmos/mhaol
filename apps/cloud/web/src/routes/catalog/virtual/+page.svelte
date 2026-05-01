@@ -285,9 +285,14 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
 		<aside class="flex flex-col gap-4">
-			{#each images as image, i (image.url || i)}
-				<img src={image.url} alt={title} loading="lazy" class="w-full rounded-md object-cover" />
-			{/each}
+			{#if images[0]}
+				<img
+					src={images[0].url}
+					alt={title}
+					loading="lazy"
+					class="w-full rounded-md object-cover"
+				/>
+			{/if}
 
 			<FirkinArtistsSection
 				{artists}
@@ -300,6 +305,15 @@
 		</aside>
 
 		<section class="flex flex-col gap-6">
+			{#if images[1]}
+				<img
+					src={images[1].url}
+					alt={title}
+					loading="lazy"
+					class="w-full rounded-md object-cover"
+				/>
+			{/if}
+
 			<CatalogDescriptionCard {description} />
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">

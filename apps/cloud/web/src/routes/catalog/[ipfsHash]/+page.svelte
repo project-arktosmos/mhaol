@@ -824,14 +824,14 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
 		<aside class="flex flex-col gap-4">
-			{#each firkin.images as image, i (image.url || i)}
+			{#if firkin.images[0]}
 				<img
-					src={image.url}
+					src={firkin.images[0].url}
 					alt={firkin.title}
 					loading="lazy"
 					class="w-full rounded-md object-cover"
 				/>
-			{/each}
+			{/if}
 
 			<FirkinArtistsSection
 				artists={firkin.artists}
@@ -844,6 +844,15 @@
 		</aside>
 
 		<section class="flex flex-col gap-6">
+			{#if firkin.images[1]}
+				<img
+					src={firkin.images[1].url}
+					alt={firkin.title}
+					loading="lazy"
+					class="w-full rounded-md object-cover"
+				/>
+			{/if}
+
 			<CatalogDescriptionCard description={firkin.description} />
 
 			<CatalogIdentityCard
