@@ -289,7 +289,6 @@
 		event.preventDefault();
 		await commitCreate();
 	}
-
 </script>
 
 <svelte:head>

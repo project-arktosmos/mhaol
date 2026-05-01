@@ -15,11 +15,5 @@
 </script>
 
 {#if src}
-	<img
-		{src}
-		alt=""
-		class={classNames('rounded-full', classes)}
-		title={label}
-		aria-label={label}
-	/>
+	<img {src} alt="" class={classNames('rounded-full', classes)} title={label} aria-label={label} />
 {/if}

@@ -1,3 +1,4 @@
+mod artists;
 mod catalog;
 mod cloud_status;
 mod database;
@@ -12,6 +13,8 @@ mod ipfs_stream;
 mod libraries;
 #[cfg(not(target_os = "android"))]
 mod library_scan;
+#[cfg(not(target_os = "android"))]
+mod metadata_enrich;
 mod p2p_stream;
 mod paths;
 mod player;
@@ -283,6 +286,7 @@ async fn main() {
         .nest("/api/users", users::router())
         .nest("/api/libraries", libraries::router())
         .nest("/api/firkins", firkins::router())
+        .nest("/api/artists", artists::router())
         .nest("/api/database", database::router())
         .nest("/api/ipfs", ipfs_pins::router())
         .nest("/api/fs", fs_browse::router())

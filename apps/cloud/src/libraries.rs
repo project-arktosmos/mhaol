@@ -13,18 +13,24 @@ use surrealdb::sql::Thing;
 
 const TABLE: &str = "library";
 
-/// Catalog kinds a library may declare it contains. Mirrors the catalog
-/// addon type ids (`/api/catalog/sources`): `movie` + `tv` from TMDB,
-/// `album` from MusicBrainz, `book` from OpenLibrary, `game` from
-/// RetroAchievements.
-pub const LIBRARY_KINDS: &[&str] = &["movie", "tv", "album", "book", "game"];
+/// Addons a library may declare it contains. These are the `local-*` addon
+/// ids exposed by `/api/catalog/sources` for local media — picking one tells
+/// the scan task which media detector to run and which addon id to stamp on
+/// generated firkins.
+pub const LIBRARY_ADDONS: &[&str] = &[
+    "local-movie",
+    "local-tv",
+    "local-album",
+    "local-book",
+    "local-game",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Library {
     pub id: Option<Thing>,
     pub path: String,
-    #[serde(default)]
-    pub kinds: Vec<String>,
+    #[serde(default, alias = "kinds")]
+    pub addons: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
@@ -35,7 +41,7 @@ pub struct Library {
 pub struct LibraryDto {
     pub id: String,
     pub path: String,
-    pub kinds: Vec<String>,
+    pub addons: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_scanned_at: Option<DateTime<Utc>>,
@@ -51,7 +57,7 @@ impl From<Library> for LibraryDto {
         Self {
             id,
             path: lib.path,
-            kinds: lib.kinds,
+            addons: lib.addons,
             created_at: lib.created_at,
             updated_at: lib.updated_at,
             last_scanned_at: lib.last_scanned_at,
@@ -63,29 +69,29 @@ impl From<Library> for LibraryDto {
 pub struct CreateLibraryRequest {
     pub path: String,
     #[serde(default)]
-    pub kinds: Vec<String>,
+    pub addons: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateLibraryRequest {
     pub path: String,
     #[serde(default)]
-    pub kinds: Option<Vec<String>>,
+    pub addons: Option<Vec<String>>,
 }
 
-fn sanitize_kinds(
+fn sanitize_addons(
     raw: Vec<String>,
 ) -> Result<Vec<String>, (StatusCode, Json<serde_json::Value>)> {
     let mut out: Vec<String> = Vec::with_capacity(raw.len());
-    for k in raw.into_iter() {
-        let trimmed = k.trim().to_lowercase();
+    for a in raw.into_iter() {
+        let trimmed = a.trim().to_lowercase();
         if trimmed.is_empty() {
             continue;
         }
-        if !LIBRARY_KINDS.contains(&trimmed.as_str()) {
+        if !LIBRARY_ADDONS.contains(&trimmed.as_str()) {
             return Err(err_response(
                 StatusCode::BAD_REQUEST,
-                format!("invalid library kind: {trimmed}"),
+                format!("invalid library addon: {trimmed}"),
             ));
         }
         if !out.iter().any(|x| x == &trimmed) {
@@ -101,6 +107,7 @@ pub fn router() -> Router<CloudState> {
         .route("/{id}", put(update).delete(delete).get(get_one))
         .route("/{id}/scan", get(scan))
         .route("/{id}/pins", get(pins))
+        .route("/{id}/firkins", get(firkins))
 }
 
 fn ensure_dir(path: &std::path::Path) -> Result<(), std::io::Error> {
@@ -165,7 +172,7 @@ async fn create(
         ));
     }
     let normalized = normalize_path(&path.to_string_lossy());
-    let kinds = sanitize_kinds(req.kinds)?;
+    let addons = sanitize_addons(req.addons)?;
 
     let existing: Vec<Library> = state
         .db
@@ -184,7 +191,7 @@ async fn create(
     let record = Library {
         id: None,
         path: normalized,
-        kinds,
+        addons,
         created_at: now,
         updated_at: now,
         last_scanned_at: None,
@@ -244,8 +251,8 @@ async fn update(
     }
 
     current.path = normalized;
-    if let Some(kinds) = req.kinds {
-        current.kinds = sanitize_kinds(kinds)?;
+    if let Some(addons) = req.addons {
+        current.addons = sanitize_addons(addons)?;
     }
     current.updated_at = Utc::now();
     current.id = None;
@@ -367,9 +374,23 @@ async fn scan(
         ));
     }
 
-    let response = tokio::task::spawn_blocking(move || scan_directory(root))
+    let mut response = tokio::task::spawn_blocking(move || scan_directory(root))
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("scan task failed: {e}")))?;
+
+    // When the library declares addons, drop any walked file whose type is
+    // irrelevant — a movie library should not list mp3s, .torrent files or
+    // images in its scan response. Empty-addons libraries return everything
+    // since no library type is declared yet.
+    #[cfg(not(target_os = "android"))]
+    if !lib.addons.is_empty() {
+        let addons = lib.addons.clone();
+        response
+            .entries
+            .retain(|e| crate::library_scan::entry_matches_addons(e, &addons));
+        response.total_files = response.entries.len();
+        response.total_size = response.entries.iter().map(|e| e.size).sum();
+    }
 
     let mut updated = lib.clone();
     updated.id = None;
@@ -385,12 +406,12 @@ async fn scan(
 
     #[cfg(not(target_os = "android"))]
     {
-        let kinds = lib.kinds.clone();
+        let addons = lib.addons.clone();
         let lib_root = lib.path.clone();
         crate::library_scan::schedule_pins_and_firkins(
             &state,
             &response.entries,
-            kinds,
+            addons,
             lib_root,
         );
     }
@@ -416,13 +437,76 @@ async fn pins(
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
 
     let prefix = lib.path;
-    let mut filtered: Vec<crate::ipfs_pins::IpfsPinDto> = all
-        .into_iter()
-        .filter(|p| path_under_prefix(&p.path, &prefix))
-        .map(Into::into)
-        .collect();
+    let mut filtered: Vec<crate::ipfs_pins::IpfsPinDto> =
+        crate::ipfs_pins::dedupe_pins(all)
+            .into_iter()
+            .filter(|p| path_under_prefix(&p.path, &prefix))
+            .map(Into::into)
+            .collect();
     filtered.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(Json(filtered))
+}
+
+/// List firkins produced by scanning this library. A firkin is "in" a
+/// library when at least one of its `ipfs` file entries matches a CID
+/// pinned under the library's directory — that's the only link between
+/// firkins (which are content-addressed) and libraries (which are
+/// path-addressed). Superseded versions are filtered out so the WebUI
+/// only sees the head of each version chain.
+async fn firkins(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<crate::firkins::FirkinDto>>, (StatusCode, Json<serde_json::Value>)> {
+    let lib: Option<Library> = state
+        .db
+        .select((TABLE, id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let lib = lib.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "library not found"))?;
+
+    let pins: Vec<crate::ipfs_pins::IpfsPin> = state
+        .db
+        .select(crate::ipfs_pins::TABLE)
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let prefix = lib.path;
+    let library_cids: std::collections::HashSet<String> = crate::ipfs_pins::dedupe_pins(pins)
+        .into_iter()
+        .filter(|p| path_under_prefix(&p.path, &prefix))
+        .map(|p| p.cid)
+        .collect();
+
+    if library_cids.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+
+    let docs: Vec<crate::firkins::Firkin> = state
+        .db
+        .select(crate::firkins::TABLE)
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+
+    let mut superseded: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for d in &docs {
+        for h in &d.version_hashes {
+            superseded.insert(h.clone());
+        }
+    }
+
+    let scoped: Vec<crate::firkins::Firkin> = docs
+        .into_iter()
+        .filter(|d| {
+            let id = d.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
+            !superseded.contains(&id)
+                && d.files
+                    .iter()
+                    .any(|f| f.kind == "ipfs" && library_cids.contains(&f.value))
+        })
+        .collect();
+
+    let mut dtos = crate::firkins::assemble_firkin_dtos(&state, scoped).await?;
+    dtos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    Ok(Json(dtos))
 }
 
 /// True when `path` equals `prefix` or sits under it as a directory child.
@@ -434,11 +518,6 @@ fn path_under_prefix(path: &str, prefix: &str) -> bool {
     }
     let rest = &path[prefix.len()..];
     rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\')
-}
-
-#[cfg(not(target_os = "android"))]
-pub(crate) fn is_pinnable_mime(mime: &str) -> bool {
-    mime.starts_with("audio/") || mime.starts_with("video/") || mime.starts_with("image/")
 }
 
 #[cfg(not(target_os = "android"))]

@@ -87,7 +87,7 @@
 								{#if roles.length > 0}
 									<div class="flex flex-wrap gap-1">
 										{#each roles as role (role)}
-											<span class="badge badge-sm badge-ghost text-[10px]">{role}</span>
+											<span class="badge badge-ghost badge-sm text-[10px]">{role}</span>
 										{/each}
 									</div>
 								{/if}
@@ -116,7 +116,7 @@
 								{#if roles.length > 0}
 									<div class="flex flex-wrap gap-1">
 										{#each roles as role (role)}
-											<span class="badge badge-sm badge-ghost text-[10px]">{role}</span>
+											<span class="badge badge-ghost badge-sm text-[10px]">{role}</span>
 										{/each}
 									</div>
 								{/if}

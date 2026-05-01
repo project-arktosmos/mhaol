@@ -18,15 +18,13 @@ export interface CatalogGenre {
 	name: string;
 }
 
-export interface CatalogTypeInfo {
-	id: string;
-	label: string;
-}
-
+/// One browsable addon. Each addon owns a single firkin kind (the kind is
+/// implicit in the addon id) — there is no separate `type` parameter
+/// anywhere in the catalog API.
 export interface CatalogSource {
 	id: string;
 	label: string;
-	types: CatalogTypeInfo[];
+	kind: string;
 	filterLabel: string;
 	hasFilter: boolean;
 }
@@ -47,11 +45,8 @@ export async function listSources(): Promise<CatalogSource[]> {
 	return (await res.json()) as CatalogSource[];
 }
 
-export async function loadGenres(addon: string, type?: string): Promise<CatalogGenre[]> {
-	const params = new URLSearchParams();
-	if (type) params.set('type', type);
-	const qs = params.toString();
-	const url = `/api/catalog/${encodeURIComponent(addon)}/genres${qs ? `?${qs}` : ''}`;
+export async function loadGenres(addon: string): Promise<CatalogGenre[]> {
+	const url = `/api/catalog/${encodeURIComponent(addon)}/genres`;
 	const res = await fetch(url, { cache: 'no-store' });
 	if (!res.ok) throw new Error(await parseError(res));
 	return (await res.json()) as CatalogGenre[];
@@ -59,14 +54,28 @@ export async function loadGenres(addon: string, type?: string): Promise<CatalogG
 
 export async function loadPopular(
 	addon: string,
-	options: { type?: string; filter?: string; page?: number } = {}
+	options: { filter?: string; page?: number } = {}
 ): Promise<CatalogPage> {
 	const params = new URLSearchParams();
-	if (options.type) params.set('type', options.type);
 	if (options.filter) params.set('filter', options.filter);
 	if (options.page) params.set('page', String(options.page));
 	const qs = params.toString();
 	const url = `/api/catalog/${encodeURIComponent(addon)}/popular${qs ? `?${qs}` : ''}`;
+	const res = await fetch(url, { cache: 'no-store' });
+	if (!res.ok) throw new Error(await parseError(res));
+	return (await res.json()) as CatalogPage;
+}
+
+export async function loadSearch(
+	addon: string,
+	query: string,
+	options: { filter?: string; page?: number } = {}
+): Promise<CatalogPage> {
+	const params = new URLSearchParams();
+	params.set('query', query);
+	if (options.filter) params.set('filter', options.filter);
+	if (options.page) params.set('page', String(options.page));
+	const url = `/api/catalog/${encodeURIComponent(addon)}/search?${params.toString()}`;
 	const res = await fetch(url, { cache: 'no-store' });
 	if (!res.ok) throw new Error(await parseError(res));
 	return (await res.json()) as CatalogPage;

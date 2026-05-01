@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm clean:ports:cloud && export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$(( ( $(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) + 1 ) / 2 ))} && cargo build -p mhaol-cloud --bin mhaol-cloud && concurrently --kill-others-on-fail --names cloud,web,tauri --prefix-colors blue,green,magenta \"pnpm run app:cloud\" \"pnpm run app:cloud:web\" \"pnpm run app:tauri:cloud\"",
+		"dev": "pnpm clean:ports:cloud && export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$(( ( $(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) + 1 ) / 2 ))} && cargo build -p mhaol-cloud --bin mhaol-cloud && concurrently --kill-others-on-fail --names cloud,web,tauri --prefix-colors blue,green,magenta \"pnpm run app:cloud:bin\" \"pnpm run app:cloud:web\" \"pnpm run app:tauri:cloud\"",
 		"dev:cloud:web": "pnpm run app:cloud:web",
 		"build": "pnpm run build:cloud && pnpm run build:rendezvous",
 		"build:cloud:web": "pnpm --filter cloud build",
@@ -21,6 +21,7 @@
 		"app:rendezvous:setup": "cargo run -p mhaol-rendezvous --bin mhaol-rendezvous -- setup",
 		"build:rendezvous": "cargo build --release --bin mhaol-rendezvous",
 		"app:cloud": "mkdir -p logs && set -a; . ./.env 2>/dev/null; set +a; HOST=127.0.0.1 PORT=9899 cargo run -p mhaol-cloud --bin mhaol-cloud 2>&1 | tee logs/cloud.log",
+		"app:cloud:bin": "mkdir -p logs && set -a; . ./.env 2>/dev/null; set +a; HOST=127.0.0.1 PORT=9899 ./target/debug/mhaol-cloud 2>&1 | tee logs/cloud.log",
 		"app:cloud:web": "mkdir -p logs && pnpm --filter cloud dev 2>&1 | tee logs/web.log",
 		"app:shepperd": "pnpm --filter shepperd dev",
 		"app:shepperd:build": "pnpm --filter shepperd build",

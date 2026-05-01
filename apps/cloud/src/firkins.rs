@@ -44,6 +44,23 @@ pub struct FileEntry {
     pub title: Option<String>,
 }
 
+/// A YouTube trailer attached to a firkin. Movies carry a single trailer
+/// for the film; TV shows carry one per season (with `label` set to the
+/// season name, e.g. `"Season 1"`). Resolved client-side via the same
+/// double-dip YouTube extraction stack the music-track flow uses, then
+/// persisted on the firkin so subsequent visits don't re-search.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Trailer {
+    #[serde(rename = "youtubeUrl")]
+    pub youtube_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+fn slice_is_empty<T>(s: &[T]) -> bool {
+    s.is_empty()
+}
+
 #[derive(Serialize)]
 struct FirkinPayloadView<'a> {
     title: &'a str,
@@ -63,6 +80,10 @@ struct FirkinPayloadView<'a> {
     creator: &'a str,
     version: u32,
     version_hashes: &'a [String],
+    /// Skipped when empty so existing firkin CIDs (created before
+    /// trailers existed) remain stable across deserialise → re-serialise.
+    #[serde(skip_serializing_if = "slice_is_empty")]
+    trailers: &'a [Trailer],
 }
 
 pub fn serialize_firkin_payload(
@@ -76,6 +97,7 @@ pub fn serialize_firkin_payload(
     creator: &str,
     version: u32,
     version_hashes: &[String],
+    trailers: &[Trailer],
 ) -> String {
     let view = FirkinPayloadView {
         title,
@@ -88,6 +110,7 @@ pub fn serialize_firkin_payload(
         creator,
         version,
         version_hashes,
+        trailers,
     };
     serde_json::to_string_pretty(&view).expect("FirkinPayloadView serializes to JSON")
 }
@@ -103,6 +126,7 @@ pub fn compute_firkin_cid(
     creator: &str,
     version: u32,
     version_hashes: &[String],
+    trailers: &[Trailer],
 ) -> String {
     let json = serialize_firkin_payload(
         title,
@@ -115,6 +139,7 @@ pub fn compute_firkin_cid(
         creator,
         version,
         version_hashes,
+        trailers,
     );
     let digest = Sha256::digest(json.as_bytes());
     let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
@@ -155,6 +180,12 @@ pub struct Firkin {
     pub version: u32,
     #[serde(default)]
     pub version_hashes: Vec<String>,
+    /// YouTube trailers resolved against this firkin. Movies hold one
+    /// entry; TV shows hold one entry per season (with `label` set to
+    /// `"Season N"`). Empty by default; resolved client-side after the
+    /// firkin is created and persisted via PUT.
+    #[serde(default)]
+    pub trailers: Vec<Trailer>,
 }
 
 #[derive(Debug, Serialize)]
@@ -181,6 +212,7 @@ pub struct FirkinDto {
     pub updated_at: DateTime<Utc>,
     pub version: u32,
     pub version_hashes: Vec<String>,
+    pub trailers: Vec<Trailer>,
 }
 
 impl FirkinDto {
@@ -205,6 +237,7 @@ impl FirkinDto {
             updated_at: doc.updated_at,
             version: doc.version,
             version_hashes: doc.version_hashes,
+            trailers: doc.trailers,
         }
     }
 }
@@ -232,6 +265,12 @@ pub struct CreateFirkinRequest {
     /// page) so every user-created firkin is attributable.
     #[serde(default)]
     pub creator: Option<String>,
+    /// Optional trailers to bake into the firkin at create time. The
+    /// virtual-catalog page resolves trailers up-front (movies: one;
+    /// TV shows: one per season) so the firkin is born with them already
+    /// attached.
+    #[serde(default)]
+    pub trailers: Vec<Trailer>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -243,6 +282,7 @@ pub struct UpdateFirkinRequest {
     pub files: Option<Vec<FileEntry>>,
     pub year: Option<i32>,
     pub addon: Option<String>,
+    pub trailers: Option<Vec<Trailer>>,
 }
 
 /// Request body for `POST /api/firkins/:id/enrich`. Carries the metadata
@@ -467,6 +507,24 @@ async fn create(
         .creator
         .map(|c| c.trim().to_string())
         .unwrap_or_default();
+    let trailers: Vec<Trailer> = req
+        .trailers
+        .into_iter()
+        .filter_map(|t| {
+            let url = t.youtube_url.trim().to_string();
+            if url.is_empty() {
+                return None;
+            }
+            let label = t
+                .label
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty());
+            Some(Trailer {
+                youtube_url: url,
+                label,
+            })
+        })
+        .collect();
 
     let now = Utc::now();
     let version: u32 = 0;
@@ -482,6 +540,7 @@ async fn create(
         &creator,
         version,
         &version_hashes,
+        &trailers,
     );
     let digest = Sha256::digest(body_json.as_bytes());
     let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
@@ -511,6 +570,7 @@ async fn create(
         updated_at: now,
         version,
         version_hashes,
+        trailers,
     };
 
     let created: Option<Firkin> = state
@@ -655,18 +715,160 @@ async fn update(
         current.addon = addon.to_string();
     }
 
+    if let Some(trailers) = req.trailers {
+        current.trailers = trailers
+            .into_iter()
+            .filter_map(|t| {
+                let url = t.youtube_url.trim().to_string();
+                if url.is_empty() {
+                    return None;
+                }
+                let label = t
+                    .label
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| !l.is_empty());
+                Some(Trailer {
+                    youtube_url: url,
+                    label,
+                })
+            })
+            .collect();
+    }
+
     current.updated_at = Utc::now();
     current.id = None;
 
-    let updated: Option<Firkin> = state
-        .db
-        .update((TABLE, id.as_str()))
-        .content(current)
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db update failed: {e}")))?;
-
-    let updated_doc = updated.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+    let updated_doc = rollforward_firkin(&state, &id, current).await?;
     Ok(Json(assemble_firkin_dto(&state, updated_doc).await?))
+}
+
+/// Apply a mutated firkin to the store, rolling forward to a new
+/// content-addressed id whenever the mutation changes a body-affecting
+/// field. When the new CID matches `old_id` (the caller's mutations
+/// didn't actually change any field that participates in the CID),
+/// updates the existing record in place so non-CID fields like
+/// `updated_at` still get persisted without minting a stale version.
+///
+/// On rollforward: increments `version`, pushes `old_id` onto
+/// `version_hashes`, recomputes the CID over the mutated body, deletes
+/// the old record, creates a new one at the new CID, and pins the new
+/// body JSON to IPFS via `pin_firkin_body`. Idempotent against a
+/// concurrent rollforward landing at the same new id (adopts the
+/// existing record). Caller is expected to have set `updated.id = None`
+/// and bumped `updated.updated_at` before calling.
+pub(crate) async fn rollforward_firkin(
+    state: &CloudState,
+    old_id: &str,
+    mut updated: Firkin,
+) -> Result<Firkin, (StatusCode, Json<serde_json::Value>)> {
+    let new_version = updated.version.saturating_add(1);
+    let mut new_hashes = updated.version_hashes.clone();
+    new_hashes.push(old_id.to_string());
+
+    let new_id = compute_firkin_cid(
+        &updated.title,
+        &updated.description,
+        &updated.artists,
+        &updated.images,
+        &updated.files,
+        updated.year,
+        &updated.addon,
+        &updated.creator,
+        new_version,
+        &new_hashes,
+        &updated.trailers,
+    );
+
+    if new_id == old_id {
+        // No body change — keep the same id but persist mutable fields
+        // like `updated_at`. Don't bump version / version_hashes.
+        let res: Option<Firkin> = state
+            .db
+            .update((TABLE, old_id))
+            .content(updated)
+            .await
+            .map_err(|e| {
+                err_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("db update failed: {e}"),
+                )
+            })?;
+        return res.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"));
+    }
+
+    updated.version = new_version;
+    updated.version_hashes = new_hashes.clone();
+
+    let new_body_json = serialize_firkin_payload(
+        &updated.title,
+        &updated.description,
+        &updated.artists,
+        &updated.images,
+        &updated.files,
+        updated.year,
+        &updated.addon,
+        &updated.creator,
+        new_version,
+        &new_hashes,
+        &updated.trailers,
+    );
+
+    let _: Option<Firkin> = state
+        .db
+        .delete((TABLE, old_id))
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db delete failed: {e}"),
+            )
+        })?;
+    let create_result: Result<Option<Firkin>, _> = state
+        .db
+        .create((TABLE, new_id.as_str()))
+        .content(updated)
+        .await;
+    let created_doc = match create_result {
+        Ok(Some(d)) => d,
+        Ok(None) => {
+            return Err(err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "firkin was not persisted",
+            ))
+        }
+        Err(e) => {
+            // A concurrent rollforward landed first at the same new id.
+            // Adopt the existing record rather than failing.
+            let msg = e.to_string();
+            if msg.contains("already exists") {
+                let doc: Option<Firkin> = state
+                    .db
+                    .select((TABLE, new_id.as_str()))
+                    .await
+                    .map_err(|e| {
+                        err_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("db select failed: {e}"),
+                        )
+                    })?;
+                doc.ok_or_else(|| {
+                    err_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "rolled-forward firkin missing",
+                    )
+                })?
+            } else {
+                return Err(err_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("db create failed: {e}"),
+                ));
+            }
+        }
+    };
+
+    pin_firkin_body(state, &new_id, new_body_json).await;
+
+    Ok(created_doc)
 }
 
 async fn delete(
@@ -779,96 +981,10 @@ async fn enrich(
         current.images = new_images;
     }
 
-    let old_id = id.clone();
-    let new_version = current.version.saturating_add(1);
-    let mut new_hashes = current.version_hashes.clone();
-    new_hashes.push(old_id.clone());
+    current.updated_at = Utc::now();
+    current.id = None;
 
-    let new_id = compute_firkin_cid(
-        &current.title,
-        &current.description,
-        &current.artists,
-        &current.images,
-        &current.files,
-        current.year,
-        &current.addon,
-        &current.creator,
-        new_version,
-        &new_hashes,
-    );
-
-    if new_id == old_id {
-        // Defensive: caller sent a payload that didn't actually change
-        // anything (or only changed fields excluded from the CID hash).
-        return Ok(Json(assemble_firkin_dto(&state, current).await?));
-    }
-
-    let new_body_json = serialize_firkin_payload(
-        &current.title,
-        &current.description,
-        &current.artists,
-        &current.images,
-        &current.files,
-        current.year,
-        &current.addon,
-        &current.creator,
-        new_version,
-        &new_hashes,
-    );
-
-    let new_record = Firkin {
-        id: None,
-        title: current.title.clone(),
-        artists: current.artists.clone(),
-        description: current.description.clone(),
-        images: current.images.clone(),
-        files: current.files.clone(),
-        year: current.year,
-        addon: current.addon.clone(),
-        creator: current.creator.clone(),
-        created_at: current.created_at,
-        updated_at: Utc::now(),
-        version: new_version,
-        version_hashes: new_hashes,
-    };
-
-    let _: Option<Firkin> = state
-        .db
-        .delete((TABLE, old_id.as_str()))
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db delete failed: {e}")))?;
-    let create_result: Result<Option<Firkin>, _> = state
-        .db
-        .create((TABLE, new_id.as_str()))
-        .content(new_record)
-        .await;
-    let created_doc = match create_result {
-        Ok(Some(d)) => d,
-        Ok(None) => {
-            return Err(err_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "firkin was not persisted",
-            ))
-        }
-        Err(e) => {
-            // A concurrent finalize / second enrich landed first at the
-            // same new id. Adopt the existing record rather than failing.
-            let msg = e.to_string();
-            if msg.contains("already exists") {
-                let doc: Option<Firkin> = state
-                    .db
-                    .select((TABLE, new_id.as_str()))
-                    .await
-                    .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
-                doc.ok_or_else(|| err_response(StatusCode::INTERNAL_SERVER_ERROR, "rolled-forward firkin missing"))?
-            } else {
-                return Err(err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db create failed: {e}")));
-            }
-        }
-    };
-
-    pin_firkin_body(&state, &new_id, new_body_json).await;
-
+    let created_doc = rollforward_firkin(&state, &id, current).await?;
     Ok(Json(assemble_firkin_dto(&state, created_doc).await?))
 }
 

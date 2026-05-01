@@ -49,8 +49,7 @@ function album(files: FirkinFile[]): CloudFirkin {
 		images: [],
 		files,
 		year: 2024,
-		type: 'album',
-		source: 'musicbrainz',
+		addon: 'musicbrainz',
 		created_at: '2024-01-01',
 		updated_at: '2024-01-01'
 	};
@@ -119,7 +118,7 @@ describe('firkinPlaybackService auto-advance', () => {
 	it('does not advance for non-album firkins (e.g. movies)', () => {
 		const movie: CloudFirkin = {
 			...album([track('movie.mp4', 'cid-movie')]),
-			type: 'movie'
+			addon: 'tmdb-movie'
 		};
 		movie.files = [{ type: 'ipfs', value: 'cid-movie', title: 'movie.mp4' }];
 

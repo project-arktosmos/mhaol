@@ -1,4 +1,5 @@
-use crate::firkins::{Artist, FileEntry, ImageMeta};
+use crate::artists::UpsertArtistRequest;
+use crate::firkins::{FileEntry, ImageMeta};
 use crate::state::CloudState;
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
@@ -27,8 +28,10 @@ pub fn router() -> Router<CloudState> {
 
 #[derive(Debug, Deserialize)]
 pub struct SearchRequest {
-    #[serde(rename = "type")]
-    pub kind: String,
+    /// The addon id whose source we're searching. The addon implies the
+    /// content kind (e.g. `tmdb-movie` searches movies, `tmdb-tv` searches
+    /// TV shows), so callers no longer need a separate `type` parameter.
+    pub addon: String,
     pub query: String,
 }
 
@@ -36,7 +39,7 @@ pub struct SearchRequest {
 pub struct SearchResultItem {
     pub title: String,
     pub description: String,
-    pub artists: Vec<Artist>,
+    pub artists: Vec<UpsertArtistRequest>,
     pub images: Vec<ImageMeta>,
     pub files: Vec<FileEntry>,
     pub year: Option<i32>,
@@ -65,7 +68,7 @@ async fn search_tmdb(
         ));
     }
 
-    let is_tv = req.kind.as_str() == "tv show";
+    let is_tv = matches!(req.addon.as_str(), "tmdb-tv" | "wyzie-subs-tv" | "local-tv");
     let endpoint = if is_tv { "/search/tv" } else { "/search/movie" };
 
     let url = format!(
@@ -134,7 +137,7 @@ async fn fetch_tmdb_credits(
     is_tv: bool,
     tmdb_id: i64,
     api_key: &str,
-) -> Vec<Artist> {
+) -> Vec<UpsertArtistRequest> {
     let kind = if is_tv { "tv" } else { "movie" };
     let url = format!("{}/{}/{}/credits?api_key={}", TMDB_BASE, kind, tmdb_id, api_key);
     let res = match client
@@ -157,8 +160,8 @@ const TMDB_RELEVANT_CREW_DEPARTMENTS: &[&str] = &["Directing", "Writing", "Produ
 const TMDB_CAST_LIMIT: usize = 20;
 const TMDB_CREW_LIMIT: usize = 15;
 
-fn build_tmdb_artists(credits: &serde_json::Value) -> Vec<Artist> {
-    let mut out: Vec<Artist> = Vec::new();
+fn build_tmdb_artists(credits: &serde_json::Value) -> Vec<UpsertArtistRequest> {
+    let mut out: Vec<UpsertArtistRequest> = Vec::new();
     let mut seen_ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
 
     if let Some(cast) = credits.get("cast").and_then(|v| v.as_array()) {
@@ -201,21 +204,35 @@ fn build_tmdb_artists(credits: &serde_json::Value) -> Vec<Artist> {
     out
 }
 
-fn build_tmdb_artist_from_person(person: &serde_json::Value) -> Option<Artist> {
+fn build_tmdb_artist_from_person(person: &serde_json::Value) -> Option<UpsertArtistRequest> {
     let name = person.get("name").and_then(|v| v.as_str())?;
     if name.is_empty() {
         return None;
     }
-    let id = person.get("id").and_then(|v| v.as_i64());
-    let url = id.map(|id| format!("https://www.themoviedb.org/person/{}", id));
     let image_url = person
         .get("profile_path")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .map(|p| format!("{}/w185{}", TMDB_IMG_BASE, p));
-    Some(Artist {
+    let job = person
+        .get("job")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
+    let character = person
+        .get("character")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
+    // Three-field artist doc: bake the character into the role for cast
+    // members ("Actor as Forrest Gump") so the `as <character>` cue is
+    // preserved without needing a separate `description` field.
+    let role = match (job, character) {
+        (Some(j), _) => Some(j.to_string()),
+        (None, Some(c)) => Some(format!("Actor as {c}")),
+        (None, None) => None,
+    };
+    Some(UpsertArtistRequest {
         name: name.to_string(),
-        url,
+        role,
         image_url,
     })
 }
@@ -570,8 +587,11 @@ pub struct SubsLyrics {
 
 #[derive(Debug, Deserialize)]
 pub struct SubsLyricsRequest {
-    #[serde(rename = "type")]
-    pub kind: String,
+    /// The addon id whose subs/lyrics we're looking up. `lrclib` and
+    /// `musicbrainz`/`local-album` use LRCLIB; `wyzie-subs-movie` /
+    /// `wyzie-subs-tv` (or the equivalent `tmdb-*` / `local-*` addon)
+    /// route through Wyzie.
+    pub addon: String,
     pub query: String,
     #[serde(rename = "externalIds", default)]
     pub external_ids: Vec<String>,
@@ -584,20 +604,23 @@ async fn search_subs_lyrics(
     Json(req): Json<SubsLyricsRequest>,
 ) -> Result<Json<Vec<SubsLyrics>>, (StatusCode, Json<serde_json::Value>)> {
     let query = req.query.trim();
-    let kind = req.kind.trim();
+    let addon = req.addon.trim();
 
-    if kind == "album" {
+    let is_album_addon = matches!(addon, "lrclib" | "musicbrainz" | "local-album");
+    if is_album_addon {
         if query.is_empty() {
             return Ok(Json(Vec::new()));
         }
         return search_lrclib(query).await.map(Json);
     }
 
-    if matches!(kind, "movie" | "tv show") {
+    let is_tv_addon = matches!(addon, "tmdb-tv" | "wyzie-subs-tv" | "local-tv");
+    let is_movie_addon = matches!(addon, "tmdb-movie" | "wyzie-subs-movie" | "local-movie");
+    if is_tv_addon || is_movie_addon {
         if req.external_ids.is_empty() {
             return Ok(Json(Vec::new()));
         }
-        let wyzie_kind = if kind == "movie" { "movie" } else { "tv" };
+        let wyzie_kind = if is_tv_addon { "tv" } else { "movie" };
         let langs = req
             .languages
             .as_ref()

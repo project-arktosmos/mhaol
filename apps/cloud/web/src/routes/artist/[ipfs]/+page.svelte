@@ -128,7 +128,7 @@
 			{#if artist.roles.length > 0}
 				<div class="flex flex-wrap gap-1">
 					{#each artist.roles as role (role)}
-						<span class="badge badge-sm badge-outline">{role}</span>
+						<span class="badge badge-outline badge-sm">{role}</span>
 					{/each}
 				</div>
 			{/if}
@@ -177,7 +177,7 @@
 				{#if artist.roles.length > 0}
 					<div class="flex flex-wrap justify-center gap-1">
 						{#each artist.roles as role (role)}
-							<span class="badge badge-xs badge-ghost">{role}</span>
+							<span class="badge badge-ghost badge-xs">{role}</span>
 						{/each}
 					</div>
 				{/if}
@@ -206,8 +206,8 @@
 				<p class="mt-2 text-[10px] text-base-content/50">
 					The CID is computed from the (normalised) <code>name</code> only — adding a role or
 					updating the image URL does not roll the CID. Different artists with the same name will
-					collide; the cloud merges them into one record by design (see <code>artists::upsert</code>).
-					To create a distinct record, use a different name.
+					collide; the cloud merges them into one record by design (see
+					<code>artists::upsert</code>). To create a distinct record, use a different name.
 				</p>
 			</div>
 
@@ -227,7 +227,7 @@
 						<label class="form-control w-full">
 							<span class="text-xs text-base-content/60">Roles (one per line)</span>
 							<textarea
-								class="textarea-bordered textarea textarea-sm font-mono"
+								class="textarea-bordered textarea font-mono textarea-sm"
 								placeholder={'Director\nActor as Forrest Gump\nProducer'}
 								rows="4"
 								bind:value={editRoles}

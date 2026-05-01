@@ -84,7 +84,7 @@ describe('SignalingAdapter', () => {
 			// instead of the rendezvous port (14080).
 			Object.defineProperty(window, 'location', {
 				configurable: true,
-				value: new URL('http://localhost:9898/'),
+				value: new URL('http://localhost:9898/')
 			});
 			expect(signalingAdapter.resolveLocalUrl('http://localhost:14080')).toBe(
 				'http://localhost:14080'
@@ -97,7 +97,7 @@ describe('SignalingAdapter', () => {
 			// dials the cloud's host on the rendezvous port.
 			Object.defineProperty(window, 'location', {
 				configurable: true,
-				value: new URL('http://10.0.0.5:9898/'),
+				value: new URL('http://10.0.0.5:9898/')
 			});
 			expect(signalingAdapter.resolveLocalUrl('http://localhost:14080')).toBe(
 				'http://10.0.0.5:14080'
@@ -107,7 +107,7 @@ describe('SignalingAdapter', () => {
 		it('does not rewrite when both sides are loopback', () => {
 			Object.defineProperty(window, 'location', {
 				configurable: true,
-				value: new URL('http://127.0.0.1:9898/'),
+				value: new URL('http://127.0.0.1:9898/')
 			});
 			expect(signalingAdapter.resolveLocalUrl('http://127.0.0.1:14080')).toBe(
 				'http://127.0.0.1:14080'

@@ -92,9 +92,7 @@
 
 	let isVideo = $derived(file?.mode !== 'audio');
 	let isStreaming = $derived(connectionState === 'streaming');
-	let isHlsStream = $derived(
-		!!directStreamUrl && isHlsUrl(directStreamUrl, directStreamMimeType)
-	);
+	let isHlsStream = $derived(!!directStreamUrl && isHlsUrl(directStreamUrl, directStreamMimeType));
 	let activeMediaElement = $derived(videoElement as HTMLMediaElement | null);
 	// Combine subtitles already attached to the file with any downloaded for the search context.
 	let assignedSubs = $derived(subtitleSearchContext ? $subsState.assigned : []);
@@ -263,12 +261,7 @@
 								? 'src not supported'
 								: `code ${code}`;
 			const reason = mediaErr?.message ? `${codeLabel}: ${mediaErr.message}` : codeLabel;
-			console.error(
-				'[PlayerVideo] media element error for',
-				directStreamUrl,
-				'reason:',
-				reason
-			);
+			console.error('[PlayerVideo] media element error for', directStreamUrl, 'reason:', reason);
 			mediaError = `Stream error (${reason})`;
 			playerService.state.update((s) => ({ ...s, error: mediaError }));
 		};

@@ -110,7 +110,7 @@
 				{$tablesStore.loading ? 'Refreshing…' : 'Refresh tables'}
 			</button>
 			<button
-				class="btn btn-error btn-sm"
+				class="btn btn-sm btn-error"
 				onclick={() => (confirmingClear = true)}
 				disabled={$tablesStore.loading || clearing || $tablesStore.tables.length === 0}
 			>
@@ -125,13 +125,14 @@
 			role="dialog"
 			aria-modal="true"
 		>
-			<div class="w-full max-w-md rounded-box border border-base-content/10 bg-base-100 p-5 shadow-xl">
+			<div
+				class="w-full max-w-md rounded-box border border-base-content/10 bg-base-100 p-5 shadow-xl"
+			>
 				<h2 class="text-lg font-semibold">Clear entire database?</h2>
 				<p class="mt-2 text-sm text-base-content/70">
 					This will remove every table from the
 					<span class="font-mono">{$tablesStore.namespace}</span> /
-					<span class="font-mono">{$tablesStore.database}</span> store
-					({$tablesStore.tables.length}
+					<span class="font-mono">{$tablesStore.database}</span> store ({$tablesStore.tables.length}
 					{$tablesStore.tables.length === 1 ? 'table' : 'tables'}). This cannot be undone.
 				</p>
 				<div class="mt-4 flex justify-end gap-2">
@@ -142,7 +143,7 @@
 					>
 						Cancel
 					</button>
-					<button class="btn btn-error btn-sm" onclick={clearDatabase} disabled={clearing}>
+					<button class="btn btn-sm btn-error" onclick={clearDatabase} disabled={clearing}>
 						{clearing ? 'Clearing…' : 'Clear database'}
 					</button>
 				</div>

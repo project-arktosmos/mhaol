@@ -88,7 +88,11 @@
 				class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 			>
 				{#each pinnedItems as item (item.id)}
-					<CatalogCard card={cardDataFor(item)} href={itemHref?.(item)} onclick={() => onselectitem(item)} />
+					<CatalogCard
+						card={cardDataFor(item)}
+						href={itemHref?.(item)}
+						onclick={() => onselectitem(item)}
+					/>
 				{/each}
 			</div>
 		{/if}
@@ -107,7 +111,11 @@
 				class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 			>
 				{#each favoriteItems as item (item.id)}
-					<CatalogCard card={cardDataFor(item)} href={itemHref?.(item)} onclick={() => onselectitem(item)} />
+					<CatalogCard
+						card={cardDataFor(item)}
+						href={itemHref?.(item)}
+						onclick={() => onselectitem(item)}
+					/>
 				{/each}
 			</div>
 		{/if}

@@ -158,7 +158,7 @@
 							<div class="flex flex-wrap items-center justify-center gap-2">
 								{#if searchLang && onsearchlangchange}
 									<select
-										class="select shadow-lg select-bordered select-sm"
+										class="select-bordered select select-sm shadow-lg"
 										value={searchLang}
 										onchange={(e) =>
 											onsearchlangchange(

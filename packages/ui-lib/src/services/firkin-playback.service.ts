@@ -8,6 +8,15 @@ import {
 } from 'ui-lib/services/firkin-stream.service';
 import { playerService } from 'ui-lib/services/player.service';
 
+/// Addons whose firkins represent an album-shaped collection of audio
+/// files. Used to decide whether a firkin should auto-play the first audio
+/// track when no video file is present.
+const ALBUM_ADDONS = new Set<string>(['musicbrainz', 'lrclib', 'local-album']);
+
+function isAlbumAddon(addon: string): boolean {
+	return ALBUM_ADDONS.has(addon);
+}
+
 export interface FirkinPlaybackState {
 	firkin: CloudFirkin | null;
 	files: FirkinFile[];
@@ -41,7 +50,7 @@ class FirkinPlaybackService {
 		}
 
 		const audios = files.filter(isAudioFile);
-		if (firkin.type === 'album' && audios.length > 0) {
+		if (isAlbumAddon(firkin.addon) && audios.length > 0) {
 			this.play(audios[0]);
 		}
 	}

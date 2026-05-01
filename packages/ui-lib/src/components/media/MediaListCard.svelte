@@ -93,7 +93,7 @@
 	<a
 		{href}
 		class={classNames(
-			'card-compact card cursor-pointer bg-base-200 shadow-sm transition-shadow hover:shadow-md no-underline text-inherit',
+			'card-compact card cursor-pointer bg-base-200 text-inherit no-underline shadow-sm transition-shadow hover:shadow-md',
 			{
 				'ring-2 ring-primary': selected
 			}

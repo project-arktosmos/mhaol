@@ -126,7 +126,9 @@
 							<span class="w-12 text-right font-mono text-xs tabular-nums">{pct.toFixed(1)}%</span>
 						</div>
 
-						<div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/60">
+						<div
+							class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/60"
+						>
 							<span>{formatSize(downloaded)} / {formatSize(file.size)}</span>
 							<span>{formatSpeed(file.downloadSpeed)}</span>
 							<span>ETA {formatEta(file.eta)}</span>

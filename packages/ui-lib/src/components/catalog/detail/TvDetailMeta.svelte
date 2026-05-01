@@ -57,8 +57,7 @@
 			<span class={getStateColor(torrent.state)}>{getStateLabel(torrent.state)}</span>
 			<span class="font-mono">{percent}%</span>
 		</div>
-		<progress class="progress w-full progress-primary" value={torrent.progress} max="1"
-		></progress>
+		<progress class="progress w-full progress-primary" value={torrent.progress} max="1"></progress>
 		<div class="flex flex-wrap gap-3 text-xs opacity-60">
 			<span>↓ {formatSpeed(torrent.downloadSpeed)}</span>
 			<span>↑ {formatSpeed(torrent.uploadSpeed)}</span>

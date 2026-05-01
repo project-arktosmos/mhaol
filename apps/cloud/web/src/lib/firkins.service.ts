@@ -106,6 +106,15 @@ export interface FileEntry {
 	title?: string;
 }
 
+/**
+ * A YouTube trailer attached to a firkin. Movies hold one; TV shows
+ * hold one per season with `label` set to the season name.
+ */
+export interface Trailer {
+	youtubeUrl: string;
+	label?: string;
+}
+
 export interface Firkin {
 	id: string;
 	title: string;
@@ -124,6 +133,7 @@ export interface Firkin {
 	updated_at: string;
 	version?: number;
 	version_hashes?: string[];
+	trailers?: Trailer[];
 }
 
 export interface FirkinsState {
@@ -203,6 +213,8 @@ class FirkinsService {
 		addon: FirkinAddon;
 		/** Override the auto-filled creator. Leave undefined to use the current user identity. */
 		creator?: string;
+		/** Optional trailers to bake into the firkin at create time. */
+		trailers?: Trailer[];
 	}): Promise<Firkin> {
 		// Auto-fill the creator from the browser-resident user identity (the
 		// same one the profile page manages). User identity is initialised on

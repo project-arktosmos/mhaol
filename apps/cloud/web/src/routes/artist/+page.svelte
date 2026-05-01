@@ -103,10 +103,10 @@
 							{#if artist.roles && artist.roles.length > 0}
 								<div class="flex flex-wrap gap-1">
 									{#each artist.roles.slice(0, 3) as role (role)}
-										<span class="badge badge-sm badge-ghost text-[10px]">{role}</span>
+										<span class="badge badge-ghost badge-sm text-[10px]">{role}</span>
 									{/each}
 									{#if artist.roles.length > 3}
-										<span class="badge badge-sm badge-ghost text-[10px]"
+										<span class="badge badge-ghost badge-sm text-[10px]"
 											>+{artist.roles.length - 3}</span
 										>
 									{/if}

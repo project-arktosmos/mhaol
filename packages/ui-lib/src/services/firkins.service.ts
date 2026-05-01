@@ -10,8 +10,9 @@ export interface CreateFirkinInput {
 	images: FirkinImage[];
 	files: FirkinFile[];
 	year: number | null;
-	type: string;
-	source: string;
+	addon: string;
+	/** EVM address of the account creating the firkin. */
+	creator: string;
 }
 
 export interface FirkinsServiceState {

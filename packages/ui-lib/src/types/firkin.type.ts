@@ -39,6 +39,18 @@ export interface FirkinFile {
 	title?: string;
 }
 
+/**
+ * A YouTube trailer attached to a firkin. Movies carry a single entry;
+ * TV shows carry one entry per season (with `label` set to the season
+ * name, e.g. `"Season 1"`). Resolved via the same double-dip YouTube
+ * extraction stack the music-track flow uses, then persisted on the
+ * firkin so subsequent visits don't re-search.
+ */
+export interface FirkinTrailer {
+	youtubeUrl: string;
+	label?: string;
+}
+
 export interface CloudFirkin {
 	id: string;
 	title: string;
@@ -70,4 +82,6 @@ export interface CloudFirkin {
 	version?: number;
 	/** CIDs of every prior version, oldest first. `version_hashes.length === version` is the chain integrity invariant. */
 	version_hashes?: string[];
+	/** YouTube trailers — one entry for movies, one per season for TV shows. */
+	trailers?: FirkinTrailer[];
 }

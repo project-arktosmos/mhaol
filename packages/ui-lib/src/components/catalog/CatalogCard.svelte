@@ -134,7 +134,7 @@
 {/snippet}
 
 {#if href}
-	<a {href} class={classNames(containerClasses, 'no-underline text-inherit')}>
+	<a {href} class={classNames(containerClasses, 'text-inherit no-underline')}>
 		{@render cardContent()}
 	</a>
 {:else}
