@@ -1,6 +1,5 @@
 <script lang="ts">
 	import '../css/app.css';
-	import 'ui-lib/services/i18n';
 	import classNames from 'classnames';
 	import Identicon from 'ui-lib/components/core/Identicon.svelte';
 	import Navbar from 'ui-lib/components/core/Navbar.svelte';

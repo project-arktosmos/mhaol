@@ -1,5 +1,4 @@
 import { writable, get, type Writable } from 'svelte/store';
-import { locale } from 'svelte-i18n';
 import { fetchJson, resolveApiUrl } from 'ui-lib/transport/fetch-helpers';
 import type {
 	AssignedSubtitle,
@@ -8,16 +7,20 @@ import type {
 } from 'ui-lib/types/subtitles.type';
 import { buildMediaKey } from 'ui-lib/types/subtitles.type';
 
+function browserLanguage(): string {
+	if (typeof navigator === 'undefined') return '';
+	return navigator.language?.trim().toLowerCase().slice(0, 2) ?? '';
+}
+
 /// Default search languages for a context: title's original language (from TMDB)
-/// plus the user's current UI locale, deduped, lowercased, 2-letter. Empty array
+/// plus the browser's UI language, deduped, lowercased, 2-letter. Empty array
 /// means "no preference" (search will return all available languages).
 function defaultLanguagesFor(ctx: SubtitleSearchContext): string[] {
 	const out = new Set<string>();
 	const orig = ctx.originalLanguage?.trim().toLowerCase().slice(0, 2);
 	if (orig) out.add(orig);
-	const ui = get(locale);
-	const uiShort = typeof ui === 'string' ? ui.trim().toLowerCase().slice(0, 2) : '';
-	if (uiShort) out.add(uiShort);
+	const ui = browserLanguage();
+	if (ui) out.add(ui);
 	return Array.from(out);
 }
 
@@ -58,7 +61,7 @@ class SubtitlesService {
 		this.state.update((s) => ({ ...s, context: ctx, results: [], error: null }));
 		if (ctx) {
 			this.refreshAssigned(ctx).catch(() => {});
-			// Kick off an initial search using the title's original language and the user's UI locale.
+			// Kick off an initial search using the title's original language and the browser's UI language.
 			const langs = defaultLanguagesFor(ctx);
 			this.search(langs.length ? langs : undefined).catch(() => {});
 		} else {

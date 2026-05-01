@@ -40,13 +40,11 @@ src/
 │   ├── tmdb-browse/          # TMDB pagination (TmdbPagination — used by movies/TV pages)
 │   ├── torrent/              # Torrent management (TorrentProgressOverlay, TorrentSettings, etc.)
 │   ├── ed2k/                 # ed2k/eDonkey client UI (Ed2kModalContent, Ed2kSearch, Ed2kFileList, Ed2kStatusBar)
-│   ├── videogames/           # Videogame WASM emulator components (EmulatorModal mounts EmulatorJS from cdn.emulatorjs.org; emulator-cores.ts maps ROM extensions to a core id — gambatte/mgba/fceumm/snes9x/mupen64plus_next/genesis_plus_gx/melonds/pcsx_rearmed/stella2014/prosystem/handy/mednafen_pce/mednafen_ngp/virtualjaguar — covers GB/GBC, GBA, NES, SNES, N64, Genesis/MD/MS/GG, NDS, PS1, A2600, A7800, Lynx, PCE, Neo Geo Pocket, Jaguar)
 │   ├── youtube/              # YouTube download (queue, settings, preview, RightPanel)
 │   └── youtube-search/       # YouTube search (input, results, channel cards)
 ├── services/                 # State management + API calls (singleton services)
 │   ├── classes/              # Base classes: ArrayServiceClass, ObjectServiceClass
-│   ├── catalog-strategies/   # Per-kind browse strategies (movie, tv, album, artist, game, youtube, photo)
-│   ├── i18n/                 # svelte-i18n locales (en.json, qq.json)
+│   ├── catalog-strategies/   # Per-kind browse strategies (movie, tv, album, artist, youtube, photo)
 │   ├── catalog.service.ts    # Unified catalog browse service with strategy pattern
 │   ├── fetch-cache.service.ts # Fetch cache for torrent download tracking on browse pages
 │   ├── image-overrides.service.ts # TMDB image override management
@@ -123,9 +121,8 @@ pnpm test:coverage    # coverage report
 ## Dependencies
 
 - `classnames` — conditional CSS class composition
-- `svelte-i18n` — internationalization
 - `viem` — Ethereum signing (signaling, player services)
 - `fflate` — compression
 - `html5-qrcode`, `qrcode` — QR code generation/scanning
-- `addons` (workspace) — TMDB, torrent search, MusicBrainz, RetroAchievements, YouTube, LRCLIB (use `addons/{addon}/...` paths)
+- `addons` (workspace) — TMDB, torrent search, MusicBrainz, YouTube, LRCLIB (use `addons/{addon}/...` paths)
 - `webrtc` (workspace) — WebRTC contact handshake layer

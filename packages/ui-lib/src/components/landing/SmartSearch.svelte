@@ -1,16 +1,25 @@
 <script lang="ts">
-	import { _ } from 'svelte-i18n';
+	const steps = [
+		'Pick a title from your library — the metadata (title, year, artist) is read automatically',
+		'Torrents are searched using the parsed metadata as the query',
+		'Each result is scored against the exact title and your preferences',
+		'Results are ranked — the best candidate is auto-selected for you'
+	];
 </script>
 
 <section id="smart-search" class="py-20 lg:py-28">
 	<div class="mx-auto max-w-6xl px-6">
 		<div class="grid items-center gap-12 lg:grid-cols-2">
 			<div>
-				<span class="mb-4 badge badge-lg badge-primary">{$_('smartSearch.badge')}</span>
-				<h2 class="text-3xl font-bold sm:text-4xl">{$_('smartSearch.heading')}</h2>
-				<p class="mt-4 text-base-content/60">{$_('smartSearch.description')}</p>
+				<span class="mb-4 badge badge-lg badge-primary">Automatic</span>
+				<h2 class="text-3xl font-bold sm:text-4xl">Smart Search</h2>
+				<p class="mt-4 text-base-content/60">
+					Select any movie, show, or album from your library and Smart Search does the rest. It
+					reads the metadata — title, year, artist — searches for torrents, and ranks each result by
+					relevance, quality, and language, automatically picking the best match.
+				</p>
 				<ul class="mt-6 space-y-3">
-					{#each ['step1', 'step2', 'step3', 'step4'] as step}
+					{#each steps as step}
 						<li class="flex items-start gap-3">
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -26,7 +35,7 @@
 									d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
 								/>
 							</svg>
-							<span class="text-sm text-base-content/70">{$_(`smartSearch.${step}`)}</span>
+							<span class="text-sm text-base-content/70">{step}</span>
 						</li>
 					{/each}
 				</ul>

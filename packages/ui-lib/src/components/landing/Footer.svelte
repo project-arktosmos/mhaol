@@ -1,12 +1,8 @@
-<script lang="ts">
-	import { _ } from 'svelte-i18n';
-</script>
-
 <footer class="border-t border-base-300 bg-base-100 py-10">
 	<div class="mx-auto max-w-6xl px-6">
 		<div class="flex flex-col items-center gap-4 text-center">
 			<span class="text-xl font-bold">Mhaol Media</span>
-			<p class="text-sm text-base-content/50">{$_('footer.tagline')}</p>
+			<p class="text-sm text-base-content/50">Free, open-source media server for everyone.</p>
 			<div class="flex gap-4">
 				<a
 					href="https://github.com/arktosmos/mhaoltube"
@@ -25,7 +21,7 @@
 					Releases
 				</a>
 			</div>
-			<p class="text-xs text-base-content/30">{$_('footer.built_with')}</p>
+			<p class="text-xs text-base-content/30">Built with Svelte, Tauri, and Rust.</p>
 		</div>
 	</div>
 </footer>
