@@ -905,7 +905,10 @@ async fn musicbrainz_popular(
     let limit: i64 = 20;
     let offset = (page - 1) * limit;
     let tag = genre.filter(|s| !s.is_empty()).unwrap_or("rock");
-    let query = format!("tag:\"{}\"", tag);
+    // Restrict to full albums only (no singles, EPs, broadcasts, etc.) — the
+    // catalog is the album browser, so showing every release-group type would
+    // be noise.
+    let query = format!("tag:\"{}\" AND primarytype:Album", tag);
     let url = format!(
         "{}/release-group?query={}&fmt=json&limit={}&offset={}",
         MUSICBRAINZ_BASE,
@@ -955,7 +958,13 @@ pub(crate) async fn musicbrainz_search(
             _ => vec![c],
         })
         .collect();
-    let lucene = format!("(releasegroup:\"{q}\" OR artist:\"{q}\")", q = escaped);
+    // OR across release-group title + artist name, then AND-restrict to full
+    // albums only so a query like "keane" returns Keane's albums and not their
+    // singles or EPs.
+    let lucene = format!(
+        "(releasegroup:\"{q}\" OR artist:\"{q}\") AND primarytype:Album",
+        q = escaped
+    );
     let url = format!(
         "{}/release-group?query={}&fmt=json&limit={}&offset={}",
         MUSICBRAINZ_BASE,
