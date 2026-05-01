@@ -14,6 +14,7 @@
 	import { themeService } from 'ui-lib/services/theme.service';
 	import { setBrowserImageCacheResolver } from 'ui-lib/services/image-cache.service';
 	import { cachedImageUrl } from '$lib/image-cache';
+	import { mediaTrackerService } from '$lib/media-tracker.service';
 	import { userIdentityService } from '$lib/user-identity.service';
 	import { onMount, onDestroy } from 'svelte';
 	import { base } from '$app/paths';
@@ -38,6 +39,7 @@
 		themeService.initialize('flix');
 		playerService.initialize();
 		userIdentityService.initialize();
+		mediaTrackerService.initialize();
 	});
 
 	onDestroy(() => {
