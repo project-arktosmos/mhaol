@@ -8,8 +8,7 @@
 	import type {
 		PlayableFile,
 		PlayableFileSubtitle,
-		PlayerConnectionState,
-		PlayerState
+		PlayerConnectionState
 	} from '$types/player.type';
 	import type { SubtitleSearchContext } from '$types/subtitles.type';
 	import PlayerControls from './PlayerControls.svelte';
@@ -271,20 +270,21 @@
 			playerService.state.update((s) => ({ ...s, error: mediaError }));
 		};
 		const onTimeUpdate = () => {
+			const cur = get(playerService.state);
 			// Don't fight the user while they're dragging the seek bar.
-			if (get(playerService.state).isSeeking) return;
+			if (cur.isSeeking) return;
 			// `timeupdate` firing means the element is actively decoding —
 			// clear buffering as a safety net in case `playing` was missed
 			// (torrent streams race element.load() with playback start).
 			const t = element.currentTime;
-			playerService.state.update((s) =>
-				s.positionSecs === t && !s.buffering ? s : { ...s, positionSecs: t, buffering: false }
-			);
+			if (cur.positionSecs === t && !cur.buffering) return;
+			playerService.state.update((s) => ({ ...s, positionSecs: t, buffering: false }));
 		};
 		const onLoadedMetadata = () => {
 			if (Number.isFinite(element.duration) && element.duration > 0) {
 				const d = element.duration;
-				playerService.state.update((s) => (s.durationSecs === d ? s : { ...s, durationSecs: d }));
+				if (get(playerService.state).durationSecs === d) return;
+				playerService.state.update((s) => ({ ...s, durationSecs: d }));
 			}
 		};
 		const onDurationChange = onLoadedMetadata;
@@ -293,11 +293,15 @@
 			playerService.setBuffering(true);
 		};
 		const onPlaying = () => {
-			// Coalesce buffering + paused clears into a single store update so
-			// downstream subscribers see one notification instead of two.
-			playerService.state.update((s: PlayerState) =>
-				!s.buffering && !s.isPaused ? s : { ...s, buffering: false, isPaused: false }
-			);
+			// Coalesce buffering + paused clears into a single store update,
+			// and skip the update entirely when both flags are already false.
+			// Svelte stores' default `safe_not_equal` treats every object
+			// reference as changed — so returning the same `s` from `update`
+			// still notifies subscribers and cascades through the catalog
+			// page's reactive graph. We have to short-circuit at the caller.
+			const cur = get(playerService.state);
+			if (!cur.buffering && !cur.isPaused) return;
+			playerService.state.update((s) => ({ ...s, buffering: false, isPaused: false }));
 		};
 		element.addEventListener('error', onError);
 		element.addEventListener('timeupdate', onTimeUpdate);
@@ -310,13 +314,18 @@
 		// untrack so the sync state write doesn't feed back into this
 		// effect's reactive dependencies.
 		untrack(() => {
+			const cur = get(playerService.state);
 			if (Number.isFinite(element.duration) && element.duration > 0) {
 				const d = element.duration;
-				playerService.state.update((s) => (s.durationSecs === d ? s : { ...s, durationSecs: d }));
+				if (cur.durationSecs !== d) {
+					playerService.state.update((s) => ({ ...s, durationSecs: d }));
+				}
 			}
 			if (Number.isFinite(element.currentTime) && element.currentTime > 0) {
 				const t = element.currentTime;
-				playerService.state.update((s) => (s.positionSecs === t ? s : { ...s, positionSecs: t }));
+				if (cur.positionSecs !== t) {
+					playerService.state.update((s) => ({ ...s, positionSecs: t }));
+				}
 			}
 			// readyState 3 (HAVE_FUTURE_DATA) or 4 (HAVE_ENOUGH_DATA) means
 			// the element can play right now — clear any leftover buffering.

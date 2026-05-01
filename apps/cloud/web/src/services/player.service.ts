@@ -1,4 +1,4 @@
-import { writable, type Writable } from 'svelte/store';
+import { get, writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { ObjectServiceClass } from '$services/classes/object-service.class';
 import type {
@@ -88,7 +88,13 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	}
 
 	setBuffering(buffering: boolean): void {
-		this.state.update((s) => (s.buffering === buffering ? s : { ...s, buffering }));
+		// Short-circuit at the caller — Svelte writable stores fire
+		// `safe_not_equal` which treats every object reference as changed,
+		// so returning the same `s` from `update()` still notifies every
+		// subscriber and cascades through the reactive graph.
+		const cur = get(this.state);
+		if (cur.buffering === buffering) return;
+		this.state.update((s) => ({ ...s, buffering }));
 	}
 
 	// ===== Seeking — direct URL playback drives the element directly via PlayerVideo =====
@@ -121,7 +127,9 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	// ===== Playback controls =====
 
 	setPaused(isPaused: boolean): void {
-		this.state.update((s) => (s.isPaused === isPaused ? s : { ...s, isPaused }));
+		const cur = get(this.state);
+		if (cur.isPaused === isPaused) return;
+		this.state.update((s) => ({ ...s, isPaused }));
 	}
 
 	setVolume(volume: number): void {
