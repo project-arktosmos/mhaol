@@ -1,6 +1,12 @@
 <script lang="ts">
 	import type { Firkin, FirkinFile } from 'cloud-ui';
-	import { catAsBlob, type PlayerIpfsClient } from '$ipfs/client';
+	import type { PlayerIpfsClient } from '$ipfs/client';
+	import {
+		startStream,
+		pickStreamMode,
+		type StreamPlayerHandle,
+		type StreamPlayerKind
+	} from '$ipfs/stream-player';
 
 	interface Props {
 		firkin: Firkin;
@@ -11,86 +17,64 @@
 	const ipfsFiles = $derived<FirkinFile[]>(firkin.files.filter((f) => f.type === 'ipfs'));
 
 	let selectedIndex = $state<number>(0);
-	let videoSrc = $state<string | null>(null);
-	let videoMime = $state<string | null>(null);
-	let loading = $state(false);
+	let mediaSrc = $state<string | null>(null);
+	let mediaMode = $state<StreamPlayerKind | null>(null);
+	let starting = $state(false);
 	let progress = $state(0);
-	let totalBytes = $state(0);
 	let error = $state<string | null>(null);
-	let abortCtrl: AbortController | null = null;
+	let handle = $state<StreamPlayerHandle | null>(null);
 
 	$effect(() => {
-		// reset selection when the firkin changes
+		// Reset playback when the firkin changes.
 		const firkinId = firkin.id;
-		selectedIndex = 0;
 		void firkinId;
-		clearVideo();
+		selectedIndex = 0;
+		clearMedia();
 	});
 
-	function clearVideo() {
-		if (videoSrc) {
-			URL.revokeObjectURL(videoSrc);
-			videoSrc = null;
+	function clearMedia() {
+		if (handle) {
+			handle.cancel();
+			handle = null;
 		}
-		videoMime = null;
+		mediaSrc = null;
+		mediaMode = null;
 		progress = 0;
-		totalBytes = 0;
 		error = null;
-		if (abortCtrl) {
-			abortCtrl.abort();
-			abortCtrl = null;
-		}
-	}
-
-	function guessMime(file: FirkinFile): string {
-		const title = (file.title ?? '').toLowerCase();
-		if (title.endsWith('.mp4') || title.endsWith('.m4v')) return 'video/mp4';
-		if (title.endsWith('.webm')) return 'video/webm';
-		if (title.endsWith('.mov')) return 'video/quicktime';
-		if (title.endsWith('.mkv')) return 'video/x-matroska';
-		if (title.endsWith('.mp3')) return 'audio/mpeg';
-		if (title.endsWith('.flac')) return 'audio/flac';
-		if (title.endsWith('.ogg')) return 'audio/ogg';
-		if (title.endsWith('.m4a')) return 'audio/mp4';
-		if (title.endsWith('.opus')) return 'audio/opus';
-		// Fall back to a generic video type — most browsers accept a Blob URL
-		// and inspect bytes regardless of the typed MIME.
-		return 'video/mp4';
+		starting = false;
 	}
 
 	async function play() {
 		const file = ipfsFiles[selectedIndex];
 		if (!file) return;
-		clearVideo();
-		loading = true;
+		clearMedia();
+		starting = true;
 		error = null;
-		progress = 0;
-		const ctrl = new AbortController();
-		abortCtrl = ctrl;
-		const mime = guessMime(file);
 		try {
-			const blob = await catAsBlob(client, file.value, mime, {
-				signal: ctrl.signal,
-				onProgress: (n) => {
-					progress = n;
+			handle = await startStream({
+				client,
+				cid: file.value,
+				title: file.title,
+				onProgress: (p) => {
+					progress = p.bytesReceived;
+					mediaMode = p.mode;
 				}
 			});
-			if (ctrl.signal.aborted) return;
-			totalBytes = blob.size;
-			videoSrc = URL.createObjectURL(blob);
-			videoMime = mime;
-		} catch (err) {
-			if (!ctrl.signal.aborted) {
+			mediaSrc = handle.src;
+			mediaMode = handle.mode;
+			handle.done.catch((err) => {
+				if (err instanceof DOMException && err.name === 'AbortError') return;
 				error = err instanceof Error ? err.message : String(err);
-			}
+			});
+		} catch (err) {
+			error = err instanceof Error ? err.message : String(err);
 		} finally {
-			if (abortCtrl === ctrl) abortCtrl = null;
-			loading = false;
+			starting = false;
 		}
 	}
 
 	function formatBytes(bytes: number): string {
-		if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+		if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
 		const units = ['B', 'KB', 'MB', 'GB'];
 		let v = bytes;
 		let u = 0;
@@ -101,7 +85,29 @@
 		return `${v.toFixed(v >= 10 || u === 0 ? 0 : 1)} ${units[u]}`;
 	}
 
-	const isAudio = $derived(videoMime?.startsWith('audio/') ?? false);
+	const isAudio = $derived.by(() => {
+		const f = ipfsFiles[selectedIndex];
+		const t = (f?.title ?? '').toLowerCase();
+		return (
+			t.endsWith('.mp3') ||
+			t.endsWith('.flac') ||
+			t.endsWith('.ogg') ||
+			t.endsWith('.m4a') ||
+			t.endsWith('.opus')
+		);
+	});
+
+	const plannedMode = $derived(pickStreamMode(ipfsFiles[selectedIndex]?.title));
+	const modeLabel = $derived.by(() => {
+		switch (mediaMode ?? plannedMode) {
+			case 'mse-mp4':
+				return 'MSE / mp4 (fragmented on the fly)';
+			case 'mse-webm':
+				return 'MSE / webm';
+			case 'blob':
+				return 'Buffered Blob (full download before playback)';
+		}
+	});
 </script>
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
@@ -120,17 +126,24 @@
 					{/each}
 				</select>
 			</label>
-			<button type="button" class="btn btn-sm btn-primary" disabled={loading} onclick={play}>
-				{loading ? 'Loading from IPFS…' : 'Play over IPFS'}
+			<button type="button" class="btn btn-sm btn-primary" disabled={starting} onclick={play}>
+				{starting ? 'Opening stream…' : 'Play over IPFS'}
 			</button>
-			{#if videoSrc}
-				<button type="button" class="btn btn-ghost btn-sm" onclick={clearVideo}>Clear</button>
+			{#if mediaSrc || handle}
+				<button type="button" class="btn btn-ghost btn-sm" onclick={clearMedia}>Clear</button>
 			{/if}
 		</div>
 
-		{#if loading}
+		<p class="mb-2 text-xs text-base-content/60">
+			Mode: <span class="font-mono">{modeLabel}</span>
+		</p>
+
+		{#if progress > 0 || starting}
 			<p class="mb-2 text-xs text-base-content/70">
-				Streamed {formatBytes(progress)} so far…
+				Streamed {formatBytes(progress)} from IPFS
+				{#if mediaMode === 'mse-mp4' || mediaMode === 'mse-webm'}
+					— playback starts as soon as the first segment is decodable
+				{/if}
 			</p>
 		{/if}
 
@@ -138,16 +151,19 @@
 			<div class="my-2 alert alert-error"><span>{error}</span></div>
 		{/if}
 
-		{#if videoSrc}
-			<p class="mb-2 text-xs text-base-content/70">
-				Loaded {formatBytes(totalBytes)} via IPFS — {videoMime}
-			</p>
+		{#if mediaSrc}
 			{#if isAudio}
-				<audio controls class="w-full" src={videoSrc}>
+				<audio controls class="w-full" src={mediaSrc} autoplay>
 					<track kind="captions" />
 				</audio>
 			{:else}
-				<video controls playsinline class="aspect-video w-full rounded bg-black" src={videoSrc}>
+				<video
+					controls
+					playsinline
+					autoplay
+					class="aspect-video w-full rounded bg-black"
+					src={mediaSrc}
+				>
 					<track kind="captions" />
 				</video>
 			{/if}

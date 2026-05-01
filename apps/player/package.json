@@ -33,6 +33,7 @@
 		"helia": "^5.0.0",
 		"hls.js": "^1.6.15",
 		"libp2p": "^2.0.0",
+		"mp4box": "^0.5.4",
 		"multiformats": "^13.3.0",
 		"uint8arrays": "^5.1.0"
 	},
