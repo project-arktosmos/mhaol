@@ -276,18 +276,29 @@ fn link_audio_branch(
     let queue = make_element("queue", Some("audio_queue"))?;
     let convert = make_element("audioconvert", Some("audio_convert"))?;
     let resample = make_element("audioresample", Some("audio_resample"))?;
+    // Force stereo 48 kHz before encoding so the resulting AAC fits the
+    // codec profile browsers' MSE accepts (AAC-LC stereo). BluRay sources
+    // are commonly 5.1/7.1 AC3; avenc_aac would otherwise preserve the
+    // source channel layout and produce multi-channel AAC, which hls.js
+    // can transmux but the browser's audio source buffer rejects with
+    // `bufferAppendError`.
+    let caps_filter = make_element("capsfilter", Some("audio_caps"))?;
+    let stereo_caps = gst::Caps::builder("audio/x-raw")
+        .field("channels", 2i32)
+        .field("rate", 48_000i32)
+        .build();
+    caps_filter.set_property("caps", &stereo_caps);
     let encoder = pick_aac_encoder()?;
     let aacparse = make_element("aacparse", Some("audio_parser"))?;
 
     pipeline
-        .add_many([&queue, &convert, &resample, &encoder, &aacparse])
+        .add_many([&queue, &convert, &resample, &caps_filter, &encoder, &aacparse])
         .map_err(|e| Error::PipelineConstruction(e.to_string()))?;
-    gst::Element::link_many([&queue, &convert, &resample, &encoder, &aacparse]).map_err(|_| {
-        Error::ElementLinkFailed {
+    gst::Element::link_many([&queue, &convert, &resample, &caps_filter, &encoder, &aacparse])
+        .map_err(|_| Error::ElementLinkFailed {
             source_element: "audio chain".into(),
             sink_element: "audio chain".into(),
-        }
-    })?;
+        })?;
 
     let hls_audio_sink = hlssink
         .request_pad_simple("audio")
@@ -302,7 +313,7 @@ fn link_audio_branch(
             sink_element: "hlssink2.audio".into(),
         })?;
 
-    for el in [&queue, &convert, &resample, &encoder, &aacparse] {
+    for el in [&queue, &convert, &resample, &caps_filter, &encoder, &aacparse] {
         el.sync_state_with_parent()
             .map_err(|e| Error::StateChange(e.to_string()))?;
     }
