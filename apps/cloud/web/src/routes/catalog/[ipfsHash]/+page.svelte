@@ -11,6 +11,7 @@
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
 	import CatalogTorrentProgressCard from '$components/catalog/CatalogTorrentProgressCard.svelte';
+	import CatalogSubsLyricsCard from '$components/catalog/CatalogSubsLyricsCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogFilesTable from '$components/catalog/CatalogFilesTable.svelte';
 	import { firkinPlaybackService } from '$services/firkin-playback.service';
@@ -29,6 +30,7 @@
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
 	import { TrackResolver } from '$services/catalog/track-resolver.svelte';
 	import { TorrentSearch, startTorrentDownload } from '$services/catalog/torrent-search.svelte';
+	import { SubsLyricsResolver } from '$services/catalog/subs-lyrics-resolver.svelte';
 	import type { TorrentResultItem } from '$lib/search.service';
 	import {
 		ingestRecommendations,
@@ -665,6 +667,40 @@
 		void torrentSearch.search({ addon: firkin.addon, title: firkin.title, year: firkin.year });
 	});
 
+	const subsLyricsResolver = new SubsLyricsResolver();
+	const subsLyricsKind = $derived<'lyrics' | 'subs' | null>(
+		isMusicBrainz ? 'lyrics' : isTmdbMovie || isTmdbTv ? 'subs' : null
+	);
+	let subsLyricsInitForFirkinId: string | null = null;
+
+	function runSubsLyricsSearch() {
+		if (!subsLyricsKind) return;
+		if (subsLyricsKind === 'lyrics') {
+			const names: string[] = firkin.artists.map((a: Firkin['artists'][number]) => a.name);
+			const artistQuery = names.filter((n: string) => n.length > 0).join(', ');
+			const query = [artistQuery, firkin.title].filter(Boolean).join(' ').trim();
+			if (!query) return;
+			void subsLyricsResolver.search({ addon: firkin.addon, query });
+		} else {
+			const externalId = isTmdbMovie ? tmdbMovieId : tmdbTvId;
+			if (!externalId) return;
+			void subsLyricsResolver.search({
+				addon: firkin.addon,
+				query: firkin.title,
+				externalIds: [externalId]
+			});
+		}
+	}
+
+	$effect(() => {
+		if (!subsLyricsKind) return;
+		if (subsLyricsKind === 'subs' && !(isTmdbMovie ? tmdbMovieId : tmdbTvId)) return;
+		const fid = firkin.id;
+		if (subsLyricsInitForFirkinId === fid) return;
+		subsLyricsInitForFirkinId = fid;
+		runSubsLyricsSearch();
+	});
+
 	$effect(() => {
 		if (!hasMagnetFiles || hasIpfsFiles) return;
 		const id = firkin.id;
@@ -958,6 +994,14 @@
 							title: firkin.title,
 							year: firkin.year
 						})}
+				/>
+			{/if}
+
+			{#if subsLyricsKind}
+				<CatalogSubsLyricsCard
+					resolver={subsLyricsResolver}
+					kind={subsLyricsKind}
+					onRefresh={runSubsLyricsSearch}
 				/>
 			{/if}
 

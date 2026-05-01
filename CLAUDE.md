@@ -154,6 +154,7 @@ The two catalog detail pages share their full presentation through components in
 - `CatalogTrailersCard.svelte` — trailers list driven by a `TrailerResolver`
 - `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`
 - `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval
+- `CatalogSubsLyricsCard.svelte` — subs/lyrics search results driven by a `SubsLyricsResolver` (auto-fired on detail mount: lyrics for MusicBrainz albums, subtitles for TMDB movies/TV). Read-only — clicking a row previews lyrics inline or opens the subtitle URL
 - `CatalogFilesTable.svelte` — firkin `files` table (detail only)
 
 **Shared resolver services** (`apps/cloud/web/src/services/catalog/`):

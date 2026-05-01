@@ -90,12 +90,14 @@ Plus the SvelteKit-reserved `$lib` (→ `src/lib/`) and `$app/*` (SvelteKit modu
 - `CatalogTrailersCard.svelte` — trailers list driven by a `TrailerResolver`
 - `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`
 - `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval
+- `CatalogSubsLyricsCard.svelte` — subs/lyrics search results driven by a `SubsLyricsResolver` (auto-fired on detail mount based on the firkin's addon: lyrics for MusicBrainz albums, subtitles for TMDB movies/TV). Read-only — subs/lyrics are not persisted on firkins; clicking a row previews lyrics inline or opens the subtitle URL
 - `CatalogFilesTable.svelte` — firkin `files` table (detail only)
 
 **Shared resolver services** (`apps/cloud/web/src/services/catalog/`, all `.svelte.ts` so `$state` runes work):
 - `trailer-resolver.svelte.ts` — `TrailerResolver` class. `resolveMovie(...)` / `resolveTv(...)` accept TMDB-sourced trailers via `stored`, prefer them when present, and only fall back to the YouTube fuzzy search when TMDB has nothing English. Optional `persist` callback writes back via `PUT /api/firkins/:id`.
 - `track-resolver.svelte.ts` — `TrackResolver` class. `loadByReleaseGroup(...)` fetches the MB tracklist and resolves YouTube URLs in series. Optional `persistTrackUrls` batches resolved URLs into one `PUT` so each resolution doesn't mint N intermediate firkin CIDs.
 - `torrent-search.svelte.ts` — `TorrentSearch` class. Optional `evaluate: true` runs `/api/torrent/evaluate` per result with a sliding-window concurrency cap (default 4). Also exports `startTorrentDownload(magnet)`.
+- `subs-lyrics-resolver.svelte.ts` — `SubsLyricsResolver` class. `search({ addon, query, externalIds? })` posts `/api/search/subs-lyrics` and exposes `results`, `status`, `error` as runes. The detail page wires it once per firkin id: lyrics queries are built from `<artists> <title>`, subtitle queries pass the firkin's TMDB id as `externalIds`. Read-only — results are not persisted on the firkin.
 
 **Pattern.** When two routes need the same UI in the cloud SPA: put the markup in `$components/<feature>/`, put the behaviour in a runes-driven service class at `$services/<feature>/<thing>.svelte.ts`, and let each route compose them with route-specific inputs and (optional) persistence callbacks. The presentational components stay free of business logic; the service classes own the state machines and side-effects.
 
