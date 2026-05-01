@@ -10,6 +10,7 @@
 	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
+	import CatalogTorrentProgressCard from '$components/catalog/CatalogTorrentProgressCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogIdentityCard from '$components/catalog/CatalogIdentityCard.svelte';
 	import CatalogVersionHistoryCard from '$components/catalog/CatalogVersionHistoryCard.svelte';
@@ -440,7 +441,13 @@
 				size: body.fileSize,
 				completedAt: ''
 			};
-			await playerService.playUrl(file, body.streamUrl, body.mimeType ?? null, 'sidebar', firkin.id);
+			await playerService.playUrl(
+				file,
+				body.streamUrl,
+				body.mimeType ?? null,
+				'sidebar',
+				firkin.id
+			);
 		} catch (err) {
 			torrentStreamError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -460,6 +467,21 @@
 			if (finished) out.push({ hash, title: f.title ?? t.name });
 		}
 		return out;
+	});
+
+	const torrentProgressRows = $derived.by(() => {
+		const seen = new Set<string>();
+		const rows: { title: string | null; torrent: (typeof $torrentsState.byHash)[string] }[] = [];
+		for (const f of firkin.files) {
+			if (f.type !== 'torrent magnet' || !f.value) continue;
+			const hash = infoHashFromMagnet(f.value);
+			if (!hash || seen.has(hash)) continue;
+			const t = $torrentsState.byHash[hash];
+			if (!t) continue;
+			seen.add(hash);
+			rows.push({ title: f.title ?? null, torrent: t });
+		}
+		return rows;
 	});
 
 	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0);
@@ -888,6 +910,8 @@
 			{/if}
 
 			<CatalogDescriptionCard description={firkin.description} />
+
+			<CatalogTorrentProgressCard rows={torrentProgressRows} />
 
 			<CatalogIdentityCard
 				cid={firkin.id}

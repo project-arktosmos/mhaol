@@ -68,6 +68,12 @@ export const NAV_ITEMS: NavItem[] = [
 		"children": []
 	},
 	{
+		"label": "Torrent",
+		"href": "/torrent",
+		"hasOwnPage": true,
+		"children": []
+	},
+	{
 		"label": "Youtube",
 		"href": "/youtube",
 		"hasOwnPage": true,

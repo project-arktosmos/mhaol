@@ -163,10 +163,7 @@
 			tone={clientStatusTone}
 			hint={torrentPkg?.message ?? null}
 		/>
-		<HealthCard
-			label="Active torrents"
-			value={activeCount !== null ? String(activeCount) : '—'}
-		/>
+		<HealthCard label="Active torrents" value={activeCount !== null ? String(activeCount) : '—'} />
 		<HealthCard
 			label="Download"
 			value={downloadSpeed !== null ? formatSpeed(downloadSpeed) : '—'}
@@ -218,11 +215,11 @@
 								<td>
 									<div class="flex flex-col gap-0.5">
 										<span class="font-medium break-all">{t.name}</span>
-										<span class="font-mono text-xs text-base-content/50 break-all">
+										<span class="font-mono text-xs break-all text-base-content/50">
 											{t.infoHash}
 										</span>
 										{#if t.outputPath}
-											<span class="font-mono text-xs text-base-content/40 break-all">
+											<span class="font-mono text-xs break-all text-base-content/40">
 												{t.outputPath}
 											</span>
 										{/if}
@@ -244,8 +241,8 @@
 									</div>
 								</td>
 								<td class="text-right text-xs">{formatBytes(t.size)}</td>
-								<td class="text-right text-xs font-mono">{formatSpeed(t.downloadSpeed)}</td>
-								<td class="text-right text-xs font-mono">{formatSpeed(t.uploadSpeed)}</td>
+								<td class="text-right font-mono text-xs">{formatSpeed(t.downloadSpeed)}</td>
+								<td class="text-right font-mono text-xs">{formatSpeed(t.uploadSpeed)}</td>
 								<td class="text-right text-xs">{t.peers}</td>
 								<td class="text-right text-xs">{t.seeds}</td>
 								<td class="text-right text-xs">{formatEta(t.eta)}</td>
