@@ -3,7 +3,7 @@ import { playYouTubeAudio, resolveYouTubeUrlForTrack } from '$lib/youtube-match.
 import { resolveLyricsForTrack } from '$lib/lrclib-match.service';
 import type { FileEntry } from '$lib/firkins.service';
 import type { ResolutionStatus, TrackEntry } from '$services/catalog/types';
-import type { SubsLyricsItem } from '$types/subs-lyrics.type';
+import type { SubsLyricsItem, SubsLyricsSyncedLine } from '$types/subs-lyrics.type';
 
 export interface TrackResolverOptions {
 	persistTrackUrls?: (resolved: { title: string; url: string }[]) => Promise<void>;
@@ -18,6 +18,11 @@ interface ResolveArgs {
 	albumTitle: string;
 	artist: string;
 	thumb: string | null;
+}
+
+interface LoadFromFirkinArgs {
+	releaseGroupId: string;
+	files: FileEntry[];
 }
 
 export class TrackResolver {
@@ -53,9 +58,64 @@ export class TrackResolver {
 		}));
 		this.status = 'done';
 		this.error = null;
-		// `myRun` keeps follow-up resolves on this resolver from clobbering
-		// the seeded list.
 		void myRun;
+	}
+
+	/// Project a MusicBrainz tracklist over the firkin's persisted `files`.
+	/// No searching: YouTube URLs and lyrics already attached to the firkin
+	/// are surfaced as resolved entries; missing ones surface as `'pending'`
+	/// so the caller can trigger the server-side resolver
+	/// (`firkinsService.resolveTracks(id)`). Returns whether any track is
+	/// missing either a YouTube URL or a lyrics entry — the detail page
+	/// uses this flag to decide whether to auto-trigger resolution.
+	async loadFromFirkin(args: LoadFromFirkinArgs): Promise<{ missingAny: boolean }> {
+		const myRun = ++this.run;
+		this.status = 'loading';
+		this.error = null;
+		this.tracks = [];
+
+		try {
+			const tracks = await fetchMusicBrainzTracks(args.releaseGroupId);
+			if (myRun !== this.run) return { missingAny: false };
+			const ytByTitle = new Map<string, string>();
+			const lyricsByTitle = new Map<string, SubsLyricsItem>();
+			for (const f of args.files) {
+				const title = (f.title ?? '').trim().toLowerCase();
+				if (!title) continue;
+				if (f.type === 'url' && isYouTubeUrl(f.value)) {
+					ytByTitle.set(title, f.value);
+				} else if (f.type === 'lyrics' && f.value) {
+					const item = decodeLyricsValue(f.value, f.title ?? '');
+					if (item) lyricsByTitle.set(title, item);
+				}
+			}
+
+			let missingAny = false;
+			this.tracks = tracks.map((t) => {
+				const key = t.title.trim().toLowerCase();
+				const youtubeUrl = ytByTitle.get(key) ?? null;
+				const lyrics = lyricsByTitle.get(key) ?? null;
+				if (!youtubeUrl) missingAny = true;
+				if (!lyrics) missingAny = true;
+				return {
+					id: t.id,
+					position: t.position,
+					title: t.title,
+					lengthMs: t.lengthMs,
+					youtubeUrl,
+					youtubeStatus: youtubeUrl ? 'idle' : 'pending',
+					lyrics,
+					lyricsStatus: lyrics ? 'found' : 'pending'
+				};
+			});
+			this.status = 'done';
+			return { missingAny };
+		} catch (err) {
+			if (myRun !== this.run) return { missingAny: false };
+			this.error = err instanceof Error ? err.message : 'Unknown error';
+			this.status = 'error';
+			return { missingAny: false };
+		}
 	}
 
 	async loadByReleaseGroup(args: LoadArgs, resolveArgs: ResolveArgs): Promise<void> {
@@ -183,6 +243,69 @@ export class TrackResolver {
 				console.warn('[track-resolver] persist failed', err);
 			}
 		}
+	}
+}
+
+function isYouTubeUrl(value: string): boolean {
+	try {
+		const host = new URL(value).hostname.toLowerCase();
+		return (
+			host === 'www.youtube.com' ||
+			host === 'youtube.com' ||
+			host === 'm.youtube.com' ||
+			host === 'music.youtube.com' ||
+			host === 'youtu.be'
+		);
+	} catch {
+		return false;
+	}
+}
+
+function parseLrcText(lrc: string): SubsLyricsSyncedLine[] {
+	const lines: SubsLyricsSyncedLine[] = [];
+	for (const raw of lrc.split('\n')) {
+		const line = raw.trim();
+		if (!line.startsWith('[')) continue;
+		const close = line.indexOf(']');
+		if (close < 0) continue;
+		const ts = line.slice(1, close);
+		const text = line.slice(close + 1).trim();
+		const m = ts.match(/^(\d+):(\d+(?:\.\d+)?)$/);
+		if (!m) continue;
+		const minutes = Number.parseFloat(m[1]);
+		const seconds = Number.parseFloat(m[2]);
+		if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) continue;
+		lines.push({ time: minutes * 60 + seconds, text });
+	}
+	lines.sort((a, b) => a.time - b.time);
+	return lines;
+}
+
+/// Decode the JSON blob the server stores under a `lyrics`-typed file
+/// entry (`{source, externalId, syncedLyrics, plainLyrics, instrumental}`)
+/// into a `SubsLyricsItem` the existing display components understand.
+function decodeLyricsValue(value: string, title: string): SubsLyricsItem | null {
+	try {
+		const parsed = JSON.parse(value) as {
+			source?: string;
+			externalId?: string;
+			syncedLyrics?: string | null;
+			plainLyrics?: string | null;
+			instrumental?: boolean;
+		};
+		const synced = parsed.syncedLyrics ? parseLrcText(parsed.syncedLyrics) : undefined;
+		return {
+			kind: 'lyrics',
+			source: parsed.source ?? 'lrclib',
+			externalId: parsed.externalId ?? '',
+			trackName: title,
+			plainLyrics: parsed.plainLyrics ?? undefined,
+			syncedLyrics: synced && synced.length > 0 ? synced : undefined,
+			instrumental: parsed.instrumental === true,
+			format: synced && synced.length > 0 ? 'lrc' : undefined
+		};
+	} catch {
+		return null;
 	}
 }
 

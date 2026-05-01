@@ -642,6 +642,15 @@ async fn search_subs_lyrics(
 async fn search_lrclib(
     query: &str,
 ) -> Result<Vec<SubsLyrics>, (StatusCode, Json<serde_json::Value>)> {
+    lrclib_search(query)
+        .await
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, e))
+}
+
+/// Run a free-text search against LRCLIB and return parsed results. The
+/// HTTP route wraps this and converts errors to JSON responses; other
+/// modules (notably the firkin track resolver) call it directly.
+pub async fn lrclib_search(query: &str) -> Result<Vec<SubsLyrics>, String> {
     let url = format!("{}/search?q={}", LRCLIB_BASE, urlencoding(query));
     let res = reqwest::Client::new()
         .get(&url)
@@ -652,19 +661,16 @@ async fn search_lrclib(
         )
         .send()
         .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("lrclib request failed: {e}")))?;
+        .map_err(|e| format!("lrclib request failed: {e}"))?;
 
     if !res.status().is_success() {
-        return Err(err(
-            StatusCode::BAD_GATEWAY,
-            format!("lrclib returned {}", res.status()),
-        ));
+        return Err(format!("lrclib returned {}", res.status()));
     }
 
     let payload: serde_json::Value = res
         .json()
         .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("lrclib parse failed: {e}")))?;
+        .map_err(|e| format!("lrclib parse failed: {e}"))?;
 
     let arr = match payload.as_array() {
         Some(a) => a,
@@ -734,6 +740,87 @@ async fn search_lrclib(
         })
         .collect();
     Ok(out)
+}
+
+/// One LRCLIB hit kept in its raw shape (synced LRC text rather than
+/// pre-parsed lines). Used by the firkin track resolver, which embeds the
+/// raw LRC into the firkin's `files` so the body stays self-contained
+/// across IPFS pins without re-fetching LRCLIB.
+#[derive(Debug, Clone, Default)]
+pub struct LrclibHit {
+    pub id: String,
+    pub track_name: String,
+    pub artist_name: String,
+    pub album_name: String,
+    pub duration: Option<f64>,
+    pub plain_lyrics: Option<String>,
+    pub synced_lyrics: Option<String>,
+    pub instrumental: bool,
+}
+
+pub async fn lrclib_search_raw(query: &str) -> Result<Vec<LrclibHit>, String> {
+    let url = format!("{}/search?q={}", LRCLIB_BASE, urlencoding(query));
+    let res = reqwest::Client::new()
+        .get(&url)
+        .header("Accept", "application/json")
+        .header(
+            "User-Agent",
+            "Mhaol/1.0 (https://github.com/project-arktosmos/mhaol)",
+        )
+        .send()
+        .await
+        .map_err(|e| format!("lrclib request failed: {e}"))?;
+    if !res.status().is_success() {
+        return Err(format!("lrclib returned {}", res.status()));
+    }
+    let payload: serde_json::Value = res
+        .json()
+        .await
+        .map_err(|e| format!("lrclib parse failed: {e}"))?;
+    let arr = match payload.as_array() {
+        Some(a) => a,
+        None => return Ok(Vec::new()),
+    };
+    Ok(arr
+        .iter()
+        .map(|item| LrclibHit {
+            id: item
+                .get("id")
+                .and_then(|v| v.as_i64())
+                .map(|n| n.to_string())
+                .unwrap_or_default(),
+            track_name: item
+                .get("trackName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            artist_name: item
+                .get("artistName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            album_name: item
+                .get("albumName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            duration: item.get("duration").and_then(|v| v.as_f64()),
+            plain_lyrics: item
+                .get("plainLyrics")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string()),
+            synced_lyrics: item
+                .get("syncedLyrics")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string()),
+            instrumental: item
+                .get("instrumental")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+        })
+        .collect())
 }
 
 fn parse_lrc_lines(lrc: &str) -> Vec<SyncedLine> {

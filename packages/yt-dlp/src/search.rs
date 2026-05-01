@@ -79,6 +79,24 @@ pub async fn search(Query(query): Query<SearchQuery>) -> impl IntoResponse {
         }
     };
 
+    match search_query(&q, query.continuation.as_deref()).await {
+        Ok(resp) => Json(resp).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e })),
+        )
+            .into_response(),
+    }
+}
+
+/// Pure helper that performs a YouTube search via the InnerTube API.
+/// Wrapped by the axum handler `search`; also callable directly from
+/// other crates that need to run a YouTube search server-side without
+/// going through HTTP (e.g. firkin track resolution).
+pub async fn search_query(
+    q: &str,
+    continuation: Option<&str>,
+) -> Result<SearchResponse, String> {
     let mut body = serde_json::json!({
         "context": {
             "client": {
@@ -90,14 +108,14 @@ pub async fn search(Query(query): Query<SearchQuery>) -> impl IntoResponse {
         }
     });
 
-    if let Some(token) = &query.continuation {
-        body["continuation"] = serde_json::Value::String(token.clone());
+    if let Some(token) = continuation {
+        body["continuation"] = serde_json::Value::String(token.to_string());
     } else {
-        body["query"] = serde_json::Value::String(q);
+        body["query"] = serde_json::Value::String(q.to_string());
     }
 
     let client = reqwest::Client::new();
-    let resp = match client
+    let resp = client
         .post(INNERTUBE_URL)
         .header("Content-Type", "application/json")
         .header("User-Agent", USER_AGENT)
@@ -108,44 +126,19 @@ pub async fn search(Query(query): Query<SearchQuery>) -> impl IntoResponse {
         .json(&body)
         .send()
         .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
-            )
-                .into_response();
-        }
-    };
+        .map_err(|e| e.to_string())?;
 
     if !resp.status().is_success() {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": format!("YouTube API error: {}", resp.status()) })),
-        )
-            .into_response();
+        return Err(format!("YouTube API error: {}", resp.status()));
     }
 
-    let data: serde_json::Value = match resp.json().await {
-        Ok(d) => d,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
-            )
-                .into_response();
-        }
-    };
-
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
     let (items, channels, continuation) = parse_innertube_response(&data);
-
-    Json(SearchResponse {
+    Ok(SearchResponse {
         items,
         channels,
         continuation,
     })
-    .into_response()
 }
 
 fn parse_innertube_response(

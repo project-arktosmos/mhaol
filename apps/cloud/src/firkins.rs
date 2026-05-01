@@ -20,7 +20,7 @@ pub const TABLE: &str = "firkin";
 const SHA2_256_CODE: u64 = 0x12;
 const RAW_CODEC: u64 = 0x55;
 
-const ALLOWED_FILE_TYPES: &[&str] = &["ipfs", "torrent magnet", "url"];
+const ALLOWED_FILE_TYPES: &[&str] = &["ipfs", "torrent magnet", "url", "lyrics"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ImageMeta {
@@ -308,12 +308,15 @@ pub struct EnrichFirkinRequest {
 }
 
 pub fn router() -> Router<CloudState> {
-    Router::new()
+    let r = Router::new()
         .route("/", get(list).post(create))
         .route("/{id}", put(update).delete(delete).get(get_one))
         .route("/{id}/finalize", post(finalize))
         .route("/{id}/enrich", post(enrich))
-        .route("/{id}/roms", post(roms))
+        .route("/{id}/roms", post(roms));
+    #[cfg(not(target_os = "android"))]
+    let r = r.route("/{id}/resolve-tracks", post(resolve_tracks));
+    r
 }
 
 fn err_response(
@@ -1071,6 +1074,184 @@ async fn roms(
         StatusCode::NOT_IMPLEMENTED,
         "rom extraction is not supported on this platform",
     ))
+}
+
+#[cfg(not(target_os = "android"))]
+async fn resolve_tracks(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    use crate::track_resolve;
+
+    let existing: Option<Firkin> = state
+        .db
+        .select((TABLE, id.as_str()))
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db select failed: {e}"),
+            )
+        })?;
+    let mut current =
+        existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+
+    if current.addon != "musicbrainz" {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "resolve-tracks only supports musicbrainz firkins",
+        ));
+    }
+
+    let release_group_id = current
+        .files
+        .iter()
+        .filter(|f| f.kind == "url")
+        .find_map(|f| extract_mb_release_group_id(&f.value))
+        .ok_or_else(|| {
+            err_response(
+                StatusCode::BAD_REQUEST,
+                "firkin is missing a MusicBrainz release-group url in `files`",
+            )
+        })?;
+
+    let tracks = track_resolve::fetch_release_group_tracks(&release_group_id)
+        .await
+        .map_err(|e| err_response(StatusCode::BAD_GATEWAY, e))?;
+
+    // Resolve artists by joining the firkin's artist CIDs to their canonical
+    // bodies, then build a comma-joined string for the search queries.
+    let artist_dtos = artists::fetch_many(&state, &current.artists)
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("artist fetch failed: {e}"),
+            )
+        })?;
+    let artist_query = artist_dtos
+        .iter()
+        .map(|a| a.name.as_str())
+        .filter(|n| !n.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let album_title = current.title.clone();
+
+    // Resolve each track in series — keeps memory + outbound requests
+    // bounded, and matches the WebUI's prior per-track UX where items
+    // appear one at a time. Failures per track surface as "no match" and
+    // are skipped without aborting the batch.
+    let mut new_files = current.files.clone();
+    let mut changed = false;
+    for track in &tracks {
+        let track_title = track.title.trim();
+        if track_title.is_empty() {
+            continue;
+        }
+
+        let already_yt = new_files.iter().any(|f| {
+            f.kind == "url"
+                && f.title
+                    .as_deref()
+                    .map(|t| t.trim().eq_ignore_ascii_case(track_title))
+                    .unwrap_or(false)
+                && is_youtube_url(&f.value)
+        });
+        let already_lyrics = new_files.iter().any(|f| {
+            f.kind == "lyrics"
+                && f.title
+                    .as_deref()
+                    .map(|t| t.trim().eq_ignore_ascii_case(track_title))
+                    .unwrap_or(false)
+        });
+        if already_yt && already_lyrics {
+            continue;
+        }
+
+        let (yt_url, lyrics_hit) = track_resolve::resolve_track(
+            track_title,
+            &artist_query,
+            &album_title,
+            track.length_ms,
+        )
+        .await;
+
+        if !already_yt {
+            if let Some(url) = yt_url {
+                new_files = track_resolve::upsert_track_file(
+                    new_files,
+                    FileEntry {
+                        kind: "url".to_string(),
+                        value: url,
+                        title: Some(track_title.to_string()),
+                    },
+                );
+                changed = true;
+            }
+        }
+        if !already_lyrics {
+            if let Some(hit) = lyrics_hit {
+                let value = track_resolve::encode_lyrics_value(&hit);
+                new_files = track_resolve::upsert_track_file(
+                    new_files,
+                    FileEntry {
+                        kind: "lyrics".to_string(),
+                        value,
+                        title: Some(track_title.to_string()),
+                    },
+                );
+                changed = true;
+            }
+        }
+    }
+
+    if !changed {
+        return Ok(Json(assemble_firkin_dto(&state, current).await?));
+    }
+
+    current.files = new_files;
+    current.updated_at = Utc::now();
+    current.id = None;
+
+    let created_doc = rollforward_firkin(&state, &id, current).await?;
+    Ok(Json(assemble_firkin_dto(&state, created_doc).await?))
+}
+
+fn extract_mb_release_group_id(value: &str) -> Option<String> {
+    let url = url::Url::parse(value).ok()?;
+    if !url
+        .host_str()
+        .map(|h| h.eq_ignore_ascii_case("musicbrainz.org"))
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    let mut segments = url.path_segments()?;
+    if segments.next()? != "release-group" {
+        return None;
+    }
+    let id = segments.next()?.to_string();
+    if id.is_empty() {
+        None
+    } else {
+        Some(id)
+    }
+}
+
+fn is_youtube_url(value: &str) -> bool {
+    let host = match url::Url::parse(value).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase)) {
+        Some(h) => h,
+        None => return false,
+    };
+    matches!(
+        host.as_str(),
+        "www.youtube.com"
+            | "youtube.com"
+            | "m.youtube.com"
+            | "music.youtube.com"
+            | "youtu.be"
+    )
 }
 
 #[cfg(test)]

@@ -15,14 +15,7 @@ import {
 	type FirkinTrailer as SharedTrailer
 } from 'cloud-ui';
 
-export {
-	FIRKIN_ADDONS,
-	FIRKIN_KINDS,
-	ADDON_KIND,
-	addonKind,
-	type FirkinAddon,
-	type FirkinKind
-};
+export { FIRKIN_ADDONS, FIRKIN_KINDS, ADDON_KIND, addonKind, type FirkinAddon, type FirkinKind };
 
 /// For a given firkin addon, the catalog/remote addon whose API can supply
 /// metadata (poster, description, year, canonical title) for a match.
@@ -45,7 +38,7 @@ export type FileEntry = SharedFileEntry;
 export type FileType = SharedFileType;
 export type Trailer = SharedTrailer;
 export type Firkin = SharedFirkin;
-export const FILE_TYPES = ['ipfs', 'torrent magnet', 'url'] as const;
+export const FILE_TYPES = ['ipfs', 'torrent magnet', 'url', 'lyrics'] as const;
 
 export interface FirkinsState {
 	loading: boolean;
@@ -174,6 +167,25 @@ class FirkinsService {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(payload)
+		});
+		if (!res.ok) throw new Error(await parseError(res));
+		const updated = (await res.json()) as Firkin;
+		this.state.update((s) => {
+			const next = s.firkins.filter((d) => d.id !== id && d.id !== updated.id);
+			next.push(updated);
+			return { ...s, firkins: next };
+		});
+		return updated;
+	}
+
+	/// Run the server-side track resolver: fetch the album's tracks from
+	/// MusicBrainz, search YouTube + LRCLIB per track, pick the best match
+	/// for each, pack the resulting URL / lyrics entries into `files`, and
+	/// roll the firkin forward to a new content-addressed id (which the
+	/// caller must navigate to). Only valid for `musicbrainz` firkins.
+	async resolveTracks(id: string): Promise<Firkin> {
+		const res = await fetch(`/api/firkins/${encodeURIComponent(id)}/resolve-tracks`, {
+			method: 'POST'
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const updated = (await res.json()) as Firkin;

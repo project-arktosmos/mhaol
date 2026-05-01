@@ -26,8 +26,7 @@
 		addonKind,
 		metadataSearchAddon,
 		type Firkin,
-		type FirkinAddon,
-		type FileEntry
+		type FirkinAddon
 	} from '$lib/firkins.service';
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
 	import { TrackResolver } from '$services/catalog/track-resolver.svelte';
@@ -602,50 +601,48 @@
 		}
 	});
 
-	const trackResolver = new TrackResolver({
-		persistTrackUrls: async (resolved) => {
-			let next: FileEntry[] = firkin.files.map((f) => ({ ...f }));
-			for (const { title: tt, url } of resolved) {
-				const idx = next.findIndex((f) => f.type === 'url' && (f.title ?? '').trim() === tt.trim());
-				if (idx >= 0) {
-					next[idx] = { ...next[idx], value: url };
-				} else {
-					next = [...next, { type: 'url', value: url, title: tt }];
-				}
-			}
-			await persistFirkinPatch({ files: next });
-		}
-	});
+	const trackResolver = new TrackResolver();
 	let tracksInitForFirkinId: string | null = null;
+	let resolvingTracks = $state(false);
+	let resolveTracksError = $state<string | null>(null);
 
 	$effect(() => {
 		if (!isMusicBrainz) return;
 		const fid = firkin.id;
 		if (tracksInitForFirkinId === fid) return;
 		tracksInitForFirkinId = fid;
-		const savedUrls: Record<string, string> = {};
-		for (const f of trackFiles) {
-			const key = (f.title ?? '').trim().toLowerCase();
-			if (key && f.value) savedUrls[key] = f.value;
-		}
-		const artist = firkin.artists
-			.map((a) => a.name)
-			.filter((n) => n && n.length > 0)
-			.join(', ');
 		if (musicBrainzReleaseGroupId) {
-			void trackResolver.loadByReleaseGroup(
-				{ releaseGroupId: musicBrainzReleaseGroupId, savedUrls },
-				{ albumTitle: firkin.title, artist, thumb }
-			);
+			void initTracksFromFirkin(fid, musicBrainzReleaseGroupId);
 		} else if (trackFiles.length > 0) {
 			trackResolver.seedFromFiles(firkin.files);
-			void trackResolver.resolveAllForCurrent({
-				albumTitle: firkin.title,
-				artist,
-				thumb
-			});
 		}
 	});
+
+	async function initTracksFromFirkin(fid: string, releaseGroupId: string): Promise<void> {
+		const result = await trackResolver.loadFromFirkin({
+			releaseGroupId,
+			files: firkin.files
+		});
+		if (!result.missingAny || resolvingTracks) return;
+		resolvingTracks = true;
+		resolveTracksError = null;
+		try {
+			const updated = await firkinsService.resolveTracks(fid);
+			data.firkin = updated;
+			if (updated.id !== fid) {
+				void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
+			} else {
+				void trackResolver.loadFromFirkin({
+					releaseGroupId,
+					files: updated.files
+				});
+			}
+		} catch (err) {
+			resolveTracksError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			resolvingTracks = false;
+		}
+	}
 
 	const torrentSearch = new TorrentSearch({ evaluate: true });
 	let addingHash = $state<string | null>(null);
@@ -906,6 +903,9 @@
 	{/if}
 	{#if torrentStreamError}
 		<div class="alert alert-error"><span>{torrentStreamError}</span></div>
+	{/if}
+	{#if resolveTracksError}
+		<div class="alert alert-error"><span>Track resolution failed: {resolveTracksError}</span></div>
 	{/if}
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
