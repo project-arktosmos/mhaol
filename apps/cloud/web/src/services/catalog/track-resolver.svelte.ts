@@ -134,32 +134,59 @@ export class TrackResolver {
 	/// album resolver is in flight, so per-track YT URL / lyrics status
 	/// updates render in real time without waiting for the firkin to
 	/// roll forward.
+	///
+	/// Idempotent: returns without touching `this.tracks` when every
+	/// track's projected fields are already in their final state. Each
+	/// reactive write to `tracks` propagates through every consumer
+	/// (CatalogTracksCard, derived stats, …); writing on every poll tick
+	/// regardless of whether anything changed used to fight the player's
+	/// own state writes inside Svelte's effect-flush loop, occasionally
+	/// tripping the runtime's update-depth guard.
 	applyProgress(progress: AlbumProgressPayload): void {
 		const byTitle = new Map<string, AlbumProgressTrack>();
 		for (const t of progress.tracks) {
 			const key = t.title.trim().toLowerCase();
 			if (key) byTitle.set(key, t);
 		}
-		this.tracks = this.tracks.map((tr) => {
+		let changed = false;
+		const next: TrackEntry[] = new Array(this.tracks.length);
+		for (let i = 0; i < this.tracks.length; i++) {
+			const tr = this.tracks[i];
 			const key = tr.title.trim().toLowerCase();
 			const p = byTitle.get(key);
-			if (!p) return tr;
+			if (!p) {
+				next[i] = tr;
+				continue;
+			}
 			const ytStatus = mapEntryStatus(p.youtubeStatus);
 			const lyStatus = mapEntryStatus(p.lyricsStatus);
-			const next = { ...tr };
-			// Prefer the projection's URL when present (it came from
-			// firkin.files), otherwise fall back to the in-flight one
-			// from the progress map.
-			if (!next.youtubeUrl && p.youtubeUrl) {
-				next.youtubeUrl = p.youtubeUrl;
+			const newYtUrl = tr.youtubeUrl ?? p.youtubeUrl ?? null;
+			const newYtStatus = newYtUrl ? 'idle' : ytStatus === 'found' ? 'found' : ytStatus;
+			let newLyrics = tr.lyrics;
+			if (!newLyrics && p.lyrics) {
+				newLyrics = decodeLyricsProgress(p.lyrics, tr.title);
 			}
-			next.youtubeStatus = next.youtubeUrl ? 'idle' : ytStatus === 'found' ? 'found' : ytStatus;
-			if (!next.lyrics && p.lyrics) {
-				next.lyrics = decodeLyricsProgress(p.lyrics, tr.title);
+			const newLyStatus = newLyrics ? 'found' : lyStatus;
+
+			if (
+				tr.youtubeUrl === newYtUrl &&
+				tr.youtubeStatus === newYtStatus &&
+				tr.lyrics === newLyrics &&
+				tr.lyricsStatus === newLyStatus
+			) {
+				next[i] = tr;
+				continue;
 			}
-			next.lyricsStatus = next.lyrics ? 'found' : lyStatus;
-			return next;
-		});
+			changed = true;
+			next[i] = {
+				...tr,
+				youtubeUrl: newYtUrl,
+				youtubeStatus: newYtStatus,
+				lyrics: newLyrics,
+				lyricsStatus: newLyStatus
+			};
+		}
+		if (changed) this.tracks = next;
 	}
 
 	async play(index: number, opts: { thumb: string | null }): Promise<void> {

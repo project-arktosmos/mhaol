@@ -88,7 +88,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	}
 
 	setBuffering(buffering: boolean): void {
-		this.state.update((s) => ({ ...s, buffering }));
+		this.state.update((s) => (s.buffering === buffering ? s : { ...s, buffering }));
 	}
 
 	// ===== Seeking — direct URL playback drives the element directly via PlayerVideo =====
@@ -121,7 +121,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	// ===== Playback controls =====
 
 	setPaused(isPaused: boolean): void {
-		this.state.update((s) => ({ ...s, isPaused }));
+		this.state.update((s) => (s.isPaused === isPaused ? s : { ...s, isPaused }));
 	}
 
 	setVolume(volume: number): void {

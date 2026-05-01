@@ -275,15 +275,15 @@
 			// `timeupdate` firing means the element is actively decoding —
 			// clear buffering as a safety net in case `playing` was missed
 			// (torrent streams race element.load() with playback start).
-			playerService.state.update((s) => ({
-				...s,
-				positionSecs: element.currentTime,
-				buffering: false
-			}));
+			const t = element.currentTime;
+			playerService.state.update((s) =>
+				s.positionSecs === t && !s.buffering ? s : { ...s, positionSecs: t, buffering: false }
+			);
 		};
 		const onLoadedMetadata = () => {
 			if (Number.isFinite(element.duration) && element.duration > 0) {
-				playerService.state.update((s) => ({ ...s, durationSecs: element.duration }));
+				const d = element.duration;
+				playerService.state.update((s) => (s.durationSecs === d ? s : { ...s, durationSecs: d }));
 			}
 		};
 		const onDurationChange = onLoadedMetadata;
@@ -307,10 +307,12 @@
 		// effect's reactive dependencies.
 		untrack(() => {
 			if (Number.isFinite(element.duration) && element.duration > 0) {
-				playerService.state.update((s) => ({ ...s, durationSecs: element.duration }));
+				const d = element.duration;
+				playerService.state.update((s) => (s.durationSecs === d ? s : { ...s, durationSecs: d }));
 			}
 			if (Number.isFinite(element.currentTime) && element.currentTime > 0) {
-				playerService.state.update((s) => ({ ...s, positionSecs: element.currentTime }));
+				const t = element.currentTime;
+				playerService.state.update((s) => (s.positionSecs === t ? s : { ...s, positionSecs: t }));
 			}
 			// readyState 3 (HAVE_FUTURE_DATA) or 4 (HAVE_ENOUGH_DATA) means
 			// the element can play right now — clear any leftover buffering.
