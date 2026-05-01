@@ -69,6 +69,11 @@ export interface PlayerState {
 	// flag clears as soon as the user clicks it (or playback otherwise
 	// begins via `playing` event).
 	awaitingPlay: boolean;
+	// Poster URL the player should paint immediately, before any stream is
+	// loaded. Pages set this on mount when they know a trailer is about to
+	// be resolved so the right-side player has something visible from page
+	// load. Falls back to `currentFile?.thumbnailUrl` once playback begins.
+	posterOverride: string | null;
 }
 
 // ===== Player Settings (localStorage) =====

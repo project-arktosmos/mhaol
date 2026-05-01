@@ -351,18 +351,23 @@
 		}
 	});
 
-	// Reset the poster overlay each time the source URL changes so a new
+	// Reset the poster overlay each time the poster URL changes so a new
 	// trailer / track gets its own pre-play poster pass. Once the element
 	// fires `playing` (or the user dismisses the deferred-play overlay),
-	// `posterDismissed` flips to true and the overlay fades out.
+	// `posterDismissed` flips to true and the overlay fades out. Tracked
+	// against the poster URL (not the stream URL) so the overlay shows
+	// from page load — before any trailer URL has resolved.
 	$effect(() => {
-		if (directStreamUrl && directStreamUrl !== posterTrackingUrl) {
-			posterTrackingUrl = directStreamUrl;
+		if (poster && poster !== posterTrackingUrl) {
+			posterTrackingUrl = poster;
 			posterDismissed = false;
 		}
 	});
 
-	const showPoster = $derived(!!poster && !!directStreamUrl && !posterDismissed);
+	const showPoster = $derived(!!poster && !posterDismissed);
+	// True when we have a poster to paint but no stream URL yet — used to
+	// give the player container a 16:9 box so the overlay has dimensions.
+	const showPosterOnlyBox = $derived(isVideo && !!poster && !directStreamUrl);
 
 	// Sync the player's subtitle search context with the service.
 	$effect(() => {
@@ -534,21 +539,30 @@
 		'flex h-full flex-col': !isFullscreen && fullscreen
 	})}
 >
-	<div class={effectiveFullscreen ? 'relative min-h-0 flex-1' : 'relative'}>
+	<div
+		class={classNames(
+			effectiveFullscreen ? 'relative min-h-0 flex-1' : 'relative w-full',
+			// Force a 16:9 box on the player container while we're showing a
+			// poster but no stream is loaded yet — without it the empty
+			// `<video>` element collapses to its tiny default size and the
+			// absolutely-positioned poster overlay has nothing to fill.
+			{ 'aspect-video': !effectiveFullscreen && showPosterOnlyBox }
+		)}
+	>
 		<video
 			bind:this={videoElement}
 			class={classNames(
 				effectiveFullscreen
 					? 'h-full w-full cursor-pointer bg-black object-contain'
 					: 'w-full cursor-pointer rounded-lg bg-black',
-				{ 'h-20': !isVideo && !effectiveFullscreen }
+				{ 'h-20': !isVideo && !effectiveFullscreen, 'h-full': showPosterOnlyBox }
 			)}
 			playsinline
 			poster={poster ?? undefined}
 			onclick={handleVideoClick}
 		></video>
 
-		{#if poster && directStreamUrl && isVideo}
+		{#if poster && isVideo}
 			<div
 				class={classNames(
 					'pointer-events-none absolute inset-0 z-10 rounded-lg bg-cover bg-center transition-opacity duration-500',

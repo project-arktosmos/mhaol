@@ -33,7 +33,8 @@ const initialState: PlayerState = {
 	directStreamUrl: null,
 	directStreamMimeType: null,
 	firkinId: null,
-	awaitingPlay: false
+	awaitingPlay: false,
+	posterOverride: null
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -94,6 +95,18 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	setBuffering(buffering: boolean): void {
 		this.state.update((s) => ({ ...s, buffering }));
+	}
+
+	/**
+	 * Pre-seed a poster on the player area before any stream is loaded.
+	 * Used by catalog detail pages so the trailer's still image paints
+	 * from page load, not after the YouTube URL resolves. Pass `null` to
+	 * clear (typically on page unmount). The override is ignored when an
+	 * actual stream is already playing — `currentFile?.thumbnailUrl`
+	 * takes precedence in the layout.
+	 */
+	setPosterOverride(posterOverride: string | null): void {
+		this.state.update((s) => ({ ...s, posterOverride }));
 	}
 
 	// ===== Seeking — direct URL playback drives the element directly via PlayerVideo =====

@@ -535,6 +535,16 @@
 		persist: (resolved) => persistFirkinPatch({ trailers: resolved }),
 		autoPlay: () => ({ firkinTitle: firkin.title, thumb: trailerThumb })
 	});
+
+	// Seed the right-side player with the trailer poster as soon as the
+	// page knows it, so the still image paints from page load rather than
+	// after the YouTube URL resolves. Cleared on unmount.
+	$effect(() => {
+		if (!isTmdbMovie && !isTmdbTv) return;
+		if (!trailerThumb) return;
+		playerService.setPosterOverride(trailerThumb);
+	});
+	onMount(() => () => playerService.setPosterOverride(null));
 	let trailersInitForFirkinId: string | null = null;
 
 	$effect(() => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
 	import CatalogDescriptionCard from '$components/catalog/CatalogDescriptionCard.svelte';
@@ -19,6 +20,7 @@
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
 	import { TrackResolver } from '$services/catalog/track-resolver.svelte';
 	import { TorrentSearch, startTorrentDownload } from '$services/catalog/torrent-search.svelte';
+	import { playerService } from '$services/player.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
@@ -101,6 +103,16 @@
 	const trailerResolver = new TrailerResolver({
 		autoPlay: () => ({ firkinTitle: title, thumb: trailerThumb })
 	});
+
+	// Seed the right-side player with the trailer poster as soon as the
+	// page knows it, so the still image paints from page load rather than
+	// after the YouTube URL resolves. Cleared on unmount.
+	$effect(() => {
+		if (!isTmdbMovie && !isTmdbTv) return;
+		if (!trailerThumb) return;
+		playerService.setPosterOverride(trailerThumb);
+	});
+	onMount(() => () => playerService.setPosterOverride(null));
 	let trailersInitForKey: string | null = null;
 
 	$effect(() => {

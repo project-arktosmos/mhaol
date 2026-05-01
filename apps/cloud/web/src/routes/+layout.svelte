@@ -114,7 +114,7 @@
 				positionSecs={$playerState.positionSecs}
 				durationSecs={$playerState.durationSecs}
 				buffering={$playerState.buffering}
-				poster={$playerState.currentFile?.thumbnailUrl}
+				poster={$playerState.currentFile?.thumbnailUrl ?? $playerState.posterOverride}
 				directStreamUrl={$playerState.directStreamUrl}
 				directStreamMimeType={$playerState.directStreamMimeType}
 				awaitingPlay={$playerState.awaitingPlay}
