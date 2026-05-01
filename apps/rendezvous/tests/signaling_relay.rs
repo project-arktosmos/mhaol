@@ -1,9 +1,8 @@
 //! End-to-end signaling regression test.
 //!
-//! This is the test the cloud + p2p-stream integration depends on. It boots
-//! the rendezvous Axum router (without a real IPFS node) on a random port,
-//! has two WebSocket peers join the same room with valid EIP-191 auth, and
-//! asserts that the canonical p2p-stream signaling flow goes end-to-end:
+//! Boots the rendezvous Axum router (without a real IPFS node) on a random
+//! port, has two WebSocket peers join the same room with valid EIP-191 auth,
+//! and asserts that the canonical signaling flow goes end-to-end:
 //!
 //!   1. The "worker" peer joins first and receives a `connected` frame.
 //!   2. The "browser" peer joins; the worker observes a `peer-joined` event.
@@ -34,9 +33,8 @@ use tokio_tungstenite::tungstenite;
 async fn worker_and_browser_relay_offer_answer_and_ice() {
     let addr = boot_rendezvous().await;
 
-    // Worker joins first, mirroring the cloud's p2p-stream flow:
-    //   POST /api/p2p-stream/sessions -> spawns worker -> worker WS-connects
-    //   then the API responds and the browser WS-connects.
+    // Worker joins first, mirroring the canonical rendezvous flow:
+    // a streaming worker joins the room, then the consumer browser does.
     let mut worker = connect_peer(&addr, "abc-room").await;
     let worker_id = expect_connected(&mut worker).await;
     let _empty_room = expect_message(&mut worker, "room-peers").await;
@@ -274,7 +272,7 @@ async fn connect_peer(addr: &str, room_id: &str) -> WsClient {
     );
     let (ws, _) = tokio_tungstenite::connect_async(&url)
         .await
-        .expect("WS upgrade failed; this is the regression that broke p2p-stream");
+        .expect("WS upgrade failed; check signaling auth wire format");
     ws
 }
 

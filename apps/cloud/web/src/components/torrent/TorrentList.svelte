@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { torrentService } from '$services/torrent.service';
-	import { playerService } from '$services/player.service';
 	import TorrentListItem from './TorrentListItem.svelte';
 
 	const torrentState = torrentService.state;
@@ -21,23 +20,9 @@
 		torrentService.removeAll();
 	}
 
-	function handleStream(infoHash: string) {
-		const torrent = $torrentState.torrents.find((t) => t.infoHash === infoHash);
-		if (!torrent) return;
-
-		playerService.play({
-			id: `torrent:${torrent.infoHash}`,
-			type: 'torrent',
-			name: torrent.name,
-			outputPath: torrent.outputPath ?? '',
-			mode: 'video',
-			format: null,
-			videoFormat: null,
-			thumbnailUrl: null,
-			durationSeconds: null,
-			size: torrent.size,
-			completedAt: ''
-		});
+	function handleStream(_infoHash: string) {
+		// WebRTC streaming has been removed. Use the catalog detail page's
+		// "Torrent Stream" button to play torrents over HTTP byte-range.
 	}
 </script>
 

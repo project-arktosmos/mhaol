@@ -106,20 +106,16 @@ export class SignalingAdapter extends AdapterClass {
 
 	/// Rewrite a backend-reported loopback URL so the browser can reach it.
 	///
-	/// The cloud advertises `state.signaling_url` (default
-	/// `http://localhost:14080`) to whoever asks; from the cloud's point of
-	/// view that's the rendezvous server on its own loopback. When the
+	/// The cloud advertises a signaling URL (default `http://localhost:14080`)
+	/// that points at the rendezvous server on its own loopback. When the
 	/// browser sits on a different machine, `localhost` resolves to the
 	/// **browser's** loopback, which has no rendezvous on it, so we swap the
 	/// hostname for whatever host the browser is currently using.
 	///
 	/// Critically, the **port** must be preserved: rendezvous lives on a
-	/// different port than the cloud WebUI (14080 vs 9898), and overwriting
-	/// the port with `window.location.port` was the regression that broke
-	/// p2p-stream after the migration off the hosted PartyKit URL — the
-	/// browser would happily try `ws://<browser-host>:9898/party/...` and
-	/// hang at "negotiating WebRTC connection" because nothing serves
-	/// `/party/*` on the cloud port.
+	/// different port than the cloud WebUI (14080 vs 9898). Overwriting the
+	/// port with `window.location.port` would point the browser at
+	/// `ws://<browser-host>:9898/party/...`, where nothing serves `/party/*`.
 	resolveLocalUrl(url: string): string {
 		try {
 			const parsed = new URL(url);

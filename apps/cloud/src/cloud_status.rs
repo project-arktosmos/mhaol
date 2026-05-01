@@ -46,7 +46,6 @@ struct DbStatus {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PackagesHealth {
-    p2p_stream: PackageHealth,
     yt_dlp: PackageHealth,
     torrent: PackageHealth,
     ed2k: PackageHealth,
@@ -107,7 +106,6 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
     };
 
     let packages = PackagesHealth {
-        p2p_stream: p2p_stream_health(),
         yt_dlp: yt_dlp_health(&state),
         torrent: torrent_health(&state).await,
         ed2k: ed2k_health(&state),
@@ -163,51 +161,6 @@ async fn get_public_ip() -> Option<String> {
 
     *PUBLIC_IP_CACHE.lock() = Some((ip.clone(), Instant::now()));
     Some(ip)
-}
-
-fn p2p_stream_health() -> PackageHealth {
-    #[cfg(not(target_os = "android"))]
-    {
-        let initialized = mhaol_p2p_stream::init().is_ok();
-        let missing = if initialized {
-            mhaol_p2p_stream::check_required_elements()
-        } else {
-            Vec::new()
-        };
-        let (status, message) = if !initialized {
-            (
-                "error",
-                Some("GStreamer failed to initialize".to_string()),
-            )
-        } else if !missing.is_empty() {
-            (
-                "warning",
-                Some(format!("Missing GStreamer elements: {}", missing.join(", "))),
-            )
-        } else {
-            ("ok", None)
-        };
-        return PackageHealth {
-            name: "p2p-stream",
-            status,
-            available: initialized && missing.is_empty(),
-            message,
-            details: serde_json::json!({
-                "gstreamerInitialized": initialized,
-                "missingElements": missing,
-            }),
-        };
-    }
-    #[cfg(target_os = "android")]
-    {
-        PackageHealth {
-            name: "p2p-stream",
-            status: "unavailable",
-            available: false,
-            message: Some("Not built for this target".to_string()),
-            details: serde_json::json!({}),
-        }
-    }
 }
 
 #[cfg_attr(target_os = "android", allow(unused_variables))]

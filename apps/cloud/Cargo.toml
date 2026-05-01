@@ -40,7 +40,6 @@ regex = "1"
 [target.'cfg(not(target_os = "android"))'.dependencies]
 async-stream = "0.3"
 tokio-stream = "0.1"
-mhaol-p2p-stream = { path = "../../packages/p2p-stream" }
 mhaol-ipfs-stream = { path = "../../packages/ipfs-stream" }
 mhaol-yt-dlp = { path = "../../packages/yt-dlp" }
 mhaol-torrent = { path = "../../packages/torrent" }

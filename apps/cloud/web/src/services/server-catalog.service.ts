@@ -1,6 +1,5 @@
 import { writable, type Writable } from 'svelte/store';
 import { signalingChatService } from '$services/signaling-chat.service';
-import { playerService } from '$services/player.service';
 import type {
 	CatalogMovie,
 	ServerCatalogMessage,
@@ -100,7 +99,7 @@ class ServerCatalogService {
 				break;
 
 			case 'stream-session':
-				playerService.playRemote('Remote Stream', msg.sessionId, msg.roomId, msg.signalingUrl);
+				console.warn('[ServerCatalog] Ignoring stream-session: WebRTC streaming has been removed');
 				break;
 
 			case 'stream-error':

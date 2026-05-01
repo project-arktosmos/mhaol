@@ -16,9 +16,9 @@ mod library_scan;
 mod media_trackers;
 #[cfg(not(target_os = "android"))]
 mod metadata_enrich;
-mod p2p_stream;
 mod paths;
 mod player;
+mod recommendations;
 #[cfg(not(target_os = "android"))]
 mod rom_extract;
 mod search;
@@ -26,7 +26,6 @@ mod state;
 mod torrent;
 mod torrent_completion;
 mod users;
-mod worker_bridge;
 #[cfg(not(target_os = "android"))]
 mod ytdl;
 
@@ -50,19 +49,6 @@ use mhaol_yt_dlp::{DownloadManager, YtDownloadConfig};
 
 #[tokio::main]
 async fn main() {
-    #[cfg(not(target_os = "android"))]
-    if std::env::args().nth(1).as_deref() == Some("worker") {
-        tracing_subscriber::fmt()
-            .with_writer(std::io::stderr)
-            .with_env_filter(
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| "info,mhaol_p2p_stream=debug".into()),
-            )
-            .init();
-        mhaol_p2p_stream::worker::run().await;
-        return;
-    }
-
     load_env();
 
     tracing_subscriber::fmt()
@@ -91,7 +77,7 @@ async fn main() {
     let signaling_url = std::env::var("SIGNALING_URL")
         .unwrap_or_else(|_| "http://localhost:14080".to_string());
     let identity_manager =
-        IdentityManager::new(identities_dir, "cloud".to_string(), signaling_url.clone());
+        IdentityManager::new(identities_dir, "cloud".to_string(), signaling_url);
 
     identity_manager.ensure_identity("SIGNALING_WALLET");
     identity_manager.ensure_identity("CLIENT_WALLET");
@@ -228,9 +214,6 @@ async fn main() {
     };
 
     #[cfg(not(target_os = "android"))]
-    let worker_bridge = Arc::new(worker_bridge::WorkerBridge::new());
-
-    #[cfg(not(target_os = "android"))]
     let ipfs_stream_manager = {
         if let Err(e) = mhaol_ipfs_stream::init() {
             tracing::warn!("[ipfs-stream] gstreamer init failed: {}", e);
@@ -252,11 +235,7 @@ async fn main() {
         #[cfg(not(target_os = "android"))]
         ipfs_manager,
         #[cfg(not(target_os = "android"))]
-        Arc::clone(&worker_bridge),
-        #[cfg(not(target_os = "android"))]
         Arc::clone(&ipfs_stream_manager),
-        #[cfg(not(target_os = "android"))]
-        signaling_url.clone(),
     );
 
     #[cfg(not(target_os = "android"))]
@@ -264,14 +243,6 @@ async fn main() {
         let watcher_state = state.clone();
         tokio::spawn(async move {
             torrent_completion::run(watcher_state).await;
-        });
-    }
-
-    #[cfg(not(target_os = "android"))]
-    {
-        let bridge = Arc::clone(&worker_bridge);
-        tokio::spawn(async move {
-            bridge.start().await;
         });
     }
 
@@ -288,6 +259,7 @@ async fn main() {
         .nest("/api/libraries", libraries::router())
         .nest("/api/firkins", firkins::router())
         .nest("/api/media-trackers", media_trackers::router())
+        .nest("/api/recommendations", recommendations::router())
         .nest("/api/artists", artists::router())
         .nest("/api/database", database::router())
         .nest("/api/ipfs", ipfs_pins::router())
@@ -296,7 +268,6 @@ async fn main() {
         .nest("/api/search", search::router())
         .nest("/api/catalog", catalog::router())
         .nest("/api/torrent", torrent::router())
-        .nest("/api/p2p-stream", p2p_stream::router())
         .nest("/api/ipfs-stream", ipfs_stream::router())
         .nest("/api/player", player::router());
 

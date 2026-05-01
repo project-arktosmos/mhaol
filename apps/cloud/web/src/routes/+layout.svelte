@@ -9,7 +9,6 @@
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import SubsLyricsFinder from '$components/player/SubsLyricsFinder.svelte';
 	import { firkinPlaybackService } from '$services/firkin-playback.service';
-	import { firkinStreamService } from '$services/firkin-stream.service';
 	import { playerService } from '$services/player.service';
 	import { themeService } from '$services/theme.service';
 	import { setBrowserImageCacheResolver } from '$services/image-cache.service';
@@ -107,7 +106,7 @@
 			class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
 		>
 			{#if $playbackState.firkin}
-				<FirkinFilesPanel onPlayFile={(file) => firkinStreamService.play(file)} />
+				<FirkinFilesPanel />
 			{/if}
 			<PlayerVideo
 				file={$playerState.currentFile}

@@ -58,8 +58,6 @@
 			if (typeof d.connectedPeers === 'number') parts.push(`${d.connectedPeers} peers`);
 			if (typeof d.pinnedCount === 'number') parts.push(`${d.pinnedCount} pinned`);
 			if (d.privateNetwork === true) parts.push('private');
-		} else if (pkg.name === 'p2p-stream') {
-			parts.push(d.gstreamerInitialized ? 'GStreamer ready' : 'GStreamer offline');
 		}
 		return parts.length > 0 ? parts.join(' · ') : null;
 	};
@@ -212,7 +210,7 @@
 		<section class="flex flex-col gap-3">
 			<h2 class="text-lg font-semibold">Packages</h2>
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-				{#each [{ key: 'p2p-stream', pkg: $state.status.packages.p2pStream }, { key: 'yt-dlp', pkg: $state.status.packages.ytDlp }, { key: 'torrent', pkg: $state.status.packages.torrent }, { key: 'ed2k', pkg: $state.status.packages.ed2k }, { key: 'ipfs', pkg: $state.status.packages.ipfs }] as { key, pkg } (key)}
+				{#each [{ key: 'yt-dlp', pkg: $state.status.packages.ytDlp }, { key: 'torrent', pkg: $state.status.packages.torrent }, { key: 'ed2k', pkg: $state.status.packages.ed2k }, { key: 'ipfs', pkg: $state.status.packages.ipfs }] as { key, pkg } (key)}
 					<HealthCard
 						label={key}
 						value={packageValue(pkg)}

@@ -12,7 +12,6 @@
 	import { favoritesService } from '$services/favorites.service';
 	import { pinsService } from '$services/pins.service';
 	import { playerService } from '$services/player.service';
-	import { playerAdapter } from '$adapters/classes/player.adapter';
 	import { mediaDetailService } from '$services/media-detail.service';
 	import { modalRouterService } from '$services/modal-router.service';
 	import { libraryService } from '$services/library.service';
@@ -362,7 +361,7 @@
 			youtubeMetadata: null,
 			musicbrainzMetadata: null,
 			imageTags: [],
-			onplay: (i) => playerService.play(playerAdapter.fromMediaItem(i)),
+			onplay: () => {},
 			onlink: (i, service) => {
 				linkModalItem = i;
 				linkModalService = service;

@@ -10,7 +10,6 @@ members = [
     "packages/ed2k",
     "packages/ipfs-core",
     "packages/ipfs-stream",
-    "packages/p2p-stream",
 ]
 
 # `core2 0.4.0` is the only published version and was yanked from crates.io.

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
 	import Hls from 'hls.js';
@@ -50,7 +50,6 @@
 	// race window where `bind:this={audioElement}` lagged the
 	// `directStreamUrl` effect, dropping the first play() on the floor.
 	let videoElement = $state<HTMLVideoElement | null>(null);
-	let streamAttached = $state(false);
 	let isFullscreen = $state(false);
 	let subsModalOpen = $state(false);
 	let audioTrackTick = $state(0);
@@ -162,12 +161,6 @@
 		return () => document.removeEventListener('keydown', handleFullscreenKeydown);
 	});
 
-	$effect(() => {
-		if (isStreaming && !streamAttached) {
-			tryAttachStream();
-		}
-	});
-
 	// Direct URL playback (yt-dlp): set src= on the video element. The same
 	// element handles audio-only sources too (the music-icon overlay covers
 	// the empty video frame).
@@ -235,13 +228,11 @@
 			element.load();
 			playElement();
 		}
-		streamAttached = true;
 	});
 
 	// Element event listeners: error reporting + position/duration sync for
-	// the seek bar. The WebRTC path gets position from the worker's data
-	// channel — direct-URL playback has no channel, so without this
-	// listener `positionSecs` stays at 0 and the bar never moves.
+	// the seek bar. Without these listeners `positionSecs` stays at 0 and
+	// the seek bar never moves.
 	$effect(() => {
 		if (!directStreamUrl) return;
 		const element = videoElement;
@@ -302,7 +293,6 @@
 
 	$effect(() => {
 		if (connectionState === 'idle') {
-			streamAttached = false;
 			isFullscreen = false;
 			mediaError = null;
 			if (videoElement) {
@@ -311,12 +301,6 @@
 				videoElement.load();
 			}
 		}
-	});
-
-	$effect(() => {
-		return () => {
-			streamAttached = false;
-		};
 	});
 
 	// Sync the player's subtitle search context with the service.
@@ -405,43 +389,14 @@
 		return cues;
 	}
 
-	async function tryAttachStream(): Promise<void> {
-		// Direct URL path is handled by its own $effect — skip WebRTC attach.
-		if (directStreamUrl) return;
-		// Wait for the DOM to settle.
-		for (let attempt = 0; attempt < 10; attempt++) {
-			await tick();
-			const stream = playerService.getMediaStream();
-			if (!stream) return;
-
-			if (videoElement) {
-				videoElement.srcObject = stream;
-				videoElement.play().catch((err: Error) => {
-					console.error('[PlayerVideo] play() failed (WebRTC):', err);
-					if (err.name === 'NotAllowedError') {
-						mediaError = 'Playback blocked by browser. Click Play to start.';
-						playerService.state.update((s) => ({ ...s, error: mediaError }));
-					}
-				});
-				streamAttached = true;
-				return;
-			}
-
-			// Element not bound yet -- wait a frame and retry
-			await new Promise((r) => requestAnimationFrame(r));
-		}
-	}
-
 	function handleStop(): void {
 		playerService.stop();
-		streamAttached = false;
 	}
 
 	function handleSeek(positionSecs: number): void {
-		// Direct URL playback (yt-dlp) — there's no WebRTC data channel, so
-		// `playerService.seek()` is a no-op. Move the playhead on the
-		// element directly and clear the seeking flag so `timeupdate` can
-		// resume driving the position.
+		// Direct URL playback drives the playhead through the element
+		// directly. Move the element's currentTime and clear the seeking
+		// flag so `timeupdate` can resume driving the position.
 		if (directStreamUrl && videoElement) {
 			videoElement.currentTime = positionSecs;
 			playerService.state.update((s) => ({

@@ -19,7 +19,6 @@ mhaol.git/
 ├── packages/
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subtitles, torrent search)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
-│   ├── p2p-stream/                   # Rust P2P streaming library (GStreamer + WebRTC)
 │   ├── ipfs-stream/                  # Rust HLS-over-IPFS streaming (GStreamer hlssink2)
 │   ├── torrent/                      # Rust torrent implementation
 │   ├── ed2k/                         # Rust eDonkey/ed2k network client (search + add)
@@ -55,7 +54,7 @@ Cross-module imports use the path aliases configured in `svelte.config.js` (see 
 
 ### Cloud
 
-The cloud is a Rust Axum server at `apps/cloud/` that bootstraps an embedded SurrealDB store, an identity manager, and the desktop-only managers (`mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, `mhaol-ipfs-core`, `mhaol-p2p-stream`). It hosts a nested Svelte WebUI that displays cloud health and library/IPFS state. Crate name `mhaol-cloud`, binary `mhaol-cloud`, default port 9898 (in dev, the binary binds 127.0.0.1:9899 and the Vite dev server takes 9898 as the public port).
+The cloud is a Rust Axum server at `apps/cloud/` that bootstraps an embedded SurrealDB store, an identity manager, and the desktop-only managers (`mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, `mhaol-ipfs-core`). It hosts a nested Svelte WebUI that displays cloud health and library/IPFS state. Crate name `mhaol-cloud`, binary `mhaol-cloud`, default port 9898 (in dev, the binary binds 127.0.0.1:9899 and the Vite dev server takes 9898 as the public port).
 
 - `apps/cloud/Cargo.toml` — Crate manifest
 - `apps/cloud/src/server.rs` — Binary entry point; opens SurrealDB, spawns workers, serves the embedded WebUI as a fallback to `/api/*`
