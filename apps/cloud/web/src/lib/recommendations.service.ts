@@ -3,6 +3,7 @@ export interface Recommendation {
 	address: string;
 	firkinId: string;
 	addon: string;
+	upstreamId: string;
 	title: string;
 	year: number | null;
 	description: string | null;
