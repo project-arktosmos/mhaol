@@ -204,7 +204,7 @@ pub async fn extract_roms_for_firkin(
             let cid = if let Some(cid) = existing_by_title.get(&relative_path) {
                 cid.clone()
             } else {
-                let req = mhaol_ipfs::AddIpfsRequest {
+                let req = mhaol_ipfs_core::AddIpfsRequest {
                     source: rom_path.to_string_lossy().to_string(),
                     pin: Some(true),
                 };
@@ -413,7 +413,7 @@ pub async fn extract_single_archive(
             let cid = if let Some(cid) = existing_by_title.get(&relative_path) {
                 cid.clone()
             } else {
-                let req = mhaol_ipfs::AddIpfsRequest {
+                let req = mhaol_ipfs_core::AddIpfsRequest {
                     source: rom_path.to_string_lossy().to_string(),
                     pin: Some(true),
                 };

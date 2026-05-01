@@ -13,7 +13,7 @@ name = "mhaol-rendezvous"
 path = "src/main.rs"
 
 [dependencies]
-mhaol-ipfs = { path = "../../packages/ipfs" }
+mhaol-ipfs-core = { path = "../../packages/ipfs-core" }
 mhaol-identity = { path = "../../packages/identity" }
 axum = { version = "0.8", features = ["ws"] }
 axum-server = { version = "0.7", features = ["tls-rustls"] }

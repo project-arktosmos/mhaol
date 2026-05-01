@@ -50,7 +50,7 @@ impl Default for IpfsConfig {
             enable_kad_dht: true,
             bootstrap_on_start: true,
             extra_bootstrap: vec![],
-            agent_version: format!("mhaol-ipfs/{}", env!("CARGO_PKG_VERSION")),
+            agent_version: format!("mhaol-ipfs-core/{}", env!("CARGO_PKG_VERSION")),
             swarm_key: None,
             dht_server_mode: false,
         }
@@ -85,7 +85,7 @@ mod tests {
         assert!(c.enable_kad_dht);
         assert!(c.bootstrap_on_start);
         assert!(c.extra_bootstrap.is_empty());
-        assert!(c.agent_version.starts_with("mhaol-ipfs/"));
+        assert!(c.agent_version.starts_with("mhaol-ipfs-core/"));
         assert_eq!(c.repo_path, PathBuf::new());
         assert!(c.swarm_key.is_none());
         assert!(!c.is_private());

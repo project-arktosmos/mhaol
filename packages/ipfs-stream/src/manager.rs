@@ -59,7 +59,7 @@ impl IpfsStreamManager {
     /// `<base_dir>/<session_id>/`. The CID is recorded on the session for
     /// observability but is otherwise opaque to the transcoder — the actual
     /// bytes come from the local filesystem path (which the caller has
-    /// pinned via `mhaol-ipfs`).
+    /// pinned via `mhaol-ipfs-core`).
     pub fn start_session(&self, cid: String, source_path: PathBuf) -> Result<StartedSession> {
         if !source_path.exists() {
             return Err(Error::SourceNotFound(source_path.display().to_string()));

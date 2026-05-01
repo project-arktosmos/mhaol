@@ -15,7 +15,7 @@ pub fn health_router() -> Router<RendezvousState> {
 #[serde(rename_all = "camelCase")]
 struct StatusBody {
     role: &'static str,
-    ipfs: mhaol_ipfs::IpfsStats,
+    ipfs: mhaol_ipfs_core::IpfsStats,
     bootstrap_multiaddrs: Vec<String>,
     turn_configured: bool,
 }

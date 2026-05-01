@@ -66,7 +66,7 @@ impl RendezvousConfig {
 
         let swarm_key_path = std::env::var("IPFS_SWARM_KEY_FILE")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| mhaol_ipfs::default_swarm_key_path());
+            .unwrap_or_else(|_| mhaol_ipfs_core::default_swarm_key_path());
 
         let bootstrap_file = std::env::var("RENDEZVOUS_BOOTSTRAP_FILE")
             .map(PathBuf::from)

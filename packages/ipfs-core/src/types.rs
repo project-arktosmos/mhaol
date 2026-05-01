@@ -92,7 +92,7 @@ mod tests {
         let s = IpfsStats {
             state: IpfsState::Running,
             peer_id: Some("12D3...".to_string()),
-            agent_version: "mhaol-ipfs/0.1.0".to_string(),
+            agent_version: "mhaol-ipfs-core/0.1.0".to_string(),
             connected_peers: 3,
             pinned_count: 0,
             repo_size_bytes: 1024,

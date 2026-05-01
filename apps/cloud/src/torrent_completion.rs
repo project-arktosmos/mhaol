@@ -133,7 +133,7 @@ async fn rollforward(
         if existing_titles.contains(&file.relative_path) {
             continue;
         }
-        let req = mhaol_ipfs::AddIpfsRequest {
+        let req = mhaol_ipfs_core::AddIpfsRequest {
             source: file.path.to_string_lossy().to_string(),
             pin: Some(true),
         };

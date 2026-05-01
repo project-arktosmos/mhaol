@@ -8,7 +8,7 @@ members = [
     "packages/yt-dlp",
     "packages/torrent",
     "packages/ed2k",
-    "packages/ipfs",
+    "packages/ipfs-core",
     "packages/ipfs-stream",
     "packages/p2p-stream",
 ]
@@ -17,4 +17,4 @@ members = [
 # `multihash-codetable 0.1.x` (a transitive dep of `rust-ipfs`) still requires
 # it, so we vendor the original source to keep resolution working.
 [patch.crates-io]
-core2 = { path = "packages/ipfs/vendored/core2" }
+core2 = { path = "packages/ipfs-core/vendored/core2" }

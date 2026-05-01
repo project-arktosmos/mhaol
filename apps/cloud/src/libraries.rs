@@ -522,9 +522,9 @@ fn path_under_prefix(path: &str, prefix: &str) -> bool {
 
 #[cfg(not(target_os = "android"))]
 pub(crate) async fn wait_for_ipfs_ready(
-    ipfs: &std::sync::Arc<mhaol_ipfs::IpfsManager>,
+    ipfs: &std::sync::Arc<mhaol_ipfs_core::IpfsManager>,
 ) -> bool {
-    use mhaol_ipfs::IpfsState;
+    use mhaol_ipfs_core::IpfsState;
     // Cap the wait at ~60s so a permanently-broken node doesn't pin tasks
     // forever. Most boots reach Running within a few seconds.
     for _ in 0..120 {

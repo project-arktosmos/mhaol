@@ -9,7 +9,7 @@ name = "mhaol_ipfs_stream"
 path = "src/lib.rs"
 
 [dependencies]
-mhaol-ipfs = { path = "../ipfs" }
+mhaol-ipfs-core = { path = "../ipfs-core" }
 gstreamer = "0.24"
 gstreamer-app = "0.24"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time", "fs", "io-util"] }

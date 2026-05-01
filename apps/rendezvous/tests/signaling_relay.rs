@@ -155,7 +155,7 @@ async fn dual_stack_bind_is_reachable_on_ipv4_and_ipv6_loopback() {
         .expect("dual-stack bind must succeed for the regression to stay fixed");
 
     let state = RendezvousState {
-        ipfs: Arc::new(mhaol_ipfs::IpfsManager::new()),
+        ipfs: Arc::new(mhaol_ipfs_core::IpfsManager::new()),
         rooms: Arc::new(RoomManager::new()),
         turn: Arc::new(TurnConfig::default()),
     };
@@ -233,7 +233,7 @@ async fn boot_rendezvous_with_turn(turn: TurnConfig) -> String {
     // IpfsManager here — keeps the test fast and avoids needing a real
     // libp2p stack.
     let state = RendezvousState {
-        ipfs: Arc::new(mhaol_ipfs::IpfsManager::new()),
+        ipfs: Arc::new(mhaol_ipfs_core::IpfsManager::new()),
         rooms: Arc::new(RoomManager::new()),
         turn: Arc::new(turn),
     };

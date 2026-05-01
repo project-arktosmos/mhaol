@@ -14,7 +14,7 @@ use crate::{AddIpfsRequest, IpfsManager};
 pub type AppState = Arc<IpfsManager>;
 
 /// Minimal HTTP router for the IPFS package. Mount with
-/// `Router::new().nest("/api/ipfs", mhaol_ipfs::api::router())` and pass an
+/// `Router::new().nest("/api/ipfs", mhaol_ipfs_core::api::router())` and pass an
 /// `Arc<IpfsManager>` as the router state.
 pub fn router() -> Router<AppState> {
     Router::new()

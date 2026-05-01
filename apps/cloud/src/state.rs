@@ -7,7 +7,7 @@ use crate::worker_bridge::WorkerBridge;
 #[cfg(not(target_os = "android"))]
 use mhaol_ed2k::Ed2kManager;
 #[cfg(not(target_os = "android"))]
-use mhaol_ipfs::IpfsManager;
+use mhaol_ipfs_core::IpfsManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_ipfs_stream::manager::IpfsStreamManager;
 #[cfg(not(target_os = "android"))]

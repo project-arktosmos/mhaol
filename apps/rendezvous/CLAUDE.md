@@ -1,7 +1,7 @@
 # Rendezvous
 
 **Location:** `apps/rendezvous/`
-**Framework:** Rust — Axum 0.8 + Tokio + `mhaol-ipfs` + `mhaol-identity`
+**Framework:** Rust — Axum 0.8 + Tokio + `mhaol-ipfs-core` + `mhaol-identity`
 **Crate:** `mhaol-rendezvous`
 **Binary:** `mhaol-rendezvous` (default HTTP port 14080, libp2p TCP port 14001)
 
@@ -48,7 +48,7 @@ mhaol-rendezvous status [--url URL]    # Health-check a running rendezvous
 The node refuses to start without a swarm key. Concretely:
 
 - It reads (or generates) a swarm key at `IPFS_SWARM_KEY_FILE` (default `<DATA_DIR>/swarm.key`, otherwise `<home>/mhaol/swarm.key`).
-- The key is passed to `mhaol-ipfs::IpfsManager::initialize`, which installs the libp2p **`pnet`** transport (TCP + pnet + noise + yamux). The `pnet` handshake fails for any peer that does not present the same pre-shared key, so non-private peers are rejected at the transport layer before anything reaches Kademlia or the application.
+- The key is passed to `mhaol-ipfs-core::IpfsManager::initialize`, which installs the libp2p **`pnet`** transport (TCP + pnet + noise + yamux). The `pnet` handshake fails for any peer that does not present the same pre-shared key, so non-private peers are rejected at the transport layer before anything reaches Kademlia or the application.
 - The public IPFS bootstrap list is **never** dialed; rendezvous is itself the only entry point into the swarm.
 - mDNS is disabled — local peers without the PSK would still be filtered, but there is nothing to gain by advertising.
 

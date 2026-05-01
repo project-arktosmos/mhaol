@@ -1,5 +1,5 @@
 [package]
-name = "mhaol-ipfs"
+name = "mhaol-ipfs-core"
 version = "0.1.0"
 edition = "2021"
 publish = false

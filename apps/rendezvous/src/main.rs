@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use mhaol_ipfs::{ensure_swarm_key, IpfsConfig, IpfsManager};
+use mhaol_ipfs_core::{ensure_swarm_key, IpfsConfig, IpfsManager};
 use mhaol_rendezvous::{
     build_router,
     config::RendezvousConfig,

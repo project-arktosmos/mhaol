@@ -42,7 +42,7 @@ use tower_http::cors::{Any, CorsLayer};
 #[cfg(not(target_os = "android"))]
 use mhaol_ed2k::{Ed2kConfig, Ed2kManager};
 #[cfg(not(target_os = "android"))]
-use mhaol_ipfs::{IpfsConfig, IpfsManager};
+use mhaol_ipfs_core::{IpfsConfig, IpfsManager};
 #[cfg(not(target_os = "android"))]
 use mhaol_torrent::{TorrentConfig, TorrentManager};
 #[cfg(not(target_os = "android"))]
@@ -191,7 +191,7 @@ async fn main() {
             if let Some(parent) = key_path.parent() {
                 std::fs::create_dir_all(parent).ok();
             }
-            let swarm_key = match mhaol_ipfs::ensure_swarm_key(&key_path) {
+            let swarm_key = match mhaol_ipfs_core::ensure_swarm_key(&key_path) {
                 Ok(k) => k,
                 Err(e) => {
                     tracing::error!(

@@ -166,7 +166,7 @@ pub fn schedule_pins_and_firkins(
         }
 
         for (path, mime, size) in stragglers {
-            let req = mhaol_ipfs::AddIpfsRequest {
+            let req = mhaol_ipfs_core::AddIpfsRequest {
                 source: path.clone(),
                 pin: Some(true),
             };
@@ -186,7 +186,7 @@ pub fn schedule_pins_and_firkins(
 
 async fn pin_and_persist_group(
     state: &CloudState,
-    ipfs: &std::sync::Arc<mhaol_ipfs::IpfsManager>,
+    ipfs: &std::sync::Arc<mhaol_ipfs_core::IpfsManager>,
     group: &MediaGroup,
 ) -> anyhow::Result<()> {
     // Hit the matching addon search BEFORE pinning so the metadata is in
@@ -212,7 +212,7 @@ async fn pin_and_persist_group(
 
     let mut new_entries: Vec<FileEntry> = Vec::with_capacity(group.files.len());
     for f in &group.files {
-        let req = mhaol_ipfs::AddIpfsRequest {
+        let req = mhaol_ipfs_core::AddIpfsRequest {
             source: f.absolute_path.clone(),
             pin: Some(true),
         };

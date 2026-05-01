@@ -6374,7 +6374,7 @@ dependencies = [
  "hex",
  "mhaol-ed2k",
  "mhaol-identity",
- "mhaol-ipfs",
+ "mhaol-ipfs-core",
  "mhaol-ipfs-stream",
  "mhaol-p2p-stream",
  "mhaol-torrent",
@@ -6453,7 +6453,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mhaol-ipfs"
+name = "mhaol-ipfs-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -6485,7 +6485,7 @@ dependencies = [
  "anyhow",
  "gstreamer",
  "gstreamer-app",
- "mhaol-ipfs",
+ "mhaol-ipfs-core",
  "parking_lot",
  "serde",
  "serde_json",
@@ -6541,7 +6541,7 @@ dependencies = [
  "hmac",
  "k256",
  "mhaol-identity",
- "mhaol-ipfs",
+ "mhaol-ipfs-core",
  "parking_lot",
  "rand 0.8.5",
  "reqwest 0.12.28",

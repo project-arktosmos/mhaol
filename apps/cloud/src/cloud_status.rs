@@ -307,18 +307,18 @@ async fn ipfs_health(state: &CloudState) -> PackageHealth {
     #[cfg(not(target_os = "android"))]
     {
         let stats = state.ipfs_manager.stats().await;
-        let initialized = stats.state == mhaol_ipfs::IpfsState::Running;
+        let initialized = stats.state == mhaol_ipfs_core::IpfsState::Running;
         let (status, message) = match stats.state {
-            mhaol_ipfs::IpfsState::Running => ("ok", None),
-            mhaol_ipfs::IpfsState::Starting => (
+            mhaol_ipfs_core::IpfsState::Running => ("ok", None),
+            mhaol_ipfs_core::IpfsState::Starting => (
                 "warning",
                 Some("IPFS node starting".to_string()),
             ),
-            mhaol_ipfs::IpfsState::Stopped => (
+            mhaol_ipfs_core::IpfsState::Stopped => (
                 "warning",
                 Some("IPFS node not initialized".to_string()),
             ),
-            mhaol_ipfs::IpfsState::Error => (
+            mhaol_ipfs_core::IpfsState::Error => (
                 "error",
                 Some("IPFS node failed to start".to_string()),
             ),
