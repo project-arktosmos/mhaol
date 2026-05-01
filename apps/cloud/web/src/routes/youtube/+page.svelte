@@ -199,7 +199,12 @@
 				size: format.contentLength ?? 0,
 				completedAt: ''
 			};
-			await playerService.playUrl(file, format.url, format.mimeType, 'sidebar');
+			await playerService.playUrl(
+				file,
+				format.url,
+				format.mimeType,
+				mode === 'audio' ? 'navbar' : 'sidebar'
+			);
 		} catch (e) {
 			playError = e instanceof Error ? e.message : String(e);
 		} finally {

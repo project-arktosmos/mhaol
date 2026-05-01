@@ -245,7 +245,7 @@ export async function playYouTubeAudio(
 		size: format.contentLength ?? 0,
 		completedAt: ''
 	};
-	await playerService.playUrl(file, format.url, format.mimeType, 'sidebar');
+	await playerService.playUrl(file, format.url, format.mimeType, 'navbar');
 }
 
 /**

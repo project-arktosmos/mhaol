@@ -6,6 +6,7 @@
 	import ThemeToggle from '$components/core/ThemeToggle.svelte';
 	import ToastOutlet from '$components/core/ToastOutlet.svelte';
 	import FirkinFilesPanel from '$components/firkins/FirkinFilesPanel.svelte';
+	import NavbarAudioPlayer from '$components/player/NavbarAudioPlayer.svelte';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import SubsLyricsFinder from '$components/player/SubsLyricsFinder.svelte';
 	import { firkinPlaybackService } from '$services/firkin-playback.service';
@@ -77,7 +78,8 @@
 			</div>
 		{/snippet}
 		{#snippet end()}
-			<div class="flex items-center gap-1">
+			<div class="flex items-center gap-2">
+				<NavbarAudioPlayer />
 				{#if $identityState.identity}
 					<a
 						href="{base}/profile"
@@ -109,7 +111,7 @@
 			{#if $playbackState.firkin}
 				<FirkinFilesPanel />
 			{/if}
-			{#if $playerDisplayMode !== 'inline'}
+			{#if $playerDisplayMode === 'sidebar' || $playerDisplayMode === 'fullscreen'}
 				<PlayerVideo
 					file={$playerState.currentFile}
 					connectionState={$playerState.connectionState}
