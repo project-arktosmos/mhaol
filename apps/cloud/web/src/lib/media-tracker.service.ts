@@ -7,6 +7,36 @@ import { userIdentityService } from '$lib/user-identity.service';
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const HEARTBEAT_DELTA_SECONDS = HEARTBEAT_INTERVAL_MS / 1000;
 
+export interface MediaTracker {
+	id: string;
+	firkinId: string;
+	address: string;
+	totalSeconds: number;
+	last_played_at: string;
+	created_at: string;
+	updated_at: string;
+}
+
+async function parseError(res: Response): Promise<string> {
+	try {
+		const data = await res.json();
+		if (data && typeof data.error === 'string') return data.error;
+	} catch {
+		// fall through
+	}
+	return `HTTP ${res.status}`;
+}
+
+export async function listMediaTrackers(address?: string): Promise<MediaTracker[]> {
+	const params = new URLSearchParams();
+	if (address) params.set('address', address);
+	const qs = params.toString();
+	const url = qs ? `/api/media-trackers?${qs}` : '/api/media-trackers';
+	const res = await fetch(url, { cache: 'no-store' });
+	if (!res.ok) throw new Error(await parseError(res));
+	return (await res.json()) as MediaTracker[];
+}
+
 class MediaTrackerService {
 	private interval: ReturnType<typeof setInterval> | null = null;
 	private currentFirkinId: string | null = null;
