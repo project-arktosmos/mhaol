@@ -207,9 +207,9 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + tray icon (no window)
+pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + tray icon (no window). Does NOT start the player.
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
-pnpm app:player       # Vite dev server for the browser-only Player SPA (port 9797). Independent of the cloud — talks straight to IPFS.
+pnpm dev:player       # Vite dev server for the browser-only Player SPA (port 9797). Independent of the cloud — talks straight to IPFS.
 
 # Building
 pnpm build            # Build cloud (WebUI + binary) and rendezvous binary

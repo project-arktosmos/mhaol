@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "pnpm clean:ports:cloud && export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$(( ( $(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) + 1 ) / 2 ))} && cargo build -p mhaol-cloud --bin mhaol-cloud && concurrently --kill-others-on-fail --names cloud,web,tauri --prefix-colors blue,green,magenta \"pnpm run app:cloud:bin\" \"pnpm run app:cloud:web\" \"pnpm run app:tauri:cloud\"",
 		"dev:cloud:web": "pnpm run app:cloud:web",
+		"dev:player": "pnpm run app:player",
 		"build": "pnpm run build:cloud && pnpm run build:rendezvous",
 		"build:cloud:web": "pnpm --filter cloud build",
 		"build:cloud": "pnpm --filter cloud build && cargo build --release --bin mhaol-cloud",

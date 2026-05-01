@@ -91,9 +91,12 @@ Limitations to be aware of:
 ## Running
 
 ```bash
-pnpm app:player        # Dev — port 9797, no API proxy (the player has no API to proxy to)
+pnpm dev:player        # Dev — port 9797, no API proxy (the player has no API to proxy to). Alias for app:player.
+pnpm app:player        # Same dev server, lower-level alias used by other scripts.
 pnpm build:player      # Static build → apps/player/dist-static/
 ```
+
+`pnpm dev` only starts the cloud strand (cloud Rust binary + cloud WebUI + Tauri shell); it does **not** start the player. Run `pnpm dev:player` in a separate terminal when you want the player up.
 
 The player does not need the cloud running — it only needs:
 
