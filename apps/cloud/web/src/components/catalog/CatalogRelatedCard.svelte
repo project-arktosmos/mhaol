@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { loadRelated, type CatalogItem } from '$lib/catalog.service';
+	import { loadRelated, type CatalogArtist, type CatalogItem } from '$lib/catalog.service';
 
 	interface Props {
 		addon: string;
@@ -55,6 +55,19 @@
 		if (item.backdropUrl) params.set('backdropUrl', item.backdropUrl);
 		return `${base}/catalog/virtual?${params.toString()}`;
 	}
+
+	function initials(name: string): string {
+		return name
+			.split(/\s+/)
+			.filter((p) => p.length > 0)
+			.map((p) => p[0]!.toUpperCase())
+			.slice(0, 2)
+			.join('');
+	}
+
+	function topArtists(artists: CatalogArtist[] | undefined, max: number): CatalogArtist[] {
+		return (artists ?? []).slice(0, max);
+	}
 </script>
 
 {#if upstreamId}
@@ -74,43 +87,79 @@
 			{:else if status === 'done' && items.length === 0}
 				<p class="text-xs text-base-content/60">No related items found upstream.</p>
 			{:else if items.length > 0}
-				<div
-					class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-				>
+				<ul class="grid grid-cols-1 gap-2 lg:grid-cols-2 xl:grid-cols-3">
 					{#each items as item (item.id)}
-						<a
-							href={virtualHref(item)}
-							class="card-compact card bg-base-100 text-inherit no-underline shadow-sm transition-all hover:shadow-md"
-						>
-							<figure class="aspect-[2/3] overflow-hidden">
-								{#if item.posterUrl}
-									<img
-										src={item.posterUrl}
-										alt={item.title}
-										class="h-full w-full object-cover"
-										loading="lazy"
-									/>
-								{:else}
-									<div
-										class="flex h-full w-full items-center justify-center bg-base-300 text-base-content/20"
-									>
-										<svg class="h-10 w-10" fill="currentColor" viewBox="0 0 24 24">
-											<path
-												d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"
-											/>
-										</svg>
-									</div>
-								{/if}
-							</figure>
-							<div class="card-body gap-0.5 p-2">
-								<h3 class="truncate text-xs font-medium" title={item.title}>{item.title}</h3>
-								{#if item.year}
-									<span class="text-xs opacity-50">{item.year}</span>
-								{/if}
-							</div>
-						</a>
+						{@const credits = topArtists(item.artists, 6)}
+						<li>
+							<a
+								href={virtualHref(item)}
+								class="flex items-stretch gap-3 rounded border border-base-content/10 bg-base-100 p-2 text-inherit no-underline transition-all hover:border-base-content/30 hover:shadow-md"
+							>
+								<div class="aspect-[2/3] w-20 shrink-0 overflow-hidden rounded bg-base-300 sm:w-24">
+									{#if item.posterUrl}
+										<img
+											src={item.posterUrl}
+											alt={item.title}
+											class="h-full w-full object-cover"
+											loading="lazy"
+										/>
+									{:else}
+										<div
+											class="flex h-full w-full items-center justify-center text-base-content/20"
+										>
+											<svg class="h-8 w-8" fill="currentColor" viewBox="0 0 24 24">
+												<path
+													d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"
+												/>
+											</svg>
+										</div>
+									{/if}
+								</div>
+
+								<div class="flex min-w-0 flex-1 flex-col gap-1">
+									<h3 class="truncate text-sm font-medium" title={item.title}>{item.title}</h3>
+									{#if item.year}
+										<span class="text-xs text-base-content/60">{item.year}</span>
+									{/if}
+
+									{#if credits.length > 0}
+										<ul class="mt-1 flex flex-col gap-1">
+											{#each credits as artist, i (`${i}-${artist.name}`)}
+												<li class="flex items-center gap-1.5">
+													{#if artist.imageUrl}
+														<img
+															src={artist.imageUrl}
+															alt={artist.name}
+															class="h-5 w-5 shrink-0 rounded-full object-cover"
+															loading="lazy"
+														/>
+													{:else}
+														<span
+															class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-base-300 text-[8px] font-semibold text-base-content/60"
+														>
+															{initials(artist.name)}
+														</span>
+													{/if}
+													<span class="truncate text-[11px]" title={artist.name}>
+														{artist.name}
+													</span>
+													{#if artist.role}
+														<span
+															class="ml-auto shrink-0 truncate text-[10px] text-base-content/50"
+															title={artist.role}
+														>
+															{artist.role}
+														</span>
+													{/if}
+												</li>
+											{/each}
+										</ul>
+									{/if}
+								</div>
+							</a>
+						</li>
 					{/each}
-				</div>
+				</ul>
 			{/if}
 		</div>
 	</div>

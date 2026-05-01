@@ -1,3 +1,9 @@
+export interface CatalogArtist {
+	name: string;
+	role?: string;
+	imageUrl?: string;
+}
+
 export interface CatalogItem {
 	id: string;
 	title: string;
@@ -5,6 +11,8 @@ export interface CatalogItem {
 	description: string | null;
 	posterUrl: string | null;
 	backdropUrl: string | null;
+	/** Populated by `/related`; absent on `/popular` and `/search`. */
+	artists?: CatalogArtist[];
 }
 
 export interface CatalogPage {
