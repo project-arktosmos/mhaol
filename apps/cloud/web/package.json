@@ -19,6 +19,7 @@
 		"@tauri-apps/api": "^2.10.1",
 		"addons": "workspace:*",
 		"blo": "^2.0.0",
+		"cloud-ui": "workspace:*",
 		"classnames": "^2.5.1",
 		"hls.js": "^1.6.15",
 		"qrcode": "^1.5.4",

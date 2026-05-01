@@ -1,70 +1,31 @@
 import { get, writable, type Writable } from 'svelte/store';
 import { userIdentityService } from '$lib/user-identity.service';
+import {
+	FIRKIN_ADDONS,
+	FIRKIN_KINDS,
+	ADDON_KIND,
+	addonKind,
+	type FirkinAddon,
+	type FirkinKind,
+	type Firkin as SharedFirkin,
+	type FirkinArtist as SharedArtist,
+	type FirkinImage as SharedImageMeta,
+	type FirkinFile as SharedFileEntry,
+	type FirkinFileType as SharedFileType,
+	type FirkinTrailer as SharedTrailer
+} from 'cloud-ui';
 
-/// Every addon known to the cloud — single source of truth for valid
-/// `firkin.addon` values. Each addon represents a single content kind, so
-/// there is no separate `type`/`kind` field on a firkin: the addon implies
-/// it.
-export const FIRKIN_ADDONS = [
-	'tmdb-movie',
-	'tmdb-tv',
-	'musicbrainz',
-	'youtube-video',
-	'youtube-channel',
-	'wyzie-subs-movie',
-	'wyzie-subs-tv',
-	'lrclib',
-	'local-movie',
-	'local-tv',
-	'local-album',
-	'local-book',
-	'local-game'
-] as const;
-
-export type FirkinAddon = (typeof FIRKIN_ADDONS)[number];
-
-/// The display kind each addon produces. Used for UI labels and to drive
-/// kind-aware behavior (audio playback, torrent search categories, etc.)
-/// without re-introducing a stored `type` field on the firkin.
-export const ADDON_KIND: Record<FirkinAddon, FirkinKind> = {
-	'tmdb-movie': 'movie',
-	'tmdb-tv': 'tv show',
-	musicbrainz: 'album',
-	'youtube-video': 'youtube video',
-	'youtube-channel': 'youtube channel',
-	'wyzie-subs-movie': 'movie',
-	'wyzie-subs-tv': 'tv show',
-	lrclib: 'album',
-	'local-movie': 'movie',
-	'local-tv': 'tv show',
-	'local-album': 'album',
-	'local-book': 'book',
-	'local-game': 'game'
+export {
+	FIRKIN_ADDONS,
+	FIRKIN_KINDS,
+	ADDON_KIND,
+	addonKind,
+	type FirkinAddon,
+	type FirkinKind
 };
-
-export const FIRKIN_KINDS = [
-	'movie',
-	'tv show',
-	'album',
-	'youtube video',
-	'youtube channel',
-	'book',
-	'game'
-] as const;
-
-export type FirkinKind = (typeof FIRKIN_KINDS)[number];
-
-export function addonKind(addon: string): FirkinKind | null {
-	return (addon as FirkinAddon) in ADDON_KIND ? ADDON_KIND[addon as FirkinAddon] : null;
-}
 
 /// For a given firkin addon, the catalog/remote addon whose API can supply
 /// metadata (poster, description, year, canonical title) for a match.
-/// `local-*` firkins resolve to their remote counterpart; remote browsable
-/// addons resolve to themselves so a manually-bookmarked TMDB entry can
-/// still be re-searched. Anything not in the map (wyzie-subs, lrclib,
-/// youtube-*, local-book, local-game) returns null and the metadata-search
-/// affordance stays hidden.
 const METADATA_SEARCH_ADDON: Record<string, string> = {
 	'local-movie': 'tmdb-movie',
 	'local-tv': 'tmdb-tv',
@@ -78,67 +39,13 @@ export function metadataSearchAddon(addon: string): string | null {
 	return METADATA_SEARCH_ADDON[addon] ?? null;
 }
 
-export interface Artist {
-	/** CID of the persisted `artist` doc; absent on transient catalog/search items prior to bookmark. */
-	id?: string;
-	name: string;
-	/** Single-occurrence role on inbound side (catalog/search → firkin upsert). */
-	role?: string;
-	/** Canonical multi-role array on resolved side (firkin GET / artist list). */
-	roles?: string[];
-	imageUrl?: string;
-}
-
-export interface ImageMeta {
-	url: string;
-	mimeType: string;
-	fileSize: number;
-	width: number;
-	height: number;
-}
-
+export type Artist = SharedArtist;
+export type ImageMeta = SharedImageMeta;
+export type FileEntry = SharedFileEntry;
+export type FileType = SharedFileType;
+export type Trailer = SharedTrailer;
+export type Firkin = SharedFirkin;
 export const FILE_TYPES = ['ipfs', 'torrent magnet', 'url'] as const;
-export type FileType = (typeof FILE_TYPES)[number];
-
-export interface FileEntry {
-	type: FileType;
-	value: string;
-	title?: string;
-}
-
-/**
- * A YouTube trailer attached to a firkin. Movies hold one; TV shows
- * hold one per season with `label` set to the season name. `language`
- * is the ISO 639-1 code from upstream (e.g. `"en"`) when known —
- * TMDB-sourced trailers carry it; YouTube-fallback trailers usually
- * leave it unset.
- */
-export interface Trailer {
-	youtubeUrl: string;
-	label?: string;
-	language?: string;
-}
-
-export interface Firkin {
-	id: string;
-	title: string;
-	/** CIDs of the referenced artist docs (cloud `artist` table), in order. */
-	artistIds?: string[];
-	/** Resolved artist bodies (server-side join from `artistIds`). */
-	artists: Artist[];
-	description: string;
-	images: ImageMeta[];
-	files: FileEntry[];
-	year: number | null;
-	addon: string;
-	/** EVM address of the account that created the firkin. Empty for server-side auto-creates. */
-	creator: string;
-	created_at: string;
-	updated_at: string;
-	version?: number;
-	version_hashes?: string[];
-	trailers?: Trailer[];
-}
 
 export interface FirkinsState {
 	loading: boolean;
