@@ -34,22 +34,27 @@
 
 	let { open, addon, initialQuery, firkinTitle, onpick, onclose }: Props = $props();
 
-	let query = $state(initialQuery);
+	let query = $state('');
 	let searching = $state(false);
 	let results = $state<CatalogLookupItem[]>([]);
 	let error = $state<string | null>(null);
 	let applyingId = $state<string | null>(null);
 
-	// Re-init and auto-search whenever the modal is opened (possibly for a
-	// different firkin than last time).
+	// Re-init and auto-search whenever the modal transitions from closed to
+	// open (possibly for a different firkin than last time). Only `open` is
+	// tracked — `initialQuery` may keep updating while the modal is mounted
+	// (the parent's firkin store polls every few seconds), and we don't want
+	// to clobber the user's in-progress edits each tick.
+	let wasOpen = false;
 	$effect(() => {
-		if (open) {
+		if (open && !wasOpen) {
 			query = initialQuery;
 			results = [];
 			error = null;
 			applyingId = null;
 			void runSearch();
 		}
+		wasOpen = open;
 	});
 
 	async function runSearch() {
