@@ -37,6 +37,12 @@
 	let filter = $state<string>('');
 	let page = $state<number>(1);
 
+	// MusicBrainz-only: which release-group field the user wants to search on.
+	// Default to artist because the typical free-text query is an artist name
+	// ("keane") and the user wants every release-group by that artist back.
+	let searchField = $state<'artist' | 'release'>('artist');
+	const showSearchFieldSelect = $derived(addon === 'musicbrainz');
+
 	let genres = $state<CatalogGenre[]>([]);
 	let genresLoading = $state(false);
 	let genresError = $state<string | null>(null);
@@ -150,7 +156,8 @@
 		try {
 			const result = await loadSearch(addon, trimmedQuery, {
 				filter: filter || undefined,
-				page: nextPage
+				page: nextPage,
+				field: addon === 'musicbrainz' ? searchField : undefined
 			});
 			if (token !== searchToken) return;
 			searchItems = result.items;
@@ -221,6 +228,10 @@
 	async function onFilterChange() {
 		page = 1;
 		await refreshItems();
+		if (trimmedQuery) await runSearch(1);
+	}
+
+	async function onSearchFieldChange() {
 		if (trimmedQuery) await runSearch(1);
 	}
 
@@ -341,16 +352,29 @@
 					<tr>
 						<th class="w-32 align-middle">Search</th>
 						<td>
-							<input
-								type="search"
-								class="input-bordered input input-sm w-full"
-								placeholder={addon
-									? `Search ${currentSource?.label ?? addon}…`
-									: 'Pick an addon to search'}
-								disabled={!addon}
-								bind:value={query}
-								oninput={scheduleSearch}
-							/>
+							<div class="flex flex-wrap items-center gap-2">
+								{#if showSearchFieldSelect}
+									<select
+										class="select-bordered select w-40 select-sm"
+										bind:value={searchField}
+										onchange={onSearchFieldChange}
+										title="Which release-group field to search on"
+									>
+										<option value="artist">Artist name</option>
+										<option value="release">Album title</option>
+									</select>
+								{/if}
+								<input
+									type="search"
+									class="input-bordered input input-sm flex-1"
+									placeholder={addon
+										? `Search ${currentSource?.label ?? addon}…`
+										: 'Pick an addon to search'}
+									disabled={!addon}
+									bind:value={query}
+									oninput={scheduleSearch}
+								/>
+							</div>
 						</td>
 					</tr>
 					{#if showFilterRow}

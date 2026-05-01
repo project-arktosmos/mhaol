@@ -69,12 +69,13 @@ export async function loadPopular(
 export async function loadSearch(
 	addon: string,
 	query: string,
-	options: { filter?: string; page?: number } = {}
+	options: { filter?: string; page?: number; field?: string } = {}
 ): Promise<CatalogPage> {
 	const params = new URLSearchParams();
 	params.set('query', query);
 	if (options.filter) params.set('filter', options.filter);
 	if (options.page) params.set('page', String(options.page));
+	if (options.field) params.set('field', options.field);
 	const url = `/api/catalog/${encodeURIComponent(addon)}/search?${params.toString()}`;
 	const res = await fetch(url, { cache: 'no-store' });
 	if (!res.ok) throw new Error(await parseError(res));

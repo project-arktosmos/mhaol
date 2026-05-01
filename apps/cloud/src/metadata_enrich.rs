@@ -178,7 +178,7 @@ async fn search_catalog(
     let result = match remote_addon {
         "tmdb-movie" => tmdb_search(false, query, 1).await,
         "tmdb-tv" => tmdb_search(true, query, 1).await,
-        "musicbrainz" => musicbrainz_search(query, 1).await,
+        "musicbrainz" => musicbrainz_search(query, 1, None).await,
         _ => return None,
     };
     match result {

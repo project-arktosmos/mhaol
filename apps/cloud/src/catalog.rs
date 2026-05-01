@@ -300,6 +300,10 @@ pub struct SearchQuery {
     pub filter: Option<String>,
     #[serde(default)]
     pub page: Option<i64>,
+    /// Currently only honored by `musicbrainz`; selects which release-group
+    /// field to target. Accepts `artist` (default) or `release` / `album`.
+    #[serde(default)]
+    pub field: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -344,7 +348,7 @@ async fn search(
     match addon.as_str() {
         "tmdb-movie" => tmdb_search(false, trimmed, page).await,
         "tmdb-tv" => tmdb_search(true, trimmed, page).await,
-        "musicbrainz" => musicbrainz_search(trimmed, page).await,
+        "musicbrainz" => musicbrainz_search(trimmed, page, q.field.as_deref()).await,
         "youtube-video" => youtube_search(false, trimmed, page).await,
         "youtube-channel" => youtube_search(true, trimmed, page).await,
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page)),
@@ -905,10 +909,7 @@ async fn musicbrainz_popular(
     let limit: i64 = 20;
     let offset = (page - 1) * limit;
     let tag = genre.filter(|s| !s.is_empty()).unwrap_or("rock");
-    // Restrict to full albums only (no singles, EPs, broadcasts, etc.) — the
-    // catalog is the album browser, so showing every release-group type would
-    // be noise.
-    let query = format!("tag:\"{}\" AND primarytype:Album", tag);
+    let query = format!("tag:\"{}\"", tag);
     let url = format!(
         "{}/release-group?query={}&fmt=json&limit={}&offset={}",
         MUSICBRAINZ_BASE,
@@ -939,17 +940,129 @@ async fn musicbrainz_popular(
     })
 }
 
+/// Which release-group field the caller wants to search on. The default is
+/// `Artist` because the typical free-text query is an artist name ("keane")
+/// and the user wants every release-group by that artist to come back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MbSearchField {
+    Artist,
+    Release,
+}
+
+impl MbSearchField {
+    fn from_param(s: Option<&str>) -> Self {
+        match s.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+            Some("release") | Some("releasegroup") | Some("title") | Some("album") => Self::Release,
+            _ => Self::Artist,
+        }
+    }
+    fn lucene_field(self) -> &'static str {
+        match self {
+            Self::Artist => "artist",
+            Self::Release => "releasegroup",
+        }
+    }
+}
+
+/// Normalise a string for token comparison: lowercase, strip parenthesised
+/// content, replace any non-alphanumeric run with a single space. Mirrors the
+/// frontend's `youtube-match.service.ts` pattern so the double-dip filter
+/// behaves the same on both sides.
+fn mb_normalize(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut depth: i32 = 0;
+    for ch in input.chars() {
+        match ch {
+            '(' | '[' | '{' => {
+                depth += 1;
+                out.push(' ');
+            }
+            ')' | ']' | '}' => {
+                depth = (depth - 1).max(0);
+                out.push(' ');
+            }
+            _ if depth > 0 => out.push(' '),
+            _ => {
+                let lower = ch.to_ascii_lowercase();
+                if lower.is_ascii_alphanumeric() {
+                    out.push(lower);
+                } else {
+                    out.push(' ');
+                }
+            }
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn mb_tokens(input: &str) -> Vec<String> {
+    mb_normalize(input)
+        .split(' ')
+        .filter(|w| w.len() > 1)
+        .map(|w| w.to_string())
+        .collect()
+}
+
+/// Double-dip: require ≥50% of the query's tokens to appear (as substrings)
+/// in the chosen target field of a release-group result. MusicBrainz's
+/// upstream search is permissive (Lucene scoring tolerates partial matches),
+/// so we filter out results where the user's term isn't actually present in
+/// the field they asked us to search on.
+fn mb_field_text(rg: &serde_json::Value, field: MbSearchField) -> String {
+    match field {
+        MbSearchField::Release => rg
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        MbSearchField::Artist => rg
+            .get("artist-credit")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|c| {
+                        c.get("name")
+                            .and_then(|v| v.as_str())
+                            .or_else(|| c.get("artist").and_then(|a| a.get("name")?.as_str()))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .unwrap_or_default(),
+    }
+}
+
+fn mb_passes_double_dip(
+    rg: &serde_json::Value,
+    field: MbSearchField,
+    query_tokens: &[String],
+) -> bool {
+    if query_tokens.is_empty() {
+        return true;
+    }
+    let target = mb_normalize(&mb_field_text(rg, field));
+    let hits = query_tokens
+        .iter()
+        .filter(|t| target.contains(t.as_str()))
+        .count();
+    let ratio = hits as f64 / query_tokens.len() as f64;
+    ratio >= 0.5
+}
+
 pub(crate) async fn musicbrainz_search(
     query: &str,
     page: i64,
+    field: Option<&str>,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
     let limit: i64 = 20;
     let offset = (page - 1).max(0) * limit;
-    // Escape Lucene query special chars in the user's query, then OR across
-    // the release-group title and the artist name fields so a query like
-    // "keane" matches both albums titled Keane and every release-group whose
-    // artist credit is Keane. MusicBrainz's `query=` param accepts Lucene
-    // syntax; raw quotes/colons in the user input would break the parse.
+    let field = MbSearchField::from_param(field);
+    // Escape Lucene query special chars in the user's query, then constrain
+    // the upstream search to the field the user picked. MusicBrainz's
+    // `query=` param accepts Lucene syntax; raw quotes/colons in the user
+    // input would break the parse. No `primarytype:` restriction — albums,
+    // singles, EPs and broadcasts all come back, the double-dip filter below
+    // is what guarantees the search term actually appears in the target field.
     let escaped: String = query
         .chars()
         .flat_map(|c| match c {
@@ -958,13 +1071,7 @@ pub(crate) async fn musicbrainz_search(
             _ => vec![c],
         })
         .collect();
-    // OR across release-group title + artist name, then AND-restrict to full
-    // albums only so a query like "keane" returns Keane's albums and not their
-    // singles or EPs.
-    let lucene = format!(
-        "(releasegroup:\"{q}\" OR artist:\"{q}\") AND primarytype:Album",
-        q = escaped
-    );
+    let lucene = format!("{}:\"{}\"", field.lucene_field(), escaped);
     let url = format!(
         "{}/release-group?query={}&fmt=json&limit={}&offset={}",
         MUSICBRAINZ_BASE,
@@ -982,10 +1089,16 @@ pub(crate) async fn musicbrainz_search(
         .and_then(|v| v.as_i64())
         .unwrap_or(limit);
     let total_pages = ((count as f64) / (limit as f64)).ceil() as i64;
+    let query_tokens = mb_tokens(query);
     let items = payload
         .get("release-groups")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().map(musicbrainz_to_item).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter(|rg| mb_passes_double_dip(rg, field, &query_tokens))
+                .map(musicbrainz_to_item)
+                .collect()
+        })
         .unwrap_or_default();
     Ok(CatalogPage {
         items,
