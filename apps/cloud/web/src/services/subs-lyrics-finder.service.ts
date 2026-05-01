@@ -67,9 +67,10 @@ class SubsLyricsFinderService {
 		this.state.update((s) => ({ ...s, searching: true, error: null, selected: null }));
 
 		try {
+			const addon = addonForType(current.type);
 			const results = await fetchJson<SubsLyricsItem[]>('/api/search/subs-lyrics', {
 				method: 'POST',
-				body: JSON.stringify({ type: current.type, query, externalIds })
+				body: JSON.stringify({ addon, query, externalIds })
 			});
 			this.state.update((s) => ({ ...s, searching: false, results }));
 		} catch (err) {
@@ -80,3 +81,14 @@ class SubsLyricsFinderService {
 }
 
 export const subsLyricsFinderService = new SubsLyricsFinderService();
+
+function addonForType(type: SubsLyricsSearchType): string {
+	switch (type) {
+		case 'album':
+			return 'lrclib';
+		case 'movie':
+			return 'wyzie-subs-movie';
+		case 'tv show':
+			return 'wyzie-subs-tv';
+	}
+}
