@@ -7,12 +7,11 @@ export type { TorrentAnalysis } from 'addons/torrent-search-thepiratebay/types';
 
 export type SmartSearchMode = 'download' | 'stream' | 'fetch';
 
-export type SmartSearchMediaType = 'movies' | 'tv' | 'music' | 'games';
+export type SmartSearchMediaType = 'movies' | 'tv' | 'music';
 
 export interface SmartSearchMediaConfig {
 	preferredLanguage?: string;
 	preferredQuality?: string;
-	preferredConsole?: string;
 }
 
 export type SmartSearchAllConfigs = Record<SmartSearchMediaType, SmartSearchMediaConfig>;
@@ -66,17 +65,10 @@ export interface SmartSearchMusicSelection extends SmartSearchBaseSelection {
 	musicSearchMode?: 'album';
 }
 
-export interface SmartSearchGameSelection extends SmartSearchBaseSelection {
-	type: 'game';
-	retroachievementsId: number;
-	consoleName: string;
-}
-
 export type SmartSearchSelection =
 	| SmartSearchMovieSelection
 	| SmartSearchTvSelection
-	| SmartSearchMusicSelection
-	| SmartSearchGameSelection;
+	| SmartSearchMusicSelection;
 
 export interface SmartSearchTorrentResult extends TorrentSearchResult {
 	searchQueries: string[];

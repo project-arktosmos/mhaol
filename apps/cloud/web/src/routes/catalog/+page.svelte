@@ -7,8 +7,6 @@
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
 	} from 'ui-lib/components/firkins/FirkinMetadataLookupModal.svelte';
-	import { CONSOLE_IMAGES } from 'assets/game-consoles';
-	import { CONSOLE_WASM_STATUS } from 'addons/retroachievements/types';
 	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
 	import {
 		listSources,
@@ -53,8 +51,7 @@
 	const currentSource = $derived(sources.find((s) => s.id === addon));
 	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
-	const isRetroAchievements = $derived(addon === 'retroachievements');
-	const showFilterRow = $derived(hasFilter && !isRetroAchievements);
+	const showFilterRow = $derived(hasFilter);
 
 	// Each catalog (remote) addon has a matching local-* addon used by
 	// library scans for the same content kind. The catalog Library section
@@ -63,8 +60,7 @@
 	const LOCAL_ADDON_FOR: Record<string, string> = {
 		'tmdb-movie': 'local-movie',
 		'tmdb-tv': 'local-tv',
-		musicbrainz: 'local-album',
-		retroachievements: 'local-game'
+		musicbrainz: 'local-album'
 	};
 
 	const libraryFirkins = $derived<Firkin[]>(
@@ -219,22 +215,13 @@
 		searchError = null;
 		searchLoading = false;
 		await refreshGenres();
-		if (source.id === 'retroachievements') {
-			items = [];
-			totalPages = 1;
-		} else {
-			await refreshItems();
-		}
+		await refreshItems();
 	}
 
 	async function onFilterChange() {
 		page = 1;
 		await refreshItems();
 		if (trimmedQuery) await runSearch(1);
-	}
-
-	function selectConsole(consoleId: string) {
-		void goto(`${base}/catalog/console/${encodeURIComponent(consoleId)}`);
 	}
 
 	// Library firkins are flagged as "needs metadata" when they're missing
@@ -290,9 +277,7 @@
 				if (sources.length > 0) {
 					addon = sources[0].id;
 					await refreshGenres();
-					if (addon !== 'retroachievements') {
-						await refreshItems();
-					}
+					await refreshItems();
 				}
 			} catch (err) {
 				sourcesError = err instanceof Error ? err.message : 'Unknown error';
@@ -480,60 +465,7 @@
 		</section>
 	{/if}
 
-	{#if isRetroAchievements}
-		<section class="flex flex-col gap-3">
-			<h2 class="text-lg font-semibold">Consoles</h2>
-			{#if genresLoading}
-				<p class="text-sm text-base-content/60">Loading consoles…</p>
-			{:else if genresError}
-				<div class="alert alert-error">
-					<span>{genresError}</span>
-				</div>
-			{:else if genres.length === 0}
-				<p class="text-sm text-base-content/60">No consoles available.</p>
-			{:else}
-				<div
-					class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-				>
-					{#each genres as console (console.id)}
-						{@const consoleImage = CONSOLE_IMAGES[Number(console.id)]}
-						{@const wasmStatus = CONSOLE_WASM_STATUS[Number(console.id)]}
-						<button
-							type="button"
-							class="card relative flex aspect-square flex-col items-center justify-center gap-2 border border-base-content/10 bg-base-200 p-4 text-center transition hover:bg-base-300"
-							onclick={() => selectConsole(console.id)}
-						>
-							<span
-								class={classNames('absolute top-2 right-2 h-2.5 w-2.5 rounded-full', {
-									'bg-success': wasmStatus === 'yes',
-									'bg-warning': wasmStatus === 'experimental',
-									'bg-error': wasmStatus === 'no',
-									'bg-base-content/20': !wasmStatus
-								})}
-								title={wasmStatus === 'yes'
-									? 'WASM emulator available'
-									: wasmStatus === 'experimental'
-										? 'WASM emulator (experimental)'
-										: wasmStatus === 'no'
-											? 'No WASM emulator'
-											: 'WASM emulator status unknown'}
-							></span>
-							{#if consoleImage}
-								<img
-									src={consoleImage}
-									alt={console.name}
-									class="h-2/3 w-full object-contain"
-									loading="lazy"
-								/>
-							{/if}
-							<span class="text-sm font-semibold">{console.name}</span>
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</section>
-	{:else}
-		<section class="flex flex-col gap-3">
+	<section class="flex flex-col gap-3">
 			<div class="flex items-center justify-between gap-4">
 				<h2 class="text-lg font-semibold">Popular</h2>
 				<div class="flex items-center gap-2">
@@ -591,7 +523,6 @@
 				</div>
 			{/if}
 		</section>
-	{/if}
 </div>
 
 {#if metadataTarget}

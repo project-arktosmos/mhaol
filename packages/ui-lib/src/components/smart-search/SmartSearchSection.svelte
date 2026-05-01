@@ -9,7 +9,6 @@
 
 	let selection = $derived($searchStore.selection);
 	let isMusic = $derived(selection?.type === 'music');
-	let isGame = $derived(selection?.type === 'game');
 
 	let mediaConfig = $derived.by(() => {
 		if (!selection) return null;
@@ -18,14 +17,11 @@
 				? 'movies'
 				: selection.type === 'tv'
 					? 'tv'
-					: selection.type === 'music'
-						? 'music'
-						: 'games';
+					: 'music';
 		return $configStore[key];
 	});
 	let preferredLanguage = $derived(mediaConfig?.preferredLanguage ?? '');
 	let preferredQuality = $derived(mediaConfig?.preferredQuality ?? '');
-	let preferredConsole = $derived(mediaConfig?.preferredConsole ?? '');
 
 	let searching = $derived($searchStore.searching);
 	let analyzing = $derived($searchStore.analyzing);
@@ -33,8 +29,7 @@
 	let scoredResults = $derived(
 		scoreResults($searchStore.searchResults, {
 			preferredLanguage,
-			preferredQuality,
-			preferredConsole
+			preferredQuality
 		})
 	);
 	let searchError = $derived($searchStore.searchError);
@@ -42,17 +37,6 @@
 	let bestCandidate = $derived(findBestCandidate(scoredResults, { analyzing, searching }));
 
 	let columns = $derived.by(() => {
-		if (isGame) {
-			return [
-				{
-					key: 'console',
-					label: 'Console',
-					title: `+100 if console matches ${preferredConsole}`,
-					getBonusValue: (s: (typeof scoredResults)[number]) => s.consoleBonus,
-					getTitle: (s: (typeof scoredResults)[number]) => s.result.analysis?.quality ?? ''
-				}
-			];
-		}
 		const cols: Array<{
 			key: string;
 			label: string;
@@ -82,7 +66,6 @@
 	let searchTerm = $derived.by(() => {
 		if (!selection) return null;
 		if (selection.type === 'music') return `${selection.artist} ${selection.title}`;
-		if (selection.type === 'game') return `${selection.title} ${selection.consoleName}`;
 		return `${selection.title} ${selection.year}`;
 	});
 </script>
@@ -98,23 +81,18 @@
 						class={classNames('badge badge-xs', {
 							'badge-primary': selection.type === 'movie',
 							'badge-info': selection.type === 'tv',
-							'badge-secondary': selection.type === 'music',
-							'badge-accent': selection.type === 'game'
+							'badge-secondary': selection.type === 'music'
 						})}
 					>
 						{selection.type === 'music'
 							? 'Music'
 							: selection.type === 'movie'
 								? 'Movie'
-								: selection.type === 'game'
-									? 'Game'
-									: 'TV'}
+								: 'TV'}
 					</span>
 				</div>
 				{#if selection.type === 'music'}
 					<div class="truncate text-xs text-base-content/40">{selection.artist}</div>
-				{:else if selection.type === 'game'}
-					<div class="truncate text-xs text-base-content/40">{selection.consoleName}</div>
 				{/if}
 			</div>
 			<button class="btn btn-ghost btn-xs" onclick={() => smartSearchService.clear()}>

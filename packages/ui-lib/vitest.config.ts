@@ -50,15 +50,6 @@ export default defineConfig({
 			'addons/musicbrainz/transform': resolve(__dirname, '../addons/musicbrainz/src/transform.ts'),
 			'addons/musicbrainz/client': resolve(__dirname, '../addons/musicbrainz/src/client.ts'),
 			'addons/musicbrainz': resolve(__dirname, '../addons/musicbrainz/src/index.ts'),
-			'addons/retroachievements/types': resolve(
-				__dirname,
-				'../addons/retroachievements/src/types.ts'
-			),
-			'addons/retroachievements/transform': resolve(
-				__dirname,
-				'../addons/retroachievements/src/transform.ts'
-			),
-			'addons/retroachievements': resolve(__dirname, '../addons/retroachievements/src/index.ts'),
 			'addons/youtube/types': resolve(__dirname, '../addons/youtube/src/types.ts'),
 			'addons/youtube/helpers': resolve(__dirname, '../addons/youtube/src/helpers.ts'),
 			'addons/youtube': resolve(__dirname, '../addons/youtube/src/index.ts'),

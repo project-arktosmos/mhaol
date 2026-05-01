@@ -6,13 +6,6 @@
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
 	} from 'ui-lib/components/firkins/FirkinMetadataLookupModal.svelte';
-	import EmulatorModal from 'ui-lib/components/videogames/EmulatorModal.svelte';
-	import {
-		coreForRom,
-		isRomArchive,
-		resolveRomForFile,
-		type EmulatorCore
-	} from 'ui-lib/components/videogames/emulator-cores';
 	import { firkinPlaybackService } from 'ui-lib/services/firkin-playback.service';
 	import {
 		firkinTorrentsService,
@@ -424,96 +417,7 @@
 		return out;
 	});
 
-	// Scanning a single archive on the firkin extracts it in place, pins
-	// every ROM inside to IPFS and rolls the firkin forward — afterwards
-	// `firkin.files` contains the new `ipfs` entries and the row's play
-	// button lights up via `resolveRomForFile`. We do this one archive at
-	// a time on user click so the request returns quickly: a No-Intro
-	// torrent has hundreds of `.7z` files; scanning all of them in one
-	// shot took minutes and made the page look frozen.
-	type ArchiveStatus = 'scanning' | 'extracted' | 'already_extracted' | 'failed' | 'skipped';
-	type ArchiveStatusInfo = { status: ArchiveStatus; error?: string };
-	type RomScanResponse = {
-		firkin_id: string;
-		archives: { name: string; relative_path: string; status: string; error?: string }[];
-	};
-	let archiveStatuses = $state<Record<string, ArchiveStatusInfo>>({});
 
-	async function scanArchive(archiveTitle: string): Promise<void> {
-		// Don't re-trigger while the same archive is mid-scan.
-		if (archiveStatuses[archiveTitle]?.status === 'scanning') return;
-		archiveStatuses = {
-			...archiveStatuses,
-			[archiveTitle]: { status: 'scanning' }
-		};
-		try {
-			const url = `/api/firkins/${encodeURIComponent(firkin.id)}/roms?archive=${encodeURIComponent(archiveTitle)}`;
-			const res = await fetch(url, { method: 'POST', cache: 'no-store' });
-			if (!res.ok) {
-				let message = `HTTP ${res.status}`;
-				try {
-					const body = await res.json();
-					if (body && typeof body.error === 'string') message = body.error;
-				} catch {
-					// ignore
-				}
-				throw new Error(message);
-			}
-			const body = (await res.json()) as RomScanResponse;
-			const next = { ...archiveStatuses };
-			let recorded = false;
-			for (const a of body.archives) {
-				const status: ArchiveStatus =
-					a.status === 'extracted' ||
-					a.status === 'already_extracted' ||
-					a.status === 'failed' ||
-					a.status === 'skipped'
-						? a.status
-						: 'failed';
-				next[a.relative_path] = { status, error: a.error };
-				if (a.relative_path === archiveTitle) recorded = true;
-			}
-			if (!recorded) {
-				next[archiveTitle] = {
-					status: 'failed',
-					error: 'archive not found on disk yet'
-				};
-			}
-			archiveStatuses = next;
-			if (body.firkin_id && body.firkin_id !== firkin.id) {
-				await goto(`${base}/catalog/${encodeURIComponent(body.firkin_id)}`);
-			}
-		} catch (err) {
-			archiveStatuses = {
-				...archiveStatuses,
-				[archiveTitle]: {
-					status: 'failed',
-					error: err instanceof Error ? err.message : 'Unknown error'
-				}
-			};
-		}
-	}
-
-	type EmulatorTarget = {
-		core: EmulatorCore;
-		gameUrl: string;
-		gameName: string;
-	};
-	let emulatorTarget = $state<EmulatorTarget | null>(null);
-
-	function launchRom(rom: { name: string; relative_path: string; cid: string }) {
-		const core = coreForRom(firkin.title, rom.name);
-		if (!core) return;
-		emulatorTarget = {
-			core,
-			gameUrl: `/api/ipfs/pins/${encodeURIComponent(rom.cid)}/file`,
-			gameName: rom.name
-		};
-	}
-
-	function closeEmulator() {
-		emulatorTarget = null;
-	}
 
 	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0);
 
@@ -1419,7 +1323,6 @@
 						<table class="table table-sm">
 							<thead>
 								<tr>
-									<th class="w-12"></th>
 									<th class="w-24">Type</th>
 									<th>Title</th>
 									<th>Value</th>
@@ -1427,80 +1330,12 @@
 							</thead>
 							<tbody>
 								{#each firkin.files as file, i (i)}
-									{@const resolved = resolveRomForFile(file, firkin.files)}
-									{@const isArchiveRow =
-										file.type === 'ipfs' && !!file.title && isRomArchive(file.title)}
-									{@const archiveStatus = isArchiveRow ? archiveStatuses[file.title!] : undefined}
 									<tr>
-										<td class="w-12">
-											{#if resolved}
-												<button
-													type="button"
-													class="btn btn-xs btn-primary"
-													onclick={() =>
-														launchRom({
-															name: resolved.title,
-															relative_path: resolved.title,
-															cid: resolved.cid
-														})}
-													title={resolved.cid === file.value
-														? `Launch in WASM emulator (${resolved.core})`
-														: `Launch ${resolved.title} in WASM emulator (${resolved.core})`}
-													aria-label="Play"
-												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														viewBox="0 0 24 24"
-														fill="currentColor"
-														class="h-3 w-3"
-														aria-hidden="true"
-													>
-														<polygon points="6 4 20 12 6 20 6 4" />
-													</svg>
-												</button>
-											{:else if archiveStatus?.status === 'scanning'}
-												<span
-													class="loading loading-xs loading-spinner text-base-content/50"
-													aria-label="Scanning archive"
-												></span>
-											{:else if isArchiveRow}
-												<button
-													type="button"
-													class="btn btn-outline btn-xs"
-													onclick={() => scanArchive(file.title!)}
-													title="Extract this archive and pin every ROM inside to IPFS"
-												>
-													Scan
-												</button>
-											{/if}
-										</td>
 										<td class={classNames('text-xs font-semibold')}>
 											<span class="badge badge-outline badge-sm">{file.type}</span>
 										</td>
 										<td class="text-xs [overflow-wrap:anywhere]">
 											{file.title ?? ''}
-											{#if archiveStatus}
-												<span
-													class={classNames('ml-2 badge align-middle badge-xs', {
-														'badge-ghost': archiveStatus.status === 'scanning',
-														'badge-success':
-															archiveStatus.status === 'extracted' ||
-															archiveStatus.status === 'already_extracted',
-														'badge-error': archiveStatus.status === 'failed',
-														'badge-warning': archiveStatus.status === 'skipped'
-													})}
-													title={archiveStatus.error ?? archiveStatus.status}
-												>
-													{archiveStatus.status === 'already_extracted'
-														? 'extracted'
-														: archiveStatus.status === 'scanning'
-															? 'scanning…'
-															: archiveStatus.status}
-												</span>
-												{#if archiveStatus.status === 'failed' && archiveStatus.error}
-													<div class="mt-0.5 text-error">{archiveStatus.error}</div>
-												{/if}
-											{/if}
 										</td>
 										<td class="font-mono text-xs break-all">{file.value}</td>
 									</tr>
@@ -1513,14 +1348,6 @@
 		</section>
 	</div>
 </div>
-
-<EmulatorModal
-	open={emulatorTarget !== null}
-	core={emulatorTarget?.core ?? null}
-	gameUrl={emulatorTarget?.gameUrl ?? null}
-	gameName={emulatorTarget?.gameName ?? 'Game'}
-	onclose={closeEmulator}
-/>
 
 {#if lookupAddon}
 	<FirkinMetadataLookupModal

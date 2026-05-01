@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { smartSearchService } from 'ui-lib/services/smart-search.service';
-	import { RA_CONSOLES } from 'addons/retroachievements/types';
 	import type { SmartSearchMediaType } from 'ui-lib/types/smart-search.type';
 
 	const configStore = smartSearchService.configStore;
@@ -37,8 +36,7 @@
 	const tabs: { id: SmartSearchMediaType; label: string }[] = [
 		{ id: 'movies', label: 'Movies' },
 		{ id: 'tv', label: 'TV' },
-		{ id: 'music', label: 'Music' },
-		{ id: 'games', label: 'Games' }
+		{ id: 'music', label: 'Music' }
 	];
 
 	let currentConfig = $derived($configStore[activeTab]);
@@ -109,21 +107,6 @@
 					>
 						{#each audioQualities as q}
 							<option value={q}>{q}</option>
-						{/each}
-					</select>
-				</label>
-			{:else if activeTab === 'games'}
-				<label class="flex items-center gap-2 text-sm">
-					<span class="text-base-content/60">Console</span>
-					<select
-						class="select-bordered select select-sm"
-						value={currentConfig.preferredConsole ?? ''}
-						onchange={(e) =>
-							smartSearchService.updateConfig(activeTab, 'preferredConsole', e.currentTarget.value)}
-					>
-						<option value="">Any</option>
-						{#each RA_CONSOLES as console}
-							<option value={console.name}>{console.name}</option>
 						{/each}
 					</select>
 				</label>

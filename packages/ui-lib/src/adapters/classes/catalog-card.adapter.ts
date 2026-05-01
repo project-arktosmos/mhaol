@@ -1,6 +1,5 @@
 import type { CatalogItem, CatalogCardData, CatalogBadge } from 'ui-lib/types/catalog.type';
 import { formatAuthors } from 'ui-lib/types/catalog.type';
-import { CONSOLE_WASM_STATUS } from 'addons/retroachievements/types';
 
 function getSubtitle(item: CatalogItem): string | null {
 	switch (item.kind) {
@@ -10,8 +9,6 @@ function getSubtitle(item: CatalogItem): string | null {
 			return item.metadata.status;
 		case 'album':
 			return formatAuthors(item.metadata.authors, 'artist') || null;
-		case 'game':
-			return item.metadata.consoleName;
 		case 'youtube_video':
 			return item.metadata.authors.find((a) => a.role === 'channel')?.name ?? null;
 		case 'youtube_channel':
@@ -29,7 +26,6 @@ function getAspectRatio(item: CatalogItem): 'poster' | 'square' | 'landscape' {
 		case 'tv_show':
 			return 'poster';
 		case 'album':
-		case 'game':
 		case 'photo':
 			return 'square';
 		case 'youtube_video':
@@ -54,21 +50,6 @@ function getBadges(item: CatalogItem): CatalogBadge[] {
 				badges.push({ label: item.metadata.primaryType, variant: 'ghost' });
 			}
 			break;
-		case 'game': {
-			const wasm = CONSOLE_WASM_STATUS[item.metadata.consoleId];
-			if (wasm === 'yes') {
-				badges.push({ label: 'Play', variant: 'success' });
-			} else if (wasm === 'experimental') {
-				badges.push({ label: 'Play (beta)', variant: 'warning' });
-			}
-			if (item.metadata.numAchievements > 0) {
-				badges.push({
-					label: `${item.metadata.numAchievements} achievements`,
-					variant: 'accent'
-				});
-			}
-			break;
-		}
 	}
 	return badges;
 }

@@ -3,7 +3,6 @@ import type { SmartSearchTorrentResult } from 'ui-lib/types/smart-search.type';
 export interface ScoringConfig {
 	preferredLanguage: string;
 	preferredQuality: string;
-	preferredConsole: string;
 }
 
 export interface ScoredResult {
@@ -13,7 +12,6 @@ export interface ScoredResult {
 	relPct: number;
 	langBonus: number;
 	qualityBonus: number;
-	consoleBonus: number;
 	score: number;
 }
 
@@ -41,13 +39,7 @@ export function scoreResults(
 				result.analysis.quality.toLowerCase().includes(config.preferredQuality.toLowerCase())
 					? 100
 					: 0;
-			const consoleBonus =
-				config.preferredConsole &&
-				result.analysis &&
-				result.analysis.reason.toLowerCase().includes('console matches')
-					? 100
-					: 0;
-			const score = seedersPct + leechersPct + relPct + langBonus + qualityBonus + consoleBonus;
+			const score = seedersPct + leechersPct + relPct + langBonus + qualityBonus;
 			return {
 				result,
 				seedersPct,
@@ -55,7 +47,6 @@ export function scoreResults(
 				relPct,
 				langBonus,
 				qualityBonus,
-				consoleBonus,
 				score
 			};
 		})

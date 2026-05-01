@@ -19,9 +19,7 @@
 
 #![cfg(not(target_os = "android"))]
 
-use crate::catalog::{
-    self, musicbrainz_search, retroachievements_search, tmdb_search, CatalogItem,
-};
+use crate::catalog::{self, musicbrainz_search, tmdb_search, CatalogItem};
 use crate::firkins::ImageMeta;
 
 /// Search input extracted from filenames / directory names by the
@@ -53,7 +51,6 @@ fn remote_addon_for(local_addon: &str) -> Option<&'static str> {
         "local-movie" => Some("tmdb-movie"),
         "local-tv" => Some("tmdb-tv"),
         "local-album" => Some("musicbrainz"),
-        "local-game" => Some("retroachievements"),
         _ => None,
     }
 }
@@ -138,9 +135,9 @@ fn pick_best<'a>(
 
 /// Build an `images` list from a catalog item's poster/backdrop URLs.
 /// The catalog already produces full URLs (TMDB's `w500` poster, MB's
-/// cover-art-archive `front-500`, RA badge), so we just wrap them in
-/// `ImageMeta` records — width/height come from the known TMDB sizes
-/// when applicable.
+/// cover-art-archive `front-500`), so we just wrap them in `ImageMeta`
+/// records — width/height come from the known TMDB sizes when
+/// applicable.
 fn images_from(catalog_item: &CatalogItem) -> Vec<ImageMeta> {
     let mut out: Vec<ImageMeta> = Vec::new();
     if let Some(url) = catalog_item.poster_url.as_ref().filter(|s| !s.is_empty()) {
@@ -182,7 +179,6 @@ async fn search_catalog(
         "tmdb-movie" => tmdb_search(false, query, 1).await,
         "tmdb-tv" => tmdb_search(true, query, 1).await,
         "musicbrainz" => musicbrainz_search(query, 1).await,
-        "retroachievements" => retroachievements_search(query, None, 1).await,
         _ => return None,
     };
     match result {

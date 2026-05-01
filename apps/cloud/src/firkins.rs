@@ -317,7 +317,7 @@ async fn assemble_firkin_dto(
     Ok(FirkinDto::from_doc_with_artists(doc, artists))
 }
 
-async fn assemble_firkin_dtos(
+pub(crate) async fn assemble_firkin_dtos(
     state: &CloudState,
     docs: Vec<Firkin>,
 ) -> Result<Vec<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {

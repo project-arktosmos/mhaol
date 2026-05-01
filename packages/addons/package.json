@@ -23,9 +23,6 @@
 		"musicbrainz": {
 			"source": "addon"
 		},
-		"retroachievements": {
-			"source": "addon"
-		},
 		"youtube": {
 			"source": "addon"
 		},
@@ -52,9 +49,6 @@
 		"./musicbrainz/types": "./musicbrainz/src/types.ts",
 		"./musicbrainz/transform": "./musicbrainz/src/transform.ts",
 		"./musicbrainz/client": "./musicbrainz/src/client.ts",
-		"./retroachievements": "./retroachievements/src/index.ts",
-		"./retroachievements/types": "./retroachievements/src/types.ts",
-		"./retroachievements/transform": "./retroachievements/src/transform.ts",
 		"./youtube": "./youtube/src/index.ts",
 		"./youtube/types": "./youtube/src/types.ts",
 		"./youtube/helpers": "./youtube/src/helpers.ts",

@@ -4,12 +4,11 @@ export type CatalogKind =
 	| 'movie'
 	| 'tv_show'
 	| 'album'
-	| 'game'
 	| 'youtube_video'
 	| 'youtube_channel'
 	| 'photo';
 
-export type CatalogSource = 'tmdb' | 'musicbrainz' | 'retroachievements' | 'youtube' | 'local';
+export type CatalogSource = 'tmdb' | 'musicbrainz' | 'youtube' | 'local';
 
 // === Authors ===
 
@@ -20,8 +19,6 @@ export type AuthorRole =
 	| 'creator'
 	| 'producer'
 	| 'artist'
-	| 'developer'
-	| 'publisher'
 	| 'channel';
 
 export interface CatalogAuthor {
@@ -47,7 +44,7 @@ export function authorsByRole(authors: CatalogAuthor[], role: AuthorRole): Catal
 }
 
 export function primaryAuthor(authors: CatalogAuthor[]): CatalogAuthor | null {
-	const priority: AuthorRole[] = ['director', 'creator', 'artist', 'developer', 'channel'];
+	const priority: AuthorRole[] = ['director', 'creator', 'artist', 'channel'];
 	for (const role of priority) {
 		const found = authors.find((a) => a.role === role);
 		if (found) return found;
@@ -176,39 +173,6 @@ export interface AlbumTrack {
 	authors: CatalogAuthor[];
 }
 
-export interface CatalogGame extends CatalogItemBase {
-	kind: 'game';
-	metadata: GameMetadata;
-}
-
-export interface GameMetadata {
-	retroachievementsId: number;
-	consoleId: number;
-	consoleName: string;
-	imageIconUrl: string;
-	numAchievements: number;
-	points: number;
-	authors: CatalogAuthor[];
-	genre: string | null;
-	released: string | null;
-	imageTitleUrl: string | null;
-	imageIngameUrl: string | null;
-	imageBoxArtUrl: string | null;
-	achievements: GameAchievement[];
-}
-
-export interface GameAchievement {
-	id: number;
-	title: string;
-	description: string;
-	points: number;
-	trueRatio: number;
-	badgeUrl: string;
-	displayOrder: number;
-	numAwarded: number;
-	numAwardedHardcore: number;
-}
-
 export interface CatalogYoutubeVideo extends CatalogItemBase {
 	kind: 'youtube_video';
 	metadata: YoutubeVideoMetadata;
@@ -274,7 +238,6 @@ export type CatalogItem =
 	| CatalogMovie
 	| CatalogTvShow
 	| CatalogAlbum
-	| CatalogGame
 	| CatalogYoutubeVideo
 	| CatalogYoutubeChannel
 	| CatalogPhoto;
@@ -289,9 +252,6 @@ export function isTvShow(item: CatalogItem): item is CatalogTvShow {
 }
 export function isAlbum(item: CatalogItem): item is CatalogAlbum {
 	return item.kind === 'album';
-}
-export function isGame(item: CatalogItem): item is CatalogGame {
-	return item.kind === 'game';
 }
 export function isYoutubeVideo(item: CatalogItem): item is CatalogYoutubeVideo {
 	return item.kind === 'youtube_video';
@@ -374,11 +334,10 @@ export const BROWSE_KINDS: CatalogKind[] = [
 	'movie',
 	'tv_show',
 	'album',
-	'game',
 	'youtube_video',
 	'photo'
 ];
 
-export const TORRENT_KINDS: CatalogKind[] = ['movie', 'tv_show', 'album', 'game'];
+export const TORRENT_KINDS: CatalogKind[] = ['movie', 'tv_show', 'album'];
 
 export const STREAMABLE_KINDS: CatalogKind[] = ['youtube_video', 'movie', 'tv_show'];

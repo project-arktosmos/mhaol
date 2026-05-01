@@ -11,7 +11,6 @@ const TMDB_BASE: &str = "https://api.themoviedb.org/3";
 const TMDB_IMG_BASE: &str = "https://image.tmdb.org/t/p";
 const MUSICBRAINZ_BASE: &str = "https://musicbrainz.org/ws/2";
 const COVERART_BASE: &str = "https://coverartarchive.org";
-const RA_BASE: &str = "https://retroachievements.org/API";
 const PIPED_BASE: &str = "https://pipedapi.kavin.rocks";
 const USER_AGENT: &str = "Mhaol/0.0.1 (https://github.com/project-arktosmos/mhaol)";
 
@@ -42,14 +41,6 @@ pub const ADDONS: &[Addon] = &[
         label: "MusicBrainz",
         kind: "album",
         filter_label: "Genre",
-        has_filter: true,
-        browsable: true,
-    },
-    Addon {
-        id: "retroachievements",
-        label: "RetroAchievements",
-        kind: "game",
-        filter_label: "Console",
         has_filter: true,
         browsable: true,
     },
@@ -277,7 +268,6 @@ async fn popular(
         "tmdb-movie" => tmdb_popular(false, q.filter.as_deref(), page).await,
         "tmdb-tv" => tmdb_popular(true, q.filter.as_deref(), page).await,
         "musicbrainz" => musicbrainz_popular(q.filter.as_deref(), page).await,
-        "retroachievements" => retroachievements_popular(q.filter.as_deref(), page).await,
         "youtube-video" => youtube_popular(false, q.filter.as_deref(), page).await,
         "youtube-channel" => youtube_popular(true, q.filter.as_deref(), page).await,
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page)),
@@ -304,7 +294,6 @@ async fn search(
         "tmdb-movie" => tmdb_search(false, trimmed, page).await,
         "tmdb-tv" => tmdb_search(true, trimmed, page).await,
         "musicbrainz" => musicbrainz_search(trimmed, page).await,
-        "retroachievements" => retroachievements_search(trimmed, q.filter.as_deref(), page).await,
         "youtube-video" => youtube_search(false, trimmed, page).await,
         "youtube-channel" => youtube_search(true, trimmed, page).await,
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page)),
@@ -325,7 +314,6 @@ async fn genres(
         "tmdb-movie" => tmdb_genres(false).await,
         "tmdb-tv" => tmdb_genres(true).await,
         "musicbrainz" => Ok(static_music_genres()),
-        "retroachievements" => Ok(static_ra_consoles()),
         "youtube-video" | "youtube-channel" => Ok(static_youtube_regions()),
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(Vec::new()),
         _ => Err(err(
@@ -362,7 +350,6 @@ async fn artists_for_item(
         "musicbrainz" => musicbrainz_artists(&id).await?,
         "tmdb-movie" => tmdb_credits(false, &id).await?,
         "tmdb-tv" => tmdb_credits(true, &id).await?,
-        "retroachievements" => retroachievements_credits(&id).await?,
         "youtube-video" => youtube_video_artists(&id).await?,
         "youtube-channel" => youtube_channel_artists(&id).await?,
         _ => Vec::new(),
@@ -920,320 +907,6 @@ fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
         poster_url,
         backdrop_url: None,
     }
-}
-
-// ---------- RetroAchievements ----------
-
-const RA_CONSOLES: &[(i64, &str)] = &[
-    (1, "Genesis/Mega Drive"),
-    (2, "Nintendo 64"),
-    (3, "SNES/Super Famicom"),
-    (4, "Game Boy"),
-    (5, "Game Boy Advance"),
-    (6, "Game Boy Color"),
-    (7, "NES/Famicom"),
-    (8, "PC Engine/TurboGrafx-16"),
-    (9, "Atari 2600"),
-    (10, "Atari 7800"),
-    (11, "Master System"),
-    (12, "PlayStation"),
-    (13, "Atari Lynx"),
-    (14, "Neo Geo Pocket"),
-    (17, "Atari Jaguar"),
-    (18, "Nintendo DS"),
-    (21, "PlayStation 2"),
-    (47, "Nintendo GameCube"),
-];
-
-fn static_ra_consoles() -> Vec<CatalogGenre> {
-    RA_CONSOLES
-        .iter()
-        .map(|(id, name)| CatalogGenre {
-            id: id.to_string(),
-            name: (*name).to_string(),
-        })
-        .collect()
-}
-
-async fn retroachievements_popular(
-    console_id: Option<&str>,
-    page: i64,
-) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
-    let user = std::env::var("RA_API_USER")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("RA_USERNAME").ok().filter(|s| !s.is_empty()))
-        .or_else(|| std::env::var("RA_USER").ok().filter(|s| !s.is_empty()));
-    let key = std::env::var("RA_API_KEY").ok().filter(|s| !s.is_empty());
-    let (Some(user), Some(key)) = (user, key) else {
-        return Err(err(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "RA_API_USER and RA_API_KEY env vars must be set on the cloud server",
-        ));
-    };
-    let console = console_id
-        .filter(|s| !s.is_empty())
-        .and_then(|s| s.parse::<i64>().ok())
-        .unwrap_or(1);
-    let url = format!(
-        "{}/API_GetGameList.php?z={}&y={}&i={}&h=1",
-        RA_BASE,
-        urlencoding(&user),
-        urlencoding(&key),
-        console
-    );
-    let payload: serde_json::Value = http_get_json(
-        &url,
-        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
-    )
-    .await?;
-    let arr = payload.as_array().cloned().unwrap_or_default();
-    let mut games: Vec<&serde_json::Value> = arr
-        .iter()
-        .filter(|g| {
-            g.get("NumAchievements")
-                .and_then(|v| v.as_i64())
-                .map(|n| n > 0)
-                .unwrap_or(false)
-        })
-        .collect();
-    games.sort_by(|a, b| {
-        let ap = a
-            .get("NumDistinctPlayersHardcore")
-            .or_else(|| a.get("NumDistinctPlayers"))
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        let bp = b
-            .get("NumDistinctPlayersHardcore")
-            .or_else(|| b.get("NumDistinctPlayers"))
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        bp.cmp(&ap)
-    });
-    let limit: usize = 20;
-    let total_pages = ((games.len() as f64) / (limit as f64)).ceil() as i64;
-    let offset = ((page - 1).max(0) as usize) * limit;
-    let items: Vec<CatalogItem> = games
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .map(retroachievements_to_item)
-        .collect();
-    Ok(CatalogPage {
-        items,
-        page,
-        total_pages: total_pages.max(1),
-    })
-}
-
-fn retroachievements_to_item(g: &serde_json::Value) -> CatalogItem {
-    let id = g
-        .get("ID")
-        .map(|v| v.to_string())
-        .unwrap_or_else(|| "".to_string());
-    let title = g
-        .get("Title")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let year = g
-        .get("Released")
-        .and_then(|v| v.as_str())
-        .and_then(|s| s.get(s.len().saturating_sub(4)..))
-        .and_then(|s| s.parse::<i32>().ok());
-    let console_name = g
-        .get("ConsoleName")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let genre = g
-        .get("Genre")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or("");
-    let mut description = console_name;
-    if !genre.is_empty() {
-        if !description.is_empty() {
-            description.push_str(" · ");
-        }
-        description.push_str(genre);
-    }
-    let poster_url = g
-        .get("ImageBoxArt")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .or_else(|| g.get("ImageIcon").and_then(|v| v.as_str()))
-        .filter(|s| !s.is_empty())
-        .map(|p| {
-            if p.starts_with("http") {
-                p.to_string()
-            } else {
-                format!("https://media.retroachievements.org{}", p)
-            }
-        });
-    CatalogItem {
-        id,
-        title,
-        year,
-        description: if description.is_empty() {
-            None
-        } else {
-            Some(description)
-        },
-        poster_url,
-        backdrop_url: None,
-    }
-}
-
-pub(crate) async fn retroachievements_search(
-    query: &str,
-    console_id: Option<&str>,
-    page: i64,
-) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
-    let user = std::env::var("RA_API_USER")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("RA_USERNAME").ok().filter(|s| !s.is_empty()))
-        .or_else(|| std::env::var("RA_USER").ok().filter(|s| !s.is_empty()));
-    let key = std::env::var("RA_API_KEY").ok().filter(|s| !s.is_empty());
-    let (Some(user), Some(key)) = (user, key) else {
-        return Err(err(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "RA_API_USER and RA_API_KEY env vars must be set on the cloud server",
-        ));
-    };
-    // RetroAchievements has no global title-search endpoint; their game list
-    // is per-console. If the caller passes a `filter` (console id) we honor
-    // it, otherwise we sweep every console we know about.
-    let consoles: Vec<i64> = match console_id
-        .filter(|s| !s.is_empty())
-        .and_then(|s| s.parse::<i64>().ok())
-    {
-        Some(id) => vec![id],
-        None => RA_CONSOLES.iter().map(|(id, _)| *id).collect(),
-    };
-    let needle = query.to_lowercase();
-    let mut tasks = Vec::with_capacity(consoles.len());
-    for c in consoles {
-        let url = format!(
-            "{}/API_GetGameList.php?z={}&y={}&i={}&h=1",
-            RA_BASE,
-            urlencoding(&user),
-            urlencoding(&key),
-            c
-        );
-        tasks.push(tokio::spawn(async move {
-            http_get_json(&url, &[("Accept", "application/json"), ("User-Agent", USER_AGENT)]).await
-        }));
-    }
-    let mut matches: Vec<serde_json::Value> = Vec::new();
-    for t in tasks {
-        let Ok(Ok(payload)) = t.await else { continue };
-        let Some(arr) = payload.as_array() else { continue };
-        for g in arr {
-            let title = g.get("Title").and_then(|v| v.as_str()).unwrap_or("");
-            let has_achievements = g
-                .get("NumAchievements")
-                .and_then(|v| v.as_i64())
-                .map(|n| n > 0)
-                .unwrap_or(false);
-            if has_achievements && title.to_lowercase().contains(&needle) {
-                matches.push(g.clone());
-            }
-        }
-    }
-    matches.sort_by(|a, b| {
-        let ap = a
-            .get("NumDistinctPlayersHardcore")
-            .or_else(|| a.get("NumDistinctPlayers"))
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        let bp = b
-            .get("NumDistinctPlayersHardcore")
-            .or_else(|| b.get("NumDistinctPlayers"))
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        bp.cmp(&ap)
-    });
-    let limit: usize = 20;
-    let total_pages = ((matches.len() as f64) / (limit as f64)).ceil() as i64;
-    let offset = ((page - 1).max(0) as usize) * limit;
-    let items: Vec<CatalogItem> = matches
-        .iter()
-        .skip(offset)
-        .take(limit)
-        .map(retroachievements_to_item)
-        .collect();
-    Ok(CatalogPage {
-        items,
-        page,
-        total_pages: total_pages.max(1),
-    })
-}
-
-async fn retroachievements_credits(
-    game_id: &str,
-) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
-    let user = std::env::var("RA_API_USER")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("RA_USERNAME").ok().filter(|s| !s.is_empty()))
-        .or_else(|| std::env::var("RA_USER").ok().filter(|s| !s.is_empty()));
-    let key = std::env::var("RA_API_KEY").ok().filter(|s| !s.is_empty());
-    let (Some(user), Some(key)) = (user, key) else {
-        return Err(err(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "RA_API_USER and RA_API_KEY env vars must be set on the cloud server",
-        ));
-    };
-    let url = format!(
-        "{}/API_GetGame.php?z={}&y={}&i={}",
-        RA_BASE,
-        urlencoding(&user),
-        urlencoding(&key),
-        urlencoding(game_id)
-    );
-    let payload: serde_json::Value = http_get_json(
-        &url,
-        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
-    )
-    .await?;
-
-    let mut out: Vec<CatalogArtist> = Vec::new();
-    let push_role = |out: &mut Vec<CatalogArtist>, role: &str, value: Option<&str>| {
-        if let Some(v) = value.and_then(|s| {
-            let trimmed = s.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        }) {
-            for piece in v.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()) {
-                out.push(CatalogArtist {
-                    name: piece.to_string(),
-                    role: Some(role.to_string()),
-                    image_url: None,
-                });
-            }
-        }
-    };
-    push_role(
-        &mut out,
-        "Developer",
-        payload.get("Developer").and_then(|v| v.as_str()),
-    );
-    push_role(
-        &mut out,
-        "Publisher",
-        payload.get("Publisher").and_then(|v| v.as_str()),
-    );
-    push_role(
-        &mut out,
-        "Genre",
-        payload.get("Genre").and_then(|v| v.as_str()),
-    );
-    Ok(out)
 }
 
 // ---------- YouTube ----------

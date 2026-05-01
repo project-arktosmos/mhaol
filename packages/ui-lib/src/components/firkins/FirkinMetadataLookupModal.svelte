@@ -16,8 +16,8 @@
 
 	interface Props {
 		open: boolean;
-		// Catalog/remote addon to search (e.g. tmdb-movie, retroachievements).
-		// The caller resolves it via `metadataSearchAddon(firkin.addon)`.
+		// Catalog/remote addon to search (e.g. tmdb-movie, musicbrainz). The
+		// caller resolves it via `metadataSearchAddon(firkin.addon)`.
 		addon: string;
 		// Pre-filled into the search box on open. Usually the firkin's
 		// current title — the parsed-from-filename one for local-* firkins.
@@ -111,8 +111,8 @@
 				Find metadata for "{firkinTitle}"
 			</h2>
 			<p class="mt-1 text-xs text-base-content/60">
-				Searching <span class="badge badge-outline badge-xs">{addon}</span>. Pick a match to apply its
-				title, year, description, and artwork — this rolls the firkin's version forward to a new
+				Searching <span class="badge badge-outline badge-xs">{addon}</span>. Pick a match to apply
+				its title, year, description, and artwork — this rolls the firkin's version forward to a new
 				CID.
 			</p>
 		</header>
@@ -125,7 +125,7 @@
 				onkeydown={handleKey}
 			/>
 			<button
-				class="btn btn-primary btn-sm"
+				class="btn btn-sm btn-primary"
 				onclick={runSearch}
 				disabled={searching || !query.trim()}
 			>
@@ -172,7 +172,7 @@
 							{/if}
 						</div>
 						<button
-							class="btn btn-primary btn-sm self-center"
+							class="btn self-center btn-sm btn-primary"
 							onclick={() => pick(item)}
 							disabled={applyingId !== null}
 						>

@@ -33,9 +33,7 @@
 				? 'movies'
 				: selection.type === 'tv'
 					? 'tv'
-					: selection.type === 'music'
-						? 'music'
-						: 'games';
+					: 'music';
 		return $configStore[key];
 	});
 
@@ -63,7 +61,6 @@
 		const maxLE = Math.max(1, ...raw.map((r) => r.leechers));
 		const prefLang = (mediaConfig?.preferredLanguage ?? '').toLowerCase();
 		const prefQuality = (mediaConfig?.preferredQuality ?? '').toLowerCase();
-		const prefConsole = (mediaConfig?.preferredConsole ?? '').toLowerCase();
 		const scored = raw
 			.map((r) => {
 				const sePct = Math.round((r.seeders / maxSE) * 100);
@@ -71,12 +68,9 @@
 				const relPct = r.analysis?.relevance ?? 0;
 				const langStr = String(r.analysis?.languages ?? '');
 				const qualStr = String(r.analysis?.quality ?? '');
-				const reasonStr = String(r.analysis?.reason ?? '');
 				const langBonus = prefLang && langStr.toLowerCase().includes(prefLang) ? 100 : 0;
 				const qualityBonus = prefQuality && qualStr.toLowerCase().includes(prefQuality) ? 100 : 0;
-				const consoleBonus =
-					prefConsole && reasonStr.toLowerCase().includes('console matches') ? 100 : 0;
-				return { r, score: sePct + lePct + relPct + langBonus + qualityBonus + consoleBonus };
+				return { r, score: sePct + lePct + relPct + langBonus + qualityBonus };
 			})
 			.sort((a, b) => b.score - a.score);
 		for (const { r } of scored) {
@@ -120,9 +114,6 @@
 					break;
 				case 'movie':
 					subdir = 'movies';
-					break;
-				case 'game':
-					subdir = 'games';
 					break;
 				default:
 					subdir = 'tv';

@@ -64,11 +64,6 @@ Create a `.env` file in the repo root. The cloud server sources this automatical
 TMDB_API_KEY=
 TMDB_READ_ACCESS_TOKEN=
 
-# Optional — RetroAchievements game metadata
-# Get your key at: https://retroachievements.org/settings -> Keys
-RA_API_USER=
-RA_API_KEY=
-
 # Optional — Identity wallet (auto-generated if not set)
 # 32-byte hex private key for the signaling identity
 SIGNALING_WALLET=
@@ -78,7 +73,7 @@ METERED_DOMAIN=
 METERED_SECRET_KEY=
 ```
 
-Without any env vars, the cloud server will still start — TMDB and RetroAchievements features just won't work, and a wallet will be auto-generated.
+Without any env vars, the cloud server will still start — TMDB features just won't work, and a wallet will be auto-generated.
 
 ---
 
@@ -205,7 +200,7 @@ mhaol.git/
 │   └── signaling/         # Rust signaling server
 ├── packages/
 │   ├── ui-lib/            # Shared components, services, types, CSS
-│   ├── addons/            # TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, Wyzie subs
+│   ├── addons/            # TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subs
 │   ├── webrtc/            # WebRTC contact handshake layer
 │   ├── signaling/         # PartyKit signaling (cloud)
 │   ├── identity/          # Rust Ethereum identity (secp256k1)

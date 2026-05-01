@@ -30,9 +30,6 @@ const defaultConfigs: SmartSearchAllConfigs = {
 	},
 	music: {
 		preferredQuality: 'FLAC'
-	},
-	games: {
-		preferredConsole: ''
 	}
 };
 
@@ -65,8 +62,6 @@ function getSubdir(selection: SmartSearchSelection): string {
 			return 'tv';
 		case 'music':
 			return 'music';
-		case 'game':
-			return 'games';
 	}
 }
 
@@ -79,8 +74,6 @@ function getLibraryTypes(selectionType: SmartSearchSelection['type']): string[] 
 			return ['tv'];
 		case 'music':
 			return ['audio', 'music'];
-		case 'game':
-			return ['games'];
 	}
 }
 
@@ -269,10 +262,6 @@ class SmartSearchService {
 				cat = 100;
 				queries = [`${selection.artist} ${title}`];
 				break;
-			case 'game':
-				cat = 400;
-				queries = [`${title} ${selection.consoleName}`];
-				break;
 			case 'movie':
 				cat = 200;
 				queries = [`${title} ${year}`];
@@ -356,18 +345,11 @@ class SmartSearchService {
 
 	private async analyzeResults(selection: SmartSearchSelection, analyzeHashes: Set<string>) {
 		const artist = selection.type === 'music' ? selection.artist : undefined;
-		const consoleName = selection.type === 'game' ? selection.consoleName : undefined;
 
 		this.store.update((s) => {
 			const results = s.searchResults.map((r) => {
 				if (!analyzeHashes.has(r.infoHash)) return r;
-				const analysis = parseTorrentName(
-					r.name,
-					selection.title,
-					selection.year,
-					artist,
-					consoleName
-				);
+				const analysis = parseTorrentName(r.name, selection.title, selection.year, artist);
 				return { ...r, analysis };
 			});
 			return { ...s, searchResults: results, analyzing: false };
@@ -895,43 +877,6 @@ class SmartSearchService {
 		}
 	}
 
-	async checkGameFetchCache(retroachievementsId: number): Promise<SmartSearchTorrentResult | null> {
-		try {
-			const res = await fetchRaw(
-				`/api/catalog/fetch-cache-by-source?source=retroachievements&sourceId=${retroachievementsId}&kind=game&scope=default&scopeKey=`
-			);
-			if (!res.ok) return null;
-			const data = await res.json();
-			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
-			candidate.uploadedAt = new Date(candidate.uploadedAt);
-			return candidate;
-		} catch {
-			return null;
-		}
-	}
-
-	async saveGameFetchCache(
-		retroachievementsId: number,
-		candidate: SmartSearchTorrentResult
-	): Promise<void> {
-		try {
-			await fetchRaw('/api/catalog/fetch-cache-by-source', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					source: 'retroachievements',
-					sourceId: String(retroachievementsId),
-					kind: 'game',
-					scope: 'default',
-					scopeKey: '',
-					candidate
-				})
-			});
-		} catch {
-			// best-effort
-		}
-	}
-
 	async startDownload(candidate: SmartSearchTorrentResult): Promise<string | null> {
 		const selection = this.getSelection();
 		if (!selection) return null;
@@ -1108,9 +1053,6 @@ class SmartSearchService {
 					case 'tv':
 						libName = 'TV Shows';
 						break;
-					case 'game':
-						libName = 'Games';
-						break;
 				}
 				const createRes = await fetchRaw('/api/libraries', {
 					method: 'POST',
@@ -1135,11 +1077,6 @@ class SmartSearchService {
 					pendingName = `${selection.artist} - ${selection.title}`;
 					mediaType = 'audio';
 					categoryId = 'audio-uncategorized';
-					break;
-				case 'game':
-					pendingName = `${selection.title} (${selection.consoleName})`;
-					mediaType = 'video';
-					categoryId = 'games';
 					break;
 				default:
 					pendingName = selection.title;
@@ -1224,16 +1161,6 @@ class SmartSearchService {
 					title: item.title,
 					year: item.year ?? '',
 					artist: formatAuthors(item.metadata.authors, 'artist'),
-					mode
-				};
-				break;
-			case 'game':
-				selection = {
-					type: 'game',
-					retroachievementsId: item.metadata.retroachievementsId,
-					title: item.title,
-					year: item.year ?? '',
-					consoleName: item.metadata.consoleName,
 					mode
 				};
 				break;

@@ -9,7 +9,6 @@ export const FIRKIN_ADDONS = [
 	'tmdb-movie',
 	'tmdb-tv',
 	'musicbrainz',
-	'retroachievements',
 	'youtube-video',
 	'youtube-channel',
 	'wyzie-subs-movie',
@@ -31,7 +30,6 @@ export const ADDON_KIND: Record<FirkinAddon, FirkinKind> = {
 	'tmdb-movie': 'movie',
 	'tmdb-tv': 'tv show',
 	musicbrainz: 'album',
-	retroachievements: 'game',
 	'youtube-video': 'youtube video',
 	'youtube-channel': 'youtube channel',
 	'wyzie-subs-movie': 'movie',
@@ -65,17 +63,15 @@ export function addonKind(addon: string): FirkinKind | null {
 /// `local-*` firkins resolve to their remote counterpart; remote browsable
 /// addons resolve to themselves so a manually-bookmarked TMDB entry can
 /// still be re-searched. Anything not in the map (wyzie-subs, lrclib,
-/// youtube-*, local-book) returns null and the metadata-search affordance
-/// stays hidden.
+/// youtube-*, local-book, local-game) returns null and the metadata-search
+/// affordance stays hidden.
 const METADATA_SEARCH_ADDON: Record<string, string> = {
 	'local-movie': 'tmdb-movie',
 	'local-tv': 'tmdb-tv',
 	'local-album': 'musicbrainz',
-	'local-game': 'retroachievements',
 	'tmdb-movie': 'tmdb-movie',
 	'tmdb-tv': 'tmdb-tv',
-	musicbrainz: 'musicbrainz',
-	retroachievements: 'retroachievements'
+	musicbrainz: 'musicbrainz'
 };
 
 export function metadataSearchAddon(addon: string): string | null {

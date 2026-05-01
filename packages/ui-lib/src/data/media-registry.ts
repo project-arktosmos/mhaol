@@ -1,6 +1,6 @@
 import type { CatalogKind, CatalogItem } from 'ui-lib/types/catalog.type';
 
-export type FilterKind = 'genre-buttons' | 'console-selector' | 'none';
+export type FilterKind = 'genre-buttons' | 'none';
 
 export interface MediaTypeConfig {
 	slug: string;
@@ -51,18 +51,6 @@ export const MEDIA_REGISTRY: Record<string, MediaTypeConfig> = {
 		features: {
 			libraryItems: 'tv'
 		},
-		selectItemId: (item) => item.sourceId
-	},
-	videogames: {
-		slug: 'videogames',
-		kind: 'game',
-		label: 'Videogames',
-		pinService: 'retroachievements',
-		favService: 'retroachievements',
-		filterKind: 'console-selector',
-		hasRecs: true,
-		recsMediaType: 'game',
-		features: {},
 		selectItemId: (item) => item.sourceId
 	},
 	music: {

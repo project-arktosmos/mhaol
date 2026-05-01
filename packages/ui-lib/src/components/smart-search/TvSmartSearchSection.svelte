@@ -63,8 +63,7 @@
 	let scoredResults = $derived(
 		scoreResults(activeResults, {
 			preferredLanguage,
-			preferredQuality,
-			preferredConsole: ''
+			preferredQuality
 		})
 	);
 
