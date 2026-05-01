@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { get } from 'svelte/store';
+	import classNames from 'classnames';
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
@@ -57,6 +58,9 @@
 			$playerState.firkinId === firkin.id &&
 			Boolean($playerState.directStreamUrl)
 	);
+
+	type StreamSource = 'trailer' | 'ipfs' | 'torrent';
+	let activeSource = $state<StreamSource>('trailer');
 
 	onDestroy(() => {
 		const state = get(playerService.state);
@@ -362,14 +366,18 @@
 		})();
 	});
 
-	const torrentStreamButtonDisabled = $derived(
-		!firstMagnet ||
-			streamEval.kind === 'idle' ||
-			streamEval.kind === 'evaluating' ||
-			streamEval.kind === 'not-streamable' ||
-			torrentStreamStarting
+	const trailerTabEnabled = $derived(isTmdbMovie || isTmdbTv);
+	const ipfsTabEnabled = $derived(hasIpfsFiles);
+	const torrentTabEnabled = $derived(streamEval.kind === 'streamable');
+	const anyTabEnabled = $derived(trailerTabEnabled || ipfsTabEnabled || torrentTabEnabled);
+
+	const trailerTabTitle = $derived(trailerTabEnabled ? 'Show trailer' : 'No trailer for this item');
+	const ipfsTabTitle = $derived(
+		ipfsTabEnabled
+			? 'Stream over IPFS as HLS'
+			: 'Available once at least one file is pinned to IPFS'
 	);
-	const torrentStreamButtonTitle = $derived.by(() => {
+	const torrentTabTitle = $derived.by(() => {
 		if (!firstMagnet) return 'Available once a torrent magnet is attached';
 		switch (streamEval.kind) {
 			case 'idle':
@@ -381,19 +389,34 @@
 				return `Stream "${streamEval.fileName}" as it downloads`;
 		}
 	});
-	const torrentStreamButtonLabel = $derived.by(() => {
-		if (torrentStreamStarting) return 'Starting…';
+	const torrentTabSuffix = $derived.by(() => {
+		if (torrentStreamStarting) return ' — starting…';
 		switch (streamEval.kind) {
 			case 'idle':
-				return 'Torrent Stream';
 			case 'evaluating':
-				return 'Probing…';
+				return ' — probing…';
 			case 'not-streamable':
-				return 'Not streamable';
+				return ' — unavailable';
 			case 'streamable':
-				return 'Torrent Stream';
+				return '';
 		}
 	});
+
+	function selectSource(source: StreamSource): void {
+		if (source === activeSource) return;
+		activeSource = source;
+		if (source === 'trailer') {
+			const s = get(playerService.state);
+			const m = get(playerService.displayMode);
+			if (m === 'inline' && s.firkinId === firkin.id && Boolean(s.directStreamUrl)) {
+				void playerService.stop();
+			}
+		} else if (source === 'ipfs') {
+			void startIpfsPlay();
+		} else if (source === 'torrent') {
+			void startTorrentStream();
+		}
+	}
 
 	async function startTorrentStream(): Promise<void> {
 		if (!firstMagnet || torrentStreamStarting) return;
@@ -845,48 +868,6 @@
 					<span>{finalizing ? 'Pinning…' : 'Play'}</span>
 				</button>
 			{/if}
-			<button
-				type="button"
-				class="btn gap-2 btn-sm btn-secondary"
-				onclick={startIpfsPlay}
-				disabled={!hasIpfsFiles || ipfsStarting}
-				aria-label="IPFS Play"
-				title={hasIpfsFiles
-					? 'Stream over IPFS as HLS'
-					: 'Available once at least one file is pinned to IPFS'}
-			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					fill="currentColor"
-					stroke="none"
-					class="h-4 w-4 shrink-0"
-					aria-hidden="true"
-				>
-					<polygon points="6 4 20 12 6 20 6 4" />
-				</svg>
-				<span>{ipfsStarting ? 'Starting…' : 'IPFS Play'}</span>
-			</button>
-			<button
-				type="button"
-				class="btn gap-2 btn-sm btn-accent"
-				onclick={startTorrentStream}
-				disabled={torrentStreamButtonDisabled}
-				aria-label="Torrent Stream"
-				title={torrentStreamButtonTitle}
-			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					fill="currentColor"
-					stroke="none"
-					class="h-4 w-4 shrink-0"
-					aria-hidden="true"
-				>
-					<polygon points="6 4 20 12 6 20 6 4" />
-				</svg>
-				<span>{torrentStreamButtonLabel}</span>
-			</button>
 			{#if needsMetadata && lookupAddon}
 				<button
 					type="button"
@@ -943,23 +924,78 @@
 		</aside>
 
 		<section class="flex flex-col gap-6">
-			{#if isInlinePlayingThisFirkin}
-				<PlayerVideo
-					file={$playerState.currentFile}
-					connectionState={$playerState.connectionState}
-					positionSecs={$playerState.positionSecs}
-					durationSecs={$playerState.durationSecs}
-					buffering={$playerState.buffering}
-					poster={trailerThumb}
-					directStreamUrl={$playerState.directStreamUrl}
-					directStreamMimeType={$playerState.directStreamMimeType}
-				/>
-			{:else if isTmdbMovie || isTmdbTv}
-				<CatalogTrailerPlayer
-					posterUrl={trailerThumb}
-					youtubeUrl={firstTrailerUrl}
-					title={firkin.title}
-				/>
+			{#if anyTabEnabled}
+				<div class="flex flex-col gap-2">
+					<div role="tablist" class="tabs-bordered tabs">
+						<button
+							type="button"
+							role="tab"
+							class={classNames('tab', { 'tab-active': activeSource === 'trailer' })}
+							disabled={!trailerTabEnabled}
+							onclick={() => selectSource('trailer')}
+							title={trailerTabTitle}
+						>
+							Trailer
+						</button>
+						<button
+							type="button"
+							role="tab"
+							class={classNames('tab', { 'tab-active': activeSource === 'ipfs' })}
+							disabled={!ipfsTabEnabled || ipfsStarting}
+							onclick={() => selectSource('ipfs')}
+							title={ipfsTabTitle}
+						>
+							IPFS Stream{ipfsStarting ? ' — starting…' : ''}
+						</button>
+						<button
+							type="button"
+							role="tab"
+							class={classNames('tab', { 'tab-active': activeSource === 'torrent' })}
+							disabled={!torrentTabEnabled || torrentStreamStarting}
+							onclick={() => selectSource('torrent')}
+							title={torrentTabTitle}
+						>
+							Torrent Stream{torrentTabSuffix}
+						</button>
+					</div>
+
+					{#if (activeSource === 'ipfs' || activeSource === 'torrent') && isInlinePlayingThisFirkin}
+						<PlayerVideo
+							file={$playerState.currentFile}
+							connectionState={$playerState.connectionState}
+							positionSecs={$playerState.positionSecs}
+							durationSecs={$playerState.durationSecs}
+							buffering={$playerState.buffering}
+							poster={trailerThumb}
+							directStreamUrl={$playerState.directStreamUrl}
+							directStreamMimeType={$playerState.directStreamMimeType}
+						/>
+					{:else if (activeSource === 'ipfs' && ipfsStarting) || (activeSource === 'torrent' && torrentStreamStarting)}
+						<div
+							class="flex aspect-video w-full items-center justify-center overflow-hidden rounded-md bg-black text-white"
+						>
+							<div class="text-center">
+								<span class="loading loading-lg loading-spinner"></span>
+								<p class="mt-2 text-sm opacity-70">
+									Starting {activeSource === 'ipfs' ? 'IPFS' : 'torrent'} stream…
+								</p>
+							</div>
+						</div>
+					{:else if activeSource === 'trailer' && trailerTabEnabled}
+						<CatalogTrailerPlayer
+							posterUrl={trailerThumb}
+							youtubeUrl={firstTrailerUrl}
+							title={firkin.title}
+						/>
+					{:else if firkin.images[1]}
+						<img
+							src={firkin.images[1].url}
+							alt={firkin.title}
+							loading="lazy"
+							class="w-full rounded-md object-cover"
+						/>
+					{/if}
+				</div>
 			{:else if firkin.images[1]}
 				<img
 					src={firkin.images[1].url}
