@@ -759,6 +759,7 @@
 		seasonNumber: number | null;
 		airYear: number | null;
 		youtubeUrl: string | null;
+		language: string | null;
 		status: 'idle' | 'pending' | 'searching' | 'found' | 'missing' | 'error';
 	};
 	let trailers = $state<TrailerEntry[]>([]);
@@ -795,6 +796,7 @@
 					seasonNumber: null,
 					airYear: firkin.year,
 					youtubeUrl: existing.youtubeUrl,
+					language: existing.language ?? null,
 					status: 'idle'
 				}
 			];
@@ -817,6 +819,7 @@
 							seasonNumber: null,
 							airYear: firkin.year,
 							youtubeUrl: first.youtubeUrl,
+							language: first.language ?? null,
 							status: 'idle'
 						}
 					];
@@ -841,6 +844,7 @@
 				seasonNumber: null,
 				airYear: firkin.year,
 				youtubeUrl: null,
+				language: null,
 				status: 'searching'
 			}
 		];
@@ -879,6 +883,7 @@
 				seasonNumber: parseSeasonNumberFromLabel(t.label ?? ''),
 				airYear: null,
 				youtubeUrl: t.youtubeUrl,
+				language: t.language ?? null,
 				status: 'idle' as const
 			}));
 			trailersStatus = 'done';
@@ -940,6 +945,7 @@
 			seasonNumber: null,
 			airYear: null,
 			youtubeUrl: t.youtubeUrl,
+			language: t.language ?? null,
 			status: 'idle' as const
 		}));
 		const seasonEntries: TrailerEntry[] = seasons.map((s) => ({
@@ -948,13 +954,14 @@
 			seasonNumber: s.seasonNumber,
 			airYear: s.airYear,
 			youtubeUrl: null,
+			language: null,
 			status: 'pending' as const
 		}));
 		trailers = [...tmdbEntries, ...seasonEntries];
 		trailersStatus = 'done';
 		const resolved: Trailer[] = tmdbShowTrailers
 			.filter((t): t is Trailer & { youtubeUrl: string } => Boolean(t.youtubeUrl))
-			.map((t) => ({ youtubeUrl: t.youtubeUrl, label: t.label }));
+			.map((t) => ({ youtubeUrl: t.youtubeUrl, label: t.label, language: t.language }));
 		for (let i = 0; i < trailers.length; i++) {
 			if (myRun !== trailersRun) return;
 			const entry = trailers[i];

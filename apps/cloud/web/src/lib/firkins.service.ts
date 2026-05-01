@@ -108,11 +108,15 @@ export interface FileEntry {
 
 /**
  * A YouTube trailer attached to a firkin. Movies hold one; TV shows
- * hold one per season with `label` set to the season name.
+ * hold one per season with `label` set to the season name. `language`
+ * is the ISO 639-1 code from upstream (e.g. `"en"`) when known —
+ * TMDB-sourced trailers carry it; YouTube-fallback trailers usually
+ * leave it unset.
  */
 export interface Trailer {
 	youtubeUrl: string;
 	label?: string;
+	language?: string;
 }
 
 export interface Firkin {

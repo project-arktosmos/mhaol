@@ -46,15 +46,22 @@ pub struct FileEntry {
 
 /// A YouTube trailer attached to a firkin. Movies carry a single trailer
 /// for the film; TV shows carry one per season (with `label` set to the
-/// season name, e.g. `"Season 1"`). Resolved client-side via the same
-/// double-dip YouTube extraction stack the music-track flow uses, then
-/// persisted on the firkin so subsequent visits don't re-search.
+/// season name, e.g. `"Season 1"`). The primary source is TMDB (via the
+/// `videos` block of the catalog detail response — see
+/// `apps/cloud/src/catalog.rs::parse_tmdb_videos`), filtered to English
+/// (`iso_639_1 == "en"`); the YouTube fuzzy search is the fallback. The
+/// optional `language` carries the ISO 639-1 code from upstream when
+/// known. `language` is `skip_serializing_if = "Option::is_none"` so
+/// existing firkin CIDs (which don't have it) stay stable across the
+/// deserialise → re-serialise round-trip.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Trailer {
     #[serde(rename = "youtubeUrl")]
     pub youtube_url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 fn slice_is_empty<T>(s: &[T]) -> bool {
@@ -519,9 +526,14 @@ async fn create(
                 .label
                 .map(|l| l.trim().to_string())
                 .filter(|l| !l.is_empty());
+            let language = t
+                .language
+                .map(|l| l.trim().to_ascii_lowercase())
+                .filter(|l| !l.is_empty());
             Some(Trailer {
                 youtube_url: url,
                 label,
+                language,
             })
         })
         .collect();
@@ -727,9 +739,14 @@ async fn update(
                     .label
                     .map(|l| l.trim().to_string())
                     .filter(|l| !l.is_empty());
+                let language = t
+                    .language
+                    .map(|l| l.trim().to_ascii_lowercase())
+                    .filter(|l| !l.is_empty());
                 Some(Trailer {
                     youtube_url: url,
                     label,
+                    language,
                 })
             })
             .collect();

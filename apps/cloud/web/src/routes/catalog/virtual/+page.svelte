@@ -224,6 +224,7 @@
 		seasonNumber: number | null;
 		airYear: number | null;
 		youtubeUrl: string | null;
+		language: string | null;
 		status: 'pending' | 'searching' | 'found' | 'missing' | 'error';
 	};
 	let trailers = $state<TrailerEntry[]>([]);
@@ -265,6 +266,7 @@
 					seasonNumber: null,
 					airYear: year,
 					youtubeUrl: tmdb.youtubeUrl,
+					language: tmdb.language ?? null,
 					status: 'found'
 				}
 			];
@@ -278,6 +280,7 @@
 				seasonNumber: null,
 				airYear: year,
 				youtubeUrl: null,
+				language: null,
 				status: 'searching'
 			}
 		];
@@ -345,6 +348,7 @@
 			seasonNumber: null,
 			airYear: null,
 			youtubeUrl: t.youtubeUrl,
+			language: t.language ?? null,
 			status: 'found'
 		}));
 		const seasonEntries: TrailerEntry[] = seasons.map((s) => ({
@@ -353,6 +357,7 @@
 			seasonNumber: s.seasonNumber,
 			airYear: s.airYear,
 			youtubeUrl: null,
+			language: null,
 			status: 'pending'
 		}));
 		trailers = [...tmdbEntries, ...seasonEntries];
@@ -387,7 +392,11 @@
 	function resolvedTrailers(): Trailer[] {
 		return trailers
 			.filter((t): t is TrailerEntry & { youtubeUrl: string } => Boolean(t.youtubeUrl))
-			.map((t) => ({ youtubeUrl: t.youtubeUrl, label: t.label ?? undefined }));
+			.map((t) => ({
+				youtubeUrl: t.youtubeUrl,
+				label: t.label ?? undefined,
+				language: t.language ?? undefined
+			}));
 	}
 
 	async function playTrailer(entry: TrailerEntry) {

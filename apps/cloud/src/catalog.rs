@@ -226,14 +226,18 @@ struct CatalogArtist {
 /// `Trailer` shape on a firkin so the frontend can hand the array
 /// verbatim to `POST /api/firkins` (or `PUT /api/firkins/:id`). For
 /// TMDB this is sourced from the `videos` block of the detail
-/// response (`append_to_response=videos`); for non-TMDB addons it
-/// is currently always empty.
+/// response (`append_to_response=videos`); `language` carries TMDB's
+/// `iso_639_1` (lower-case ISO 639-1, e.g. `"en"`) so the frontend
+/// can show / filter trailers by spoken language. Non-TMDB addons
+/// currently leave `language` unset.
 #[derive(Serialize)]
 struct CatalogTrailer {
     #[serde(rename = "youtubeUrl")]
     youtube_url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
 }
 
 /// Combined metadata payload for a single catalog item. Returned by
@@ -681,7 +685,10 @@ fn parse_tmdb_credits(credits: &serde_json::Value) -> Vec<CatalogArtist> {
 /// Map TMDB's `videos` block into our universal trailer shape. We keep
 /// only YouTube videos whose `type` is `Trailer` (the official trailer
 /// is what the firkin's `trailers` array is for; teasers, clips, and
-/// behind-the-scenes are filtered out). When the upstream entry is
+/// behind-the-scenes are filtered out), AND whose `iso_639_1` is `"en"`
+/// — non-English entries are dropped here so the WebUI surfaces only
+/// English trailers (when none survive the filter the frontend falls
+/// back to the YouTube fuzzy search). When the upstream entry is
 /// flagged `official`, it sorts ahead of fan/redistributed cuts.
 fn parse_tmdb_videos(videos: &serde_json::Value) -> Vec<CatalogTrailer> {
     let Some(arr) = videos.get("results").and_then(|v| v.as_array()) else {
@@ -695,6 +702,18 @@ fn parse_tmdb_videos(videos: &serde_json::Value) -> Vec<CatalogTrailer> {
         }
         let kind = v.get("type").and_then(|s| s.as_str()).unwrap_or("");
         if !kind.eq_ignore_ascii_case("Trailer") {
+            continue;
+        }
+        let language = v
+            .get("iso_639_1")
+            .and_then(|s| s.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_ascii_lowercase());
+        // English-only filter. Foreign-language trailers fall through
+        // to the YouTube fuzzy search on the frontend so the user
+        // doesn't end up with a Spanish/French dub when an English
+        // trailer wasn't on TMDB.
+        if language.as_deref() != Some("en") {
             continue;
         }
         let Some(key) = v
@@ -720,6 +739,7 @@ fn parse_tmdb_videos(videos: &serde_json::Value) -> Vec<CatalogTrailer> {
             CatalogTrailer {
                 youtube_url: format!("https://www.youtube.com/watch?v={key}"),
                 label: name,
+                language,
             },
         ));
     }
