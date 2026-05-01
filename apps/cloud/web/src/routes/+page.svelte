@@ -50,9 +50,6 @@
 			if (typeof d.queued === 'number' && d.queued > 0) parts.push(`${d.queued} queued`);
 		} else if (pkg.name === 'torrent') {
 			if (typeof d.activeTorrents === 'number') parts.push(`${d.activeTorrents} active`);
-		} else if (pkg.name === 'ed2k') {
-			if (d.serverConnected && d.serverName) parts.push(`server: ${d.serverName}`);
-			if (typeof d.activeFiles === 'number') parts.push(`${d.activeFiles} active`);
 		} else if (pkg.name === 'ipfs') {
 			if (typeof d.state === 'string') parts.push(String(d.state).toLowerCase());
 			if (typeof d.connectedPeers === 'number') parts.push(`${d.connectedPeers} peers`);
@@ -210,7 +207,7 @@
 		<section class="flex flex-col gap-3">
 			<h2 class="text-lg font-semibold">Packages</h2>
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-				{#each [{ key: 'yt-dlp', pkg: $state.status.packages.ytDlp }, { key: 'torrent', pkg: $state.status.packages.torrent }, { key: 'ed2k', pkg: $state.status.packages.ed2k }, { key: 'ipfs', pkg: $state.status.packages.ipfs }] as { key, pkg } (key)}
+				{#each [{ key: 'yt-dlp', pkg: $state.status.packages.ytDlp }, { key: 'torrent', pkg: $state.status.packages.torrent }, { key: 'ipfs', pkg: $state.status.packages.ipfs }] as { key, pkg } (key)}
 					<HealthCard
 						label={key}
 						value={packageValue(pkg)}

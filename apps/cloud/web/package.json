@@ -22,8 +22,7 @@
 		"classnames": "^2.5.1",
 		"hls.js": "^1.6.15",
 		"qrcode": "^1.5.4",
-		"viem": "^2.46.3",
-		"webrtc": "workspace:*"
+		"viem": "^2.46.3"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.2",

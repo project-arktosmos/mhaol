@@ -24,7 +24,6 @@ const config = {
 			$services: 'src/services',
 			$transport: 'src/transport',
 			'app-shims': 'src/app-shims',
-			'webrtc/*': '../../../packages/webrtc/src/*',
 			'torrent-search-thepiratebay':
 				'../../../packages/addons/torrent-search-thepiratebay/src/index.ts'
 		}

@@ -7,7 +7,6 @@ members = [
     "packages/identity",
     "packages/yt-dlp",
     "packages/torrent",
-    "packages/ed2k",
     "packages/ipfs-core",
     "packages/ipfs-stream",
 ]

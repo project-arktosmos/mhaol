@@ -3,7 +3,6 @@
 This document guides Claude (and developers) on implementing features in this monorepo. Follow these conventions strictly to maintain consistency across all packages.
 
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
-- `packages/webrtc/CLAUDE.md` — WebRTC contact handshake layer
 - `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`) + cloud WebUI (components, services, types, adapters, utils, CSS/themes, transport layer all live here)
 - `apps/rendezvous/CLAUDE.md` — Private-swarm IPFS bootstrap node + DHT-backed WebRTC signaling
 ---
@@ -21,9 +20,7 @@ mhaol.git/
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── ipfs-stream/                  # Rust HLS-over-IPFS streaming (GStreamer hlssink2)
 │   ├── torrent/                      # Rust torrent implementation
-│   ├── ed2k/                         # Rust eDonkey/ed2k network client (search + add)
-│   ├── ipfs-core/                    # Rust IPFS node (libp2p + Bitswap + Kademlia DHT, embedded)
-│   └── webrtc/                       # WebRTC contact handshake layer (TypeScript)
+│   └── ipfs-core/                    # Rust IPFS node (libp2p + Bitswap + Kademlia DHT, embedded)
 ├── pnpm-workspace.yaml
 └── package.json                      # Root workspace scripts
 ```
@@ -54,7 +51,7 @@ Cross-module imports use the path aliases configured in `svelte.config.js` (see 
 
 ### Cloud
 
-The cloud is a Rust Axum server at `apps/cloud/` that bootstraps an embedded SurrealDB store, an identity manager, and the desktop-only managers (`mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ed2k`, `mhaol-ipfs-core`). It hosts a nested Svelte WebUI that displays cloud health and library/IPFS state. Crate name `mhaol-cloud`, binary `mhaol-cloud`, default port 9898 (in dev, the binary binds 127.0.0.1:9899 and the Vite dev server takes 9898 as the public port).
+The cloud is a Rust Axum server at `apps/cloud/` that bootstraps an embedded SurrealDB store, an identity manager, and the desktop-only managers (`mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ipfs-core`). It hosts a nested Svelte WebUI that displays cloud health and library/IPFS state. Crate name `mhaol-cloud`, binary `mhaol-cloud`, default port 9898 (in dev, the binary binds 127.0.0.1:9899 and the Vite dev server takes 9898 as the public port).
 
 - `apps/cloud/Cargo.toml` — Crate manifest
 - `apps/cloud/src/server.rs` — Binary entry point; opens SurrealDB, spawns workers, serves the embedded WebUI as a fallback to `/api/*`
@@ -91,10 +88,9 @@ The cloud frontend has these screens:
 
 All frontend-to-backend communication goes through `apps/cloud/web/src/transport/`:
 - `transport.type.ts` — `Transport` interface (fetch, subscribe, resolveUrl)
-- `http-transport.ts` — HTTP implementation (wraps browser fetch)
-- `webrtc-transport.ts` — WebRTC RPC implementation (sends requests over data channels)
+- `ws-transport.ts` — WebSocket RPC implementation (sends requests over a peer connection)
 - `fetch-helpers.ts` — `fetchJson()`, `fetchRaw()`, `subscribeSSE()` used by all services
-- `transport-context.ts` — Module-level singleton (`setTransport`/`getTransport`)
+- `transport-context.ts` — Module-level singleton (`setTransport`/`getTransport`); the default fallback talks plain HTTP via `globalThis.fetch`
 - `rpc.type.ts` — RPC message protocol types
 
 ### How the cloud SPA wires up
@@ -312,4 +308,3 @@ When making significant structural changes (new packages, new component director
 - **Root CLAUDE.md** — Monorepo structure, app architecture, workspace scripts
 - **apps/cloud/CLAUDE.md** — Cloud server API modules + routes, **and** the cloud WebUI: components, services, adapters, types, utils, CSS/themes, transport layer
 - **apps/rendezvous/CLAUDE.md** — Rendezvous app
-- **packages/webrtc/CLAUDE.md** — WebRTC contact handshake layer

@@ -1,7 +1,7 @@
 //! Centralized on-disk layout for the cloud app.
 //!
 //! Everything the cloud writes — SurrealDB store, identities, IPFS repo,
-//! torrent / ed2k / yt-dlp downloads, swarm key, rendezvous bootstrap file —
+//! torrent / yt-dlp downloads, swarm key, rendezvous bootstrap file —
 //! lives under a single root directory. By default this is
 //! `<home>/mhaol-cloud/` (resolved per-OS via `dirs::home_dir()`); set
 //! `DATA_DIR` to override.
@@ -60,10 +60,6 @@ pub fn torrents_dir() -> PathBuf {
 /// live separately from `torrents_dir()` to keep real downloads safe.
 pub fn torrent_streams_dir() -> PathBuf {
     downloads_dir().join("torrent-streams")
-}
-
-pub fn ed2k_dir() -> PathBuf {
-    downloads_dir().join("ed2k")
 }
 
 pub fn ipfs_repo_dir() -> PathBuf {

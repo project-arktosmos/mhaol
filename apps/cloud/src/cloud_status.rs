@@ -48,7 +48,6 @@ struct DbStatus {
 struct PackagesHealth {
     yt_dlp: PackageHealth,
     torrent: PackageHealth,
-    ed2k: PackageHealth,
     ipfs: PackageHealth,
 }
 
@@ -108,7 +107,6 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
     let packages = PackagesHealth {
         yt_dlp: yt_dlp_health(&state),
         torrent: torrent_health(&state).await,
-        ed2k: ed2k_health(&state),
         ipfs: ipfs_health(&state).await,
     };
 
@@ -306,48 +304,3 @@ async fn ipfs_health(state: &CloudState) -> PackageHealth {
     }
 }
 
-#[cfg_attr(target_os = "android", allow(unused_variables))]
-fn ed2k_health(state: &CloudState) -> PackageHealth {
-    #[cfg(not(target_os = "android"))]
-    {
-        let initialized = state.ed2k_manager.is_initialized();
-        let stats = state.ed2k_manager.stats();
-        let (status, message) = if !initialized {
-            (
-                "warning",
-                Some("ed2k client not initialized".to_string()),
-            )
-        } else if !stats.server_connected {
-            (
-                "warning",
-                Some("Not connected to an ed2k server".to_string()),
-            )
-        } else {
-            ("ok", None)
-        };
-        return PackageHealth {
-            name: "ed2k",
-            status,
-            available: initialized && stats.server_connected,
-            message,
-            details: serde_json::json!({
-                "initialized": initialized,
-                "serverConnected": stats.server_connected,
-                "serverName": stats.server_name,
-                "activeFiles": stats.active_files,
-                "downloadSpeed": stats.download_speed,
-                "uploadSpeed": stats.upload_speed,
-            }),
-        };
-    }
-    #[cfg(target_os = "android")]
-    {
-        PackageHealth {
-            name: "ed2k",
-            status: "unavailable",
-            available: false,
-            message: Some("Not built for this target".to_string()),
-            details: serde_json::json!({}),
-        }
-    }
-}

@@ -39,8 +39,6 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
 #[cfg(not(target_os = "android"))]
-use mhaol_ed2k::{Ed2kConfig, Ed2kManager};
-#[cfg(not(target_os = "android"))]
 use mhaol_ipfs_core::{IpfsConfig, IpfsManager};
 #[cfg(not(target_os = "android"))]
 use mhaol_torrent::{TorrentConfig, TorrentManager};
@@ -123,46 +121,6 @@ async fn main() {
     };
 
     #[cfg(not(target_os = "android"))]
-    let ed2k_manager = {
-        let manager = Arc::new(Ed2kManager::new());
-        manager.install_arc();
-        let download_path = paths::ed2k_dir();
-        let config = Ed2kConfig {
-            download_path,
-            ..Ed2kConfig::default()
-        };
-        if let Err(e) = manager.initialize(config) {
-            tracing::warn!("[ed2k] init failed: {}", e);
-        }
-        let manager_clone = Arc::clone(&manager);
-        tokio::spawn(async move {
-            loop {
-                match manager_clone.connect_any_server().await {
-                    Ok(server) => {
-                        tracing::info!(
-                            "[ed2k] connected to server {} ({}:{}), users={} files={}",
-                            server.name,
-                            server.host,
-                            server.port,
-                            server.user_count,
-                            server.file_count
-                        );
-                        break;
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "[ed2k] no servers reachable: {} — retrying in 30s",
-                            e
-                        );
-                        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-                    }
-                }
-            }
-        });
-        manager
-    };
-
-    #[cfg(not(target_os = "android"))]
     let ipfs_manager = {
         let manager = Arc::new(IpfsManager::new());
         let manager_clone = Arc::clone(&manager);
@@ -230,8 +188,6 @@ async fn main() {
         ytdl_manager,
         #[cfg(not(target_os = "android"))]
         torrent_manager,
-        #[cfg(not(target_os = "android"))]
-        ed2k_manager,
         #[cfg(not(target_os = "android"))]
         ipfs_manager,
         #[cfg(not(target_os = "android"))]

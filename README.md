@@ -200,12 +200,10 @@ mhaol.git/
 │   └── signaling/         # Rust signaling server
 ├── packages/
 │   ├── addons/            # TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subs
-│   ├── webrtc/            # WebRTC contact handshake layer
 │   ├── signaling/         # PartyKit signaling (cloud)
 │   ├── identity/          # Rust Ethereum identity (secp256k1)
 │   ├── torrent/           # Rust torrent client
 │   ├── yt-dlp/            # Rust yt-dlp wrapper
-│   ├── ed2k/              # Rust eDonkey/ed2k client
 │   └── ipfs/              # Rust embedded IPFS node (libp2p, private swarm)
 ├── .env                   # API keys and secrets (not committed)
 ├── package.json           # Workspace scripts
