@@ -149,13 +149,11 @@ The two catalog detail pages share their full presentation through components in
 
 **Shared components** (`apps/cloud/web/src/components/catalog/`):
 - `CatalogPageHeader.svelte` — back link, title, addon/kind/year badges, optional `extraBadge`, action snippet slot
-- `CatalogDescriptionCard.svelte` — description card
+- `CatalogDescriptionPanel.svelte` — tabbed panel showing the description (default tab), identity (CID / created / updated / version, detail only), and version history (`version_hashes` chain, detail only). Tabs are only rendered when the corresponding props are supplied — virtual pages get a description-only single-tab layout with no tab strip
 - `CatalogImagesCard.svelte` — images grid with metadata
 - `CatalogTrailersCard.svelte` — trailers list driven by a `TrailerResolver`
 - `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`
 - `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval
-- `CatalogIdentityCard.svelte` — CID / created / updated / version (detail only)
-- `CatalogVersionHistoryCard.svelte` — `version_hashes` chain (detail only)
 - `CatalogFilesTable.svelte` — firkin `files` table (detail only)
 
 **Shared resolver services** (`apps/cloud/web/src/services/catalog/`):

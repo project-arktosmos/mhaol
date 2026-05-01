@@ -1,7 +1,7 @@
 <script lang="ts">
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
-	import CatalogDescriptionCard from '$components/catalog/CatalogDescriptionCard.svelte';
+	import CatalogDescriptionPanel from '$components/catalog/CatalogDescriptionPanel.svelte';
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
@@ -314,11 +314,7 @@
 
 		<section class="flex flex-col gap-6">
 			{#if isTmdbMovie || isTmdbTv}
-				<CatalogTrailerPlayer
-					posterUrl={trailerThumb}
-					youtubeUrl={firstTrailerUrl}
-					{title}
-				/>
+				<CatalogTrailerPlayer posterUrl={trailerThumb} youtubeUrl={firstTrailerUrl} {title} />
 			{:else if images[1]}
 				<img
 					src={images[1].url}
@@ -328,7 +324,7 @@
 				/>
 			{/if}
 
-			<CatalogDescriptionCard {description} />
+			<CatalogDescriptionPanel {description} />
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>

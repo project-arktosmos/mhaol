@@ -5,15 +5,13 @@
 		type CatalogLookupItem
 	} from '$components/firkins/FirkinMetadataLookupModal.svelte';
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
-	import CatalogDescriptionCard from '$components/catalog/CatalogDescriptionCard.svelte';
+	import CatalogDescriptionPanel from '$components/catalog/CatalogDescriptionPanel.svelte';
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
 	import CatalogTorrentProgressCard from '$components/catalog/CatalogTorrentProgressCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
-	import CatalogIdentityCard from '$components/catalog/CatalogIdentityCard.svelte';
-	import CatalogVersionHistoryCard from '$components/catalog/CatalogVersionHistoryCard.svelte';
 	import CatalogFilesTable from '$components/catalog/CatalogFilesTable.svelte';
 	import { firkinPlaybackService } from '$services/firkin-playback.service';
 	import { firkinTorrentsService, infoHashFromMagnet } from '$services/firkin-torrents.service';
@@ -909,18 +907,18 @@
 				/>
 			{/if}
 
-			<CatalogDescriptionCard description={firkin.description} />
-
-			<CatalogTorrentProgressCard rows={torrentProgressRows} />
-
-			<CatalogIdentityCard
-				cid={firkin.id}
-				createdAt={firkin.created_at}
-				updatedAt={firkin.updated_at}
-				version={firkin.version ?? 0}
+			<CatalogDescriptionPanel
+				description={firkin.description}
+				identity={{
+					cid: firkin.id,
+					createdAt: firkin.created_at,
+					updatedAt: firkin.updated_at,
+					version: firkin.version ?? 0
+				}}
+				versionHashes={firkin.version_hashes ?? []}
 			/>
 
-			<CatalogVersionHistoryCard versionHashes={firkin.version_hashes ?? []} />
+			<CatalogTorrentProgressCard rows={torrentProgressRows} />
 
 			{#if isTmdbMovie || isTmdbTv}
 				<CatalogTrailersCard resolver={trailerResolver} firkinTitle={firkin.title} {thumb} />
