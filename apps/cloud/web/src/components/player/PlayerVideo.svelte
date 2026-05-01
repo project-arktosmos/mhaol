@@ -8,7 +8,8 @@
 	import type {
 		PlayableFile,
 		PlayableFileSubtitle,
-		PlayerConnectionState
+		PlayerConnectionState,
+		PlayerState
 	} from '$types/player.type';
 	import type { SubtitleSearchContext } from '$types/subtitles.type';
 	import PlayerControls from './PlayerControls.svelte';
@@ -292,8 +293,11 @@
 			playerService.setBuffering(true);
 		};
 		const onPlaying = () => {
-			playerService.setBuffering(false);
-			playerService.setPaused(false);
+			// Coalesce buffering + paused clears into a single store update so
+			// downstream subscribers see one notification instead of two.
+			playerService.state.update((s: PlayerState) =>
+				!s.buffering && !s.isPaused ? s : { ...s, buffering: false, isPaused: false }
+			);
 		};
 		element.addEventListener('error', onError);
 		element.addEventListener('timeupdate', onTimeUpdate);
