@@ -408,29 +408,56 @@ async fn list(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
 
-    // A firkin is "superseded" if its id appears in another firkin's
-    // `version_hashes` (i.e. some newer record has rolled it forward).
-    // Hide superseded ones so list consumers (e.g. the /catalog Library
-    // section) only ever see the current head of each version chain —
-    // even when a previous rollforward attempt left the old record in
-    // place after creating the new one.
+    let docs = collapse_to_chain_heads(docs);
+    let mut dtos = assemble_firkin_dtos(&state, docs).await?;
+    dtos.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    Ok(Json(dtos))
+}
+
+/// Reduce a raw `firkin` table dump to one record per logical media item.
+///
+/// Runs in two passes:
+///
+/// 1. **Drop superseded versions.** A firkin is "superseded" when its id
+///    appears in another firkin's `version_hashes` — i.e. it's an earlier
+///    link in a version chain that has since been rolled forward. This
+///    catches stragglers left behind by a crashed or partial rollforward.
+///
+/// 2. **Collapse parallel chains.** Two distinct chains can share the
+///    same `(addon, title, year)` — one created via the catalog "Bookmark"
+///    button (no files), another from a library scan (files attached, may
+///    have rolled forward several times). Neither references the other,
+///    so the version-hash filter alone leaves both heads visible. Keep
+///    the head with the higher `version` (and the more recent `updated_at`
+///    if tied) so callers see exactly one row per logical item.
+pub(crate) fn collapse_to_chain_heads(docs: Vec<Firkin>) -> Vec<Firkin> {
     let mut superseded: std::collections::HashSet<String> = std::collections::HashSet::new();
     for d in &docs {
         for h in &d.version_hashes {
             superseded.insert(h.clone());
         }
     }
-
-    let docs: Vec<Firkin> = docs
+    let heads: Vec<Firkin> = docs
         .into_iter()
         .filter(|d| {
             let id = d.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
             !superseded.contains(&id)
         })
         .collect();
-    let mut dtos = assemble_firkin_dtos(&state, docs).await?;
-    dtos.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-    Ok(Json(dtos))
+
+    let mut by_key: std::collections::HashMap<(String, String, Option<i32>), Firkin> =
+        std::collections::HashMap::new();
+    for d in heads {
+        let key = (d.addon.clone(), d.title.clone(), d.year);
+        match by_key.get(&key) {
+            Some(existing)
+                if (existing.version, existing.updated_at) >= (d.version, d.updated_at) => {}
+            _ => {
+                by_key.insert(key, d);
+            }
+        }
+    }
+    by_key.into_values().collect()
 }
 
 async fn get_one(
@@ -1044,4 +1071,70 @@ async fn roms(
         StatusCode::NOT_IMPLEMENTED,
         "rom extraction is not supported on this platform",
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use surrealdb::sql::{Id, Thing};
+
+    fn doc(id: &str, title: &str, addon: &str, version: u32, version_hashes: &[&str]) -> Firkin {
+        let now = Utc::now();
+        Firkin {
+            id: Some(Thing::from((TABLE, Id::String(id.to_string())))),
+            title: title.to_string(),
+            artists: Vec::new(),
+            description: String::new(),
+            images: Vec::new(),
+            files: Vec::new(),
+            year: None,
+            addon: addon.to_string(),
+            creator: String::new(),
+            created_at: now,
+            updated_at: now,
+            version,
+            version_hashes: version_hashes.iter().map(|s| s.to_string()).collect(),
+            trailers: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn collapses_parallel_chains_to_highest_version() {
+        // Two distinct chains for the same (addon, title): the bookmark
+        // chain (v=0, no hashes) and the library-scan chain (v=2 with its
+        // own version_hashes that don't overlap the bookmark id).
+        let bookmark = doc("bookmark-cid", "X-Men", "tmdb-movie", 0, &[]);
+        let scan_v0 = doc("scan-v0", "X-Men", "tmdb-movie", 0, &[]);
+        let scan_v1 = doc("scan-v1", "X-Men", "tmdb-movie", 1, &["scan-v0"]);
+        let scan_head =
+            doc("scan-v2", "X-Men", "tmdb-movie", 2, &["scan-v0", "scan-v1"]);
+
+        let kept =
+            collapse_to_chain_heads(vec![bookmark, scan_v0, scan_v1, scan_head]);
+
+        assert_eq!(kept.len(), 1);
+        assert_eq!(
+            kept[0].id.as_ref().unwrap().id.to_raw(),
+            "scan-v2",
+            "should keep the v=2 chain head"
+        );
+    }
+
+    #[test]
+    fn keeps_distinct_addons_separate() {
+        let local = doc("local-id", "X-Men", "local-movie", 1, &[]);
+        let tmdb = doc("tmdb-id", "X-Men", "tmdb-movie", 0, &[]);
+        let kept = collapse_to_chain_heads(vec![local, tmdb]);
+        assert_eq!(kept.len(), 2);
+    }
+
+    #[test]
+    fn keeps_distinct_years_separate() {
+        let mut a = doc("id-a", "Joker", "tmdb-movie", 0, &[]);
+        a.year = Some(2019);
+        let mut b = doc("id-b", "Joker", "tmdb-movie", 0, &[]);
+        b.year = Some(2024);
+        let kept = collapse_to_chain_heads(vec![a, b]);
+        assert_eq!(kept.len(), 2);
+    }
 }

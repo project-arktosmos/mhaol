@@ -451,8 +451,11 @@ async fn pins(
 /// library when at least one of its `ipfs` file entries matches a CID
 /// pinned under the library's directory — that's the only link between
 /// firkins (which are content-addressed) and libraries (which are
-/// path-addressed). Superseded versions are filtered out so the WebUI
-/// only sees the head of each version chain.
+/// path-addressed). Results are passed through
+/// [`crate::firkins::collapse_to_chain_heads`] so callers see one row per
+/// logical item: superseded versions are dropped, and parallel chains
+/// with the same `(addon, title, year)` collapse to the highest-versioned
+/// head.
 async fn firkins(
     State(state): State<CloudState>,
     Path(id): Path<String>,
@@ -486,23 +489,18 @@ async fn firkins(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
 
-    let mut superseded: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for d in &docs {
-        for h in &d.version_hashes {
-            superseded.insert(h.clone());
-        }
-    }
-
-    let scoped: Vec<crate::firkins::Firkin> = docs
+    // Filter to firkins whose ipfs files live under this library before
+    // collapsing — otherwise an unrelated higher-version chain elsewhere
+    // could shadow this library's head.
+    let in_library: Vec<crate::firkins::Firkin> = docs
         .into_iter()
         .filter(|d| {
-            let id = d.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
-            !superseded.contains(&id)
-                && d.files
-                    .iter()
-                    .any(|f| f.kind == "ipfs" && library_cids.contains(&f.value))
+            d.files
+                .iter()
+                .any(|f| f.kind == "ipfs" && library_cids.contains(&f.value))
         })
         .collect();
+    let scoped = crate::firkins::collapse_to_chain_heads(in_library);
 
     let mut dtos = crate::firkins::assemble_firkin_dtos(&state, scoped).await?;
     dtos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
