@@ -3,9 +3,9 @@ use crate::firkins::{compute_firkin_cid, FileEntry, ImageMeta};
 use tracing;
 use crate::state::CloudState;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Query, State},
     http::StatusCode,
-    routing::{get, post, put},
+    routing::{get, post},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
@@ -17,8 +17,7 @@ pub const TABLE: &str = "recommendation";
 pub const SOURCE_TABLE: &str = "recommendation_source";
 
 /// One row per `(user, recommended firkin)` pair. Tracks how many distinct
-/// source-firkin pages have recommended this item to this user, plus the
-/// user's own annotations (watched flag and 0-100 score).
+/// source-firkin pages have recommended this item to this user.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recommendation {
     pub id: Option<Thing>,
@@ -53,9 +52,6 @@ pub struct Recommendation {
     /// item to the user. Each (user, source) pair contributes at most once
     /// — see the marker rows in [`SOURCE_TABLE`].
     pub count: u32,
-    pub watched: bool,
-    /// 0-100 user-provided score.
-    pub score: u8,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -88,8 +84,6 @@ pub struct RecommendationDto {
     #[serde(rename = "backdropUrl")]
     pub backdrop_url: Option<String>,
     pub count: u32,
-    pub watched: bool,
-    pub score: u8,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -113,8 +107,6 @@ impl From<Recommendation> for RecommendationDto {
             poster_url: r.poster_url,
             backdrop_url: r.backdrop_url,
             count: r.count,
-            watched: r.watched,
-            score: r.score,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -163,20 +155,10 @@ pub struct IngestResponse {
     pub ingested: u32,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct UpdateRequest {
-    pub address: String,
-    #[serde(default)]
-    pub watched: Option<bool>,
-    #[serde(default)]
-    pub score: Option<u8>,
-}
-
 pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/", get(list))
         .route("/ingest", post(ingest))
-        .route("/{firkin_id}", put(update))
 }
 
 fn err_response(
@@ -409,8 +391,6 @@ async fn ingest(
                     poster_url: item.poster_url.clone(),
                     backdrop_url: item.backdrop_url.clone(),
                     count: 1,
-                    watched: false,
-                    score: 0,
                     created_at: now,
                     updated_at: now,
                 };
@@ -458,73 +438,6 @@ async fn ingest(
         processed: true,
         ingested,
     }))
-}
-
-async fn update(
-    State(state): State<CloudState>,
-    Path(firkin_id): Path<String>,
-    Json(req): Json<UpdateRequest>,
-) -> Result<Json<RecommendationDto>, (StatusCode, Json<serde_json::Value>)> {
-    let address = normalize_address(&req.address)
-        .ok_or_else(|| err_response(StatusCode::BAD_REQUEST, "invalid address"))?;
-    let firkin_id = firkin_id.trim().to_string();
-    if firkin_id.is_empty() {
-        return Err(err_response(
-            StatusCode::BAD_REQUEST,
-            "firkin_id is required",
-        ));
-    }
-    if let Some(score) = req.score {
-        if score > 100 {
-            return Err(err_response(
-                StatusCode::BAD_REQUEST,
-                "score must be 0..=100",
-            ));
-        }
-    }
-
-    let rec_id = record_id("recommendation", &address, &firkin_id);
-    let existing: Option<Recommendation> = state
-        .db
-        .select((TABLE, rec_id.as_str()))
-        .await
-        .map_err(|e| {
-            err_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("db select failed: {e}"),
-            )
-        })?;
-    let mut current = existing.ok_or_else(|| {
-        err_response(StatusCode::NOT_FOUND, "recommendation not found")
-    })?;
-    current.id = None;
-    if let Some(watched) = req.watched {
-        current.watched = watched;
-    }
-    if let Some(score) = req.score {
-        current.score = score;
-    }
-    current.updated_at = Utc::now();
-    let saved: Option<Recommendation> = state
-        .db
-        .update((TABLE, rec_id.as_str()))
-        .content(current)
-        .await
-        .map_err(|e| {
-            err_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("db update failed: {e}"),
-            )
-        })?;
-    let dto: RecommendationDto = saved
-        .ok_or_else(|| {
-            err_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "recommendation was not persisted",
-            )
-        })?
-        .into();
-    Ok(Json(dto))
 }
 
 /// Pull the upstream provider id off a firkin's URL files. Mirrors the

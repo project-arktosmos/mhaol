@@ -10,8 +10,6 @@ export interface Recommendation {
 	posterUrl: string | null;
 	backdropUrl: string | null;
 	count: number;
-	watched: boolean;
-	score: number;
 	created_at: string;
 	updated_at: string;
 }
@@ -62,17 +60,4 @@ export async function ingestRecommendations(req: IngestRequest): Promise<IngestR
 	});
 	if (!res.ok) throw new Error(await parseError(res));
 	return (await res.json()) as IngestResponse;
-}
-
-export async function updateRecommendation(
-	firkinId: string,
-	patch: { address: string; watched?: boolean; score?: number }
-): Promise<Recommendation> {
-	const res = await fetch(`/api/recommendations/${encodeURIComponent(firkinId)}`, {
-		method: 'PUT',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify(patch)
-	});
-	if (!res.ok) throw new Error(await parseError(res));
-	return (await res.json()) as Recommendation;
 }

@@ -1,11 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import classNames from 'classnames';
-	import {
-		listRecommendations,
-		updateRecommendation,
-		type Recommendation
-	} from '$lib/recommendations.service';
+	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
 	import { userIdentityService } from '$lib/user-identity.service';
 
 	const userIdentityState = userIdentityService.state;
@@ -13,8 +8,6 @@
 	let rows = $state<Recommendation[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
-	let savingId = $state<string | null>(null);
-	let saveError = $state<string | null>(null);
 	let lastLoadedAddress: string | null = null;
 
 	$effect(() => {
@@ -46,46 +39,6 @@
 		return `${cid.slice(0, 10)}…${cid.slice(-6)}`;
 	}
 
-	async function toggleWatched(row: Recommendation) {
-		const address = $userIdentityState.identity?.address;
-		if (!address) return;
-		savingId = row.firkinId;
-		saveError = null;
-		try {
-			const updated = await updateRecommendation(row.firkinId, {
-				address,
-				watched: !row.watched
-			});
-			rows = rows.map((r) => (r.firkinId === updated.firkinId ? updated : r));
-		} catch (err) {
-			saveError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			savingId = null;
-		}
-	}
-
-	async function setScore(row: Recommendation, raw: string) {
-		const address = $userIdentityState.identity?.address;
-		if (!address) return;
-		const parsed = Number.parseInt(raw, 10);
-		if (!Number.isFinite(parsed)) return;
-		const score = Math.max(0, Math.min(100, parsed));
-		if (score === row.score) return;
-		savingId = row.firkinId;
-		saveError = null;
-		try {
-			const updated = await updateRecommendation(row.firkinId, {
-				address,
-				score
-			});
-			rows = rows.map((r) => (r.firkinId === updated.firkinId ? updated : r));
-		} catch (err) {
-			saveError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			savingId = null;
-		}
-	}
-
 	function copyHash(cid: string) {
 		void navigator.clipboard?.writeText(cid).catch(() => {
 			// silent — clipboard may be unavailable
@@ -111,7 +64,8 @@
 		<p class="text-sm text-base-content/60">
 			Items the catalog API has recommended to you, indexed by their virtual IPFS hash. Counts only
 			update when you visit a real <code>/catalog/[ipfsHash]</code> detail page; virtual catalog pages
-			don't contribute. Each source firkin contributes at most once per item.
+			don't contribute. Each source firkin contributes at most once per item. Rows disappear automatically
+			once you bookmark or assign a torrent for the recommended item.
 		</p>
 	</header>
 
@@ -122,9 +76,6 @@
 	{:else}
 		{#if error}
 			<div class="alert alert-error"><span>{error}</span></div>
-		{/if}
-		{#if saveError}
-			<div class="alert alert-error"><span>{saveError}</span></div>
 		{/if}
 
 		<section class="card border border-base-content/10 bg-base-200">
@@ -137,30 +88,23 @@
 								<th>Title</th>
 								<th class="w-40">IPFS hash</th>
 								<th class="w-20 text-right">Count</th>
-								<th class="w-24 text-center">Watched</th>
-								<th class="w-44">Score</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#if loading && rows.length === 0}
 								<tr>
-									<td colspan="6" class="text-center text-base-content/60">Loading…</td>
+									<td colspan="4" class="text-center text-base-content/60">Loading…</td>
 								</tr>
 							{:else if rows.length === 0}
 								<tr>
-									<td colspan="6" class="text-center text-base-content/60">
+									<td colspan="4" class="text-center text-base-content/60">
 										No recommendations yet — visit a movie, TV show, or album detail page to start
 										collecting.
 									</td>
 								</tr>
 							{:else}
 								{#each rows as row (row.firkinId)}
-									<tr
-										class={classNames({
-											'opacity-60': row.watched,
-											'bg-base-300/50': savingId === row.firkinId
-										})}
-									>
+									<tr>
 										<td>
 											{#if row.posterUrl}
 												<img
@@ -203,32 +147,6 @@
 											</button>
 										</td>
 										<td class="text-right font-mono text-sm">{row.count}</td>
-										<td class="text-center">
-											<input
-												type="checkbox"
-												class="checkbox checkbox-sm"
-												checked={row.watched}
-												disabled={savingId === row.firkinId}
-												onchange={() => toggleWatched(row)}
-											/>
-										</td>
-										<td>
-											<div class="flex items-center gap-2">
-												<input
-													type="range"
-													min="0"
-													max="100"
-													step="1"
-													class="range flex-1 range-xs"
-													value={row.score}
-													disabled={savingId === row.firkinId}
-													onchange={(e) => setScore(row, e.currentTarget.value)}
-												/>
-												<span class="w-10 shrink-0 text-right font-mono text-xs">
-													{row.score}
-												</span>
-											</div>
-										</td>
 									</tr>
 								{/each}
 							{/if}
