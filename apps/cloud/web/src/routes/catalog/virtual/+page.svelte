@@ -135,19 +135,21 @@
 		}
 	});
 
+	// Virtual page just shows the MusicBrainz tracklist for preview —
+	// per-track YouTube + lyrics resolution is server-side, kicked off
+	// automatically by `POST /api/firkins` for musicbrainz albums and
+	// continued in a background task that outlives the request. Browsing
+	// away from this page never interrupts a running resolve, because
+	// nothing was running here in the first place.
 	const trackResolver = new TrackResolver();
-	const albumArtist = $derived(description.split(' · ')[0]?.trim() ?? '');
 	let tracksInitForKey: string | null = null;
 
 	$effect(() => {
-		if (!isMusicBrainz || !title) return;
+		if (!isMusicBrainz || !title || !itemId) return;
 		const key = `${addon}:${itemId}:${title}`;
 		if (tracksInitForKey === key) return;
 		tracksInitForKey = key;
-		void trackResolver.loadByReleaseGroup(
-			{ releaseGroupId: itemId },
-			{ albumTitle: title, artist: albumArtist, thumb }
-		);
+		void trackResolver.loadFromFirkin({ releaseGroupId: itemId, files: [] });
 	});
 
 	const torrentSearch = new TorrentSearch();
@@ -176,7 +178,7 @@
 				artists,
 				description,
 				images,
-				files: [...buildUpstreamSourceFiles(), ...trackResolver.resolvedTrackFiles()],
+				files: buildUpstreamSourceFiles(),
 				year,
 				addon: addon as FirkinAddon,
 				trailers: trailerResolver.resolvedTrailers()

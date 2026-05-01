@@ -136,21 +136,6 @@
 		}
 	}
 
-	function isYouTubeUrl(value: string): boolean {
-		try {
-			const host = new URL(value).hostname.toLowerCase();
-			return (
-				host === 'www.youtube.com' ||
-				host === 'youtube.com' ||
-				host === 'm.youtube.com' ||
-				host === 'music.youtube.com' ||
-				host === 'youtu.be'
-			);
-		} catch {
-			return false;
-		}
-	}
-
 	function parseMusicBrainzReleaseGroupId(value: string): string | null {
 		try {
 			const u = new URL(value);
@@ -161,12 +146,6 @@
 			return null;
 		}
 	}
-
-	const trackFiles = $derived(
-		firkin.files.filter(
-			(f) => f.type === 'url' && (f.title ?? '').trim().length > 0 && isYouTubeUrl(f.value)
-		)
-	);
 
 	const musicBrainzReleaseGroupId = $derived(
 		firkin.files
@@ -603,8 +582,7 @@
 
 	const trackResolver = new TrackResolver();
 	let tracksInitForFirkinId: string | null = null;
-	let resolvingTracks = $state(false);
-	let resolveTracksError = $state<string | null>(null);
+	let tracksMissingAny = $state(false);
 
 	$effect(() => {
 		if (!isMusicBrainz) return;
@@ -612,37 +590,75 @@
 		if (tracksInitForFirkinId === fid) return;
 		tracksInitForFirkinId = fid;
 		if (musicBrainzReleaseGroupId) {
-			void initTracksFromFirkin(fid, musicBrainzReleaseGroupId);
-		} else if (trackFiles.length > 0) {
-			trackResolver.seedFromFiles(firkin.files);
+			void initTracksFromFirkin(musicBrainzReleaseGroupId);
 		}
 	});
 
-	async function initTracksFromFirkin(fid: string, releaseGroupId: string): Promise<void> {
+	async function initTracksFromFirkin(releaseGroupId: string): Promise<void> {
 		const result = await trackResolver.loadFromFirkin({
 			releaseGroupId,
 			files: firkin.files
 		});
-		if (!result.missingAny || resolvingTracks) return;
-		resolvingTracks = true;
-		resolveTracksError = null;
-		try {
-			const updated = await firkinsService.resolveTracks(fid);
-			data.firkin = updated;
-			if (updated.id !== fid) {
-				void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
-			} else {
-				void trackResolver.loadFromFirkin({
-					releaseGroupId,
-					files: updated.files
-				});
-			}
-		} catch (err) {
-			resolveTracksError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			resolvingTracks = false;
-		}
+		tracksMissingAny = result.missingAny;
 	}
+
+	// While the server's background album-resolution task is still
+	// running, poll the firkin every few seconds. When it rolls forward
+	// to a new content-addressed id, navigate to it; if the body comes
+	// back at the same id with new files (rare — only when no rollforward
+	// was needed), refresh the in-memory copy and re-project tracks.
+	$effect(() => {
+		if (!isMusicBrainz || !tracksMissingAny) return;
+		const id = firkin.id;
+		const releaseGroupId = musicBrainzReleaseGroupId;
+		let cancelled = false;
+		const tick = async () => {
+			if (cancelled) return;
+			try {
+				const res = await fetch(`${base}/api/firkins/${encodeURIComponent(id)}`, {
+					cache: 'no-store'
+				});
+				if (cancelled) return;
+				if (res.status === 404) {
+					const listRes = await fetch(`${base}/api/firkins`, { cache: 'no-store' });
+					if (!listRes.ok) return;
+					const list = (await listRes.json()) as Firkin[];
+					if (cancelled) return;
+					const successor = list.find((d) => (d.version_hashes ?? []).includes(id));
+					if (successor) {
+						await goto(`${base}/catalog/${encodeURIComponent(successor.id)}`);
+					}
+					return;
+				}
+				if (!res.ok) return;
+				const fresh = (await res.json()) as Firkin;
+				if (cancelled) return;
+				if (fresh.id !== id) {
+					await goto(`${base}/catalog/${encodeURIComponent(fresh.id)}`);
+					return;
+				}
+				const freshHasMore =
+					fresh.files.length !== firkin.files.length || fresh.updated_at !== firkin.updated_at;
+				if (freshHasMore) {
+					data.firkin = fresh;
+					if (releaseGroupId) {
+						const result = await trackResolver.loadFromFirkin({
+							releaseGroupId,
+							files: fresh.files
+						});
+						tracksMissingAny = result.missingAny;
+					}
+				}
+			} catch {
+				// swallow — try again on next tick
+			}
+		};
+		const timer = setInterval(tick, 4000);
+		return () => {
+			cancelled = true;
+			clearInterval(timer);
+		};
+	});
 
 	const torrentSearch = new TorrentSearch({ evaluate: true });
 	let addingHash = $state<string | null>(null);
@@ -903,9 +919,6 @@
 	{/if}
 	{#if torrentStreamError}
 		<div class="alert alert-error"><span>{torrentStreamError}</span></div>
-	{/if}
-	{#if resolveTracksError}
-		<div class="alert alert-error"><span>Track resolution failed: {resolveTracksError}</span></div>
 	{/if}
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">

@@ -595,6 +595,15 @@ async fn create(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
     if let Some(existing) = existing {
+        // Same body already on disk — re-trigger album resolution in the
+        // background in case a prior attempt was interrupted before
+        // rolling the firkin forward. The inner loop is idempotent: if
+        // every track already has both YT URL + lyrics it returns the
+        // record unchanged.
+        #[cfg(not(target_os = "android"))]
+        if existing.addon == "musicbrainz" {
+            spawn_resolve_album_tracks(state.clone(), new_id.clone());
+        }
         return Ok((StatusCode::OK, Json(assemble_firkin_dto(&state, existing).await?)));
     }
 
@@ -614,6 +623,7 @@ async fn create(
         version_hashes,
         trailers,
     };
+    let record_addon = record.addon.clone();
 
     let created: Option<Firkin> = state
         .db
@@ -627,6 +637,17 @@ async fn create(
     let dto = FirkinDto::from_doc_with_artists(created_doc, artist_dtos);
 
     pin_firkin_body(&state, &new_id, body_json).await;
+
+    // Auto-trigger album track resolution for fresh musicbrainz firkins.
+    // Spawned as a background task so the bookmark response returns
+    // immediately and the resolution itself outlives the HTTP request /
+    // any client-side navigation.
+    #[cfg(not(target_os = "android"))]
+    if record_addon == "musicbrainz" {
+        spawn_resolve_album_tracks(state.clone(), new_id.clone());
+    }
+    #[cfg(target_os = "android")]
+    let _ = record_addon;
 
     Ok((StatusCode::CREATED, Json(dto)))
 }
@@ -1081,25 +1102,40 @@ async fn resolve_tracks(
     State(state): State<CloudState>,
     Path(id): Path<String>,
 ) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    let resolved = resolve_album_tracks(&state, &id)
+        .await
+        .map_err(|(s, m)| err_response(s, m))?;
+    Ok(Json(assemble_firkin_dto(&state, resolved).await?))
+}
+
+/// Inner album-resolution loop. Walks the firkin's MusicBrainz tracklist,
+/// queries YouTube + LRCLIB for each track that's still missing data,
+/// scores hits with the same token-based rankers as the WebUI, packs
+/// resolved entries into `files`, and rolls the firkin forward (or
+/// returns it unchanged when nothing was missing). Designed to be called
+/// from both the explicit HTTP endpoint and a fire-and-forget background
+/// task spawned by the create handler — the loop's lifetime is tied to
+/// the spawned future, *not* the originating HTTP request, so closing
+/// the browser tab does not interrupt the resolution.
+#[cfg(not(target_os = "android"))]
+pub(crate) async fn resolve_album_tracks(
+    state: &CloudState,
+    id: &str,
+) -> Result<Firkin, (StatusCode, String)> {
     use crate::track_resolve;
 
     let existing: Option<Firkin> = state
         .db
-        .select((TABLE, id.as_str()))
+        .select((TABLE, id))
         .await
-        .map_err(|e| {
-            err_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("db select failed: {e}"),
-            )
-        })?;
-    let mut current =
-        existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let mut current = existing
+        .ok_or((StatusCode::NOT_FOUND, "firkin not found".to_string()))?;
 
     if current.addon != "musicbrainz" {
-        return Err(err_response(
+        return Err((
             StatusCode::BAD_REQUEST,
-            "resolve-tracks only supports musicbrainz firkins",
+            "resolve-tracks only supports musicbrainz firkins".to_string(),
         ));
     }
 
@@ -1108,23 +1144,19 @@ async fn resolve_tracks(
         .iter()
         .filter(|f| f.kind == "url")
         .find_map(|f| extract_mb_release_group_id(&f.value))
-        .ok_or_else(|| {
-            err_response(
-                StatusCode::BAD_REQUEST,
-                "firkin is missing a MusicBrainz release-group url in `files`",
-            )
-        })?;
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "firkin is missing a MusicBrainz release-group url in `files`".to_string(),
+        ))?;
 
     let tracks = track_resolve::fetch_release_group_tracks(&release_group_id)
         .await
-        .map_err(|e| err_response(StatusCode::BAD_GATEWAY, e))?;
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e))?;
 
-    // Resolve artists by joining the firkin's artist CIDs to their canonical
-    // bodies, then build a comma-joined string for the search queries.
-    let artist_dtos = artists::fetch_many(&state, &current.artists)
+    let artist_dtos = artists::fetch_many(state, &current.artists)
         .await
         .map_err(|e| {
-            err_response(
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("artist fetch failed: {e}"),
             )
@@ -1138,10 +1170,6 @@ async fn resolve_tracks(
 
     let album_title = current.title.clone();
 
-    // Resolve each track in series — keeps memory + outbound requests
-    // bounded, and matches the WebUI's prior per-track UX where items
-    // appear one at a time. Failures per track surface as "no match" and
-    // are skipped without aborting the batch.
     let mut new_files = current.files.clone();
     let mut changed = false;
     for track in &tracks {
@@ -1207,15 +1235,57 @@ async fn resolve_tracks(
     }
 
     if !changed {
-        return Ok(Json(assemble_firkin_dto(&state, current).await?));
+        return Ok(current);
     }
 
     current.files = new_files;
     current.updated_at = Utc::now();
     current.id = None;
 
-    let created_doc = rollforward_firkin(&state, &id, current).await?;
-    Ok(Json(assemble_firkin_dto(&state, created_doc).await?))
+    rollforward_firkin(state, id, current)
+        .await
+        .map_err(|(s, j)| {
+            let msg = j
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("rollforward failed")
+                .to_string();
+            (s, msg)
+        })
+}
+
+/// Spawn `resolve_album_tracks` as a fire-and-forget background task.
+/// Called by the firkin create handler so a freshly-bookmarked
+/// MusicBrainz album starts processing immediately and continues even if
+/// the user navigates away from the detail page. Errors are logged via
+/// `tracing::warn!` rather than surfaced — the detail page's polling
+/// effect will pick up the rolled-forward firkin once the task finishes.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn spawn_resolve_album_tracks(state: CloudState, id: String) {
+    tokio::spawn(async move {
+        match resolve_album_tracks(&state, &id).await {
+            Ok(updated) => {
+                let new_id = updated
+                    .id
+                    .as_ref()
+                    .map(|t| t.id.to_raw())
+                    .unwrap_or_default();
+                tracing::info!(
+                    firkin_id = %id,
+                    new_id = %new_id,
+                    "background album resolution complete"
+                );
+            }
+            Err((status, msg)) => {
+                tracing::warn!(
+                    firkin_id = %id,
+                    status = %status,
+                    error = %msg,
+                    "background album resolution failed"
+                );
+            }
+        }
+    });
 }
 
 fn extract_mb_release_group_id(value: &str) -> Option<String> {
