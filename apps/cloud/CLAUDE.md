@@ -169,7 +169,11 @@ The Svelte app lives at `apps/cloud/web/` (pnpm package name `cloud`). The user-
 
 ### Right-side aside
 
-`apps/cloud/web/src/routes/+layout.svelte` mounts a fixed-width right-side aside that mirrors the player app's: `FirkinFilesPanel` (rendered when `firkinPlaybackService` has a firkin selected), `PlayerVideo` (the playback surface — drives both yt-dlp direct streams and IPFS-pinned WebRTC sessions), and `SubsLyricsFinder` (talks to `/api/search/subs-lyrics`). The layout calls `playerService.initialize()` on mount so the aside's stores wake up; the `/api/player/stream-status` and `/api/player/playable` stubs let initialize settle without errors.
+`apps/cloud/web/src/routes/+layout.svelte` mounts a fixed-width right-side aside that mirrors the player app's: `FirkinFilesPanel` (rendered when `firkinPlaybackService` has a firkin selected), `PlayerVideo` (the **video** playback surface — drives yt-dlp direct video streams and IPFS-pinned WebRTC sessions; rendered only when `playerService.displayMode` is `sidebar` or `fullscreen`), and `SubsLyricsFinder` (talks to `/api/search/subs-lyrics`). The layout calls `playerService.initialize()` on mount so the aside's stores wake up; the `/api/player/stream-status` and `/api/player/playable` stubs let initialize settle without errors.
+
+### Navbar audio player
+
+Audio playback uses the dedicated `displayMode === 'navbar'` mode, rendered by `apps/cloud/web/src/components/player/NavbarAudioPlayer.svelte` inside the navbar's `end` snippet (left of the identity / theme toggle). It is a compact horizontal strip (thumbnail, title, play/pause, position, seek bar, duration, stop) that owns its own hidden `<video>` element wired to `playerService.state.directStreamUrl`. The element is kept mounted at all times so its attach effect can drive `src` / `play()` whenever the layout's reactive condition flips back to "navbar mode active". Audio callers (the catalog tracks card via `playYouTubeAudio` in `apps/cloud/web/src/lib/youtube-match.service.ts`, and the `/youtube` page when `mode === 'audio'`) call `playerService.playUrl(file, url, mime, 'navbar')` to surface playback here. Video callers (`playYouTubeVideo`, the `/youtube` page in video mode) keep using `'sidebar'` so the `PlayerVideo` surface in the aside picks them up; firkin in-page playback (`/catalog/[ipfsHash]`) uses `'inline'` as before.
 
 ### `/youtube` route
 
