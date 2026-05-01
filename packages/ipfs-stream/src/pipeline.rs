@@ -180,6 +180,11 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
             return;
         };
         let media_type = structure.name().as_str();
+        tracing::info!(
+            "[ipfs-stream] decodebin pad added: media_type={} pad={}",
+            media_type,
+            src_pad.name()
+        );
 
         if media_type.starts_with("video/") {
             if video_linked.swap(true, Ordering::SeqCst) {

@@ -214,6 +214,7 @@ fn spawn_bus_watcher(pipeline: gst::Pipeline, session_id: String, inner: Arc<Mut
             use gst::MessageView;
             match msg.view() {
                 MessageView::Eos(_) => {
+                    tracing::info!("[ipfs-stream] session {session_id} pipeline EOS");
                     if let Some(entry) = inner.lock().sessions.get_mut(&session_id) {
                         entry.record.state = SessionState::Finished;
                     }
@@ -221,7 +222,8 @@ fn spawn_bus_watcher(pipeline: gst::Pipeline, session_id: String, inner: Arc<Mut
                 }
                 MessageView::Error(err) => {
                     tracing::error!(
-                        "[ipfs-stream] session {session_id} pipeline error: {} ({:?})",
+                        "[ipfs-stream] session {session_id} pipeline error from {:?}: {} (debug={:?})",
+                        err.src().map(|s| s.path_string()),
                         err.error(),
                         err.debug()
                     );
@@ -229,6 +231,31 @@ fn spawn_bus_watcher(pipeline: gst::Pipeline, session_id: String, inner: Arc<Mut
                         entry.record.state = SessionState::Error;
                     }
                     break;
+                }
+                MessageView::Warning(warning) => {
+                    tracing::warn!(
+                        "[ipfs-stream] session {session_id} pipeline warning from {:?}: {} (debug={:?})",
+                        warning.src().map(|s| s.path_string()),
+                        warning.error(),
+                        warning.debug()
+                    );
+                }
+                MessageView::StateChanged(sc) => {
+                    // Only log state changes on the pipeline itself — element-level
+                    // state changes are too noisy.
+                    if let Some(src) = sc.src() {
+                        if src.is::<gst::Pipeline>() {
+                            tracing::info!(
+                                "[ipfs-stream] session {session_id} pipeline state {:?} -> {:?} (pending {:?})",
+                                sc.old(),
+                                sc.current(),
+                                sc.pending()
+                            );
+                        }
+                    }
+                }
+                MessageView::AsyncDone(_) => {
+                    tracing::info!("[ipfs-stream] session {session_id} async-done");
                 }
                 _ => {}
             }

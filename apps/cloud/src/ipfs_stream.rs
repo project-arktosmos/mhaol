@@ -143,6 +143,23 @@ async fn start_session(
         duration_seconds
     );
 
+    // If hlssink2 never flushed the first segment within the warm-up
+    // window, the GStreamer pipeline is stuck (corrupted source, missing
+    // codec, decodebin typefind hang, etc). Returning the URL anyway
+    // would just hang the player on a 404 loop forever. Tear the session
+    // back down and surface a useful error so the frontend can show it.
+    if !ready {
+        let _ = state.ipfs_stream_manager.stop_session(&session_id);
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!(
+                "ipfs-stream pipeline did not produce a playlist within 60s for cid {cid} \
+                 (source may be incomplete or contain unsupported codecs — check cloud logs \
+                 for GStreamer errors)"
+            ),
+        ));
+    }
+
     Ok(Json(StartSessionResponse {
         session_id: session_id.clone(),
         playlist_url: format!("/api/ipfs-stream/sessions/{session_id}/playlist.m3u8"),

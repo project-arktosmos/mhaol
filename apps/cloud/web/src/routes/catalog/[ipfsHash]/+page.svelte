@@ -300,6 +300,10 @@
 			);
 		} catch (err) {
 			ipfsError = err instanceof Error ? err.message : 'Unknown error';
+			// Pipeline never produced a playlist — go back to the trailer tab
+			// so the user isn't stuck on a permanent spinner. The error alert
+			// above the player still surfaces what went wrong.
+			if (activeSource === 'ipfs') activeSource = 'trailer';
 		} finally {
 			ipfsStarting = false;
 		}
@@ -466,6 +470,7 @@
 			await playerService.playUrl(file, body.streamUrl, body.mimeType ?? null, 'inline', firkin.id);
 		} catch (err) {
 			torrentStreamError = err instanceof Error ? err.message : 'Unknown error';
+			if (activeSource === 'torrent') activeSource = 'trailer';
 		} finally {
 			torrentStreamStarting = false;
 		}
