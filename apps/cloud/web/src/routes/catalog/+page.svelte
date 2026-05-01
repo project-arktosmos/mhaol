@@ -4,6 +4,9 @@
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import FirkinCard from 'ui-lib/components/firkins/FirkinCard.svelte';
+	import FirkinMetadataLookupModal, {
+		type CatalogLookupItem
+	} from 'ui-lib/components/firkins/FirkinMetadataLookupModal.svelte';
 	import { CONSOLE_IMAGES } from 'assets/game-consoles';
 	import { CONSOLE_WASM_STATUS } from 'addons/retroachievements/types';
 	import type { CloudFirkin } from 'ui-lib/types/firkin.type';
@@ -11,11 +14,12 @@
 		listSources,
 		loadGenres,
 		loadPopular,
+		loadSearch,
 		type CatalogItem,
 		type CatalogGenre,
 		type CatalogSource
 	} from '$lib/catalog.service';
-	import { firkinsService, type Firkin } from '$lib/firkins.service';
+	import { firkinsService, metadataSearchAddon, type Firkin } from '$lib/firkins.service';
 
 	const firkinsStore = firkinsService.state;
 
@@ -35,16 +39,38 @@
 	let itemsLoading = $state(false);
 	let itemsError = $state<string | null>(null);
 
+	let query = $state<string>('');
+	let searchItems = $state<CatalogItem[]>([]);
+	let searchPage = $state<number>(1);
+	let searchTotalPages = $state<number>(1);
+	let searchLoading = $state(false);
+	let searchError = $state<string | null>(null);
+	let searchToken = 0;
+	let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+	const trimmedQuery = $derived(query.trim());
+	const hasSearch = $derived(trimmedQuery.length > 0);
+
 	const currentSource = $derived(sources.find((s) => s.id === addon));
 	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
 	const isRetroAchievements = $derived(addon === 'retroachievements');
 	const showFilterRow = $derived(hasFilter && !isRetroAchievements);
 
+	// Each catalog (remote) addon has a matching local-* addon used by
+	// library scans for the same content kind. The catalog Library section
+	// should surface both: virtual / bookmarked items live under the remote
+	// addon, locally-scanned files live under the local-* counterpart.
+	const LOCAL_ADDON_FOR: Record<string, string> = {
+		'tmdb-movie': 'local-movie',
+		'tmdb-tv': 'local-tv',
+		musicbrainz: 'local-album',
+		retroachievements: 'local-game'
+	};
+
 	const libraryFirkins = $derived<Firkin[]>(
 		addon
 			? $firkinsStore.firkins
-					.filter((d) => d.addon === addon)
+					.filter((d) => d.addon === addon || d.addon === LOCAL_ADDON_FOR[addon])
 					.slice()
 					.sort((a, b) => b.created_at.localeCompare(a.created_at))
 					.slice(0, 6)
@@ -64,6 +90,7 @@
 			files: [],
 			year: item.year,
 			addon,
+			creator: '',
 			created_at: '',
 			updated_at: '',
 			version: 0,
@@ -104,6 +131,57 @@
 		}
 	}
 
+	async function runSearch(nextPage = 1) {
+		if (!addon || !trimmedQuery) {
+			searchItems = [];
+			searchTotalPages = 1;
+			searchPage = 1;
+			searchError = null;
+			return;
+		}
+		const token = ++searchToken;
+		searchLoading = true;
+		searchError = null;
+		try {
+			const result = await loadSearch(addon, trimmedQuery, {
+				filter: filter || undefined,
+				page: nextPage
+			});
+			if (token !== searchToken) return;
+			searchItems = result.items;
+			searchTotalPages = result.totalPages;
+			searchPage = result.page;
+		} catch (err) {
+			if (token !== searchToken) return;
+			searchItems = [];
+			searchTotalPages = 1;
+			searchError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			if (token === searchToken) searchLoading = false;
+		}
+	}
+
+	function scheduleSearch() {
+		if (searchDebounce) clearTimeout(searchDebounce);
+		if (!trimmedQuery) {
+			searchToken++;
+			searchItems = [];
+			searchTotalPages = 1;
+			searchPage = 1;
+			searchError = null;
+			searchLoading = false;
+			return;
+		}
+		searchDebounce = setTimeout(() => {
+			void runSearch(1);
+		}, 300);
+	}
+
+	async function goToSearchPage(next: number) {
+		if (next < 1 || next > searchTotalPages || next === searchPage) return;
+		await runSearch(next);
+	}
+
 	async function refreshItems() {
 		if (!addon) {
 			items = [];
@@ -133,6 +211,13 @@
 		addon = source.id;
 		page = 1;
 		filter = '';
+		query = '';
+		searchToken++;
+		searchItems = [];
+		searchTotalPages = 1;
+		searchPage = 1;
+		searchError = null;
+		searchLoading = false;
 		await refreshGenres();
 		if (source.id === 'retroachievements') {
 			items = [];
@@ -145,10 +230,47 @@
 	async function onFilterChange() {
 		page = 1;
 		await refreshItems();
+		if (trimmedQuery) await runSearch(1);
 	}
 
 	function selectConsole(consoleId: string) {
 		void goto(`${base}/catalog/console/${encodeURIComponent(consoleId)}`);
+	}
+
+	// Library firkins are flagged as "needs metadata" when they're missing
+	// the two fields a catalog match would normally provide: a description
+	// and at least one image. Year alone isn't enough — local-* scanners
+	// often parse `(YYYY)` out of the filename so a freshly-scanned firkin
+	// can have a year but no other metadata.
+	function firkinNeedsMetadata(firkin: Firkin): boolean {
+		return firkin.description.trim() === '' || firkin.images.length === 0;
+	}
+
+	let metadataTarget = $state<{ firkin: Firkin; addon: string } | null>(null);
+
+	function openMetadataLookup(firkin: Firkin) {
+		const addonId = metadataSearchAddon(firkin.addon);
+		if (!addonId) return;
+		metadataTarget = { firkin, addon: addonId };
+	}
+
+	async function applyMetadata(item: CatalogLookupItem) {
+		if (!metadataTarget) return;
+		const oldId = metadataTarget.firkin.id;
+		const updated = await firkinsService.enrich(oldId, {
+			title: item.title,
+			year: item.year,
+			description: item.description ?? '',
+			posterUrl: item.posterUrl,
+			backdropUrl: item.backdropUrl
+		});
+		metadataTarget = null;
+		// Refresh so the rolled-forward firkin (new CID) replaces the old
+		// one in the Library section's list.
+		await firkinsService.refresh();
+		if (updated.id !== oldId) {
+			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
+		}
 	}
 
 	async function goToPage(next: number) {
@@ -161,7 +283,10 @@
 		const stopFirkins = firkinsService.start();
 		void (async () => {
 			try {
-				sources = await listSources();
+				const fetched = await listSources();
+				sources = fetched.filter(
+					(s) => s.id !== 'youtube-video' && s.id !== 'youtube-channel'
+				);
 				if (sources.length > 0) {
 					addon = sources[0].id;
 					await refreshGenres();
@@ -215,6 +340,21 @@
 							</div>
 						</td>
 					</tr>
+					<tr>
+						<th class="w-32 align-middle">Search</th>
+						<td>
+							<input
+								type="search"
+								class="input-bordered input input-sm w-full"
+								placeholder={addon
+									? `Search ${currentSource?.label ?? addon}…`
+									: 'Pick an addon to search'}
+								disabled={!addon}
+								bind:value={query}
+								oninput={scheduleSearch}
+							/>
+						</td>
+					</tr>
 					{#if showFilterRow}
 						<tr>
 							<th class="w-32 align-middle">{filterLabel}</th>
@@ -253,21 +393,92 @@
 		{:else}
 			<div class="grid grid-cols-6 gap-4">
 				{#each libraryFirkins as doc (doc.id)}
-					<a
-						href={`${base}/catalog/${encodeURIComponent(doc.id)}`}
-						class="block no-underline"
-						onclick={(e) => {
-							if ((e.target as HTMLElement).closest('button, summary')) {
-								e.preventDefault();
-							}
-						}}
-					>
-						<FirkinCard firkin={doc as CloudFirkin} />
-					</a>
+					{@const canEnrich = firkinNeedsMetadata(doc) && metadataSearchAddon(doc.addon) !== null}
+					<div class="relative">
+						<a
+							href={`${base}/catalog/${encodeURIComponent(doc.id)}`}
+							class="block no-underline"
+							onclick={(e) => {
+								if ((e.target as HTMLElement).closest('button, summary')) {
+									e.preventDefault();
+								}
+							}}
+						>
+							<FirkinCard firkin={doc as CloudFirkin} />
+						</a>
+						{#if canEnrich}
+							<button
+								type="button"
+								class="btn absolute top-2 right-2 btn-xs btn-primary"
+								onclick={() => openMetadataLookup(doc)}
+								title="Search the relevant addon and bake matching metadata into this firkin"
+							>
+								Find metadata
+							</button>
+						{/if}
+					</div>
 				{/each}
 			</div>
 		{/if}
 	</section>
+
+	{#if hasSearch}
+		<section class="flex flex-col gap-3">
+			<div class="flex items-center justify-between gap-4">
+				<h2 class="text-lg font-semibold">Search results</h2>
+				<div class="flex items-center gap-2">
+					<button
+						class="btn btn-outline btn-xs"
+						onclick={() => goToSearchPage(searchPage - 1)}
+						disabled={searchLoading || searchPage <= 1}
+					>
+						Prev
+					</button>
+					<span class="text-xs text-base-content/60">Page {searchPage} / {searchTotalPages}</span>
+					<button
+						class="btn btn-outline btn-xs"
+						onclick={() => goToSearchPage(searchPage + 1)}
+						disabled={searchLoading || searchPage >= searchTotalPages}
+					>
+						Next
+					</button>
+				</div>
+			</div>
+
+			{#if searchError}
+				<div class="alert alert-error">
+					<span>{searchError}</span>
+				</div>
+			{/if}
+
+			{#if searchLoading && searchItems.length === 0}
+				<p class="text-sm text-base-content/60">Searching…</p>
+			{:else if searchItems.length === 0}
+				<p class="text-sm text-base-content/60">No matches.</p>
+			{:else}
+				<div
+					class={classNames(
+						'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+						{ 'opacity-60': searchLoading }
+					)}
+				>
+					{#each searchItems as item (item.id)}
+						<a
+							href={virtualHref(item)}
+							class="block no-underline"
+							onclick={(e) => {
+								if ((e.target as HTMLElement).closest('button, summary')) {
+									e.preventDefault();
+								}
+							}}
+						>
+							<FirkinCard firkin={virtualFirkin(item)} />
+						</a>
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/if}
 
 	{#if isRetroAchievements}
 		<section class="flex flex-col gap-3">
@@ -382,3 +593,14 @@
 		</section>
 	{/if}
 </div>
+
+{#if metadataTarget}
+	<FirkinMetadataLookupModal
+		open={metadataTarget !== null}
+		addon={metadataTarget.addon}
+		initialQuery={metadataTarget.firkin.title}
+		firkinTitle={metadataTarget.firkin.title}
+		onpick={applyMetadata}
+		onclose={() => (metadataTarget = null)}
+	/>
+{/if}
