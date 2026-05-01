@@ -80,3 +80,10 @@ export async function loadSearch(
 	if (!res.ok) throw new Error(await parseError(res));
 	return (await res.json()) as CatalogPage;
 }
+
+export async function loadRelated(addon: string, id: string): Promise<CatalogItem[]> {
+	const url = `/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(id)}/related`;
+	const res = await fetch(url, { cache: 'no-store' });
+	if (!res.ok) throw new Error(await parseError(res));
+	return (await res.json()) as CatalogItem[];
+}

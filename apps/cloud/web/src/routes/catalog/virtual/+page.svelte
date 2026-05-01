@@ -7,6 +7,7 @@
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
+	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import type { CloudFirkin } from '$types/firkin.type';
 	import {
 		firkinsService,
@@ -342,6 +343,10 @@
 					{assignError}
 					onRefresh={() => torrentSearch.search({ addon, title, year })}
 				/>
+			{/if}
+
+			{#if isMusicBrainz || isTmdbMovie || isTmdbTv}
+				<CatalogRelatedCard {addon} upstreamId={itemId} />
 			{/if}
 		</section>
 	</div>

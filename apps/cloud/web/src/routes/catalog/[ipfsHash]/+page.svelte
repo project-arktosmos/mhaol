@@ -11,6 +11,7 @@
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
+	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogIdentityCard from '$components/catalog/CatalogIdentityCard.svelte';
 	import CatalogVersionHistoryCard from '$components/catalog/CatalogVersionHistoryCard.svelte';
 	import CatalogFilesTable from '$components/catalog/CatalogFilesTable.svelte';
@@ -833,6 +834,14 @@
 							year: firkin.year
 						})}
 				/>
+			{/if}
+
+			{#if isTmdbMovie}
+				<CatalogRelatedCard addon={firkin.addon} upstreamId={tmdbMovieId} />
+			{:else if isTmdbTv}
+				<CatalogRelatedCard addon={firkin.addon} upstreamId={tmdbTvId} />
+			{:else if isMusicBrainz}
+				<CatalogRelatedCard addon={firkin.addon} upstreamId={musicBrainzReleaseGroupId} />
 			{/if}
 
 			<CatalogFilesTable files={firkin.files} />

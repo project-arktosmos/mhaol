@@ -150,6 +150,7 @@ pub fn router() -> Router<CloudState> {
         .route("/{addon}/search", get(search))
         .route("/{addon}/genres", get(genres))
         .route("/{addon}/{id}/metadata", get(metadata_for_item))
+        .route("/{addon}/{id}/related", get(related_for_item))
         .route(
             "/musicbrainz/release-groups/{id}/tracks",
             get(musicbrainz_tracks),
@@ -405,6 +406,30 @@ async fn metadata_for_item(
     Ok(Json(CatalogMetadata { artists, trailers }))
 }
 
+/// `GET /api/catalog/{addon}/{id}/related` — fetches items related to the
+/// upstream catalog item identified by `id`. For `tmdb-movie` / `tmdb-tv`
+/// this proxies TMDB's `/recommendations` endpoint; for `musicbrainz`
+/// it browses other release-groups by the same primary artist.
+/// Output is ephemeral — the WebUI displays these as virtual catalog
+/// links, never persisting them to SurrealDB or pinning to IPFS.
+/// Unknown / unsupported addons return an empty list (200) so the
+/// frontend can call this unconditionally.
+async fn related_for_item(
+    State(_state): State<CloudState>,
+    Path((addon, id)): Path<(String, String)>,
+) -> Result<Json<Vec<CatalogItem>>, (StatusCode, Json<serde_json::Value>)> {
+    if id.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "id is required"));
+    }
+    let items = match addon.as_str() {
+        "tmdb-movie" => tmdb_related(false, &id).await?,
+        "tmdb-tv" => tmdb_related(true, &id).await?,
+        "musicbrainz" => musicbrainz_related(&id).await?,
+        _ => Vec::new(),
+    };
+    Ok(Json(items))
+}
+
 // ---------- TMDB ----------
 
 async fn tmdb_popular(
@@ -616,6 +641,38 @@ async fn tmdb_metadata(
     let videos = payload.get("videos").cloned().unwrap_or(serde_json::Value::Null);
     let trailers = parse_tmdb_videos(&videos);
     Ok((artists, trailers))
+}
+
+/// Fetch a single page of TMDB's recommendations for the given movie /
+/// TV show. The recommendations endpoint returns the same item shape as
+/// `/popular`, so we reuse `tmdb_to_item` to map it into our universal
+/// `CatalogItem`.
+async fn tmdb_related(
+    is_tv: bool,
+    id: &str,
+) -> Result<Vec<CatalogItem>, (StatusCode, Json<serde_json::Value>)> {
+    let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "TMDB_API_KEY env var is not set on the cloud server",
+        ));
+    }
+    let kind = if is_tv { "tv" } else { "movie" };
+    let url = format!(
+        "{}/{}/{}/recommendations?api_key={}&page=1",
+        TMDB_BASE,
+        kind,
+        urlencoding(id),
+        api_key
+    );
+    let payload: serde_json::Value = http_get_json(&url, &[("Accept", "application/json")]).await?;
+    let items = payload
+        .get("results")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().map(tmdb_to_item).collect())
+        .unwrap_or_default();
+    Ok(items)
 }
 
 fn parse_tmdb_credits(credits: &serde_json::Value) -> Vec<CatalogArtist> {
@@ -1023,6 +1080,57 @@ async fn musicbrainz_artists(
         });
     }
     Ok(out)
+}
+
+/// Other release-groups by the same primary artist as the given
+/// release-group. Resolves the artist via `inc=artist-credits` on the
+/// release-group, then browses release-groups by that artist id.
+/// The current release-group is filtered out of the result.
+async fn musicbrainz_related(
+    release_group_id: &str,
+) -> Result<Vec<CatalogItem>, (StatusCode, Json<serde_json::Value>)> {
+    let url = format!(
+        "{}/release-group/{}?inc=artist-credits&fmt=json",
+        MUSICBRAINZ_BASE,
+        urlencoding(release_group_id)
+    );
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+    let artist_id = payload
+        .get("artist-credit")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|c| c.get("artist"))
+        .and_then(|a| a.get("id"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let Some(artist_id) = artist_id else {
+        return Ok(Vec::new());
+    };
+    let url = format!(
+        "{}/release-group?artist={}&type=album|ep&fmt=json&limit=24",
+        MUSICBRAINZ_BASE,
+        urlencoding(&artist_id)
+    );
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+    let items: Vec<CatalogItem> = payload
+        .get("release-groups")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(musicbrainz_to_item)
+                .filter(|it| it.id != release_group_id)
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(items)
 }
 
 fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
