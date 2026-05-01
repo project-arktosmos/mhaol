@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
@@ -8,6 +9,7 @@
 	import CatalogDescriptionPanel from '$components/catalog/CatalogDescriptionPanel.svelte';
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
+	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
 	import CatalogTorrentProgressCard from '$components/catalog/CatalogTorrentProgressCard.svelte';
@@ -48,6 +50,22 @@
 	const firkin = $derived<Firkin>(data.firkin);
 	let removing = $state(false);
 	let removeError = $state<string | null>(null);
+
+	const playerState = playerService.state;
+	const playerDisplayMode = playerService.displayMode;
+	const isInlinePlayingThisFirkin = $derived(
+		$playerDisplayMode === 'inline' &&
+			$playerState.firkinId === firkin.id &&
+			Boolean($playerState.directStreamUrl)
+	);
+
+	onDestroy(() => {
+		const state = get(playerService.state);
+		const mode = get(playerService.displayMode);
+		if (mode === 'inline' && state.firkinId === firkin.id) {
+			void playerService.stop();
+		}
+	});
 
 	const hasIpfsFiles = $derived(firkin.files.some((f) => f.type === 'ipfs'));
 	const firstIpfsCid = $derived(firkin.files.find((f) => f.type === 'ipfs')?.value ?? null);
@@ -292,7 +310,7 @@
 				file,
 				body.playlistUrl,
 				'application/vnd.apple.mpegurl',
-				'sidebar',
+				'inline',
 				firkin.id
 			);
 		} catch (err) {
@@ -441,13 +459,7 @@
 				size: body.fileSize,
 				completedAt: ''
 			};
-			await playerService.playUrl(
-				file,
-				body.streamUrl,
-				body.mimeType ?? null,
-				'sidebar',
-				firkin.id
-			);
+			await playerService.playUrl(file, body.streamUrl, body.mimeType ?? null, 'inline', firkin.id);
 		} catch (err) {
 			torrentStreamError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -928,7 +940,18 @@
 		</aside>
 
 		<section class="flex flex-col gap-6">
-			{#if isTmdbMovie || isTmdbTv}
+			{#if isInlinePlayingThisFirkin}
+				<PlayerVideo
+					file={$playerState.currentFile}
+					connectionState={$playerState.connectionState}
+					positionSecs={$playerState.positionSecs}
+					durationSecs={$playerState.durationSecs}
+					buffering={$playerState.buffering}
+					poster={trailerThumb}
+					directStreamUrl={$playerState.directStreamUrl}
+					directStreamMimeType={$playerState.directStreamMimeType}
+				/>
+			{:else if isTmdbMovie || isTmdbTv}
 				<CatalogTrailerPlayer
 					posterUrl={trailerThumb}
 					youtubeUrl={firstTrailerUrl}

@@ -25,6 +25,7 @@
 
 	const playbackState = firkinPlaybackService.state;
 	const playerState = playerService.state;
+	const playerDisplayMode = playerService.displayMode;
 	const identityState = userIdentityService.state;
 
 	// `/profile` lives on the right side of the navbar (as the identity menu),
@@ -108,16 +109,18 @@
 			{#if $playbackState.firkin}
 				<FirkinFilesPanel />
 			{/if}
-			<PlayerVideo
-				file={$playerState.currentFile}
-				connectionState={$playerState.connectionState}
-				positionSecs={$playerState.positionSecs}
-				durationSecs={$playerState.durationSecs}
-				buffering={$playerState.buffering}
-				poster={$playerState.currentFile?.thumbnailUrl}
-				directStreamUrl={$playerState.directStreamUrl}
-				directStreamMimeType={$playerState.directStreamMimeType}
-			/>
+			{#if $playerDisplayMode !== 'inline'}
+				<PlayerVideo
+					file={$playerState.currentFile}
+					connectionState={$playerState.connectionState}
+					positionSecs={$playerState.positionSecs}
+					durationSecs={$playerState.durationSecs}
+					buffering={$playerState.buffering}
+					poster={$playerState.currentFile?.thumbnailUrl}
+					directStreamUrl={$playerState.directStreamUrl}
+					directStreamMimeType={$playerState.directStreamMimeType}
+				/>
+			{/if}
 			<SubsLyricsFinder />
 		</aside>
 	</main>
