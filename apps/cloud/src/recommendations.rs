@@ -1,6 +1,5 @@
 use crate::catalog::is_known_addon;
 use crate::firkins::{compute_firkin_cid, FileEntry, ImageMeta};
-use tracing;
 use crate::state::CloudState;
 use axum::{
     extract::{Query, State},
@@ -31,12 +30,9 @@ pub struct Recommendation {
     pub addon: String,
     /// Upstream provider id (TMDB movie id, MusicBrainz release-group id,
     /// …) — same value the WebUI passes as `IngestItem::id`. Persisted so
-    /// that when the user later adds a firkin for the same item to their
-    /// collection, [`cleanup_for_firkin`] can locate this row by
-    /// `(address, addon, upstream_id)` without depending on the firkin
-    /// CID matching the recommendation CID exactly. (The bookmarked
-    /// firkin's CID typically diverges because by then artists / trailers
-    /// have been resolved client-side.)
+    /// the WebUI can rebuild the upstream URL without re-querying the
+    /// catalog API (used by the `/recommendations` page's bookmark button
+    /// to mint the same `url` file `/catalog/virtual` would attach).
     #[serde(default)]
     pub upstream_id: String,
     pub title: String,
@@ -440,100 +436,6 @@ async fn ingest(
     }))
 }
 
-/// Pull the upstream provider id off a firkin's URL files. Mirrors the
-/// WebUI's `parseTmdbId` / `parseMusicBrainzReleaseGroupId` helpers, but
-/// runs server-side so we can match recommendation rows even when the
-/// firkin is created outside the WebUI flow.
-pub fn extract_upstream_id(addon: &str, files: &[FileEntry]) -> Option<String> {
-    let prefix: &str = match addon {
-        "tmdb-movie" => "https://www.themoviedb.org/movie/",
-        "tmdb-tv" => "https://www.themoviedb.org/tv/",
-        "musicbrainz" => "https://musicbrainz.org/release-group/",
-        _ => return None,
-    };
-    for f in files {
-        if f.kind != "url" {
-            continue;
-        }
-        let val = f.value.trim();
-        let Some(rest) = val.strip_prefix(prefix) else {
-            continue;
-        };
-        let id = rest
-            .split(|c: char| c == '/' || c == '?' || c == '#')
-            .next()
-            .unwrap_or("");
-        if !id.is_empty() {
-            return Some(id.to_string());
-        }
-    }
-    None
-}
-
-/// Remove every recommendation row whose `(address, addon, upstream_id)`
-/// triple matches the firkin we just persisted. Triggered from
-/// [`crate::firkins::create`] right after the firkin lands in SurrealDB —
-/// once the user has the item in their collection, recommending it again
-/// is noise. Best-effort: every error is logged via `tracing::warn!` and
-/// swallowed so a recommendations failure cannot fail the firkin create.
-///
-/// Returns the number of rows actually deleted (mostly useful for tests).
-pub async fn cleanup_for_firkin(
-    state: &CloudState,
-    addon: &str,
-    files: &[FileEntry],
-    creator: &str,
-) -> u32 {
-    let creator_trimmed = creator.trim();
-    if creator_trimmed.is_empty() {
-        return 0;
-    }
-    let Some(address) = normalize_address(creator_trimmed) else {
-        return 0;
-    };
-    let Some(upstream_id) = extract_upstream_id(addon, files) else {
-        return 0;
-    };
-
-    let rows: Vec<Recommendation> = match state.db.select(TABLE).await {
-        Ok(rows) => rows,
-        Err(e) => {
-            tracing::warn!("[recommendations] cleanup select failed: {e}");
-            return 0;
-        }
-    };
-
-    let mut deleted: u32 = 0;
-    for row in rows {
-        if row.address != address {
-            continue;
-        }
-        if row.addon != addon {
-            continue;
-        }
-        if row.upstream_id != upstream_id {
-            continue;
-        }
-        let Some(thing) = row.id.as_ref() else {
-            continue;
-        };
-        let raw_id = thing.id.to_raw();
-        match state
-            .db
-            .delete::<Option<Recommendation>>((TABLE, raw_id.as_str()))
-            .await
-        {
-            Ok(_) => deleted += 1,
-            Err(e) => {
-                tracing::warn!(
-                    "[recommendations] failed to delete row {raw_id}: {e}"
-                );
-            }
-        }
-    }
-    deleted
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -561,38 +463,6 @@ mod tests {
         let a = compute_recommendation_cid(&item);
         let b = compute_recommendation_cid(&item);
         assert_eq!(a, b);
-    }
-
-    #[test]
-    fn extract_upstream_id_handles_known_addons() {
-        let files = vec![
-            FileEntry {
-                kind: "torrent magnet".to_string(),
-                value: "magnet:?xt=urn:btih:abc".to_string(),
-                title: None,
-            },
-            FileEntry {
-                kind: "url".to_string(),
-                value: "https://www.themoviedb.org/movie/603".to_string(),
-                title: Some("TMDB Movie".to_string()),
-            },
-        ];
-        assert_eq!(
-            extract_upstream_id("tmdb-movie", &files),
-            Some("603".to_string())
-        );
-        assert_eq!(extract_upstream_id("tmdb-tv", &files), None);
-        assert_eq!(extract_upstream_id("local-movie", &files), None);
-
-        let mb_files = vec![FileEntry {
-            kind: "url".to_string(),
-            value: "https://musicbrainz.org/release-group/abc-def?from=somewhere".to_string(),
-            title: None,
-        }];
-        assert_eq!(
-            extract_upstream_id("musicbrainz", &mb_files),
-            Some("abc-def".to_string())
-        );
     }
 
     #[test]

@@ -1,6 +1,16 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
+	import {
+		firkinsService,
+		type Artist,
+		type FirkinAddon,
+		type ImageMeta,
+		type FileEntry,
+		type Trailer
+	} from '$lib/firkins.service';
 	import { userIdentityService } from '$lib/user-identity.service';
 
 	const userIdentityState = userIdentityService.state;
@@ -9,6 +19,8 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let lastLoadedAddress: string | null = null;
+	let bookmarkingId = $state<string | null>(null);
+	let bookmarkError = $state<string | null>(null);
 
 	$effect(() => {
 		const address = $userIdentityState.identity?.address;
@@ -45,6 +57,95 @@
 		});
 	}
 
+	function buildUpstreamSourceFiles(addon: string, upstreamId: string): FileEntry[] {
+		if (!upstreamId) return [];
+		if (addon === 'musicbrainz') {
+			return [
+				{
+					type: 'url',
+					value: `https://musicbrainz.org/release-group/${upstreamId}`,
+					title: 'MusicBrainz Release Group'
+				}
+			];
+		}
+		if (addon === 'tmdb-tv') {
+			return [
+				{
+					type: 'url',
+					value: `https://www.themoviedb.org/tv/${upstreamId}`,
+					title: 'TMDB TV Show'
+				}
+			];
+		}
+		if (addon === 'tmdb-movie') {
+			return [
+				{
+					type: 'url',
+					value: `https://www.themoviedb.org/movie/${upstreamId}`,
+					title: 'TMDB Movie'
+				}
+			];
+		}
+		return [];
+	}
+
+	function imagesFromRow(row: Recommendation): ImageMeta[] {
+		return [row.posterUrl, row.backdropUrl]
+			.filter((url): url is string => Boolean(url))
+			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
+	}
+
+	async function fetchUpstreamMetadata(
+		addon: string,
+		upstreamId: string
+	): Promise<{ artists: Artist[]; trailers: Trailer[] }> {
+		try {
+			const res = await fetch(
+				`${base}/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(upstreamId)}/metadata`,
+				{ cache: 'no-store' }
+			);
+			if (!res.ok) return { artists: [], trailers: [] };
+			const body = (await res.json()) as { artists?: Artist[]; trailers?: Trailer[] };
+			return {
+				artists: Array.isArray(body.artists) ? body.artists : [],
+				trailers: Array.isArray(body.trailers) ? body.trailers : []
+			};
+		} catch {
+			return { artists: [], trailers: [] };
+		}
+	}
+
+	async function bookmark(row: Recommendation) {
+		if (bookmarkingId) return;
+		if (!row.upstreamId) {
+			bookmarkError = 'recommendation is missing its upstream id';
+			return;
+		}
+		bookmarkingId = row.firkinId;
+		bookmarkError = null;
+		try {
+			const { artists, trailers } = await fetchUpstreamMetadata(row.addon, row.upstreamId);
+			const created = await firkinsService.create({
+				title: row.title,
+				artists,
+				description: row.description ?? '',
+				images: imagesFromRow(row),
+				files: buildUpstreamSourceFiles(row.addon, row.upstreamId),
+				year: row.year,
+				addon: row.addon as FirkinAddon,
+				trailers
+			});
+			// The detail page fires `loadRelated` + `ingestRecommendations`
+			// on mount, so navigating there is what "pulls their
+			// recommendations" — no need to duplicate that flow here.
+			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
+		} catch (err) {
+			bookmarkError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			bookmarkingId = null;
+		}
+	}
+
 	onMount(() => {
 		const address = $userIdentityState.identity?.address;
 		if (address) {
@@ -64,8 +165,8 @@
 		<p class="text-sm text-base-content/60">
 			Items the catalog API has recommended to you, indexed by their virtual IPFS hash. Counts only
 			update when you visit a real <code>/catalog/[ipfsHash]</code> detail page; virtual catalog pages
-			don't contribute. Each source firkin contributes at most once per item. Rows disappear automatically
-			once you bookmark or assign a torrent for the recommended item.
+			don't contribute. Each source firkin contributes at most once per item. Bookmark a row to mint a
+			real firkin and pull its own recommendations into this list.
 		</p>
 	</header>
 
@@ -76,6 +177,9 @@
 	{:else}
 		{#if error}
 			<div class="alert alert-error"><span>{error}</span></div>
+		{/if}
+		{#if bookmarkError}
+			<div class="alert alert-error"><span>{bookmarkError}</span></div>
 		{/if}
 
 		<section class="card border border-base-content/10 bg-base-200">
@@ -88,16 +192,17 @@
 								<th>Title</th>
 								<th class="w-40">IPFS hash</th>
 								<th class="w-20 text-right">Count</th>
+								<th class="w-32"></th>
 							</tr>
 						</thead>
 						<tbody>
 							{#if loading && rows.length === 0}
 								<tr>
-									<td colspan="4" class="text-center text-base-content/60">Loading…</td>
+									<td colspan="5" class="text-center text-base-content/60">Loading…</td>
 								</tr>
 							{:else if rows.length === 0}
 								<tr>
-									<td colspan="4" class="text-center text-base-content/60">
+									<td colspan="5" class="text-center text-base-content/60">
 										No recommendations yet — visit a movie, TV show, or album detail page to start
 										collecting.
 									</td>
@@ -147,6 +252,28 @@
 											</button>
 										</td>
 										<td class="text-right font-mono text-sm">{row.count}</td>
+										<td class="text-right">
+											<button
+												type="button"
+												class="btn gap-1 btn-xs btn-primary"
+												onclick={() => bookmark(row)}
+												disabled={bookmarkingId !== null || !row.upstreamId}
+												title="Persist this recommendation as a firkin and pull its own recommendations"
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													viewBox="0 0 24 24"
+													fill="currentColor"
+													class="h-3.5 w-3.5 shrink-0"
+													aria-hidden="true"
+												>
+													<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
+												</svg>
+												<span>
+													{bookmarkingId === row.firkinId ? 'Bookmarking…' : 'Bookmark'}
+												</span>
+											</button>
+										</td>
 									</tr>
 								{/each}
 							{/if}

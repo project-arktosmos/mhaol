@@ -598,17 +598,6 @@ async fn create(
 
     pin_firkin_body(&state, &new_id, body_json).await;
 
-    // Once the user has the firkin in their collection, prior
-    // recommendations for the same upstream item are noise — drop them
-    // (best-effort; failures are logged inside `cleanup_for_firkin`).
-    let _ = crate::recommendations::cleanup_for_firkin(
-        &state,
-        &dto.addon,
-        &dto.files,
-        &dto.creator,
-    )
-    .await;
-
     Ok((StatusCode::CREATED, Json(dto)))
 }
 
