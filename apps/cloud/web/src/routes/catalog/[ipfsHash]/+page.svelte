@@ -73,8 +73,63 @@
 		}
 	});
 
-	const hasIpfsFiles = $derived(firkin.files.some((f) => f.type === 'ipfs'));
-	const firstIpfsCid = $derived(firkin.files.find((f) => f.type === 'ipfs')?.value ?? null);
+	// IPFS streaming runs the file through a GStreamer hlssink2 pipeline
+	// (decodebin → x264 + AAC → HLS), so the source has to be real
+	// video/audio. Library scans pin sibling files too — VobSub `.sub`
+	// subtitles, ROM `.iso`s, sample/promo clips — and picking those
+	// would either stall decodebin forever (no video/audio pad to link)
+	// or stream the wrong thing. We filter to playable extensions, skip
+	// obvious non-main files, and prefer `.mkv` so a BluRay rip's main
+	// container wins over a tiny `ETRG.mp4` promo.
+	const EXT_PRIORITY: Record<string, number> = {
+		'.mkv': 0,
+		'.mp4': 1,
+		'.m4v': 2,
+		'.mov': 3,
+		'.webm': 4,
+		'.avi': 5,
+		'.ts': 6,
+		'.m2ts': 7,
+		'.mpg': 8,
+		'.mpeg': 9,
+		'.ogv': 10,
+		'.wmv': 11,
+		'.flv': 12,
+		'.flac': 13,
+		'.m4a': 14,
+		'.mp3': 15,
+		'.opus': 16,
+		'.ogg': 17,
+		'.wav': 18,
+		'.aac': 19
+	};
+	const NON_MAIN_KEYWORDS = ['sample', 'trailer', 'promo', 'extras', 'behind', 'bonus'];
+	function extOf(title: string): string | null {
+		const lower = title.toLowerCase();
+		const idx = lower.lastIndexOf('.');
+		return idx >= 0 ? lower.slice(idx) : null;
+	}
+	function isPlayableMedia(title: string | undefined | null): boolean {
+		if (!title) return false;
+		const ext = extOf(title);
+		return ext !== null && ext in EXT_PRIORITY;
+	}
+	function isMainContent(title: string): boolean {
+		const lower = title.toLowerCase();
+		return !NON_MAIN_KEYWORDS.some((kw) => lower.includes(kw));
+	}
+	const playableIpfsFiles = $derived.by(() => {
+		const matched = firkin.files.filter((f) => f.type === 'ipfs' && isPlayableMedia(f.title));
+		const main = matched.filter((f) => isMainContent(f.title ?? ''));
+		const pool = main.length > 0 ? main : matched;
+		return [...pool].sort((a, b) => {
+			const ae = extOf(a.title ?? '') ?? '';
+			const be = extOf(b.title ?? '') ?? '';
+			return (EXT_PRIORITY[ae] ?? 999) - (EXT_PRIORITY[be] ?? 999);
+		});
+	});
+	const hasIpfsFiles = $derived(playableIpfsFiles.length > 0);
+	const firstIpfsCid = $derived(playableIpfsFiles[0]?.value ?? null);
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
 	// "Real" files = anything playable on its own. URL-typed entries (TMDB
 	// source URL, MusicBrainz release-group URL, persisted YouTube track
