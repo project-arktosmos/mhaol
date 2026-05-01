@@ -5,9 +5,16 @@
 	interface Props {
 		addon: string;
 		upstreamId: string | null;
+		/**
+		 * Fires once per `(addon, upstreamId)` change when the related list
+		 * has loaded. Used by `/catalog/[ipfsHash]` to feed the items into
+		 * the per-user recommendation counter; not used by `/catalog/virtual`
+		 * (virtual pages must not update counts).
+		 */
+		onItemsLoaded?: (items: CatalogItem[]) => void;
 	}
 
-	let { addon, upstreamId }: Props = $props();
+	let { addon, upstreamId, onItemsLoaded }: Props = $props();
 
 	type Status = 'idle' | 'loading' | 'done' | 'error';
 	let status = $state<Status>('idle');
@@ -37,6 +44,7 @@
 			if (loadedKey !== `${currentAddon}:${currentId}`) return;
 			items = fetched;
 			status = 'done';
+			onItemsLoaded?.(fetched);
 		} catch (err) {
 			if (loadedKey !== `${currentAddon}:${currentId}`) return;
 			error = err instanceof Error ? err.message : 'Unknown error';

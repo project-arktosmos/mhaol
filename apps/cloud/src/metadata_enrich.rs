@@ -236,6 +236,7 @@ mod tests {
             description: Some(format!("about {title}")),
             poster_url: None,
             backdrop_url: None,
+            artists: Vec::new(),
         }
     }
 

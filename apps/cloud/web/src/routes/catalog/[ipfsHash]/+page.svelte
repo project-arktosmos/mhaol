@@ -32,6 +32,11 @@
 	import { TrackResolver } from '$services/catalog/track-resolver.svelte';
 	import { TorrentSearch, startTorrentDownload } from '$services/catalog/torrent-search.svelte';
 	import type { TorrentResultItem } from '$lib/search.service';
+	import {
+		ingestRecommendations,
+		type RecommendationIngestItem
+	} from '$lib/recommendations.service';
+	import { userIdentityService } from '$lib/user-identity.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 
@@ -52,6 +57,42 @@
 	const isTmdbMovie = $derived(firkin.addon === 'tmdb-movie');
 	const isTmdbTv = $derived(firkin.addon === 'tmdb-tv');
 	const thumb = $derived(firkin.images[0]?.url ?? null);
+
+	const userIdentityState = userIdentityService.state;
+	let recommendationsIngestedFor: string | null = null;
+
+	function handleRelatedItemsLoaded(
+		items: {
+			id: string;
+			title: string;
+			year: number | null;
+			description: string | null;
+			posterUrl: string | null;
+			backdropUrl: string | null;
+		}[]
+	) {
+		const sourceFirkinId = firkin.id;
+		if (!sourceFirkinId) return;
+		if (recommendationsIngestedFor === sourceFirkinId) return;
+		recommendationsIngestedFor = sourceFirkinId;
+		const address = $userIdentityState.identity?.address;
+		if (!address) return;
+		if (items.length === 0) return;
+		const ingestItems: RecommendationIngestItem[] = items
+			.filter((it) => it.id && it.title)
+			.map((it) => ({
+				addon: firkin.addon,
+				id: it.id,
+				title: it.title,
+				year: it.year,
+				description: it.description,
+				posterUrl: it.posterUrl,
+				backdropUrl: it.backdropUrl
+			}));
+		void ingestRecommendations({ address, sourceFirkinId, items: ingestItems }).catch((err) => {
+			console.warn('[recommendations] ingest failed:', err);
+		});
+	}
 
 	const needsMetadata = $derived(firkin.description.trim() === '' || firkin.images.length === 0);
 	const lookupAddon = $derived(metadataSearchAddon(firkin.addon));
@@ -837,11 +878,23 @@
 			{/if}
 
 			{#if isTmdbMovie}
-				<CatalogRelatedCard addon={firkin.addon} upstreamId={tmdbMovieId} />
+				<CatalogRelatedCard
+					addon={firkin.addon}
+					upstreamId={tmdbMovieId}
+					onItemsLoaded={handleRelatedItemsLoaded}
+				/>
 			{:else if isTmdbTv}
-				<CatalogRelatedCard addon={firkin.addon} upstreamId={tmdbTvId} />
+				<CatalogRelatedCard
+					addon={firkin.addon}
+					upstreamId={tmdbTvId}
+					onItemsLoaded={handleRelatedItemsLoaded}
+				/>
 			{:else if isMusicBrainz}
-				<CatalogRelatedCard addon={firkin.addon} upstreamId={musicBrainzReleaseGroupId} />
+				<CatalogRelatedCard
+					addon={firkin.addon}
+					upstreamId={musicBrainzReleaseGroupId}
+					onItemsLoaded={handleRelatedItemsLoaded}
+				/>
 			{/if}
 
 			<CatalogFilesTable files={firkin.files} />
