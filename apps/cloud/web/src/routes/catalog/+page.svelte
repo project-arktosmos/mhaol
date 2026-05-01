@@ -64,13 +64,27 @@
 	};
 
 	const libraryFirkins = $derived<Firkin[]>(
-		addon
-			? $firkinsStore.firkins
-					.filter((d) => d.addon === addon || d.addon === LOCAL_ADDON_FOR[addon])
-					.slice()
-					.sort((a, b) => b.created_at.localeCompare(a.created_at))
-					.slice(0, 6)
-			: []
+		(() => {
+			if (!addon) return [];
+			const all = $firkinsStore.firkins.filter(
+				(d) => d.addon === addon || d.addon === LOCAL_ADDON_FOR[addon]
+			);
+			// A firkin is "superseded" when another firkin lists its id in
+			// `version_hashes` — i.e. it's an earlier link in a version chain
+			// that has since been rolled forward. The server already drops
+			// these from `/api/firkins`, but the WebUI's optimistic updates
+			// in `firkinsService.enrich()` only remove the immediate
+			// predecessor, so older links can linger locally until the next
+			// poll. Filter again here so the Library row never shows two
+			// versions of the same chain.
+			const superseded = new Set<string>();
+			for (const d of all) for (const h of d.version_hashes ?? []) superseded.add(h);
+			return all
+				.filter((d) => !superseded.has(d.id))
+				.slice()
+				.sort((a, b) => b.created_at.localeCompare(a.created_at))
+				.slice(0, 6);
+		})()
 	);
 
 	function virtualFirkin(item: CatalogItem): CloudFirkin {
