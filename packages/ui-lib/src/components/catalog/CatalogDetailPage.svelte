@@ -32,6 +32,15 @@
 		eta: number | null;
 	}
 
+	interface FetchedTorrentEntry {
+		label: string;
+		name: string;
+		quality: string;
+		languages: string;
+	}
+
+	type SearchLang = 'en' | 'es';
+
 	interface Props {
 		item: CatalogItem;
 		loading?: boolean;
@@ -41,8 +50,10 @@
 		fetchSteps?: FetchSteps | null;
 		torrentStatus?: TorrentStatus | null;
 		fetchedTorrent?: { name: string; quality: string; languages: string } | null;
+		fetchedTorrents?: FetchedTorrentEntry[] | null;
 		isFavorite?: boolean;
 		isPinned?: boolean;
+		searchLang?: SearchLang | null;
 		onfetch?: () => void;
 		ondownload?: () => void;
 		onstream?: () => void;
@@ -50,6 +61,7 @@
 		onback: () => void;
 		ontogglefavorite?: () => void;
 		ontogglepin?: () => void;
+		onsearchlangchange?: (lang: SearchLang) => void;
 		sidebar?: Snippet;
 		extra?: Snippet;
 		rightPanel?: Snippet;
@@ -64,8 +76,10 @@
 		fetchSteps = null,
 		torrentStatus = null,
 		fetchedTorrent = null,
+		fetchedTorrents = null,
 		isFavorite = false,
 		isPinned = false,
+		searchLang = null,
 		onfetch,
 		ondownload,
 		onstream,
@@ -73,6 +87,7 @@
 		onback,
 		ontogglefavorite,
 		ontogglepin,
+		onsearchlangchange,
 		sidebar,
 		extra,
 		rightPanel
@@ -140,9 +155,26 @@
 
 					{#if supportsTorrent && !streaming}
 						<div class="absolute inset-0 flex items-center justify-center">
-							<div class="flex flex-wrap justify-center gap-2">
+							<div class="flex flex-wrap items-center justify-center gap-2">
+								{#if searchLang && onsearchlangchange}
+									<select
+										class="select-bordered select select-sm shadow-lg"
+										value={searchLang}
+										onchange={(e) =>
+											onsearchlangchange(
+												(e.currentTarget as HTMLSelectElement).value as SearchLang
+											)}
+									>
+										<option value="en">English</option>
+										<option value="es">Spanish</option>
+									</select>
+								{/if}
 								{#if onfetch}
-									<button class="btn btn-sm btn-primary shadow-lg" disabled={fetching} onclick={onfetch}>
+									<button
+										class="btn shadow-lg btn-sm btn-primary"
+										disabled={fetching}
+										onclick={onfetch}
+									>
 										{#if fetching}
 											<span class="loading loading-xs loading-spinner"></span>
 										{/if}
@@ -151,7 +183,7 @@
 								{/if}
 								{#if ondownload}
 									<button
-										class="btn btn-sm btn-secondary shadow-lg"
+										class="btn shadow-lg btn-sm btn-secondary"
 										disabled={!fetched || isDownloading || isDownloaded}
 										onclick={ondownload}
 									>
@@ -159,10 +191,14 @@
 									</button>
 								{/if}
 								{#if onstream}
-									<button class="btn btn-sm btn-accent shadow-lg" onclick={onstream}> Stream </button>
+									<button class="btn shadow-lg btn-sm btn-accent" onclick={onstream}>
+										Stream
+									</button>
 								{/if}
 								{#if onshowsearch}
-									<button class="btn btn-ghost btn-sm shadow-lg" onclick={onshowsearch}> Manual Search </button>
+									<button class="btn shadow-lg btn-ghost btn-sm" onclick={onshowsearch}>
+										Manual Search
+									</button>
 								{/if}
 							</div>
 						</div>
@@ -230,7 +266,22 @@
 				</div>
 			{/if}
 
-			{#if fetchedTorrent}
+			{#if fetchedTorrents && fetchedTorrents.length > 0}
+				<div class="flex flex-col gap-2">
+					{#each fetchedTorrents as t}
+						<div class="rounded-lg bg-base-200 p-3 text-sm">
+							<div class="mb-1 flex items-center gap-2">
+								<span class="badge badge-xs badge-primary">{t.label}</span>
+							</div>
+							<p class="font-medium break-words">{t.name}</p>
+							<div class="mt-1 flex gap-2 text-xs opacity-60">
+								<span>{t.quality}</span>
+								<span>{t.languages}</span>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{:else if fetchedTorrent}
 				<div class="rounded-lg bg-base-200 p-3 text-sm">
 					<p class="font-medium">{fetchedTorrent.name}</p>
 					<div class="mt-1 flex gap-2 text-xs opacity-60">

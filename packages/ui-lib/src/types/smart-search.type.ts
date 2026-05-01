@@ -7,14 +7,11 @@ export type { TorrentAnalysis } from 'addons/torrent-search-thepiratebay/types';
 
 export type SmartSearchMode = 'download' | 'stream' | 'fetch';
 
-export type SmartSearchMediaType = 'movies' | 'tv' | 'music' | 'games' | 'books';
+export type SmartSearchMediaType = 'movies' | 'tv' | 'music';
 
 export interface SmartSearchMediaConfig {
 	preferredLanguage?: string;
 	preferredQuality?: string;
-	preferredConsole?: string;
-	preferredFormat?: string;
-	smartSearchPrompt: string;
 }
 
 export type SmartSearchAllConfigs = Record<SmartSearchMediaType, SmartSearchMediaConfig>;
@@ -25,11 +22,19 @@ interface SmartSearchBaseSelection {
 	mode: SmartSearchMode;
 }
 
+/**
+ * Language hint that drives indexer selection for a search:
+ *  - `en` (default): PirateBay only
+ *  - `es`: PirateBay + Spanish-enriched queries + Spanish-language indexers
+ */
+export type SmartSearchLang = 'en' | 'es';
+
 export interface SmartSearchMovieSelection extends SmartSearchBaseSelection {
 	type: 'movie';
 	tmdbId: number;
 	existingItemId?: string;
 	existingLibraryId?: string;
+	searchLang?: SmartSearchLang;
 }
 
 export interface TvSeasonMeta {
@@ -60,24 +65,10 @@ export interface SmartSearchMusicSelection extends SmartSearchBaseSelection {
 	musicSearchMode?: 'album';
 }
 
-export interface SmartSearchGameSelection extends SmartSearchBaseSelection {
-	type: 'game';
-	retroachievementsId: number;
-	consoleName: string;
-}
-
-export interface SmartSearchBookSelection extends SmartSearchBaseSelection {
-	type: 'book';
-	openlibraryKey: string;
-	author: string;
-}
-
 export type SmartSearchSelection =
 	| SmartSearchMovieSelection
 	| SmartSearchTvSelection
-	| SmartSearchMusicSelection
-	| SmartSearchGameSelection
-	| SmartSearchBookSelection;
+	| SmartSearchMusicSelection;
 
 export interface SmartSearchTorrentResult extends TorrentSearchResult {
 	searchQueries: string[];
@@ -110,6 +101,11 @@ export interface TvSmartSearchResults {
 	seasons: Record<number, TvSeasonResults>;
 }
 
+export interface TvFetchedCandidates {
+	complete: SmartSearchTorrentResult | null;
+	seasons: Record<number, SmartSearchTorrentResult | null>;
+}
+
 export interface SmartSearchState {
 	selection: SmartSearchSelection | null;
 	visible: boolean;
@@ -123,6 +119,7 @@ export interface SmartSearchState {
 	pendingLibraryId: string | null;
 	downloadedHash: string | null;
 	fetchedCandidate: SmartSearchTorrentResult | null;
+	fetchedTvCandidates: TvFetchedCandidates | null;
 	tvResults: TvSmartSearchResults | null;
 	tvSeasonsMeta: TvSeasonMeta[] | null;
 	activeTvTab: 'complete' | number;

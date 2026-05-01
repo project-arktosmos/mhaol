@@ -8,40 +8,28 @@ import type {
 	SmartSearchTorrentResult,
 	SmartSearchMode,
 	SmartSearchMediaType,
-	SmartSearchMediaConfig,
 	SmartSearchAllConfigs,
 	TvSmartSearchResults,
-	TvSeasonMeta,
+	TvFetchedCandidates,
 	MusicSmartSearchResults
 } from 'ui-lib/types/smart-search.type';
 import type { TorrentSearchResult } from 'addons/torrent-search-thepiratebay/types';
 import type { CatalogItem } from 'ui-lib/types/catalog.type';
 import { formatAuthors } from 'ui-lib/types/catalog.type';
 import { parseTorrentName } from 'addons/torrent-search-thepiratebay/parse-torrent-name';
-import { queueService } from 'ui-lib/services/queue.service';
+import { isCastilianRelease } from 'addons/torrent-search-spanish/is-castilian';
 
 const defaultConfigs: SmartSearchAllConfigs = {
 	movies: {
 		preferredLanguage: 'English',
-		preferredQuality: '1080p',
-		smartSearchPrompt: ''
+		preferredQuality: '1080p'
 	},
 	tv: {
 		preferredLanguage: 'English',
-		preferredQuality: '1080p',
-		smartSearchPrompt: ''
+		preferredQuality: '1080p'
 	},
 	music: {
-		preferredQuality: 'FLAC',
-		smartSearchPrompt: ''
-	},
-	games: {
-		preferredConsole: '',
-		smartSearchPrompt: ''
-	},
-	books: {
-		preferredFormat: 'EPUB',
-		smartSearchPrompt: ''
+		preferredQuality: 'FLAC'
 	}
 };
 
@@ -58,27 +46,13 @@ const initialState: SmartSearchState = {
 	pendingLibraryId: null,
 	downloadedHash: null,
 	fetchedCandidate: null,
+	fetchedTvCandidates: null,
 	tvResults: null,
 	tvSeasonsMeta: null,
 	activeTvTab: 'complete',
 	musicResults: null,
 	activeMusicTab: 'album'
 };
-
-function selectionToMediaType(type: SmartSearchSelection['type']): SmartSearchMediaType {
-	switch (type) {
-		case 'movie':
-			return 'movies';
-		case 'tv':
-			return 'tv';
-		case 'music':
-			return 'music';
-		case 'game':
-			return 'games';
-		case 'book':
-			return 'books';
-	}
-}
 
 function getSubdir(selection: SmartSearchSelection): string {
 	switch (selection.type) {
@@ -88,10 +62,6 @@ function getSubdir(selection: SmartSearchSelection): string {
 			return 'tv';
 		case 'music':
 			return 'music';
-		case 'game':
-			return 'games';
-		case 'book':
-			return 'books';
 	}
 }
 
@@ -104,10 +74,6 @@ function getLibraryTypes(selectionType: SmartSearchSelection['type']): string[] 
 			return ['tv'];
 		case 'music':
 			return ['audio', 'music'];
-		case 'game':
-			return ['games'];
-		case 'book':
-			return ['books', 'document'];
 	}
 }
 
@@ -150,9 +116,6 @@ class SmartSearchService {
 				updates['movies.preferredQuality'] = parsed.preferredQuality;
 				updates['tv.preferredQuality'] = parsed.preferredQuality;
 			}
-			if (parsed.smartSearchPrompt) {
-				updates['movies.smartSearchPrompt'] = parsed.smartSearchPrompt;
-			}
 			if (Object.keys(updates).length > 0) {
 				fetchRaw('/api/smart-search/settings', {
 					method: 'PUT',
@@ -184,12 +147,6 @@ class SmartSearchService {
 		}
 	}
 
-	getConfigForType(type: SmartSearchSelection['type']): SmartSearchMediaConfig {
-		let config: SmartSearchAllConfigs = defaultConfigs;
-		this.configStore.subscribe((c) => (config = c))();
-		return config[selectionToMediaType(type)];
-	}
-
 	select(selection: SmartSearchSelection) {
 		if (this.abortController) {
 			this.abortController.abort();
@@ -208,6 +165,7 @@ class SmartSearchService {
 			pendingLibraryId: null,
 			downloadedHash: null,
 			fetchedCandidate: null,
+			fetchedTvCandidates: null,
 			tvResults: null,
 			tvSeasonsMeta: selection.type === 'tv' ? (selection.seasons ?? null) : null,
 			activeTvTab: 'complete',
@@ -224,7 +182,11 @@ class SmartSearchService {
 		this.createPendingItem(selection);
 
 		if (selection.mode === 'fetch') {
-			this.autoPickOnSearchComplete();
+			if (selection.type === 'tv') {
+				this.autoPickTvOnSearchComplete();
+			} else {
+				this.autoPickOnSearchComplete();
+			}
 		}
 	}
 
@@ -241,6 +203,31 @@ class SmartSearchService {
 		});
 	}
 
+	private autoPickTvOnSearchComplete() {
+		let started = false;
+		const unsubscribe = this.store.subscribe((state) => {
+			if (state.searching) started = true;
+			if (started && !state.searching) {
+				unsubscribe();
+				if (state.searchError) return;
+				const candidates = this.pickBestTvCandidates();
+				this.setFetchedTvCandidates(candidates);
+			}
+		});
+	}
+
+	private pickBestTvCandidates(): TvFetchedCandidates {
+		const tvResults = this.getState().tvResults;
+		if (!tvResults) return { complete: null, seasons: {} };
+		const complete = this.pickBestFromList(tvResults.complete);
+		const seasons: Record<number, SmartSearchTorrentResult | null> = {};
+		for (const [snStr, packs] of Object.entries(tvResults.seasons)) {
+			const sn = Number(snStr);
+			seasons[sn] = this.pickBestFromList(packs.seasonPacks);
+		}
+		return { complete, seasons };
+	}
+
 	clear() {
 		if (this.abortController) {
 			this.abortController.abort();
@@ -255,6 +242,7 @@ class SmartSearchService {
 			pendingItemId: null,
 			pendingLibraryId: null,
 			fetchedCandidate: null,
+			fetchedTvCandidates: null,
 			tvResults: null,
 			tvSeasonsMeta: null,
 			activeTvTab: 'complete',
@@ -274,14 +262,6 @@ class SmartSearchService {
 				cat = 100;
 				queries = [`${selection.artist} ${title}`];
 				break;
-			case 'game':
-				cat = 400;
-				queries = [`${title} ${selection.consoleName}`];
-				break;
-			case 'book':
-				cat = 601;
-				queries = [`${title} ${selection.author}`];
-				break;
 			case 'movie':
 				cat = 200;
 				queries = [`${title} ${year}`];
@@ -291,6 +271,9 @@ class SmartSearchService {
 				queries = [`${title} ${year}`];
 				break;
 		}
+
+		const langParam = selection.type === 'movie' && selection.searchLang === 'es' ? '&lang=es' : '';
+		const castilianOnly = selection.type === 'movie' && selection.searchLang === 'es';
 
 		this.store.update((s) => ({ ...s, searching: true, searchError: null }));
 
@@ -303,11 +286,17 @@ class SmartSearchService {
 
 				try {
 					const res = await fetchRaw(
-						`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}`,
+						`/api/torrent/search?q=${encodeURIComponent(query)}&cat=${cat}${langParam}`,
 						{ signal }
 					);
 					if (!res.ok) continue;
-					const data: TorrentSearchResult[] = await res.json();
+					const raw: TorrentSearchResult[] = await res.json();
+
+					// Defense-in-depth: if the user picked Castilian Spanish,
+					// strip any non-Castilian rows the backend (possibly stale)
+					// might have returned. The latino marker wins over any
+					// other Spanish indicator — see addons/torrent-search-spanish.
+					const data = castilianOnly ? raw.filter((r) => isCastilianRelease(r.name)) : raw;
 
 					const sorted = [...data].sort((a, b) => {
 						if (b.seeders !== a.seeders) return b.seeders - a.seeders;
@@ -355,99 +344,16 @@ class SmartSearchService {
 	}
 
 	private async analyzeResults(selection: SmartSearchSelection, analyzeHashes: Set<string>) {
-		const artist =
-			selection.type === 'music'
-				? selection.artist
-				: selection.type === 'book'
-					? selection.author
-					: undefined;
-		const consoleName = selection.type === 'game' ? selection.consoleName : undefined;
+		const artist = selection.type === 'music' ? selection.artist : undefined;
 
-		// Step 1: Immediate heuristic analysis (parseTorrentName) — completes synchronously
 		this.store.update((s) => {
 			const results = s.searchResults.map((r) => {
 				if (!analyzeHashes.has(r.infoHash)) return r;
-				const analysis = parseTorrentName(
-					r.name,
-					selection.title,
-					selection.year,
-					artist,
-					consoleName
-				);
+				const analysis = parseTorrentName(r.name, selection.title, selection.year, artist);
 				return { ...r, analysis };
 			});
 			return { ...s, searchResults: results, analyzing: false };
 		});
-
-		// Step 2: Fire off LLM tasks in background to enhance heuristic results
-		this.enhanceWithLlm(selection, analyzeHashes, artist, consoleName);
-	}
-
-	private async enhanceWithLlm(
-		selection: SmartSearchSelection,
-		analyzeHashes: Set<string>,
-		artist: string | undefined,
-		consoleName: string | undefined
-	) {
-		queueService.subscribe();
-
-		const config = this.getConfigForType(selection.type);
-		const state = this.getState();
-
-		for (const hash of analyzeHashes) {
-			const result = state.searchResults.find((r) => r.infoHash === hash);
-			if (!result) continue;
-
-			const task = await queueService.createTask('llm:analyze-torrent', {
-				torrentName: result.name,
-				mediaTitle: selection.title,
-				mediaYear: selection.year,
-				artist: artist ?? null,
-				consoleName: consoleName ?? null,
-				promptTemplate: config.smartSearchPrompt ?? ''
-			});
-			if (!task) continue;
-
-			// Each task resolves independently — update results as they arrive
-			queueService
-				.waitForTask(task.id)
-				.then((completed) => {
-					if (completed.status === 'completed' && completed.result) {
-						const llmResult = completed.result;
-						this.store.update((s) => ({
-							...s,
-							searchResults: s.searchResults.map((r) => {
-								if (r.infoHash !== hash) return r;
-								const base = r.analysis ?? {
-									quality: '',
-									languages: '',
-									subs: '',
-									relevance: 0,
-									reason: '',
-									seasonNumber: null,
-									episodeNumber: null,
-									isCompleteSeries: false,
-									isDiscography: false
-								};
-								return {
-									...r,
-									analysis: {
-										...base,
-										quality: (llmResult.quality as string) ?? base.quality,
-										languages: (llmResult.languages as string) ?? base.languages,
-										subs: (llmResult.subs as string) ?? base.subs,
-										relevance: (llmResult.relevance as number) ?? base.relevance,
-										reason: (llmResult.reason as string) ?? base.reason
-									}
-								};
-							})
-						}));
-					}
-				})
-				.catch(() => {
-					// LLM analysis failed; heuristic fallback already applied
-				});
-		}
 	}
 
 	private async runTvSearches(
@@ -515,10 +421,12 @@ class SmartSearchService {
 			}
 
 			if (signal.aborted) return;
-			this.store.update((s) => ({ ...s, searching: false }));
 
-			// Analyze all results (not just top 5 per query) for TV since we need season/episode info
+			// Analyze all results (not just top 5 per query) for TV since we need season/episode info.
+			// Run heuristic analysis + tvResults rebuild synchronously BEFORE flipping `searching: false`,
+			// so the auto-pick subscription sees a populated `tvResults`.
 			this.analyzeTvResults(selection, analyzeHashes);
+			this.store.update((s) => ({ ...s, searching: false }));
 		} catch (error) {
 			if (signal.aborted) return;
 			this.store.update((s) => ({
@@ -529,8 +437,7 @@ class SmartSearchService {
 		}
 	}
 
-	private async analyzeTvResults(selection: SmartSearchSelection, analyzeHashes: Set<string>) {
-		// Step 1: Immediate heuristic analysis — completes synchronously
+	private analyzeTvResults(selection: SmartSearchSelection, analyzeHashes: Set<string>) {
 		this.store.update((s) => {
 			const results = s.searchResults.map((r) => {
 				if (!analyzeHashes.has(r.infoHash)) return r;
@@ -539,12 +446,7 @@ class SmartSearchService {
 			});
 			return { ...s, searchResults: results, analyzing: false };
 		});
-
-		// Step 2: Build initial TV structure from heuristic results
 		this.rebuildTvResults();
-
-		// Step 3: Fire off LLM tasks in background to enhance heuristic results
-		this.enhanceWithLlm(selection, analyzeHashes, undefined, undefined);
 	}
 
 	private rebuildTvResults() {
@@ -713,8 +615,6 @@ class SmartSearchService {
 		});
 
 		this.rebuildMusicResults();
-
-		this.enhanceWithLlm(selection, analyzeHashes, selection.artist, undefined);
 	}
 
 	private rebuildMusicResults() {
@@ -829,6 +729,17 @@ class SmartSearchService {
 		}
 	}
 
+	async clearTvFetchCache(tmdbId: number): Promise<void> {
+		try {
+			await fetchRaw(
+				`/api/catalog/fetch-cache-by-source?source=tmdb&sourceId=${tmdbId}&kind=tv_show`,
+				{ method: 'DELETE' }
+			);
+		} catch {
+			// best-effort
+		}
+	}
+
 	async saveTvFetchCache(
 		tmdbId: number,
 		scope: string,
@@ -864,6 +775,19 @@ class SmartSearchService {
 
 	setFetchedCandidate(candidate: SmartSearchTorrentResult) {
 		this.store.update((s) => ({ ...s, fetchedCandidate: candidate }));
+	}
+
+	setFetchedTvCandidates(candidates: TvFetchedCandidates) {
+		const seasonValues = Object.entries(candidates.seasons)
+			.sort(([a], [b]) => Number(a) - Number(b))
+			.map(([, c]) => c)
+			.filter((c): c is SmartSearchTorrentResult => c !== null);
+		const primary = candidates.complete ?? seasonValues[0] ?? null;
+		this.store.update((s) => ({
+			...s,
+			fetchedTvCandidates: candidates,
+			fetchedCandidate: primary
+		}));
 	}
 
 	async selectAndWaitForBest(
@@ -950,80 +874,6 @@ class SmartSearchService {
 			console.log('[fetch-cache] save response', res.status, res.statusText);
 		} catch (err) {
 			console.error('[fetch-cache] save failed', err);
-		}
-	}
-
-	async checkBookFetchCache(openlibraryKey: string): Promise<SmartSearchTorrentResult | null> {
-		try {
-			const res = await fetchRaw(
-				`/api/catalog/fetch-cache-by-source?source=openlibrary&sourceId=${encodeURIComponent(openlibraryKey)}&kind=book&scope=default&scopeKey=`
-			);
-			if (!res.ok) return null;
-			const data = await res.json();
-			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
-			candidate.uploadedAt = new Date(candidate.uploadedAt);
-			return candidate;
-		} catch {
-			return null;
-		}
-	}
-
-	async saveBookFetchCache(
-		openlibraryKey: string,
-		candidate: SmartSearchTorrentResult
-	): Promise<void> {
-		try {
-			await fetchRaw('/api/catalog/fetch-cache-by-source', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					source: 'openlibrary',
-					sourceId: openlibraryKey,
-					kind: 'book',
-					scope: 'default',
-					scopeKey: '',
-					candidate
-				})
-			});
-		} catch {
-			// best-effort
-		}
-	}
-
-	async checkGameFetchCache(retroachievementsId: number): Promise<SmartSearchTorrentResult | null> {
-		try {
-			const res = await fetchRaw(
-				`/api/catalog/fetch-cache-by-source?source=retroachievements&sourceId=${retroachievementsId}&kind=game&scope=default&scopeKey=`
-			);
-			if (!res.ok) return null;
-			const data = await res.json();
-			const candidate = JSON.parse(data.candidateJson) as SmartSearchTorrentResult;
-			candidate.uploadedAt = new Date(candidate.uploadedAt);
-			return candidate;
-		} catch {
-			return null;
-		}
-	}
-
-	async saveGameFetchCache(
-		retroachievementsId: number,
-		candidate: SmartSearchTorrentResult
-	): Promise<void> {
-		try {
-			await fetchRaw('/api/catalog/fetch-cache-by-source', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					source: 'retroachievements',
-					sourceId: String(retroachievementsId),
-					kind: 'game',
-					scope: 'default',
-					scopeKey: '',
-					candidate
-				})
-			});
-		} catch {
-			// best-effort
 		}
 	}
 
@@ -1203,12 +1053,6 @@ class SmartSearchService {
 					case 'tv':
 						libName = 'TV Shows';
 						break;
-					case 'game':
-						libName = 'Games';
-						break;
-					case 'book':
-						libName = 'Books';
-						break;
 				}
 				const createRes = await fetchRaw('/api/libraries', {
 					method: 'POST',
@@ -1233,16 +1077,6 @@ class SmartSearchService {
 					pendingName = `${selection.artist} - ${selection.title}`;
 					mediaType = 'audio';
 					categoryId = 'audio-uncategorized';
-					break;
-				case 'game':
-					pendingName = `${selection.title} (${selection.consoleName})`;
-					mediaType = 'video';
-					categoryId = 'games';
-					break;
-				case 'book':
-					pendingName = `${selection.author} - ${selection.title}`;
-					mediaType = 'document';
-					categoryId = 'books';
 					break;
 				default:
 					pendingName = selection.title;
@@ -1327,26 +1161,6 @@ class SmartSearchService {
 					title: item.title,
 					year: item.year ?? '',
 					artist: formatAuthors(item.metadata.authors, 'artist'),
-					mode
-				};
-				break;
-			case 'game':
-				selection = {
-					type: 'game',
-					retroachievementsId: item.metadata.retroachievementsId,
-					title: item.title,
-					year: item.year ?? '',
-					consoleName: item.metadata.consoleName,
-					mode
-				};
-				break;
-			case 'book':
-				selection = {
-					type: 'book',
-					openlibraryKey: item.metadata.openlibraryKey,
-					title: item.title,
-					year: item.year ?? '',
-					author: item.metadata.authors[0]?.name ?? '',
 					mode
 				};
 				break;

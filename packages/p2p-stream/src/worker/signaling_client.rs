@@ -219,12 +219,13 @@ async fn handle_server_message(
             // the Rust worker joins first and waits for the browser, so this
             // list should be empty. If there are existing peers, treat them
             // like peer-joined.
-            if let Some(peers) = value.get("peers").and_then(|p| p.as_array()) {
-                for peer in peers {
-                    if let Some(pid) = peer.as_str() {
-                        create_peer_session(session_id, pid, manager, out_tx).await;
-                    }
-                }
+            //
+            // Wire format (rendezvous + the legacy mhaol-signaling): each
+            // peer is an object `{ peer_id, name, instance_type }`. An older
+            // version of this code called `peer.as_str()` and silently
+            // dropped every peer because they are objects, not strings.
+            for pid in extract_peer_ids(&value) {
+                create_peer_session(session_id, &pid, manager, out_tx).await;
             }
         }
 
@@ -518,6 +519,27 @@ fn build_ws_url(
     Ok(url)
 }
 
+/// Extract `peer_id` strings from a `room-peers` payload. Tolerates both the
+/// canonical object form `{ "peers": [{ "peer_id": "0x..." }] }` and a
+/// legacy string-array form `{ "peers": ["0x..."] }` so the worker keeps
+/// working if the wire format ever drifts.
+fn extract_peer_ids(value: &serde_json::Value) -> Vec<String> {
+    let Some(peers) = value.get("peers").and_then(|p| p.as_array()) else {
+        return Vec::new();
+    };
+    peers
+        .iter()
+        .filter_map(|peer| {
+            if let Some(s) = peer.as_str() {
+                return Some(s.to_string());
+            }
+            peer.get("peer_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
+        .collect()
+}
+
 /// Hex encode a byte slice.
 fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -537,4 +559,78 @@ fn percent_encode(input: &str) -> String {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_peer_ids_handles_object_form() {
+        // Wire format produced by rendezvous and the legacy mhaol-signaling.
+        let payload = serde_json::json!({
+            "type": "room-peers",
+            "room_id": "abc",
+            "peers": [
+                { "peer_id": "0xaaaa", "name": "alice", "instance_type": "client" },
+                { "peer_id": "0xbbbb", "name": "bob",   "instance_type": "server" },
+            ],
+        });
+        assert_eq!(
+            extract_peer_ids(&payload),
+            vec!["0xaaaa".to_string(), "0xbbbb".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_peer_ids_handles_string_form() {
+        // Defensive fallback: if some other server sends bare strings we still
+        // recover the peer ids instead of dropping them silently.
+        let payload = serde_json::json!({
+            "type": "room-peers",
+            "peers": ["0xaaaa", "0xbbbb"],
+        });
+        assert_eq!(
+            extract_peer_ids(&payload),
+            vec!["0xaaaa".to_string(), "0xbbbb".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_peer_ids_returns_empty_for_missing_key() {
+        let payload = serde_json::json!({ "type": "room-peers" });
+        assert!(extract_peer_ids(&payload).is_empty());
+    }
+
+    #[test]
+    fn extract_peer_ids_skips_objects_without_peer_id() {
+        let payload = serde_json::json!({
+            "peers": [
+                { "name": "no peer_id" },
+                { "peer_id": "0xcccc" },
+            ],
+        });
+        assert_eq!(extract_peer_ids(&payload), vec!["0xcccc".to_string()]);
+    }
+
+    #[test]
+    fn build_ws_url_uses_party_path_and_strips_https() {
+        // Browser and worker must hit the same `/party/{room_id}` path that
+        // rendezvous serves; this is the contract the regression test guards.
+        let key = SigningKey::random(&mut k256::elliptic_curve::rand_core::OsRng);
+        let address = eth_address_from_key(&key);
+        let url = build_ws_url("https://example.com", "room-1", &key, &address, None).unwrap();
+        assert!(url.starts_with("wss://example.com/party/room-1?"));
+        assert!(url.contains(&format!("address={address}")));
+        assert!(url.contains("signature=0x"));
+        assert!(url.contains("timestamp="));
+    }
+
+    #[test]
+    fn build_ws_url_http_becomes_ws_for_localhost_rendezvous() {
+        let key = SigningKey::random(&mut k256::elliptic_curve::rand_core::OsRng);
+        let address = eth_address_from_key(&key);
+        let url = build_ws_url("http://localhost:14080", "abc", &key, &address, None).unwrap();
+        assert!(url.starts_with("ws://localhost:14080/party/abc?"));
+    }
 }

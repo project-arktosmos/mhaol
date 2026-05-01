@@ -77,6 +77,42 @@ describe('SignalingAdapter', () => {
 		it('handles invalid URLs gracefully', () => {
 			expect(signalingAdapter.resolveLocalUrl('not-a-url')).toBe('not-a-url');
 		});
+
+		it('preserves the rendezvous port when the browser is on localhost', () => {
+			// Regression: previously rewrote both hostname and port with
+			// window.location, sending the player to the cloud port (9898)
+			// instead of the rendezvous port (14080).
+			Object.defineProperty(window, 'location', {
+				configurable: true,
+				value: new URL('http://localhost:9898/')
+			});
+			expect(signalingAdapter.resolveLocalUrl('http://localhost:14080')).toBe(
+				'http://localhost:14080'
+			);
+		});
+
+		it('rewrites hostname but keeps port when the browser is on a different host', () => {
+			// Cross-machine case: cloud advertises its loopback URL, browser
+			// sits on a real LAN IP. We swap the hostname so the browser
+			// dials the cloud's host on the rendezvous port.
+			Object.defineProperty(window, 'location', {
+				configurable: true,
+				value: new URL('http://10.0.0.5:9898/')
+			});
+			expect(signalingAdapter.resolveLocalUrl('http://localhost:14080')).toBe(
+				'http://10.0.0.5:14080'
+			);
+		});
+
+		it('does not rewrite when both sides are loopback', () => {
+			Object.defineProperty(window, 'location', {
+				configurable: true,
+				value: new URL('http://127.0.0.1:9898/')
+			});
+			expect(signalingAdapter.resolveLocalUrl('http://127.0.0.1:14080')).toBe(
+				'http://127.0.0.1:14080'
+			);
+		});
 	});
 
 	describe('buildWsUrl', () => {

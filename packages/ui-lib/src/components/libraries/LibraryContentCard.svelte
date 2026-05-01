@@ -106,13 +106,19 @@
 {/snippet}
 
 {#if href}
-	<a {href} class="card cursor-pointer bg-base-100 shadow-sm transition-shadow hover:shadow-md no-underline text-inherit">
+	<a
+		{href}
+		class="card cursor-pointer bg-base-100 text-inherit no-underline shadow-sm transition-shadow hover:shadow-md"
+	>
 		{@render cardBody()}
 	</a>
 {:else}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="card cursor-pointer bg-base-100 shadow-sm transition-shadow hover:shadow-md" {onclick}>
+	<div
+		class="card cursor-pointer bg-base-100 shadow-sm transition-shadow hover:shadow-md"
+		{onclick}
+	>
 		{@render cardBody()}
 	</div>
 {/if}

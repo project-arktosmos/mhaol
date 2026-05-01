@@ -157,6 +157,15 @@ impl StreamPipeline {
     pub async fn next_bus_event(&mut self) -> Option<BusEvent> {
         self.bus_events.recv().await
     }
+
+    /// Take ownership of the bus_events receiver. After this call,
+    /// `next_bus_event` returns `None`. Used by `PeerSession` so a
+    /// dedicated thread can watch for `BusEvent::Eos` and forward it to
+    /// the browser as a `TrackEnded` data-channel message.
+    pub fn take_bus_events(&mut self) -> Option<mpsc::UnboundedReceiver<BusEvent>> {
+        let (_dummy_tx, dummy_rx) = mpsc::unbounded_channel();
+        Some(std::mem::replace(&mut self.bus_events, dummy_rx))
+    }
 }
 
 impl Drop for StreamPipeline {

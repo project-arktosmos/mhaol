@@ -132,21 +132,46 @@ impl DownloadPipeline {
         po_token: Option<&str>,
         visitor_data: Option<&str>,
     ) -> Result<StreamUrlResult> {
-        let (player_response, _client, po_token_was_used) =
-            self.fetch_player_response(video_id, po_token, visitor_data).await?;
+        self.extract_stream_urls_inner(video_id, po_token, visitor_data, false).await
+    }
 
-        if !player_response.is_playable() {
-            let reason = player_response
-                .unplayable_reason()
-                .unwrap_or_else(|| "Unknown reason".to_string());
-            return Err(YtDlpError::VideoUnavailable { reason }.into());
-        }
+    /// Extract resolved stream URLs preferring browser-client (WEB) signing so that
+    /// the URLs can be fetched from a browser User-Agent without CDN 403s. This
+    /// matters specifically for audio-only adaptive streams — non-WEB clients
+    /// (ANDROID/IOS) sign URLs that the googlevideo CDN refuses to serve to a
+    /// browser UA.
+    pub async fn extract_stream_urls_for_browser(
+        &self,
+        video_id: &str,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+    ) -> Result<StreamUrlResult> {
+        self.extract_stream_urls_inner(video_id, po_token, visitor_data, true).await
+    }
 
-        let mut resolved_formats = self.resolve_formats(&player_response, video_id).await?;
+    async fn extract_stream_urls_inner(
+        &self,
+        video_id: &str,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+        prefer_browser: bool,
+    ) -> Result<StreamUrlResult> {
+        use crate::extractor::clients::{ANDROID, IOS, TV, WEB, WEB_EMBEDDED};
 
-        if resolved_formats.is_empty() {
-            return Err(YtDlpError::NoSuitableFormat.into());
-        }
+        // Browser-priority client list. We use the same order whether or not
+        // a po_token is present — the post-fetch retry loop below decides
+        // which client wins, not the token.
+        let web_priority: &[&InnertubeClient] =
+            &[&*WEB, &*WEB_EMBEDDED, &*TV, &*ANDROID, &*IOS];
+        let clients: &[&InnertubeClient] = if prefer_browser || po_token.is_some() {
+            web_priority
+        } else {
+            &*CLIENT_PRIORITY
+        };
+
+        let (player_response, mut resolved_formats, _client, po_token_was_used) = self
+            .fetch_and_resolve_with_clients(video_id, po_token, visitor_data, clients)
+            .await?;
 
         // Append pot=TOKEN when applicable
         if po_token_was_used {
@@ -652,6 +677,107 @@ impl DownloadPipeline {
         headers
     }
 
+    /// Iterate clients and return the first one whose response is playable
+    /// AND whose formats resolve to >= 1 URL. The single-shot
+    /// `fetch_player_response_with_clients` returns the first client that
+    /// reports `playabilityStatus: OK`, but with the modern WEB surface that
+    /// flag can be `OK` while every returned format carries an unresolvable
+    /// `signatureCipher` (player.js extraction misses, throttled n-param,
+    /// etc.) — `resolve_formats` then yields an empty Vec and the caller has
+    /// to surface `NoSuitableFormat`. The browser-streaming path is the
+    /// loudest victim of this since it forces WEB first. Doing the resolve
+    /// here lets us drop a non-resolving client and try the next one in the
+    /// priority list, so a half-working WEB no longer poisons the whole
+    /// extraction.
+    async fn fetch_and_resolve_with_clients(
+        &self,
+        video_id: &str,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+        clients: &[&'static InnertubeClient],
+    ) -> Result<(
+        PlayerResponse,
+        Vec<ResolvedFormat>,
+        &'static InnertubeClient,
+        bool,
+    )> {
+        let mut last_unplayable_reason: Option<String> = None;
+
+        for client in clients {
+            let (token, vd) = if client.is_browser {
+                (po_token, visitor_data)
+            } else {
+                (None, None)
+            };
+
+            let sts = if client.requires_js {
+                if let Err(e) = self.ensure_player_js_loaded(video_id).await {
+                    log::warn!(
+                        "Could not load player.js before {} request (no STS): {}",
+                        client.name,
+                        e
+                    );
+                }
+                self.sig_resolver.lock().sts()
+            } else {
+                None
+            };
+
+            let player_response = match self
+                .innertube
+                .player(video_id, client, sts, token, vd)
+                .await
+            {
+                Ok(resp) if resp.is_playable() => resp,
+                Ok(resp) => {
+                    let reason = resp.unplayable_reason().unwrap_or_default();
+                    log::warn!(
+                        "{} client returned unplayable for {}: {}",
+                        client.name,
+                        video_id,
+                        reason
+                    );
+                    if !reason.is_empty() {
+                        last_unplayable_reason = Some(reason);
+                    }
+                    continue;
+                }
+                Err(e) => {
+                    log::warn!("{} client failed for {}: {}", client.name, video_id, e);
+                    continue;
+                }
+            };
+
+            let resolved_formats = self.resolve_formats(&player_response, video_id).await?;
+
+            if resolved_formats.is_empty() {
+                log::warn!(
+                    "{} client returned playable response but resolved 0 formats for {} \u{2014} falling back to next client",
+                    client.name,
+                    video_id
+                );
+                continue;
+            }
+
+            let token_used = token.is_some();
+            log::info!(
+                "Got playable response with {} resolved formats from {} client for {}{}",
+                resolved_formats.len(),
+                client.name,
+                video_id,
+                if token_used { " (with PO token)" } else { "" },
+            );
+
+            return Ok((player_response, resolved_formats, client, token_used));
+        }
+
+        if let Some(reason) = last_unplayable_reason {
+            Err(YtDlpError::VideoUnavailable { reason }.into())
+        } else {
+            Err(YtDlpError::NoSuitableFormat.into())
+        }
+    }
+
     /// Returns (player_response, client, po_token_was_used).
     async fn fetch_player_response(
         &self,
@@ -667,6 +793,16 @@ impl DownloadPipeline {
         } else {
             &*CLIENT_PRIORITY
         };
+        self.fetch_player_response_with_clients(video_id, po_token, visitor_data, clients).await
+    }
+
+    async fn fetch_player_response_with_clients(
+        &self,
+        video_id: &str,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+        clients: &[&'static InnertubeClient],
+    ) -> Result<(PlayerResponse, &'static InnertubeClient, bool)> {
 
         for client in clients {
             let (token, vd) = if client.is_browser {
@@ -745,23 +881,46 @@ impl DownloadPipeline {
         }
 
         let resolver = self.sig_resolver.lock();
-        for fmt in &mut resolved {
+        let n_function_available = resolver.has_n_function();
+        let mut kept = Vec::with_capacity(resolved.len());
+        for mut fmt in resolved {
+            let url_has_n = url_has_n_param(&fmt.url);
             match signatures::apply_n_param(&fmt.url, &resolver) {
                 Ok(new_url) => {
                     if new_url != fmt.url {
                         log::debug!("n-param transformed for itag {}", fmt.itag);
+                        fmt.url = new_url;
+                        kept.push(fmt);
+                    } else if url_has_n && !n_function_available {
+                        // The URL carries an `n=…` param that we couldn't
+                        // transform because n_function extraction failed for
+                        // this player.js version. Modern WEB streams 403 in
+                        // that state, so drop the format and let the caller
+                        // fall back to the next innertube client.
+                        log::warn!(
+                            "Dropping itag {} \u{2014} URL has untransformed n-param and n_function is unavailable",
+                            fmt.itag
+                        );
                     } else {
-                        log::debug!("n-param unchanged for itag {} (no n param or same value)", fmt.itag);
+                        log::debug!(
+                            "n-param unchanged for itag {} (no n param or no-op transform)",
+                            fmt.itag
+                        );
+                        fmt.url = new_url;
+                        kept.push(fmt);
                     }
-                    fmt.url = new_url;
                 }
                 Err(e) => {
-                    log::warn!("n-param transformation failed for itag {}: {}", fmt.itag, e);
+                    log::warn!(
+                        "n-param transformation failed for itag {} \u{2014} dropping: {}",
+                        fmt.itag,
+                        e
+                    );
                 }
             }
         }
 
-        Ok(resolved)
+        Ok(kept)
     }
 
     async fn resolve_signature_formats(
@@ -1182,5 +1341,15 @@ impl DownloadPipeline {
         }
 
         results
+    }
+}
+
+/// Cheap check: does a googlevideo URL carry an `n=…` query parameter? Used
+/// to decide whether dropping a format is necessary when the n-param
+/// transform function couldn't be extracted from player.js.
+fn url_has_n_param(url: &str) -> bool {
+    match url::Url::parse(url) {
+        Ok(parsed) => parsed.query_pairs().any(|(k, _)| k == "n"),
+        Err(_) => false,
     }
 }

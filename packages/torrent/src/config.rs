@@ -15,6 +15,11 @@ pub const DEFAULT_TRACKERS: &[&str] = &[
 #[derive(Debug, Clone)]
 pub struct TorrentConfig {
     pub download_path: PathBuf,
+    /// Separate directory used for "torrent stream" sessions so the temporary
+    /// stream payloads stay isolated from real downloads and can be wiped on
+    /// every fresh stream. If empty, a `streams/` subdirectory of
+    /// `download_path` is used.
+    pub stream_path: PathBuf,
     /// Port range for incoming peer connections (default: 6881..6891)
     pub listen_port_range: Range<u16>,
     /// Enable UPnP port forwarding (default: true)
@@ -31,6 +36,7 @@ impl Default for TorrentConfig {
     fn default() -> Self {
         Self {
             download_path: PathBuf::new(),
+            stream_path: PathBuf::new(),
             listen_port_range: 6881..6891,
             enable_upnp: true,
             fast_resume: true,
@@ -142,6 +148,7 @@ mod tests {
     fn config_custom_values() {
         let config = TorrentConfig {
             download_path: PathBuf::from("/custom/path"),
+            stream_path: PathBuf::from("/custom/streams"),
             listen_port_range: 7000..7010,
             enable_upnp: false,
             fast_resume: false,
@@ -160,6 +167,7 @@ mod tests {
     fn config_clone() {
         let config = TorrentConfig {
             download_path: PathBuf::from("/test"),
+            stream_path: PathBuf::from("/test-streams"),
             listen_port_range: 5000..5005,
             enable_upnp: false,
             fast_resume: true,

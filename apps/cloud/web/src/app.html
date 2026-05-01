@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<script>
+			try {
+				var stored = localStorage.getItem('object-service:theme-settings');
+				if (stored) {
+					var theme = JSON.parse(stored).theme;
+					if (theme === 'dark' || theme === 'light') {
+						document.documentElement.setAttribute('data-theme', theme);
+					}
+				}
+			} catch (e) {}
+		</script>
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

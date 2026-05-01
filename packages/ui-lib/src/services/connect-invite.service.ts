@@ -1,40 +1,16 @@
 import { DEFAULT_SIGNALING_URL } from 'ui-lib/lib/api-base';
-import type { ConnectionConfig, TransportMode } from 'ui-lib/types/connection-config.type';
+import type { ConnectionConfig } from 'ui-lib/types/connection-config.type';
 
-interface InviteHttp {
-	transport: 'http' | 'ws';
+interface Invite {
+	transport: 'ws';
 	serverUrl: string;
 }
 
-interface InviteWebRtc {
-	transport: 'webrtc';
-	serverAddress: string;
-	signalingUrl?: string;
-}
-
-type Invite = InviteHttp | InviteWebRtc;
-
-const VALID_TRANSPORTS: TransportMode[] = ['http', 'ws', 'webrtc'];
-
 export function buildInvite(config: ConnectionConfig): string {
-	let invite: Invite;
-
-	if (config.transportMode === 'http' || config.transportMode === 'ws') {
-		invite = {
-			transport: config.transportMode,
-			serverUrl: config.serverUrl
-		};
-	} else {
-		invite = {
-			transport: 'webrtc',
-			serverAddress: config.serverAddress,
-			...(config.signalingUrl &&
-				config.signalingUrl !== DEFAULT_SIGNALING_URL && {
-					signalingUrl: config.signalingUrl
-				})
-		};
-	}
-
+	const invite: Invite = {
+		transport: 'ws',
+		serverUrl: config.serverUrl
+	};
 	return JSON.stringify(invite);
 }
 
@@ -60,32 +36,13 @@ export function parseInvite(json: string): ConnectionConfig | null {
 	try {
 		const data = JSON.parse(json);
 		if (!data || typeof data !== 'object') return null;
-
-		const transport = data.transport as TransportMode;
-		if (!VALID_TRANSPORTS.includes(transport)) return null;
-
-		if (transport === 'http' || transport === 'ws') {
-			if (!data.serverUrl || typeof data.serverUrl !== 'string') return null;
-			return {
-				transportMode: transport,
-				serverUrl: data.serverUrl,
-				serverAddress: '',
-				signalingUrl: DEFAULT_SIGNALING_URL
-			};
-		}
-
-		if (transport === 'webrtc') {
-			if (!data.serverAddress || typeof data.serverAddress !== 'string') return null;
-			return {
-				transportMode: 'webrtc',
-				serverUrl: '',
-				serverAddress: data.serverAddress,
-				signalingUrl:
-					typeof data.signalingUrl === 'string' ? data.signalingUrl : DEFAULT_SIGNALING_URL
-			};
-		}
-
-		return null;
+		if (data.transport !== 'ws') return null;
+		if (!data.serverUrl || typeof data.serverUrl !== 'string') return null;
+		return {
+			transportMode: 'ws',
+			serverUrl: data.serverUrl,
+			signalingUrl: DEFAULT_SIGNALING_URL
+		};
 	} catch {
 		return null;
 	}

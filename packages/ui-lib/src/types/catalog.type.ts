@@ -3,25 +3,12 @@
 export type CatalogKind =
 	| 'movie'
 	| 'tv_show'
-	| 'tv_season'
-	| 'tv_episode'
 	| 'album'
-	| 'track'
-	| 'book'
-	| 'game'
 	| 'youtube_video'
 	| 'youtube_channel'
-	| 'iptv_channel'
 	| 'photo';
 
-export type CatalogSource =
-	| 'tmdb'
-	| 'musicbrainz'
-	| 'openlibrary'
-	| 'retroachievements'
-	| 'youtube'
-	| 'iptv'
-	| 'local';
+export type CatalogSource = 'tmdb' | 'musicbrainz' | 'youtube' | 'local';
 
 // === Authors ===
 
@@ -32,9 +19,6 @@ export type AuthorRole =
 	| 'creator'
 	| 'producer'
 	| 'artist'
-	| 'author'
-	| 'developer'
-	| 'publisher'
 	| 'channel';
 
 export interface CatalogAuthor {
@@ -60,14 +44,7 @@ export function authorsByRole(authors: CatalogAuthor[], role: AuthorRole): Catal
 }
 
 export function primaryAuthor(authors: CatalogAuthor[]): CatalogAuthor | null {
-	const priority: AuthorRole[] = [
-		'director',
-		'creator',
-		'author',
-		'artist',
-		'developer',
-		'channel'
-	];
+	const priority: AuthorRole[] = ['director', 'creator', 'artist', 'channel'];
 	for (const role of priority) {
 		const found = authors.find((a) => a.role === role);
 		if (found) return found;
@@ -148,19 +125,6 @@ export interface CatalogTvSeasonSummary {
 	seasonNumber: number;
 }
 
-export interface CatalogTvSeason extends CatalogItemBase {
-	kind: 'tv_season';
-	metadata: TvSeasonMetadata;
-}
-
-export interface TvSeasonMetadata {
-	tmdbId: number;
-	seasonNumber: number;
-	episodeCount: number;
-	airDate: string | null;
-	episodes: CatalogTvEpisodeSummary[];
-}
-
 export interface CatalogTvEpisodeSummary {
 	id: number;
 	name: string;
@@ -171,20 +135,6 @@ export interface CatalogTvEpisodeSummary {
 	stillUrl: string | null;
 	runtime: number | null;
 	voteAverage: number;
-}
-
-export interface CatalogTvEpisode extends CatalogItemBase {
-	kind: 'tv_episode';
-	metadata: TvEpisodeMetadata;
-}
-
-export interface TvEpisodeMetadata {
-	tmdbId: number;
-	seasonNumber: number;
-	episodeNumber: number;
-	airDate: string | null;
-	runtime: number | null;
-	stillUrl: string | null;
 }
 
 export interface CatalogAlbum extends CatalogItemBase {
@@ -223,74 +173,6 @@ export interface AlbumTrack {
 	authors: CatalogAuthor[];
 }
 
-export interface CatalogTrack extends CatalogItemBase {
-	kind: 'track';
-	metadata: TrackMetadata;
-}
-
-export interface TrackMetadata {
-	musicbrainzId: string;
-	number: string;
-	duration: string | null;
-	durationMs: number | null;
-	authors: CatalogAuthor[];
-	disambiguation: string | null;
-}
-
-export interface CatalogBook extends CatalogItemBase {
-	kind: 'book';
-	metadata: BookMetadata;
-}
-
-export interface BookMetadata {
-	openlibraryKey: string;
-	authors: CatalogAuthor[];
-	firstPublishYear: string;
-	coverId: number | null;
-	coverUrl: string | null;
-	subjects: string[];
-	publishers: string[];
-	pageCount: number | null;
-	editionCount: number;
-	isbn: string | null;
-	ratingsAverage: number | null;
-	ratingsCount: number;
-	description: string | null;
-}
-
-export interface CatalogGame extends CatalogItemBase {
-	kind: 'game';
-	metadata: GameMetadata;
-}
-
-export interface GameMetadata {
-	retroachievementsId: number;
-	consoleId: number;
-	consoleName: string;
-	imageIconUrl: string;
-	numAchievements: number;
-	points: number;
-	authors: CatalogAuthor[];
-	genre: string | null;
-	released: string | null;
-	imageTitleUrl: string | null;
-	imageIngameUrl: string | null;
-	imageBoxArtUrl: string | null;
-	achievements: GameAchievement[];
-}
-
-export interface GameAchievement {
-	id: number;
-	title: string;
-	description: string;
-	points: number;
-	trueRatio: number;
-	badgeUrl: string;
-	displayOrder: number;
-	numAwarded: number;
-	numAwardedHardcore: number;
-}
-
 export interface CatalogYoutubeVideo extends CatalogItemBase {
 	kind: 'youtube_video';
 	metadata: YoutubeVideoMetadata;
@@ -319,21 +201,6 @@ export interface YoutubeChannelMetadata {
 	url: string;
 	subscriberText: string | null;
 	imageUrl: string | null;
-}
-
-export interface CatalogIptvChannel extends CatalogItemBase {
-	kind: 'iptv_channel';
-	metadata: IptvChannelMetadata;
-}
-
-export interface IptvChannelMetadata {
-	channelId: string;
-	country: string;
-	categories: string[];
-	logo: string | null;
-	website: string | null;
-	hasEpg: boolean;
-	isNsfw: boolean;
 }
 
 export interface CatalogPhoto extends CatalogItemBase {
@@ -370,15 +237,9 @@ export interface CatalogImage {
 export type CatalogItem =
 	| CatalogMovie
 	| CatalogTvShow
-	| CatalogTvSeason
-	| CatalogTvEpisode
 	| CatalogAlbum
-	| CatalogTrack
-	| CatalogBook
-	| CatalogGame
 	| CatalogYoutubeVideo
 	| CatalogYoutubeChannel
-	| CatalogIptvChannel
 	| CatalogPhoto;
 
 // === Type guards ===
@@ -389,32 +250,14 @@ export function isMovie(item: CatalogItem): item is CatalogMovie {
 export function isTvShow(item: CatalogItem): item is CatalogTvShow {
 	return item.kind === 'tv_show';
 }
-export function isTvSeason(item: CatalogItem): item is CatalogTvSeason {
-	return item.kind === 'tv_season';
-}
-export function isTvEpisode(item: CatalogItem): item is CatalogTvEpisode {
-	return item.kind === 'tv_episode';
-}
 export function isAlbum(item: CatalogItem): item is CatalogAlbum {
 	return item.kind === 'album';
-}
-export function isTrack(item: CatalogItem): item is CatalogTrack {
-	return item.kind === 'track';
-}
-export function isBook(item: CatalogItem): item is CatalogBook {
-	return item.kind === 'book';
-}
-export function isGame(item: CatalogItem): item is CatalogGame {
-	return item.kind === 'game';
 }
 export function isYoutubeVideo(item: CatalogItem): item is CatalogYoutubeVideo {
 	return item.kind === 'youtube_video';
 }
 export function isYoutubeChannel(item: CatalogItem): item is CatalogYoutubeChannel {
 	return item.kind === 'youtube_channel';
-}
-export function isIptvChannel(item: CatalogItem): item is CatalogIptvChannel {
-	return item.kind === 'iptv_channel';
 }
 export function isPhoto(item: CatalogItem): item is CatalogPhoto {
 	return item.kind === 'photo';
@@ -491,18 +334,10 @@ export const BROWSE_KINDS: CatalogKind[] = [
 	'movie',
 	'tv_show',
 	'album',
-	'book',
-	'game',
 	'youtube_video',
-	'iptv_channel',
 	'photo'
 ];
 
-export const TORRENT_KINDS: CatalogKind[] = ['movie', 'tv_show', 'album', 'book', 'game'];
+export const TORRENT_KINDS: CatalogKind[] = ['movie', 'tv_show', 'album'];
 
-export const STREAMABLE_KINDS: CatalogKind[] = [
-	'youtube_video',
-	'iptv_channel',
-	'movie',
-	'tv_episode'
-];
+export const STREAMABLE_KINDS: CatalogKind[] = ['youtube_video', 'movie', 'tv_show'];

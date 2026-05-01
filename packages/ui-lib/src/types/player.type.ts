@@ -55,6 +55,10 @@ export interface PlayerState {
 	isSeeking: boolean;
 	isPaused: boolean;
 	buffering: boolean;
+	// When set, PlayerVideo plays this URL directly via <video src> instead of
+	// the WebRTC MediaStream path (used by yt-dlp direct streams).
+	directStreamUrl: string | null;
+	directStreamMimeType: string | null;
 }
 
 // ===== Player Settings (localStorage) =====

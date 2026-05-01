@@ -35,7 +35,9 @@ const initialState: PlayerState = {
 	durationSecs: null,
 	isSeeking: false,
 	isPaused: true,
-	buffering: false
+	buffering: false,
+	directStreamUrl: null,
+	directStreamMimeType: null
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -84,6 +86,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			}));
 
 			this._initialized = true;
+
+			// Belt-and-suspenders: hard tab/window close doesn't reliably fire onDestroy,
+			// so kill any active session here too. The DELETE uses keepalive so it
+			// survives the unload.
+			window.addEventListener('pagehide', this.handlePageHide);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
@@ -93,6 +100,15 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			}));
 		}
 	}
+
+	private handlePageHide = (): void => {
+		const sessionId = get(this.state).sessionId;
+		if (!sessionId) return;
+		fetchRaw(`/api/player/sessions/${sessionId}`, {
+			method: 'DELETE',
+			keepalive: true
+		}).catch(() => {});
+	};
 
 	// ===== Refresh files =====
 
@@ -148,10 +164,14 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 				video_codec: streamConfig.video_codec,
 				video_quality: streamConfig.video_quality
 			};
+			// Always send file_path when present so the backend can play a specific file
+			// (e.g. an individual episode in a season pack). info_hash is also sent so the
+			// backend can fall back to "largest video" resolution if file_path is a directory.
+			if (file.outputPath) {
+				sessionBody.file_path = file.outputPath;
+			}
 			if (file.infoHash) {
 				sessionBody.info_hash = file.infoHash;
-			} else {
-				sessionBody.file_path = file.outputPath;
 			}
 
 			const session = await fetchJson<{
@@ -205,13 +225,41 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		}
 	}
 
+	// ===== Direct URL playback (used by yt-dlp streams — bypasses WebRTC entirely) =====
+
+	async playUrl(
+		file: PlayableFile,
+		streamUrl: string,
+		mimeType?: string | null,
+		displayMode?: PlayerDisplayMode
+	): Promise<void> {
+		if (!browser) return;
+
+		await this.stop();
+		this.playGeneration++;
+		if (displayMode) this.displayMode.set(displayMode);
+
+		this.state.update((s) => ({
+			...s,
+			currentFile: file,
+			connectionState: 'streaming',
+			error: null,
+			positionSecs: 0,
+			durationSecs: file.durationSeconds,
+			buffering: false,
+			directStreamUrl: streamUrl,
+			directStreamMimeType: mimeType ?? null
+		}));
+	}
+
 	// ===== Remote playback (session created by remote server, info received via data channel) =====
 
 	async playRemote(
 		name: string,
 		sessionId: string,
 		roomId: string,
-		signalingUrl: string
+		signalingUrl: string,
+		mode: 'audio' | 'video' = 'video'
 	): Promise<void> {
 		if (!browser) return;
 
@@ -222,7 +270,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			type: 'library',
 			name,
 			outputPath: '',
-			mode: 'video',
+			mode,
 			format: null,
 			videoFormat: null,
 			thumbnailUrl: null,
@@ -243,7 +291,16 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		}));
 
 		try {
-			await this.connectToSignalingRoom(signalingAdapter.resolveLocalUrl(signalingUrl), roomId);
+			const resolved = signalingAdapter.resolveLocalUrl(signalingUrl);
+			console.log(
+				'[Player] signaling URL — raw:',
+				signalingUrl,
+				'resolved:',
+				resolved,
+				'window:',
+				window.location.href
+			);
+			await this.connectToSignalingRoom(resolved, roomId);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.state.update((s) => ({
@@ -510,6 +567,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 					this.handleMediaInfo(msg.payload as MediaInfoPayload);
 				} else if (type === 'PositionUpdate') {
 					this.handlePositionUpdate(msg.payload as PositionPayload);
+				} else if (type === 'TrackEnded') {
+					this.handleTrackEnded();
 				}
 			} catch (e) {
 				console.warn('[Player] Data channel message parse error:', e);
@@ -604,6 +663,30 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		}));
 	}
 
+	private trackEndedListeners: Set<() => void> = new Set();
+
+	/// Register a callback for when the worker reports the current track has
+	/// ended (sent via the data channel as `{"type":"TrackEnded"}`). Returns
+	/// an unsubscribe function. This is the hook the firkin playback
+	/// service uses to auto-advance to the next track in an album.
+	onTrackEnded(callback: () => void): () => void {
+		this.trackEndedListeners.add(callback);
+		return () => {
+			this.trackEndedListeners.delete(callback);
+		};
+	}
+
+	private handleTrackEnded(): void {
+		console.log('[Player] Track ended, notifying listeners');
+		for (const listener of this.trackEndedListeners) {
+			try {
+				listener();
+			} catch (e) {
+				console.error('[Player] onTrackEnded listener threw:', e);
+			}
+		}
+	}
+
 	// ===== Stop playback =====
 
 	async stop(): Promise<void> {
@@ -634,8 +717,12 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 		if (currentState.sessionId) {
 			try {
+				// keepalive: the browser will keep this DELETE in-flight even if the
+				// page is unloading (tab close, navigation), so the worker actually
+				// gets the kill command.
 				await fetchRaw(`/api/player/sessions/${currentState.sessionId}`, {
-					method: 'DELETE'
+					method: 'DELETE',
+					keepalive: true
 				});
 			} catch {
 				// Ignore cleanup errors
@@ -654,7 +741,9 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			durationSecs: null,
 			isSeeking: false,
 			isPaused: true,
-			buffering: false
+			buffering: false,
+			directStreamUrl: null,
+			directStreamMimeType: null
 		}));
 		this.displayMode.set('fullscreen');
 	}
@@ -668,8 +757,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	// ===== Lifecycle =====
 
-	destroy(): void {
-		this.stop();
+	async destroy(): Promise<void> {
+		if (browser) {
+			window.removeEventListener('pagehide', this.handlePageHide);
+		}
+		await this.stop();
 	}
 }
 

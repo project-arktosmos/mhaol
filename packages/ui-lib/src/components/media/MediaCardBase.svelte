@@ -107,7 +107,7 @@
 	<a
 		{href}
 		class={classNames(
-			'card-compact card bg-base-200 shadow-sm no-underline text-inherit',
+			'card-compact card bg-base-200 text-inherit no-underline shadow-sm',
 			{
 				'ring-2 ring-primary': selected,
 				'cursor-pointer transition-shadow hover:shadow-md': true

@@ -38,21 +38,22 @@ dist-static/
 # Rust
 target/
 
+# Runtime logs
+logs/
+
 # SQLite
 *.db
 *.db-wal
 *.db-shm
+
+# SurrealDB / SurrealKV
+cloud-surrealkv/
 
 # Downloads
 downloads/
 **/downloads/
 !packages/ui-lib/src/components/downloads/
 !apps/frontend/src/routes/(app)/options/downloads/
-
-# LLM models
-models/*
-!models/.gitkeep
-*.gguf
 
 # Prebuilt binaries
 apps/video/bin/

@@ -4,8 +4,7 @@ A family of self-hosted media apps built on shared core components. Each app shi
 
 **Apps in this repo:**
 
-- **Frontend** — SvelteKit SPA for browsing and managing your media library (movies, TV, music, games, books, YouTube)
-- **Node** — Rust Axum headless server powering the backend (API, torrents, P2P streaming, identity)
+- **Cloud** — Rust Axum server (port 9898) with a nested Svelte WebUI; ships a tray-only desktop Tauri shell ("Mhaol Cloud")
 - **Shepperd** — Browser extension that detects media as you browse and imports it into Mhaol
 - **Signaling** — Self-hosted WebSocket signaling server for WebRTC peer connections
 
@@ -21,7 +20,7 @@ A family of self-hosted media apps built on shared core components. Each app shi
 
 ### System dependencies (Linux only)
 
-The Rust node requires GStreamer and native build tools on Linux:
+The Rust cloud binary requires GStreamer and native build tools on Linux:
 
 ```bash
 pnpm install:deps
@@ -57,18 +56,13 @@ pnpm install
 
 ## Environment Variables
 
-Create a `.env` file in the repo root. The node server sources this automatically on startup.
+Create a `.env` file in the repo root. The cloud server sources this automatically on startup.
 
 ```bash
 # Required — TMDB movie/TV metadata
 # Get a free key at: https://www.themoviedb.org/settings/api
 TMDB_API_KEY=
 TMDB_READ_ACCESS_TOKEN=
-
-# Optional — RetroAchievements game metadata
-# Get your key at: https://retroachievements.org/settings -> Keys
-RA_API_USER=
-RA_API_KEY=
 
 # Optional — Identity wallet (auto-generated if not set)
 # 32-byte hex private key for the signaling identity
@@ -79,7 +73,7 @@ METERED_DOMAIN=
 METERED_SECRET_KEY=
 ```
 
-Without any env vars, the node will still start — TMDB and RetroAchievements features just won't work, and a wallet will be auto-generated.
+Without any env vars, the cloud server will still start — TMDB features just won't work, and a wallet will be auto-generated.
 
 ---
 
@@ -87,46 +81,24 @@ Without any env vars, the node will still start — TMDB and RetroAchievements f
 
 All commands run from the **repo root**. Never `cd` into a package directory.
 
-### Full stack (frontend + node)
+### Cloud
 
 ```bash
-pnpm dev
+pnpm dev            # Rust loopback :9899 + Vite WebUI :9898 + tray-only Tauri shell
+pnpm dev:cloud:web  # WebUI hot-reload only (assumes the Rust server is already running)
 ```
 
-This starts both in parallel:
-- **Frontend** on [http://localhost:1570](http://localhost:1570)
-- **Node** on [http://localhost:1530](http://localhost:1530)
 
-The frontend dev server proxies all `/api/*` requests to the node automatically.
 
-### Frontend only
+The cloud WebUI is browser-accessible at [http://localhost:9898](http://localhost:9898).
 
-```bash
-pnpm dev:frontend
-```
-
-Starts the SvelteKit dev server on port **1570**. Requires the node to be running separately for API calls to work.
-
-### Node only
-
-```bash
-pnpm dev:node
-```
-
-Starts the Rust Axum server on port **1530**. On first run, it:
-1. Creates a SQLite database (`apps/node/mhaol.db`)
-2. Seeds default libraries (Movies, TV, Music, Games, YouTube) under `~/Documents/mhaol/downloads/`
-3. Initializes addon modules (TMDB, MusicBrainz, RetroAchievements, etc.)
-4. Starts background workers (P2P streaming, LLM queue)
-5. Connects to the signaling server for WebRTC peer discovery
-
-**Node environment variables** (all optional, sensible defaults):
+**Cloud environment variables** (all optional, sensible defaults):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `1530` | HTTP server port |
+| `PORT` | `9898` | HTTP server port (set to 9899 in dev so Vite owns 9898) |
 | `HOST` | `0.0.0.0` | Bind address |
-| `DB_PATH` | `apps/node/mhaol.db` | SQLite database path |
+| `DB_PATH` | `~/mhaol/cloud-rocksdb/` | SurrealDB store path |
 | `DATA_DIR` | `~/Documents/mhaol` | Media storage directory |
 | `SIGNALING_URL` | PartyKit hosted | Signaling server URL |
 
@@ -142,87 +114,48 @@ pnpm app:shepperd:build
 
 Load the built extension from `apps/shepperd/dist/` in your browser's extension manager (enable developer mode).
 
-### Signaling (self-hosted)
+### Rendezvous (private-swarm IPFS bootstrap + WebRTC signaling + TURN)
 
-For self-hosted signaling instead of the default PartyKit instance:
-
-```bash
-# Interactive setup wizard (creates config)
-pnpm signaling:setup
-
-# Start the signaling server
-pnpm signaling:serve
-```
-
-For PartyKit cloud signaling (development):
+Rendezvous bundles the private-swarm IPFS bootstrap node, the WebSocket WebRTC signaling relay, and the TURN credential server into a single binary. It replaces the previous PartyKit/`mhaol-signaling` stack.
 
 ```bash
-pnpm signaling:dev      # Local dev
-pnpm signaling:deploy   # Deploy to PartyKit
+# Run rendezvous (HTTP 14080, libp2p TCP 14001)
+pnpm app:rendezvous
+
+# Linux deployment wizard (coturn + Let's Encrypt + systemd)
+pnpm app:rendezvous:setup
 ```
 
 ---
 
 ## Building for Production
 
-### Frontend
+### Cloud
 
 ```bash
-pnpm build
+pnpm build:cloud
 ```
 
-Outputs a static site to `apps/frontend/dist-static/`.
+Builds the cloud WebUI and the release binary at `target/release/mhaol-cloud` (the WebUI is embedded into the binary).
 
-### Node
+### Rendezvous
 
 ```bash
-pnpm build:node
+pnpm build:rendezvous
 ```
 
-Builds the release binary at `target/release/mhaol-node`.
-
-To bundle the frontend into the node binary (single-binary deployment):
-
-```bash
-pnpm build
-cargo build --release --bin mhaol-node --features embed-frontend
-```
-
-Then run with `CLIENT_STATIC_DIR` pointing to the frontend dist, or use the embedded frontend feature.
-
-### Signaling
-
-```bash
-pnpm build:signaling
-```
-
-Builds to `target/release/mhaol-signaling`.
+Builds to `target/release/mhaol-rendezvous`.
 
 ---
 
-## Desktop & Mobile Builds (Tauri)
-
-The frontend can be packaged as a native desktop or Android app via Tauri.
-
-### Desktop
+## Desktop Tauri shell (Mhaol Cloud)
 
 ```bash
-cd apps/frontend/src-tauri
-cargo tauri dev       # Development
-cargo tauri build     # Production
+pnpm app:tauri:cloud         # Development
+pnpm app:tauri:cloud:build   # Production
 ```
 
-### Android
-
-Requires Android SDK (min SDK 24) and the Tauri Android prerequisites.
-
-```bash
-pnpm android:dev          # Dev on connected device/emulator
-pnpm android:build        # Release build (AAB)
-pnpm android:build:apk    # Release build (APK)
-```
-
-The `android:dev` command automatically sets up `adb reverse` to forward port 1530 to the device.
+The Mhaol Cloud shell is **tray-only** — it never opens a window. The WebUI stays browser-accessible at `http://localhost:9898`.
 
 ---
 
@@ -233,8 +166,8 @@ Run all checks before committing:
 ```bash
 pnpm lint       # Prettier + ESLint
 pnpm check      # svelte-check + cargo check
-pnpm build      # Verify frontend builds
-pnpm test       # vitest + cargo test
+pnpm build      # Build cloud WebUI and the mhaol-cloud release binary
+pnpm test       # vitest
 ```
 
 Or all at once:
@@ -262,21 +195,20 @@ pnpm clean      # Remove build artifacts + cargo clean
 ```
 mhaol.git/
 ├── apps/
-│   ├── frontend/          # SvelteKit SPA (port 1570)
-│   ├── node/              # Rust Axum server (port 1530)
+│   ├── cloud/             # Rust Axum server (port 9898) + nested Svelte WebUI + tray-only Tauri shell
 │   ├── shepperd/          # Browser extension (Manifest V3)
 │   └── signaling/         # Rust signaling server
 ├── packages/
 │   ├── ui-lib/            # Shared components, services, types, CSS
-│   ├── addons/            # TMDB, MusicBrainz, RetroAchievements, YouTube, LRCLIB, OpenLibrary
+│   ├── addons/            # TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subs
 │   ├── webrtc/            # WebRTC contact handshake layer
 │   ├── signaling/         # PartyKit signaling (cloud)
 │   ├── identity/          # Rust Ethereum identity (secp256k1)
-│   ├── queue/             # Rust task queue (SQLite)
 │   ├── torrent/           # Rust torrent client
 │   ├── p2p-stream/        # Rust P2P streaming (GStreamer + WebRTC)
 │   ├── yt-dlp/            # Rust yt-dlp wrapper
-│   └── llm/               # Rust LLM (llama.cpp)
+│   ├── ed2k/              # Rust eDonkey/ed2k client
+│   └── ipfs/              # Rust embedded IPFS node (libp2p, private swarm)
 ├── .env                   # API keys and secrets (not committed)
 ├── package.json           # Workspace scripts
 ├── Cargo.toml             # Rust workspace
@@ -285,6 +217,6 @@ mhaol.git/
 
 ### Architecture
 
-Apps under `apps/` are thin wrappers. All shared frontend code (components, services, types, adapters) lives in `packages/ui-lib`. Apps only contain route files and configuration — they import and assemble, never implement.
+The cloud WebUI is a thin wrapper. All shared frontend code (components, services, types, adapters) lives in `packages/ui-lib`. The WebUI only contains route files and configuration — it imports and assembles, never implements.
 
-The frontend communicates with the node via a transport layer (`packages/ui-lib/src/transport/`) that abstracts over HTTP and WebRTC, making the same API calls work whether connecting locally or peer-to-peer.
+The frontend communicates with the cloud server via a transport layer (`packages/ui-lib/src/transport/`) that abstracts over HTTP and WebRTC, making the same API calls work whether connecting locally or peer-to-peer.

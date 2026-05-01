@@ -1,8 +1,0 @@
-{
-	"name": "assets",
-	"version": "1.0.0",
-	"type": "module",
-	"exports": {
-		"./game-consoles": "./game-consoles/index.ts"
-	}
-}

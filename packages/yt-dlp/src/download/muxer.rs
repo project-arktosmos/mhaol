@@ -91,15 +91,12 @@ impl FfmpegMuxer {
             .ok_or(YtDlpError::FfmpegNotAvailable)?;
 
         let (codec, ext_args): (&str, Vec<&str>) = match target_format {
-            AudioFormat::Mp3 => {
-                let q = match quality {
-                    AudioQuality::Best => "0",
-                    AudioQuality::High => "2",
-                    AudioQuality::Medium => "5",
-                    AudioQuality::Low => "9",
-                };
-                ("libmp3lame", vec!["-q:a", q])
-            }
+            AudioFormat::Mp3 => match quality {
+                AudioQuality::Best => ("libmp3lame", vec!["-b:a", "320k"]),
+                AudioQuality::High => ("libmp3lame", vec!["-q:a", "2"]),
+                AudioQuality::Medium => ("libmp3lame", vec!["-q:a", "5"]),
+                AudioQuality::Low => ("libmp3lame", vec!["-q:a", "9"]),
+            },
             AudioFormat::Aac => ("aac", vec!["-b:a", "128k"]),
             AudioFormat::Opus => ("libopus", vec!["-b:a", "128k"]),
         };

@@ -1,0 +1,22 @@
+[package]
+name = "mhaol-cloud-shell"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "mhaol_cloud_shell"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.10", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+sha3 = "0.10"
+hex = "0.4"
+url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+tokio = { version = "1", features = ["fs"] }
+log = "0.4"

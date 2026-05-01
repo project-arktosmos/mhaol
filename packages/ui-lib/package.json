@@ -19,7 +19,6 @@
 		"fflate": "^0.8.2",
 		"html5-qrcode": "^2.3.8",
 		"qrcode": "^1.5.4",
-		"svelte-i18n": "^4.0.1",
 		"viem": "^2.46.3",
 		"webrtc": "workspace:*"
 	},

@@ -1,17 +1,29 @@
 use anyhow::Result;
-use librqbit::{AddTorrent, AddTorrentOptions, Api, Session, SessionOptions, SessionPersistenceConfig};
+use librqbit::{
+    api::TorrentIdOrHash, AddTorrent, AddTorrentOptions, Api, Session, SessionOptions,
+    SessionPersistenceConfig,
+};
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::io::{AsyncRead, AsyncSeek};
 
 use crate::config::{TorrentConfig, DEFAULT_TRACKERS};
-use crate::types::{AddTorrentRequest, TorrentFile, TorrentInfo, TorrentState, TorrentStats};
-use crate::util::{get_unix_timestamp, parse_magnet_uri};
+use crate::types::{
+    AddTorrentRequest, StreamFile, TorrentFile, TorrentInfo, TorrentState, TorrentStats,
+    TorrentStreamInfo,
+};
+use crate::util::{get_unix_timestamp, parse_magnet_uri, streamable_mime_type};
 
 #[derive(Debug, Clone)]
 pub struct TrackingInfo {
-    pub output_path: Option<String>,
+    /// Parent directory the torrent was added under. The full output path is
+    /// derived by joining this with the resolved torrent name on each `list()`,
+    /// so we always reflect the actual on-disk layout (which can drift from
+    /// the magnet `dn=` once rqbit resolves the metadata, especially when
+    /// `dn=` contains literal slashes).
+    pub download_dir: Option<String>,
 }
 
 pub struct TorrentManager {
@@ -19,6 +31,10 @@ pub struct TorrentManager {
     config: RwLock<TorrentConfig>,
     tracking_info: RwLock<HashMap<String, TrackingInfo>>,
     completed_torrents: RwLock<HashSet<String>>,
+    /// Info hashes that were added by `start_stream`. These live in the
+    /// dedicated `stream_path` and get wiped (torrent + on-disk files) the
+    /// next time a new stream is started.
+    stream_info_hashes: RwLock<HashSet<String>>,
 }
 
 impl TorrentManager {
@@ -28,6 +44,7 @@ impl TorrentManager {
             config: RwLock::new(TorrentConfig::default()),
             tracking_info: RwLock::new(HashMap::new()),
             completed_torrents: RwLock::new(HashSet::new()),
+            stream_info_hashes: RwLock::new(HashSet::new()),
         }
     }
 
@@ -121,6 +138,21 @@ impl TorrentManager {
         self.config.write().download_path = path;
     }
 
+    /// On-disk directory used for "torrent stream" sessions. Falls back to
+    /// `<download_path>/streams` if not explicitly configured.
+    pub fn stream_path(&self) -> PathBuf {
+        let cfg = self.config.read();
+        if cfg.stream_path.as_os_str().is_empty() {
+            cfg.download_path.join("streams")
+        } else {
+            cfg.stream_path.clone()
+        }
+    }
+
+    pub fn set_stream_path(&self, path: PathBuf) {
+        self.config.write().stream_path = path;
+    }
+
     pub fn is_initialized(&self) -> bool {
         self.session.read().is_some()
     }
@@ -207,7 +239,7 @@ impl TorrentManager {
             self.set_tracking_info(
                 info_hash.clone(),
                 TrackingInfo {
-                    output_path: Some(file_path.clone()),
+                    download_dir: Some(output_path.clone()),
                 },
             );
 
@@ -243,7 +275,7 @@ impl TorrentManager {
         self.set_tracking_info(
             info_hash.clone(),
             TrackingInfo {
-                output_path: Some(file_path.clone()),
+                download_dir: Some(output_path.clone()),
             },
         );
 
@@ -376,19 +408,23 @@ impl TorrentManager {
             let info_hash = item.info_hash.to_string();
             let name = item.name.unwrap_or_else(|| "Unknown".to_string());
 
-            // Look up tracking info by info_hash, create if missing
-            let tracking = match self.get_tracking_info(&info_hash) {
-                Some(t) => t,
-                None => {
-                    let output_path = self.download_path().to_string_lossy().to_string();
-                    let file_path = format!("{}/{}", output_path, name);
-                    let new_tracking = TrackingInfo {
-                        output_path: Some(file_path),
-                    };
-                    self.set_tracking_info(info_hash.clone(), new_tracking.clone());
-                    new_tracking
-                }
-            };
+            // Always derive output_path from the resolved item.name joined onto
+            // the tracked download_dir. The magnet `dn=` we cached at add-time
+            // can drift from the metadata name rqbit eventually resolves
+            // (e.g. dn contains a literal `/` from `[Remastered/2009]`), so we
+            // can't trust any name baked into the cached path.
+            let download_dir: PathBuf = self
+                .get_tracking_info(&info_hash)
+                .and_then(|t| t.download_dir)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| self.download_path());
+            let file_path = download_dir.join(&name).to_string_lossy().to_string();
+            self.set_tracking_info(
+                info_hash.clone(),
+                TrackingInfo {
+                    download_dir: Some(download_dir.to_string_lossy().to_string()),
+                },
+            );
 
             torrents.push(TorrentInfo {
                 id,
@@ -403,7 +439,7 @@ impl TorrentManager {
                 state: torrent_state,
                 added_at: get_unix_timestamp(),
                 eta,
-                output_path: tracking.output_path,
+                output_path: Some(file_path),
             });
         }
 
@@ -760,6 +796,184 @@ impl TorrentManager {
         Ok(files)
     }
 
+    /// Resolve magnet metadata without committing to a download. Returns the
+    /// best streamable file (largest video/* by size) along with its index in
+    /// the torrent's file list.
+    pub async fn evaluate_magnet(&self, magnet: &str) -> Result<TorrentStreamInfo> {
+        if !magnet.starts_with("magnet:") {
+            anyhow::bail!("magnet URI required");
+        }
+        let api = self
+            .api()
+            .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
+
+        let add = AddTorrent::from_url(magnet);
+        let opts = AddTorrentOptions {
+            list_only: true,
+            ..Default::default()
+        };
+        let response = api
+            .api_add_torrent(add, Some(opts))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to resolve magnet metadata: {}", e))?;
+
+        let info_hash = response.details.info_hash.to_lowercase();
+        let name = response
+            .details
+            .name
+            .clone()
+            .unwrap_or_else(|| info_hash.clone());
+        let files = response
+            .details
+            .files
+            .ok_or_else(|| anyhow::anyhow!("torrent has no file list"))?;
+
+        let (idx, file) = files
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, f)| streamable_mime_type(&f.name).map(|m| (idx, f, m)))
+            .max_by_key(|(_, f, _)| f.length)
+            .map(|(idx, f, mime)| {
+                (
+                    idx,
+                    StreamFile {
+                        index: idx,
+                        name: f.name.clone(),
+                        size: f.length,
+                        mime_type: Some(mime.to_string()),
+                    },
+                )
+            })
+            .ok_or_else(|| anyhow::anyhow!("no streamable video file in torrent"))?;
+        let _ = idx; // silence unused
+
+        Ok(TorrentStreamInfo {
+            info_hash,
+            name,
+            file,
+        })
+    }
+
+    /// Delete every torrent previously started via `start_stream`, including
+    /// its on-disk files. Stream payloads are intentionally ephemeral —
+    /// each fresh `start_stream` call wipes prior streams so they don't pile
+    /// up on disk.
+    pub async fn clear_streams(&self) -> Result<()> {
+        let api = self
+            .api()
+            .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
+
+        let hashes: Vec<String> = self.stream_info_hashes.read().iter().cloned().collect();
+        for hash in &hashes {
+            let id = match TorrentIdOrHash::parse(hash) {
+                Ok(id) => id,
+                Err(e) => {
+                    log::warn!("[torrent stream] skip invalid hash {}: {}", hash, e);
+                    continue;
+                }
+            };
+            if let Err(e) = api.api_torrent_action_delete(id).await {
+                log::warn!(
+                    "[torrent stream] delete {} failed (may already be gone): {}",
+                    hash,
+                    e
+                );
+            }
+            self.remove_tracking_info(hash);
+        }
+        self.stream_info_hashes.write().clear();
+
+        // Best-effort wipe of any leftover files in the stream root that the
+        // session didn't know about (e.g. left behind by a previous process
+        // that crashed before bookkeeping caught up). The `.rqbit` persistence
+        // folder is preserved.
+        let stream_path = self.stream_path();
+        if stream_path.exists() {
+            if let Ok(entries) = std::fs::read_dir(&stream_path) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.file_name().map(|n| n == ".rqbit").unwrap_or(false) {
+                        continue;
+                    }
+                    let res = if path.is_dir() {
+                        std::fs::remove_dir_all(&path)
+                    } else {
+                        std::fs::remove_file(&path)
+                    };
+                    if let Err(e) = res {
+                        log::warn!("[torrent stream] failed to remove {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Wipe any prior stream torrents (and their on-disk files), then start
+    /// a new stream session for `magnet`, restricted to the single video file
+    /// picked by [`evaluate_magnet`]. Stream payloads land in a dedicated
+    /// `stream_path` so they never mingle with regular downloads.
+    pub async fn start_stream(&self, magnet: &str) -> Result<TorrentStreamInfo> {
+        let api = self
+            .api()
+            .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
+
+        // Wipe any prior streams before kicking off a new one. We do this
+        // before evaluating the magnet so the user-visible "Resolving…"
+        // window covers the cleanup too.
+        if let Err(e) = self.clear_streams().await {
+            log::warn!("[torrent stream] clear_streams failed: {}", e);
+        }
+
+        let probe = self.evaluate_magnet(magnet).await?;
+
+        let stream_path = self.stream_path();
+        std::fs::create_dir_all(&stream_path).ok();
+        let output_folder = stream_path.to_string_lossy().to_string();
+        let opts = AddTorrentOptions {
+            overwrite: true,
+            only_files: Some(vec![probe.file.index]),
+            output_folder: Some(output_folder.clone()),
+            ..Default::default()
+        };
+
+        api.api_add_torrent(AddTorrent::from_url(magnet), Some(opts))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to start torrent stream: {}", e))?;
+
+        self.set_tracking_info(
+            probe.info_hash.clone(),
+            TrackingInfo {
+                download_dir: Some(output_folder),
+            },
+        );
+        self.stream_info_hashes
+            .write()
+            .insert(probe.info_hash.clone());
+
+        Ok(probe)
+    }
+
+    /// Open a seekable byte stream over a single file inside an already-added
+    /// torrent. Returns the file length and a reader implementing
+    /// `AsyncRead + AsyncSeek`.
+    pub fn open_file_stream(
+        &self,
+        info_hash: &str,
+        file_id: usize,
+    ) -> Result<(u64, impl AsyncRead + AsyncSeek + Send + Unpin + 'static)> {
+        let api = self
+            .api()
+            .ok_or_else(|| anyhow::anyhow!("Torrent client not initialized"))?;
+        let id = TorrentIdOrHash::parse(info_hash)
+            .map_err(|e| anyhow::anyhow!("Invalid info hash: {}", e))?;
+        let stream = api
+            .api_stream(id, file_id)
+            .map_err(|e| anyhow::anyhow!("Failed to open file stream: {}", e))?;
+        let len = stream.len();
+        Ok((len, stream))
+    }
+
     pub fn complete_download(&self, info_hash: String, output_path: String) -> Result<()> {
         let path = std::path::Path::new(&output_path);
 
@@ -828,12 +1042,12 @@ mod tests {
     fn set_and_get_tracking_info() {
         let mgr = TorrentManager::new();
         let info = TrackingInfo {
-            output_path: Some("/tmp/test".to_string()),
+            download_dir: Some("/tmp/test".to_string()),
         };
         mgr.set_tracking_info("abc123".to_string(), info);
         let retrieved = mgr.get_tracking_info("abc123");
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().output_path, Some("/tmp/test".to_string()));
+        assert_eq!(retrieved.unwrap().download_dir, Some("/tmp/test".to_string()));
     }
 
     #[test]
@@ -848,17 +1062,17 @@ mod tests {
         mgr.set_tracking_info(
             "abc".to_string(),
             TrackingInfo {
-                output_path: Some("/first".to_string()),
+                download_dir: Some("/first".to_string()),
             },
         );
         mgr.set_tracking_info(
             "abc".to_string(),
             TrackingInfo {
-                output_path: Some("/second".to_string()),
+                download_dir: Some("/second".to_string()),
             },
         );
         let retrieved = mgr.get_tracking_info("abc").unwrap();
-        assert_eq!(retrieved.output_path, Some("/second".to_string()));
+        assert_eq!(retrieved.download_dir, Some("/second".to_string()));
     }
 
     #[test]
@@ -867,7 +1081,7 @@ mod tests {
         mgr.set_tracking_info(
             "abc".to_string(),
             TrackingInfo {
-                output_path: None,
+                download_dir: None,
             },
         );
         mgr.mark_torrent_completed("abc".to_string());
@@ -1135,6 +1349,7 @@ mod tests {
         let mgr = TorrentManager::new();
         let config = TorrentConfig {
             download_path: tmp.path().to_path_buf(),
+            stream_path: tmp.path().join("streams"),
             listen_port_range: 0..1, // port 0 lets the OS assign an available port
             enable_upnp: false,
             fast_resume: false,
@@ -1273,7 +1488,7 @@ mod tests {
         let tracking =
             mgr.get_tracking_info("da39a3ee5e6b4b0d3255bfef95601890afd80709");
         assert!(tracking.is_some());
-        assert!(tracking.unwrap().output_path.is_some());
+        assert!(tracking.unwrap().download_dir.is_some());
     }
 
     #[tokio::test]
@@ -1311,6 +1526,7 @@ mod tests {
         let mgr = TorrentManager::new();
         let config = TorrentConfig {
             download_path: tmp.path().to_path_buf(),
+            stream_path: tmp.path().join("streams"),
             listen_port_range: 0..1,
             enable_upnp: false,
             fast_resume: false,
@@ -1330,6 +1546,7 @@ mod tests {
         let mgr = TorrentManager::new();
         let config = TorrentConfig {
             download_path: tmp.path().to_path_buf(),
+            stream_path: tmp.path().join("streams"),
             listen_port_range: 0..1,
             enable_upnp: false,
             fast_resume: false,
@@ -1345,24 +1562,67 @@ mod tests {
     #[test]
     fn tracking_info_clone() {
         let info = TrackingInfo {
-            output_path: Some("/path".to_string()),
+            download_dir: Some("/path".to_string()),
         };
         let cloned = info.clone();
-        assert_eq!(cloned.output_path, info.output_path);
+        assert_eq!(cloned.download_dir, info.download_dir);
     }
 
     #[test]
     fn tracking_info_debug() {
         let info = TrackingInfo {
-            output_path: Some("/test".to_string()),
+            download_dir: Some("/test".to_string()),
         };
         let debug = format!("{:?}", info);
         assert!(debug.contains("/test"));
     }
 
     #[test]
-    fn tracking_info_none_output_path() {
-        let info = TrackingInfo { output_path: None };
-        assert!(info.output_path.is_none());
+    fn tracking_info_none_download_dir() {
+        let info = TrackingInfo { download_dir: None };
+        assert!(info.download_dir.is_none());
+    }
+
+    // ── stream_path / clear_streams ────────────────────────────────
+
+    #[test]
+    fn stream_path_falls_back_to_download_subdir_when_unset() {
+        let mgr = TorrentManager::new();
+        mgr.set_download_path(PathBuf::from("/tmp/dl"));
+        // stream_path is empty by default → falls back to <download>/streams
+        assert_eq!(mgr.stream_path(), PathBuf::from("/tmp/dl/streams"));
+    }
+
+    #[test]
+    fn stream_path_uses_explicit_setting_when_set() {
+        let mgr = TorrentManager::new();
+        mgr.set_download_path(PathBuf::from("/tmp/dl"));
+        mgr.set_stream_path(PathBuf::from("/tmp/streams-elsewhere"));
+        assert_eq!(mgr.stream_path(), PathBuf::from("/tmp/streams-elsewhere"));
+    }
+
+    #[tokio::test]
+    async fn clear_streams_fails_when_not_initialized() {
+        let mgr = TorrentManager::new();
+        let res = mgr.clear_streams().await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn clear_streams_wipes_stray_files_when_session_has_no_streams() {
+        let (mgr, tmp) = create_initialized_manager().await;
+        let stream_dir = tmp.path().join("streams");
+        std::fs::create_dir_all(&stream_dir).unwrap();
+        let stray = stream_dir.join("leftover.mp4");
+        std::fs::write(&stray, b"junk").unwrap();
+        // Mark a fake .rqbit folder so we can verify it's preserved.
+        let rqbit = stream_dir.join(".rqbit");
+        std::fs::create_dir_all(&rqbit).unwrap();
+        std::fs::write(rqbit.join("state.json"), b"{}").unwrap();
+
+        mgr.clear_streams().await.unwrap();
+
+        assert!(!stray.exists());
+        assert!(rqbit.exists());
     }
 }

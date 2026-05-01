@@ -1,13 +1,9 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { onMount } from 'svelte';
-	import { DEFAULT_SIGNALING_URL } from 'ui-lib/lib/api-base';
 	import { connectionConfigService } from 'ui-lib/services/connection-config.service';
 	import { clientIdentityService } from 'ui-lib/services/client-identity.service';
-	import {
-		nodeConnectionService,
-		type NodeConnectionPhase
-	} from 'ui-lib/services/node-connection.service';
+	import { nodeConnectionService } from 'ui-lib/services/node-connection.service';
 	import { generateRandomUsername } from 'ui-lib/utils/random-username';
 	import { toastService } from 'ui-lib/services/toast.service';
 	import {
@@ -17,7 +13,6 @@
 		clearInviteFromUrl
 	} from 'ui-lib/services/connect-invite.service';
 	import { blo } from 'blo';
-	import type { TransportMode } from 'ui-lib/types/connection-config.type';
 
 	let {
 		onconnected,
@@ -37,11 +32,9 @@
 	let displayName = $state(localIdentity.name);
 	let clientAddress = localIdentity.address;
 
-	type ConnectionTab = 'invite' | TransportMode;
+	type ConnectionTab = 'invite' | 'ws';
 	let activeTab = $state<ConnectionTab>('invite');
-	let transportMode = $state<TransportMode>(existingConfig?.transportMode ?? 'http');
 	let serverUrl = $state(existingConfig?.serverUrl ?? defaults.serverUrl);
-	let serverAddress = $state(existingConfig?.serverAddress ?? defaults.serverAddress);
 	let signalingUrl = $state(existingConfig?.signalingUrl ?? defaults.signalingUrl);
 
 	let inviteInput = $state(urlInvite ?? '');
@@ -61,7 +54,6 @@
 				if (!nodeDefaults) return;
 				const fresh = connectionConfigService.defaults();
 				serverUrl = fresh.serverUrl;
-				serverAddress = fresh.serverAddress;
 				if (fresh.signalingUrl) signalingUrl = fresh.signalingUrl;
 			});
 		}
@@ -73,36 +65,7 @@
 		$connState.phase !== 'idle' && $connState.phase !== 'ready' && $connState.phase !== 'error'
 	);
 
-	const WEBRTC_STEPS: { phase: NodeConnectionPhase; label: string }[] = [
-		{ phase: 'connecting', label: 'Initialize identity' },
-		{ phase: 'signaling', label: 'Connect to signaling' },
-		{ phase: 'peer-discovery', label: 'Discover server peer' },
-		{ phase: 'webrtc', label: 'Establish WebRTC connection' },
-		{ phase: 'handshake', label: 'Exchange passports' },
-		{ phase: 'ready', label: 'Ready' }
-	];
-
-	function stepStatus(
-		stepPhase: NodeConnectionPhase,
-		currentPhase: NodeConnectionPhase
-	): 'pending' | 'active' | 'done' | 'error' {
-		const stepIdx = WEBRTC_STEPS.findIndex((s) => s.phase === stepPhase);
-		const currentIdx = WEBRTC_STEPS.findIndex((s) => s.phase === currentPhase);
-		if (currentPhase === 'error') {
-			if (stepIdx < currentIdx || currentIdx === -1) return 'done';
-			return stepIdx === currentIdx ? 'error' : 'pending';
-		}
-		if (currentIdx === -1) return 'pending';
-		if (stepIdx < currentIdx) return 'done';
-		if (stepIdx === currentIdx) return 'active';
-		return 'pending';
-	}
-
-	let canConnect = $derived(
-		transportMode === 'http' || transportMode === 'ws'
-			? serverUrl.trim().length > 0
-			: serverAddress.trim().length > 0 && signalingUrl.trim().length > 0
-	);
+	let canConnect = $derived(serverUrl.trim().length > 0);
 
 	let parsedInvite = $derived(inviteInput.trim() ? parseInvite(inviteInput.trim()) : null);
 	let canConnectInvite = $derived(parsedInvite !== null);
@@ -111,13 +74,7 @@
 		if (!parsedInvite) return;
 
 		try {
-			if (parsedInvite.transportMode === 'http') {
-				await nodeConnectionService.connectHttp(parsedInvite);
-			} else if (parsedInvite.transportMode === 'ws') {
-				await nodeConnectionService.connectWs(parsedInvite);
-			} else {
-				await nodeConnectionService.connectWebRtc(parsedInvite);
-			}
+			await nodeConnectionService.connectWs(parsedInvite);
 			connectionConfigService.save(parsedInvite);
 			onconnected();
 		} catch {
@@ -127,20 +84,13 @@
 
 	async function handleConnect() {
 		const config = {
-			transportMode,
+			transportMode: 'ws' as const,
 			serverUrl: serverUrl.trim(),
-			serverAddress: serverAddress.trim(),
 			signalingUrl: signalingUrl.trim()
 		};
 
 		try {
-			if (transportMode === 'http') {
-				await nodeConnectionService.connectHttp(config);
-			} else if (transportMode === 'ws') {
-				await nodeConnectionService.connectWs(config);
-			} else {
-				await nodeConnectionService.connectWebRtc(config);
-			}
+			await nodeConnectionService.connectWs(config);
 			connectionConfigService.save(config);
 			onconnected();
 		} catch {
@@ -195,32 +145,17 @@
 						<span class="h-1.5 w-1.5 rounded-full bg-success-content"></span>
 						Connected
 					</span>
-					<span class="badge badge-outline badge-sm">
-						{existingConfig.transportMode.toUpperCase()}
-					</span>
+					<span class="badge badge-outline badge-sm">WS</span>
 				</div>
 				<p class="mt-1 truncate font-mono text-xs">{clientAddress}</p>
 			</div>
 		</div>
 
 		<div class="rounded-lg bg-base-200 p-3">
-			{#if existingConfig.transportMode === 'http' || existingConfig.transportMode === 'ws'}
-				<div class="text-sm">
-					<span class="text-base-content/60">Server URL</span>
-					<p class="mt-0.5 truncate font-mono">{existingConfig.serverUrl}</p>
-				</div>
-			{:else}
-				<div class="flex flex-col gap-2 text-sm">
-					<div>
-						<span class="text-base-content/60">Server Address</span>
-						<p class="mt-0.5 truncate font-mono">{existingConfig.serverAddress}</p>
-					</div>
-					<div>
-						<span class="text-base-content/60">Signaling Server</span>
-						<p class="mt-0.5 truncate font-mono">{existingConfig.signalingUrl}</p>
-					</div>
-				</div>
-			{/if}
+			<div class="text-sm">
+				<span class="text-base-content/60">Server URL</span>
+				<p class="mt-0.5 truncate font-mono">{existingConfig.serverUrl}</p>
+			</div>
 		</div>
 
 		<div class="form-control">
@@ -303,7 +238,7 @@
 
 		<!-- Connection mode tabs -->
 		<div class="flex flex-wrap gap-1">
-			{#each [{ id: 'invite', label: 'Paste Invite' }, { id: 'http', label: 'HTTP' }, { id: 'ws', label: 'WebSocket' }, { id: 'webrtc', label: 'WebRTC' }] as tab (tab.id)}
+			{#each [{ id: 'invite', label: 'Paste Invite' }, { id: 'ws', label: 'WebSocket' }] as tab (tab.id)}
 				<button
 					class={classNames('btn btn-sm', {
 						'btn-primary': activeTab === tab.id,
@@ -312,7 +247,6 @@
 					disabled={connecting}
 					onclick={() => {
 						activeTab = tab.id as ConnectionTab;
-						if (tab.id !== 'invite') transportMode = tab.id as TransportMode;
 					}}
 				>
 					{tab.label}
@@ -341,8 +275,8 @@
 			</div>
 		{/if}
 
-		<!-- HTTP / WS fields -->
-		{#if activeTab === 'http' || activeTab === 'ws'}
+		<!-- WS fields -->
+		{#if activeTab === 'ws'}
 			<div class="form-control">
 				<label class="label" for="server-url">
 					<span class="label-text">Server URL</span>
@@ -356,59 +290,6 @@
 					disabled={connecting}
 				/>
 			</div>
-		{/if}
-
-		<!-- WebRTC fields -->
-		{#if activeTab === 'webrtc'}
-			<div class="form-control">
-				<label class="label" for="server-address">
-					<span class="label-text">Server Ethereum Address</span>
-				</label>
-				<input
-					id="server-address"
-					type="text"
-					class="input-bordered input w-full font-mono text-sm"
-					placeholder="0x..."
-					bind:value={serverAddress}
-					disabled={connecting}
-				/>
-			</div>
-			<div class="form-control">
-				<label class="label" for="signaling-url">
-					<span class="label-text">Signaling Server</span>
-				</label>
-				<input
-					id="signaling-url"
-					type="text"
-					class="input-bordered input w-full text-sm"
-					placeholder={DEFAULT_SIGNALING_URL}
-					bind:value={signalingUrl}
-					disabled={connecting}
-				/>
-			</div>
-		{/if}
-
-		<!-- WebRTC connection progress -->
-		{#if activeTab === 'webrtc' && $connState.phase !== 'idle'}
-			<ul class="steps steps-vertical text-sm">
-				{#each WEBRTC_STEPS as step (step.phase)}
-					{@const status = stepStatus(step.phase, $connState.phase)}
-					<li
-						class={classNames('step', {
-							'step-primary': status === 'done',
-							'step-info': status === 'active',
-							'step-error': status === 'error'
-						})}
-					>
-						<span class="flex items-center gap-2">
-							{step.label}
-							{#if status === 'active'}
-								<span class="loading loading-xs loading-spinner"></span>
-							{/if}
-						</span>
-					</li>
-				{/each}
-			</ul>
 		{/if}
 
 		<!-- Error display -->
