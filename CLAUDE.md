@@ -4,7 +4,9 @@ This document guides Claude (and developers) on implementing features in this mo
 
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`) + cloud WebUI (components, services, types, adapters, utils, CSS/themes, transport layer all live here)
-- `apps/rendezvous/CLAUDE.md` — Private-swarm IPFS bootstrap node + DHT-backed WebRTC signaling
+- `apps/rendezvous/CLAUDE.md` — Private-swarm IPFS bootstrap node + DHT-backed WebRTC signaling + `/ws` transport for browser peers
+- `apps/player/CLAUDE.md` — Browser-only static SPA that joins the same private swarm directly via Helia and renders firkins fetched over UnixFS, never talking to the cloud HTTP API
+- `packages/cloud-ui/` — Shared Svelte 5 display components + firkin types used by both the cloud WebUI and the player app
 ---
 
 ## Monorepo Overview
@@ -13,14 +15,16 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 mhaol.git/
 ├── apps/
 │   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud")
-│   ├── rendezvous/                   # Rust IPFS bootstrap node + DHT/WebSocket WebRTC signaling + TURN credential server (mhaol-rendezvous, HTTP 14080, libp2p 14001)
+│   ├── rendezvous/                   # Rust IPFS bootstrap node + DHT/WebSocket WebRTC signaling + TURN credential server (mhaol-rendezvous, HTTP 14080, libp2p 14001 TCP, 14002 ws)
+│   ├── player/                       # Browser-only Svelte static SPA — joins the private IPFS swarm directly via Helia and renders firkins by CID (port 9797)
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subtitles, torrent search)
+│   ├── cloud-ui/                     # Shared Svelte 5 display components + firkin types (used by cloud WebUI and player)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── ipfs-stream/                  # Rust HLS-over-IPFS streaming (GStreamer hlssink2)
 │   ├── torrent/                      # Rust torrent implementation
-│   └── ipfs-core/                    # Rust IPFS node (libp2p + Bitswap + Kademlia DHT, embedded)
+│   └── ipfs-core/                    # Rust IPFS node (libp2p + Bitswap + Kademlia DHT, embedded; TCP+WS+pnet+noise+yamux)
 ├── pnpm-workspace.yaml
 └── package.json                      # Root workspace scripts
 ```
@@ -205,11 +209,13 @@ Run these from the **repo root**:
 # Development
 pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): Rust loopback :9899 + Vite WebUI :9898 + tray icon (no window)
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
+pnpm app:player       # Vite dev server for the browser-only Player SPA (port 9797). Independent of the cloud — talks straight to IPFS.
 
 # Building
 pnpm build            # Build cloud (WebUI + binary) and rendezvous binary
 pnpm build:cloud:web  # Build cloud WebUI static assets only
 pnpm build:cloud      # Build cloud WebUI then build mhaol-cloud release binary (embeds the WebUI)
+pnpm build:player     # Build the player static SPA (apps/player/dist-static/)
 pnpm build:rendezvous # Build mhaol-rendezvous release binary
 
 # Quality
@@ -246,6 +252,7 @@ The dev scripts tee full stdout+stderr (cargo build noise, panics, `tracing` eve
 | Script | Log file |
 |---|---|
 | `pnpm app:rendezvous` | `logs/rendezvous.log` |
+| `pnpm app:player` | `logs/player.log` |
 | `pnpm dev` (cloud strand) | `logs/cloud.log` |
 | `pnpm dev` (web strand) | `logs/web.log` |
 | `pnpm dev` (tauri strand) | `logs/tauri.log` |
