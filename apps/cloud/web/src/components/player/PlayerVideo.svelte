@@ -621,10 +621,13 @@
 			{durationSecs}
 			{connectionState}
 			isFullscreen={effectiveFullscreen}
+			initialVolume={playerService.getVolume()}
 			onseek={handleSeek}
 			onseekstart={handleSeekStart}
 			onstop={handleStop}
 			onfullscreentoggle={toggleFullscreen}
+			onpaused={(paused) => playerService.setPaused(paused)}
+			onvolumechange={(v) => playerService.setVolume(v)}
 			{onprev}
 			{onnext}
 		/>

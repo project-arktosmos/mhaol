@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { playerService } from '$services/player.service';
+	import { untrack } from 'svelte';
 	import type { PlayerConnectionState } from '$types/player.type';
 	import PlayerSeekBar from './PlayerSeekBar.svelte';
 
@@ -11,13 +11,16 @@
 		durationSecs = null,
 		connectionState = 'idle',
 		isFullscreen = false,
+		initialVolume = 0.5,
 		onseek,
 		onseekstart,
 		onseekend,
 		onstop,
 		onfullscreentoggle,
 		onprev,
-		onnext
+		onnext,
+		onpaused,
+		onvolumechange
 	}: {
 		mediaElement?: HTMLMediaElement | null;
 		isVideo?: boolean;
@@ -25,6 +28,12 @@
 		durationSecs?: number | null;
 		connectionState?: PlayerConnectionState;
 		isFullscreen?: boolean;
+		/**
+		 * Volume to apply to the media element on first attachment. The
+		 * component otherwise stays decoupled from any external volume
+		 * store; emit `onvolumechange` to persist user changes.
+		 */
+		initialVolume?: number;
 		onseek?: (positionSecs: number) => void;
 		onseekstart?: () => void;
 		onseekend?: () => void;
@@ -32,21 +41,29 @@
 		onfullscreentoggle?: () => void;
 		onprev?: () => void;
 		onnext?: () => void;
+		/** Fires whenever the underlying media element pauses or resumes. */
+		onpaused?: (paused: boolean) => void;
+		/** Fires whenever the user mutes / unmutes / changes volume. */
+		onvolumechange?: (volume: number) => void;
 	} = $props();
 
 	let isPaused = $state(true);
-	let volume = $state(playerService.getVolume());
+	// `initialVolume` is read once on mount via `untrack` (below). Tracking
+	// it reactively in the $state initialiser triggers Svelte's
+	// `state_referenced_locally` warning since the value would be captured
+	// only on first render anyway.
+	let volume = $state(0);
 	let isMuted = $state(false);
-	let volumeBeforeMute = $state(playerService.getVolume());
+	let volumeBeforeMute = $state(0);
 
 	function onPlay(): void {
 		isPaused = false;
-		playerService.setPaused(false);
+		onpaused?.(false);
 	}
 
 	function onPause(): void {
 		isPaused = true;
-		playerService.setPaused(true);
+		onpaused?.(true);
 	}
 
 	function onVolumeChange(): void {
@@ -56,6 +73,7 @@
 	}
 
 	let currentElement: HTMLMediaElement | null = null;
+	let volumeInitialized = false;
 
 	$effect(() => {
 		if (mediaElement !== currentElement) {
@@ -69,6 +87,12 @@
 				mediaElement.addEventListener('play', onPlay);
 				mediaElement.addEventListener('pause', onPause);
 				mediaElement.addEventListener('volumechange', onVolumeChange);
+				if (!volumeInitialized) {
+					const seed = untrack(() => initialVolume);
+					volume = seed;
+					volumeBeforeMute = seed;
+					volumeInitialized = true;
+				}
 				mediaElement.volume = volume;
 				isPaused = mediaElement.paused;
 				isMuted = mediaElement.muted;
@@ -106,7 +130,7 @@
 			mediaElement.muted = true;
 			isMuted = true;
 		}
-		playerService.setVolume(mediaElement.muted ? 0 : mediaElement.volume);
+		onvolumechange?.(mediaElement.muted ? 0 : mediaElement.volume);
 	}
 
 	let disabled = $derived(connectionState !== 'streaming');
