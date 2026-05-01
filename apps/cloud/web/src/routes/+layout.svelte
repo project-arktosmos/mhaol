@@ -53,7 +53,7 @@
 					{#if item.children.length === 0}
 						<a href="{base}{item.href}" class="btn btn-outline btn-sm">{item.label}</a>
 					{:else}
-						<div class="dropdown-hover dropdown dropdown-bottom">
+						<div class="dropdown dropdown-bottom">
 							{#if item.hasOwnPage}
 								<a href="{base}{item.href}" class={triggerClass(item)}>{item.label}</a>
 							{:else}
