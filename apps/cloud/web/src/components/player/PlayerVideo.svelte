@@ -59,6 +59,12 @@
 	let mediaError = $state<string | null>(null);
 	let hlsInstance: Hls | null = null;
 	let attachedDirectUrl: string | null = null;
+	// Tracks whether the poster overlay has been hidden for the current
+	// stream. Reset whenever the source URL changes so each new trailer /
+	// track gets its own poster pass; flipped to true once playback
+	// actually begins (or the user dismisses the deferred-play overlay).
+	let posterDismissed = $state(false);
+	let posterTrackingUrl: string | null = null;
 
 	function isHlsUrl(url: string, mime: string | null): boolean {
 		if (mime && /mpegurl/i.test(mime)) return true;
@@ -294,6 +300,7 @@
 			playerService.setBuffering(true);
 		};
 		const onPlaying = () => {
+			posterDismissed = true;
 			playerService.setBuffering(false);
 			playerService.setPaused(false);
 		};
@@ -334,6 +341,8 @@
 		if (connectionState === 'idle') {
 			isFullscreen = false;
 			mediaError = null;
+			posterTrackingUrl = null;
+			posterDismissed = false;
 			if (videoElement) {
 				videoElement.srcObject = null;
 				videoElement.removeAttribute('src');
@@ -341,6 +350,19 @@
 			}
 		}
 	});
+
+	// Reset the poster overlay each time the source URL changes so a new
+	// trailer / track gets its own pre-play poster pass. Once the element
+	// fires `playing` (or the user dismisses the deferred-play overlay),
+	// `posterDismissed` flips to true and the overlay fades out.
+	$effect(() => {
+		if (directStreamUrl && directStreamUrl !== posterTrackingUrl) {
+			posterTrackingUrl = directStreamUrl;
+			posterDismissed = false;
+		}
+	});
+
+	const showPoster = $derived(!!poster && !!directStreamUrl && !posterDismissed);
 
 	// Sync the player's subtitle search context with the service.
 	$effect(() => {
@@ -463,6 +485,7 @@
 
 	function handleStartDeferredPlay(): void {
 		if (!videoElement) return;
+		posterDismissed = true;
 		playerService.state.update((s) => ({ ...s, awaitingPlay: false }));
 		videoElement.play().catch((err: Error) => {
 			console.error('[PlayerVideo] deferred play() rejected', err);
@@ -524,6 +547,17 @@
 			poster={poster ?? undefined}
 			onclick={handleVideoClick}
 		></video>
+
+		{#if poster && directStreamUrl && isVideo}
+			<div
+				class={classNames(
+					'pointer-events-none absolute inset-0 z-10 rounded-lg bg-cover bg-center transition-opacity duration-500',
+					showPoster ? 'opacity-100' : 'opacity-0'
+				)}
+				style:background-image={`url(${poster})`}
+				aria-hidden="true"
+			></div>
+		{/if}
 
 		{#if !isVideo}
 			<div
