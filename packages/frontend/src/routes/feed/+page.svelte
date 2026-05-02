@@ -41,13 +41,15 @@
 	function ratingLabel(row: Recommendation): string {
 		const reviews = row.reviews ?? [];
 		if (reviews.length === 0) return '—';
-		const total = reviews.reduce(
-			(sum, r) => (r.maxScore > 0 ? sum + r.score / r.maxScore : sum),
-			0
-		);
-		const avg = (total / reviews.length) * 10;
-		const rounded = Math.round(avg * 10) / 10;
-		return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)} / 10`;
+		let count = 0;
+		let total = 0;
+		for (const r of reviews) {
+			if (!Number.isFinite(r.maxScore) || r.maxScore <= 0) continue;
+			total += (r.score / r.maxScore) * 100;
+			count += 1;
+		}
+		if (count === 0) return '—';
+		return `${Math.round(total / count)}%`;
 	}
 
 	$effect(() => {
