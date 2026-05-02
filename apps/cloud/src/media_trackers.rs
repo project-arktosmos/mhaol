@@ -14,16 +14,29 @@ use surrealdb::sql::Thing;
 
 pub const TABLE: &str = "media_tracker";
 
-/// One row per (firkin, user) pair. Accumulated playback time is added by
-/// the right-side player every 10 seconds while a firkin file is playing
-/// (plus a 0-delta heartbeat at play-start so the row exists even if the
-/// user immediately stops).
+/// One row per (firkin, track?, user) tuple. Accumulated playback time is
+/// added by the right-side player every 10 seconds while a firkin file is
+/// playing (plus a 0-delta heartbeat at play-start so the row exists even if
+/// the user immediately stops). When the player surfaces a per-track context
+/// (music playback driven by `playPlaylistTrack`), `track_id` is set and the
+/// row counts time for that specific track within the album. For everything
+/// else (movies, single-file streams) `track_id` is `None` and the row counts
+/// time at the firkin level — same shape as before per-track tracking landed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaTracker {
     pub id: Option<Thing>,
     /// CID of the firkin being tracked — the firkin's own SurrealDB id, which
     /// is its IPFS-style content address.
     pub firkin_id: String,
+    /// Optional per-track identifier (e.g. MusicBrainz track id). When `None`
+    /// the row aggregates time at the firkin level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_id: Option<String>,
+    /// Display title for the track, captured at heartbeat time so the
+    /// consumption UI can render per-track rows without re-resolving the
+    /// album. Optional and best-effort.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_title: Option<String>,
     /// Lowercased EVM address of the user whose playback time this row tracks.
     pub address: String,
     pub total_seconds: f64,
@@ -37,6 +50,10 @@ pub struct MediaTrackerDto {
     pub id: String,
     #[serde(rename = "firkinId")]
     pub firkin_id: String,
+    #[serde(rename = "trackId", skip_serializing_if = "Option::is_none")]
+    pub track_id: Option<String>,
+    #[serde(rename = "trackTitle", skip_serializing_if = "Option::is_none")]
+    pub track_title: Option<String>,
     pub address: String,
     #[serde(rename = "totalSeconds")]
     pub total_seconds: f64,
@@ -55,6 +72,8 @@ impl From<MediaTracker> for MediaTrackerDto {
         Self {
             id,
             firkin_id: t.firkin_id,
+            track_id: t.track_id,
+            track_title: t.track_title,
             address: t.address,
             total_seconds: t.total_seconds,
             last_played_at: t.last_played_at,
@@ -74,6 +93,15 @@ impl IntoResponse for MediaTrackerDto {
 pub struct HeartbeatRequest {
     #[serde(rename = "firkinId")]
     pub firkin_id: String,
+    /// Optional per-track identifier. When set the heartbeat is bucketed
+    /// against the (firkin, track, user) tuple instead of the firkin row.
+    #[serde(default, rename = "trackId")]
+    pub track_id: Option<String>,
+    /// Optional display title for the track, persisted on first heartbeat
+    /// so the consumption UI doesn't have to re-resolve the album to label
+    /// rows. Trimmed; empty values are dropped.
+    #[serde(default, rename = "trackTitle")]
+    pub track_title: Option<String>,
     pub address: String,
     /// Seconds of playback to add to the tracker. `0` is allowed (used as a
     /// play-start signal) and is the only value that creates a fresh row
@@ -86,6 +114,8 @@ pub struct HeartbeatRequest {
 pub struct ListQuery {
     #[serde(rename = "firkinId")]
     pub firkin_id: Option<String>,
+    #[serde(rename = "trackId")]
+    pub track_id: Option<String>,
     pub address: Option<String>,
 }
 
@@ -118,15 +148,20 @@ fn normalize_address(raw: &str) -> Option<String> {
     Some(format!("0x{}", body))
 }
 
-/// Deterministic SurrealDB record id for a `(firkin_id, address)` pair.
-/// Same pattern as `ipfs_pins::pin_record_id` so the heartbeat handler is
-/// idempotent under races: every concurrent caller for the same pair lands
-/// on the same row.
-fn record_id(firkin_id: &str, address: &str) -> String {
+/// Deterministic SurrealDB record id for a `(firkin_id, track_id?, address)`
+/// tuple. Same pattern as `ipfs_pins::pin_record_id` so the heartbeat handler
+/// is idempotent under races: every concurrent caller for the same tuple
+/// lands on the same row. When `track_id` is `None` the digest matches the
+/// pre-per-track shape, so existing firkin-level rows keep accumulating.
+fn record_id(firkin_id: &str, track_id: Option<&str>, address: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(firkin_id.as_bytes());
     hasher.update(b":");
     hasher.update(address.as_bytes());
+    if let Some(tid) = track_id {
+        hasher.update(b":");
+        hasher.update(tid.as_bytes());
+    }
     let digest = hasher.finalize();
     let mut hex = String::with_capacity(digest.len() * 2);
     for byte in digest {
@@ -154,12 +189,18 @@ async fn list(
         None => None,
     };
     let firkin_filter = q.firkin_id.as_deref().map(|s| s.trim().to_string());
+    let track_filter = q.track_id.as_deref().map(|s| s.trim().to_string());
 
     let mut dtos: Vec<MediaTrackerDto> = trackers
         .into_iter()
         .filter(|t| {
             if let Some(fid) = &firkin_filter {
                 if !fid.is_empty() && &t.firkin_id != fid {
+                    return false;
+                }
+            }
+            if let Some(tid) = &track_filter {
+                if !tid.is_empty() && t.track_id.as_deref() != Some(tid.as_str()) {
                     return false;
                 }
             }
@@ -192,6 +233,18 @@ async fn heartbeat(
             "deltaSeconds must be a finite non-negative number",
         ));
     }
+    let track_id = req
+        .track_id
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let track_title = req
+        .track_title
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
 
     let firkin_exists: Option<Firkin> = state
         .db
@@ -207,7 +260,7 @@ async fn heartbeat(
         return Err(err_response(StatusCode::NOT_FOUND, "firkin not found"));
     }
 
-    let id = record_id(&firkin_id, &address);
+    let id = record_id(&firkin_id, track_id.as_deref(), &address);
     let now = Utc::now();
 
     let existing: Option<MediaTracker> = state
@@ -227,6 +280,15 @@ async fn heartbeat(
             current.total_seconds += req.delta_seconds;
             current.last_played_at = now;
             current.updated_at = now;
+            // Back-fill metadata that wasn't carried on prior heartbeats but
+            // is now known. Once a row has a title, later beats without one
+            // leave it intact.
+            if current.track_id.is_none() {
+                current.track_id = track_id.clone();
+            }
+            if let Some(t) = track_title.clone() {
+                current.track_title = Some(t);
+            }
             state
                 .db
                 .update((TABLE, id.as_str()))
@@ -243,6 +305,8 @@ async fn heartbeat(
             let record = MediaTracker {
                 id: None,
                 firkin_id,
+                track_id: track_id.clone(),
+                track_title: track_title.clone(),
                 address,
                 total_seconds: req.delta_seconds,
                 last_played_at: now,
@@ -279,12 +343,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn record_id_is_deterministic_per_pair() {
-        let a = record_id("bafy1", "0xabc");
-        let b = record_id("bafy1", "0xabc");
+    fn record_id_is_deterministic_per_tuple() {
+        let a = record_id("bafy1", None, "0xabc");
+        let b = record_id("bafy1", None, "0xabc");
         assert_eq!(a, b);
-        assert_ne!(a, record_id("bafy1", "0xdef"));
-        assert_ne!(a, record_id("bafy2", "0xabc"));
+        assert_ne!(a, record_id("bafy1", None, "0xdef"));
+        assert_ne!(a, record_id("bafy2", None, "0xabc"));
+    }
+
+    #[test]
+    fn record_id_separates_track_buckets() {
+        let album = record_id("bafyAlbum", None, "0xuser");
+        let t1 = record_id("bafyAlbum", Some("track-1"), "0xuser");
+        let t2 = record_id("bafyAlbum", Some("track-2"), "0xuser");
+        assert_ne!(album, t1);
+        assert_ne!(album, t2);
+        assert_ne!(t1, t2);
+        assert_eq!(t1, record_id("bafyAlbum", Some("track-1"), "0xuser"));
     }
 
     #[test]

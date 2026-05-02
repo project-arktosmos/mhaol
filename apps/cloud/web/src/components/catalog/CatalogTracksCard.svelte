@@ -6,6 +6,12 @@
 		resolver: TrackResolver;
 		thumb: string | null;
 		albumTitle?: string;
+		// CID of the firkin this tracklist belongs to. Forwarded to the
+		// player so the navbar's per-track consumption tracker buckets
+		// time against the right (firkin, track) pair. Omitted on the
+		// virtual catalog page (no firkin yet); `preview` already disables
+		// playback there.
+		firkinId?: string;
 		onRefresh?: () => void;
 		// Preview mode hides per-track YouTube/lyrics state and disables
 		// playback. Used by `/catalog/virtual` where nothing has been
@@ -13,7 +19,7 @@
 		// per-track YouTube + LRCLIB resolution.
 		preview?: boolean;
 	}
-	let { resolver, thumb, albumTitle, onRefresh, preview = false }: Props = $props();
+	let { resolver, thumb, albumTitle, firkinId, onRefresh, preview = false }: Props = $props();
 
 	let expandedLyricsIdx = $state<number | null>(null);
 
@@ -61,8 +67,7 @@
 					(track.youtubeStatus === 'found' || track.youtubeStatus === 'idle') &&
 					!!track.youtubeUrl}
 				{@const isPlaying = resolver.playingIndex === idx}
-				{@const lyricsExpanded =
-					!preview && expandedLyricsIdx === idx && Boolean(track.lyrics)}
+				{@const lyricsExpanded = !preview && expandedLyricsIdx === idx && Boolean(track.lyrics)}
 				{@const lyricsKindLabel = track.lyrics
 					? (track.lyrics.syncedLyrics?.length ?? 0) > 0
 						? 'synced'
@@ -84,7 +89,7 @@
 								'cursor-default': !playable
 							})}
 							disabled={!playable || resolver.playingIndex !== null}
-							onclick={() => resolver.play(idx, { thumb, albumTitle })}
+							onclick={() => resolver.play(idx, { thumb, albumTitle, firkinId })}
 							title={playable ? `Play "${track.title}"` : track.title}
 						>
 							<span class="w-6 shrink-0 text-right font-mono text-base-content/60"

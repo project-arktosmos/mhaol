@@ -9,6 +9,8 @@ const HEARTBEAT_DELTA_SECONDS = HEARTBEAT_INTERVAL_MS / 1000;
 export interface MediaTracker {
 	id: string;
 	firkinId: string;
+	trackId?: string;
+	trackTitle?: string;
 	address: string;
 	totalSeconds: number;
 	last_played_at: string;
@@ -39,6 +41,8 @@ export async function listMediaTrackers(address?: string): Promise<MediaTracker[
 class MediaTrackerService {
 	private interval: ReturnType<typeof setInterval> | null = null;
 	private currentFirkinId: string | null = null;
+	private currentTrackId: string | null = null;
+	private currentTrackTitle: string | null = null;
 	private initialized = false;
 
 	initialize(): void {
@@ -47,16 +51,26 @@ class MediaTrackerService {
 
 		// Drive the tracker off the player service: any playUrl caller that
 		// passes a firkin id (catalog detail page's IPFS HLS + torrent stream
-		// flows) sets `firkinId` on the player state. Heartbeats accumulate
-		// while that id is set and the connection is streaming; flipping to
-		// a different firkin restarts cleanly. The interval-side
-		// `sendHeartbeat` already short-circuits when paused / not streaming.
+		// flows, plus the navbar music playlist) sets `firkinId` on the
+		// player state. When the playlist also surfaces a `trackId`, the
+		// heartbeat buckets time per-track within the album. Flipping the
+		// firkin or track restarts the heartbeat loop so swaps don't bleed
+		// time into the wrong row. The interval-side `sendHeartbeat` already
+		// short-circuits when paused / not streaming.
 		playerService.state.subscribe((s) => {
 			const firkinId = s.firkinId;
-			if (firkinId === this.currentFirkinId) return;
+			const trackId = s.trackId;
+			const trackTitle = s.trackTitle;
+			if (
+				firkinId === this.currentFirkinId &&
+				trackId === this.currentTrackId &&
+				trackTitle === this.currentTrackTitle
+			) {
+				return;
+			}
 			this.stop();
 			if (firkinId) {
-				this.start(firkinId);
+				this.start(firkinId, trackId, trackTitle);
 			}
 		});
 
@@ -67,11 +81,13 @@ class MediaTrackerService {
 		this.stop();
 	};
 
-	private start(firkinId: string): void {
+	private start(firkinId: string, trackId: string | null, trackTitle: string | null): void {
 		this.currentFirkinId = firkinId;
-		void this.sendHeartbeat(firkinId, 0);
+		this.currentTrackId = trackId;
+		this.currentTrackTitle = trackTitle;
+		void this.sendHeartbeat(firkinId, trackId, trackTitle, 0);
 		this.interval = setInterval(() => {
-			void this.sendHeartbeat(firkinId, HEARTBEAT_DELTA_SECONDS);
+			void this.sendHeartbeat(firkinId, trackId, trackTitle, HEARTBEAT_DELTA_SECONDS);
 		}, HEARTBEAT_INTERVAL_MS);
 	}
 
@@ -81,9 +97,16 @@ class MediaTrackerService {
 			this.interval = null;
 		}
 		this.currentFirkinId = null;
+		this.currentTrackId = null;
+		this.currentTrackTitle = null;
 	}
 
-	private async sendHeartbeat(firkinId: string, deltaSeconds: number): Promise<void> {
+	private async sendHeartbeat(
+		firkinId: string,
+		trackId: string | null,
+		trackTitle: string | null,
+		deltaSeconds: number
+	): Promise<void> {
 		const identity = get(userIdentityService.state).identity;
 		if (!identity) return;
 
@@ -104,6 +127,8 @@ class MediaTrackerService {
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					firkinId,
+					trackId: trackId ?? undefined,
+					trackTitle: trackTitle ?? undefined,
 					address: identity.address,
 					deltaSeconds
 				})

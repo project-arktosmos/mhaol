@@ -64,6 +64,14 @@ export interface PlayerState {
 	// consumption tracker — heartbeats only accumulate while this is set
 	// (set by playUrl callers that have a firkin context).
 	firkinId: string | null;
+	// Optional per-track id within the firkin (e.g. MusicBrainz track id).
+	// When set, consumption is bucketed against (firkin, track, user) so the
+	// consumption page can break down listening time per song. Movies / TV /
+	// single-file streams leave this null.
+	trackId: string | null;
+	// Display title for the active track. Captured alongside trackId so the
+	// consumption row can be labelled without re-resolving the album.
+	trackTitle: string | null;
 	// Synced LRC lines for the currently-playing track, when available.
 	// Drives the navbar lyrics panel; null disables the panel.
 	syncedLyrics: SubsLyricsSyncedLine[] | null;
@@ -85,12 +93,20 @@ export interface PlaylistTrack {
 	durationSeconds: number | null;
 	syncedLyrics: SubsLyricsSyncedLine[] | null;
 	position?: number;
+	// Stable per-track identifier (e.g. MusicBrainz track id). Surfaces
+	// through the player into the consumption tracker so each song gets
+	// its own row.
+	id?: string;
 }
 
 export interface PlayerPlaylist {
 	tracks: PlaylistTrack[];
 	currentIndex: number;
 	title?: string;
+	// CID of the firkin (album) this playlist was sourced from. Set by the
+	// catalog tracks card so the navbar prev/next swap stays in the same
+	// firkin context for consumption tracking.
+	firkinId?: string;
 }
 
 // ===== Player Settings (localStorage) =====

@@ -1112,7 +1112,12 @@
 			{/if}
 
 			{#if isMusicBrainz}
-				<CatalogTracksCard resolver={trackResolver} {thumb} albumTitle={firkin.title} />
+				<CatalogTracksCard
+					resolver={trackResolver}
+					{thumb}
+					albumTitle={firkin.title}
+					firkinId={firkin.id}
+				/>
 			{/if}
 
 			{#if hasMagnetFiles}

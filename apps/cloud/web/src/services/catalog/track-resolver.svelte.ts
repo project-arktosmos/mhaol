@@ -193,7 +193,7 @@ export class TrackResolver {
 
 	async play(
 		index: number,
-		opts: { thumb: string | null; albumTitle?: string }
+		opts: { thumb: string | null; albumTitle?: string; firkinId?: string | null }
 	): Promise<void> {
 		const t = this.tracks[index];
 		if (!t || !t.youtubeUrl || this.playingIndex !== null) return;
@@ -202,9 +202,7 @@ export class TrackResolver {
 		try {
 			const durationSeconds = t.lengthMs ? Math.round(t.lengthMs / 1000) : null;
 			const syncedLyrics =
-				t.lyrics?.syncedLyrics && t.lyrics.syncedLyrics.length > 0
-					? t.lyrics.syncedLyrics
-					: null;
+				t.lyrics?.syncedLyrics && t.lyrics.syncedLyrics.length > 0 ? t.lyrics.syncedLyrics : null;
 			// Surface the full tracklist to the floating player panel so the
 			// user can swap between songs from anywhere in the app — even
 			// after navigating away from this catalog page (the playlist
@@ -218,14 +216,25 @@ export class TrackResolver {
 					tr.lyrics?.syncedLyrics && tr.lyrics.syncedLyrics.length > 0
 						? tr.lyrics.syncedLyrics
 						: null,
-				position: tr.position
+				position: tr.position,
+				id: tr.id
 			}));
 			playerService.setPlaylist({
 				tracks: playlistTracks,
 				currentIndex: index,
-				title: opts.albumTitle
+				title: opts.albumTitle,
+				firkinId: opts.firkinId ?? undefined
 			});
-			await playYouTubeAudio(t.youtubeUrl, t.title, opts.thumb, durationSeconds, syncedLyrics);
+			await playYouTubeAudio(
+				t.youtubeUrl,
+				t.title,
+				opts.thumb,
+				durationSeconds,
+				syncedLyrics,
+				opts.firkinId ?? null,
+				t.id ?? null,
+				t.title
+			);
 		} catch (err) {
 			this.playError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {

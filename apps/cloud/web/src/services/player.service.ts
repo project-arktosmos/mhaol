@@ -35,6 +35,8 @@ const initialState: PlayerState = {
 	directStreamUrl: null,
 	directStreamMimeType: null,
 	firkinId: null,
+	trackId: null,
+	trackTitle: null,
 	syncedLyrics: null
 };
 
@@ -117,6 +119,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			directStreamUrl: null,
 			directStreamMimeType: null,
 			firkinId: null,
+			trackId: null,
+			trackTitle: null,
 			syncedLyrics: syncedLyrics && syncedLyrics.length > 0 ? syncedLyrics : null
 		}));
 	}
@@ -127,7 +131,9 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		mimeType?: string | null,
 		displayMode?: PlayerDisplayMode,
 		firkinId?: string | null,
-		syncedLyrics?: SubsLyricsSyncedLine[] | null
+		syncedLyrics?: SubsLyricsSyncedLine[] | null,
+		trackId?: string | null,
+		trackTitle?: string | null
 	): Promise<void> {
 		if (!browser) return;
 
@@ -154,6 +160,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			directStreamUrl: streamUrl,
 			directStreamMimeType: mimeType ?? null,
 			firkinId: firkinId ?? null,
+			trackId: trackId ?? null,
+			trackTitle: trackTitle ?? null,
 			syncedLyrics: syncedLyrics && syncedLyrics.length > 0 ? syncedLyrics : null
 		}));
 	}
@@ -235,6 +243,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			directStreamUrl: null,
 			directStreamMimeType: null,
 			firkinId: null,
+			trackId: null,
+			trackTitle: null,
 			syncedLyrics: null
 		}));
 		this.displayMode.set('fullscreen');

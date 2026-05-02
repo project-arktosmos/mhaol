@@ -221,7 +221,10 @@ export async function playYouTubeAudio(
 	title: string,
 	thumbnailUrl: string | null = null,
 	durationSeconds: number | null = null,
-	syncedLyrics: SubsLyricsSyncedLine[] | null = null
+	syncedLyrics: SubsLyricsSyncedLine[] | null = null,
+	firkinId: string | null = null,
+	trackId: string | null = null,
+	trackTitle: string | null = null
 ): Promise<void> {
 	// Surface the floating panel immediately with the chosen track's
 	// metadata so the user gets a loading indicator the moment they hit
@@ -245,9 +248,7 @@ export async function playYouTubeAudio(
 
 	let res: Response;
 	try {
-		res = await fetch(
-			`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`
-		);
+		res = await fetch(`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`);
 	} catch (err) {
 		await playerService.stop();
 		throw err;
@@ -264,7 +265,16 @@ export async function playYouTubeAudio(
 		throw new Error('No playable audio format');
 	}
 	const file: PlayableFile = { ...placeholder, size: format.contentLength ?? 0 };
-	await playerService.playUrl(file, format.url, format.mimeType, 'navbar', null, syncedLyrics);
+	await playerService.playUrl(
+		file,
+		format.url,
+		format.mimeType,
+		'navbar',
+		firkinId,
+		syncedLyrics,
+		trackId,
+		trackTitle ?? title
+	);
 }
 
 /**
@@ -272,10 +282,7 @@ export async function playYouTubeAudio(
  * that track. Used by the floating player panel's prev/next/playlist
  * controls so the swap path stays in one place.
  */
-export async function playPlaylistTrack(
-	playlist: PlayerPlaylist,
-	index: number
-): Promise<void> {
+export async function playPlaylistTrack(playlist: PlayerPlaylist, index: number): Promise<void> {
 	if (index < 0 || index >= playlist.tracks.length) return;
 	if (index === playlist.currentIndex) return;
 	const t = playlist.tracks[index];
@@ -286,7 +293,10 @@ export async function playPlaylistTrack(
 		t.title,
 		t.thumbnailUrl,
 		t.durationSeconds,
-		t.syncedLyrics
+		t.syncedLyrics,
+		playlist.firkinId ?? null,
+		t.id ?? null,
+		t.title
 	);
 }
 

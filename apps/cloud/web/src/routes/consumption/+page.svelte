@@ -7,11 +7,59 @@
 
 	const userIdentityState = userIdentityService.state;
 
+	interface FirkinGroup {
+		firkinId: string;
+		firkin: Firkin | undefined;
+		albumRow: MediaTracker | null;
+		trackRows: MediaTracker[];
+		totalSeconds: number;
+		lastPlayedAt: string;
+	}
+
 	let trackers = $state<MediaTracker[]>([]);
 	let firkinsById = $state<Record<string, Firkin>>({});
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let lastLoadedAddress: string | null = null;
+	let expandedFirkin = $state<string | null>(null);
+
+	// Group raw tracker rows by firkin: the row with no trackId (movies, TV,
+	// non-music streams, or the legacy album-level pre-per-track row) becomes
+	// the "album" row for the firkin; rows with trackId become per-track
+	// children. Total time per firkin sums both, so albums whose listening
+	// happened before per-track tracking landed still show the right total.
+	let groups = $derived.by<FirkinGroup[]>(() => {
+		const map = new Map<string, FirkinGroup>();
+		for (const row of trackers) {
+			let group = map.get(row.firkinId);
+			if (!group) {
+				group = {
+					firkinId: row.firkinId,
+					firkin: firkinsById[row.firkinId],
+					albumRow: null,
+					trackRows: [],
+					totalSeconds: 0,
+					lastPlayedAt: row.last_played_at
+				};
+				map.set(row.firkinId, group);
+			}
+			if (row.trackId) {
+				group.trackRows.push(row);
+			} else {
+				group.albumRow = row;
+			}
+			group.totalSeconds += row.totalSeconds;
+			if (row.last_played_at > group.lastPlayedAt) {
+				group.lastPlayedAt = row.last_played_at;
+			}
+		}
+		const list = Array.from(map.values());
+		for (const g of list) {
+			g.trackRows.sort((a, b) => b.totalSeconds - a.totalSeconds);
+		}
+		list.sort((a, b) => (a.lastPlayedAt < b.lastPlayedAt ? 1 : -1));
+		return list;
+	});
 
 	$effect(() => {
 		const address = $userIdentityState.identity?.address;
@@ -111,7 +159,7 @@
 		<p class="text-sm text-base-content/60">
 			Playback time per firkin, accumulated by the right-side player. The tracker writes a heartbeat
 			every 10 seconds while a firkin file is streaming and not paused; pauses, buffering, and
-			connection teardown stop time accruing.
+			connection teardown stop time accruing. Music firkins expand to show per-track listening time.
 		</p>
 	</header>
 
@@ -128,7 +176,7 @@
 			<div class="card border border-base-content/10 bg-base-200">
 				<div class="card-body p-4">
 					<div class="text-xs text-base-content/60 uppercase">Tracked firkins</div>
-					<div class="text-2xl font-semibold">{trackers.length}</div>
+					<div class="text-2xl font-semibold">{groups.length}</div>
 				</div>
 			</div>
 			<div class="card border border-base-content/10 bg-base-200">
@@ -141,7 +189,7 @@
 				<div class="card-body p-4">
 					<div class="text-xs text-base-content/60 uppercase">Last played</div>
 					<div class="text-2xl font-semibold">
-						{trackers[0] ? formatRelative(trackers[0].last_played_at) : '—'}
+						{groups[0] ? formatRelative(groups[0].lastPlayedAt) : '—'}
 					</div>
 				</div>
 			</div>
@@ -173,13 +221,15 @@
 									</td>
 								</tr>
 							{:else}
-								{#each trackers as row (row.id)}
-									{@const firkin = firkinsById[row.firkinId]}
+								{#each groups as group (group.firkinId)}
+									{@const firkin = group.firkin}
 									{@const poster = firkin?.images?.[0]?.url}
 									{@const title = firkin?.title ?? '(unknown firkin)'}
 									{@const detailHref = firkin
-										? `${base}/catalog/${encodeURIComponent(row.firkinId)}`
+										? `${base}/catalog/${encodeURIComponent(group.firkinId)}`
 										: null}
+									{@const expanded = expandedFirkin === group.firkinId}
+									{@const hasTracks = group.trackRows.length > 0}
 									<tr>
 										<td>
 											{#if poster}
@@ -203,23 +253,43 @@
 										</td>
 										<td>
 											<div class="flex flex-col gap-0.5">
-												{#if detailHref}
-													<a
-														href={detailHref}
-														class="link font-medium link-hover"
-														title="Open detail page"
-													>
-														{title}
-													</a>
-												{:else}
-													<span class="font-medium text-base-content/60">{title}</span>
-												{/if}
+												<div class="flex items-center gap-2">
+													{#if hasTracks}
+														<button
+															type="button"
+															class="btn px-1 btn-ghost btn-xs"
+															aria-label={expanded ? 'Collapse tracks' : 'Expand tracks'}
+															title={expanded ? 'Collapse tracks' : 'Expand tracks'}
+															onclick={() => (expandedFirkin = expanded ? null : group.firkinId)}
+														>
+															{expanded ? '▾' : '▸'}
+														</button>
+													{/if}
+													{#if detailHref}
+														<a
+															href={detailHref}
+															class="link font-medium link-hover"
+															title="Open detail page"
+														>
+															{title}
+														</a>
+													{:else}
+														<span class="font-medium text-base-content/60">{title}</span>
+													{/if}
+												</div>
 												<div class="flex flex-wrap items-center gap-1 text-xs text-base-content/60">
 													{#if firkin}
 														<span class="badge badge-ghost badge-sm">{firkin.addon}</span>
 														{#if firkin.year}
 															<span>{firkin.year}</span>
 														{/if}
+													{/if}
+													{#if hasTracks}
+														<span class="badge badge-sm badge-info">
+															{group.trackRows.length} track{group.trackRows.length === 1
+																? ''
+																: 's'}
+														</span>
 													{/if}
 												</div>
 											</div>
@@ -228,22 +298,50 @@
 											<button
 												type="button"
 												class="font-mono text-xs text-base-content/70 hover:text-base-content"
-												title={`${row.firkinId} (click to copy)`}
-												onclick={() => copyHash(row.firkinId)}
+												title={`${group.firkinId} (click to copy)`}
+												onclick={() => copyHash(group.firkinId)}
 											>
-												{truncateCid(row.firkinId)}
+												{truncateCid(group.firkinId)}
 											</button>
 										</td>
 										<td class="text-right font-mono text-sm">
-											{formatDuration(row.totalSeconds)}
+											{formatDuration(group.totalSeconds)}
 										</td>
 										<td
 											class="text-right text-sm text-base-content/70"
-											title={formatAbsolute(row.last_played_at)}
+											title={formatAbsolute(group.lastPlayedAt)}
 										>
-											{formatRelative(row.last_played_at)}
+											{formatRelative(group.lastPlayedAt)}
 										</td>
 									</tr>
+									{#if expanded && hasTracks}
+										{#each group.trackRows as track (track.id)}
+											<tr class="bg-base-100/40">
+												<td></td>
+												<td colspan="2" class="pl-12">
+													<div class="flex flex-col gap-0.5">
+														<span class="text-sm">
+															{track.trackTitle ?? '(untitled track)'}
+														</span>
+														{#if track.trackId}
+															<span class="font-mono text-[10px] text-base-content/40">
+																{track.trackId}
+															</span>
+														{/if}
+													</div>
+												</td>
+												<td class="text-right font-mono text-sm">
+													{formatDuration(track.totalSeconds)}
+												</td>
+												<td
+													class="text-right text-sm text-base-content/70"
+													title={formatAbsolute(track.last_played_at)}
+												>
+													{formatRelative(track.last_played_at)}
+												</td>
+											</tr>
+										{/each}
+									{/if}
 								{/each}
 							{/if}
 						</tbody>
