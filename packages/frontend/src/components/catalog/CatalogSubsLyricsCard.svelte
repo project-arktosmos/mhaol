@@ -20,35 +20,6 @@
 		`${labelKind} search${resolver.results.length > 0 ? ` (${resolver.results.length})` : ''}`
 	);
 
-	function describe(item: SubsLyricsItem): string {
-		if (item.kind === 'lyrics') {
-			const parts: string[] = [];
-			if ((item.syncedLyrics?.length ?? 0) > 0) parts.push('synced');
-			else if (item.plainLyrics) parts.push('plain');
-			else if (item.instrumental) parts.push('instrumental');
-			if (item.albumName) parts.push(item.albumName);
-			return parts.join(' · ');
-		}
-		const parts: string[] = [];
-		if (item.format) parts.push(item.format);
-		if (item.isHearingImpaired) parts.push('HI');
-		return parts.join(' · ') || item.source;
-	}
-
-	function rowLabel(item: SubsLyricsItem): string {
-		if (item.kind === 'lyrics') {
-			const artist = item.artistName ?? '';
-			const track = item.trackName ?? '';
-			return [artist, track].filter(Boolean).join(' — ') || item.source;
-		}
-		// In the subs view rows are nested inside a per-language <details>,
-		// so the row label is the OpenSubtitles file id (or source-prefixed
-		// fallback) rather than the language name.
-		return item.externalId
-			? `#${item.externalId}`
-			: (item.display ?? item.language ?? item.source);
-	}
-
 	function rowKey(item: SubsLyricsItem, index: number): string {
 		return `${item.source}::${item.externalId || index}`;
 	}
@@ -57,29 +28,55 @@
 		return item.display ?? item.language ?? '—';
 	}
 
-	type LanguageGroup = { label: string; items: SubsLyricsItem[] };
+	function filenameExt(item: SubsLyricsItem): string | null {
+		const name = item.release;
+		if (!name) return null;
+		const dot = name.lastIndexOf('.');
+		if (dot < 0 || dot === name.length - 1) return null;
+		return name.slice(dot + 1);
+	}
 
-	// Group subtitle results by language (display name preferred, falls
-	// back to the 3-letter code, then "—"). Ordering: English first if
-	// present, then by descending count, then alphabetical.
-	const grouped = $derived.by<LanguageGroup[]>(() => {
+	function lyricsType(item: SubsLyricsItem): string {
+		if ((item.syncedLyrics?.length ?? 0) > 0) return 'synced';
+		if (item.plainLyrics) return 'plain';
+		if (item.instrumental) return 'instrumental';
+		return '—';
+	}
+
+	// Sort subtitle results so all rows for the same language are
+	// adjacent. English first when present, then by group size desc, then
+	// alphabetical. Within a language the original order is preserved.
+	const sortedSubs = $derived.by<SubsLyricsItem[]>(() => {
 		if (kind !== 'subs') return [];
-		const map = new Map<string, SubsLyricsItem[]>();
+		const counts = new Map<string, number>();
 		for (const item of resolver.results) {
 			const key = languageLabel(item);
-			const arr = map.get(key);
-			if (arr) arr.push(item);
-			else map.set(key, [item]);
+			counts.set(key, (counts.get(key) ?? 0) + 1);
 		}
-		const groups = Array.from(map, ([label, items]) => ({ label, items }));
-		groups.sort((a, b) => {
-			if (a.label === 'English' && b.label !== 'English') return -1;
-			if (b.label === 'English' && a.label !== 'English') return 1;
-			if (b.items.length !== a.items.length) return b.items.length - a.items.length;
-			return a.label.localeCompare(b.label);
-		});
-		return groups;
+		const rank = (label: string): [number, number, string] => {
+			if (label === 'English') return [0, 0, label];
+			return [1, -(counts.get(label) ?? 0), label];
+		};
+		return resolver.results
+			.map((item, idx) => ({ item, idx, key: languageLabel(item) }))
+			.sort((a, b) => {
+				const ra = rank(a.key);
+				const rb = rank(b.key);
+				if (ra[0] !== rb[0]) return ra[0] - rb[0];
+				if (ra[1] !== rb[1]) return ra[1] - rb[1];
+				if (ra[2] !== rb[2]) return ra[2].localeCompare(rb[2]);
+				return a.idx - b.idx;
+			})
+			.map((entry) => entry.item);
 	});
+
+	function languageOf(item: SubsLyricsItem, index: number): string | null {
+		if (kind !== 'subs') return null;
+		const label = languageLabel(item);
+		if (index === 0) return label;
+		const prev = sortedSubs[index - 1];
+		return prev && languageLabel(prev) === label ? null : label;
+	}
 </script>
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
@@ -118,93 +115,102 @@
 		{:else if resolver.status === 'idle'}
 			<p class="text-sm text-base-content/60">Idle.</p>
 		{:else if kind === 'subs'}
-			<div class="flex flex-col gap-1">
-				{#each grouped as group, gi (group.label + gi)}
-					<details
-						class="rounded border border-base-content/10 bg-base-100 open:bg-base-200"
-						open={group.label === 'English' || gi === 0}
-					>
-						<summary
-							class="flex cursor-pointer items-center justify-between gap-2 px-2 py-1 text-xs font-medium select-none"
-						>
-							<span class="truncate">{group.label}</span>
-							<span class="text-[10px] text-base-content/60">{group.items.length}</span>
-						</summary>
-						<ul class="flex flex-col gap-1 border-t border-base-content/10 p-1">
-							{#each group.items as item, i (rowKey(item, i))}
-								{@const isSelected = selected === item}
-								<li>
-									<button
-										type="button"
-										class={classNames(
-											'flex w-full flex-col gap-0.5 rounded border border-base-content/10 bg-base-100 px-2 py-1 text-left text-xs hover:bg-base-200',
-											{ 'border-primary': isSelected }
-										)}
-										onclick={() => (selected = isSelected ? null : item)}
-									>
-										<span class="truncate font-medium">{rowLabel(item)}</span>
-										<span class="truncate text-[10px] text-base-content/60">
-											{describe(item)}
-										</span>
-									</button>
-								</li>
-							{/each}
-						</ul>
-					</details>
-				{/each}
+			<div class="max-h-96 overflow-y-auto rounded border border-base-content/10 bg-base-100">
+				<table class="table table-xs">
+					<thead class="sticky top-0 bg-base-200 text-[10px] uppercase">
+						<tr>
+							<th class="w-28">Language</th>
+							<th>Filename</th>
+							<th class="w-12">Ext</th>
+							<th class="w-10">HI</th>
+							<th class="w-24">ID</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each sortedSubs as item, i (rowKey(item, i))}
+							{@const lang = languageOf(item, i)}
+							{@const ext = filenameExt(item)}
+							<tr
+								class={classNames('cursor-pointer hover:bg-base-200', {
+									'bg-primary/10': selected === item
+								})}
+								onclick={() => (selected = selected === item ? null : item)}
+							>
+								<td class="font-medium">{lang ?? ''}</td>
+								<td
+									class="max-w-[1px] truncate text-[11px] text-base-content/70"
+									title={item.release ?? ''}
+								>
+									{item.release ?? '…'}
+								</td>
+								<td class="font-mono text-[10px] uppercase text-base-content/60">
+									{ext ?? item.format ?? '—'}
+								</td>
+								<td class="text-center">{item.isHearingImpaired ? 'HI' : ''}</td>
+								<td class="font-mono text-[10px] text-base-content/60">{item.externalId}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
 		{:else}
-			<ul class="flex flex-col gap-1">
-				{#each resolver.results as item, i (rowKey(item, i))}
-					{@const isSelected = selected === item}
-					<li>
-						<button
-							type="button"
-							class={classNames(
-								'flex w-full flex-col gap-0.5 rounded border border-base-content/10 bg-base-100 px-2 py-1 text-left text-xs hover:bg-base-200',
-								{ 'border-primary': isSelected }
-							)}
-							onclick={() => (selected = isSelected ? null : item)}
-						>
-							<span class="truncate font-medium">{rowLabel(item)}</span>
-							<span class="truncate text-[10px] text-base-content/60">{describe(item)}</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
+			<div class="max-h-96 overflow-y-auto rounded border border-base-content/10 bg-base-100">
+				<table class="table table-xs">
+					<thead class="sticky top-0 bg-base-200 text-[10px] uppercase">
+						<tr>
+							<th>Track</th>
+							<th>Artist</th>
+							<th>Album</th>
+							<th class="w-24">Type</th>
+							<th class="w-20">Source</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each resolver.results as item, i (rowKey(item, i))}
+							<tr
+								class={classNames('cursor-pointer hover:bg-base-200', {
+									'bg-primary/10': selected === item
+								})}
+								onclick={() => (selected = selected === item ? null : item)}
+							>
+								<td class="font-medium">{item.trackName ?? '—'}</td>
+								<td class="text-base-content/70">{item.artistName ?? '—'}</td>
+								<td class="text-base-content/70">{item.albumName ?? '—'}</td>
+								<td>{lyricsType(item)}</td>
+								<td class="text-base-content/70">{item.source}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
 
-			{#if selected}
-				{@const sel = selected}
-				<div class="mt-2 flex flex-col gap-1 rounded border border-base-content/10 bg-base-100 p-2">
-					{#if sel.kind === 'lyrics'}
-						{#if sel.syncedLyrics && sel.syncedLyrics.length > 0}
-							<div class="flex max-h-64 flex-col gap-0.5 overflow-y-auto text-xs leading-tight">
-								{#each sel.syncedLyrics as line, idx (idx)}
-									<span class="text-base-content/80">{line.text || '…'}</span>
-								{/each}
-							</div>
-						{:else if sel.plainLyrics}
-							<pre
-								class="max-h-64 overflow-y-auto text-xs whitespace-pre-wrap text-base-content/80">{sel.plainLyrics}</pre>
-						{:else if sel.instrumental}
-							<span class="text-xs text-base-content/60">Instrumental.</span>
-						{:else}
-							<span class="text-xs text-base-content/60">No lyrics in this entry.</span>
-						{/if}
-					{:else if sel.url}
-						<a
-							class="link text-xs break-all link-primary"
-							href={sel.url}
-							target="_blank"
-							rel="noopener"
-						>
-							Open subtitle ({sel.format ?? 'file'})
-						</a>
+		{#if selected}
+			{@const sel = selected}
+			<div class="mt-2 flex flex-col gap-1 rounded border border-base-content/10 bg-base-100 p-2">
+				{#if sel.kind === 'lyrics'}
+					{#if sel.syncedLyrics && sel.syncedLyrics.length > 0}
+						<div class="flex max-h-64 flex-col gap-0.5 overflow-y-auto text-xs leading-tight">
+							{#each sel.syncedLyrics as line, idx (idx)}
+								<span class="text-base-content/80">{line.text || '…'}</span>
+							{/each}
+						</div>
+					{:else if sel.plainLyrics}
+						<pre
+							class="max-h-64 overflow-y-auto text-xs whitespace-pre-wrap text-base-content/80">{sel.plainLyrics}</pre>
+					{:else if sel.instrumental}
+						<span class="text-xs text-base-content/60">Instrumental.</span>
 					{:else}
-						<span class="text-xs text-base-content/60">No URL provided.</span>
+						<span class="text-xs text-base-content/60">No lyrics in this entry.</span>
 					{/if}
-				</div>
-			{/if}
+				{:else if sel.url}
+					<a class="link text-xs break-all link-primary" href={sel.url} target="_blank" rel="noopener">
+						Open subtitle ({sel.format ?? 'file'})
+					</a>
+				{:else}
+					<span class="text-xs text-base-content/60">No URL provided.</span>
+				{/if}
+			</div>
 		{/if}
 	</div>
 </div>

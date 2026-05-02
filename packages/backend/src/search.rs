@@ -590,6 +590,12 @@ pub struct SubsLyrics {
     pub display: Option<String>,
     #[serde(rename = "sourceExternalId", default, skip_serializing_if = "Option::is_none")]
     pub source_external_id: Option<String>,
+    /// Release / file name reported by the upstream subtitle host's
+    /// `Content-Disposition` header (e.g.
+    /// `Captain.America.Civil.WAR.2016.1080p.HD.TC.AC3.x264-ETRG.srt`).
+    /// Populated by `search_stremio_opensubs` via per-URL HEAD requests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -744,6 +750,7 @@ pub async fn lrclib_search(query: &str) -> Result<Vec<SubsLyrics>, String> {
                 is_hearing_impaired: false,
                 display: Some(display),
                 source_external_id: None,
+                release: None,
             }
         })
         .collect();
@@ -1030,10 +1037,64 @@ async fn search_stremio_opensubs(
                 is_hearing_impaired: false,
                 display: Some(display),
                 source_external_id: Some(imdb_id.clone()),
+                release: None,
             });
         }
     }
+
+    resolve_release_filenames(&client, &mut out).await;
     Ok(out)
+}
+
+/// Resolve every subtitle's release filename in parallel by HEADing the
+/// download URL and parsing `Content-Disposition: attachment; filename=…`.
+/// All HEADs run concurrently via `tokio::task::JoinSet`; the upstream is
+/// behind Cloudflare and shrugs off a burst of ~100 in-flight HEADs.
+/// Per-URL failures are silently skipped — the row still renders, just
+/// without a filename.
+async fn resolve_release_filenames(client: &reqwest::Client, items: &mut [SubsLyrics]) {
+    use tokio::task::JoinSet;
+
+    let mut set: JoinSet<Option<(usize, String)>> = JoinSet::new();
+    for (idx, item) in items.iter().enumerate() {
+        let Some(url) = item.url.clone() else { continue };
+        let client = client.clone();
+        set.spawn(async move {
+            let res = client.head(&url).send().await.ok()?;
+            let header = res.headers().get(reqwest::header::CONTENT_DISPOSITION)?;
+            let value = header.to_str().ok()?;
+            Some((idx, parse_content_disposition_filename(value)?))
+        });
+    }
+
+    while let Some(joined) = set.join_next().await {
+        if let Ok(Some((idx, name))) = joined {
+            if let Some(item) = items.get_mut(idx) {
+                item.release = Some(name);
+            }
+        }
+    }
+}
+
+/// Pull the `filename="…"` (or bare `filename=…`) value out of an
+/// HTTP `Content-Disposition` header. Strips surrounding quotes and any
+/// stray whitespace, returns `None` if the param is absent.
+fn parse_content_disposition_filename(value: &str) -> Option<String> {
+    let lower = value.to_ascii_lowercase();
+    let key = "filename=";
+    let start = lower.find(key)? + key.len();
+    let rest = value.get(start..)?.trim();
+    let trimmed = rest.trim_matches(|c: char| c == '"' || c == '\'');
+    let end = trimmed
+        .find(';')
+        .map(|i| trimmed[..i].trim_end_matches(|c: char| c == '"' || c == '\''))
+        .unwrap_or(trimmed);
+    let cleaned = end.trim();
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned.to_string())
+    }
 }
 
 #[allow(dead_code)]
@@ -1152,6 +1213,7 @@ async fn fetch_wyzie_one(
                 is_hearing_impaired: is_hi,
                 display,
                 source_external_id: Some(external_id.to_string()),
+                release: None,
             }
         })
         .collect();
