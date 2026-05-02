@@ -29,6 +29,7 @@
 	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
 	import { userIdentityService } from '$lib/user-identity.service';
 	import { consumptionModalService } from '$services/consumption-modal.service';
+	import { diskModalService } from '$services/disk-modal.service';
 
 	const firkinsStore = firkinsService.state;
 	const firkinsIncludeAll = firkinsService.includeAll;
@@ -404,6 +405,14 @@
 			title="Show playback time per firkin"
 		>
 			Consumption
+		</button>
+		<button
+			type="button"
+			class="btn btn-outline btn-sm"
+			onclick={() => diskModalService.open()}
+			title="Show host volumes and the data-root breakdown"
+		>
+			Disk
 		</button>
 	</div>
 </section>
