@@ -68,6 +68,14 @@
 				<button
 					type="button"
 					class="btn btn-outline btn-sm"
+					onclick={() => artistsModalService.open()}
+					title="Browse content-addressed artist records"
+				>
+					Artists
+				</button>
+				<button
+					type="button"
+					class="btn btn-outline btn-sm"
 					onclick={() => consumptionModalService.open()}
 					title="Show playback time per firkin"
 				>
@@ -84,10 +92,10 @@
 				<button
 					type="button"
 					class="btn btn-outline btn-sm"
-					onclick={() => librariesModalService.open()}
-					title="Manage libraries on this machine"
+					onclick={() => healthModalService.open()}
+					title="Live health of this Mhaol cloud node"
 				>
-					Libraries
+					Health
 				</button>
 				<button
 					type="button"
@@ -100,26 +108,18 @@
 				<button
 					type="button"
 					class="btn btn-outline btn-sm"
+					onclick={() => librariesModalService.open()}
+					title="Manage libraries on this machine"
+				>
+					Libraries
+				</button>
+				<button
+					type="button"
+					class="btn btn-outline btn-sm"
 					onclick={() => torrentModalService.open()}
 					title="Show the embedded torrent client status"
 				>
 					Torrent
-				</button>
-				<button
-					type="button"
-					class="btn btn-outline btn-sm"
-					onclick={() => artistsModalService.open()}
-					title="Browse content-addressed artist records"
-				>
-					Artists
-				</button>
-				<button
-					type="button"
-					class="btn btn-outline btn-sm"
-					onclick={() => healthModalService.open()}
-					title="Live health of this Mhaol cloud node"
-				>
-					Health
 				</button>
 			</div>
 		{/snippet}
