@@ -9,6 +9,12 @@ export default defineConfig({
 		port: parseInt(process.env.PORT || '9797'),
 		fs: {
 			allow: ['../../..']
+		},
+		proxy: {
+			'/api': {
+				target: process.env.PLAYER_API_TARGET || 'http://localhost:9898',
+				changeOrigin: true
+			}
 		}
 	},
 	preview: {

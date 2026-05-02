@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../web/dist-static",
     "devUrl": "http://localhost:9898",
-    "beforeBuildCommand": "pnpm --filter cloud build"
+    "beforeBuildCommand": "BASE_PATH=/player pnpm --filter player build && pnpm --filter cloud build"
   },
   "app": {
     "windows": [],
