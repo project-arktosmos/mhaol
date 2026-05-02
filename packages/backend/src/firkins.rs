@@ -25,6 +25,7 @@ const ALLOWED_FILE_TYPES: &[&str] = &[
     "torrent magnet",
     "url",
     "lyrics",
+    "subtitle",
     "youtube preferred client",
 ];
 

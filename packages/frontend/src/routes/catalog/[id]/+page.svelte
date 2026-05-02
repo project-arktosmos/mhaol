@@ -26,6 +26,7 @@
 	import { playerService } from '$services/player.service';
 	import type { CloudFirkin } from '$types/firkin.type';
 	import type { PlayableFile } from '$types/player.type';
+	import type { SubsLyricsItem } from '$types/subs-lyrics.type';
 	import {
 		firkinsService,
 		addonKind,
@@ -1214,7 +1215,7 @@
 		}
 	});
 
-	async function assignTorrent(torrent: TorrentResultItem) {
+	async function assignTorrent(torrent: TorrentResultItem, sub?: SubsLyricsItem) {
 		if (!torrent.magnetLink || addingHash || existingHashes.has(torrent.magnetLink)) {
 			return;
 		}
@@ -1225,6 +1226,30 @@
 				...firkin.files,
 				{ type: 'torrent magnet' as const, value: torrent.magnetLink, title: torrent.title }
 			];
+			// Subtitles are stored as a reference, not a download — we keep
+			// the upstream URL plus enough metadata to render a label and
+			// re-fetch on demand. The ETL stays server-side / on-demand;
+			// this row just declares "this firkin has been paired with
+			// release X of sub Y" so playback can pick it up later.
+			if (sub) {
+				const subPayload = {
+					source: sub.source,
+					externalId: sub.externalId,
+					url: sub.url ?? null,
+					language: sub.language ?? null,
+					display: sub.display ?? null,
+					release: sub.release ?? null,
+					format: sub.format ?? null,
+					isHearingImpaired: sub.isHearingImpaired ?? false
+				};
+				const lang = sub.display ?? sub.language ?? 'sub';
+				const release = sub.release ?? `#${sub.externalId}`;
+				nextFiles.push({
+					type: 'subtitle' as const,
+					value: JSON.stringify(subPayload),
+					title: `${lang}: ${release}`
+				});
+			}
 			if (isTmdbTv) {
 				// TV shows accumulate one magnet per season on the same firkin.
 				// PUT keeps the record id stable and lets the auto-start effect

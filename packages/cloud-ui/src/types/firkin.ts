@@ -74,6 +74,7 @@ export const FIRKIN_FILE_TYPES = [
 	'torrent magnet',
 	'url',
 	'lyrics',
+	'subtitle',
 	'youtube preferred client'
 ] as const;
 export type FirkinFileType = (typeof FIRKIN_FILE_TYPES)[number];

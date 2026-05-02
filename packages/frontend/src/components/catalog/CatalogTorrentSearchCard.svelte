@@ -7,7 +7,7 @@
 
 	interface Props {
 		search: TorrentSearch;
-		onAssign: (torrent: TorrentResultItem) => void | Promise<void>;
+		onAssign: (torrent: TorrentResultItem, sub?: SubsLyricsItem) => void | Promise<void>;
 		addingHash: string | null;
 		assignError?: string | null;
 		existingHashes?: Set<string>;
@@ -38,11 +38,23 @@
 		return `${flag}${lang}: ${release}`.trim();
 	}
 
-	function openSub(event: Event) {
+	// Per-torrent-row sub selection. Keyed by infoHash so the choice
+	// survives `subMatches` re-derivation. The `Use` button reads from
+	// here and forwards the picked sub to `onAssign`, which persists it
+	// onto the firkin alongside the torrent magnet — no download or
+	// preview happens on selection.
+	let selectedSubByHash = $state<Record<string, SubsLyricsItem>>({});
+
+	function chooseSub(infoHash: string, matches: MatchedSub[], event: Event) {
 		const select = event.currentTarget as HTMLSelectElement;
-		const url = select.value;
-		if (url) window.open(url, '_blank', 'noopener');
-		select.selectedIndex = 0;
+		const idx = select.selectedIndex - 1;
+		const next = { ...selectedSubByHash };
+		if (idx < 0 || idx >= matches.length) {
+			delete next[infoHash];
+		} else {
+			next[infoHash] = matches[idx].sub;
+		}
+		selectedSubByHash = next;
 	}
 
 	function rowEval(magnet: string | undefined | null): TorrentRowEval {
@@ -272,19 +284,17 @@
 												<span class="text-xs text-base-content/40">—</span>
 											{:else}
 												<select
-													class="select select-bordered w-full max-w-[10rem] select-xs"
-													onchange={openSub}
+													class="select-bordered select w-full max-w-[10rem] select-xs"
+													onchange={(e) => chooseSub(torrent.infoHash, subMatches, e)}
 													title="{subMatches.length} matching subtitle{subMatches.length === 1
 														? ''
-														: 's'} (★ = release-group match)"
+														: 's'} (★ = release-group match) — picked sub is saved on the firkin when you click Use"
 												>
 													<option value=""
-														>{subMatches.length} sub{subMatches.length === 1
-															? ''
-															: 's'}…</option
+														>{subMatches.length} sub{subMatches.length === 1 ? '' : 's'}…</option
 													>
 													{#each subMatches as m (m.sub.externalId)}
-														<option value={m.sub.url ?? ''} disabled={!m.sub.url}>
+														<option value={m.sub.externalId} disabled={!m.sub.url}>
 															{subOptionLabel(m)}
 														</option>
 													{/each}
@@ -300,7 +310,7 @@
 														type="button"
 														class="btn btn-xs btn-primary"
 														disabled={addingHash !== null}
-														onclick={() => onAssign(torrent)}
+														onclick={() => onAssign(torrent, selectedSubByHash[torrent.infoHash])}
 														aria-label="Use this torrent"
 													>
 														{adding ? '…' : 'Use'}
