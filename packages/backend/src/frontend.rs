@@ -5,7 +5,7 @@ use axum::{
 use rust_embed::Embed;
 
 #[derive(Embed)]
-#[folder = "../../packages/frontend/dist-static/"]
+#[folder = "../frontend/dist-static/"]
 struct CloudWebAssets;
 
 pub async fn serve_frontend(uri: Uri) -> Response {

@@ -53,14 +53,13 @@ use mhaol_torrent::{TorrentConfig, TorrentManager};
 #[cfg(not(target_os = "android"))]
 use mhaol_yt_dlp::{DownloadManager, YtDownloadConfig};
 
-#[tokio::main]
-async fn main() {
+pub async fn run() {
     load_env();
 
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,mhaol_cloud=debug,surrealdb=info".into()),
+                .unwrap_or_else(|_| "info,mhaol_backend=debug,surrealdb=info".into()),
         )
         .init();
 

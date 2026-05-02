@@ -1,15 +1,19 @@
 [package]
-name = "mhaol-cloud"
+name = "mhaol-backend"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
+[lib]
+name = "mhaol_backend"
+path = "src/lib.rs"
+
 [[bin]]
 name = "mhaol-cloud"
-path = "src/server.rs"
+path = "src/bin/mhaol-cloud.rs"
 
 [dependencies]
-mhaol-identity = { path = "../../packages/identity" }
+mhaol-identity = { path = "../identity" }
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
@@ -40,9 +44,9 @@ regex = "1"
 [target.'cfg(not(target_os = "android"))'.dependencies]
 async-stream = "0.3"
 tokio-stream = "0.1"
-mhaol-ipfs-stream = { path = "../../packages/ipfs-stream" }
-mhaol-yt-dlp = { path = "../../packages/yt-dlp" }
-mhaol-torrent = { path = "../../packages/torrent" }
-mhaol-ipfs-core = { path = "../../packages/ipfs-core" }
+mhaol-ipfs-stream = { path = "../ipfs-stream" }
+mhaol-yt-dlp = { path = "../yt-dlp" }
+mhaol-torrent = { path = "../torrent" }
+mhaol-ipfs-core = { path = "../ipfs-core" }
 zip = { version = "2", default-features = false, features = ["deflate", "bzip2"] }
 sevenz-rust2 = "0.13"

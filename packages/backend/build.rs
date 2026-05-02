@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 fn main() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let dist_dir = manifest_dir.join("../../packages/frontend/dist-static");
+    let dist_dir = manifest_dir.join("../frontend/dist-static");
     fs::create_dir_all(&dist_dir).ok();
 
     let index = dist_dir.join("index.html");
@@ -16,5 +16,5 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=../../packages/frontend/dist-static");
+    println!("cargo:rerun-if-changed=../frontend/dist-static");
 }
