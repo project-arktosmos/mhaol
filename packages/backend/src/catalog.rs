@@ -174,7 +174,7 @@ pub fn router() -> Router<CloudState> {
         )
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct CatalogItem {
     pub id: String,
     pub title: String,
@@ -203,7 +203,7 @@ pub(crate) struct CatalogItem {
     pub artist_name: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub(crate) struct CatalogPage {
     pub items: Vec<CatalogItem>,
     pub page: i64,
@@ -211,7 +211,7 @@ pub(crate) struct CatalogPage {
     pub total_pages: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct CatalogGenre {
     id: String,
     name: String,
@@ -272,7 +272,7 @@ pub(crate) struct CatalogEpisode {
 /// frontend hands the array verbatim to `POST /api/firkins`, which
 /// upserts each entry into the `artist` table and stores the resulting
 /// CIDs on the firkin.
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct CatalogArtist {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -392,23 +392,46 @@ fn err(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<serd
 }
 
 async fn popular(
-    State(_state): State<CloudState>,
+    State(state): State<CloudState>,
     Path(addon): Path<String>,
     Query(q): Query<PopularQuery>,
 ) -> Result<Json<CatalogPage>, (StatusCode, Json<serde_json::Value>)> {
     let page = q.page.unwrap_or(1).max(1);
-    match addon.as_str() {
-        "tmdb-movie" => tmdb_popular(false, q.filter.as_deref(), page).await,
-        "tmdb-tv" => tmdb_popular(true, q.filter.as_deref(), page).await,
-        "musicbrainz" => musicbrainz_popular(q.filter.as_deref(), page).await,
-        "youtube-video" => youtube_popular(q.filter.as_deref(), page).await,
-        "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page)),
-        _ => Err(err(
-            StatusCode::NOT_FOUND,
-            format!("addon \"{addon}\" is not supported"),
-        )),
+    let filter = q.filter.as_deref().unwrap_or("");
+    let cache_key = format!("popular::{addon}::{filter}::{page}");
+    let addon_str = addon.clone();
+    let filter_owned = q.filter.clone();
+    let page_for_fetch = page;
+    let mut payload = crate::catalog_cache::get_or_fetch(&state, &cache_key, move || async move {
+        match addon_str.as_str() {
+            "tmdb-movie" => tmdb_popular(false, filter_owned.as_deref(), page_for_fetch).await,
+            "tmdb-tv" => tmdb_popular(true, filter_owned.as_deref(), page_for_fetch).await,
+            "musicbrainz" => musicbrainz_popular(filter_owned.as_deref(), page_for_fetch).await,
+            "youtube-video" => youtube_popular(filter_owned.as_deref(), page_for_fetch).await,
+            "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page_for_fetch)),
+            _ => Err(err(
+                StatusCode::NOT_FOUND,
+                format!("addon \"{addon_str}\" is not supported"),
+            )),
+        }
+    })
+    .await?;
+
+    // Drop items the user has already minted a firkin for (bookmarked or
+    // browse-cache — both count). The cached payload is the pristine
+    // upstream response so the filter is recomputed each request as the
+    // firkin store changes. DB read failures are logged and swallowed —
+    // an unfiltered popular page is still a usable page.
+    match crate::firkins::upstream_ids_for_addon(&state, &addon).await {
+        Ok(known) if !known.is_empty() => {
+            payload.items.retain(|it| !known.contains(&it.id));
+        }
+        Ok(_) => {}
+        Err(e) => {
+            tracing::debug!("[catalog] firkin upstream-id read failed for {addon}: {e}");
+        }
     }
-    .map(Json)
+    Ok(Json(payload))
 }
 
 async fn search(
@@ -437,22 +460,27 @@ async fn search(
 }
 
 async fn genres(
-    State(_state): State<CloudState>,
+    State(state): State<CloudState>,
     Path(addon): Path<String>,
     Query(_q): Query<GenresQuery>,
 ) -> Result<Json<Vec<CatalogGenre>>, (StatusCode, Json<serde_json::Value>)> {
-    match addon.as_str() {
-        "tmdb-movie" => tmdb_genres(false).await,
-        "tmdb-tv" => tmdb_genres(true).await,
-        "musicbrainz" => Ok(static_music_genres()),
-        "youtube-video" => Ok(static_youtube_search_kinds()),
-        "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(Vec::new()),
-        _ => Err(err(
-            StatusCode::NOT_FOUND,
-            format!("addon \"{addon}\" is not supported"),
-        )),
-    }
-    .map(Json)
+    let cache_key = format!("genres::{addon}");
+    let addon_str = addon.clone();
+    let payload = crate::catalog_cache::get_or_fetch(&state, &cache_key, move || async move {
+        match addon_str.as_str() {
+            "tmdb-movie" => tmdb_genres(false).await,
+            "tmdb-tv" => tmdb_genres(true).await,
+            "musicbrainz" => Ok(static_music_genres()),
+            "youtube-video" => Ok(static_youtube_search_kinds()),
+            "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(Vec::new()),
+            _ => Err(err(
+                StatusCode::NOT_FOUND,
+                format!("addon \"{addon_str}\" is not supported"),
+            )),
+        }
+    })
+    .await?;
+    Ok(Json(payload))
 }
 
 fn empty_page(page: i64) -> CatalogPage {

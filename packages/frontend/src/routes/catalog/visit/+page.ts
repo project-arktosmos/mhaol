@@ -2,6 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { base } from '$app/paths';
 import {
 	firkinsService,
+	type Artist,
 	type FirkinAddon,
 	type FileEntry,
 	type ImageMeta,
@@ -35,6 +36,7 @@ export const load = async ({ url }) => {
 	const description = (params.get('description') ?? '').trim();
 	const posterUrl = (params.get('posterUrl') ?? '').trim();
 	const backdropUrl = (params.get('backdropUrl') ?? '').trim();
+	const artistName = (params.get('artistName') ?? '').trim();
 
 	const images: ImageMeta[] = [posterUrl, backdropUrl]
 		.filter((u) => u.length > 0)
@@ -90,9 +92,16 @@ export const load = async ({ url }) => {
 		}
 	}
 
+	const artists: Artist[] = artistName
+		? artistName
+				.split(/\s*,\s*/)
+				.filter((n) => n.length > 0)
+				.map((name) => ({ name, role: 'artist' }))
+		: [];
+
 	const created = await firkinsService.create({
 		title,
-		artists: [],
+		artists,
 		description,
 		images,
 		files,

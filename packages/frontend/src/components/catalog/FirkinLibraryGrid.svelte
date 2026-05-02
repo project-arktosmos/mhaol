@@ -3,47 +3,46 @@
 	import { base } from '$app/paths';
 	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import type { CloudFirkin } from '$types/firkin.type';
-	import { firkinsService, type Firkin } from '$lib/firkins.service';
 
 	interface Props {
-		firkinIds: string[];
+		firkins: CloudFirkin[];
 		collapsed?: boolean;
 		collapsedCount?: number;
 		moreHref?: string;
 		emptyMessage?: string;
-		actions?: Snippet<[Firkin]>;
+		hrefBuilder?: (firkin: CloudFirkin) => string;
+		actions?: Snippet<[CloudFirkin]>;
 	}
 
 	let {
-		firkinIds,
+		firkins,
 		collapsed = true,
 		collapsedCount = 6,
 		moreHref,
 		emptyMessage = 'No firkins yet.',
+		hrefBuilder,
 		actions
 	}: Props = $props();
 
-	const firkinsStore = firkinsService.state;
-
-	const firkinsById = $derived(new Map($firkinsStore.firkins.map((d) => [d.id, d] as const)));
-	const allFirkins = $derived<Firkin[]>(
-		firkinIds.map((id) => firkinsById.get(id)).filter((d): d is Firkin => d !== undefined)
+	const visibleFirkins = $derived<CloudFirkin[]>(
+		collapsed ? firkins.slice(0, collapsedCount) : firkins
 	);
-	const visibleFirkins = $derived<Firkin[]>(
-		collapsed ? allFirkins.slice(0, collapsedCount) : allFirkins
-	);
-	const hiddenCount = $derived(Math.max(0, allFirkins.length - collapsedCount));
+	const hiddenCount = $derived(Math.max(0, firkins.length - collapsedCount));
 	const showMoreCell = $derived(collapsed && hiddenCount > 0 && !!moreHref);
+
+	function defaultHref(firkin: CloudFirkin): string {
+		return `${base}/catalog/${encodeURIComponent(firkin.id)}`;
+	}
 </script>
 
-{#if allFirkins.length === 0}
+{#if firkins.length === 0}
 	<p class="text-sm text-base-content/60">{emptyMessage}</p>
 {:else}
 	<div class="grid grid-cols-7 gap-4">
 		{#each visibleFirkins as doc (doc.id)}
 			<div class="relative">
 				<a
-					href={`${base}/catalog/${encodeURIComponent(doc.id)}`}
+					href={hrefBuilder ? hrefBuilder(doc) : defaultHref(doc)}
 					class="block no-underline"
 					onclick={(e) => {
 						if ((e.target as HTMLElement).closest('button, summary')) {
@@ -51,7 +50,7 @@
 						}
 					}}
 				>
-					<FirkinCard firkin={doc as CloudFirkin} />
+					<FirkinCard firkin={doc} />
 				</a>
 				{#if actions}
 					{@render actions(doc)}

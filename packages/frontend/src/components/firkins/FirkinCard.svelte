@@ -5,6 +5,7 @@
 	import type { CloudFirkin } from '$types/firkin.type';
 	import { getCachedImageUrl } from '$services/image-cache.service';
 	import { firkinTooltipService } from '$services/firkins/firkin-tooltip.svelte';
+	import { hashColor } from '$utils/string/hash-color';
 
 	interface Props {
 		firkin: CloudFirkin;
@@ -34,6 +35,22 @@
 			.filter((n) => n && n.length > 0)
 			.join(', ')
 	);
+	let albumBgColor = $derived(
+		isAlbum ? `#${hashColor(`${firkin.title}::${artistNames}`)}` : null
+	);
+
+	// Musicbrainz firkins are created with description = "credits · primary_type"
+	// (or just one of the two). Strip the credits prefix to surface the type.
+	let albumType = $derived.by(() => {
+		if (!isAlbum) return '';
+		const desc = (firkin.description ?? '').trim();
+		if (!desc) return '';
+		if (artistNames && desc.startsWith(artistNames)) {
+			const rest = desc.slice(artistNames.length).trim();
+			return rest.startsWith('·') ? rest.slice(1).trim() : '';
+		}
+		return desc;
+	});
 
 	let coverImage = $derived(firkin.images?.[0] ?? null);
 	let resolvedCoverUrl = $state<string | null>(null);
@@ -101,14 +118,16 @@
 	onclick={handleClick}
 >
 	<figure
-		class={classNames('relative overflow-hidden bg-base-300', {
-			'aspect-square w-full': isAlbum
+		class={classNames('relative overflow-hidden', {
+			'aspect-square w-full': isAlbum,
+			'bg-base-300': !isAlbum
 		})}
+		style={albumBgColor ? `background-color: ${albumBgColor};` : undefined}
 	>
 		{#if coverImage && resolvedCoverUrl}
 			<img
 				src={resolvedCoverUrl}
-				alt={firkin.title}
+				alt={isAlbum ? '' : firkin.title}
 				width={coverImage.width || undefined}
 				height={coverImage.height || undefined}
 				class={classNames('block w-full', isAlbum ? 'h-full object-cover' : 'h-auto')}
@@ -138,9 +157,13 @@
 	{#if isAlbum}
 		<div class="px-3 py-2">
 			<div class="truncate text-sm font-semibold" title={firkin.title}>{firkin.title}</div>
-			{#if artistNames}
-				<div class="truncate text-xs text-base-content/70" title={artistNames}>
-					{artistNames}
+			{#if artistNames || albumType}
+				<div
+					class="truncate text-xs text-base-content/70"
+					title={[artistNames, albumType].filter(Boolean).join(' · ')}
+				>
+					{artistNames}{#if artistNames && albumType}<span class="mx-1 text-base-content/40">·</span
+						>{/if}{#if albumType}<span class="text-base-content/50">{albumType}</span>{/if}
 				</div>
 			{/if}
 		</div>

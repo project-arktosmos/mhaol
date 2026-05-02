@@ -53,6 +53,7 @@
 		if (item.description) params.set('description', item.description);
 		if (item.posterUrl) params.set('posterUrl', item.posterUrl);
 		if (item.backdropUrl) params.set('backdropUrl', item.backdropUrl);
+		if (item.artistName) params.set('artistName', item.artistName);
 		if (Array.isArray(item.reviews) && item.reviews.length > 0) {
 			params.set('reviews', JSON.stringify(item.reviews));
 		}

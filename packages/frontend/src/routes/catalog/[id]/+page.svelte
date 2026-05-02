@@ -872,22 +872,21 @@
 	// Season-aware fan-out for tv shows. After the initial show-name search
 	// settles, we look at how its results classify by season — any season
 	// the show has but the results don't cover gets its own focused search
-	// (`Show Name S05`). Skipped entirely when a whole-show pack already
-	// appears in results (it covers every season by definition).
+	// (`Show Name S05`). Untagged results (no `S0N` token) are not treated
+	// as whole-show packs: most are episode rips or release-group dumps with
+	// sloppy naming, not complete-series torrents, so they don't suppress
+	// the per-season fan-out. searchAppend dedups by infoHash, so re-finding
+	// a torrent already in the show-wide pool is harmless.
 	let tvSeasonNumbers = $state<number[]>([]);
 	let perSeasonSearched: { firkinId: string; seasons: Set<number> } | null = null;
-	const tvResultCoverage = $derived.by<{ covered: Set<number>; hasWholeShow: boolean }>(() => {
+	const tvResultCoverage = $derived.by<{ covered: Set<number> }>(() => {
 		const covered = new Set<number>();
-		let hasWholeShow = false;
 		for (const t of torrentSearch.matches) {
 			const range = parseTorrentSeasons(t.parsedTitle || t.title);
-			if (!range) {
-				hasWholeShow = true;
-				continue;
-			}
+			if (!range) continue;
 			for (let s = range.start; s <= range.end; s++) covered.add(s);
 		}
-		return { covered, hasWholeShow };
+		return { covered };
 	});
 	let addingHash = $state<string | null>(null);
 	let assignError = $state<string | null>(null);
@@ -939,8 +938,7 @@
 		if (!isTmdbTv) return;
 		if (tvSeasonNumbers.length === 0) return;
 		if (torrentSearch.status !== 'done') return;
-		const { covered, hasWholeShow } = tvResultCoverage;
-		if (hasWholeShow) return;
+		const { covered } = tvResultCoverage;
 		if (perSeasonSearched?.firkinId !== firkin.id) {
 			perSeasonSearched = { firkinId: firkin.id, seasons: new Set() };
 		}

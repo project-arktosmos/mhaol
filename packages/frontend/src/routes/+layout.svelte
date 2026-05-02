@@ -8,6 +8,7 @@
 	import NavbarAudioPlayer from '$components/player/NavbarAudioPlayer.svelte';
 	import NavbarLyricsPanel from '$components/player/NavbarLyricsPanel.svelte';
 	import NavbarPlaylistPanel from '$components/player/NavbarPlaylistPanel.svelte';
+	import FirkinTooltip from '$components/firkins/FirkinTooltip.svelte';
 	import { playerService } from '$services/player.service';
 	import { themeService } from '$services/theme.service';
 	import { setBrowserImageCacheResolver } from '$services/image-cache.service';
@@ -118,3 +119,4 @@
 </div>
 
 <ToastOutlet />
+<FirkinTooltip />

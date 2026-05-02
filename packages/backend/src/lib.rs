@@ -1,5 +1,6 @@
 mod artists;
 mod catalog;
+mod catalog_cache;
 mod cloud_status;
 mod database;
 mod db;

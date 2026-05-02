@@ -6,6 +6,8 @@
 	import { page as pageStore } from '$app/state';
 	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import FirkinLibraryGrid from '$components/catalog/FirkinLibraryGrid.svelte';
+	import LazyRow from '$components/catalog/LazyRow.svelte';
+	import PopularGenreRow from '$components/catalog/PopularGenreRow.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
 	} from '$components/firkins/FirkinMetadataLookupModal.svelte';
@@ -13,13 +15,19 @@
 	import {
 		listSources,
 		loadGenres,
-		loadPopular,
 		loadSearch,
 		type CatalogItem,
 		type CatalogGenre,
 		type CatalogSource
 	} from '$lib/catalog.service';
-	import { firkinsService, metadataSearchAddon, type Firkin } from '$lib/firkins.service';
+	import {
+		firkinsService,
+		metadataSearchAddon,
+		type Firkin,
+		type FirkinAddon
+	} from '$lib/firkins.service';
+	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
+	import { userIdentityService } from '$lib/user-identity.service';
 
 	const firkinsStore = firkinsService.state;
 	const firkinsIncludeAll = firkinsService.includeAll;
@@ -36,9 +44,6 @@
 		if (fromUrl && sources.some((s) => s.id === fromUrl)) return fromUrl;
 		return sources[0]?.id ?? '';
 	});
-	let filter = $state<string>('');
-	let page = $state<number>(1);
-
 	// MusicBrainz-only: which release-group field the user wants to search on.
 	// Default to artist because the typical free-text query is an artist name
 	// ("keane") and the user wants every release-group by that artist back.
@@ -46,13 +51,6 @@
 	const showSearchFieldSelect = $derived(addon === 'musicbrainz');
 
 	let genres = $state<CatalogGenre[]>([]);
-	let genresLoading = $state(false);
-	let genresError = $state<string | null>(null);
-
-	let items = $state<CatalogItem[]>([]);
-	let totalPages = $state<number>(1);
-	let itemsLoading = $state(false);
-	let itemsError = $state<string | null>(null);
 
 	let query = $state<string>('');
 	let searchItems = $state<CatalogItem[]>([]);
@@ -66,9 +64,7 @@
 	const hasSearch = $derived(trimmedQuery.length > 0);
 
 	const currentSource = $derived(sources.find((s) => s.id === addon));
-	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
-	const showFilterRow = $derived(hasFilter);
 	const hasPopular = $derived(currentSource?.hasPopular ?? true);
 
 	// Each catalog (remote) addon has a matching local-* addon used by
@@ -89,20 +85,58 @@
 					.sort((a, b) => b.created_at.localeCompare(a.created_at))
 			: []
 	);
-	const libraryFirkinIds = $derived(libraryAllFirkins.map((d) => d.id));
 	const galleryHref = $derived(
 		addon ? `${base}/catalog/gallery?addon=${encodeURIComponent(addon)}` : ''
+	);
+	const recommendationsHref = $derived(
+		addon ? `${base}/catalog/gallery?addon=${encodeURIComponent(addon)}&mode=for-you` : ''
+	);
+
+	const userIdentityState = userIdentityService.state;
+	let recommendations = $state<Recommendation[]>([]);
+	let lastRecommendationsAddress: string | null = null;
+
+	$effect(() => {
+		const address = $userIdentityState.identity?.address;
+		if (!address) {
+			recommendations = [];
+			lastRecommendationsAddress = null;
+			return;
+		}
+		if (lastRecommendationsAddress === address) return;
+		lastRecommendationsAddress = address;
+		void (async () => {
+			try {
+				recommendations = await listRecommendations(address, { excludeActioned: true });
+			} catch {
+				recommendations = [];
+			}
+		})();
+	});
+
+	const addonRecommendationFirkins = $derived<CloudFirkin[]>(
+		addon
+			? recommendations
+					.filter((r) => r.addon === addon)
+					.map((r) => recommendationToFirkin(r))
+			: []
 	);
 
 	function virtualFirkin(item: CatalogItem): CloudFirkin {
 		const images = [item.posterUrl, item.backdropUrl]
 			.filter((url): url is string => Boolean(url))
 			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
+		const artists = item.artistName
+			? item.artistName
+					.split(/\s*,\s*/)
+					.filter((n) => n.length > 0)
+					.map((name) => ({ name, role: 'artist' }))
+			: [];
 		return {
 			id: `virtual:${addon}:${item.id}`,
 			cid: '',
 			title: item.title,
-			artists: [],
+			artists,
 			description: item.description ?? '',
 			images,
 			files: [],
@@ -117,6 +151,29 @@
 		};
 	}
 
+	function recommendationToFirkin(row: Recommendation): CloudFirkin {
+		const images = [row.posterUrl, row.backdropUrl]
+			.filter((url): url is string => Boolean(url))
+			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
+		return {
+			id: `virtual:${row.addon}:${row.upstreamId}`,
+			cid: row.firkinId,
+			title: row.title,
+			artists: [],
+			description: row.description ?? '',
+			images,
+			files: [],
+			year: row.year,
+			addon: row.addon as FirkinAddon,
+			creator: '',
+			created_at: row.created_at,
+			updated_at: row.updated_at,
+			version: 0,
+			version_hashes: [],
+			reviews: row.reviews ?? []
+		};
+	}
+
 	function visitHref(item: CatalogItem): string {
 		const params = new URLSearchParams();
 		params.set('addon', addon);
@@ -126,6 +183,7 @@
 		if (item.description) params.set('description', item.description);
 		if (item.posterUrl) params.set('posterUrl', item.posterUrl);
 		if (item.backdropUrl) params.set('backdropUrl', item.backdropUrl);
+		if (item.artistName) params.set('artistName', item.artistName);
 		// Forward the upstream review snapshot so the detail page can
 		// render it before the metadata-backfill effect refetches.
 		if (Array.isArray(item.reviews) && item.reviews.length > 0) {
@@ -134,24 +192,42 @@
 		return `${base}/catalog/visit?${params.toString()}`;
 	}
 
+	function visitHrefForFirkin(firkin: CloudFirkin): string {
+		const prefix = `virtual:${firkin.addon}:`;
+		const upstreamId = firkin.id.startsWith(prefix)
+			? firkin.id.slice(prefix.length)
+			: firkin.id;
+		const [poster, backdrop] = firkin.images;
+		const params = new URLSearchParams();
+		params.set('addon', firkin.addon);
+		params.set('id', upstreamId);
+		params.set('title', firkin.title);
+		if (firkin.year !== null && firkin.year !== undefined) {
+			params.set('year', String(firkin.year));
+		}
+		if (firkin.description) params.set('description', firkin.description);
+		if (poster?.url) params.set('posterUrl', poster.url);
+		if (backdrop?.url) params.set('backdropUrl', backdrop.url);
+		const artistNames = (firkin.artists ?? [])
+			.map((a) => a.name)
+			.filter((n) => n && n.length > 0)
+			.join(', ');
+		if (artistNames) params.set('artistName', artistNames);
+		if (Array.isArray(firkin.reviews) && firkin.reviews.length > 0) {
+			params.set('reviews', JSON.stringify(firkin.reviews));
+		}
+		return `${base}/catalog/visit?${params.toString()}`;
+	}
+
 	async function refreshGenres() {
 		if (!addon || !hasFilter) {
 			genres = [];
-			filter = '';
 			return;
 		}
-		genresLoading = true;
-		genresError = null;
 		try {
 			genres = await loadGenres(addon);
-			if (!genres.some((g) => g.id === filter)) {
-				filter = genres[0]?.id ?? '';
-			}
-		} catch (err) {
+		} catch {
 			genres = [];
-			genresError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			genresLoading = false;
 		}
 	}
 
@@ -168,7 +244,6 @@
 		searchError = null;
 		try {
 			const result = await loadSearch(addon, trimmedQuery, {
-				filter: filter || undefined,
 				page: nextPage,
 				field: addon === 'musicbrainz' ? searchField : undefined
 			});
@@ -207,45 +282,11 @@
 		await runSearch(next);
 	}
 
-	async function refreshItems() {
-		if (!addon || !hasPopular) {
-			items = [];
-			totalPages = 1;
-			page = 1;
-			itemsLoading = false;
-			itemsError = null;
-			return;
-		}
-		itemsLoading = true;
-		itemsError = null;
-		try {
-			const result = await loadPopular(addon, {
-				filter: filter || undefined,
-				page
-			});
-			items = result.items;
-			totalPages = result.totalPages;
-			page = result.page;
-		} catch (err) {
-			items = [];
-			totalPages = 1;
-			itemsError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			itemsLoading = false;
-		}
-	}
-
 	async function selectAddon(source: CatalogSource) {
 		if (addon === source.id) return;
 		const url = new URL(pageStore.url);
 		url.searchParams.set('addon', source.id);
 		await goto(`${url.pathname}${url.search}`, { keepFocus: true, noScroll: true });
-	}
-
-	async function onFilterChange() {
-		page = 1;
-		await refreshItems();
-		if (trimmedQuery) await runSearch(1);
 	}
 
 	async function onSearchFieldChange() {
@@ -284,12 +325,6 @@
 		await firkinsService.refresh();
 	}
 
-	async function goToPage(next: number) {
-		if (next < 1 || next > totalPages || next === page) return;
-		page = next;
-		await refreshItems();
-	}
-
 	onMount(() => {
 		const stopFirkins = firkinsService.start();
 		void (async () => {
@@ -305,11 +340,10 @@
 	});
 
 	// Whenever the URL-driven `addon` changes (initial load, addon click, or
-	// browser back/forward), reset per-addon state and refetch genres + items.
+	// browser back/forward), reset search state and refetch genres.
 	$effect(() => {
 		const current = addon;
 		if (!current) return;
-		filter = '';
 		query = '';
 		searchToken++;
 		searchItems = [];
@@ -317,11 +351,7 @@
 		searchPage = 1;
 		searchError = null;
 		searchLoading = false;
-		page = 1;
-		void (async () => {
-			await refreshGenres();
-			await refreshItems();
-		})();
+		void refreshGenres();
 	});
 </script>
 
@@ -329,87 +359,49 @@
 	<title>Mhaol Cloud — Catalog</title>
 </svelte:head>
 
-<section class="sticky top-0 z-30 overflow-x-auto border-b border-base-content/10 bg-base-200">
-		<table class="table table-sm">
-			<tbody>
-				<tr>
-					<th class="w-32 align-middle">Addon</th>
-					<td>
-						<div class="flex flex-wrap gap-2">
-							{#each sources as source (source.id)}
-								{@const active = addon === source.id}
-								<button
-									type="button"
-									class={classNames('btn btn-sm', {
-										'btn-primary': active,
-										'btn-outline': !active
-									})}
-									onclick={() => selectAddon(source)}
-									title={source.kind}
-								>
-									{source.label}
-								</button>
-							{/each}
-						</div>
-					</td>
-				</tr>
-				<tr>
-					<th class="w-32 align-middle">Search</th>
-					<td>
-						<div class="flex flex-wrap items-center gap-2">
-							{#if showSearchFieldSelect}
-								<select
-									class="select-bordered select w-40 select-sm"
-									bind:value={searchField}
-									onchange={onSearchFieldChange}
-									title="Which release-group field to search on"
-								>
-									<option value="artist">Artist name</option>
-									<option value="release">Album title</option>
-								</select>
-							{/if}
-							<input
-								type="search"
-								class="input-bordered input input-sm flex-1"
-								placeholder={addon
-									? `Search ${currentSource?.label ?? addon}…`
-									: 'Pick an addon to search'}
-								disabled={!addon}
-								bind:value={query}
-								oninput={scheduleSearch}
-							/>
-						</div>
-					</td>
-				</tr>
-				{#if showFilterRow}
-					<tr>
-						<th class="w-32 align-middle">{filterLabel}</th>
-						<td>
-							{#if genresLoading}
-								<span class="text-xs text-base-content/60"
-									>Loading {filterLabel.toLowerCase()}…</span
-								>
-							{:else if genresError}
-								<span class="text-xs text-error">{genresError}</span>
-							{:else if genres.length === 0}
-								<span class="text-xs text-base-content/60">No options available</span>
-							{:else}
-								<select
-									class="select-bordered select w-full select-sm"
-									bind:value={filter}
-									onchange={onFilterChange}
-								>
-									{#each genres as option (option.id)}
-										<option value={option.id}>{option.name}</option>
-									{/each}
-								</select>
-							{/if}
-						</td>
-					</tr>
-				{/if}
-			</tbody>
-		</table>
-	</section>
+<section class="sticky top-0 z-50 border-b border-base-content/10 bg-base-200">
+	<div class="grid grid-cols-2 gap-4 p-3">
+		<div class="grid grid-cols-4 gap-2">
+			{#each sources as source (source.id)}
+				{@const active = addon === source.id}
+				<button
+					type="button"
+					class={classNames('btn w-full btn-sm', {
+						'btn-primary': active,
+						'btn-outline': !active
+					})}
+					onclick={() => selectAddon(source)}
+					title={source.kind}
+				>
+					{source.label}
+				</button>
+			{/each}
+		</div>
+		<div class="flex flex-wrap items-center gap-2">
+			{#if showSearchFieldSelect}
+				<select
+					class="select-bordered select w-40 select-sm"
+					bind:value={searchField}
+					onchange={onSearchFieldChange}
+					title="Which release-group field to search on"
+				>
+					<option value="artist">Artist name</option>
+					<option value="release">Album title</option>
+				</select>
+			{/if}
+			<input
+				type="search"
+				class="input-bordered input input-sm flex-1"
+				placeholder={addon
+					? `Search ${currentSource?.label ?? addon}…`
+					: 'Pick an addon to search'}
+				disabled={!addon}
+				bind:value={query}
+				oninput={scheduleSearch}
+			/>
+		</div>
+	</div>
+</section>
 
 	<div class="flex flex-col gap-6 p-6">
 		{#if sourcesError}
@@ -418,6 +410,7 @@
 			</div>
 		{/if}
 
+		<LazyRow>
 		<section class="flex flex-col gap-3">
 			<div class="flex items-center justify-between gap-4">
 				<h2 class="text-lg font-semibold">Library</h2>
@@ -437,7 +430,7 @@
 				</label>
 			</div>
 			<FirkinLibraryGrid
-				firkinIds={libraryFirkinIds}
+				firkins={libraryAllFirkins}
 				collapsed={true}
 				collapsedCount={6}
 				moreHref={galleryHref}
@@ -459,8 +452,28 @@
 				{/snippet}
 			</FirkinLibraryGrid>
 		</section>
+		</LazyRow>
+
+		{#if addonRecommendationFirkins.length > 0}
+			<LazyRow>
+			<section class="flex flex-col gap-3">
+				<div class="flex flex-wrap items-center justify-between gap-4">
+					<h2 class="text-lg font-semibold">For you</h2>
+				</div>
+				<FirkinLibraryGrid
+					firkins={addonRecommendationFirkins}
+					collapsed={true}
+					collapsedCount={6}
+					moreHref={recommendationsHref}
+					hrefBuilder={visitHrefForFirkin}
+					emptyMessage="No recommendations for this addon yet."
+				/>
+			</section>
+			</LazyRow>
+		{/if}
 
 		{#if hasSearch}
+			<LazyRow>
 			<section class="flex flex-col gap-3">
 				<div class="flex items-center justify-between gap-4">
 					<h2 class="text-lg font-semibold">Search results</h2>
@@ -516,68 +529,32 @@
 					</div>
 				{/if}
 			</section>
+			</LazyRow>
 		{/if}
 
 		{#if hasPopular}
-			<section class="flex flex-col gap-3">
-				<div class="flex items-center justify-between gap-4">
-					<h2 class="text-lg font-semibold">Popular</h2>
-					<div class="flex items-center gap-2">
-						<button
-							class="btn btn-outline btn-xs"
-							onclick={() => goToPage(page - 1)}
-							disabled={itemsLoading || page <= 1}
-						>
-							Prev
-						</button>
-						<span class="text-xs text-base-content/60">Page {page} / {totalPages}</span>
-						<button
-							class="btn btn-outline btn-xs"
-							onclick={() => goToPage(page + 1)}
-							disabled={itemsLoading || page >= totalPages}
-						>
-							Next
-						</button>
-						<button class="btn btn-outline btn-xs" onclick={refreshItems} disabled={itemsLoading}>
-							Refresh
-						</button>
-					</div>
-				</div>
-
-				{#if itemsError}
-					<div class="alert alert-error">
-						<span>{itemsError}</span>
-					</div>
-				{/if}
-
-				{#if itemsLoading && items.length === 0}
-					<p class="text-sm text-base-content/60">Loading…</p>
-				{:else if items.length === 0}
-					<p class="text-sm text-base-content/60">No items.</p>
-				{:else}
-					<div
-						class={classNames(
-							'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
-							{ 'opacity-60': itemsLoading }
-						)}
-					>
-						{#each items as item (item.id)}
-							<a
-								href={visitHref(item)}
-								class="block no-underline"
-								onclick={(e) => {
-									if ((e.target as HTMLElement).closest('button, summary')) {
-										e.preventDefault();
-									}
-								}}
-							>
-								<FirkinCard firkin={virtualFirkin(item)} />
-							</a>
-						{/each}
-					</div>
-				{/if}
-			</section>
+			{#if hasFilter && genres.length > 0}
+				{#each genres as genre (genre.id)}
+					<LazyRow>
+						<PopularGenreRow
+							addon={addon}
+							genreId={genre.id}
+							title={genre.name}
+							hrefBuilder={visitHrefForFirkin}
+						/>
+					</LazyRow>
+				{/each}
+			{:else}
+				<LazyRow>
+					<PopularGenreRow
+						addon={addon}
+						title="Popular"
+						hrefBuilder={visitHrefForFirkin}
+					/>
+				</LazyRow>
+			{/if}
 		{/if}
+
 </div>
 
 {#if metadataTarget}

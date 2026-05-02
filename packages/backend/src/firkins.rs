@@ -141,6 +141,72 @@ fn extract_tmdb_id(addon: &str, files: &[FileEntry]) -> Option<(bool, String)> {
     None
 }
 
+/// Pull the upstream addon id (TMDB numeric, MusicBrainz release-group
+/// MBID, YouTube video id) off a firkin's `files` array. Mirrors the
+/// canonical URLs baked in by `/catalog/visit` so the catalog popular
+/// filter can match an upstream catalog item to an existing firkin
+/// regardless of bookmark state. Returns `None` when the addon is not
+/// browsable or no matching `url` file is present.
+pub(crate) fn extract_upstream_id(addon: &str, files: &[FileEntry]) -> Option<String> {
+    match addon {
+        "tmdb-movie" | "tmdb-tv" => extract_tmdb_id(addon, files).map(|(_, id)| id),
+        "musicbrainz" => files
+            .iter()
+            .filter(|f| f.kind == "url")
+            .find_map(|f| extract_mb_release_group_id(f.value.trim())),
+        "youtube-video" => files
+            .iter()
+            .filter(|f| f.kind == "url")
+            .find_map(|f| extract_youtube_video_id(f.value.trim())),
+        _ => None,
+    }
+}
+
+/// `https://www.youtube.com/watch?v=<id>` / `https://youtu.be/<id>` etc.
+/// → `Some("<id>")`. Anything else returns `None`. Used to match an
+/// upstream YouTube video to firkins minted from the `/catalog/visit`
+/// resolver (which bakes the canonical watch URL into the firkin's
+/// `files`).
+fn extract_youtube_video_id(value: &str) -> Option<String> {
+    let url = url::Url::parse(value).ok()?;
+    let host = url.host_str()?.to_ascii_lowercase();
+    match host.as_str() {
+        "www.youtube.com" | "youtube.com" | "m.youtube.com" | "music.youtube.com" => url
+            .query_pairs()
+            .find(|(k, _)| k == "v")
+            .map(|(_, v)| v.into_owned())
+            .filter(|s| !s.is_empty()),
+        "youtu.be" => url
+            .path_segments()?
+            .find(|s| !s.is_empty())
+            .map(|s| s.to_string()),
+        _ => None,
+    }
+}
+
+/// Collect every upstream id of every firkin known to the cloud for the
+/// given browsable `addon`. Used by `catalog::popular` to filter out
+/// items the user has already minted a firkin for (bookmarked or browse-
+/// cache — both count, since the dedup target is "we already have a row
+/// for this upstream item"). Reads the `firkin` table once and walks each
+/// row's `files` for the addon's canonical URL pattern.
+pub(crate) async fn upstream_ids_for_addon(
+    state: &CloudState,
+    addon: &str,
+) -> Result<std::collections::HashSet<String>, surrealdb::Error> {
+    let docs: Vec<Firkin> = state.db.select(TABLE).await?;
+    let mut out: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for doc in docs {
+        if doc.addon != addon {
+            continue;
+        }
+        if let Some(id) = extract_upstream_id(&doc.addon, &doc.files) {
+            out.insert(id);
+        }
+    }
+    Ok(out)
+}
+
 fn catalog_review_to_review(r: CatalogReview) -> Review {
     Review {
         label: r.label,
