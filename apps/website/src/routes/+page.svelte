@@ -13,5 +13,5 @@
 <MediaTypes />
 <Apps />
 <HowItWorks />
-<ComingUp />
 <Install />
+<ComingUp />

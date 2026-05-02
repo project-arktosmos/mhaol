@@ -115,7 +115,7 @@
 	];
 </script>
 
-<section id="coming-up" class="border-b border-base-300 bg-base-200">
+<section id="coming-up" class="bg-base-200">
 	<div class="mx-auto w-full max-w-6xl px-4 py-20">
 		<div class="mb-10 max-w-3xl">
 			<div
