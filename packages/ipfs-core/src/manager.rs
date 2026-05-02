@@ -544,32 +544,50 @@ async fn add_file_via_repo(
 ) -> Result<String> {
     use rust_ipfs::Block;
     use rust_unixfs::file::adder::FileAdder;
+    use tokio::io::AsyncReadExt;
 
-    let bytes = tokio::fs::read(path)
+    // Stream the file through the FileAdder a buffer at a time instead of
+    // slurping the whole thing into memory — a 3 GB movie would otherwise
+    // allocate 3 GB RSS and OOM the cloud on macOS. The buffer is the
+    // unit of disk I/O; the adder still chunks internally at its own
+    // (256 KiB) boundary to produce UnixFS leaf blocks.
+    const READ_BUF: usize = 256 * 1024;
+
+    let mut file = tokio::fs::File::open(path)
         .await
-        .map_err(|e| anyhow!("read {}: {e}", path.display()))?;
+        .map_err(|e| anyhow!("open {}: {e}", path.display()))?;
+    let mut buf = vec![0u8; READ_BUF];
 
     let mut adder = FileAdder::default();
     let repo = ipfs.repo();
     let mut last_cid: Option<cid::Cid> = None;
 
-    let mut total = 0;
-    while total < bytes.len() {
-        let (blocks, consumed) = adder.push(&bytes[total..]);
-        for (cid, block_bytes) in blocks {
-            let block = Block::new(cid, block_bytes)
-                .map_err(|e| anyhow!("block construct: {e}"))?;
-            repo.put_block(&block)
-                .await
-                .map_err(|e| anyhow!("put_block: {e}"))?;
-            last_cid = Some(cid);
-        }
-        if consumed == 0 {
-            // Defensive: an adder that refuses to consume input would
-            // otherwise spin forever.
+    loop {
+        let n = file
+            .read(&mut buf)
+            .await
+            .map_err(|e| anyhow!("read {}: {e}", path.display()))?;
+        if n == 0 {
             break;
         }
-        total += consumed;
+        let mut consumed_total = 0;
+        while consumed_total < n {
+            let (blocks, consumed) = adder.push(&buf[consumed_total..n]);
+            for (cid, block_bytes) in blocks {
+                let block = Block::new(cid, block_bytes)
+                    .map_err(|e| anyhow!("block construct: {e}"))?;
+                repo.put_block(&block)
+                    .await
+                    .map_err(|e| anyhow!("put_block: {e}"))?;
+                last_cid = Some(cid);
+            }
+            if consumed == 0 {
+                // Defensive: an adder that refuses to consume input would
+                // otherwise spin forever.
+                break;
+            }
+            consumed_total += consumed;
+        }
     }
     for (cid, block_bytes) in adder.finish() {
         let block = Block::new(cid, block_bytes)
