@@ -16,6 +16,7 @@
 		onToggle?: () => void;
 		onRefresh?: () => void;
 		subs?: SubsLyricsItem[];
+		autoSelectFirstSub?: boolean;
 	}
 
 	let {
@@ -28,7 +29,8 @@
 		open = true,
 		onToggle,
 		onRefresh,
-		subs = []
+		subs = [],
+		autoSelectFirstSub = false
 	}: Props = $props();
 
 	function subOptionLabel(m: MatchedSub): string {
@@ -42,19 +44,34 @@
 	// survives `subMatches` re-derivation. The `Use` button reads from
 	// here and forwards the picked sub to `onAssign`, which persists it
 	// onto the firkin alongside the torrent magnet — no download or
-	// preview happens on selection.
-	let selectedSubByHash = $state<Record<string, SubsLyricsItem>>({});
+	// preview happens on selection. `null` means the user explicitly
+	// cleared their pick (placeholder option) — distinct from "not
+	// interacted yet", so the `autoSelectFirstSub` default doesn't
+	// override an explicit clear.
+	let selectedSubByHash = $state<Record<string, SubsLyricsItem | null>>({});
 
 	function chooseSub(infoHash: string, matches: MatchedSub[], event: Event) {
 		const select = event.currentTarget as HTMLSelectElement;
 		const idx = select.selectedIndex - 1;
 		const next = { ...selectedSubByHash };
 		if (idx < 0 || idx >= matches.length) {
-			delete next[infoHash];
+			next[infoHash] = null;
 		} else {
 			next[infoHash] = matches[idx].sub;
 		}
 		selectedSubByHash = next;
+	}
+
+	function defaultSubFor(matches: MatchedSub[]): SubsLyricsItem | undefined {
+		if (!autoSelectFirstSub) return undefined;
+		return matches.find((m) => m.sub.url)?.sub;
+	}
+
+	function effectiveSubFor(infoHash: string, matches: MatchedSub[]): SubsLyricsItem | undefined {
+		if (infoHash in selectedSubByHash) {
+			return selectedSubByHash[infoHash] ?? undefined;
+		}
+		return defaultSubFor(matches);
 	}
 
 	function rowEval(magnet: string | undefined | null): TorrentRowEval {
@@ -190,6 +207,7 @@
 									{@const adding = addingHash === torrent.magnetLink}
 									{@const ev = rowEval(torrent.magnetLink)}
 									{@const subMatches = matchSubsToTorrent(torrent.title, subs)}
+									{@const effectiveSub = effectiveSubFor(torrent.infoHash, subMatches)}
 									{@const hidden = defaultCollapsed
 										? !expanded
 										: probing
@@ -285,6 +303,7 @@
 											{:else}
 												<select
 													class="select-bordered select w-full max-w-[10rem] select-xs"
+													value={effectiveSub?.externalId ?? ''}
 													onchange={(e) => chooseSub(torrent.infoHash, subMatches, e)}
 													title="{subMatches.length} matching subtitle{subMatches.length === 1
 														? ''
@@ -310,7 +329,7 @@
 														type="button"
 														class="btn btn-xs btn-primary"
 														disabled={addingHash !== null}
-														onclick={() => onAssign(torrent, selectedSubByHash[torrent.infoHash])}
+														onclick={() => onAssign(torrent, effectiveSub)}
 														aria-label="Use this torrent"
 													>
 														{adding ? '…' : 'Use'}

@@ -1600,6 +1600,7 @@
 					{assignError}
 					{existingHashes}
 					subs={subsLyricsResolver.results}
+					autoSelectFirstSub={isTmdbMovie}
 					collapsible
 					open={torrentSearchOpen}
 					onToggle={toggleTorrentSearch}
@@ -1618,6 +1619,7 @@
 					{assignError}
 					{existingHashes}
 					subs={subsLyricsResolver.results}
+					autoSelectFirstSub={isTmdbMovie}
 					onRefresh={() =>
 						torrentSearch.search({
 							addon: firkin.addon,
