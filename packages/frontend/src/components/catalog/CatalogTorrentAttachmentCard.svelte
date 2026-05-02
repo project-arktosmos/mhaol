@@ -3,18 +3,19 @@
 	import { Icon } from 'cloud-ui';
 
 	interface Props {
-		/** A `torrent magnet` is attached to the firkin's `files` — the
+		/** A `torrent magnet` is persisted on the firkin's `files` — the
 		 * Download flow, where the torrent client persists bytes to
 		 * `<data_root>/downloads/torrents/`. */
 		downloadAttached: boolean;
-		/** A torrent stream session is currently active for this firkin —
-		 * the Stream flow, where the torrent client writes to
-		 * `<data_root>/downloads/torrent-streams/` and the inline player is
-		 * pulling bytes off it. */
-		streamActive: boolean;
+		/** A `torrent stream magnet` is persisted on the firkin's `files` —
+		 * the Stream flow, where the torrent client writes to the ephemeral
+		 * `<data_root>/downloads/torrent-streams/` (wiped on each new
+		 * stream). The persisted magnet records the user's most-recent
+		 * stream pick so the panel survives reloads. */
+		streamAttached: boolean;
 	}
 
-	let { downloadAttached, streamActive }: Props = $props();
+	let { downloadAttached, streamAttached }: Props = $props();
 </script>
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
@@ -35,13 +36,13 @@
 		<div
 			class={classNames(
 				'flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center',
-				streamActive ? 'bg-base-300/40 text-base-content' : 'text-base-content/40'
+				streamAttached ? 'bg-base-300/40 text-base-content' : 'text-base-content/40'
 			)}
 		>
 			<Icon name="lorc/magnet" size={32} title="Stream mode" />
 			<span class="text-xs font-medium">Stream</span>
 			<span class="text-[10px] text-base-content/60">
-				{streamActive ? 'Streaming now' : 'Inactive'}
+				{streamAttached ? 'Magnet attached' : 'Not attached'}
 			</span>
 		</div>
 	</div>

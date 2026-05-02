@@ -23,6 +23,7 @@ const RAW_CODEC: u64 = 0x55;
 const ALLOWED_FILE_TYPES: &[&str] = &[
     "ipfs",
     "torrent magnet",
+    "torrent stream magnet",
     "url",
     "lyrics",
     "subtitle",

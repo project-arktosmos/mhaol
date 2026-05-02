@@ -72,6 +72,7 @@ export interface FirkinImage {
 export const FIRKIN_FILE_TYPES = [
 	'ipfs',
 	'torrent magnet',
+	'torrent stream magnet',
 	'url',
 	'lyrics',
 	'subtitle',

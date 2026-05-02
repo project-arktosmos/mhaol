@@ -171,6 +171,9 @@
 	const hasIpfsFiles = $derived(playableIpfsFiles.length > 0);
 	const firstIpfsCid = $derived(playableIpfsFiles[0]?.value ?? null);
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
+	const hasStreamMagnetFiles = $derived(
+		firkin.files.some((f) => f.type === 'torrent stream magnet')
+	);
 	// "Real" files = anything playable on its own. URL-typed entries (TMDB
 	// source URL, MusicBrainz release-group URL, persisted YouTube track
 	// URLs) are pure metadata pointers and don't qualify.
@@ -603,9 +606,9 @@
 
 	let streamingHash = $state<string | null>(null);
 
-	async function startTorrentStream(magnetOverride?: string): Promise<void> {
+	async function startTorrentStream(magnetOverride?: string): Promise<boolean> {
 		const magnet = magnetOverride ?? firstMagnet;
-		if (!magnet || torrentStreamStarting) return;
+		if (!magnet || torrentStreamStarting) return false;
 		torrentStreamStarting = true;
 		streamingHash = magnet;
 		torrentStreamError = null;
@@ -649,9 +652,11 @@
 				subtitles: playerSubtitles
 			};
 			await playerService.playUrl(file, body.streamUrl, body.mimeType ?? null, 'inline', firkin.id);
+			return true;
 		} catch (err) {
 			torrentStreamError = err instanceof Error ? err.message : 'Unknown error';
 			if (activeSource === 'torrent') activeSource = 'trailer';
+			return false;
 		} finally {
 			torrentStreamStarting = false;
 			streamingHash = null;
@@ -663,10 +668,28 @@
 	/// manager's `start_stream` writes to the dedicated `downloads/torrent-streams/`
 	/// directory and wipes any prior stream payload, so calling this multiple
 	/// times in a row is safe — only the latest pick keeps disk space.
+	///
+	/// On success we persist a `torrent stream magnet` entry on the firkin so
+	/// the attachment card remembers the user's pick across page reloads.
+	/// Singular: only the most-recent stream pick is kept; the prior one is
+	/// dropped via `removeTypes`. The on-disk stream payload is also wiped by
+	/// the next `start_stream`, so the persisted magnet always matches the
+	/// torrent currently in `downloads/torrent-streams/`.
 	async function streamTorrentFromRow(torrent: TorrentResultItem): Promise<void> {
 		if (!torrent.magnetLink || torrentStreamStarting) return;
 		activeSource = 'torrent';
-		await startTorrentStream(torrent.magnetLink);
+		const magnet = torrent.magnetLink;
+		const ok = await startTorrentStream(magnet);
+		if (!ok) return;
+		try {
+			const updated = await firkinsService.mutateFiles(firkin.id, {
+				removeTypes: ['torrent stream magnet'],
+				add: [{ type: 'torrent stream magnet', value: magnet, title: torrent.title }]
+			});
+			firkinOverride = updated;
+		} catch (err) {
+			console.warn('[catalog detail] failed to persist stream magnet:', err);
+		}
 	}
 
 	const completedTorrents = $derived.by(() => {
@@ -1877,8 +1900,7 @@
 			{#if isTmdbMovie}
 				<CatalogTorrentAttachmentCard
 					downloadAttached={hasMagnetFiles}
-					streamActive={activeSource === 'torrent' &&
-						(torrentStreamStarting || isInlinePlayingThisFirkin)}
+					streamAttached={hasStreamMagnetFiles}
 				/>
 			{/if}
 

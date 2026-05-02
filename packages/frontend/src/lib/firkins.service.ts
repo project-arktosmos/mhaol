@@ -40,7 +40,14 @@ export type FileType = SharedFileType;
 export type Trailer = SharedTrailer;
 export type Review = SharedReview;
 export type Firkin = SharedFirkin;
-export const FILE_TYPES = ['ipfs', 'torrent magnet', 'url', 'lyrics', 'subtitle'] as const;
+export const FILE_TYPES = [
+	'ipfs',
+	'torrent magnet',
+	'torrent stream magnet',
+	'url',
+	'lyrics',
+	'subtitle'
+] as const;
 
 export interface FirkinsState {
 	loading: boolean;
