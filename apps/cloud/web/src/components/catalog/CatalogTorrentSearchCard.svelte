@@ -35,47 +35,6 @@
 	const heading = $derived(
 		`Torrent search${(!collapsible || open) && search.matches.length > 0 ? ` (${search.matches.length})` : ''}`
 	);
-
-	const QUALITY_GROUPS: {
-		label: string;
-		matches: (q: string | null) => boolean;
-	}[] = [
-		{ label: '4K / 2160p', matches: (q) => q === '2160p' || q === '4K' || q === '4K UHD' },
-		{ label: '1080p', matches: (q) => q === '1080p' },
-		{ label: '720p', matches: (q) => q === '720p' },
-		{ label: '480p', matches: (q) => q === '480p' },
-		{ label: '360p', matches: (q) => q === '360p' },
-		{ label: 'Other', matches: () => true }
-	];
-
-	function groupIndex(quality: string | null): number {
-		for (let i = 0; i < QUALITY_GROUPS.length; i++) {
-			if (QUALITY_GROUPS[i].matches(quality)) return i;
-		}
-		return QUALITY_GROUPS.length - 1;
-	}
-
-	const groupedMatches = $derived.by(() => {
-		const buckets = new Map<number, TorrentResultItem[]>();
-		for (const t of search.matches) {
-			const idx = groupIndex(t.quality);
-			let bucket = buckets.get(idx);
-			if (!bucket) {
-				bucket = [];
-				buckets.set(idx, bucket);
-			}
-			bucket.push(t);
-		}
-		for (const list of buckets.values()) {
-			list.sort((a, b) => b.seeders + b.leechers - (a.seeders + a.leechers));
-		}
-		const out: { label: string; rows: TorrentResultItem[] }[] = [];
-		for (let i = 0; i < QUALITY_GROUPS.length; i++) {
-			const rows = buckets.get(i);
-			if (rows && rows.length > 0) out.push({ label: QUALITY_GROUPS[i].label, rows });
-		}
-		return out;
-	});
 </script>
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
@@ -132,7 +91,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each groupedMatches as group (group.label)}
+							{#each search.groupedMatches as group (group.label)}
 								<tr class="bg-base-300/40">
 									<th
 										colspan="7"
@@ -178,6 +137,13 @@
 														{ev.fileName}
 													</span>
 												</div>
+											{:else if ev.kind === 'skipped'}
+												<span
+													class="text-xs text-base-content/40"
+													title="Skipped — a streamable candidate was found earlier in this quality group"
+												>
+													—
+												</span>
 											{:else}
 												<div class="flex flex-col gap-0.5">
 													<span class="badge gap-1 badge-ghost badge-sm">
