@@ -147,17 +147,37 @@ fn cached_to_response(row: &StoredTorrentEval) -> serde_json::Value {
 
 #[cfg(not(target_os = "android"))]
 async fn load_cached_eval(state: &CloudState, info_hash: &str) -> Option<StoredTorrentEval> {
-    match state
+    let row = match state
         .db
         .select::<Option<StoredTorrentEval>>((TORRENT_EVAL_TABLE, info_hash))
         .await
     {
-        Ok(row) => row,
+        Ok(row) => row?,
         Err(e) => {
             tracing::warn!("torrent_eval cache load failed for {info_hash}: {e}");
-            None
+            return None;
         }
+    };
+
+    // Defensive cache-bust: prior versions of `streamable_mime_type` whitelisted
+    // mkv / mov / avi / ogv / ts. A `<video>` element can't progressive-stream
+    // those, so existing `streamable: true` rows for those mime types lie about
+    // the Stream button's safety. Treat them as cache-miss so the next call
+    // re-evaluates with the current rules and overwrites the row.
+    if row.streamable
+        && !matches!(
+            row.mime_type.as_deref(),
+            Some("video/mp4") | Some("video/webm")
+        )
+    {
+        tracing::info!(
+            "torrent_eval cache bust for {info_hash}: stored mime {:?} no longer streamable",
+            row.mime_type
+        );
+        return None;
     }
+
+    Some(row)
 }
 
 /// Persisted torrent search results scoped to a single firkin. Reading this

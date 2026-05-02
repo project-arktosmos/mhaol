@@ -3,45 +3,25 @@
 
 	interface Props {
 		title: string;
-		addon: string;
-		kindLabel?: string | null;
 		year?: number | null;
-		extraBadge?: { label: string; class: string } | null;
-		backHref?: string | null;
-		backLabel?: string;
+		kindLabel?: string | null;
 		actions?: Snippet;
 	}
 
-	let {
-		title,
-		addon,
-		kindLabel = null,
-		year = null,
-		extraBadge = null,
-		backHref = null,
-		backLabel = 'Catalog',
-		actions
-	}: Props = $props();
+	let { title, year = null, kindLabel = null, actions }: Props = $props();
+
+	const showYear = $derived(year !== null && year !== undefined && Number.isFinite(year));
+	const subline = $derived(
+		[kindLabel, showYear ? String(year) : null].filter((s): s is string => Boolean(s)).join(' · ')
+	);
 </script>
 
 <header class="flex flex-wrap items-start justify-between gap-3">
-	<div class="flex flex-col gap-1">
-		{#if backHref}
-			<a class="text-xs text-base-content/60 hover:underline" href={backHref}>← {backLabel}</a>
-		{/if}
+	<div class="flex flex-col gap-0.5">
 		<h1 class="text-2xl font-bold [overflow-wrap:anywhere]">{title}</h1>
-		<p class="text-sm text-base-content/70">
-			<span class="badge badge-outline badge-sm">{addon}</span>
-			{#if kindLabel}
-				<span class="badge badge-outline badge-sm">{kindLabel}</span>
-			{/if}
-			{#if year !== null && year !== undefined && Number.isFinite(year)}
-				<span class="badge badge-outline badge-sm">{year}</span>
-			{/if}
-			{#if extraBadge}
-				<span class={`badge badge-sm ${extraBadge.class}`}>{extraBadge.label}</span>
-			{/if}
-		</p>
+		{#if subline}
+			<p class="text-sm text-base-content/70 italic">{subline}</p>
+		{/if}
 	</div>
 	{#if actions}
 		<div class="flex items-center gap-2">

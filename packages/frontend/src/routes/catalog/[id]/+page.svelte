@@ -9,14 +9,15 @@
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
 	import { CatalogScoresCard } from 'cloud-ui';
 	import CatalogDescriptionPanel from '$components/catalog/CatalogDescriptionPanel.svelte';
-	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTvSeasonsCard from '$components/catalog/CatalogTvSeasonsCard.svelte';
 	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
-	import CatalogTorrentAttachmentCard from '$components/catalog/CatalogTorrentAttachmentCard.svelte';
-	import CatalogTorrentProgressCard from '$components/catalog/CatalogTorrentProgressCard.svelte';
+	import CatalogTorrentAttachmentCard, {
+		type AttachmentInfo,
+		type DownloadAttachmentInfo
+	} from '$components/catalog/CatalogTorrentAttachmentCard.svelte';
 	import CatalogSubsLyricsCard from '$components/catalog/CatalogSubsLyricsCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogAlbumsByArtistCard from '$components/catalog/CatalogAlbumsByArtistCard.svelte';
@@ -89,8 +90,6 @@
 	// the user clicks Bookmark, the same record gains the full detail
 	// surface (Play / Find metadata / Delete, plus torrent search auto-fire).
 	const isBookmarked = $derived(firkin.bookmarked !== false);
-	let removing = $state(false);
-	let removeError = $state<string | null>(null);
 	let bookmarking = $state(false);
 	let bookmarkError = $state<string | null>(null);
 
@@ -549,6 +548,12 @@
 	const firstMagnet = $derived(
 		firkin.files.find((f) => f.type === 'torrent magnet')?.value ?? null
 	);
+	// Persisted stream pick from the attachment card. Present when the user
+	// has previously kicked off a torrent-stream — without a download
+	// magnet attached — via the search row's Stream button.
+	const firstStreamMagnet = $derived(
+		firkin.files.find((f) => f.type === 'torrent stream magnet')?.value ?? null
+	);
 
 	let torrentStreamStarting = $state(false);
 	let torrentStreamError = $state<string | null>(null);
@@ -560,7 +565,9 @@
 	// Once the file is pinned locally to IPFS, the torrent stream is
 	// strictly worse — same bytes, slower path, extra peers — so we
 	// hide that option entirely.
-	const torrentTabEnabled = $derived(Boolean(firstMagnet) && !ipfsTabEnabled);
+	const torrentTabEnabled = $derived(
+		(Boolean(firstMagnet) || Boolean(firstStreamMagnet)) && !ipfsTabEnabled
+	);
 	const anyTabEnabled = $derived(trailerTabEnabled || ipfsTabEnabled || torrentTabEnabled);
 
 	const trailerTabTitle = $derived(trailerTabEnabled ? 'Show trailer' : 'No trailer for this item');
@@ -571,7 +578,7 @@
 	);
 	const torrentTabTitle = $derived.by(() => {
 		if (ipfsTabEnabled) return 'File is pinned locally — use IPFS Stream instead';
-		if (!firstMagnet) return 'Available once a torrent magnet is attached';
+		if (!firstMagnet && !firstStreamMagnet) return 'Available once a torrent magnet is attached';
 		return 'Stream the attached torrent as it downloads';
 	});
 	const torrentTabSuffix = $derived(torrentStreamStarting ? ' — starting…' : '');
@@ -601,11 +608,27 @@
 		}
 	}
 
+	function handleSourceClick(source: StreamSource): void {
+		if (source === 'trailer') {
+			if (activeSource !== 'trailer') selectSource('trailer');
+			return;
+		}
+		if (source === activeSource) {
+			if (source === 'ipfs') void startIpfsPlay();
+			else if (source === 'torrent') void startTorrentStream();
+			return;
+		}
+		selectSource(source);
+	}
+
 	let streamingHash = $state<string | null>(null);
 
-	async function startTorrentStream(magnetOverride?: string): Promise<void> {
-		const magnet = magnetOverride ?? firstMagnet;
-		if (!magnet || torrentStreamStarting) return;
+	async function startTorrentStream(magnetOverride?: string): Promise<boolean> {
+		// Prefer the explicit stream pick (set by the attachment card / search
+		// row) over the download magnet, then fall back to the download magnet
+		// when no stream pick has been made yet.
+		const magnet = magnetOverride ?? firstStreamMagnet ?? firstMagnet;
+		if (!magnet || torrentStreamStarting) return false;
 		torrentStreamStarting = true;
 		streamingHash = magnet;
 		torrentStreamError = null;
@@ -649,24 +672,73 @@
 				subtitles: playerSubtitles
 			};
 			await playerService.playUrl(file, body.streamUrl, body.mimeType ?? null, 'inline', firkin.id);
+			return true;
 		} catch (err) {
 			torrentStreamError = err instanceof Error ? err.message : 'Unknown error';
 			if (activeSource === 'torrent') activeSource = 'trailer';
+			return false;
 		} finally {
 			torrentStreamStarting = false;
 			streamingHash = null;
 		}
 	}
 
-	/// Start a torrent stream straight from a search-result row (instead of
-	/// the user having to first attach the magnet via Download). The torrent
-	/// manager's `start_stream` writes to the dedicated `downloads/torrent-streams/`
-	/// directory and wipes any prior stream payload, so calling this multiple
-	/// times in a row is safe — only the latest pick keeps disk space.
-	async function streamTorrentFromRow(torrent: TorrentResultItem): Promise<void> {
-		if (!torrent.magnetLink || torrentStreamStarting) return;
+	/// Start a torrent stream for a magnet, switch the player to the
+	/// inline torrent source, and persist the user's pick on the firkin so
+	/// the attachment card remembers it across reloads. Re-playing the same
+	/// magnet (e.g. via the attachment card's stream cell) skips the
+	/// persist round-trip — the firkin already records this exact magnet.
+	///
+	/// `start_stream` writes to the dedicated `downloads/torrent-streams/`
+	/// directory and wipes any prior stream payload, so the persisted
+	/// magnet always matches the torrent currently in that directory.
+	async function playStreamFor(magnet: string, title: string | null): Promise<void> {
+		if (!magnet || torrentStreamStarting) return;
 		activeSource = 'torrent';
-		await startTorrentStream(torrent.magnetLink);
+		const ok = await startTorrentStream(magnet);
+		if (!ok) return;
+		const alreadyPersisted = firkin.files.some(
+			(f) => f.type === 'torrent stream magnet' && f.value === magnet
+		);
+		if (alreadyPersisted) return;
+		try {
+			const updated = await firkinsService.mutateFiles(firkin.id, {
+				removeTypes: ['torrent stream magnet'],
+				add: [{ type: 'torrent stream magnet', value: magnet, title: title ?? undefined }]
+			});
+			firkinOverride = updated;
+		} catch (err) {
+			console.warn('[catalog detail] failed to persist stream magnet:', err);
+		}
+	}
+
+	/// Search-row Stream button — pick a brand-new torrent for streaming.
+	async function streamTorrentFromRow(torrent: TorrentResultItem): Promise<void> {
+		if (!torrent.magnetLink) return;
+		await ensureBookmarked();
+		await playStreamFor(torrent.magnetLink, torrent.title);
+	}
+
+	/// Attachment-card Stream cell click — re-run the torrent-stream stack
+	/// on whatever's already persisted on the firkin. Useful after a page
+	/// reload (the on-disk stream payload may have been wiped by another
+	/// firkin's pick) or for replaying the current pick after the player
+	/// was stopped.
+	async function replayStreamMagnet(): Promise<void> {
+		const entry = firkin.files.find((f) => f.type === 'torrent stream magnet' && f.value);
+		if (!entry || !entry.value) return;
+		await playStreamFor(entry.value, entry.title ?? null);
+	}
+
+	/// Attachment-card Download cell click — only fires once
+	/// `torrent_completion.rs` has pinned the finished torrent to IPFS, at
+	/// which point the cell switches into IPFS-play mode. Flips the player
+	/// tab to `ipfs` and runs the existing IPFS HLS pipeline on the first
+	/// playable CID (same path as the IPFS Stream tab).
+	async function playFromAttachmentDownload(): Promise<void> {
+		if (!firstIpfsCid || ipfsStarting) return;
+		activeSource = 'ipfs';
+		await startIpfsPlay();
 	}
 
 	const completedTorrents = $derived.by(() => {
@@ -681,21 +753,6 @@
 			if (finished) out.push({ hash, title: f.title ?? t.name });
 		}
 		return out;
-	});
-
-	const torrentProgressRows = $derived.by(() => {
-		const seen = new Set<string>();
-		const rows: { title: string | null; torrent: (typeof $torrentsState.byHash)[string] }[] = [];
-		for (const f of firkin.files) {
-			if (f.type !== 'torrent magnet' || !f.value) continue;
-			const hash = infoHashFromMagnet(f.value);
-			if (!hash || seen.has(hash)) continue;
-			const t = $torrentsState.byHash[hash];
-			if (!t) continue;
-			seen.add(hash);
-			rows.push({ title: f.title ?? null, torrent: t });
-		}
-		return rows;
 	});
 
 	const canPlay = $derived(hasIpfsFiles || completedTorrents.length > 0);
@@ -796,12 +853,29 @@
 		persist: (resolved) =>
 			isBookmarked ? persistFirkinPatch({ trailers: resolved }) : Promise.resolve()
 	});
-	// First playable trailer URL — drives the inline `CatalogTrailerPlayer`
-	// above the description (replacing the second image). Stays null until
-	// the resolver finds a YouTube URL; the player keeps showing the poster
-	// in the meantime so the area never appears blank.
+	// All playable trailers — feeds the top-right select on the inline
+	// `CatalogTrailerPlayer` so the user can switch between movie + per-season
+	// trailers without a separate trailers list.
+	const playableTrailers = $derived(
+		trailerResolver.trailers
+			.filter((t): t is typeof t & { youtubeUrl: string } => Boolean(t.youtubeUrl))
+			.map((t) => ({ key: t.key, label: t.label, youtubeUrl: t.youtubeUrl }))
+	);
+	let selectedTrailerKey = $state<string | null>(null);
+	$effect(() => {
+		const keys = playableTrailers.map((t) => t.key);
+		if (keys.length === 0) {
+			selectedTrailerKey = null;
+			return;
+		}
+		if (!selectedTrailerKey || !keys.includes(selectedTrailerKey)) {
+			selectedTrailerKey = keys[0];
+		}
+	});
 	const firstTrailerUrl = $derived(
-		trailerResolver.trailers.find((t) => Boolean(t.youtubeUrl))?.youtubeUrl ?? null
+		playableTrailers.find((t) => t.key === selectedTrailerKey)?.youtubeUrl ??
+			playableTrailers[0]?.youtubeUrl ??
+			null
 	);
 	let trailersInitForFirkinId: string | null = null;
 
@@ -1037,15 +1111,15 @@
 		};
 	});
 
-	// No per-row streamability probes: every probe is an `api_add_torrent`
-	// with `list_only: true` against the indexer's magnet, and a "streamable"
-	// verdict was misleading anyway — it only meant the metadata had a video
-	// file, not that the torrent could actually be streamed without going
-	// through the full add/initialize handshake. The Stream button posts
-	// `/api/torrent/stream` directly; the backend resolves metadata + waits
-	// for the torrent to leave `Initializing` before returning, so any real
-	// failure surfaces synchronously instead of as a 404 on the byte stream.
-	const torrentSearch = new TorrentSearch();
+	// Per-row streamability probes drive the Stream button's enabled state in
+	// `CatalogTorrentSearchCard`. With the streamability whitelist now narrowed
+	// to mp4/m4v/webm (the only containers a Tauri WebView <video> element can
+	// actually progressive-stream), the eval verdict is meaningful: rows that
+	// come back `not-streamable` get the button disabled instead of letting
+	// the user click and get hit with "no streamable video file in torrent"
+	// from the Stream endpoint. Probes are cached server-side in `torrent_eval`
+	// keyed by info_hash, so repeated visits are instant.
+	const torrentSearch = new TorrentSearch({ evaluate: true });
 
 	// Season-aware fan-out for tv shows. After the initial show-name search
 	// settles, we look at how its results classify by season — any season
@@ -1078,6 +1152,94 @@
 		new Set(firkin.files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
 	);
 
+	/// Look up an attached magnet's metadata in the persisted torrent search
+	/// results so the attachment card can show seeders/leechers/size pulled
+	/// from the indexer's snapshot. Falls back to the FileEntry's own title
+	/// when the search cache doesn't carry the picked infoHash (e.g. the
+	/// user picked it before the indexer's results were persisted, or a
+	/// later refresh dropped it).
+	function attachmentInfoFor(
+		fileType: 'torrent magnet' | 'torrent stream magnet'
+	): AttachmentInfo | null {
+		const entry = firkin.files.find((f) => f.type === fileType && f.value);
+		if (!entry || !entry.value) return null;
+		const hash = infoHashFromMagnet(entry.value);
+		const match = hash
+			? torrentSearch.matches.find((m) => m.infoHash.toLowerCase() === hash.toLowerCase())
+			: null;
+		return {
+			title: match?.parsedTitle || match?.title || entry.title || 'Magnet attached',
+			seeders: match?.seeders ?? null,
+			leechers: match?.leechers ?? null,
+			sizeBytes: match?.sizeBytes ?? null
+		};
+	}
+
+	/// Same lookup as `attachmentInfoFor('torrent magnet')` but joined with
+	/// the live `firkinTorrentsService` snapshot so the attachment card can
+	/// render actual download progress / speed / ETA. Live `size` (resolved
+	/// post-metadata) wins over the indexer's static `sizeBytes`.
+	const downloadInfo = $derived.by<DownloadAttachmentInfo | null>(() => {
+		const base = attachmentInfoFor('torrent magnet');
+		if (!base) return null;
+		const entry = firkin.files.find((f) => f.type === 'torrent magnet' && f.value);
+		const hash = entry?.value ? infoHashFromMagnet(entry.value) : null;
+		const live = hash ? $torrentsState.byHash[hash] : null;
+		// Once `torrent_completion.rs` pins the finished torrent's files to
+		// IPFS, an `ipfs`-typed FileEntry shows up on the firkin and the
+		// cell flips into a click-to-stream state. We use `firstIpfsCid`
+		// (filtered to playable types) so the click is guaranteed to land
+		// on something the player can render.
+		const ipfsCid = firstIpfsCid;
+		if (!live) {
+			return {
+				...base,
+				progress: null,
+				downloadSpeed: null,
+				etaSeconds: null,
+				finished: false,
+				ipfsCid
+			};
+		}
+		return {
+			...base,
+			sizeBytes: live.size > 0 ? live.size : base.sizeBytes,
+			progress: live.progress,
+			downloadSpeed: live.downloadSpeed,
+			etaSeconds: live.eta,
+			finished: live.state === 'seeding' || live.progress >= 1,
+			ipfsCid
+		};
+	});
+	const streamInfo = $derived(attachmentInfoFor('torrent stream magnet'));
+
+	// Surface a faded "preferred pick" preview in each empty attachment cell.
+	// Walks `torrentSearch.groupedMatches` top-down — groups are already in
+	// quality priority order (4K → 2160p → 1080p → 720p → 480p → 360p → Other)
+	// and rows within a group are sorted by seeders desc — so the first row
+	// that matches the per-cell criteria is the highest-quality / most-seeded
+	// option whose corresponding button would be enabled in the search table.
+	const preferredDownloadTorrent = $derived.by<TorrentResultItem | null>(() => {
+		for (const group of torrentSearch.groupedMatches) {
+			for (const row of group.rows) {
+				if (!row.magnetLink) continue;
+				if (existingHashes.has(row.magnetLink)) continue;
+				return row;
+			}
+		}
+		return null;
+	});
+	const preferredStreamTorrent = $derived.by<TorrentResultItem | null>(() => {
+		for (const group of torrentSearch.groupedMatches) {
+			for (const row of group.rows) {
+				if (!row.magnetLink) continue;
+				if (torrentSearch.rowEvals[row.magnetLink]?.kind !== 'streamable') continue;
+				return row;
+			}
+		}
+		return null;
+	});
+
 	function toggleTorrentSearch() {
 		torrentSearchOpen = !torrentSearchOpen;
 		if (torrentSearchOpen && torrentSearchInitForFirkinId !== firkin.id) {
@@ -1100,9 +1262,17 @@
 	// search results to classify torrents per-season, and the user typically
 	// adds one torrent per season — so even when the firkin already has a
 	// magnet attached, fresh results are still useful.
+	//
+	// Movies also ignore the gate when either attachment cell is empty: the
+	// `CatalogTorrentAttachmentCard` renders a faded preferred-pick preview
+	// in the empty cell, and the preview needs `torrentSearch.matches` to
+	// have populated regardless of whether the *other* cell is already
+	// filled.
 	$effect(() => {
 		if (isMusicBrainz) return;
-		if (!isTmdbTv && !hasNoRealFiles) return;
+		const movieAttachmentEmpty =
+			isTmdbMovie && (downloadInfo === null || streamInfo === null);
+		if (!isTmdbTv && !hasNoRealFiles && !movieAttachmentEmpty) return;
 		if (torrentSearchInitForFirkinId === firkin.id) return;
 		torrentSearchInitForFirkinId = firkin.id;
 		void torrentSearch.search({
@@ -1517,6 +1687,22 @@
 		}
 	});
 
+	/// Best-effort: promote a browse-cache firkin into a bookmarked one
+	/// before persisting any torrent pick. Picking a torrent from the
+	/// search table means the user is committing to this item, so the
+	/// firkin should land in their library even if they never clicked the
+	/// Bookmark button explicitly. Errors are logged and swallowed — the
+	/// torrent action proceeds either way.
+	async function ensureBookmarked(): Promise<void> {
+		if (isBookmarked) return;
+		try {
+			const updated = await firkinsService.bookmark(firkin.id);
+			firkinOverride = updated;
+		} catch (err) {
+			console.warn('[catalog detail] failed to auto-bookmark on torrent action:', err);
+		}
+	}
+
 	async function assignTorrent(torrent: TorrentResultItem) {
 		if (!torrent.magnetLink || addingHash || existingHashes.has(torrent.magnetLink)) {
 			return;
@@ -1524,6 +1710,7 @@
 		assignError = null;
 		addingHash = torrent.magnetLink;
 		try {
+			await ensureBookmarked();
 			const additions: FileEntry[] = [
 				{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
 			];
@@ -1566,19 +1753,6 @@
 		}
 	}
 
-	async function remove() {
-		if (removing) return;
-		removing = true;
-		removeError = null;
-		try {
-			await firkinsService.remove(firkin.id);
-			window.location.href = `${base}/catalog`;
-		} catch (err) {
-			removeError = err instanceof Error ? err.message : 'Unknown error';
-			removing = false;
-		}
-	}
-
 	/// Promote a browse-cache firkin into a bookmarked one. The server
 	/// flips the flag in place (no CID roll, no version bump). On success
 	/// the local firkin reactively gains its bookmarked surface — torrent
@@ -1604,35 +1778,8 @@
 </svelte:head>
 
 <div class="flex min-h-full flex-col gap-6 p-6">
-	<CatalogPageHeader
-		title={firkin.title}
-		addon={firkin.addon}
-		kindLabel={firkinKind}
-		year={firkin.year}
-	>
+	<CatalogPageHeader title={firkin.title} year={firkin.year} kindLabel={firkinKind}>
 		{#snippet actions()}
-			{#if !isBookmarked}
-				<button
-					type="button"
-					class="btn gap-2 btn-sm btn-primary"
-					onclick={bookmark}
-					disabled={bookmarking}
-					aria-label="Bookmark"
-					title="Add this catalog item to your library"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="currentColor"
-						stroke="none"
-						class="h-4 w-4 shrink-0"
-						aria-hidden="true"
-					>
-						<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
-					</svg>
-					<span>{bookmarking ? 'Bookmarking…' : 'Bookmark'}</span>
-				</button>
-			{/if}
 			{#if canPlay}
 				<button
 					type="button"
@@ -1666,11 +1813,31 @@
 			{/if}
 			<button
 				type="button"
-				class="btn btn-outline btn-sm btn-error"
-				onclick={remove}
-				disabled={removing}
+				class="btn gap-2 btn-sm btn-primary"
+				onclick={bookmark}
+				disabled={bookmarking || isBookmarked}
+				aria-label="Bookmark"
+				title={isBookmarked ? 'Already bookmarked' : 'Add this catalog item to your library'}
 			>
-				{removing ? 'Deleting…' : 'Delete firkin'}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+					stroke="none"
+					class="h-4 w-4 shrink-0"
+					aria-hidden="true"
+				>
+					<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
+				</svg>
+				<span>
+					{#if bookmarking}
+						Bookmarking…
+					{:else if isBookmarked}
+						Bookmarked
+					{:else}
+						Bookmark
+					{/if}
+				</span>
 			</button>
 		{/snippet}
 	</CatalogPageHeader>
@@ -1679,9 +1846,6 @@
 		<div class="alert alert-error"><span>{bookmarkError}</span></div>
 	{/if}
 
-	{#if removeError}
-		<div class="alert alert-error"><span>{removeError}</span></div>
-	{/if}
 	{#if finalizeError}
 		<div class="alert alert-error"><span>{finalizeError}</span></div>
 	{/if}
@@ -1726,39 +1890,6 @@
 		<section class="flex w-full flex-col gap-6 lg:col-span-2">
 			{#if anyTabEnabled}
 				<div class="flex flex-col gap-2">
-					<div role="tablist" class="tabs-bordered tabs">
-						<button
-							type="button"
-							role="tab"
-							class={classNames('tab', { 'tab-active': activeSource === 'trailer' })}
-							disabled={!trailerTabEnabled}
-							onclick={() => selectSource('trailer')}
-							title={trailerTabTitle}
-						>
-							{isYoutubeVideo ? 'Video' : 'Trailer'}
-						</button>
-						<button
-							type="button"
-							role="tab"
-							class={classNames('tab', { 'tab-active': activeSource === 'ipfs' })}
-							disabled={!ipfsTabEnabled || ipfsStarting}
-							onclick={() => selectSource('ipfs')}
-							title={ipfsTabTitle}
-						>
-							IPFS Stream{ipfsStarting ? ' — starting…' : ''}
-						</button>
-						<button
-							type="button"
-							role="tab"
-							class={classNames('tab', { 'tab-active': activeSource === 'torrent' })}
-							disabled={!torrentTabEnabled || torrentStreamStarting}
-							onclick={() => selectSource('torrent')}
-							title={torrentTabTitle}
-						>
-							Torrent Stream{torrentTabSuffix}
-						</button>
-					</div>
-
 					{#if subPickerEnabled}
 						<div
 							class="flex flex-wrap items-center gap-2 rounded border border-base-content/10 bg-base-200 px-2 py-1.5 text-xs"
@@ -1820,6 +1951,36 @@
 						</div>
 					{/if}
 
+					{#snippet sourceButtons()}
+						<button
+							type="button"
+							class="btn"
+							disabled={!trailerTabEnabled}
+							onclick={() => handleSourceClick('trailer')}
+							title={trailerTabTitle}
+						>
+							{isYoutubeVideo ? 'Video' : 'Trailer'}
+						</button>
+						<button
+							type="button"
+							class="btn"
+							disabled={!ipfsTabEnabled || ipfsStarting}
+							onclick={() => handleSourceClick('ipfs')}
+							title={ipfsTabTitle}
+						>
+							IPFS Stream{ipfsStarting ? ' — starting…' : ''}
+						</button>
+						<button
+							type="button"
+							class="btn"
+							disabled={!torrentTabEnabled || torrentStreamStarting}
+							onclick={() => handleSourceClick('torrent')}
+							title={torrentTabTitle}
+						>
+							Torrent Stream{torrentTabSuffix}
+						</button>
+					{/snippet}
+
 					{#if (activeSource === 'ipfs' || activeSource === 'torrent') && isInlinePlayingThisFirkin}
 						<PlayerVideo
 							file={$playerState.currentFile}
@@ -1834,6 +1995,7 @@
 							directStreamMimeType={$playerState.directStreamMimeType}
 							streamOffsetSecs={$playerState.streamOffsetSecs}
 							onseekrequest={activeSource === 'ipfs' ? handleIpfsSeek : undefined}
+							extraControls={sourceButtons}
 						/>
 					{:else if (activeSource === 'ipfs' && ipfsStarting) || (activeSource === 'torrent' && torrentStreamStarting)}
 						<div
@@ -1853,6 +2015,10 @@
 							title={firkin.title}
 							preferredClient={isYoutubeVideo ? youtubePreferredClient : null}
 							onResolved={isYoutubeVideo ? persistYoutubePreferredClient : undefined}
+							trailerOptions={isYoutubeVideo ? [] : playableTrailers}
+							{selectedTrailerKey}
+							onTrailerSelect={(k) => (selectedTrailerKey = k)}
+							extraControls={sourceButtons}
 						/>
 					{:else if firkin.images[1]}
 						<img
@@ -1876,9 +2042,20 @@
 
 			{#if isTmdbMovie}
 				<CatalogTorrentAttachmentCard
-					downloadAttached={hasMagnetFiles}
-					streamActive={activeSource === 'torrent' &&
-						(torrentStreamStarting || isInlinePlayingThisFirkin)}
+					download={downloadInfo}
+					stream={streamInfo}
+					onStreamPlay={replayStreamMagnet}
+					streamPlaying={torrentStreamStarting}
+					onDownloadPlay={playFromAttachmentDownload}
+					downloadPlaying={ipfsStarting}
+					preferredDownload={preferredDownloadTorrent}
+					preferredStream={preferredStreamTorrent}
+					attachingDownload={addingHash !== null &&
+						preferredDownloadTorrent?.magnetLink === addingHash}
+					attachingStream={streamingHash !== null &&
+						preferredStreamTorrent?.magnetLink === streamingHash}
+					onAttachDownload={assignTorrent}
+					onAttachStream={streamTorrentFromRow}
 				/>
 			{/if}
 
@@ -1896,12 +2073,6 @@
 					{availableEpisodeKeys}
 					onPlayEpisode={playEpisode}
 				/>
-			{/if}
-
-			<CatalogTorrentProgressCard rows={torrentProgressRows} />
-
-			{#if isTmdbMovie || isTmdbTv}
-				<CatalogTrailersCard resolver={trailerResolver} firkinTitle={firkin.title} {thumb} />
 			{/if}
 
 			{#if isMusicBrainz}
@@ -1950,6 +2121,9 @@
 					{streamingHash}
 					{assignError}
 					{existingHashes}
+					collapsible
+					open={torrentSearchOpen}
+					onToggle={toggleTorrentSearch}
 					onRefresh={() =>
 						torrentSearch.search({
 							addon: firkin.addon,

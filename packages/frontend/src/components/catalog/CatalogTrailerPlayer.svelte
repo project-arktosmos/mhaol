@@ -1,5 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
+	import type { Snippet } from 'svelte';
 	import { resolveYouTubeStreamUrl } from '$lib/youtube-match.service';
 	import PlayerControls from '$components/player/PlayerControls.svelte';
 
@@ -18,9 +19,29 @@
 		/// to the firkin (only when it differs from the current cached
 		/// value) so the next visit lands on the right client first.
 		onResolved?: (clientName: string) => void;
+		/// Full list of playable trailers. When length > 1 and `onTrailerSelect`
+		/// is provided, the player renders a top-right select to switch between
+		/// them. The active `youtubeUrl` prop is still the source of truth for
+		/// what is being streamed.
+		trailerOptions?: { key: string; label: string | null; youtubeUrl: string }[];
+		selectedTrailerKey?: string | null;
+		onTrailerSelect?: (key: string) => void;
+		/// Forwarded to <PlayerControls> — rendered between the mute and
+		/// fullscreen buttons.
+		extraControls?: Snippet;
 	}
 
-	let { posterUrl, youtubeUrl, title, preferredClient = null, onResolved }: Props = $props();
+	let {
+		posterUrl,
+		youtubeUrl,
+		title,
+		preferredClient = null,
+		onResolved,
+		trailerOptions = [],
+		selectedTrailerKey = null,
+		onTrailerSelect,
+		extraControls
+	}: Props = $props();
 
 	let containerElement = $state<HTMLDivElement | null>(null);
 	let videoElement = $state<HTMLVideoElement | null>(null);
@@ -94,6 +115,16 @@
 			});
 	}
 
+	function togglePlayPause(): void {
+		if (!videoElement) return;
+		if (!started) {
+			handleStart();
+			return;
+		}
+		if (videoElement.paused) videoElement.play().catch(console.error);
+		else videoElement.pause();
+	}
+
 	function handleSeek(pos: number): void {
 		if (!videoElement) return;
 		videoElement.currentTime = pos;
@@ -146,10 +177,11 @@
 			<video
 				bind:this={videoElement}
 				src={streamUrl}
-				class="absolute inset-0 h-full w-full bg-black"
+				class="absolute inset-0 h-full w-full cursor-pointer bg-black"
 				playsinline
 				preload="auto"
 				aria-label={title}
+				onclick={togglePlayPause}
 			></video>
 		{/if}
 
@@ -162,6 +194,20 @@
 				style:background-image={`url(${posterUrl})`}
 				aria-hidden="true"
 			></div>
+		{/if}
+
+		{#if trailerOptions.length > 1 && onTrailerSelect}
+			<select
+				class="select-bordered select absolute top-2 right-2 z-30 max-w-[60%] select-sm"
+				value={selectedTrailerKey ?? trailerOptions[0]?.key ?? ''}
+				onchange={(e) => onTrailerSelect((e.currentTarget as HTMLSelectElement).value)}
+				aria-label="Pick trailer"
+				title="Pick trailer"
+			>
+				{#each trailerOptions as opt (opt.key)}
+					<option value={opt.key}>{opt.label ?? 'Trailer'}</option>
+				{/each}
+			</select>
 		{/if}
 
 		{#if !started && (streamUrl || posterUrl)}
@@ -214,5 +260,6 @@
 		onseek={handleSeek}
 		onstop={handleStop}
 		onfullscreentoggle={toggleFullscreen}
+		{extraControls}
 	/>
 </div>

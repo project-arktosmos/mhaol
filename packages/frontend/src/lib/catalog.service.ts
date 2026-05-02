@@ -14,6 +14,11 @@ export interface CatalogItem {
 	backdropUrl: string | null;
 	reviews?: CatalogReview[];
 	artistName?: string;
+	/// Compact "kind" tag for the item — for `musicbrainz` this is the
+	/// upstream release-group `primary-type` (`Album` / `Single` / `EP` /
+	/// `Broadcast` / `Other`). Empty for addons whose listing has no
+	/// inherent sub-kind.
+	kind?: string;
 }
 
 export interface CatalogPage {
@@ -79,13 +84,14 @@ export async function loadPopular(
 export async function loadSearch(
 	addon: string,
 	query: string,
-	options: { filter?: string; page?: number; field?: string } = {}
+	options: { filter?: string; page?: number; field?: string; primaryType?: string } = {}
 ): Promise<CatalogPage> {
 	const params = new URLSearchParams();
 	params.set('query', query);
 	if (options.filter) params.set('filter', options.filter);
 	if (options.page) params.set('page', String(options.page));
 	if (options.field) params.set('field', options.field);
+	if (options.primaryType) params.set('primaryType', options.primaryType);
 	const url = `/api/catalog/${encodeURIComponent(addon)}/search?${params.toString()}`;
 	const res = await fetch(url, { cache: 'no-store' });
 	if (!res.ok) throw new Error(await parseError(res));

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { formatSizeBytes, type TorrentResultItem } from '$lib/search.service';
-	import type { TorrentSearch, TorrentRowEval } from '$services/catalog/torrent-search.svelte';
+	import type { TorrentSearch } from '$services/catalog/torrent-search.svelte';
 
 	interface Props {
 		search: TorrentSearch;
@@ -31,36 +31,6 @@
 		onRefresh
 	}: Props = $props();
 
-	function rowEval(magnet: string | undefined | null): TorrentRowEval {
-		if (!magnet) return { kind: 'not-streamable', reason: 'no magnet' };
-		return search.rowEvals[magnet] ?? { kind: 'pending' };
-	}
-
-	function firstStreamableIndex(rows: TorrentResultItem[]): number {
-		for (let i = 0; i < rows.length; i++) {
-			if (rowEval(rows[i].magnetLink).kind === 'streamable') return i;
-		}
-		return -1;
-	}
-
-	function hasInflight(rows: TorrentResultItem[]): boolean {
-		for (const r of rows) {
-			const k = rowEval(r.magnetLink).kind;
-			if (k === 'pending' || k === 'evaluating') return true;
-		}
-		return false;
-	}
-
-	function activeProbeIndex(rows: TorrentResultItem[]): number {
-		for (let i = 0; i < rows.length; i++) {
-			if (rowEval(rows[i].magnetLink).kind === 'evaluating') return i;
-		}
-		for (let i = 0; i < rows.length; i++) {
-			if (rowEval(rows[i].magnetLink).kind === 'pending') return i;
-		}
-		return -1;
-	}
-
 	let expandedGroups = $state<Record<string, boolean>>({});
 
 	function toggleGroup(label: string) {
@@ -69,12 +39,29 @@
 		if (!wasExpanded) void search.probeRemaining(label);
 	}
 
+	// Pick the row to surface as the collapsed group head: the first row
+	// (rows are already sorted by seeders desc by `groupMatches`) that has
+	// **both** options available — Stream (probe verdict is `streamable`) and
+	// Download (not already in `existingHashes`). When no row qualifies (still
+	// probing, every streamable row already added, etc.) we fall back to
+	// index 0 so the group still has a header to expand from.
+	function pickHeadIndex(rows: TorrentResultItem[]): number {
+		for (let i = 0; i < rows.length; i++) {
+			const magnet = rows[i].magnetLink;
+			if (!magnet) continue;
+			if (search.rowEvals[magnet]?.kind !== 'streamable') continue;
+			if (existingHashes.has(magnet)) continue;
+			return i;
+		}
+		return 0;
+	}
+
 	const heading = $derived(
 		`Torrent search${(!collapsible || open) && search.matches.length > 0 ? ` (${search.matches.length})` : ''}`
 	);
 </script>
 
-<div class="card border border-base-content/10 bg-base-200 p-4">
+<div class="flex flex-col gap-2">
 	<div class="flex items-center justify-between gap-2">
 		{#if collapsible}
 			<button
@@ -127,48 +114,70 @@
 						</thead>
 						<tbody>
 							{#each search.groupedMatches as group (group.label)}
-								{@const streamableIdx = firstStreamableIndex(group.rows)}
-								{@const probing = group.probe && hasInflight(group.rows)}
-								{@const probeIdx = probing ? activeProbeIndex(group.rows) : -1}
-								{@const defaultCollapsed = !group.probe}
 								{@const expanded = expandedGroups[group.label] ?? false}
-								<tr class="bg-base-300/40">
-									<th colspan="5" class="p-0">
-										<button
-											type="button"
-											class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase hover:bg-base-300/60"
-											onclick={() => toggleGroup(group.label)}
-											aria-expanded={expanded}
-										>
-											<span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
-											<span>{group.label} ({group.rows.length})</span>
-										</button>
-									</th>
-								</tr>
+								{@const headIndex = pickHeadIndex(group.rows)}
+								{#if expanded}
+									<tr class="bg-base-300/40">
+										<th colspan="5" class="p-0">
+											<button
+												type="button"
+												class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase hover:bg-base-300/60"
+												onclick={() => toggleGroup(group.label)}
+												aria-expanded={expanded}
+											>
+												<span aria-hidden="true">▼</span>
+												<span>{group.label} ({group.rows.length})</span>
+											</button>
+										</th>
+									</tr>
+								{/if}
 								{#each group.rows as torrent, rowIdx (torrent.infoHash)}
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
 									{@const streaming = streamingHash === torrent.magnetLink}
-									{@const hidden = expanded
-										? false
-										: defaultCollapsed
-											? true
-											: probing
-												? rowIdx !== probeIdx
-												: streamableIdx >= 0 && rowIdx > streamableIdx}
+									{@const rowEval = torrent.magnetLink
+										? search.rowEvals[torrent.magnetLink]
+										: undefined}
+									{@const streamReady = rowEval?.kind === 'streamable'}
+									{@const streamProbing =
+										rowEval?.kind === 'pending' || rowEval?.kind === 'evaluating'}
+									{@const streamBlockedReason =
+										rowEval?.kind === 'not-streamable'
+											? rowEval.reason
+											: rowEval?.kind === 'skipped'
+												? rowEval.reason
+												: streamProbing
+													? 'Probing streamability…'
+													: !rowEval
+														? 'Not yet probed'
+														: null}
+									{@const hidden = rowIdx !== headIndex && !expanded}
 									<tr
 										class={classNames('hover', {
 											'opacity-60': added || adding,
-											hidden
+											hidden,
+											'bg-base-300/40': rowIdx === headIndex && !expanded
 										})}
 									>
 										<td>
-											<span
-												class="block max-w-[18rem] truncate text-xs text-base-content/80"
-												title={torrent.title}
-											>
-												{torrent.parsedTitle || torrent.title}
-											</span>
+											{#if rowIdx === headIndex && !expanded}
+												<button
+													type="button"
+													class="flex w-full items-center gap-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase"
+													onclick={() => toggleGroup(group.label)}
+													aria-expanded={expanded}
+												>
+													<span aria-hidden="true">▶</span>
+													<span>{group.label} ({group.rows.length})</span>
+												</button>
+											{:else}
+												<span
+													class="block max-w-[18rem] truncate text-xs text-base-content/80"
+													title={torrent.title}
+												>
+													{torrent.parsedTitle || torrent.title}
+												</span>
+											{/if}
 										</td>
 										<td class="text-xs text-success">{torrent.seeders}</td>
 										<td class="text-xs text-warning">{torrent.leechers}</td>
@@ -181,11 +190,18 @@
 													<button
 														type="button"
 														class="btn btn-xs btn-success"
-														disabled={streamingHash !== null}
+														disabled={streamingHash !== null || !streamReady}
 														onclick={() => onStream?.(torrent)}
 														aria-label="Stream this torrent"
+														title={streamBlockedReason ?? undefined}
 													>
-														{streaming ? '…' : 'Stream'}
+														{#if streaming}
+															…
+														{:else if streamProbing}
+															Probing…
+														{:else}
+															Stream
+														{/if}
 													</button>
 												{/if}
 												{#if added}

@@ -201,6 +201,13 @@ pub(crate) struct CatalogItem {
     /// TV shows where there's no equivalent.
     #[serde(rename = "artistName", default, skip_serializing_if = "Option::is_none")]
     pub artist_name: Option<String>,
+    /// Compact "kind" tag for the item. For `musicbrainz` this is the
+    /// upstream release-group `primary-type` (Album / Single / EP /
+    /// Broadcast / Other) so the WebUI can render type-toggle pills above
+    /// the search results. Empty for addons whose listing doesn't expose
+    /// an inherent sub-kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -382,6 +389,12 @@ pub struct SearchQuery {
     /// field to target. Accepts `artist` (default) or `release` / `album`.
     #[serde(default)]
     pub field: Option<String>,
+    /// Currently only honored by `musicbrainz`; constrains the upstream
+    /// search to the given release-group `primary-type` (`Album`,
+    /// `Single`, `EP`, `Broadcast`, `Other`). Empty / missing returns
+    /// every type, matching legacy behaviour.
+    #[serde(default, rename = "primaryType")]
+    pub primary_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -448,7 +461,9 @@ async fn search(
     match addon.as_str() {
         "tmdb-movie" => tmdb_search(false, trimmed, page).await,
         "tmdb-tv" => tmdb_search(true, trimmed, page).await,
-        "musicbrainz" => musicbrainz_search(trimmed, page, q.field.as_deref()).await,
+        "musicbrainz" => {
+            musicbrainz_search(trimmed, page, q.field.as_deref(), q.primary_type.as_deref()).await
+        }
         "youtube-video" => youtube_search(trimmed, page, q.filter.as_deref()).await,
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page)),
         _ => Err(err(
@@ -757,6 +772,7 @@ fn tmdb_to_item(r: &serde_json::Value) -> CatalogItem {
         artists: Vec::new(),
         reviews,
         artist_name: None,
+        kind: None,
     }
 }
 
@@ -1548,6 +1564,7 @@ pub(crate) async fn musicbrainz_search(
     query: &str,
     page: i64,
     field: Option<&str>,
+    primary_type: Option<&str>,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
     let limit: i64 = 20;
     let offset = (page - 1).max(0) * limit;
@@ -1555,9 +1572,9 @@ pub(crate) async fn musicbrainz_search(
     // Escape Lucene query special chars in the user's query, then constrain
     // the upstream search to the field the user picked. MusicBrainz's
     // `query=` param accepts Lucene syntax; raw quotes/colons in the user
-    // input would break the parse. No `primarytype:` restriction — albums,
-    // singles, EPs and broadcasts all come back, the double-dip filter below
-    // is what guarantees the search term actually appears in the target field.
+    // input would break the parse. When `primary_type` is supplied the
+    // Lucene query is narrowed with `AND primarytype:"…"` so server-side
+    // pagination matches what the WebUI's type-toggle pills are showing.
     let escaped: String = query
         .chars()
         .flat_map(|c| match c {
@@ -1566,7 +1583,14 @@ pub(crate) async fn musicbrainz_search(
             _ => vec![c],
         })
         .collect();
-    let lucene = format!("{}:\"{}\"", field.lucene_field(), escaped);
+    let mut lucene = format!("{}:\"{}\"", field.lucene_field(), escaped);
+    if let Some(pt) = primary_type
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let pt_escaped = lucene_escape_phrase(pt);
+        lucene.push_str(&format!(" AND primarytype:\"{}\"", pt_escaped));
+    }
     let url = format!(
         "{}/release-group?query={}&fmt=json&limit={}&offset={}",
         MUSICBRAINZ_BASE,
@@ -1982,6 +2006,11 @@ fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
     } else {
         Some(credits.clone())
     };
+    let kind = if primary_type.is_empty() {
+        None
+    } else {
+        Some(primary_type.to_string())
+    };
     CatalogItem {
         id,
         title,
@@ -1996,6 +2025,7 @@ fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
         artists: Vec::new(),
         reviews,
         artist_name,
+        kind,
     }
 }
 
@@ -2089,6 +2119,7 @@ fn video_search_to_item(item: &mhaol_yt_dlp::search::SearchItem) -> CatalogItem 
         artists: Vec::new(),
         reviews: Vec::new(),
         artist_name: None,
+        kind: None,
     }
 }
 
@@ -2120,6 +2151,7 @@ fn channel_search_to_item(item: &mhaol_yt_dlp::search::SearchChannelItem) -> Cat
         artists: Vec::new(),
         reviews: Vec::new(),
         artist_name: None,
+        kind: None,
     }
 }
 
@@ -2152,27 +2184,56 @@ async fn youtube_video_artists(
 
 // ---------- helpers ----------
 
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(30))
+            .pool_idle_timeout(std::time::Duration::from_secs(20))
+            .user_agent(USER_AGENT)
+            .build()
+            .expect("reqwest client builder")
+    })
+}
+
+fn error_chain(err: &(dyn std::error::Error + 'static)) -> String {
+    let mut out = err.to_string();
+    let mut cur = err.source();
+    while let Some(e) = cur {
+        out.push_str(": ");
+        out.push_str(&e.to_string());
+        cur = e.source();
+    }
+    out
+}
+
 async fn http_get_json(
     url: &str,
     headers: &[(&str, &str)],
 ) -> Result<serde_json::Value, (StatusCode, Json<serde_json::Value>)> {
-    let mut req = reqwest::Client::new().get(url);
+    let mut req = http_client().get(url);
     for (k, v) in headers {
         req = req.header(*k, *v);
     }
-    let res = req
-        .send()
-        .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("upstream request failed: {e}")))?;
+    let res = req.send().await.map_err(|e| {
+        err(
+            StatusCode::BAD_GATEWAY,
+            format!("upstream request failed: {}", error_chain(&e)),
+        )
+    })?;
     if !res.status().is_success() {
         return Err(err(
             StatusCode::BAD_GATEWAY,
             format!("upstream returned {}", res.status()),
         ));
     }
-    res.json::<serde_json::Value>()
-        .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("upstream parse failed: {e}")))
+    res.json::<serde_json::Value>().await.map_err(|e| {
+        err(
+            StatusCode::BAD_GATEWAY,
+            format!("upstream parse failed: {}", error_chain(&e)),
+        )
+    })
 }
 
 fn capitalize_words(s: &str) -> String {

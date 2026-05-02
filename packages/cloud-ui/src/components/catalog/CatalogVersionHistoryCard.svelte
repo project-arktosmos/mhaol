@@ -7,8 +7,8 @@
 </script>
 
 {#if versionHashes.length > 0}
-	<div class="card border border-base-content/10 bg-base-200 p-4">
-		<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
+	<div class="flex flex-col gap-2">
+		<h2 class="text-sm font-semibold text-base-content/70 uppercase">
 			Version history ({versionHashes.length})
 		</h2>
 		<ol class="list-decimal pl-6 text-xs">

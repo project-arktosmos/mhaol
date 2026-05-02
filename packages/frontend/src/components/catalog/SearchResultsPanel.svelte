@@ -39,8 +39,36 @@
 	const searchField = $derived<'artist' | 'release'>(
 		(pageStore.url.searchParams.get('field') as 'artist' | 'release') ?? 'artist'
 	);
+	const primaryType = $derived((pageStore.url.searchParams.get('primaryType') ?? '').trim());
 	const isOpen = $derived(trimmedQuery.length > 0);
 	const currentSource = $derived(sources.find((s) => s.id === addon));
+
+	/// MusicBrainz release-group `primary-type` values, in the order they
+	/// appear on the toggle row. `''` is the "all kinds" pill (no
+	/// `primarytype:` constraint applied to the upstream Lucene query).
+	const MB_PRIMARY_TYPES: Array<{ id: string; label: string }> = [
+		{ id: '', label: 'All' },
+		{ id: 'Album', label: 'Albums' },
+		{ id: 'EP', label: 'EPs' },
+		{ id: 'Single', label: 'Singles' },
+		{ id: 'Broadcast', label: 'Broadcasts' },
+		{ id: 'Other', label: 'Other' }
+	];
+
+	function selectPrimaryType(next: string) {
+		if (next === primaryType) return;
+		const url = new URL(pageStore.url);
+		if (next) {
+			url.searchParams.set('primaryType', next);
+		} else {
+			url.searchParams.delete('primaryType');
+		}
+		void goto(`${url.pathname}${url.search}${url.hash}`, {
+			keepFocus: true,
+			noScroll: true,
+			replaceState: true
+		});
+	}
 
 	let items = $state<CatalogItem[]>([]);
 	let pageNum = $state<number>(1);
@@ -108,7 +136,8 @@
 		try {
 			const result = await loadSearch(addon, trimmedQuery, {
 				page: nextPage,
-				field: addon === 'musicbrainz' ? searchField : undefined
+				field: addon === 'musicbrainz' ? searchField : undefined,
+				primaryType: addon === 'musicbrainz' && primaryType ? primaryType : undefined
 			});
 			if (t !== token) return;
 			items = result.items;
@@ -133,6 +162,7 @@
 		const url = new URL(pageStore.url);
 		url.searchParams.delete('q');
 		url.searchParams.delete('field');
+		url.searchParams.delete('primaryType');
 		void goto(`${base}/${url.search}${url.hash}`, {
 			keepFocus: true,
 			noScroll: true,
@@ -144,7 +174,9 @@
 		const currentAddon = addon;
 		const q = trimmedQuery;
 		const f = searchField;
+		const pt = primaryType;
 		void f;
+		void pt;
 		if (!currentAddon || !q) {
 			token++;
 			items = [];
@@ -211,6 +243,30 @@
 		</div>
 
 		<div class="flex-1 overflow-y-auto p-6">
+			{#if addon === 'musicbrainz'}
+				<div
+					class="mb-4 flex flex-wrap items-center gap-2"
+					role="tablist"
+					aria-label="Filter by release type"
+				>
+					{#each MB_PRIMARY_TYPES as pill (pill.id)}
+						{@const active = primaryType === pill.id}
+						<button
+							type="button"
+							role="tab"
+							aria-selected={active}
+							class={classNames('btn btn-xs', {
+								'btn-primary': active,
+								'border border-base-content/20 btn-ghost': !active
+							})}
+							onclick={() => selectPrimaryType(pill.id)}
+							disabled={loading}
+						>
+							{pill.label}
+						</button>
+					{/each}
+				</div>
+			{/if}
 			{#if error}
 				<div class="alert alert-error">
 					<span>{error}</span>

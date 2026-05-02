@@ -34,38 +34,30 @@
 </script>
 
 {#if reviews.length > 0}
-	<div class="card border border-base-content/10 bg-base-200 p-4">
-		<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Scores</h2>
-		<div class="overflow-x-auto rounded border border-base-content/10">
-			<table class="table table-xs">
-				<thead>
+	<div class="flex flex-col gap-2">
+		<h2 class="text-sm font-semibold text-base-content/70 uppercase">Scores</h2>
+		<table class="table table-xs">
+			<tbody>
+				{#each reviews as review (review.label)}
+					{@const pct = reviewPercent(review)}
 					<tr>
-						<th>Source</th>
-						<th class="text-right">Score</th>
+						<td class="font-semibold">{review.label}</td>
+						<td class="text-right font-mono">
+							{#if pct !== null}
+								{formatPercent(pct)}
+							{:else}
+								—
+							{/if}
+						</td>
 					</tr>
-				</thead>
-				<tbody>
-					{#each reviews as review (review.label)}
-						{@const pct = reviewPercent(review)}
-						<tr>
-							<td class="font-semibold">{review.label}</td>
-							<td class="text-right font-mono">
-								{#if pct !== null}
-									{formatPercent(pct)}
-								{:else}
-									—
-								{/if}
-							</td>
-						</tr>
-					{/each}
-					{#if averagePercent !== null && reviewPercents.length > 1}
-						<tr class="border-t-2 border-base-content/20 bg-base-300/40 font-semibold">
-							<td>Average</td>
-							<td class="text-right font-mono">{formatPercent(averagePercent)}</td>
-						</tr>
-					{/if}
-				</tbody>
-			</table>
-		</div>
+				{/each}
+				{#if averagePercent !== null && reviewPercents.length > 1}
+					<tr class="border-t-2 border-base-content/20 font-semibold">
+						<td>Average</td>
+						<td class="text-right font-mono">{formatPercent(averagePercent)}</td>
+					</tr>
+				{/if}
+			</tbody>
+		</table>
 	</div>
 {/if}

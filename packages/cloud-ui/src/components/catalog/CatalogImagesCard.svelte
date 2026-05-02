@@ -26,8 +26,8 @@
 </script>
 
 {#if images.length > 0}
-	<div class="card border border-base-content/10 bg-base-200 p-4">
-		<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">
+	<div class="flex flex-col gap-2">
+		<h2 class="text-sm font-semibold text-base-content/70 uppercase">
 			Images ({images.length})
 		</h2>
 		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">

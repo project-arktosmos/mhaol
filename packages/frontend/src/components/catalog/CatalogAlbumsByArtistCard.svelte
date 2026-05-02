@@ -3,7 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { loadMusicbrainzAlbumsByArtist, type CatalogItem } from '$lib/catalog.service';
 	import { materializeBrowseFirkin } from '$lib/catalog-firkin';
-	import { cachedImageUrl } from '$lib/image-cache';
+	import FirkinCard from '$components/firkins/FirkinCard.svelte';
+	import type { CloudFirkin } from '$types/firkin.type';
 
 	interface Props {
 		releaseGroupId: string | null;
@@ -79,6 +80,35 @@
 		return id ? `${base}/catalog/${encodeURIComponent(id)}` : `${base}/catalog/visit`;
 	}
 
+	function toFirkin(item: CatalogItem): CloudFirkin {
+		const images = [item.posterUrl, item.backdropUrl]
+			.filter((url): url is string => Boolean(url))
+			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
+		const artists = item.artistName
+			? item.artistName
+					.split(/\s*,\s*/)
+					.filter((n) => n.length > 0)
+					.map((name) => ({ name, role: 'artist' }))
+			: [];
+		return {
+			id: firkinIds[item.id] ?? `virtual:musicbrainz:${item.id}`,
+			cid: '',
+			title: item.title,
+			artists,
+			description: item.description ?? '',
+			images,
+			files: [],
+			year: item.year,
+			addon: 'musicbrainz',
+			creator: '',
+			created_at: '',
+			updated_at: '',
+			version: 0,
+			version_hashes: [],
+			reviews: item.reviews ?? []
+		};
+	}
+
 	async function handleClick(event: MouseEvent, item: CatalogItem) {
 		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
 			return;
@@ -110,66 +140,28 @@
 </script>
 
 {#if releaseGroupId}
-	<div class="card border border-base-content/10 bg-base-200">
-		<div class="card-body p-4">
-			<h2 class="text-sm font-semibold text-base-content/70 uppercase">More by this artist</h2>
+	<div class="flex flex-col gap-2">
+		<h2 class="text-sm font-semibold text-base-content/70 uppercase">More by this artist</h2>
 
-			{#if status === 'loading'}
-				<div class="flex items-center gap-2 text-xs text-base-content/60">
-					<span class="loading loading-xs loading-spinner"></span>
-					<span>Loading albums…</span>
-				</div>
-			{:else if status === 'error'}
-				<div class="alert alert-error">
-					<span class="text-xs">{error ?? 'Failed to load albums'}</span>
-				</div>
-			{:else if status === 'done' && items.length === 0}
-				<p class="text-xs text-base-content/60">No other albums found for this artist.</p>
-			{:else if items.length > 0}
-				<ul class="flex flex-col gap-2">
-					{#each items as item (item.id)}
-						<li>
-							<a
-								href={hrefFor(item)}
-								onclick={(e) => handleClick(e, item)}
-								title={item.title}
-								class="group flex items-center gap-3 rounded p-1 transition-colors hover:bg-base-300"
-							>
-								<div
-									class="aspect-square h-12 w-12 shrink-0 overflow-hidden rounded border border-base-content/10 bg-base-300"
-								>
-									{#if item.posterUrl}
-										<img
-											src={cachedImageUrl(item.posterUrl)}
-											alt={item.title}
-											class="h-full w-full object-cover"
-											loading="lazy"
-										/>
-									{:else}
-										<div
-											class="flex h-full w-full items-center justify-center text-base-content/20"
-										>
-											<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-												<path
-													d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"
-												/>
-											</svg>
-										</div>
-									{/if}
-								</div>
-								<div class="flex min-w-0 flex-col gap-0.5">
-									<span class="line-clamp-2 text-xs leading-snug font-medium">
-										{item.title}
-									</span>
-									{#if item.year !== null && item.year !== undefined}
-										<span class="text-xs text-base-content/60">{item.year}</span>
-									{/if}
-								</div>
-							</a>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</div>
+		{#if status === 'loading'}
+			<div class="flex items-center gap-2 text-xs text-base-content/60">
+				<span class="loading loading-xs loading-spinner"></span>
+				<span>Loading albums…</span>
+			</div>
+		{:else if status === 'error'}
+			<div class="alert alert-error">
+				<span class="text-xs">{error ?? 'Failed to load albums'}</span>
+			</div>
+		{:else if status === 'done' && items.length === 0}
+			<p class="text-xs text-base-content/60">No other albums found for this artist.</p>
+		{:else if items.length > 0}
+			<div class="grid grid-cols-2 gap-3">
+				{#each items as item (item.id)}
+					<a href={hrefFor(item)} onclick={(e) => handleClick(e, item)} class="block no-underline">
+						<FirkinCard firkin={toFirkin(item)} />
+					</a>
+				{/each}
+			</div>
+		{/if}
 	</div>
 {/if}

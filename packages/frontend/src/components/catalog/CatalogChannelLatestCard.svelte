@@ -2,6 +2,8 @@
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { materializeBrowseFirkin } from '$lib/catalog-firkin';
+	import FirkinCard from '$components/firkins/FirkinCard.svelte';
+	import type { CloudFirkin } from '$types/firkin.type';
 
 	interface ChannelFeedItem {
 		videoId: string;
@@ -124,6 +126,32 @@
 		return id ? `${base}/catalog/${encodeURIComponent(id)}` : `${base}/catalog/visit`;
 	}
 
+	function toFirkin(item: ChannelFeedItem): CloudFirkin {
+		const images = item.thumbnailUrl
+			? [{ url: item.thumbnailUrl, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }]
+			: [];
+		const channelName = feed?.channelTitle ?? '';
+		return {
+			id: firkinIds[item.videoId] ?? `virtual:youtube-video:${item.videoId}`,
+			cid: '',
+			title: item.title,
+			artists: channelName ? [{ name: channelName, role: 'channel' }] : [],
+			description: [formatRelative(item.publishedAt), item.description ?? '']
+				.filter((s) => s.length > 0)
+				.join(' · '),
+			images,
+			files: [],
+			year: null,
+			addon: 'youtube-video',
+			creator: '',
+			created_at: item.publishedAt ?? '',
+			updated_at: item.publishedAt ?? '',
+			version: 0,
+			version_hashes: [],
+			reviews: []
+		};
+	}
+
 	async function handleClick(event: MouseEvent, item: ChannelFeedItem) {
 		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
 			return;
@@ -150,8 +178,8 @@
 	}
 </script>
 
-<section class="card border border-base-content/10 bg-base-200 p-4">
-	<header class="mb-3 flex items-baseline justify-between gap-2">
+<section class="flex flex-col gap-2">
+	<header class="flex items-baseline justify-between gap-2">
 		<h2 class="text-sm font-semibold text-base-content/70 uppercase">Latest from channel</h2>
 		{#if feed?.channelTitle}
 			<a
@@ -176,38 +204,12 @@
 	{:else if status === 'empty'}
 		<p class="text-xs text-base-content/60">Channel feed is empty.</p>
 	{:else if visibleItems.length > 0}
-		<ul class="flex flex-col gap-3">
+		<div class="grid grid-cols-2 gap-3">
 			{#each visibleItems as item (item.videoId)}
-				<li class="flex gap-2">
-					<a
-						class="flex flex-1 link gap-2 link-hover"
-						href={hrefFor(item)}
-						onclick={(e) => handleClick(e, item)}
-						title={item.title}
-					>
-						{#if item.thumbnailUrl}
-							<img
-								src={item.thumbnailUrl}
-								alt=""
-								loading="lazy"
-								class="h-12 w-20 shrink-0 rounded object-cover"
-							/>
-						{:else}
-							<div class="h-12 w-20 shrink-0 rounded bg-base-300"></div>
-						{/if}
-						<div class="flex min-w-0 flex-1 flex-col">
-							<span class="line-clamp-2 text-xs font-medium text-base-content">
-								{item.title}
-							</span>
-							{#if item.publishedAt}
-								<span class="mt-auto text-[10px] text-base-content/50">
-									{formatRelative(item.publishedAt)}
-								</span>
-							{/if}
-						</div>
-					</a>
-				</li>
+				<a href={hrefFor(item)} onclick={(e) => handleClick(e, item)} class="block no-underline">
+					<FirkinCard firkin={toFirkin(item)} />
+				</a>
 			{/each}
-		</ul>
+		</div>
 	{/if}
 </section>

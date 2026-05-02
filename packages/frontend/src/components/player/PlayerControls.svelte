@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { untrack } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import type { PlayerConnectionState } from '$types/player.type';
 	import PlayerSeekBar from './PlayerSeekBar.svelte';
 
@@ -21,7 +21,8 @@
 		onprev,
 		onnext,
 		onpaused,
-		onvolumechange
+		onvolumechange,
+		extraControls
 	}: {
 		mediaElement?: HTMLMediaElement | null;
 		isVideo?: boolean;
@@ -47,6 +48,12 @@
 		onpaused?: (paused: boolean) => void;
 		/** Fires whenever the user mutes / unmutes / changes volume. */
 		onvolumechange?: (volume: number) => void;
+		/**
+		 * Optional snippet rendered between the mute and fullscreen buttons.
+		 * Used by the catalog detail page to surface its source-picker
+		 * buttons inline in the player controls.
+		 */
+		extraControls?: Snippet;
 	} = $props();
 
 	let isPaused = $state(true);
@@ -74,39 +81,36 @@
 		isMuted = mediaElement.muted;
 	}
 
-	let currentElement: HTMLMediaElement | null = null;
 	let volumeInitialized = false;
 
 	$effect(() => {
-		if (mediaElement !== currentElement) {
-			if (currentElement) {
-				currentElement.removeEventListener('play', onPlay);
-				currentElement.removeEventListener('pause', onPause);
-				currentElement.removeEventListener('volumechange', onVolumeChange);
+		const el = mediaElement;
+		if (!el) return;
+
+		el.addEventListener('play', onPlay);
+		el.addEventListener('pause', onPause);
+		el.addEventListener('volumechange', onVolumeChange);
+
+		// Reads of `volume` / writes that would re-trigger this effect have to
+		// stay inside `untrack`. Otherwise the volume initializer below writes
+		// `volume`, the effect re-runs immediately, the cleanup detaches the
+		// `play` / `pause` listeners, and the play→pause icon swap silently
+		// stops working a few microseconds after mount.
+		untrack(() => {
+			if (!volumeInitialized) {
+				volume = initialVolume;
+				volumeBeforeMute = initialVolume;
+				volumeInitialized = true;
 			}
-			currentElement = mediaElement;
-			if (mediaElement) {
-				mediaElement.addEventListener('play', onPlay);
-				mediaElement.addEventListener('pause', onPause);
-				mediaElement.addEventListener('volumechange', onVolumeChange);
-				if (!volumeInitialized) {
-					const seed = untrack(() => initialVolume);
-					volume = seed;
-					volumeBeforeMute = seed;
-					volumeInitialized = true;
-				}
-				mediaElement.volume = volume;
-				isPaused = mediaElement.paused;
-				isMuted = mediaElement.muted;
-			}
-		}
+			el.volume = volume;
+			isPaused = el.paused;
+			isMuted = el.muted;
+		});
 
 		return () => {
-			if (currentElement) {
-				currentElement.removeEventListener('play', onPlay);
-				currentElement.removeEventListener('pause', onPause);
-				currentElement.removeEventListener('volumechange', onVolumeChange);
-			}
+			el.removeEventListener('play', onPlay);
+			el.removeEventListener('pause', onPause);
+			el.removeEventListener('volumechange', onVolumeChange);
 		};
 	});
 
@@ -140,42 +144,88 @@
 	let volumeDisplay = $derived(isMuted || volume === 0 ? 'muted' : volume < 0.5 ? 'low' : 'high');
 </script>
 
-<div class={classNames('flex flex-col gap-1', { 'pointer-events-none opacity-50': disabled })}>
-	<PlayerSeekBar
-		{positionSecs}
-		{durationSecs}
-		{bufferedRanges}
-		{disabled}
-		onseek={(pos) => onseek?.(pos)}
-		onseekstart={() => onseekstart?.()}
-		onseekend={() => onseekend?.()}
-	/>
+<div class="flex flex-col gap-1">
+	<div class={classNames({ 'pointer-events-none opacity-50': disabled })}>
+		<PlayerSeekBar
+			{positionSecs}
+			{durationSecs}
+			{bufferedRanges}
+			{disabled}
+			onseek={(pos) => onseek?.(pos)}
+			onseekstart={() => onseekstart?.()}
+			onseekend={() => onseekend?.()}
+		/>
+	</div>
 
 	<div class="flex items-center gap-1">
-		{#if onprev}
-			<button class="btn" onclick={() => onprev?.()}>Previous</button>
-		{/if}
+		<div
+			class={classNames('flex items-center gap-1', {
+				'pointer-events-none opacity-50': disabled
+			})}
+		>
+			{#if onprev}
+				<button class="btn" onclick={() => onprev?.()}>Previous</button>
+			{/if}
 
-		<button class="btn" onclick={togglePlayPause}>
-			{isPaused ? 'Play' : 'Pause'}
-		</button>
-
-		{#if onnext}
-			<button class="btn" onclick={() => onnext?.()}>Next</button>
-		{/if}
-
-		<button class="btn" onclick={toggleMute}>
-			{volumeDisplay === 'muted' ? 'Unmute' : 'Mute'}
-		</button>
-
-		<div class="flex-1"></div>
-
-		{#if isVideo}
-			<button class="btn" onclick={() => onfullscreentoggle?.()}>
-				{isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+			<button
+				class="btn"
+				onclick={togglePlayPause}
+				aria-label={isPaused ? 'Play' : 'Pause'}
+				title={isPaused ? 'Play' : 'Pause'}
+			>
+				{#if isPaused}
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						class="h-5 w-5 translate-x-0.5"
+						aria-hidden="true"
+					>
+						<polygon points="6 4 20 12 6 20 6 4" />
+					</svg>
+				{:else}
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						class="h-5 w-5"
+						aria-hidden="true"
+					>
+						<rect x="6" y="4" width="4" height="16" />
+						<rect x="14" y="4" width="4" height="16" />
+					</svg>
+				{/if}
 			</button>
+
+			{#if onnext}
+				<button class="btn" onclick={() => onnext?.()}>Next</button>
+			{/if}
+
+			<button class="btn" onclick={toggleMute}>
+				{volumeDisplay === 'muted' ? 'Unmute' : 'Mute'}
+			</button>
+		</div>
+
+		{#if extraControls}
+			<div class="flex flex-1 flex-wrap items-center justify-center gap-1">
+				{@render extraControls()}
+			</div>
+		{:else}
+			<div class="flex-1"></div>
 		{/if}
 
-		<button class="btn" onclick={() => onstop?.()}>Stop</button>
+		<div
+			class={classNames('flex items-center gap-1', {
+				'pointer-events-none opacity-50': disabled
+			})}
+		>
+			{#if isVideo}
+				<button class="btn" onclick={() => onfullscreentoggle?.()}>
+					{isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+				</button>
+			{/if}
+
+			<button class="btn" onclick={() => onstop?.()}>Stop</button>
+		</div>
 	</div>
 </div>
