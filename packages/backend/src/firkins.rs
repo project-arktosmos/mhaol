@@ -1,5 +1,5 @@
 use crate::artists::{self, ArtistDto, UpsertArtistRequest};
-use crate::catalog::is_known_addon;
+use crate::catalog::{self, is_known_addon, CatalogReview};
 use crate::state::CloudState;
 use axum::{
     extract::{Path, State},
@@ -112,6 +112,69 @@ fn sanitize_review(r: Review) -> Option<Review> {
         max_score: r.max_score,
         vote_count: r.vote_count,
     })
+}
+
+/// Pull the TMDB upstream id off a firkin's `files` array. The
+/// `/catalog/visit` resolver bakes the canonical TMDB URL
+/// (`https://www.themoviedb.org/movie/<id>` or `.../tv/<id>`) into the
+/// firkin as a `url`-typed entry so the detail page can resume metadata
+/// resolution. Returns `(is_tv, id)` on a match.
+fn extract_tmdb_id(addon: &str, files: &[FileEntry]) -> Option<(bool, String)> {
+    let (is_tv, prefix) = match addon {
+        "tmdb-movie" => (false, "https://www.themoviedb.org/movie/"),
+        "tmdb-tv" => (true, "https://www.themoviedb.org/tv/"),
+        _ => return None,
+    };
+    for f in files {
+        if f.kind != "url" {
+            continue;
+        }
+        let v = f.value.trim();
+        let Some(rest) = v.strip_prefix(prefix) else {
+            continue;
+        };
+        let id_part = rest.split(['/', '?', '#']).next().unwrap_or("");
+        if !id_part.is_empty() && id_part.chars().all(|c| c.is_ascii_digit()) {
+            return Some((is_tv, id_part.to_string()));
+        }
+    }
+    None
+}
+
+fn catalog_review_to_review(r: CatalogReview) -> Review {
+    Review {
+        label: r.label,
+        score: r.score,
+        max_score: r.max_score,
+        vote_count: r.vote_count,
+    }
+}
+
+/// For TMDB firkins, fetch the upstream metadata and merge any review
+/// labels not already in the supplied list. The catalog `tmdb_metadata`
+/// helper returns a TMDB-then-OMDb merged review list (Rotten Tomatoes /
+/// Metacritic / IMDb when `OMDB_API_KEY` is set and the upstream item
+/// resolves to an IMDb id). Best-effort: any failure mode (TMDB key
+/// missing, network error, no IMDb id) leaves `reviews` untouched.
+async fn enrich_reviews_from_tmdb(addon: &str, files: &[FileEntry], reviews: &mut Vec<Review>) {
+    let Some((is_tv, id)) = extract_tmdb_id(addon, files) else {
+        return;
+    };
+    let Ok((_artists, _trailers, upstream)) = catalog::tmdb_metadata(is_tv, &id).await else {
+        return;
+    };
+    for cr in upstream {
+        let label = cr.label.trim();
+        if label.is_empty() {
+            continue;
+        }
+        if reviews.iter().any(|r| r.label == label) {
+            continue;
+        }
+        if let Some(sanitized) = sanitize_review(catalog_review_to_review(cr)) {
+            reviews.push(sanitized);
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -701,11 +764,19 @@ pub(crate) async fn create_firkin_record(
             })
         })
         .collect();
-    let reviews: Vec<Review> = req
+    let mut reviews: Vec<Review> = req
         .reviews
         .into_iter()
         .filter_map(sanitize_review)
         .collect();
+    // Server-side OMDb enrichment for TMDB firkins. The frontend's
+    // `/catalog/visit` resolver only forwards the TMDB review snapshot
+    // from the popular endpoint; the upstream id and IMDb lookup live on
+    // the cloud, so the cloud is the right place to merge in Rotten
+    // Tomatoes / Metacritic / IMDb. Failures (no OMDB_API_KEY, network
+    // error, no IMDb id) are swallowed — the firkin still gets created
+    // with whatever reviews the caller supplied.
+    enrich_reviews_from_tmdb(addon, &files, &mut reviews).await;
     // Defaults to `true` when omitted so legacy callers keep their
     // bookmark-on-create contract; the new `/catalog/visit` resolver flow
     // sends an explicit `false` to mark the firkin as a browse cache.
