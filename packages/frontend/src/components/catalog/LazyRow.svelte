@@ -35,7 +35,18 @@
 	});
 </script>
 
-<div bind:this={el} style:min-height={visible ? undefined : minHeight}>
+<!--
+	Once visible, the wrapper switches to `display: contents` so its children
+	become direct flex items of the parent. That way a child that decides to
+	render nothing (e.g. PopularGenreRow hiding a genre that can't fill the
+	7-col row) doesn't leave the wrapper as an empty flex item that still
+	takes a `gap-6` slot in the catalog page's column layout.
+-->
+<div
+	bind:this={el}
+	style:min-height={visible ? undefined : minHeight}
+	style:display={visible ? 'contents' : undefined}
+>
 	{#if visible}
 		{@render children()}
 	{/if}
