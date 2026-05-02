@@ -1,27 +1,20 @@
-name: Website (build on PRs, deploy main to GitHub Pages)
+name: Website (deploy each PR to GitHub Pages)
 
-# Builds apps/website (mhaol-website) and deploys it to GitHub Pages.
+# Builds apps/website (mhaol-website) and deploys it to GitHub Pages on
+# every pull request that touches the website or its dependencies.
 #
-# - On every PR that touches the website or its dependencies, runs lint +
-#   svelte-check + production build, and uploads the dist as a workflow
-#   artifact for review. No deploy on PRs.
-# - On push to `main` (and manual dispatch), runs the same build, then
-#   publishes apps/website/dist-static/ to GitHub Pages.
+# Notes:
+# - GitHub Pages only hosts one site per repo, so the deploy from the most
+#   recent PR is what's live. PRs deploying concurrently will queue through
+#   the `github-pages` environment.
+# - The `id-token: write` permission is not granted to PRs from forks; the
+#   deploy step will fail in that case. Same-repo branch PRs work fine.
 #
 # One-time repo setup: Settings → Pages → Build and deployment →
 # Source = "GitHub Actions". The workflow handles everything else.
 
 on:
   pull_request:
-    paths:
-      - 'apps/website/**'
-      - 'packages/cloud-ui/**'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'package.json'
-      - '.github/workflows/website-pages.yml'
-  push:
-    branches: [main]
     paths:
       - 'apps/website/**'
       - 'packages/cloud-ui/**'
@@ -37,8 +30,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: website-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: website-pages
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -79,22 +72,12 @@ jobs:
         run: cp apps/website/dist-static/index.html apps/website/dist-static/404.html
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: apps/website/dist-static
 
-      - name: Upload PR preview artifact
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: website-dist
-          path: apps/website/dist-static
-          if-no-files-found: error
-
   deploy:
     name: Deploy to GitHub Pages
-    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:
