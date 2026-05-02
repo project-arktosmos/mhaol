@@ -9,6 +9,13 @@ const TMDB_IMG_BASE: &str = "https://image.tmdb.org/t/p";
 const PIRATEBAY_BASE: &str = "https://apibay.org";
 const LRCLIB_BASE: &str = "https://lrclib.net/api";
 const WYZIE_BASE: &str = "https://sub.wyzie.io";
+/// Stremio's public OpenSubtitles v3 addon. No API key required and no
+/// rate-limit gating. Endpoint shape:
+///   /subtitles/movie/<imdb_id>.json
+///   /subtitles/series/<imdb_id>:<season>:<episode>.json
+/// Returns `{ subtitles: [{ id, url, lang }, ...] }` where `lang` is a
+/// 3-letter ISO 639-2 code and `url` is a UTF-8-encoded SRT.
+const STREMIO_OPENSUBS_BASE: &str = "https://opensubtitles-v3.strem.io";
 const TPB_TRACKERS: &[&str] = &[
     "udp://tracker.opentrackr.org:1337/announce",
     "udp://tracker.openbittorrent.com:6969/announce",
@@ -588,15 +595,24 @@ pub struct SubsLyrics {
 #[derive(Debug, Deserialize)]
 pub struct SubsLyricsRequest {
     /// The addon id whose subs/lyrics we're looking up. `lrclib` and
-    /// `musicbrainz`/`local-album` use LRCLIB; `wyzie-subs-movie` /
-    /// `wyzie-subs-tv` (or the equivalent `tmdb-*` / `local-*` addon)
-    /// route through Wyzie.
+    /// `musicbrainz`/`local-album` use LRCLIB; `tmdb-movie` / `tmdb-tv`
+    /// (and `local-movie` / `local-tv`) route through Stremio's public
+    /// OpenSubtitles v3 addon, which keys off IMDb id — the backend
+    /// converts the supplied TMDB id via TMDB's `external_ids` endpoint.
     pub addon: String,
     pub query: String,
     #[serde(rename = "externalIds", default)]
     pub external_ids: Vec<String>,
     #[serde(default)]
     pub languages: Option<Vec<String>>,
+    /// TV-only. Stremio's OpenSubtitles v3 addon scopes subtitles to a
+    /// specific episode. When omitted, the backend defaults to season 1
+    /// episode 1 so the catalog detail page at least returns something
+    /// for the show as a whole.
+    #[serde(default)]
+    pub season: Option<u32>,
+    #[serde(default)]
+    pub episode: Option<u32>,
 }
 
 async fn search_subs_lyrics(
@@ -620,18 +636,10 @@ async fn search_subs_lyrics(
         if req.external_ids.is_empty() {
             return Ok(Json(Vec::new()));
         }
-        let wyzie_kind = if is_tv_addon { "tv" } else { "movie" };
-        let langs = req
-            .languages
-            .as_ref()
-            .map(|v| {
-                v.iter()
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        return search_wyzie(wyzie_kind, &req.external_ids, &langs)
+        let kind = if is_tv_addon { "tv" } else { "movie" };
+        let season = req.season.unwrap_or(1);
+        let episode = req.episode.unwrap_or(1);
+        return search_stremio_opensubs(kind, &req.external_ids, season, episode)
             .await
             .map(Json);
     }
@@ -860,6 +868,175 @@ fn parse_lrc_timestamp(s: &str) -> Option<f64> {
     Some(minutes * 60.0 + seconds)
 }
 
+/// Resolve a TMDB id to its IMDb id via TMDB's `external_ids` endpoint.
+/// Movies expose `imdb_id` at the root of the detail response too, but
+/// TV shows only carry it under `external_ids` — going through this
+/// dedicated endpoint works for both kinds with one URL shape.
+async fn tmdb_to_imdb_id(
+    client: &reqwest::Client,
+    kind: &str,
+    tmdb_id: &str,
+) -> Option<String> {
+    let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        return None;
+    }
+    let path = if kind == "tv" { "tv" } else { "movie" };
+    let url = format!(
+        "{}/{}/{}/external_ids?api_key={}",
+        TMDB_BASE,
+        path,
+        urlencoding(tmdb_id),
+        urlencoding(&api_key)
+    );
+    let res = client.get(&url).send().await.ok()?;
+    if !res.status().is_success() {
+        return None;
+    }
+    let payload: serde_json::Value = res.json().await.ok()?;
+    payload
+        .get("imdb_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Three-letter ISO 639-2 codes from Stremio's OpenSubtitles v3 addon
+/// mapped to a human-readable display name. Covers the languages
+/// OpenSubtitles actually carries; unknowns fall through to the raw
+/// 3-letter code so the row still renders.
+fn language_display(lang: &str) -> Option<&'static str> {
+    Some(match lang {
+        "eng" => "English",
+        "spa" => "Spanish",
+        "por" => "Portuguese",
+        "pob" => "Portuguese (Brazil)",
+        "fre" | "fra" => "French",
+        "ger" | "deu" => "German",
+        "ita" => "Italian",
+        "rus" => "Russian",
+        "jpn" => "Japanese",
+        "kor" => "Korean",
+        "chi" | "zho" => "Chinese",
+        "ara" => "Arabic",
+        "dut" | "nld" => "Dutch",
+        "pol" => "Polish",
+        "tur" => "Turkish",
+        "swe" => "Swedish",
+        "nor" => "Norwegian",
+        "dan" => "Danish",
+        "fin" => "Finnish",
+        "ell" | "gre" => "Greek",
+        "heb" => "Hebrew",
+        "hin" => "Hindi",
+        "ind" => "Indonesian",
+        "vie" => "Vietnamese",
+        "tha" => "Thai",
+        "ron" | "rum" => "Romanian",
+        "hun" => "Hungarian",
+        "cze" | "ces" => "Czech",
+        "slo" | "slk" => "Slovak",
+        "ukr" => "Ukrainian",
+        "bul" => "Bulgarian",
+        "srp" => "Serbian",
+        "hrv" => "Croatian",
+        "slv" => "Slovenian",
+        _ => return None,
+    })
+}
+
+async fn search_stremio_opensubs(
+    kind: &str,
+    external_ids: &[String],
+    season: u32,
+    episode: u32,
+) -> Result<Vec<SubsLyrics>, (StatusCode, Json<serde_json::Value>)> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("http client failed: {e}")))?;
+
+    let mut out: Vec<SubsLyrics> = Vec::new();
+    for tmdb_id in external_ids {
+        let trimmed = tmdb_id.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let imdb_id = match tmdb_to_imdb_id(&client, kind, trimmed).await {
+            Some(id) => id,
+            None => continue,
+        };
+        let url = if kind == "tv" {
+            format!(
+                "{}/subtitles/series/{}:{}:{}.json",
+                STREMIO_OPENSUBS_BASE, imdb_id, season, episode
+            )
+        } else {
+            format!("{}/subtitles/movie/{}.json", STREMIO_OPENSUBS_BASE, imdb_id)
+        };
+        let res = match client
+            .get(&url)
+            .header("Accept", "application/json")
+            .header("User-Agent", "Mhaol/1.0")
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if !res.status().is_success() {
+            continue;
+        }
+        let payload: serde_json::Value = match res.json().await {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let arr = match payload.get("subtitles").and_then(|v| v.as_array()) {
+            Some(a) => a,
+            None => continue,
+        };
+        for item in arr {
+            let id = item
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let lang = item
+                .get("lang")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let url_str = item
+                .get("url")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let display = language_display(&lang)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| lang.clone());
+            out.push(SubsLyrics {
+                kind: "subtitle".to_string(),
+                source: "opensubtitles".to_string(),
+                external_id: id,
+                language: if lang.is_empty() { None } else { Some(lang) },
+                track_name: None,
+                artist_name: None,
+                album_name: None,
+                duration: None,
+                format: Some("srt".to_string()),
+                url: url_str,
+                plain_lyrics: None,
+                synced_lyrics: None,
+                instrumental: false,
+                is_hearing_impaired: false,
+                display: Some(display),
+                source_external_id: Some(imdb_id.clone()),
+            });
+        }
+    }
+    Ok(out)
+}
+
+#[allow(dead_code)]
 async fn search_wyzie(
     kind: &str,
     external_ids: &[String],
@@ -907,6 +1084,7 @@ async fn search_wyzie(
     Ok(out)
 }
 
+#[allow(dead_code)]
 async fn fetch_wyzie_one(
     client: &reqwest::Client,
     url: &str,

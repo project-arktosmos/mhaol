@@ -969,8 +969,8 @@
 		if (!externalId) {
 			return `no TMDB id on this firkin (title: ${firkin.title})`;
 		}
-		const kindLabel = isTmdbMovie ? 'movie' : 'tv';
-		return `wyzie ${kindLabel} id=${externalId} (title: ${firkin.title})`;
+		const kindLabel = isTmdbMovie ? 'movie' : 'tv s1e1 (default)';
+		return `OpenSubtitles v3 ${kindLabel} via TMDB id=${externalId} (title: ${firkin.title})`;
 	});
 
 	function runSubsLyricsSearch() {

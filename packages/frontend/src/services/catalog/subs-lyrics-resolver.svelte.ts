@@ -8,6 +8,8 @@ interface SearchArgs {
 	query: string;
 	externalIds?: string[];
 	languages?: string[];
+	season?: number;
+	episode?: number;
 }
 
 export class SubsLyricsResolver {
@@ -34,7 +36,9 @@ export class SubsLyricsResolver {
 					addon: args.addon,
 					query: args.query,
 					externalIds: args.externalIds ?? [],
-					languages: args.languages
+					languages: args.languages,
+					season: args.season,
+					episode: args.episode
 				})
 			});
 			if (!res.ok) {
