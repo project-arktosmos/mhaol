@@ -60,7 +60,9 @@
 	let previewUrls = $state<(string | null)[]>([]);
 
 	$effect(() => {
-		const sources = previewFirkins.map((f) => f.images?.[0]?.url ?? null);
+		const sources = previewFirkins.map((f) =>
+			useLandscape ? (f.images?.[f.images.length - 1]?.url ?? null) : (f.images?.[0]?.url ?? null)
+		);
 		let cancelled = false;
 		void Promise.all(
 			sources.map(async (url) => {
@@ -115,33 +117,31 @@
 			</div>
 		{/each}
 		{#if showMoreCell && moreHref}
-			<article class="card h-full w-full overflow-hidden rounded-md bg-base-200 shadow-sm">
-				<figure class="relative h-full w-full overflow-hidden bg-base-300">
-					<div class="grid h-full grid-cols-2 grid-rows-2 gap-px">
-						{#each Array.from({ length: PREVIEW_COUNT }, (_, i) => i) as i (i)}
-							<div class="overflow-hidden bg-base-200">
-								{#if previewUrls[i]}
-									<img
-										src={previewUrls[i]}
-										alt=""
-										class="h-full w-full object-cover"
-										loading="lazy"
-									/>
-								{/if}
-							</div>
-						{/each}
-					</div>
-					<div class="absolute inset-0 flex items-center justify-center bg-base-300/60">
-						<a
-							href={moreHref}
-							class="btn btn-primary"
-							aria-label={`More — ${hiddenCount} additional`}
-						>
-							More
-						</a>
-					</div>
-				</figure>
-			</article>
+			<div class="relative h-full w-full overflow-hidden rounded-md bg-base-300 shadow-sm">
+				<div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-px">
+					{#each Array.from({ length: PREVIEW_COUNT }, (_, i) => i) as i (i)}
+						<div class="overflow-hidden bg-base-200">
+							{#if previewUrls[i]}
+								<img
+									src={previewUrls[i]}
+									alt=""
+									class="h-full w-full object-cover"
+									loading="lazy"
+								/>
+							{/if}
+						</div>
+					{/each}
+				</div>
+				<div class="absolute inset-0 flex items-center justify-center bg-base-300/60">
+					<a
+						href={moreHref}
+						class="btn btn-primary"
+						aria-label={`More — ${hiddenCount} additional`}
+					>
+						More
+					</a>
+				</div>
+			</div>
 		{/if}
 	</div>
 {/if}
