@@ -189,7 +189,6 @@
 {/snippet}
 
 <div class="flex flex-col gap-2">
-	<h2 class="text-sm font-semibold text-base-content/70 uppercase">Torrent attachment</h2>
 	<div class="grid grid-cols-2 gap-3">
 		{#if trailer && onTrailerPlay}
 			<button
