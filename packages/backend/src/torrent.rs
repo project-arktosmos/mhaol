@@ -21,6 +21,9 @@ use surrealdb::sql::Thing;
 const TORRENT_EVAL_TABLE: &str = "torrent_eval";
 
 #[cfg(not(target_os = "android"))]
+const FIRKIN_TORRENT_SEARCH_TABLE: &str = "firkin_torrent_search";
+
+#[cfg(not(target_os = "android"))]
 use axum::{
     body::Body,
     http::{header, HeaderMap, HeaderValue, Response},
@@ -157,6 +160,52 @@ async fn load_cached_eval(state: &CloudState, info_hash: &str) -> Option<StoredT
     }
 }
 
+/// Persisted torrent search results scoped to a single firkin. Reading this
+/// row on the next visit lets the WebUI rehydrate the torrent search table
+/// and the streamability column without re-hitting the indexer or replaying
+/// per-row /api/torrent/evaluate calls (the cached eval rows are joined into
+/// the response).
+#[cfg(not(target_os = "android"))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredFirkinTorrentSearch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<Thing>,
+    firkin_id: String,
+    addon: String,
+    query: String,
+    category: String,
+    results: Vec<crate::search::TorrentResult>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+#[cfg(not(target_os = "android"))]
+#[derive(Debug, Deserialize)]
+pub struct FirkinTorrentSearchRequest {
+    pub addon: String,
+    pub query: String,
+    #[serde(default)]
+    pub category: Option<String>,
+}
+
+#[cfg(not(target_os = "android"))]
+async fn load_cached_evals_for(
+    state: &CloudState,
+    info_hashes: &[String],
+) -> std::collections::HashMap<String, serde_json::Value> {
+    use std::collections::HashMap;
+    let mut out: HashMap<String, serde_json::Value> = HashMap::new();
+    for hash in info_hashes {
+        if hash.is_empty() {
+            continue;
+        }
+        if let Some(row) = load_cached_eval(state, hash).await {
+            out.insert(hash.clone(), cached_to_response(&row));
+        }
+    }
+    out
+}
+
 #[cfg(not(target_os = "android"))]
 async fn store_cached_eval(state: &CloudState, row: StoredTorrentEval) {
     let info_hash = row.info_hash.clone();
@@ -196,6 +245,121 @@ pub fn router() -> Router<CloudState> {
         .route("/stream", post(stream_start))
         .route("/stream/{info_hash}/{file_index}", get(stream_serve))
         .route("/evaluate", post(evaluate))
+}
+
+#[cfg(not(target_os = "android"))]
+pub async fn get_firkin_search(
+    State(state): State<CloudState>,
+    AxumPath(firkin_id): AxumPath<String>,
+) -> Json<serde_json::Value> {
+    match state
+        .db
+        .select::<Option<StoredFirkinTorrentSearch>>((FIRKIN_TORRENT_SEARCH_TABLE, firkin_id.as_str()))
+        .await
+    {
+        Ok(Some(row)) => {
+            let hashes: Vec<String> =
+                row.results.iter().map(|r| r.info_hash.clone()).collect();
+            let evals = load_cached_evals_for(&state, &hashes).await;
+            Json(json!({
+                "firkinId": row.firkin_id,
+                "addon": row.addon,
+                "query": row.query,
+                "category": row.category,
+                "results": row.results,
+                "evals": evals,
+                "createdAt": row.created_at,
+                "updatedAt": row.updated_at,
+            }))
+        }
+        Ok(None) => Json(serde_json::Value::Null),
+        Err(e) => {
+            tracing::warn!("firkin_torrent_search load failed for {firkin_id}: {e}");
+            Json(serde_json::Value::Null)
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+pub async fn get_firkin_search(
+    State(_state): State<CloudState>,
+    AxumPath(_firkin_id): AxumPath<String>,
+) -> Json<serde_json::Value> {
+    Json(serde_json::Value::Null)
+}
+
+#[cfg(not(target_os = "android"))]
+pub async fn refresh_firkin_search(
+    State(state): State<CloudState>,
+    AxumPath(firkin_id): AxumPath<String>,
+    Json(req): Json<FirkinTorrentSearchRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let category = req.category.clone().unwrap_or_else(|| "0".into());
+    let results = crate::search::run_torrent_query(&req.query, &category)
+        .await
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, e))?;
+
+    let now = Utc::now();
+    let existing: Option<StoredFirkinTorrentSearch> = state
+        .db
+        .select((FIRKIN_TORRENT_SEARCH_TABLE, firkin_id.as_str()))
+        .await
+        .unwrap_or(None);
+    let created_at = existing.as_ref().map(|r| r.created_at).unwrap_or(now);
+
+    let row = StoredFirkinTorrentSearch {
+        id: None,
+        firkin_id: firkin_id.clone(),
+        addon: req.addon.clone(),
+        query: req.query.clone(),
+        category: category.clone(),
+        results: results.clone(),
+        created_at,
+        updated_at: now,
+    };
+
+    let store_result: Result<Option<StoredFirkinTorrentSearch>, _> = if existing.is_some() {
+        state
+            .db
+            .update((FIRKIN_TORRENT_SEARCH_TABLE, firkin_id.as_str()))
+            .content(row)
+            .await
+    } else {
+        state
+            .db
+            .create((FIRKIN_TORRENT_SEARCH_TABLE, firkin_id.as_str()))
+            .content(row)
+            .await
+    };
+    if let Err(e) = store_result {
+        tracing::warn!("firkin_torrent_search persist failed for {firkin_id}: {e}");
+    }
+
+    let hashes: Vec<String> = results.iter().map(|r| r.info_hash.clone()).collect();
+    let evals = load_cached_evals_for(&state, &hashes).await;
+
+    Ok(Json(json!({
+        "firkinId": firkin_id,
+        "addon": req.addon,
+        "query": req.query,
+        "category": category,
+        "results": results,
+        "evals": evals,
+        "createdAt": created_at,
+        "updatedAt": now,
+    })))
+}
+
+#[cfg(target_os = "android")]
+pub async fn refresh_firkin_search(
+    State(_state): State<CloudState>,
+    AxumPath(_firkin_id): AxumPath<String>,
+    Json(_req): Json<FirkinTorrentSearchRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    Err(err(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "torrent search unavailable on this platform",
+    ))
 }
 
 fn err(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {

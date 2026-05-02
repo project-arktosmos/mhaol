@@ -1133,7 +1133,12 @@
 		torrentSearchOpen = !torrentSearchOpen;
 		if (torrentSearchOpen && torrentSearchInitForFirkinId !== firkin.id) {
 			torrentSearchInitForFirkinId = firkin.id;
-			void torrentSearch.search({ addon: firkin.addon, title: firkin.title, year: firkin.year });
+			void torrentSearch.search({
+				addon: firkin.addon,
+				title: firkin.title,
+				year: firkin.year,
+				firkinId: firkin.id
+			});
 		}
 	}
 
@@ -1151,7 +1156,12 @@
 		if (!isTmdbTv && !hasNoRealFiles) return;
 		if (torrentSearchInitForFirkinId === firkin.id) return;
 		torrentSearchInitForFirkinId = firkin.id;
-		void torrentSearch.search({ addon: firkin.addon, title: firkin.title, year: firkin.year });
+		void torrentSearch.search({
+			addon: firkin.addon,
+			title: firkin.title,
+			year: firkin.year,
+			firkinId: firkin.id
+		});
 	});
 
 	// Once the initial show-name search settles, classify its results by
@@ -1967,7 +1977,9 @@
 						torrentSearch.search({
 							addon: firkin.addon,
 							title: firkin.title,
-							year: firkin.year
+							year: firkin.year,
+							firkinId: firkin.id,
+							forceRefresh: true
 						})}
 				/>
 			{:else if hasNoRealFiles && !isMusicBrainz}
@@ -1981,7 +1993,9 @@
 						torrentSearch.search({
 							addon: firkin.addon,
 							title: firkin.title,
-							year: firkin.year
+							year: firkin.year,
+							firkinId: firkin.id,
+							forceRefresh: true
 						})}
 				/>
 			{/if}

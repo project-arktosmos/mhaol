@@ -1,10 +1,71 @@
 import { base } from '$app/paths';
 import {
 	matchTorrentsForResult,
+	parseTorrentName,
 	searchTorrents,
+	tpbCategoryFor,
 	type TorrentResultItem
 } from '$lib/search.service';
 import { addonKind } from '$lib/firkins.service';
+
+type RawTorrent = Omit<TorrentResultItem, 'parsedTitle' | 'year' | 'quality'>;
+
+interface FirkinTorrentSearchResponse {
+	results: RawTorrent[];
+	evals?: Record<string, unknown>;
+}
+
+async function fetchFirkinTorrentSearch(
+	firkinId: string
+): Promise<FirkinTorrentSearchResponse | null> {
+	try {
+		const res = await fetch(`${base}/api/firkins/${encodeURIComponent(firkinId)}/torrent-search`);
+		if (!res.ok) return null;
+		const body = (await res.json()) as FirkinTorrentSearchResponse | null;
+		return body ?? null;
+	} catch {
+		return null;
+	}
+}
+
+async function refreshFirkinTorrentSearch(
+	firkinId: string,
+	addon: string,
+	query: string,
+	category: string
+): Promise<FirkinTorrentSearchResponse | null> {
+	try {
+		const res = await fetch(`${base}/api/firkins/${encodeURIComponent(firkinId)}/torrent-search`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ addon, query, category })
+		});
+		if (!res.ok) return null;
+		return (await res.json()) as FirkinTorrentSearchResponse;
+	} catch {
+		return null;
+	}
+}
+
+function evalToRowEval(value: unknown): TorrentRowEval | null {
+	if (!value || typeof value !== 'object') return null;
+	const v = value as Record<string, unknown>;
+	if (v.streamable === true) {
+		return {
+			kind: 'streamable',
+			fileName: typeof v.fileName === 'string' ? v.fileName : '',
+			fileSize: typeof v.fileSize === 'number' ? v.fileSize : 0,
+			mimeType: typeof v.mimeType === 'string' ? v.mimeType : null
+		};
+	}
+	if (v.streamable === false) {
+		return {
+			kind: 'not-streamable',
+			reason: typeof v.reason === 'string' ? v.reason : 'not streamable'
+		};
+	}
+	return null;
+}
 
 export type TorrentSearchStatus = 'idle' | 'searching' | 'done' | 'error';
 
@@ -38,6 +99,16 @@ interface RunArgs {
 	addon: string;
 	title: string;
 	year: number | null;
+	/** When provided, the service hydrates from / persists to the firkin-scoped
+	 * backend cache via `/api/firkins/:id/torrent-search`. The response also
+	 * carries cached per-magnet probe evals so the streamability column lights
+	 * up immediately on revisit instead of replaying every `/api/torrent/evaluate`
+	 * round-trip. Omitting this falls back to the legacy local-storage flow. */
+	firkinId?: string;
+	/** Skip the GET-cache check and POST a fresh search to the backend (which
+	 * also re-persists). Used by the **Refresh** button when the user wants
+	 * fresh indexer results. */
+	forceRefresh?: boolean;
 }
 
 export interface TorrentQualityGroup {
@@ -183,9 +254,39 @@ export class TorrentSearch {
 		this.searchStack = [];
 		const entryId = this.pushStackEntry('Show', args.title);
 		try {
-			const torrents = await searchTorrents(args.addon, args.title);
-			if (myRun !== this.run) return;
 			const isTv = addonKind(args.addon) === 'tv show';
+			let raw: RawTorrent[] | null = null;
+			let evals: Record<string, unknown> = {};
+
+			if (args.firkinId) {
+				if (!args.forceRefresh) {
+					const cached = await fetchFirkinTorrentSearch(args.firkinId);
+					if (myRun !== this.run) return;
+					if (cached && Array.isArray(cached.results) && cached.results.length > 0) {
+						raw = cached.results;
+						evals = cached.evals ?? {};
+					}
+				}
+				if (raw === null) {
+					const category = tpbCategoryFor(args.addon) ?? '0';
+					const refreshed = await refreshFirkinTorrentSearch(
+						args.firkinId,
+						args.addon,
+						args.title,
+						String(category)
+					);
+					if (myRun !== this.run) return;
+					if (refreshed && Array.isArray(refreshed.results)) {
+						raw = refreshed.results;
+						evals = refreshed.evals ?? {};
+					}
+				}
+			}
+
+			const torrents = raw
+				? raw.map((t) => ({ ...t, ...parseTorrentName(t.title) }))
+				: await searchTorrents(args.addon, args.title);
+			if (myRun !== this.run) return;
 			const matches = matchTorrentsForResult(
 				{
 					title: args.title,
@@ -200,6 +301,15 @@ export class TorrentSearch {
 				{ skipYearFilter: isTv }
 			);
 			this.matches = matches;
+
+			const seedEvals: Record<string, TorrentRowEval> = {};
+			for (const m of matches) {
+				if (!m.magnetLink) continue;
+				const cached = evalToRowEval(evals[m.infoHash]);
+				if (cached) seedEvals[m.magnetLink] = cached;
+			}
+			this.rowEvals = seedEvals;
+
 			this.status = 'done';
 			this.updateStackEntry(entryId, { status: 'done', count: matches.length });
 			// Streamability probing runs one /api/torrent/evaluate per row.
@@ -230,6 +340,10 @@ export class TorrentSearch {
 		for (const g of grouped) {
 			for (const t of g.rows) {
 				if (!t.magnetLink) continue;
+				// Pre-populated cache entries (loaded by `search()` from
+				// `/api/firkins/:id/torrent-search`) win over fresh seeding —
+				// don't overwrite them with `pending` / `skipped`.
+				if (this.rowEvals[t.magnetLink]) continue;
 				if (t.seeders <= 0) {
 					seed[t.magnetLink] = { kind: 'skipped', reason: 'No seeders' };
 					continue;
@@ -239,7 +353,7 @@ export class TorrentSearch {
 					: { kind: 'skipped', reason: 'Unknown quality — not probed' };
 			}
 		}
-		this.rowEvals = seed;
+		this.rowEvals = { ...this.rowEvals, ...seed };
 
 		await Promise.all(grouped.filter((g) => g.probe).map((g) => this.probeGroup(g, runToken)));
 	}
@@ -271,6 +385,15 @@ export class TorrentSearch {
 		for (const t of group.rows) {
 			if (runToken !== this.run) return;
 			if (!t.magnetLink) continue;
+			const current = this.rowEvals[t.magnetLink];
+			// Cached results (loaded from the firkin's persisted search) take
+			// precedence — don't re-probe rows we already know about.
+			if (current?.kind === 'streamable') {
+				foundStreamable = true;
+				continue;
+			}
+			if (current?.kind === 'not-streamable') continue;
+			if (current?.kind === 'skipped') continue;
 			if (t.seeders <= 0) continue;
 			if (foundStreamable) {
 				this.rowEvals = {
