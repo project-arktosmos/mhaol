@@ -117,6 +117,14 @@
 	// the Download cell promotes to `col-span-2` so the row stays balanced.
 	const downloadActionable = $derived(Boolean(download && download.ipfsCid && onDownloadPlay));
 
+	// When only two cells are visible (Trailer + the actionable Download),
+	// drop the col-span-2 on both so they sit side-by-side in a single row
+	// instead of stacking. The all-three case (Trailer + Stream + Download)
+	// keeps Trailer as a full-width header above Stream / Download.
+	const hasTrailer = $derived(Boolean(trailer && onTrailerPlay));
+	const trailerSpansFull = $derived(hasTrailer && !downloadActionable);
+	const downloadSpansFull = $derived(downloadActionable && !hasTrailer);
+
 	function torrentToInfo(t: TorrentResultItem): AttachmentInfo {
 		return {
 			title: t.parsedTitle || t.title,
@@ -188,7 +196,8 @@
 				type="button"
 				onclick={() => onTrailerPlay?.()}
 				disabled={trailerPlaying}
-				class="col-span-2 flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
+				class:col-span-2={trailerSpansFull}
 				aria-label="Play trailer"
 			>
 				<Icon name="delapouite/film-strip" size={32} title="Trailer" />
@@ -258,7 +267,8 @@
 				type="button"
 				onclick={() => onDownloadPlay?.()}
 				disabled={downloadPlaying}
-				class="col-span-2 flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
+				class:col-span-2={downloadSpansFull}
 				aria-label="Play via IPFS"
 			>
 				{@render downloadHeader(download)}
