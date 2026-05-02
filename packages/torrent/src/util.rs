@@ -1,17 +1,21 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Map a filename's extension to a streaming mime type.
-/// Returns `None` for files we don't consider streamable in a `<video>` element.
+///
+/// Returns `None` for files we don't consider streamable in a `<video>`
+/// element. The whitelist is intentionally narrow: only containers that
+/// Chromium-based WebViews (the cloud, android-tv, and android-mobile shells
+/// all run on Tauri WebViews) progressive-stream over HTTP byte-ranges
+/// without buffering the whole file first. `mkv`, `mov`, `avi`, `ogv`, `ts`
+/// are *technically* video but browser `<video>` decoders can't progressively
+/// play them — the user sees librqbit silently fetching the full file with
+/// nothing on screen, which is exactly the "streamable: true but the entire
+/// file is needed" failure mode this gate exists to prevent.
 pub fn streamable_mime_type(name: &str) -> Option<&'static str> {
     let ext = name.rsplit('.').next()?.to_ascii_lowercase();
     match ext.as_str() {
         "mp4" | "m4v" => Some("video/mp4"),
         "webm" => Some("video/webm"),
-        "mkv" => Some("video/x-matroska"),
-        "mov" => Some("video/quicktime"),
-        "avi" => Some("video/x-msvideo"),
-        "ogv" => Some("video/ogg"),
-        "ts" => Some("video/mp2t"),
         _ => None,
     }
 }
@@ -72,6 +76,37 @@ mod tests {
         let ts1 = get_unix_timestamp();
         let ts2 = get_unix_timestamp();
         assert!(ts2 >= ts1);
+    }
+
+    // ── streamable_mime_type ────────────────────────────────────────
+
+    #[test]
+    fn streamable_accepts_browser_progressive_containers() {
+        assert_eq!(streamable_mime_type("Movie.mp4"), Some("video/mp4"));
+        assert_eq!(streamable_mime_type("Movie.M4V"), Some("video/mp4"));
+        assert_eq!(streamable_mime_type("Clip.webm"), Some("video/webm"));
+    }
+
+    #[test]
+    fn streamable_rejects_containers_browsers_cant_progressive_stream() {
+        // mkv / mov / avi / ogv / ts pre-2026-05 used to be marked
+        // streamable from extension alone; in practice browser <video>
+        // elements can't decode them progressively, so the torrent
+        // client downloads the whole file with nothing on screen.
+        assert_eq!(streamable_mime_type("Movie.mkv"), None);
+        assert_eq!(streamable_mime_type("Movie.mov"), None);
+        assert_eq!(streamable_mime_type("Movie.avi"), None);
+        assert_eq!(streamable_mime_type("Movie.ogv"), None);
+        assert_eq!(streamable_mime_type("Movie.ts"), None);
+    }
+
+    #[test]
+    fn streamable_rejects_non_video_extensions() {
+        assert_eq!(streamable_mime_type("readme.txt"), None);
+        assert_eq!(streamable_mime_type("archive.rar"), None);
+        assert_eq!(streamable_mime_type("part1.r00"), None);
+        // No-dot input: rsplit returns the whole string and falls through.
+        assert_eq!(streamable_mime_type("noextension"), None);
     }
 
     // ── parse_magnet_uri ────────────────────────────────────────────
