@@ -30,6 +30,7 @@ const initialState: PlayerState = {
 	buffering: false,
 	directStreamUrl: null,
 	directStreamMimeType: null,
+	streamOffsetSecs: 0,
 	firkinId: null,
 	trackId: null,
 	trackTitle: null,
@@ -114,6 +115,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			buffering: true,
 			directStreamUrl: null,
 			directStreamMimeType: null,
+			streamOffsetSecs: 0,
 			firkinId: null,
 			trackId: null,
 			trackTitle: null,
@@ -129,7 +131,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		firkinId?: string | null,
 		syncedLyrics?: SubsLyricsSyncedLine[] | null,
 		trackId?: string | null,
-		trackTitle?: string | null
+		trackTitle?: string | null,
+		streamOffsetSecs?: number
 	): Promise<void> {
 		if (!browser) return;
 
@@ -144,17 +147,19 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		this.playGeneration++;
 		if (displayMode) this.displayMode.set(displayMode);
 
+		const offsetSecs = streamOffsetSecs && streamOffsetSecs > 0 ? streamOffsetSecs : 0;
 		this.state.update((s) => ({
 			...s,
 			currentFile: file,
 			connectionState: 'streaming',
 			error: null,
-			positionSecs: 0,
+			positionSecs: offsetSecs,
 			durationSecs: file.durationSeconds,
 			isPaused: false,
 			buffering: false,
 			directStreamUrl: streamUrl,
 			directStreamMimeType: mimeType ?? null,
+			streamOffsetSecs: offsetSecs,
 			firkinId: firkinId ?? null,
 			trackId: trackId ?? null,
 			trackTitle: trackTitle ?? null,
@@ -235,6 +240,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			buffering: false,
 			directStreamUrl: null,
 			directStreamMimeType: null,
+			streamOffsetSecs: 0,
 			firkinId: null,
 			trackId: null,
 			trackTitle: null,

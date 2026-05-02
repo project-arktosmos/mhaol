@@ -411,15 +411,40 @@
 	});
 	const availableEpisodeKeys = $derived(new Set(episodeCidByKey.keys()));
 
-	async function playIpfsCid(cid: string, label: string): Promise<void> {
+	// Active IPFS-stream session. We retain the session id so we can
+	// `DELETE` it before starting a new one (e.g. on a seek-anywhere
+	// click that lands outside the buffered range), and the source CID
+	// + label so the seek handler knows what stream to restart.
+	let ipfsSessionId = $state<string | null>(null);
+	let ipfsSessionCid = $state<string | null>(null);
+	let ipfsSessionLabel = $state<string | null>(null);
+
+	async function playIpfsCid(
+		cid: string,
+		label: string,
+		seekPositionSecs: number = 0
+	): Promise<void> {
 		if (!cid || ipfsStarting) return;
 		ipfsStarting = true;
 		ipfsError = null;
+		// Tear down the previous session before kicking off a new one so
+		// the cloud isn't transcoding two streams of the same source in
+		// parallel after a seek-anywhere restart.
+		const prevSessionId = ipfsSessionId;
+		if (prevSessionId) {
+			void fetch(`${base}/api/ipfs-stream/sessions/${encodeURIComponent(prevSessionId)}`, {
+				method: 'DELETE'
+			}).catch(() => {});
+			ipfsSessionId = null;
+		}
 		try {
 			const res = await fetch(`${base}/api/ipfs-stream/sessions`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ cid })
+				body: JSON.stringify({
+					cid,
+					seekPositionSeconds: seekPositionSecs > 0 ? seekPositionSecs : undefined
+				})
 			});
 			if (!res.ok) {
 				let message = `HTTP ${res.status}`;
@@ -454,15 +479,23 @@
 				completedAt: '',
 				subtitles: playerSubtitles
 			};
+			ipfsSessionId = body.sessionId;
+			ipfsSessionCid = cid;
+			ipfsSessionLabel = label;
 			await playerService.playUrl(
 				file,
 				body.playlistUrl,
 				'application/vnd.apple.mpegurl',
 				'inline',
-				firkin.id
+				firkin.id,
+				null,
+				null,
+				null,
+				seekPositionSecs > 0 ? seekPositionSecs : 0
 			);
 		} catch (err) {
 			ipfsError = err instanceof Error ? err.message : 'Unknown error';
+			ipfsSessionId = null;
 			// Pipeline never produced a playlist — go back to the trailer tab
 			// so the user isn't stuck on a permanent spinner. The error alert
 			// above the player still surfaces what went wrong.
@@ -470,6 +503,18 @@
 		} finally {
 			ipfsStarting = false;
 		}
+	}
+
+	// Out-of-buffer seek handler for the inline player. PlayerVideo
+	// already does in-element seeks for targets that fall inside the
+	// buffered range; only the past-end / before-offset cases reach
+	// here, and the only correct response is "transcode from there".
+	async function handleIpfsSeek(targetSourceSecs: number): Promise<void> {
+		const cid = ipfsSessionCid;
+		const label = ipfsSessionLabel;
+		if (!cid || !label) return;
+		const target = Math.max(0, Math.floor(targetSourceSecs * 1000) / 1000);
+		await playIpfsCid(cid, label, target);
 	}
 
 	async function startIpfsPlay(): Promise<void> {
@@ -1853,6 +1898,8 @@
 							subtitleUrl={currentSubtitleUrl}
 							directStreamUrl={$playerState.directStreamUrl}
 							directStreamMimeType={$playerState.directStreamMimeType}
+							streamOffsetSecs={$playerState.streamOffsetSecs}
+							onseekrequest={activeSource === 'ipfs' ? handleIpfsSeek : undefined}
 						/>
 					{:else if (activeSource === 'ipfs' && ipfsStarting) || (activeSource === 'torrent' && torrentStreamStarting)}
 						<div
