@@ -5,6 +5,8 @@ use surrealdb::Surreal;
 #[cfg(not(target_os = "android"))]
 use crate::track_progress::AlbumProgressMap;
 #[cfg(not(target_os = "android"))]
+use crate::tv_build_progress::TvBuildProgressMap;
+#[cfg(not(target_os = "android"))]
 use crate::ytdl_channel_cache::YoutubeChannelCache;
 #[cfg(not(target_os = "android"))]
 use mhaol_ipfs_core::IpfsManager;
@@ -39,6 +41,13 @@ pub struct CloudState {
     /// background task resolves them.
     #[cfg(not(target_os = "android"))]
     pub track_progress: AlbumProgressMap,
+    /// Live progress map for the background TV-show firkin builder. Keyed
+    /// by `<library_id>::<lowercase_show>::<year>`. The libraries page
+    /// polls this so each show group's "Match TMDB & build firkin"
+    /// button surfaces phase + current/total counters in real time, and
+    /// re-hydrates the in-progress badge after a refresh.
+    #[cfg(not(target_os = "android"))]
+    pub tv_build_progress: TvBuildProgressMap,
     /// In-memory cache for the YouTube channel RSS surface used by the
     /// catalog detail pages. Holds two layers: video id → channel id
     /// (long TTL since channel ownership is stable) and channel id →
@@ -71,6 +80,8 @@ impl CloudState {
             ipfs_stream_manager,
             #[cfg(not(target_os = "android"))]
             track_progress: AlbumProgressMap::new(),
+            #[cfg(not(target_os = "android"))]
+            tv_build_progress: TvBuildProgressMap::new(),
             #[cfg(not(target_os = "android"))]
             ytdl_channel_cache: YoutubeChannelCache::new(),
         }

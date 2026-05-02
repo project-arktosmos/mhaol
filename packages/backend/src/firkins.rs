@@ -603,6 +603,19 @@ async fn create(
     State(state): State<CloudState>,
     Json(req): Json<CreateFirkinRequest>,
 ) -> Result<(StatusCode, Json<FirkinDto>), (StatusCode, Json<serde_json::Value>)> {
+    let (status, dto) = create_firkin_record(&state, req).await?;
+    Ok((status, Json(dto)))
+}
+
+/// Inner handler for `POST /api/firkins`. Extracted so background tasks
+/// (the TV-show firkin builder, future bulk importers) can mint firkins
+/// through the same code path the HTTP handler uses without round-tripping
+/// through the network — same dedup-by-CID, same artist materialisation,
+/// same body pin, same album-resolver auto-spawn.
+pub(crate) async fn create_firkin_record(
+    state: &CloudState,
+    req: CreateFirkinRequest,
+) -> Result<(StatusCode, FirkinDto), (StatusCode, Json<serde_json::Value>)> {
     let title = req.title.trim();
     if title.is_empty() {
         return Err(err_response(StatusCode::BAD_REQUEST, "title is required"));
@@ -761,7 +774,7 @@ async fn create(
         }
         #[cfg(target_os = "android")]
         let _ = existing_id;
-        return Ok((StatusCode::OK, Json(assemble_firkin_dto(&state, existing).await?)));
+        return Ok((StatusCode::OK, assemble_firkin_dto(state, existing).await?));
     }
 
     let new_id = uuid::Uuid::new_v4().to_string();
@@ -799,7 +812,7 @@ async fn create(
         .ok_or_else(|| err_response(StatusCode::INTERNAL_SERVER_ERROR, "firkin was not persisted"))?;
     let dto = FirkinDto::from_doc_with_artists(created_doc, artist_dtos);
 
-    pin_firkin_body(&state, &new_id, body_json).await;
+    pin_firkin_body(state, &new_id, body_json).await;
 
     // Auto-trigger album track resolution for fresh musicbrainz firkins,
     // but only when the firkin is bookmarked — un-bookmarked browse-cache
@@ -814,7 +827,7 @@ async fn create(
     #[cfg(target_os = "android")]
     let _ = (record_addon, record_bookmarked);
 
-    Ok((StatusCode::CREATED, Json(dto)))
+    Ok((StatusCode::CREATED, dto))
 }
 
 pub(crate) fn compute_body_cid(body_json: &str) -> String {

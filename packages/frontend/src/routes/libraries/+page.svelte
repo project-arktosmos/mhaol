@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
 	import {
@@ -16,8 +16,7 @@
 		firkinsService,
 		type Artist,
 		type Trailer,
-		type Review,
-		type FileEntry
+		type Review
 	} from '$lib/firkins.service';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -43,9 +42,6 @@
 	let addonsError = $state<string | null>(null);
 	let creatingFirkinFor = $state<Record<string, boolean>>({});
 	let createFirkinErrors = $state<Record<string, string>>({});
-	let matchingShowFor = $state<Record<string, boolean>>({});
-	let matchShowProgress = $state<Record<string, string>>({});
-	let matchShowErrors = $state<Record<string, string>>({});
 
 	function toggleNewAddon(addon: LibraryAddon) {
 		newAddons = newAddons.includes(addon)
@@ -89,7 +85,31 @@
 		await librariesService.refresh();
 		const { libraries } = get(libsStore);
 		await Promise.all(libraries.map(handleLibraryOnMount));
+		// Re-hydrate the in-progress badge for any TV firkin builds the
+		// server is still running. Polling kicks in only when at least one
+		// non-terminal job exists; the loop self-stops once everything is
+		// either completed or errored.
+		await Promise.all(libraries.map(hydrateTvBuildsForLibrary));
 	});
+
+	onDestroy(() => {
+		for (const handle of tvBuildPollers.values()) {
+			window.clearInterval(handle);
+		}
+		tvBuildPollers.clear();
+	});
+
+	async function hydrateTvBuildsForLibrary(lib: Library) {
+		try {
+			const snapshot = await pollTvBuilds(lib.id);
+			applyTvBuildSnapshot(lib.id, snapshot);
+			if (hasActiveBuild(lib.id)) {
+				ensureTvBuildPolling(lib.id);
+			}
+		} catch {
+			// non-fatal: the next user action will retry
+		}
+	}
 
 	function isStale(lib: Library): boolean {
 		if (!lib.last_scanned_at) return true;
@@ -364,261 +384,220 @@
 		}
 	}
 
-	interface TmdbCatalogItem {
-		id: string;
-		title: string;
-		year: number | null;
-		description: string | null;
-		posterUrl: string | null;
-		backdropUrl?: string | null;
-	}
+	type TvBuildPhase =
+		| 'searching'
+		| 'fetching_seasons'
+		| 'fetching_episodes'
+		| 'fetching_metadata'
+		| 'waiting_pins'
+		| 'creating_firkin'
+		| 'completed'
+		| 'error';
 
-	interface TmdbCatalogPage {
-		items: TmdbCatalogItem[];
-		page: number;
-		totalPages: number;
-	}
-
-	interface TmdbSeasonDto {
-		seasonNumber: number;
-		name: string;
-		airYear?: number | null;
-		episodeCount?: number | null;
-		posterUrl?: string | null;
-		overview?: string | null;
-	}
-
-	interface TmdbEpisodeDto {
-		episodeNumber: number;
-		seasonNumber: number;
-		name: string;
-		overview?: string | null;
-		airDate?: string | null;
-		runtime?: number | null;
-		stillUrl?: string | null;
-		voteAverage?: number | null;
-	}
-
-	interface TmdbMetadataDto {
-		artists?: Artist[];
-		trailers?: Trailer[];
-		reviews?: Review[];
-	}
-
-	async function fetchJsonOrThrow<T>(url: string): Promise<T> {
-		const res = await fetch(url, { cache: 'no-store' });
-		if (!res.ok) {
-			let message = `HTTP ${res.status}`;
-			try {
-				const body = await res.json();
-				if (body && typeof body.error === 'string') message = body.error;
-			} catch {
-				// ignore
-			}
-			throw new Error(message);
-		}
-		return (await res.json()) as T;
+	interface TvBuildProgress {
+		libraryId: string;
+		jobKey: string;
+		show: string;
+		year?: number;
+		phase: TvBuildPhase;
+		message?: string;
+		current?: number;
+		total?: number;
+		tmdbId?: string;
+		tmdbTitle?: string;
+		error?: string;
+		completedFirkinId?: string;
+		startedAt: string;
+		updatedAt: string;
 	}
 
 	function showKey(libId: string, group: { show: string; year?: number }): string {
 		return `${libId}::${group.show.toLowerCase()}::${group.year ?? ''}`;
 	}
 
-	/// Pick the best TMDB-search candidate for a parsed show name. TMDB
-	/// already orders results by relevance, so we lean on that and only
-	/// override when the parsed query carries a year hint that picks out
-	/// one specific candidate (a show + a reboot of the same name share
-	/// the title but never the year). Falls back to the top result when
-	/// no year hint is available.
-	function pickBestTvMatch(
-		items: TmdbCatalogItem[],
-		year: number | undefined
-	): TmdbCatalogItem | null {
-		if (items.length === 0) return null;
-		if (typeof year === 'number') {
-			const exact = items.find((it) => it.year === year);
-			if (exact) return exact;
-			const close = items.find((it) => it.year && Math.abs(it.year - year) <= 1);
-			if (close) return close;
+	function progressLabel(p: TvBuildProgress): string {
+		if (p.message) return p.message;
+		switch (p.phase) {
+			case 'searching':
+				return 'Searching TMDB…';
+			case 'fetching_seasons':
+				return 'Fetching seasons…';
+			case 'fetching_episodes':
+				return p.current !== undefined && p.total !== undefined
+					? `Fetching episodes (${p.current}/${p.total})…`
+					: 'Fetching episodes…';
+			case 'fetching_metadata':
+				return 'Fetching artists, trailers & reviews…';
+			case 'waiting_pins':
+				return p.current !== undefined && p.total !== undefined
+					? `Waiting for IPFS pins (${p.current}/${p.total})…`
+					: 'Waiting for IPFS pins…';
+			case 'creating_firkin':
+				return 'Creating firkin…';
+			case 'completed':
+				return 'Done — firkin built';
+			case 'error':
+				return p.error ?? 'Failed';
 		}
-		return items[0];
 	}
 
-	/// TMDB-match an entire TV show group from the scan results, fetch all
-	/// of its seasons + episodes, map every local file to its (S, E) episode
-	/// metadata, and assemble a single `tmdb-tv` firkin. Episodes without a
-	/// local file are still represented as `url`-typed file entries pointing
-	/// at the per-episode TMDB URL so the firkin records what's missing as
-	/// well as what's available.
-	async function matchAndCreateTvFirkin(
+	/// Per-library polling. When a libraries page mounts (or a new library
+	/// row appears in $libsStore) we start a 2-second loop that pulls
+	/// `/api/libraries/:id/tv-builds`, mirroring the server's progress map
+	/// into `tvBuildJobs[libraryId][jobKey]`. The loop self-stops when no
+	/// non-terminal jobs remain — clicking a new "Match TMDB & build
+	/// firkin" button restarts it via `ensureTvBuildPolling`.
+	const tvBuildPollers = new Map<string, number>();
+	let tvBuildJobs = $state<Record<string, Record<string, TvBuildProgress>>>({});
+	/// Keys we've already auto-navigated for in this tab — keeps the
+	/// "completed → goto /catalog/<id>" handler from firing again after
+	/// the firkin page itself triggers another poll.
+	const navigatedJobs = new Set<string>();
+	/// Keys whose terminal "Done" badge has been acknowledged in this tab.
+	/// Used to decide whether to auto-navigate (only when the user kicked
+	/// off the build from this same tab) vs. to render a "View firkin"
+	/// link (when the build was already in flight when the page mounted).
+	const ownedJobs = new Set<string>();
+
+	async function pollTvBuilds(libId: string): Promise<TvBuildProgress[]> {
+		const res = await fetch(`/api/libraries/${encodeURIComponent(libId)}/tv-builds`, {
+			cache: 'no-store'
+		});
+		if (!res.ok) {
+			throw new Error(`HTTP ${res.status}`);
+		}
+		return (await res.json()) as TvBuildProgress[];
+	}
+
+	function applyTvBuildSnapshot(libId: string, snapshot: TvBuildProgress[]) {
+		const next: Record<string, TvBuildProgress> = {};
+		for (const p of snapshot) {
+			next[p.jobKey] = p;
+			if (
+				p.phase === 'completed' &&
+				p.completedFirkinId &&
+				ownedJobs.has(p.jobKey) &&
+				!navigatedJobs.has(p.jobKey)
+			) {
+				navigatedJobs.add(p.jobKey);
+				const firkinId = p.completedFirkinId;
+				void goto(`${base}/catalog/${encodeURIComponent(firkinId)}`);
+			}
+		}
+		tvBuildJobs = { ...tvBuildJobs, [libId]: next };
+	}
+
+	function hasActiveBuild(libId: string): boolean {
+		const map = tvBuildJobs[libId];
+		if (!map) return false;
+		return Object.values(map).some(
+			(p) => p.phase !== 'completed' && p.phase !== 'error'
+		);
+	}
+
+	function ensureTvBuildPolling(libId: string) {
+		if (tvBuildPollers.has(libId)) return;
+		const handle = window.setInterval(async () => {
+			try {
+				const snapshot = await pollTvBuilds(libId);
+				applyTvBuildSnapshot(libId, snapshot);
+				if (!hasActiveBuild(libId)) {
+					const h = tvBuildPollers.get(libId);
+					if (h !== undefined) {
+						window.clearInterval(h);
+						tvBuildPollers.delete(libId);
+					}
+				}
+			} catch {
+				// ignore — next tick retries
+			}
+		}, 2000);
+		tvBuildPollers.set(libId, handle);
+	}
+
+	/// Hand the structured TV scan group off to the backend. The actual
+	/// TMDB search, season/episode fetch, pin waiting, and firkin create
+	/// all happen there in a `tokio::spawn`ed task — leaving the page or
+	/// reloading does not interrupt the build, and the polling loop
+	/// re-hydrates the in-progress badge from `/api/libraries/:id/tv-builds`.
+	async function startTvFirkinBuild(
 		libId: string,
 		group: {
 			show: string;
 			year?: number;
 			seasons: Array<{ season: number; entries: ScanEntry[] }>;
-		},
-		cidByPath: Map<string, string>
+		}
 	) {
 		const key = showKey(libId, group);
-		if (matchingShowFor[key]) return;
-		matchingShowFor = { ...matchingShowFor, [key]: true };
-		matchShowProgress = { ...matchShowProgress, [key]: 'Searching TMDB…' };
-		const { [key]: _ignored, ...errRest } = matchShowErrors;
-		matchShowErrors = errRest;
+		const files: Array<{ path: string; season: number; episode: number }> = [];
+		for (const season of group.seasons) {
+			for (const entry of season.entries) {
+				const tv = entry.extractedTvQuery;
+				if (!tv) continue;
+				files.push({ path: entry.path, season: tv.season, episode: tv.episode });
+			}
+		}
+		ownedJobs.add(key);
 		try {
-			const searchUrl = `/api/catalog/tmdb-tv/search?query=${encodeURIComponent(group.show)}&page=1`;
-			const page = await fetchJsonOrThrow<TmdbCatalogPage>(searchUrl);
-			const match = pickBestTvMatch(page.items, group.year);
-			if (!match) {
-				throw new Error(`No TMDB result for "${group.show}"`);
-			}
-			matchShowProgress = {
-				...matchShowProgress,
-				[key]: `Matched ${match.title}${match.year ? ` (${match.year})` : ''} — fetching seasons…`
-			};
-
-			const seasons = await fetchJsonOrThrow<TmdbSeasonDto[]>(
-				`/api/catalog/tmdb-tv/${encodeURIComponent(match.id)}/seasons`
-			);
-			if (seasons.length === 0) {
-				throw new Error('TMDB returned no seasons for this show');
-			}
-
-			matchShowProgress = {
-				...matchShowProgress,
-				[key]: `Fetching episodes (0/${seasons.length})…`
-			};
-			const episodesBySeason = new Map<number, TmdbEpisodeDto[]>();
-			let fetched = 0;
-			const seasonResults = await Promise.allSettled(
-				seasons.map((s) =>
-					fetchJsonOrThrow<TmdbEpisodeDto[]>(
-						`/api/catalog/tmdb-tv/${encodeURIComponent(match.id)}/season/${s.seasonNumber}/episodes`
-					).then((eps) => {
-						episodesBySeason.set(s.seasonNumber, eps);
-						fetched += 1;
-						matchShowProgress = {
-							...matchShowProgress,
-							[key]: `Fetching episodes (${fetched}/${seasons.length})…`
-						};
-						return eps;
-					})
-				)
-			);
-			if (seasonResults.every((r) => r.status === 'rejected')) {
-				throw new Error('Failed to fetch episodes for any season from TMDB');
-			}
-
-			matchShowProgress = {
-				...matchShowProgress,
-				[key]: 'Fetching artists, trailers & reviews…'
-			};
-			let metadata: TmdbMetadataDto = { artists: [], trailers: [], reviews: [] };
-			try {
-				metadata = await fetchJsonOrThrow<TmdbMetadataDto>(
-					`/api/catalog/tmdb-tv/${encodeURIComponent(match.id)}/metadata`
-				);
-			} catch {
-				// metadata is non-essential — keep the firkin creation flowing
-			}
-
-			const fileBySE = new Map<string, ScanEntry>();
-			for (const season of group.seasons) {
-				for (const entry of season.entries) {
-					const tv = entry.extractedTvQuery;
-					if (!tv) continue;
-					const k = `S${String(tv.season).padStart(2, '0')}E${String(tv.episode).padStart(2, '0')}`;
-					if (!fileBySE.has(k)) fileBySE.set(k, entry);
+			const res = await fetch(`/api/libraries/${encodeURIComponent(libId)}/tv-build`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ show: group.show, year: group.year, files })
+			});
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
 				}
+				throw new Error(message);
 			}
-
-			const pendingPins: ScanEntry[] = [];
-			for (const entry of fileBySE.values()) {
-				if (!cidByPath.get(entry.path)) pendingPins.push(entry);
-			}
-			const cidByEntryPath = new Map<string, string>();
-			for (const [, entry] of fileBySE) {
-				const existing = cidByPath.get(entry.path);
-				if (existing) cidByEntryPath.set(entry.path, existing);
-			}
-			if (pendingPins.length > 0) {
-				matchShowProgress = {
-					...matchShowProgress,
-					[key]: `Waiting for IPFS pins (0/${pendingPins.length})…`
-				};
-				let pinned = 0;
-				for (const entry of pendingPins) {
-					const cid = await waitForPinForPath(libId, entry.path);
-					if (cid) cidByEntryPath.set(entry.path, cid);
-					pinned += 1;
-					matchShowProgress = {
-						...matchShowProgress,
-						[key]: `Waiting for IPFS pins (${pinned}/${pendingPins.length})…`
-					};
-				}
-			}
-
-			const files: FileEntry[] = [
-				{
-					type: 'url',
-					value: `https://www.themoviedb.org/tv/${match.id}`,
-					title: 'TMDB TV'
-				}
-			];
-			for (const season of seasons) {
-				const eps = episodesBySeason.get(season.seasonNumber) ?? [];
-				for (const ep of eps) {
-					const seKey = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
-					const epLabel = `${seKey} — ${ep.name}`;
-					const entry = fileBySE.get(seKey);
-					const cid = entry ? cidByEntryPath.get(entry.path) : undefined;
-					if (cid) {
-						files.push({ type: 'ipfs', value: cid, title: epLabel });
-					} else {
-						files.push({
-							type: 'url',
-							value: `https://www.themoviedb.org/tv/${match.id}/season/${season.seasonNumber}/episode/${ep.episodeNumber}`,
-							title: epLabel
-						});
+			const initial = (await res.json()) as TvBuildProgress;
+			tvBuildJobs = {
+				...tvBuildJobs,
+				[libId]: { ...(tvBuildJobs[libId] ?? {}), [initial.jobKey]: initial }
+			};
+			ensureTvBuildPolling(libId);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Unknown error';
+			tvBuildJobs = {
+				...tvBuildJobs,
+				[libId]: {
+					...(tvBuildJobs[libId] ?? {}),
+					[key]: {
+						libraryId: libId,
+						jobKey: key,
+						show: group.show,
+						year: group.year,
+						phase: 'error',
+						error: message,
+						startedAt: new Date().toISOString(),
+						updatedAt: new Date().toISOString()
 					}
 				}
-			}
-
-			const images = match.posterUrl
-				? [
-						{
-							url: match.posterUrl,
-							mimeType: 'image/jpeg',
-							fileSize: 0,
-							width: 0,
-							height: 0
-						}
-					]
-				: [];
-
-			matchShowProgress = { ...matchShowProgress, [key]: 'Creating firkin…' };
-			const created = await firkinsService.create({
-				title: match.title,
-				artists: metadata.artists ?? [],
-				description: match.description ?? '',
-				images,
-				files,
-				year: match.year ?? null,
-				addon: 'tmdb-tv',
-				trailers: metadata.trailers ?? [],
-				reviews: metadata.reviews ?? []
-			});
-			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
-		} catch (err) {
-			matchShowErrors = {
-				...matchShowErrors,
-				[key]: err instanceof Error ? err.message : 'Unknown error'
 			};
-		} finally {
-			matchingShowFor = { ...matchingShowFor, [key]: false };
-			const { [key]: _p, ...progRest } = matchShowProgress;
-			matchShowProgress = progRest;
 		}
+	}
+
+	/// One-shot DELETE that clears all completed/errored jobs for a
+	/// library — used by the "Hide" button on terminal badges and on
+	/// page mount to keep the table tidy after a successful build.
+	async function clearTerminalTvBuilds(libId: string) {
+		try {
+			await fetch(`/api/libraries/${encodeURIComponent(libId)}/tv-builds`, {
+				method: 'DELETE'
+			});
+		} catch {
+			// best-effort
+		}
+		const next: Record<string, TvBuildProgress> = {};
+		const current = tvBuildJobs[libId] ?? {};
+		for (const [k, v] of Object.entries(current)) {
+			if (v.phase !== 'completed' && v.phase !== 'error') next[k] = v;
+		}
+		tvBuildJobs = { ...tvBuildJobs, [libId]: next };
 	}
 
 	function formatBytes(bytes: number): string {
@@ -1073,28 +1052,61 @@
 															{#each groupEntries(scanResults[lib.id].entries) as group, gi (gi)}
 																{#if group.kind === 'show'}
 																	{@const sKey = showKey(lib.id, group)}
-																	{@const matching = !!matchingShowFor[sKey]}
+																	{@const job = tvBuildJobs[lib.id]?.[sKey]}
+																	{@const inFlight =
+																		!!job &&
+																		job.phase !== 'completed' &&
+																		job.phase !== 'error'}
 																	<tr class="bg-base-200/60">
 																		<td colspan="9" class="text-sm font-semibold">
 																			<div class="flex items-center justify-between gap-2">
 																				<span>
 																					{group.show}{group.year ? ` (${group.year})` : ''}
 																				</span>
-																				<button
-																					class="btn btn-xs btn-primary"
-																					disabled={matching}
-																					onclick={() =>
-																						matchAndCreateTvFirkin(lib.id, group, cidByPath)}
-																				>
-																					{matching
-																						? (matchShowProgress[sKey] ?? 'Working…')
-																						: 'Match TMDB & build firkin'}
-																				</button>
+																				<div class="flex items-center gap-2">
+																					{#if job?.phase === 'completed' && job.completedFirkinId}
+																						<a
+																							class="btn btn-xs btn-success"
+																							href={`${base}/catalog/${encodeURIComponent(job.completedFirkinId)}`}
+																						>
+																							View firkin
+																						</a>
+																					{/if}
+																					<button
+																						class="btn btn-xs btn-primary"
+																						disabled={inFlight}
+																						onclick={() => startTvFirkinBuild(lib.id, group)}
+																					>
+																						{inFlight
+																							? progressLabel(job!)
+																							: job?.phase === 'completed'
+																								? 'Re-run match'
+																								: 'Match TMDB & build firkin'}
+																					</button>
+																				</div>
 																			</div>
-																			{#if matchShowErrors[sKey]}
-																				<p class="mt-1 text-xs font-normal text-error">
-																					{matchShowErrors[sKey]}
-																				</p>
+																			{#if inFlight && job?.total !== undefined && job.total > 0}
+																				{@const pct = Math.round(
+																					((job.current ?? 0) / job.total) * 100
+																				)}
+																				<progress
+																					class="mt-1 w-full progress progress-primary"
+																					value={pct}
+																					max="100"
+																				></progress>
+																			{/if}
+																			{#if job?.phase === 'error'}
+																				<div class="mt-1 flex items-center gap-2">
+																					<p class="text-xs font-normal text-error">
+																						{job.error ?? 'Failed'}
+																					</p>
+																					<button
+																						class="btn btn-ghost btn-xs"
+																						onclick={() => clearTerminalTvBuilds(lib.id)}
+																					>
+																						Dismiss
+																					</button>
+																				</div>
 																			{/if}
 																		</td>
 																	</tr>

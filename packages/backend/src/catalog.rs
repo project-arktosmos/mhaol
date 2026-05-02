@@ -226,40 +226,40 @@ struct CatalogTrack {
 /// Used by the WebUI to enumerate seasons for trailer resolution: each
 /// season is searched against YouTube as `"{showTitle} season {n} trailer"`
 /// and the best match is kept on the firkin's `trailers` array.
-#[derive(Serialize)]
-struct CatalogSeason {
+#[derive(Clone, Serialize)]
+pub(crate) struct CatalogSeason {
     #[serde(rename = "seasonNumber")]
-    season_number: i64,
-    name: String,
+    pub season_number: i64,
+    pub name: String,
     #[serde(rename = "airYear", skip_serializing_if = "Option::is_none")]
-    air_year: Option<i32>,
+    pub air_year: Option<i32>,
     #[serde(rename = "episodeCount", skip_serializing_if = "Option::is_none")]
-    episode_count: Option<i64>,
+    pub episode_count: Option<i64>,
     #[serde(rename = "posterUrl", skip_serializing_if = "Option::is_none")]
-    poster_url: Option<String>,
+    pub poster_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    overview: Option<String>,
+    pub overview: Option<String>,
 }
 
 /// One episode of a TMDB TV-show season, returned by
 /// `GET /api/catalog/tmdb-tv/{id}/season/{season_number}/episodes`.
-#[derive(Serialize)]
-struct CatalogEpisode {
+#[derive(Clone, Serialize)]
+pub(crate) struct CatalogEpisode {
     #[serde(rename = "episodeNumber")]
-    episode_number: i64,
+    pub episode_number: i64,
     #[serde(rename = "seasonNumber")]
-    season_number: i64,
-    name: String,
+    pub season_number: i64,
+    pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    overview: Option<String>,
+    pub overview: Option<String>,
     #[serde(rename = "airDate", skip_serializing_if = "Option::is_none")]
-    air_date: Option<String>,
+    pub air_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime: Option<i64>,
+    pub runtime: Option<i64>,
     #[serde(rename = "stillUrl", skip_serializing_if = "Option::is_none")]
-    still_url: Option<String>,
+    pub still_url: Option<String>,
     #[serde(rename = "voteAverage", skip_serializing_if = "Option::is_none")]
-    vote_average: Option<f64>,
+    pub vote_average: Option<f64>,
 }
 
 /// Three-field "person/group attached to a media item" record matching the
@@ -285,14 +285,14 @@ pub(crate) struct CatalogArtist {
 /// `iso_639_1` (lower-case ISO 639-1, e.g. `"en"`) so the frontend
 /// can show / filter trailers by spoken language. Non-TMDB addons
 /// currently leave `language` unset.
-#[derive(Serialize)]
-struct CatalogTrailer {
+#[derive(Clone, Serialize)]
+pub(crate) struct CatalogTrailer {
     #[serde(rename = "youtubeUrl")]
-    youtube_url: String,
+    pub youtube_url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    label: Option<String>,
+    pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    language: Option<String>,
+    pub language: Option<String>,
 }
 
 /// One upstream user-rating snapshot for a catalog item. Mirrors the
@@ -708,7 +708,7 @@ const TMDB_CREW_JOBS: &[&str] = &[
 /// `/metadata` endpoint is hit. The same response also carries the
 /// item's `vote_average` (0–10) and `vote_count`, so we extract a
 /// `CatalogReview` from it here without an extra request.
-async fn tmdb_metadata(
+pub(crate) async fn tmdb_metadata(
     is_tv: bool,
     id: &str,
 ) -> Result<
@@ -934,6 +934,15 @@ async fn tmdb_tv_seasons(
     State(_state): State<CloudState>,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<CatalogSeason>>, (StatusCode, Json<serde_json::Value>)> {
+    fetch_tmdb_tv_seasons(&id).await.map(Json)
+}
+
+/// Fetch a TMDB TV show's season list. Extracted from the HTTP handler so
+/// background tasks (`tv_build`) can reuse the same upstream call + JSON
+/// parser without round-tripping through the network.
+pub(crate) async fn fetch_tmdb_tv_seasons(
+    id: &str,
+) -> Result<Vec<CatalogSeason>, (StatusCode, Json<serde_json::Value>)> {
     if id.trim().is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, "id is required"));
     }
@@ -993,13 +1002,25 @@ async fn tmdb_tv_seasons(
         }
     }
     out.sort_by_key(|s| s.season_number);
-    Ok(Json(out))
+    Ok(out)
 }
 
 async fn tmdb_tv_season_episodes(
     State(_state): State<CloudState>,
     Path((id, season_number)): Path<(String, i64)>,
 ) -> Result<Json<Vec<CatalogEpisode>>, (StatusCode, Json<serde_json::Value>)> {
+    fetch_tmdb_tv_season_episodes(&id, season_number)
+        .await
+        .map(Json)
+}
+
+/// Fetch a TMDB TV show season's episode list. Extracted from the HTTP
+/// handler so background tasks (`tv_build`) can reuse the same upstream
+/// call + JSON parser without round-tripping through the network.
+pub(crate) async fn fetch_tmdb_tv_season_episodes(
+    id: &str,
+    season_number: i64,
+) -> Result<Vec<CatalogEpisode>, (StatusCode, Json<serde_json::Value>)> {
     if id.trim().is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, "id is required"));
     }
@@ -1070,7 +1091,7 @@ async fn tmdb_tv_season_episodes(
         }
     }
     out.sort_by_key(|e| e.episode_number);
-    Ok(Json(out))
+    Ok(out)
 }
 
 // ---------- MusicBrainz ----------

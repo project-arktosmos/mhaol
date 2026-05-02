@@ -27,6 +27,10 @@ mod state;
 #[cfg(not(target_os = "android"))]
 mod tmdb_match;
 #[cfg(not(target_os = "android"))]
+mod tv_build;
+#[cfg(not(target_os = "android"))]
+mod tv_build_progress;
+#[cfg(not(target_os = "android"))]
 mod tv_match;
 mod torrent;
 mod torrent_completion;
@@ -233,6 +237,11 @@ pub async fn run() {
     {
         app = app.nest("/api/ytdl", ytdl::router());
         app = app.nest("/api/p2p", p2p::router());
+        // The tv_build router is nested under /api/libraries because its
+        // routes are scoped by library id. Kept as a separate module so
+        // the orchestrator + progress map don't drag library_scan-sized
+        // imports into libraries.rs.
+        app = app.nest("/api/libraries", tv_build::router());
     }
 
     let app = app
