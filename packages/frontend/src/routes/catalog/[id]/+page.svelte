@@ -1558,41 +1558,16 @@
 		}
 	});
 
-	async function assignTorrent(torrent: TorrentResultItem, sub?: SubsLyricsItem) {
+	async function assignTorrent(torrent: TorrentResultItem) {
 		if (!torrent.magnetLink || addingHash || existingHashes.has(torrent.magnetLink)) {
 			return;
 		}
 		assignError = null;
 		addingHash = torrent.magnetLink;
 		try {
-			// Build the new file entries this click produces. Subtitles are
-			// stored as a reference, not a download — we keep the upstream
-			// URL plus enough metadata to render a label and re-fetch on
-			// demand. The ETL stays server-side / on-demand; this row just
-			// declares "this firkin has been paired with release X of sub
-			// Y" so playback can pick it up later.
 			const additions: FileEntry[] = [
 				{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
 			];
-			if (sub) {
-				const subPayload = {
-					source: sub.source,
-					externalId: sub.externalId,
-					url: sub.url ?? null,
-					language: sub.language ?? null,
-					display: sub.display ?? null,
-					release: sub.release ?? null,
-					format: sub.format ?? null,
-					isHearingImpaired: sub.isHearingImpaired ?? false
-				};
-				const lang = sub.display ?? sub.language ?? 'sub';
-				const release = sub.release ?? `#${sub.externalId}`;
-				additions.push({
-					type: 'subtitle',
-					value: JSON.stringify(subPayload),
-					title: `${lang}: ${release}`
-				});
-			}
 			if (isTmdbTv) {
 				// TV shows accumulate one magnet per season on the same firkin.
 				// Use the granular files endpoint so the server reads the
@@ -1985,8 +1960,6 @@
 					{addingHash}
 					{assignError}
 					{existingHashes}
-					subs={subsLyricsResolver.results}
-					autoSelectFirstSub={isTmdbMovie}
 					collapsible
 					open={torrentSearchOpen}
 					onToggle={toggleTorrentSearch}
@@ -2004,8 +1977,6 @@
 					{addingHash}
 					{assignError}
 					{existingHashes}
-					subs={subsLyricsResolver.results}
-					autoSelectFirstSub={isTmdbMovie}
 					onRefresh={() =>
 						torrentSearch.search({
 							addon: firkin.addon,
