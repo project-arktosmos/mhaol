@@ -4,10 +4,12 @@
 
 	interface Props {
 		title: string;
+		year?: number | null;
+		kindLabel?: string | null;
 		actions?: Snippet;
 	}
 
-	let { title, actions }: Props = $props();
+	let { title, year = null, kindLabel = null, actions }: Props = $props();
 </script>
 
-<Shared {title} {actions} />
+<Shared {title} {year} {kindLabel} {actions} />

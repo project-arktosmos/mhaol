@@ -1701,7 +1701,7 @@
 </svelte:head>
 
 <div class="flex min-h-full flex-col gap-6 p-6">
-	<CatalogPageHeader title={firkin.title}>
+	<CatalogPageHeader title={firkin.title} year={firkin.year} kindLabel={firkinKind}>
 		{#snippet actions()}
 			{#if canPlay}
 				<button
@@ -1788,17 +1788,6 @@
 					loading="lazy"
 					class="w-full rounded-md object-cover"
 				/>
-			{/if}
-
-			{#if firkinKind || (firkin.year !== null && firkin.year !== undefined && Number.isFinite(firkin.year))}
-				<div class="flex flex-wrap items-center gap-1">
-					{#if firkinKind}
-						<span class="badge badge-outline badge-sm">{firkinKind}</span>
-					{/if}
-					{#if firkin.year !== null && firkin.year !== undefined && Number.isFinite(firkin.year)}
-						<span class="badge badge-outline badge-sm">{firkin.year}</span>
-					{/if}
-				</div>
 			{/if}
 
 			<CatalogScoresCard reviews={firkin.reviews ?? []} />
