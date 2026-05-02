@@ -2,6 +2,8 @@
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { materializeBrowseFirkin } from '$lib/catalog-firkin';
+	import FirkinCard from '$components/firkins/FirkinCard.svelte';
+	import type { CloudFirkin } from '$types/firkin.type';
 
 	interface RelatedItem {
 		videoId: string;
@@ -108,6 +110,32 @@
 		return id ? `${base}/catalog/${encodeURIComponent(id)}` : `${base}/catalog/visit`;
 	}
 
+	function toFirkin(item: RelatedItem): CloudFirkin {
+		const images = item.thumbnail
+			? [{ url: item.thumbnail, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }]
+			: [];
+		const description = [item.uploaderName, item.durationText, item.viewsText]
+			.filter((s) => s && s.length > 0)
+			.join(' · ');
+		return {
+			id: firkinIds[item.videoId] ?? `virtual:youtube-video:${item.videoId}`,
+			cid: '',
+			title: item.title,
+			artists: item.uploaderName ? [{ name: item.uploaderName, role: 'channel' }] : [],
+			description,
+			images,
+			files: [],
+			year: null,
+			addon: 'youtube-video',
+			creator: '',
+			created_at: '',
+			updated_at: '',
+			version: 0,
+			version_hashes: [],
+			reviews: []
+		};
+	}
+
 	async function handleClick(event: MouseEvent, item: RelatedItem) {
 		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
 			return;
@@ -150,44 +178,12 @@
 	{:else if status === 'empty'}
 		<p class="text-xs text-base-content/60">No related videos returned.</p>
 	{:else if visibleItems.length > 0}
-		<ul class="flex flex-col gap-3">
+		<div class="grid grid-cols-2 gap-3">
 			{#each visibleItems as item (item.videoId)}
-				<li class="flex gap-2">
-					<a
-						class="flex flex-1 link gap-2 link-hover"
-						href={hrefFor(item)}
-						onclick={(e) => handleClick(e, item)}
-						title={item.title}
-					>
-						{#if item.thumbnail}
-							<img
-								src={item.thumbnail}
-								alt=""
-								loading="lazy"
-								class="h-12 w-20 shrink-0 rounded object-cover"
-							/>
-						{:else}
-							<div class="h-12 w-20 shrink-0 rounded bg-base-300"></div>
-						{/if}
-						<div class="flex min-w-0 flex-1 flex-col">
-							<span class="line-clamp-2 text-xs font-medium text-base-content">
-								{item.title}
-							</span>
-							<span class="mt-auto flex flex-wrap gap-1 text-[10px] text-base-content/50">
-								{#if item.uploaderName}
-									<span class="truncate">{item.uploaderName}</span>
-								{/if}
-								{#if item.durationText}
-									<span>· {item.durationText}</span>
-								{/if}
-								{#if item.viewsText}
-									<span>· {item.viewsText}</span>
-								{/if}
-							</span>
-						</div>
-					</a>
-				</li>
+				<a href={hrefFor(item)} onclick={(e) => handleClick(e, item)} class="block no-underline">
+					<FirkinCard firkin={toFirkin(item)} />
+				</a>
 			{/each}
-		</ul>
+		</div>
 	{/if}
 </section>
