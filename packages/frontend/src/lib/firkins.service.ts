@@ -296,6 +296,9 @@ class FirkinsService {
 			release?: string | null;
 			format?: string | null;
 			isHearingImpaired?: boolean;
+			/** TV-only — identifies which episode the subtitle is timed to. */
+			season?: number;
+			episode?: number;
 		}
 	): Promise<Firkin> {
 		const res = await fetch(`/api/firkins/${encodeURIComponent(id)}/subtitle`, {

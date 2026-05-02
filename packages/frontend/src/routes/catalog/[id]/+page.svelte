@@ -476,6 +476,13 @@
 		await playIpfsCid(firstIpfsCid, firkin.title);
 	}
 
+	// Track which TV episode the user is currently streaming so the
+	// subtitle search and the player's filtered subtitle list can pivot
+	// per-episode. Set in `playEpisode`; left null for movies and any
+	// non-episode IPFS / torrent stream.
+	let currentSeason = $state<number | null>(null);
+	let currentEpisode = $state<number | null>(null);
+
 	async function playEpisode(season: number, episode: number): Promise<void> {
 		const key = `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
 		const cid = episodeCidByKey.get(key);
@@ -483,6 +490,8 @@
 		// Switch the player tab so the inline pane renders the episode.
 		// The IPFS tab is gated on `ipfsTabEnabled` (= `hasIpfsFiles`),
 		// which is true whenever any episode has a CID.
+		currentSeason = season;
+		currentEpisode = episode;
 		activeSource = 'ipfs';
 		await playIpfsCid(cid, `${firkin.title} — ${key}`);
 	}
@@ -1140,14 +1149,29 @@
 	});
 
 	const subsLyricsResolver = new SubsLyricsResolver();
-	// Subtitle search is movie-only for now: TV requires a season/episode
-	// picker, which the catalog detail page doesn't have yet, and the
-	// `tmdb-tv` season-1-episode-1 default produced misleading results.
-	const subsLyricsKind = $derived<'subs' | null>(isTmdbMovie ? 'subs' : null);
-	let subsLyricsInitForFirkinId: string | null = null;
+	// Subtitle search runs for both TMDB movies and TMDB TV shows. TV
+	// requires the user to have started an episode-specific stream first
+	// (so we know which `(season, episode)` to pin the OpenSubtitles
+	// query to); the picker UI gates on `currentSeason`/`currentEpisode`
+	// being set.
+	const subsLyricsKind = $derived<'subs' | null>(isTmdbMovie || isTmdbTv ? 'subs' : null);
+	// Per-(firkin, season, episode) sentinel — for TV we want the search
+	// to re-fire whenever the user pivots to a different episode, so a
+	// flat firkin-id sentinel won't do.
+	let subsLyricsInitKey: string | null = null;
 
 	const subsLyricsSearchTerm = $derived.by<string | null>(() => {
 		if (!subsLyricsKind) return null;
+		if (isTmdbTv) {
+			if (!tmdbTvId) {
+				return `no TMDB id on this firkin (title: ${firkin.title})`;
+			}
+			if (currentSeason === null || currentEpisode === null) {
+				return `${firkin.title} — start an episode stream to search subtitles for it`;
+			}
+			const tag = `S${String(currentSeason).padStart(2, '0')}E${String(currentEpisode).padStart(2, '0')}`;
+			return `OpenSubtitles v3 tv via TMDB id=${tmdbTvId} ${tag} (title: ${firkin.title})`;
+		}
 		if (!tmdbMovieId) {
 			return `no TMDB id on this firkin (title: ${firkin.title})`;
 		}
@@ -1156,6 +1180,17 @@
 
 	function runSubsLyricsSearch() {
 		if (!subsLyricsKind) return;
+		if (isTmdbTv) {
+			if (!tmdbTvId || currentSeason === null || currentEpisode === null) return;
+			void subsLyricsResolver.search({
+				addon: firkin.addon,
+				query: firkin.title,
+				externalIds: [tmdbTvId],
+				season: currentSeason,
+				episode: currentEpisode
+			});
+			return;
+		}
 		if (!tmdbMovieId) return;
 		void subsLyricsResolver.search({
 			addon: firkin.addon,
@@ -1165,17 +1200,27 @@
 	}
 
 	// Subtitle search no longer auto-fires on detail mount — it kicks
-	// only once an IPFS or torrent stream actually starts. See
-	// `selectSource(...)` and the maybe-search effect below: the subs
-	// query is gated on `activeSource` flipping to a streamable tab so
-	// we don't burn an OpenSubtitles round-trip on every page visit.
+	// only once an IPFS or torrent stream actually starts. For TV the
+	// search also re-fires when the user pivots to a different episode,
+	// so the gate is keyed off `(firkin.id, currentSeason, currentEpisode)`
+	// rather than the firkin id alone.
 	$effect(() => {
 		if (!subsLyricsKind) return;
-		if (!tmdbMovieId) return;
 		if (activeSource !== 'ipfs' && activeSource !== 'torrent') return;
-		const fid = firkin.id;
-		if (subsLyricsInitForFirkinId === fid) return;
-		subsLyricsInitForFirkinId = fid;
+		let key: string;
+		if (isTmdbTv) {
+			if (!tmdbTvId) return;
+			if (currentSeason === null || currentEpisode === null) return;
+			key = `${firkin.id}::${currentSeason}::${currentEpisode}`;
+		} else {
+			if (!tmdbMovieId) return;
+			key = firkin.id;
+		}
+		if (subsLyricsInitKey === key) return;
+		subsLyricsInitKey = key;
+		// Drop any prior episode-specific selection so the new search
+		// doesn't render last episode's pick as `selected`.
+		selectedSubExternalId = null;
 		runSubsLyricsSearch();
 	});
 
@@ -1192,6 +1237,8 @@
 		display: string;
 		release: string | null;
 		externalId: string;
+		season: number | null;
+		episode: number | null;
 	};
 	const attachedSubtitles = $derived.by<AttachedSubtitle[]>(() => {
 		const out: AttachedSubtitle[] = [];
@@ -1204,6 +1251,8 @@
 					display: string;
 					release: string | null;
 					externalId: string;
+					season: number;
+					episode: number;
 				}>;
 				if (!parsed.cid || !parsed.language) continue;
 				out.push({
@@ -1211,7 +1260,9 @@
 					language: parsed.language,
 					display: parsed.display ?? parsed.language,
 					release: parsed.release ?? null,
-					externalId: parsed.externalId ?? ''
+					externalId: parsed.externalId ?? '',
+					season: typeof parsed.season === 'number' ? parsed.season : null,
+					episode: typeof parsed.episode === 'number' ? parsed.episode : null
 				});
 			} catch {
 				// pre-existing payloads without a `cid` (or non-JSON) — ignore
@@ -1219,8 +1270,22 @@
 		}
 		return out;
 	});
+
+	// For TV firkins, restrict the subs visible to the player + picker to
+	// the currently-playing episode so an S01E03 sub doesn't render on top
+	// of S01E04 just because both live on the same firkin. Movies have
+	// `season` / `episode` of `null` on every entry so the filter is a
+	// no-op.
+	const subsForCurrentEpisode = $derived<AttachedSubtitle[]>(
+		isTmdbTv
+			? attachedSubtitles.filter(
+					(s) => s.season === currentSeason && s.episode === currentEpisode
+				)
+			: attachedSubtitles.filter((s) => s.season === null && s.episode === null)
+	);
+
 	const playerSubtitles = $derived<PlayableFileSubtitle[]>(
-		attachedSubtitles.map((s) => ({
+		subsForCurrentEpisode.map((s) => ({
 			languageCode: s.language,
 			languageName: s.display,
 			url: `${base}/api/ipfs/pins/${encodeURIComponent(s.cid)}/file`,
@@ -1312,10 +1377,18 @@
 		if (!id) return;
 		const pick = subsForLanguage.find((s) => s.externalId === id);
 		if (!pick || !pick.url) return;
+		// TV firkins must carry the (season, episode) on the persisted
+		// FileEntry so the same OpenSubtitles externalId can land on
+		// multiple episodes without dedup collisions, and so the player's
+		// per-episode filter knows which sub belongs to which.
+		if (isTmdbTv && (currentSeason === null || currentEpisode === null)) {
+			attachSubtitleError = 'Start an episode stream before attaching a subtitle';
+			return;
+		}
 		attachingSubtitle = true;
 		attachSubtitleError = null;
 		try {
-			const updated = await firkinsService.attachSubtitle(firkin.id, {
+			const payload: Parameters<typeof firkinsService.attachSubtitle>[1] = {
 				source: pick.source,
 				externalId: pick.externalId,
 				url: pick.url,
@@ -1324,7 +1397,12 @@
 				release: pick.release ?? null,
 				format: pick.format ?? null,
 				isHearingImpaired: pick.isHearingImpaired ?? false
-			});
+			};
+			if (isTmdbTv && currentSeason !== null && currentEpisode !== null) {
+				payload.season = currentSeason;
+				payload.episode = currentEpisode;
+			}
+			const updated = await firkinsService.attachSubtitle(firkin.id, payload);
 			firkinOverride = updated;
 		} catch (err) {
 			attachSubtitleError = err instanceof Error ? err.message : 'Unknown error';
@@ -1335,28 +1413,33 @@
 
 	const isSubtitleAttached = $derived(
 		selectedSubExternalId !== null &&
-			attachedSubtitles.some(
+			subsForCurrentEpisode.some(
 				(s) =>
 					s.externalId === selectedSubExternalId &&
 					s.language.toLowerCase() === selectedSubLanguage.toLowerCase()
 			)
 	);
-	const subPickerEnabled = $derived(
-		isBookmarked &&
-			(activeSource === 'ipfs' || activeSource === 'torrent') &&
-			Boolean(subsLyricsKind)
-	);
+	const subPickerEnabled = $derived.by(() => {
+		if (!isBookmarked) return false;
+		if (activeSource !== 'ipfs' && activeSource !== 'torrent') return false;
+		if (!subsLyricsKind) return false;
+		if (isTmdbTv) return currentSeason !== null && currentEpisode !== null;
+		return true;
+	});
 
 	// Controlled active-subtitle URL fed to `<PlayerVideo subtitleUrl=…>`.
 	// Resolves to the first attached subtitle whose language matches the
-	// user's pick in the toolbar; when the toolbar's specific release is
-	// also attached, that wins (so a fresh download instantly shows on the
+	// user's pick in the toolbar — and, on TV, also the currently-playing
+	// `(season, episode)`. When the toolbar's specific release is also
+	// attached, that wins (so a fresh download instantly shows on the
 	// player even when an older same-language sub is still on the firkin).
 	// Returns `null` to mean "subs off" — switching to a language with no
 	// downloads yet hides any prior selection.
 	const currentSubtitleUrl = $derived.by<string | null>(() => {
 		const lang = selectedSubLanguage.toLowerCase();
-		const candidates = attachedSubtitles.filter((s) => s.language.toLowerCase() === lang);
+		const candidates = subsForCurrentEpisode.filter(
+			(s) => s.language.toLowerCase() === lang
+		);
 		if (candidates.length === 0) return null;
 		const preferred = selectedSubExternalId
 			? candidates.find((s) => s.externalId === selectedSubExternalId)

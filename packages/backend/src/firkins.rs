@@ -1667,13 +1667,23 @@ pub struct AttachSubtitleRequest {
     pub format: Option<String>,
     #[serde(rename = "isHearingImpaired", default)]
     pub is_hearing_impaired: bool,
+    /// TV-only. Identifies which episode the subtitle is timed to so a
+    /// `tmdb-tv` firkin can carry one row per (season, episode, language)
+    /// without dedup colliding across episodes. Movies leave both unset.
+    #[serde(default)]
+    pub season: Option<u32>,
+    #[serde(default)]
+    pub episode: Option<u32>,
 }
 
 /// Persisted shape of a `subtitle`-typed FileEntry's `value`. Stored as a
 /// JSON-serialised string on the firkin; `cid` points at the VTT bytes
 /// pinned to IPFS, which the in-page player resolves via
 /// `/api/ipfs/pins/<cid>/file`. `url` is kept around for re-fetch /
-/// debugging only.
+/// debugging only. `season` / `episode` are populated for TV firkins so
+/// the frontend can filter the player's subtitle list to the currently-
+/// playing episode (and dedup the same `(language, externalId)` pair
+/// across episodes without collision).
 #[cfg(not(target_os = "android"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SubtitleFileValue {
@@ -1690,6 +1700,10 @@ struct SubtitleFileValue {
     pub format: String,
     #[serde(rename = "isHearingImpaired", default)]
     pub is_hearing_impaired: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub season: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub episode: Option<u32>,
 }
 
 /// SRT timestamps look like `00:01:23,456`; VTT requires `.` as the
@@ -1866,6 +1880,8 @@ async fn attach_subtitle(
         release,
         format: "vtt".to_string(),
         is_hearing_impaired: req.is_hearing_impaired,
+        season: req.season,
+        episode: req.episode,
     };
     let value_json = serde_json::to_string(&value).map_err(|e| {
         err_response(
@@ -1874,19 +1890,34 @@ async fn attach_subtitle(
         )
     })?;
 
-    // Replace any prior subtitle entry with the same (language, externalId).
+    // Replace any prior subtitle entry with the same
+    // (language, externalId, season, episode) tuple. For movies the
+    // season/episode pair is `None` on both sides so the dedup falls back
+    // to the (language, externalId) pair. For TV firkins different
+    // episodes coexist because the season/episode keys disambiguate.
     // Re-running the attach for the same pick is a no-op rollforward
     // because the persisted value is identical (same cid).
-    let lang_marker = format!("\"language\":\"{language}\"");
-    let key_marker = format!("\"externalId\":\"{external_id}\"");
     let mut next_files: Vec<FileEntry> = Vec::with_capacity(current.files.len() + 1);
     for f in current.files.into_iter() {
-        if f.kind == "subtitle" && f.value.contains(&lang_marker) && f.value.contains(&key_marker) {
-            continue;
+        if f.kind == "subtitle" {
+            if let Ok(parsed) = serde_json::from_str::<SubtitleFileValue>(&f.value) {
+                if parsed.language == language
+                    && parsed.external_id == external_id
+                    && parsed.season == req.season
+                    && parsed.episode == req.episode
+                {
+                    continue;
+                }
+            }
         }
         next_files.push(f);
     }
-    let title = display.clone().unwrap_or_else(|| language.clone());
+    let title = match (req.season, req.episode, display.as_deref()) {
+        (Some(s), Some(e), Some(d)) => format!("S{s:02}E{e:02} {d}"),
+        (Some(s), Some(e), None) => format!("S{s:02}E{e:02} {language}"),
+        (_, _, Some(d)) => d.to_string(),
+        _ => language.clone(),
+    };
     next_files.push(FileEntry {
         kind: "subtitle".to_string(),
         value: value_json,
