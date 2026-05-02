@@ -154,17 +154,143 @@ fn parse_secondary_results(data: &serde_json::Value) -> Vec<RelatedItem> {
     };
 
     for entry in results {
+        // The current YouTube web client serves the sidebar as
+        // `lockupViewModel` entries — the new view-model-style schema.
+        if let Some(lockup) = entry.get("lockupViewModel") {
+            if let Some(item) = parse_lockup_view_model(lockup) {
+                items.push(item);
+            }
+            continue;
+        }
+        // Older clients (or fallback) still return `compactVideoRenderer`.
         if let Some(compact) = entry.get("compactVideoRenderer") {
             if let Some(item) = parse_compact_video_renderer(compact) {
                 items.push(item);
             }
+            continue;
         }
-        // Skip continuationItemRenderer, compactRadioRenderer (mixes),
-        // compactPlaylistRenderer, and ad slots — the consumer only
-        // cares about a flat list of related videos.
+        // Skip continuationItemRenderer, reelShelfRenderer (Shorts),
+        // compactRadioRenderer (mixes), compactPlaylistRenderer, and ad
+        // slots — the consumer only cares about a flat list of related
+        // videos.
     }
 
     items
+}
+
+fn parse_lockup_view_model(v: &serde_json::Value) -> Option<RelatedItem> {
+    // Only surface plain videos. Playlists / podcasts / mixes use
+    // different content types and would point at a `list=` URL rather
+    // than a watchable video.
+    let content_type = v.get("contentType").and_then(|t| t.as_str()).unwrap_or("");
+    if content_type != "LOCKUP_CONTENT_TYPE_VIDEO" {
+        return None;
+    }
+
+    let video_id = v.get("contentId")?.as_str()?.to_string();
+
+    let title = v
+        .pointer("/metadata/lockupMetadataViewModel/title/content")
+        .and_then(|t| t.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    // Pick the largest thumbnail source available. The sources list is
+    // ordered small → large, so `last` wins.
+    let thumbnail = v
+        .pointer("/contentImage/thumbnailViewModel/image/sources")
+        .and_then(|t| t.as_array())
+        .and_then(|arr| arr.last())
+        .and_then(|t| t.get("url"))
+        .and_then(|u| u.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    // Duration sits inside an overlay badge; walk the badges and pick
+    // the first one that has a `text` field shaped like a duration
+    // (`MM:SS` or `H:MM:SS`).
+    let duration_text = v
+        .pointer("/contentImage/thumbnailViewModel/overlays")
+        .and_then(|o| o.as_array())
+        .and_then(|overlays| {
+            overlays.iter().find_map(|overlay| {
+                overlay
+                    .pointer("/thumbnailBottomOverlayViewModel/badges")
+                    .and_then(|b| b.as_array())
+                    .and_then(|badges| {
+                        badges.iter().find_map(|b| {
+                            b.pointer("/thumbnailBadgeViewModel/text")
+                                .and_then(|t| t.as_str())
+                                .filter(|s| s.contains(':'))
+                                .map(str::to_string)
+                        })
+                    })
+            })
+        })
+        .unwrap_or_default();
+    let duration = parse_duration(&duration_text);
+
+    // Metadata rows: row 0 is the byline (uploader name), row 1 is
+    // `[<views>, <uploaded date>]`. The shape is stable across regular
+    // sidebar entries.
+    let metadata_rows = v
+        .pointer("/metadata/lockupMetadataViewModel/metadata/contentMetadataViewModel/metadataRows")
+        .and_then(|r| r.as_array());
+
+    let uploader_name = metadata_rows
+        .and_then(|rows| rows.first())
+        .and_then(|row| row.pointer("/metadataParts/0/text/content"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let (views_text, uploaded_date) = metadata_rows
+        .and_then(|rows| rows.get(1))
+        .and_then(|row| row.get("metadataParts").and_then(|p| p.as_array()))
+        .map(|parts| {
+            let v = parts
+                .first()
+                .and_then(|p| p.pointer("/text/content"))
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let d = parts
+                .get(1)
+                .and_then(|p| p.pointer("/text/content"))
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            (v, d)
+        })
+        .unwrap_or_default();
+    let views = parse_view_count(&views_text);
+
+    let uploader_url = v
+        .pointer(
+            "/metadata/lockupMetadataViewModel/image/decoratedAvatarViewModel/rendererContext/commandContext/onTap/innertubeCommand/browseEndpoint/canonicalBaseUrl",
+        )
+        .and_then(|t| t.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    Some(RelatedItem {
+        video_id: video_id.clone(),
+        title,
+        url: format!("/watch?v={}", video_id),
+        thumbnail,
+        duration,
+        duration_text,
+        views,
+        views_text,
+        uploaded_date,
+        uploader_name,
+        uploader_url,
+        // The lockup view model exposes verified / artist badges on a
+        // different path than the legacy renderer; we don't surface
+        // them yet — the UI currently doesn't render the badge
+        // anyway, so leaving it as `false` is harmless.
+        uploader_verified: false,
+    })
 }
 
 fn parse_compact_video_renderer(v: &serde_json::Value) -> Option<RelatedItem> {
