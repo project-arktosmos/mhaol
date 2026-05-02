@@ -32,20 +32,21 @@
 
 	const PREVIEW_COUNT = 4;
 
-	// Per-kind row sizing — wider tiles get fewer columns. Movie/TV-landscape
-	// uses aspect-video tiles, so 4 firkins + More fits cleanly. Albums
-	// (square) and YouTube videos (aspect-video) sit in between with 5 firkins
-	// + More. The portrait-poster default keeps the original 6 + More layout.
+	// Per-kind row sizing — wider tiles get fewer columns.
+	//   - Movie/TV-landscape and YouTube (aspect-video): 4 firkins + More = 5 cols
+	//   - Albums (square): 5 firkins + More = 6 cols
+	//   - Portrait-poster default (covers movies/TV, books, games): 6 + More = 7 cols
 	const viewModeStore = movieTvViewModeService.store;
 	const referenceKind = $derived(firkins.length > 0 ? addonKind(firkins[0].addon) : null);
 	const useLandscape = $derived(
 		(referenceKind === 'movie' || referenceKind === 'tv show') &&
 			$viewModeStore.mode === 'landscapes'
 	);
-	const isMidWidthRow = $derived(referenceKind === 'album' || referenceKind === 'youtube video');
-	const effectiveCollapsedCount = $derived(useLandscape ? 4 : isMidWidthRow ? 5 : collapsedCount);
+	const isWideRow = $derived(useLandscape || referenceKind === 'youtube video');
+	const isAlbumRow = $derived(referenceKind === 'album');
+	const effectiveCollapsedCount = $derived(isWideRow ? 4 : isAlbumRow ? 5 : collapsedCount);
 	const gridColsClass = $derived(
-		useLandscape ? 'grid-cols-5' : isMidWidthRow ? 'grid-cols-6' : 'grid-cols-7'
+		isWideRow ? 'grid-cols-5' : isAlbumRow ? 'grid-cols-6' : 'grid-cols-7'
 	);
 
 	const visibleFirkins = $derived<CloudFirkin[]>(
