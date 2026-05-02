@@ -82,6 +82,11 @@
 			torrent: TorrentResultItem;
 			status: 'streamable' | 'probing';
 		}>;
+		/** One representative torrent per quality bucket from the torrent
+		 * search. Powers the Download tab's per-quality picks table — every
+		 * discovered quality gets a row with its own Assign / Play button.
+		 * Empty until the search returns at least one row. */
+		downloadPicksByQuality?: Array<{ quality: string; torrent: TorrentResultItem }>;
 		/** Click handler for the faded Download preview — should run the
 		 * same flow as the Download button on the search table row (attach
 		 * the magnet to the firkin and start the torrent client). */
@@ -116,6 +121,7 @@
 		downloadPlaying = false,
 		preferredDownload = null,
 		streamPicksByQuality = [],
+		downloadPicksByQuality = [],
 		onAttachDownload,
 		onAttachStream,
 		attachingDownload = false,
@@ -147,6 +153,15 @@
 		const byLabel = streamPicksByQuality.find((p) => p.quality === stream.quality);
 		if (byLabel) return byLabel.quality;
 		const byRaw = streamPicksByQuality.find((p) => p.torrent.quality === stream.quality);
+		return byRaw?.quality ?? null;
+	});
+
+	// Same as `attachedStreamQuality` but for the Download tab's table.
+	const attachedDownloadQuality = $derived.by<string | null>(() => {
+		if (!download?.quality) return null;
+		const byLabel = downloadPicksByQuality.find((p) => p.quality === download.quality);
+		if (byLabel) return byLabel.quality;
+		const byRaw = downloadPicksByQuality.find((p) => p.torrent.quality === download.quality);
 		return byRaw?.quality ?? null;
 	});
 
@@ -277,8 +292,78 @@
 	{/if}
 {/snippet}
 
+{#snippet downloadPicksTable(activeQuality: string | null)}
+	<table class="table table-xs w-full">
+		<thead>
+			<tr class="text-[10px] text-base-content/60 uppercase">
+				<th class="text-left">Quality</th>
+				<th class="text-success" title="Seeders">↑</th>
+				<th class="text-warning" title="Leechers">↓</th>
+				<th class="text-right">Size</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tbody>
+			{#each downloadPicksByQuality as pick (pick.quality)}
+				{@const isActive = activeQuality === pick.quality}
+				<tr class={isActive ? 'bg-base-200' : ''}>
+					<td class="text-left text-xs font-medium">{pick.quality}</td>
+					<td class="text-success">{pick.torrent.seeders ?? '—'}</td>
+					<td class="text-warning">{pick.torrent.leechers ?? '—'}</td>
+					<td class="text-right text-[10px] text-base-content/70">
+						{pick.torrent.sizeBytes != null ? formatSizeBytes(pick.torrent.sizeBytes) : '—'}
+					</td>
+					<td>
+						{#if isActive && download?.ipfsCid && onDownloadPlay}
+							<button
+								type="button"
+								onclick={() => onDownloadPlay?.()}
+								disabled={downloadPlaying}
+								class="btn w-full btn-xs btn-primary"
+							>
+								{downloadPlaying ? '…' : 'Play'}
+							</button>
+						{:else if isActive && download}
+							<button
+								type="button"
+								disabled
+								class="btn w-full btn-xs btn-primary"
+								aria-label="Downloading"
+								title={download.finished
+									? 'Seeding · pinning to IPFS…'
+									: download.progress != null
+										? `${Math.round(download.progress * 100)}%`
+										: 'Queued'}
+							>
+								{#if download.finished}
+									Seeding…
+								{:else if download.progress != null}
+									{Math.round(download.progress * 100)}%
+								{:else}
+									Queued
+								{/if}
+							</button>
+						{:else}
+							<button
+								type="button"
+								onclick={() => onAttachDownload?.(pick.torrent)}
+								disabled={attachingDownload}
+								class="btn w-full btn-xs btn-primary"
+							>
+								{attachingDownload ? '…' : 'Assign'}
+							</button>
+						{/if}
+					</td>
+				</tr>
+			{/each}
+		</tbody>
+	</table>
+{/snippet}
+
 {#snippet downloadContent()}
-	{#if download && download.ipfsCid && onDownloadPlay}
+	{#if downloadPicksByQuality.length > 0 && onAttachDownload}
+		{@render downloadPicksTable(attachedDownloadQuality)}
+	{:else if download && download.ipfsCid && onDownloadPlay}
 		<div class="flex flex-col items-center gap-1">
 			<span
 				class="block max-w-full truncate font-mono text-[10px] text-base-content/60"

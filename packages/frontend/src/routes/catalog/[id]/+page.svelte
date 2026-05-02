@@ -1231,6 +1231,23 @@
 		}
 		return null;
 	});
+	// One representative row per quality bucket from the torrent search
+	// (best-seeded inside the group). Powers the Download tab's per-quality
+	// picks table — like the Stream tab, every discovered quality lands as
+	// a row immediately, with its own Assign button.
+	const downloadPicksByQuality = $derived.by<
+		Array<{ quality: string; torrent: TorrentResultItem }>
+	>(() => {
+		const out: Array<{ quality: string; torrent: TorrentResultItem }> = [];
+		for (const group of torrentSearch.groupedMatches) {
+			for (const row of group.rows) {
+				if (!row.magnetLink) continue;
+				out.push({ quality: group.label, torrent: row });
+				break;
+			}
+		}
+		return out;
+	});
 	// One representative row per quality bucket discovered by the torrent
 	// search, in quality priority order. We surface qualities the moment
 	// the indexer returns them so the attachment card can render a row
@@ -2089,6 +2106,7 @@
 					downloadPlaying={ipfsStarting}
 					preferredDownload={preferredDownloadTorrent}
 					{streamPicksByQuality}
+					{downloadPicksByQuality}
 					attachingDownload={addingHash !== null &&
 						preferredDownloadTorrent?.magnetLink === addingHash}
 					attachingStream={streamingHash !== null &&
