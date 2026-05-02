@@ -1025,7 +1025,9 @@
 		<div class="alert alert-error"><span>{torrentStreamError}</span></div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
+	<div
+		class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr_minmax(0,_320px)]"
+	>
 		<aside class="flex flex-col gap-4">
 			{#if firkin.images[0]}
 				<img
@@ -1195,6 +1197,10 @@
 				/>
 			{/if}
 
+			<CatalogFilesTable files={firkin.files} />
+		</section>
+
+		<aside class="flex flex-col gap-4">
 			{#if isTmdbMovie}
 				<CatalogRelatedCard
 					addon={firkin.addon}
@@ -1214,9 +1220,7 @@
 					onItemsLoaded={handleRelatedItemsLoaded}
 				/>
 			{/if}
-
-			<CatalogFilesTable files={firkin.files} />
-		</section>
+		</aside>
 	</div>
 </div>
 

@@ -82,7 +82,7 @@
 			{:else if status === 'done' && items.length === 0}
 				<p class="text-xs text-base-content/60">No related items found upstream.</p>
 			{:else if items.length > 0}
-				<ul class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4">
+				<ul class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-2">
 					{#each items as item (item.id)}
 						<li>
 							<a

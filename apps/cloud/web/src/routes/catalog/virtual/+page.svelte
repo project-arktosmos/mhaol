@@ -304,7 +304,9 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr]">
+	<div
+		class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr_minmax(0,_320px)]"
+	>
 		<aside class="flex flex-col gap-4">
 			{#if images[0]}
 				<img
@@ -367,10 +369,12 @@
 					onRefresh={() => torrentSearch.search({ addon, title, year })}
 				/>
 			{/if}
+		</section>
 
+		<aside class="flex flex-col gap-4">
 			{#if isMusicBrainz || isTmdbMovie || isTmdbTv}
 				<CatalogRelatedCard {addon} upstreamId={itemId} />
 			{/if}
-		</section>
+		</aside>
 	</div>
 </div>
