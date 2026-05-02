@@ -1,0 +1,141 @@
+name: Release Tauri Cloud (multi-platform)
+
+# Builds ONLY the apps/cloud Tauri shell ("Mhaol Cloud") for macOS, Linux,
+# and Windows, and attaches the resulting installers to the published release.
+# Does not build the mhaol-cloud bin, mhaol-headless bin, or the Android shells.
+#
+# Bundles are UNSIGNED. macOS Gatekeeper and Windows SmartScreen will warn
+# users on first launch; this is intentional — code signing requires paid
+# certs we don't intend to obtain.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            arch_label: macos-universal
+            tauri_target: universal-apple-darwin
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            arch_label: linux-x86_64
+            tauri_target: ''
+            rust_targets: ''
+          - platform: windows-latest
+            arch_label: windows-x86_64
+            tauri_target: ''
+            rust_targets: ''
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux deps
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            libayatana-appindicator3-dev \
+            patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+          key: tauri-cloud-${{ matrix.arch_label }}
+
+      - name: Install Tauri CLI
+        run: cargo install --locked tauri-cli --version "^2"
+
+      - name: Build Tauri cloud bundle
+        working-directory: apps/cloud
+        shell: bash
+        run: |
+          if [[ -n "${{ matrix.tauri_target }}" ]]; then
+            cargo tauri build --target "${{ matrix.tauri_target }}"
+          else
+            cargo tauri build
+          fi
+
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          mkdir -p dist-release
+          case "${{ runner.os }}" in
+            macOS)
+              BUNDLE="target/${{ matrix.tauri_target }}/release/bundle"
+              cp "$BUNDLE"/dmg/*.dmg dist-release/ 2>/dev/null || true
+              if compgen -G "$BUNDLE/macos/*.app" > /dev/null; then
+                ( cd "$BUNDLE/macos" && for app in *.app; do
+                    zip -ry "$GITHUB_WORKSPACE/dist-release/${app%.app}-${{ matrix.arch_label }}.app.zip" "$app"
+                  done )
+              fi
+              ;;
+            Linux)
+              BUNDLE="target/release/bundle"
+              cp "$BUNDLE"/deb/*.deb dist-release/ 2>/dev/null || true
+              cp "$BUNDLE"/appimage/*.AppImage dist-release/ 2>/dev/null || true
+              cp "$BUNDLE"/rpm/*.rpm dist-release/ 2>/dev/null || true
+              ;;
+            Windows)
+              BUNDLE="target/release/bundle"
+              cp "$BUNDLE"/msi/*.msi dist-release/ 2>/dev/null || true
+              cp "$BUNDLE"/nsis/*.exe dist-release/ 2>/dev/null || true
+              ;;
+          esac
+          if [[ -z "$(ls -A dist-release 2>/dev/null)" ]]; then
+            echo "::error::no Tauri bundle artifacts produced for ${{ matrix.arch_label }}"
+            exit 1
+          fi
+          ls -la dist-release/
+
+      - name: Generate checksums
+        shell: bash
+        working-directory: dist-release
+        run: |
+          if command -v shasum >/dev/null; then
+            shasum -a 256 * > SHA256SUMS-${{ matrix.arch_label }}.txt
+          else
+            sha256sum * > SHA256SUMS-${{ matrix.arch_label }}.txt
+          fi
+          cat SHA256SUMS-${{ matrix.arch_label }}.txt
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-cloud-${{ matrix.arch_label }}
+          path: dist-release/*
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-release/*
+          fail_on_unmatched_files: true
