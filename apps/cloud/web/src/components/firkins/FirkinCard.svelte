@@ -1,6 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { blo } from 'blo';
+	import { Icon, addonKind, type FirkinKind, type IconName } from 'cloud-ui';
 	import type { CloudFirkin } from '$types/firkin.type';
 	import { getCachedImageUrl } from '$services/image-cache.service';
 
@@ -10,6 +11,20 @@
 	}
 
 	let { firkin, classes = '' }: Props = $props();
+
+	const KIND_ICON: Record<FirkinKind, IconName> = {
+		movie: 'delapouite/film-strip',
+		'tv show': 'delapouite/tv',
+		album: 'delapouite/compact-disc',
+		'youtube video': 'delapouite/video-camera',
+		'youtube channel': 'delapouite/tv-tower',
+		book: 'delapouite/book-cover',
+		game: 'delapouite/gamepad'
+	};
+
+	let placeholderIcon = $derived<IconName>(
+		KIND_ICON[addonKind(firkin.addon) ?? 'movie'] ?? 'delapouite/film-strip'
+	);
 
 	let coverImage = $derived(firkin.images?.[0] ?? null);
 	let resolvedCoverUrl = $state<string | null>(null);
@@ -74,6 +89,13 @@
 					class="block h-auto w-full"
 					loading="lazy"
 				/>
+			{:else}
+				<div
+					class="flex aspect-[2/3] w-full items-center justify-center text-base-content/30"
+					aria-hidden="true"
+				>
+					<Icon name={placeholderIcon} size="40%" />
+				</div>
 			{/if}
 			{#if firkin.description}
 				<figcaption
@@ -103,7 +125,7 @@
 		<div class="flex flex-wrap items-center gap-1.5 border-t border-base-content/10 px-4 py-2">
 			{#each reviews as review (review.label)}
 				<span
-					class="badge badge-outline badge-sm gap-1 font-mono"
+					class="badge gap-1 badge-outline font-mono badge-sm"
 					title={review.voteCount !== undefined
 						? `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)} (${formatVotes(review.voteCount)})`
 						: `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)}`}
