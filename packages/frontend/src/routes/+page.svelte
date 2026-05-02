@@ -5,6 +5,8 @@
 	import FirkinLibraryGrid from '$components/catalog/FirkinLibraryGrid.svelte';
 	import LazyRow from '$components/catalog/LazyRow.svelte';
 	import PopularGenreRow from '$components/catalog/PopularGenreRow.svelte';
+	import NavbarAddonPicker from '$components/core/NavbarAddonPicker.svelte';
+	import NavbarSearch from '$components/core/NavbarSearch.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
 	} from '$components/firkins/FirkinMetadataLookupModal.svelte';
@@ -23,13 +25,6 @@
 	} from '$lib/firkins.service';
 	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
 	import { userIdentityService } from '$lib/user-identity.service';
-	import { artistsModalService } from '$services/artists-modal.service';
-	import { consumptionModalService } from '$services/consumption-modal.service';
-	import { diskModalService } from '$services/disk-modal.service';
-	import { healthModalService } from '$services/health-modal.service';
-	import { ipfsModalService } from '$services/ipfs-modal.service';
-	import { librariesModalService } from '$services/libraries-modal.service';
-	import { torrentModalService } from '$services/torrent-modal.service';
 
 	const firkinsStore = firkinsService.state;
 	const firkinsIncludeAll = firkinsService.includeAll;
@@ -224,63 +219,9 @@
 </svelte:head>
 
 <section class="sticky top-0 z-50 border-b border-base-content/10 bg-base-200">
-	<div class="flex flex-wrap items-center gap-2 p-3">
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => consumptionModalService.open()}
-			title="Show playback time per firkin"
-		>
-			Consumption
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => diskModalService.open()}
-			title="Show host volumes and the data-root breakdown"
-		>
-			Disk
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => librariesModalService.open()}
-			title="Manage libraries on this machine"
-		>
-			Libraries
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => ipfsModalService.open()}
-			title="Show IPFS pins recorded by the cloud"
-		>
-			IPFS
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => torrentModalService.open()}
-			title="Show the embedded torrent client status"
-		>
-			Torrent
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => artistsModalService.open()}
-			title="Browse content-addressed artist records"
-		>
-			Artists
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => healthModalService.open()}
-			title="Live health of this Mhaol cloud node"
-		>
-			Health
-		</button>
+	<div class="flex flex-wrap items-center gap-3 p-3">
+		<NavbarAddonPicker />
+		<NavbarSearch />
 	</div>
 </section>
 
