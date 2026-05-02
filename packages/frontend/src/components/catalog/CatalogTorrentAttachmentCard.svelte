@@ -208,9 +208,9 @@
 				>
 					{trailer.title}
 				</span>
-				<span class="text-[10px] font-medium text-success">
-					{trailerPlaying ? 'Starting…' : 'Click to play'}
-				</span>
+				{#if trailerPlaying}
+					<span class="text-[10px] font-medium text-success">Starting…</span>
+				{/if}
 			</button>
 		{/if}
 
@@ -278,9 +278,9 @@
 				>
 					{shortCid(download.ipfsCid)}
 				</span>
-				<span class="text-[10px] font-medium text-success">
-					{downloadPlaying ? 'Starting…' : 'Click to play'}
-				</span>
+				{#if downloadPlaying}
+					<span class="text-[10px] font-medium text-success">Starting…</span>
+				{/if}
 			</button>
 		{:else if download}
 			<div
