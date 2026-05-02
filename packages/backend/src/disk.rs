@@ -97,6 +97,14 @@ async fn get_disks() -> Json<DiskResponse> {
         })
         .collect();
 
+    // Collapse sibling mounts that share the same underlying physical volume.
+    // On macOS APFS containers and Linux btrfs subvolumes, a single SSD can
+    // expose multiple read-only / data / preboot mounts that all report the
+    // same total + available bytes. Two rows with the same (totalBytes,
+    // availableBytes, fileSystem) are the same volume — keep the entry that
+    // hosts the data root, otherwise the one with the shortest mount path.
+    disks = dedupe_physical(disks);
+
     // Stable order: data-root disk first, then by mount point.
     disks.sort_by(|a, b| match (b.is_data_root_disk, a.is_data_root_disk) {
         (true, false) => std::cmp::Ordering::Greater,
@@ -114,6 +122,37 @@ async fn get_disks() -> Json<DiskResponse> {
         disks,
         subdirs,
     })
+}
+
+/// Collapse sibling mount points that map to the same underlying physical
+/// volume. Keys on `(totalBytes, availableBytes, fileSystem)` — two mounts
+/// with identical capacity, free space, and filesystem type are firmlinked
+/// siblings (APFS) or subvolumes (btrfs) of one disk. Among siblings, the
+/// row hosting the data root wins; otherwise the shortest mount path wins.
+fn dedupe_physical(disks: Vec<DiskInfo>) -> Vec<DiskInfo> {
+    use std::collections::HashMap;
+    let mut buckets: HashMap<(u64, u64, String), DiskInfo> = HashMap::new();
+    for disk in disks {
+        let key = (disk.total_bytes, disk.available_bytes, disk.file_system.clone());
+        match buckets.get(&key) {
+            None => {
+                buckets.insert(key, disk);
+            }
+            Some(existing) => {
+                let replace = if disk.is_data_root_disk && !existing.is_data_root_disk {
+                    true
+                } else if !disk.is_data_root_disk && existing.is_data_root_disk {
+                    false
+                } else {
+                    disk.mount_point.len() < existing.mount_point.len()
+                };
+                if replace {
+                    buckets.insert(key, disk);
+                }
+            }
+        }
+    }
+    buckets.into_values().collect()
 }
 
 /// Reports a stable list of the data root's known subdirs (matches
