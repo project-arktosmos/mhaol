@@ -125,12 +125,13 @@ export class TorrentSearch {
 		}
 	}
 
-	// Probe each defined quality group sequentially. Within a group, walk rows
-	// in peer-score order (already sorted by groupMatches) and stop the moment
-	// one is streamable; remaining rows in that group are marked 'skipped' so
-	// the UI can dim them. Groups with `probe: false` (the "Other" catch-all
-	// for unknown quality strings) are not probed at all — their rows are
-	// pre-marked 'skipped' too so the UI doesn't leave them spinning.
+	// Each defined quality group kicks off its own sequential probe queue at
+	// the same time, so groups run in parallel and within a group rows go
+	// top-down in peer-score order (already sorted by groupMatches), stopping
+	// the moment one is streamable. Remaining rows in the group are marked
+	// 'skipped' so the UI dims them. Groups with `probe: false` (the "Other"
+	// catch-all for unknown quality strings) are not probed at all — their
+	// rows are pre-marked 'skipped' too so the UI doesn't leave them spinning.
 	private async evaluateGrouped(grouped: TorrentQualityGroup[], runToken: number): Promise<void> {
 		const seed: Record<string, TorrentRowEval> = {};
 		for (const g of grouped) {
@@ -143,29 +144,29 @@ export class TorrentSearch {
 		}
 		this.rowEvals = seed;
 
-		for (const g of grouped) {
+		await Promise.all(grouped.filter((g) => g.probe).map((g) => this.probeGroup(g, runToken)));
+	}
+
+	private async probeGroup(group: TorrentQualityGroup, runToken: number): Promise<void> {
+		let foundStreamable = false;
+		for (const t of group.rows) {
 			if (runToken !== this.run) return;
-			if (!g.probe) continue;
-			let foundStreamable = false;
-			for (const t of g.rows) {
-				if (runToken !== this.run) return;
-				if (!t.magnetLink) continue;
-				if (foundStreamable) {
-					this.rowEvals = {
-						...this.rowEvals,
-						[t.magnetLink]: {
-							kind: 'skipped',
-							reason: 'Streamable candidate found earlier in this quality group'
-						}
-					};
-					continue;
-				}
-				this.rowEvals = { ...this.rowEvals, [t.magnetLink]: { kind: 'evaluating' } };
-				const result = await this.probeOne(t.magnetLink);
-				if (runToken !== this.run) return;
-				this.rowEvals = { ...this.rowEvals, [t.magnetLink]: result };
-				if (result.kind === 'streamable') foundStreamable = true;
+			if (!t.magnetLink) continue;
+			if (foundStreamable) {
+				this.rowEvals = {
+					...this.rowEvals,
+					[t.magnetLink]: {
+						kind: 'skipped',
+						reason: 'Streamable candidate found earlier in this quality group'
+					}
+				};
+				continue;
 			}
+			this.rowEvals = { ...this.rowEvals, [t.magnetLink]: { kind: 'evaluating' } };
+			const result = await this.probeOne(t.magnetLink);
+			if (runToken !== this.run) return;
+			this.rowEvals = { ...this.rowEvals, [t.magnetLink]: result };
+			if (result.kind === 'streamable') foundStreamable = true;
 		}
 	}
 
