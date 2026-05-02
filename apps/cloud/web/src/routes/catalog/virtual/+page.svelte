@@ -14,7 +14,8 @@
 		type Firkin,
 		type ImageMeta,
 		type Artist,
-		type Trailer
+		type Trailer,
+		type Review
 	} from '$lib/firkins.service';
 	import type { TorrentResultItem } from '$lib/search.service';
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
@@ -56,6 +57,7 @@
 	let artistsStatus = $state<ArtistsStatus>('idle');
 	let artistsError = $state<string | null>(null);
 	let tmdbTrailers = $state<Trailer[]>([]);
+	let upstreamReviews = $state<Review[]>([]);
 	let metadataInitForKey: string | null = null;
 	let metadataRun = 0;
 
@@ -72,6 +74,7 @@
 		artistsError = null;
 		artists = [];
 		tmdbTrailers = [];
+		upstreamReviews = [];
 		try {
 			const res = await fetch(
 				`${base}/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(id)}/metadata`,
@@ -87,10 +90,15 @@
 				}
 				throw new Error(message);
 			}
-			const body = (await res.json()) as { artists?: Artist[]; trailers?: Trailer[] };
+			const body = (await res.json()) as {
+				artists?: Artist[];
+				trailers?: Trailer[];
+				reviews?: Review[];
+			};
 			if (myRun !== metadataRun) return;
 			artists = Array.isArray(body.artists) ? body.artists : [];
 			tmdbTrailers = Array.isArray(body.trailers) ? body.trailers : [];
+			upstreamReviews = Array.isArray(body.reviews) ? body.reviews : [];
 			artistsStatus = 'done';
 		} catch (err) {
 			if (myRun !== metadataRun) return;
@@ -181,7 +189,8 @@
 				files: buildUpstreamSourceFiles(),
 				year,
 				addon: addon as FirkinAddon,
-				trailers: trailerResolver.resolvedTrailers()
+				trailers: trailerResolver.resolvedTrailers(),
+				reviews: upstreamReviews
 			});
 			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
 		} catch (err) {
@@ -239,7 +248,8 @@
 				],
 				year,
 				addon: addon as FirkinAddon,
-				trailers: trailerResolver.resolvedTrailers()
+				trailers: trailerResolver.resolvedTrailers(),
+				reviews: upstreamReviews
 			});
 			await startTorrentDownload(torrent.magnetLink);
 			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
@@ -326,7 +336,7 @@
 				/>
 			{/if}
 
-			<CatalogDescriptionPanel {description} />
+			<CatalogDescriptionPanel {description} reviews={upstreamReviews} />
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>

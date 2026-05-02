@@ -515,6 +515,7 @@ async fn rollforward(
         new_version,
         &new_hashes,
         &doc.trailers,
+        &doc.reviews,
     );
 
     if new_id == old_id {
@@ -533,6 +534,7 @@ async fn rollforward(
         new_version,
         &new_hashes,
         &doc.trailers,
+        &doc.reviews,
     );
 
     let new_record = Firkin {
@@ -550,6 +552,7 @@ async fn rollforward(
         version: new_version,
         version_hashes: new_hashes,
         trailers: doc.trailers.clone(),
+        reviews: doc.reviews.clone(),
     };
 
     let _: Option<Firkin> = state.db.delete((FIRKIN_TABLE, old_id.as_str())).await?;

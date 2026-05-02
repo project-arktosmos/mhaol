@@ -244,26 +244,40 @@
 	type ArtistsBackfillStatus = 'idle' | 'loading' | 'done' | 'error';
 	let artistsBackfillStatus = $state<ArtistsBackfillStatus>('idle');
 	let artistsBackfillError = $state<string | null>(null);
-	let artistsBackfillForFirkinId: string | null = null;
+	let metadataBackfillForFirkinId: string | null = null;
+
+	function metadataUpstreamId(): string | null {
+		if (isMusicBrainz) return musicBrainzReleaseGroupId;
+		if (isTmdbMovie) return tmdbMovieId;
+		if (isTmdbTv) return tmdbTvId;
+		return null;
+	}
 
 	$effect(() => {
 		const fid = firkin.id;
-		if (artistsBackfillForFirkinId === fid) return;
-		if (firkin.artists.length > 0) {
-			artistsBackfillForFirkinId = fid;
+		if (metadataBackfillForFirkinId === fid) return;
+		const upstreamId = metadataUpstreamId();
+		const reviewsMissing = (firkin.reviews ?? []).length === 0;
+		const artistsMissing =
+			firkin.artists.length === 0 && (isMusicBrainz || isTmdbMovie || isTmdbTv);
+		if (!upstreamId || (!reviewsMissing && !artistsMissing)) {
+			metadataBackfillForFirkinId = fid;
 			return;
 		}
-		const upstreamId = firkin.addon === 'musicbrainz' ? musicBrainzReleaseGroupId : null;
-		if (!upstreamId) {
-			artistsBackfillForFirkinId = fid;
-			return;
-		}
-		artistsBackfillForFirkinId = fid;
-		void backfillArtists(fid, firkin.addon, upstreamId);
+		metadataBackfillForFirkinId = fid;
+		void backfillFromMetadata(fid, firkin.addon, upstreamId, {
+			fetchArtists: artistsMissing,
+			fetchReviews: reviewsMissing
+		});
 	});
 
-	async function backfillArtists(firkinId: string, addon: string, upstreamId: string) {
-		artistsBackfillStatus = 'loading';
+	async function backfillFromMetadata(
+		firkinId: string,
+		addon: string,
+		upstreamId: string,
+		want: { fetchArtists: boolean; fetchReviews: boolean }
+	) {
+		if (want.fetchArtists) artistsBackfillStatus = 'loading';
 		artistsBackfillError = null;
 		try {
 			const res = await fetch(
@@ -271,16 +285,23 @@
 				{ cache: 'no-store' }
 			);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const body = (await res.json()) as { artists?: Firkin['artists'] };
-			const fetched = Array.isArray(body.artists) ? body.artists : [];
-			if (fetched.length === 0) {
-				artistsBackfillStatus = 'done';
+			const body = (await res.json()) as {
+				artists?: Firkin['artists'];
+				reviews?: Firkin['reviews'];
+			};
+			const fetchedArtists = Array.isArray(body.artists) ? body.artists : [];
+			const fetchedReviews = Array.isArray(body.reviews) ? body.reviews : [];
+			const patch: { artists?: Firkin['artists']; reviews?: Firkin['reviews'] } = {};
+			if (want.fetchArtists && fetchedArtists.length > 0) patch.artists = fetchedArtists;
+			if (want.fetchReviews && fetchedReviews.length > 0) patch.reviews = fetchedReviews;
+			if (Object.keys(patch).length === 0) {
+				if (want.fetchArtists) artistsBackfillStatus = 'done';
 				return;
 			}
 			const putRes = await fetch(`${base}/api/firkins/${encodeURIComponent(firkinId)}`, {
 				method: 'PUT',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ artists: fetched })
+				body: JSON.stringify(patch)
 			});
 			if (!putRes.ok) {
 				let message = `HTTP ${putRes.status}`;
@@ -294,13 +315,13 @@
 			}
 			const updated = (await putRes.json()) as Firkin;
 			data.firkin = updated;
-			artistsBackfillStatus = 'done';
+			if (want.fetchArtists) artistsBackfillStatus = 'done';
 			if (updated.id !== firkinId) {
 				void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
 			}
 		} catch (err) {
 			artistsBackfillError = err instanceof Error ? err.message : 'Unknown error';
-			artistsBackfillStatus = 'error';
+			if (want.fetchArtists) artistsBackfillStatus = 'error';
 		}
 	}
 
@@ -1122,6 +1143,7 @@
 					version: firkin.version ?? 0
 				}}
 				versionHashes={firkin.version_hashes ?? []}
+				reviews={firkin.reviews ?? []}
 			/>
 
 			<CatalogTorrentProgressCard rows={torrentProgressRows} />

@@ -246,15 +246,32 @@ struct CatalogTrailer {
     language: Option<String>,
 }
 
+/// One upstream user-rating snapshot for a catalog item. Mirrors the
+/// persisted `Review` shape on a firkin so the frontend can hand the
+/// array verbatim to `POST /api/firkins` (or `PUT /api/firkins/:id`).
+/// `score` is the raw upstream value, `max_score` is the scale (TMDB
+/// reports out of 10, MusicBrainz out of 5), `vote_count` is the number
+/// of ratings the average is computed over when known.
+#[derive(Serialize)]
+struct CatalogReview {
+    label: String,
+    score: f64,
+    #[serde(rename = "maxScore")]
+    max_score: f64,
+    #[serde(rename = "voteCount", skip_serializing_if = "Option::is_none")]
+    vote_count: Option<u32>,
+}
+
 /// Combined metadata payload for a single catalog item. Returned by
 /// `GET /api/catalog/{addon}/{id}/metadata`. Lets the frontend pull
-/// artists and trailers in one call so each upstream provider can
-/// satisfy them in a single request (TMDB's `append_to_response`
+/// artists, trailers and reviews in one call so each upstream provider
+/// can satisfy them in a single request (TMDB's `append_to_response`
 /// merges credits and videos into one HTTP call).
 #[derive(Serialize)]
 struct CatalogMetadata {
     artists: Vec<CatalogArtist>,
     trailers: Vec<CatalogTrailer>,
+    reviews: Vec<CatalogReview>,
 }
 
 #[derive(Serialize)]
@@ -404,15 +421,22 @@ async fn metadata_for_item(
     if id.trim().is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, "id is required"));
     }
-    let (artists, trailers) = match addon.as_str() {
-        "musicbrainz" => (musicbrainz_artists(&id).await?, Vec::new()),
+    let (artists, trailers, reviews) = match addon.as_str() {
+        "musicbrainz" => {
+            let (artists, reviews) = musicbrainz_metadata(&id).await?;
+            (artists, Vec::new(), reviews)
+        }
         "tmdb-movie" => tmdb_metadata(false, &id).await?,
         "tmdb-tv" => tmdb_metadata(true, &id).await?,
-        "youtube-video" => (youtube_video_artists(&id).await?, Vec::new()),
-        "youtube-channel" => (youtube_channel_artists(&id).await?, Vec::new()),
-        _ => (Vec::new(), Vec::new()),
+        "youtube-video" => (youtube_video_artists(&id).await?, Vec::new(), Vec::new()),
+        "youtube-channel" => (youtube_channel_artists(&id).await?, Vec::new(), Vec::new()),
+        _ => (Vec::new(), Vec::new(), Vec::new()),
     };
-    Ok(Json(CatalogMetadata { artists, trailers }))
+    Ok(Json(CatalogMetadata {
+        artists,
+        trailers,
+        reviews,
+    }))
 }
 
 /// `GET /api/catalog/{addon}/{id}/related` — fetches items related to the
@@ -624,11 +648,16 @@ const TMDB_CREW_JOBS: &[&str] = &[
 /// upstream HTTP request via `append_to_response=credits,videos`. The
 /// detail endpoint (`/movie/{id}` or `/tv/{id}`) carries both blocks in
 /// one response, so callers don't pay two round-trips when the
-/// `/metadata` endpoint is hit.
+/// `/metadata` endpoint is hit. The same response also carries the
+/// item's `vote_average` (0–10) and `vote_count`, so we extract a
+/// `CatalogReview` from it here without an extra request.
 async fn tmdb_metadata(
     is_tv: bool,
     id: &str,
-) -> Result<(Vec<CatalogArtist>, Vec<CatalogTrailer>), (StatusCode, Json<serde_json::Value>)> {
+) -> Result<
+    (Vec<CatalogArtist>, Vec<CatalogTrailer>, Vec<CatalogReview>),
+    (StatusCode, Json<serde_json::Value>),
+> {
     let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
         return Err(err(
@@ -650,7 +679,36 @@ async fn tmdb_metadata(
     let artists = parse_tmdb_credits(&credits);
     let videos = payload.get("videos").cloned().unwrap_or(serde_json::Value::Null);
     let trailers = parse_tmdb_videos(&videos);
-    Ok((artists, trailers))
+    let reviews = parse_tmdb_reviews(&payload);
+    Ok((artists, trailers, reviews))
+}
+
+/// Pull TMDB's `vote_average` and `vote_count` off the item detail
+/// response into our universal `CatalogReview` shape. TMDB scores are
+/// always out of 10. Returns an empty vec when the upstream response
+/// has no votes yet (vote_count == 0) so the firkin doesn't carry a
+/// meaningless "0.0 / 10 (0 votes)" entry.
+fn parse_tmdb_reviews(payload: &serde_json::Value) -> Vec<CatalogReview> {
+    let score = payload.get("vote_average").and_then(|v| v.as_f64());
+    let count = payload
+        .get("vote_count")
+        .and_then(|v| v.as_u64())
+        .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
+    match (score, count) {
+        (Some(s), Some(c)) if c > 0 && s.is_finite() => vec![CatalogReview {
+            label: "TMDB".to_string(),
+            score: s,
+            max_score: 10.0,
+            vote_count: Some(c),
+        }],
+        (Some(s), None) if s.is_finite() && s > 0.0 => vec![CatalogReview {
+            label: "TMDB".to_string(),
+            score: s,
+            max_score: 10.0,
+            vote_count: None,
+        }],
+        _ => Vec::new(),
+    }
 }
 
 /// Fetch a single page of TMDB's recommendations for the given movie /
@@ -1173,11 +1231,17 @@ async fn musicbrainz_tracks(
     Ok(Json(out))
 }
 
-async fn musicbrainz_artists(
+/// Fetch a release-group's artist credits AND community rating in one
+/// upstream call via `inc=artist-credits+ratings`. The MusicBrainz
+/// rating block has shape `{ "value": <0..5>, "votes-count": <u32> }`;
+/// we only emit a `CatalogReview` when at least one vote exists so
+/// fresh / niche release-groups don't get a hollow `0.0 / 5 (0 votes)`
+/// entry.
+async fn musicbrainz_metadata(
     release_group_id: &str,
-) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<(Vec<CatalogArtist>, Vec<CatalogReview>), (StatusCode, Json<serde_json::Value>)> {
     let url = format!(
-        "{}/release-group/{}?inc=artist-credits&fmt=json",
+        "{}/release-group/{}?inc=artist-credits+ratings&fmt=json",
         MUSICBRAINZ_BASE,
         urlencoding(release_group_id)
     );
@@ -1187,7 +1251,7 @@ async fn musicbrainz_artists(
     )
     .await?;
 
-    let mut out: Vec<CatalogArtist> = Vec::new();
+    let mut artists: Vec<CatalogArtist> = Vec::new();
     let credits = payload
         .get("artist-credit")
         .and_then(|v| v.as_array())
@@ -1204,13 +1268,32 @@ async fn musicbrainz_artists(
         if name.is_empty() {
             continue;
         }
-        out.push(CatalogArtist {
+        artists.push(CatalogArtist {
             name,
             role: Some("Artist".to_string()),
             image_url: None,
         });
     }
-    Ok(out)
+    let reviews = parse_musicbrainz_reviews(&payload);
+    Ok((artists, reviews))
+}
+
+fn parse_musicbrainz_reviews(payload: &serde_json::Value) -> Vec<CatalogReview> {
+    let rating = payload.get("rating");
+    let value = rating.and_then(|r| r.get("value")).and_then(|v| v.as_f64());
+    let votes = rating
+        .and_then(|r| r.get("votes-count"))
+        .and_then(|v| v.as_u64())
+        .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
+    match (value, votes) {
+        (Some(v), Some(c)) if c > 0 && v.is_finite() => vec![CatalogReview {
+            label: "MusicBrainz".to_string(),
+            score: v,
+            max_score: 5.0,
+            vote_count: Some(c),
+        }],
+        _ => Vec::new(),
+    }
 }
 
 /// Other release-groups by the same primary artist as the given

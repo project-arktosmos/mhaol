@@ -64,8 +64,48 @@ pub struct Trailer {
     pub language: Option<String>,
 }
 
+/// A user-rating (review) attached to a firkin, sourced from an upstream
+/// catalog API. `label` names the source (e.g. `"TMDB"`, `"MusicBrainz"`),
+/// `score` is the raw rating value as exposed by that source, and
+/// `max_score` is the scale (TMDB returns 0–10, MusicBrainz returns 0–5)
+/// so the UI can render `score / max_score` without per-source rules.
+/// `vote_count` is the number of ratings the average is computed over,
+/// when known; `skip_serializing_if = "Option::is_none"` keeps it out of
+/// the canonical body when absent so existing CIDs stay stable.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Review {
+    pub label: String,
+    pub score: f64,
+    #[serde(rename = "maxScore")]
+    pub max_score: f64,
+    #[serde(rename = "voteCount", default, skip_serializing_if = "Option::is_none")]
+    pub vote_count: Option<u32>,
+}
+
 fn slice_is_empty<T>(s: &[T]) -> bool {
     s.is_empty()
+}
+
+/// Trim and validate a review request from a client. Drops entries with
+/// an empty label, a non-finite score / max_score, or a non-positive
+/// max_score. The label is trimmed; the score is clamped into
+/// `[0, max_score]` so a misbehaving upstream can't poison the firkin
+/// body with a value outside its declared scale.
+fn sanitize_review(r: Review) -> Option<Review> {
+    let label = r.label.trim().to_string();
+    if label.is_empty() {
+        return None;
+    }
+    if !r.score.is_finite() || !r.max_score.is_finite() || r.max_score <= 0.0 {
+        return None;
+    }
+    let score = r.score.max(0.0).min(r.max_score);
+    Some(Review {
+        label,
+        score,
+        max_score: r.max_score,
+        vote_count: r.vote_count,
+    })
 }
 
 #[derive(Serialize)]
@@ -91,8 +131,13 @@ struct FirkinPayloadView<'a> {
     /// trailers existed) remain stable across deserialise → re-serialise.
     #[serde(skip_serializing_if = "slice_is_empty")]
     trailers: &'a [Trailer],
+    /// Skipped when empty so existing firkin CIDs (created before
+    /// reviews existed) remain stable across deserialise → re-serialise.
+    #[serde(skip_serializing_if = "slice_is_empty")]
+    reviews: &'a [Review],
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn serialize_firkin_payload(
     title: &str,
     description: &str,
@@ -105,6 +150,7 @@ pub fn serialize_firkin_payload(
     version: u32,
     version_hashes: &[String],
     trailers: &[Trailer],
+    reviews: &[Review],
 ) -> String {
     let view = FirkinPayloadView {
         title,
@@ -118,10 +164,12 @@ pub fn serialize_firkin_payload(
         version,
         version_hashes,
         trailers,
+        reviews,
     };
     serde_json::to_string_pretty(&view).expect("FirkinPayloadView serializes to JSON")
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn compute_firkin_cid(
     title: &str,
     description: &str,
@@ -134,6 +182,7 @@ pub fn compute_firkin_cid(
     version: u32,
     version_hashes: &[String],
     trailers: &[Trailer],
+    reviews: &[Review],
 ) -> String {
     let json = serialize_firkin_payload(
         title,
@@ -147,6 +196,7 @@ pub fn compute_firkin_cid(
         version,
         version_hashes,
         trailers,
+        reviews,
     );
     let digest = Sha256::digest(json.as_bytes());
     let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
@@ -193,6 +243,12 @@ pub struct Firkin {
     /// firkin is created and persisted via PUT.
     #[serde(default)]
     pub trailers: Vec<Trailer>,
+    /// User ratings sourced from upstream catalog APIs (TMDB
+    /// `vote_average` / `vote_count`, MusicBrainz `rating.value` /
+    /// `votes-count`). Each entry is one source's snapshot at the time
+    /// the firkin was bookmarked or last enriched; see [`Review`].
+    #[serde(default)]
+    pub reviews: Vec<Review>,
 }
 
 #[derive(Debug, Serialize)]
@@ -220,6 +276,7 @@ pub struct FirkinDto {
     pub version: u32,
     pub version_hashes: Vec<String>,
     pub trailers: Vec<Trailer>,
+    pub reviews: Vec<Review>,
 }
 
 impl FirkinDto {
@@ -245,6 +302,7 @@ impl FirkinDto {
             version: doc.version,
             version_hashes: doc.version_hashes,
             trailers: doc.trailers,
+            reviews: doc.reviews,
         }
     }
 }
@@ -278,6 +336,11 @@ pub struct CreateFirkinRequest {
     /// attached.
     #[serde(default)]
     pub trailers: Vec<Trailer>,
+    /// Optional reviews to bake into the firkin at create time. The
+    /// virtual-catalog page pulls ratings from `/api/catalog/.../metadata`
+    /// up-front so the bookmark already carries the upstream score.
+    #[serde(default)]
+    pub reviews: Vec<Review>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -290,6 +353,7 @@ pub struct UpdateFirkinRequest {
     pub year: Option<i32>,
     pub addon: Option<String>,
     pub trailers: Option<Vec<Trailer>>,
+    pub reviews: Option<Vec<Review>>,
 }
 
 /// Request body for `POST /api/firkins/:id/enrich`. Carries the metadata
@@ -569,6 +633,11 @@ async fn create(
             })
         })
         .collect();
+    let reviews: Vec<Review> = req
+        .reviews
+        .into_iter()
+        .filter_map(sanitize_review)
+        .collect();
 
     let now = Utc::now();
     let version: u32 = 0;
@@ -585,6 +654,7 @@ async fn create(
         version,
         &version_hashes,
         &trailers,
+        &reviews,
     );
     let digest = Sha256::digest(body_json.as_bytes());
     let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
@@ -624,6 +694,7 @@ async fn create(
         version,
         version_hashes,
         trailers,
+        reviews,
     };
     let record_addon = record.addon.clone();
 
@@ -805,6 +876,10 @@ async fn update(
             .collect();
     }
 
+    if let Some(reviews) = req.reviews {
+        current.reviews = reviews.into_iter().filter_map(sanitize_review).collect();
+    }
+
     current.updated_at = Utc::now();
     current.id = None;
 
@@ -847,6 +922,7 @@ pub(crate) async fn rollforward_firkin(
         new_version,
         &new_hashes,
         &updated.trailers,
+        &updated.reviews,
     );
 
     if new_id == old_id {
@@ -881,6 +957,7 @@ pub(crate) async fn rollforward_firkin(
         new_version,
         &new_hashes,
         &updated.trailers,
+        &updated.reviews,
     );
 
     let _: Option<Firkin> = state
@@ -1548,6 +1625,7 @@ mod tests {
             version,
             version_hashes: version_hashes.iter().map(|s| s.to_string()).collect(),
             trailers: Vec::new(),
+            reviews: Vec::new(),
         }
     }
 

@@ -6,10 +6,18 @@
 		version: number;
 	}
 
+	interface Review {
+		label: string;
+		score: number;
+		maxScore: number;
+		voteCount?: number;
+	}
+
 	interface Props {
 		description: string;
 		identity?: Identity | null;
 		versionHashes?: string[];
+		reviews?: Review[];
 		hrefFor?: ((cid: string) => string) | null;
 	}
 
@@ -17,6 +25,7 @@
 		description,
 		identity = null,
 		versionHashes = [],
+		reviews = [],
 		hrefFor = null
 	}: Props = $props();
 
@@ -45,9 +54,40 @@
 			return value;
 		}
 	}
+
+	function formatScore(value: number): string {
+		const rounded = Math.round(value * 10) / 10;
+		return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+	}
+
+	function formatVotes(count: number): string {
+		if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M votes`;
+		if (count >= 1000) return `${(count / 1000).toFixed(1)}k votes`;
+		return `${count} vote${count === 1 ? '' : 's'}`;
+	}
 </script>
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
+	{#if reviews.length > 0}
+		<div class="mb-3 flex flex-wrap items-center gap-2">
+			<span class="text-xs font-semibold text-base-content/70 uppercase">Reviews</span>
+			{#each reviews as review (review.label)}
+				<span
+					class="badge badge-outline gap-1 font-mono text-xs"
+					title={review.voteCount !== undefined
+						? `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)} (${formatVotes(review.voteCount)})`
+						: `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)}`}
+				>
+					<span class="font-semibold">{review.label}</span>
+					<span>{formatScore(review.score)} / {formatScore(review.maxScore)}</span>
+					{#if review.voteCount !== undefined}
+						<span class="text-base-content/60">· {formatVotes(review.voteCount)}</span>
+					{/if}
+				</span>
+			{/each}
+		</div>
+	{/if}
+
 	{#if tabs.length > 1}
 		<div role="tablist" class="tabs-boxed tabs tabs-sm mb-3 self-start">
 			{#each tabs as tab (tab.id)}

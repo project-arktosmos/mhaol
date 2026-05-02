@@ -251,6 +251,7 @@ pub fn compute_recommendation_cid(item: &IngestItem) -> String {
         0,
         &[],
         &[],
+        &[],
     )
 }
 

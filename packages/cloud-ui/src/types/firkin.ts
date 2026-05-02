@@ -87,6 +87,20 @@ export interface FirkinTrailer {
 	language?: string;
 }
 
+/**
+ * One user-rating snapshot attached to a firkin, sourced from an upstream
+ * catalog API (TMDB `vote_average`/`vote_count`, MusicBrainz
+ * `rating.value`/`votes-count`). `score` is the raw upstream value;
+ * `maxScore` is its scale (TMDB = 10, MusicBrainz = 5) so the UI can
+ * render `score / maxScore` without per-source rules.
+ */
+export interface FirkinReview {
+	label: string;
+	score: number;
+	maxScore: number;
+	voteCount?: number;
+}
+
 export interface Firkin {
 	id: string;
 	title: string;
@@ -103,4 +117,5 @@ export interface Firkin {
 	version?: number;
 	version_hashes?: string[];
 	trailers?: FirkinTrailer[];
+	reviews?: FirkinReview[];
 }

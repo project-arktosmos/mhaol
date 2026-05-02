@@ -322,6 +322,7 @@ async fn create_firkin(
         version,
         &version_hashes,
         &[],
+        &[],
     );
 
     let already: Option<Firkin> = state.db.select((FIRKIN_TABLE, new_id.as_str())).await?;
@@ -344,6 +345,7 @@ async fn create_firkin(
         version,
         version_hashes,
         trailers: Vec::new(),
+        reviews: Vec::new(),
     };
 
     let _: Option<Firkin> = state
@@ -412,6 +414,7 @@ async fn upsert_firkin_with_files(
         new_version,
         &new_hashes,
         &existing.trailers,
+        &existing.reviews,
     );
 
     if new_id == old_id {
@@ -433,6 +436,7 @@ async fn upsert_firkin_with_files(
         version: new_version,
         version_hashes: new_hashes,
         trailers: existing.trailers.clone(),
+        reviews: existing.reviews.clone(),
     };
 
     let _: Option<Firkin> = state

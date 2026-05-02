@@ -12,7 +12,8 @@ import {
 	type FirkinImage as SharedImageMeta,
 	type FirkinFile as SharedFileEntry,
 	type FirkinFileType as SharedFileType,
-	type FirkinTrailer as SharedTrailer
+	type FirkinTrailer as SharedTrailer,
+	type FirkinReview as SharedReview
 } from 'cloud-ui';
 
 export { FIRKIN_ADDONS, FIRKIN_KINDS, ADDON_KIND, addonKind, type FirkinAddon, type FirkinKind };
@@ -37,6 +38,7 @@ export type ImageMeta = SharedImageMeta;
 export type FileEntry = SharedFileEntry;
 export type FileType = SharedFileType;
 export type Trailer = SharedTrailer;
+export type Review = SharedReview;
 export type Firkin = SharedFirkin;
 export const FILE_TYPES = ['ipfs', 'torrent magnet', 'url', 'lyrics'] as const;
 
@@ -119,6 +121,8 @@ class FirkinsService {
 		creator?: string;
 		/** Optional trailers to bake into the firkin at create time. */
 		trailers?: Trailer[];
+		/** Optional reviews (upstream user-ratings) to bake into the firkin at create time. */
+		reviews?: Review[];
 	}): Promise<Firkin> {
 		// Auto-fill the creator from the browser-resident user identity (the
 		// same one the profile page manages). User identity is initialised on
