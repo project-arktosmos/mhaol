@@ -541,7 +541,10 @@
 		isTmdbMovie || isTmdbTv || (isYoutubeVideo && Boolean(youtubeVideoUrl))
 	);
 	const ipfsTabEnabled = $derived(hasIpfsFiles);
-	const torrentTabEnabled = $derived(streamEval.kind === 'streamable');
+	// Once the file is pinned locally to IPFS, the torrent stream is
+	// strictly worse — same bytes, slower path, extra peers — so we
+	// hide that option entirely.
+	const torrentTabEnabled = $derived(streamEval.kind === 'streamable' && !ipfsTabEnabled);
 	const anyTabEnabled = $derived(trailerTabEnabled || ipfsTabEnabled || torrentTabEnabled);
 
 	const trailerTabTitle = $derived(trailerTabEnabled ? 'Show trailer' : 'No trailer for this item');
@@ -551,6 +554,7 @@
 			: 'Available once at least one file is pinned to IPFS'
 	);
 	const torrentTabTitle = $derived.by(() => {
+		if (ipfsTabEnabled) return 'File is pinned locally — use IPFS Stream instead';
 		if (!firstMagnet) return 'Available once a torrent magnet is attached';
 		switch (streamEval.kind) {
 			case 'idle':
@@ -572,6 +576,15 @@
 				return ' — unavailable';
 			case 'streamable':
 				return '';
+		}
+	});
+
+	// If IPFS becomes available while the user is on the torrent tab,
+	// flip them over — the torrent tab is now disabled, so leaving them
+	// on it would strand them on a stale player.
+	$effect(() => {
+		if (ipfsTabEnabled && activeSource === 'torrent') {
+			activeSource = 'ipfs';
 		}
 	});
 
