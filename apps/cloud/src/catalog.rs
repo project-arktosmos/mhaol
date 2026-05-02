@@ -1309,15 +1309,18 @@ fn parse_musicbrainz_reviews(payload: &serde_json::Value) -> Vec<CatalogReview> 
     }
 }
 
-/// Other release-groups by the same primary artist as the given
-/// release-group. Resolves the artist via `inc=artist-credits` on the
-/// release-group, then browses release-groups by that artist id.
-/// The current release-group is filtered out of the result.
+/// Albums similar to the given release-group, computed from MusicBrainz's
+/// curated genres + user-contributed tags. We pull the source release-
+/// group with `inc=artist-credits+tags+genres` once, take its top-weighted
+/// terms, and run a Lucene `tag:"…"` similarity search over album/EP
+/// release-groups (excluding the source itself). When the source has no
+/// genres/tags or the similarity query returns nothing, we fall back to
+/// the older same-artist browse so the panel still has content.
 async fn musicbrainz_related(
     release_group_id: &str,
 ) -> Result<Vec<CatalogItem>, (StatusCode, Json<serde_json::Value>)> {
     let url = format!(
-        "{}/release-group/{}?inc=artist-credits&fmt=json",
+        "{}/release-group/{}?inc=artist-credits+tags+genres&fmt=json",
         MUSICBRAINZ_BASE,
         urlencoding(release_group_id)
     );
@@ -1326,6 +1329,48 @@ async fn musicbrainz_related(
         &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
     )
     .await?;
+
+    let top_terms = mb_top_similarity_terms(&payload, 4);
+    if !top_terms.is_empty() {
+        let term_clause = top_terms
+            .iter()
+            .map(|t| format!("tag:\"{}\"", lucene_escape_phrase(t)))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        let query = format!(
+            "({term_clause}) AND (primarytype:album OR primarytype:ep) AND NOT rgid:{release_group_id}"
+        );
+        let url = format!(
+            "{}/release-group?query={}&fmt=json&limit=24",
+            MUSICBRAINZ_BASE,
+            urlencoding(&query)
+        );
+        let search_payload: serde_json::Value = http_get_json(
+            &url,
+            &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+        )
+        .await?;
+        let items: Vec<CatalogItem> = search_payload
+            .get("release-groups")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|rg| {
+                        let item = musicbrainz_to_item(rg);
+                        if item.id == release_group_id {
+                            return None;
+                        }
+                        Some(item)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !items.is_empty() {
+            return Ok(items);
+        }
+    }
+
+    // Fallback: same primary artist as the source release-group.
     let artist_id = payload
         .get("artist-credit")
         .and_then(|v| v.as_array())
@@ -1363,6 +1408,54 @@ async fn musicbrainz_related(
         })
         .unwrap_or_default();
     Ok(items)
+}
+
+/// Pick up to `n` similarity terms from a release-group payload, drawn
+/// from MB's curated `genres` (preferred) and free-form user `tags`.
+/// Sorted by `count` (number of users who applied the tag) descending.
+/// Names are deduped case-insensitively across the two arrays so the
+/// same string surfaced as both a genre and a tag only counts once.
+fn mb_top_similarity_terms(payload: &serde_json::Value, n: usize) -> Vec<String> {
+    let mut terms: Vec<(String, i64)> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for field in ["genres", "tags"] {
+        let Some(arr) = payload.get(field).and_then(|v| v.as_array()) else {
+            continue;
+        };
+        for entry in arr {
+            let name = entry
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if name.is_empty() {
+                continue;
+            }
+            if !seen.insert(name.to_ascii_lowercase()) {
+                continue;
+            }
+            let count = entry.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+            terms.push((name, count));
+        }
+    }
+    terms.sort_by(|a, b| b.1.cmp(&a.1));
+    terms.into_iter().take(n).map(|(name, _)| name).collect()
+}
+
+/// Escape characters that have special meaning inside a Lucene
+/// double-quoted phrase. MB's `query` parameter is parsed with Lucene,
+/// so backslash and double-quote both need to be escaped before being
+/// embedded in `tag:"…"`.
+fn lucene_escape_phrase(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c == '\\' || c == '"' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
