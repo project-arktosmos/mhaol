@@ -1,6 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { untrack, type Snippet } from 'svelte';
+	import { Icon } from 'cloud-ui';
 	import type { PlayerConnectionState } from '$types/player.type';
 	import PlayerSeekBar from './PlayerSeekBar.svelte';
 
@@ -170,8 +171,13 @@
 				<button class="btn" onclick={() => onprev?.()}>Previous</button>
 			{/if}
 
-			<button class="btn" onclick={togglePlayPause}>
-				{isPaused ? 'Play' : 'Pause'}
+			<button
+				class="btn"
+				onclick={togglePlayPause}
+				aria-label={isPaused ? 'Play' : 'Pause'}
+				title={isPaused ? 'Play' : 'Pause'}
+			>
+				<Icon name={isPaused ? 'guard13007/play-button' : 'guard13007/pause-button'} size="1em" />
 			</button>
 
 			{#if onnext}
