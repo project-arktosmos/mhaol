@@ -1021,10 +1021,47 @@
 		};
 	});
 
+	// Auto-start magnets that haven't been kicked yet. For tmdb-tv firkins
+	// (which hold one magnet per season after a per-season fan-out search)
+	// run them one-at-a-time: starting all of them in parallel saturates
+	// the LAN, the disk, and the trackers, and the user typically watches
+	// season-by-season anyway. The effect re-runs when `firkin.files`
+	// changes (a new magnet is assigned) and when the polled torrent state
+	// changes (a prior magnet finishes), so the next eligible magnet kicks
+	// off automatically without an explicit completion hook. Other addons
+	// keep their parallel-start behaviour — they never carry more than one
+	// magnet in practice.
 	$effect(() => {
 		const magnets = firkin.files
 			.filter((f) => f.type === 'torrent magnet' && f.value)
 			.map((f) => f.value);
+		if (magnets.length === 0) return;
+
+		if (isTmdbTv) {
+			// `started` covers two cases: (a) a torrent we've kicked this
+			// session (startedHashes) — handles the up-to-2s window before
+			// the poll picks it up, and (b) a torrent the manager already
+			// knows about (poll result) — handles page reloads. `active`
+			// is "started and not finished"; we only kick the next magnet
+			// when nothing is active.
+			const states = magnets.map((magnet) => {
+				const hash = infoHashFromMagnet(magnet);
+				const t = hash ? $torrentsState.byHash[hash] : null;
+				const finished = !!t && (t.state === 'seeding' || t.progress >= 1);
+				const started = startedHashes.has(magnet) || !!t;
+				return { magnet, started, finished };
+			});
+			const active = states.find((s) => s.started && !s.finished);
+			if (active) return;
+			const next = states.find((s) => !s.started);
+			if (!next) return;
+			startedHashes = new Set(startedHashes).add(next.magnet);
+			void startTorrentDownload(next.magnet).catch((err) => {
+				console.warn('[catalog detail] auto-start failed for magnet:', err);
+			});
+			return;
+		}
+
 		for (const magnet of magnets) {
 			if (startedHashes.has(magnet)) continue;
 			startedHashes = new Set(startedHashes).add(magnet);
@@ -1041,21 +1078,30 @@
 		assignError = null;
 		addingHash = torrent.magnetLink;
 		try {
-			const created = await firkinsService.create({
-				title: firkin.title,
-				artists: firkin.artists,
-				description: firkin.description,
-				images: firkin.images,
-				files: [
-					...firkin.files,
-					{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
-				],
-				year: firkin.year,
-				addon: firkin.addon as FirkinAddon
-			});
-			await startTorrentDownload(torrent.magnetLink);
-			if (created.id !== firkin.id) {
-				await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
+			const nextFiles = [
+				...firkin.files,
+				{ type: 'torrent magnet' as const, value: torrent.magnetLink, title: torrent.title }
+			];
+			if (isTmdbTv) {
+				// TV shows accumulate one magnet per season on the same firkin.
+				// PUT keeps the record id stable and lets the auto-start effect
+				// run them sequentially; POST would mint a new firkin per click
+				// (different CID body) and bounce the user to a fresh page.
+				await persistFirkinPatch({ files: nextFiles });
+			} else {
+				const created = await firkinsService.create({
+					title: firkin.title,
+					artists: firkin.artists,
+					description: firkin.description,
+					images: firkin.images,
+					files: nextFiles,
+					year: firkin.year,
+					addon: firkin.addon as FirkinAddon
+				});
+				await startTorrentDownload(torrent.magnetLink);
+				if (created.id !== firkin.id) {
+					await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
+				}
 			}
 		} catch (err) {
 			assignError = err instanceof Error ? err.message : 'Unknown error';

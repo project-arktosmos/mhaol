@@ -177,7 +177,8 @@ async fn rollforward(
 
     let mut new_entries: Vec<FileEntry> = Vec::new();
     for file in &walked {
-        if existing_titles.contains(&file.relative_path) {
+        let title = format_file_title(&doc.addon, &file.relative_path);
+        if existing_titles.contains(&title) || existing_titles.contains(&file.relative_path) {
             continue;
         }
         let req = mhaol_ipfs_core::AddIpfsRequest {
@@ -215,7 +216,7 @@ async fn rollforward(
         new_entries.push(FileEntry {
             kind: "ipfs".to_string(),
             value: info.cid,
-            title: Some(file.relative_path.clone()),
+            title: Some(title),
         });
     }
 
@@ -373,6 +374,31 @@ pub async fn finalize_firkin(
     }
 
     Ok(Some(id))
+}
+
+/// Format the FileEntry title for a downloaded torrent file. For
+/// `tmdb-tv` firkins we lift the `SxxExx` token out of the relative
+/// path (`Show.Name.S02E03.1080p.mkv` → `S02E03 — Show.Name.S02E03.1080p.mkv`)
+/// so the firkin's files can be queried per-episode without re-parsing
+/// the filename downstream. Other addons keep the raw relative path.
+#[cfg(not(target_os = "android"))]
+fn format_file_title(addon: &str, relative_path: &str) -> String {
+    if addon != "tmdb-tv" {
+        return relative_path.to_string();
+    }
+    use std::sync::OnceLock;
+    static SE_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = SE_RE.get_or_init(|| {
+        regex::Regex::new(r"(?i)\bs(\d{1,2})\s*e(\d{1,3})\b").expect("static regex compiles")
+    });
+    match re.captures(relative_path) {
+        Some(caps) => {
+            let s: u32 = caps[1].parse().unwrap_or(0);
+            let e: u32 = caps[2].parse().unwrap_or(0);
+            format!("S{s:02}E{e:02} — {relative_path}")
+        }
+        None => relative_path.to_string(),
+    }
 }
 
 #[cfg(not(target_os = "android"))]
