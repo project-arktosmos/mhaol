@@ -213,7 +213,6 @@
 		<thead>
 			<tr class="text-[10px] text-base-content/60 uppercase">
 				<th class="text-left">Trailer</th>
-				<th class="text-left">YouTube id</th>
 				<th></th>
 			</tr>
 		</thead>
@@ -222,9 +221,6 @@
 				<tr>
 					<td class="text-left text-xs font-medium">
 						{t.label ?? 'Trailer'}
-					</td>
-					<td class="text-left font-mono text-[10px] text-base-content/70" title={t.youtubeId}>
-						{t.youtubeId}
 					</td>
 					<td>
 						<button
