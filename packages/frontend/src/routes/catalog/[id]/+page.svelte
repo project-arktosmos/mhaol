@@ -552,60 +552,6 @@
 	let torrentStreamStarting = $state(false);
 	let torrentStreamError = $state<string | null>(null);
 
-	type StreamEvalState =
-		| { kind: 'idle' }
-		| { kind: 'evaluating' }
-		| { kind: 'streamable'; fileName: string; fileSize: number; mimeType: string | null }
-		| { kind: 'not-streamable'; reason: string };
-	let streamEval = $state<StreamEvalState>({ kind: 'idle' });
-	let evalRun = 0;
-
-	$effect(() => {
-		const magnet = firstMagnet;
-		if (!magnet) {
-			streamEval = { kind: 'idle' };
-			return;
-		}
-		const myRun = ++evalRun;
-		streamEval = { kind: 'evaluating' };
-		void (async () => {
-			try {
-				const res = await fetch(`${base}/api/torrent/evaluate`, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ magnet })
-				});
-				if (myRun !== evalRun) return;
-				const body = (await res.json()) as
-					| {
-							streamable: true;
-							infoHash: string;
-							name: string;
-							fileIndex: number;
-							fileName: string;
-							fileSize: number;
-							mimeType: string | null;
-					  }
-					| { streamable: false; reason: string };
-				if (myRun !== evalRun) return;
-				if (body.streamable) {
-					streamEval = {
-						kind: 'streamable',
-						fileName: body.fileName,
-						fileSize: body.fileSize,
-						mimeType: body.mimeType
-					};
-				} else {
-					streamEval = { kind: 'not-streamable', reason: body.reason };
-				}
-			} catch (err) {
-				if (myRun !== evalRun) return;
-				const message = err instanceof Error ? err.message : 'Unknown error';
-				streamEval = { kind: 'not-streamable', reason: message };
-			}
-		})();
-	});
-
 	const trailerTabEnabled = $derived(
 		isTmdbMovie || isTmdbTv || (isYoutubeVideo && Boolean(youtubeVideoUrl))
 	);
@@ -613,7 +559,7 @@
 	// Once the file is pinned locally to IPFS, the torrent stream is
 	// strictly worse — same bytes, slower path, extra peers — so we
 	// hide that option entirely.
-	const torrentTabEnabled = $derived(streamEval.kind === 'streamable' && !ipfsTabEnabled);
+	const torrentTabEnabled = $derived(Boolean(firstMagnet) && !ipfsTabEnabled);
 	const anyTabEnabled = $derived(trailerTabEnabled || ipfsTabEnabled || torrentTabEnabled);
 
 	const trailerTabTitle = $derived(trailerTabEnabled ? 'Show trailer' : 'No trailer for this item');
@@ -625,28 +571,9 @@
 	const torrentTabTitle = $derived.by(() => {
 		if (ipfsTabEnabled) return 'File is pinned locally — use IPFS Stream instead';
 		if (!firstMagnet) return 'Available once a torrent magnet is attached';
-		switch (streamEval.kind) {
-			case 'idle':
-			case 'evaluating':
-				return 'Probing magnet metadata via DHT/trackers (BEP 9/10) — this can take 10–60s on DHT-only torrents';
-			case 'not-streamable':
-				return `Not streamable: ${streamEval.reason}`;
-			case 'streamable':
-				return `Stream "${streamEval.fileName}" as it downloads`;
-		}
+		return 'Stream the attached torrent as it downloads';
 	});
-	const torrentTabSuffix = $derived.by(() => {
-		if (torrentStreamStarting) return ' — starting…';
-		switch (streamEval.kind) {
-			case 'idle':
-			case 'evaluating':
-				return ' — probing…';
-			case 'not-streamable':
-				return ' — unavailable';
-			case 'streamable':
-				return '';
-		}
-	});
+	const torrentTabSuffix = $derived(torrentStreamStarting ? ' — starting…' : '');
 
 	// If IPFS becomes available while the user is on the torrent tab,
 	// flip them over — the torrent tab is now disabled, so leaving them
@@ -1109,10 +1036,15 @@
 		};
 	});
 
-	// `evaluate: true` runs streamability probes on results; the search
-	// itself short-circuits the probes for TV shows (too many results) so
-	// it's safe to leave on here.
-	const torrentSearch = new TorrentSearch({ evaluate: true });
+	// No per-row streamability probes: every probe is an `api_add_torrent`
+	// with `list_only: true` against the indexer's magnet, and a "streamable"
+	// verdict was misleading anyway — it only meant the metadata had a video
+	// file, not that the torrent could actually be streamed without going
+	// through the full add/initialize handshake. The Stream button posts
+	// `/api/torrent/stream` directly; the backend resolves metadata + waits
+	// for the torrent to leave `Initializing` before returning, so any real
+	// failure surfaces synchronously instead of as a 404 on the byte stream.
+	const torrentSearch = new TorrentSearch();
 
 	// Season-aware fan-out for tv shows. After the initial show-name search
 	// settles, we look at how its results classify by season — any season
