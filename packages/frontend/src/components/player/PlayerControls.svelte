@@ -1,6 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { untrack } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import type { PlayerConnectionState } from '$types/player.type';
 	import PlayerSeekBar from './PlayerSeekBar.svelte';
 
@@ -21,7 +21,8 @@
 		onprev,
 		onnext,
 		onpaused,
-		onvolumechange
+		onvolumechange,
+		extraControls
 	}: {
 		mediaElement?: HTMLMediaElement | null;
 		isVideo?: boolean;
@@ -47,6 +48,12 @@
 		onpaused?: (paused: boolean) => void;
 		/** Fires whenever the user mutes / unmutes / changes volume. */
 		onvolumechange?: (volume: number) => void;
+		/**
+		 * Optional snippet rendered between the mute and fullscreen buttons.
+		 * Used by the catalog detail page to surface its source-picker
+		 * buttons inline in the player controls.
+		 */
+		extraControls?: Snippet;
 	} = $props();
 
 	let isPaused = $state(true);
@@ -140,42 +147,62 @@
 	let volumeDisplay = $derived(isMuted || volume === 0 ? 'muted' : volume < 0.5 ? 'low' : 'high');
 </script>
 
-<div class={classNames('flex flex-col gap-1', { 'pointer-events-none opacity-50': disabled })}>
-	<PlayerSeekBar
-		{positionSecs}
-		{durationSecs}
-		{bufferedRanges}
-		{disabled}
-		onseek={(pos) => onseek?.(pos)}
-		onseekstart={() => onseekstart?.()}
-		onseekend={() => onseekend?.()}
-	/>
+<div class="flex flex-col gap-1">
+	<div class={classNames({ 'pointer-events-none opacity-50': disabled })}>
+		<PlayerSeekBar
+			{positionSecs}
+			{durationSecs}
+			{bufferedRanges}
+			{disabled}
+			onseek={(pos) => onseek?.(pos)}
+			onseekstart={() => onseekstart?.()}
+			onseekend={() => onseekend?.()}
+		/>
+	</div>
 
 	<div class="flex items-center gap-1">
-		{#if onprev}
-			<button class="btn" onclick={() => onprev?.()}>Previous</button>
-		{/if}
+		<div
+			class={classNames('flex items-center gap-1', {
+				'pointer-events-none opacity-50': disabled
+			})}
+		>
+			{#if onprev}
+				<button class="btn" onclick={() => onprev?.()}>Previous</button>
+			{/if}
 
-		<button class="btn" onclick={togglePlayPause}>
-			{isPaused ? 'Play' : 'Pause'}
-		</button>
-
-		{#if onnext}
-			<button class="btn" onclick={() => onnext?.()}>Next</button>
-		{/if}
-
-		<button class="btn" onclick={toggleMute}>
-			{volumeDisplay === 'muted' ? 'Unmute' : 'Mute'}
-		</button>
-
-		<div class="flex-1"></div>
-
-		{#if isVideo}
-			<button class="btn" onclick={() => onfullscreentoggle?.()}>
-				{isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+			<button class="btn" onclick={togglePlayPause}>
+				{isPaused ? 'Play' : 'Pause'}
 			</button>
+
+			{#if onnext}
+				<button class="btn" onclick={() => onnext?.()}>Next</button>
+			{/if}
+
+			<button class="btn" onclick={toggleMute}>
+				{volumeDisplay === 'muted' ? 'Unmute' : 'Mute'}
+			</button>
+		</div>
+
+		{#if extraControls}
+			<div class="flex flex-1 flex-wrap items-center justify-center gap-1">
+				{@render extraControls()}
+			</div>
+		{:else}
+			<div class="flex-1"></div>
 		{/if}
 
-		<button class="btn" onclick={() => onstop?.()}>Stop</button>
+		<div
+			class={classNames('flex items-center gap-1', {
+				'pointer-events-none opacity-50': disabled
+			})}
+		>
+			{#if isVideo}
+				<button class="btn" onclick={() => onfullscreentoggle?.()}>
+					{isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+				</button>
+			{/if}
+
+			<button class="btn" onclick={() => onstop?.()}>Stop</button>
+		</div>
 	</div>
 </div>

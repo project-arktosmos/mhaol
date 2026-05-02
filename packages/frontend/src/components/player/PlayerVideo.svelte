@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
 	import Hls from 'hls.js';
@@ -30,7 +30,8 @@
 		streamOffsetSecs = 0,
 		onseekrequest,
 		onprev,
-		onnext
+		onnext,
+		extraControls
 	}: {
 		file?: PlayableFile | null;
 		connectionState?: PlayerConnectionState;
@@ -69,6 +70,9 @@
 		onseekrequest?: (targetSourceSecs: number) => void;
 		onprev?: () => void;
 		onnext?: () => void;
+		/// Forwarded to <PlayerControls> — rendered between the mute and
+		/// fullscreen buttons.
+		extraControls?: Snippet;
 	} = $props();
 
 	// Single `<video>` element handles both video and audio modes. The HTML
@@ -814,6 +818,7 @@
 			onvolumechange={(v) => playerService.setVolume(v)}
 			{onprev}
 			{onnext}
+			{extraControls}
 		/>
 	</div>
 </div>

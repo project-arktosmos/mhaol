@@ -1,5 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
+	import type { Snippet } from 'svelte';
 	import { resolveYouTubeStreamUrl } from '$lib/youtube-match.service';
 	import PlayerControls from '$components/player/PlayerControls.svelte';
 
@@ -25,10 +26,9 @@
 		trailerOptions?: { key: string; label: string | null; youtubeUrl: string }[];
 		selectedTrailerKey?: string | null;
 		onTrailerSelect?: (key: string) => void;
-		/// Fires whenever the internal `started` state flips, so the parent
-		/// can mirror it (used to hide its own controls overlay during
-		/// playback).
-		onStartedChange?: (started: boolean) => void;
+		/// Forwarded to <PlayerControls> — rendered between the mute and
+		/// fullscreen buttons.
+		extraControls?: Snippet;
 	}
 
 	let {
@@ -40,7 +40,7 @@
 		trailerOptions = [],
 		selectedTrailerKey = null,
 		onTrailerSelect,
-		onStartedChange
+		extraControls
 	}: Props = $props();
 
 	let containerElement = $state<HTMLDivElement | null>(null);
@@ -152,10 +152,6 @@
 	// `<video>` element has it attached; before that we report 'idle' so the
 	// seek bar / buttons stay greyed out.
 	const synthConnectionState = $derived<'idle' | 'streaming'>(streamUrl ? 'streaming' : 'idle');
-
-	$effect(() => {
-		onStartedChange?.(started);
-	});
 </script>
 
 <div class="flex flex-col gap-1">
@@ -253,5 +249,6 @@
 		onseek={handleSeek}
 		onstop={handleStop}
 		onfullscreentoggle={toggleFullscreen}
+		{extraControls}
 	/>
 </div>

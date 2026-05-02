@@ -608,24 +608,6 @@
 		}
 	}
 
-	// Trailer playback state lifted from <CatalogTrailerPlayer> via
-	// `onStartedChange`. Used to hide the source-button overlay while the
-	// trailer is playing — the source buttons are pointer-events-none on
-	// their container, so before playback starts the user can still click
-	// the trailer's underlying play button by clicking outside the labels.
-	let trailerStarted = $state(false);
-
-	$effect(() => {
-		if (activeSource !== 'trailer') trailerStarted = false;
-	});
-
-	const showSourceButtons = $derived(
-		!isInlinePlayingThisFirkin &&
-			!ipfsStarting &&
-			!torrentStreamStarting &&
-			!(activeSource === 'trailer' && trailerStarted)
-	);
-
 	function handleSourceClick(source: StreamSource): void {
 		if (source === 'trailer') {
 			if (activeSource !== 'trailer') selectSource('trailer');
@@ -1916,92 +1898,83 @@
 						</div>
 					{/if}
 
-					<div class="relative">
-						{#if (activeSource === 'ipfs' || activeSource === 'torrent') && isInlinePlayingThisFirkin}
-							<PlayerVideo
-								file={$playerState.currentFile}
-								connectionState={$playerState.connectionState}
-								positionSecs={$playerState.positionSecs}
-								durationSecs={$playerState.durationSecs}
-								buffering={$playerState.buffering}
-								poster={trailerThumb}
-								hideSubtitleSelect
-								subtitleUrl={currentSubtitleUrl}
-								directStreamUrl={$playerState.directStreamUrl}
-								directStreamMimeType={$playerState.directStreamMimeType}
-								streamOffsetSecs={$playerState.streamOffsetSecs}
-								onseekrequest={activeSource === 'ipfs' ? handleIpfsSeek : undefined}
-							/>
-						{:else if (activeSource === 'ipfs' && ipfsStarting) || (activeSource === 'torrent' && torrentStreamStarting)}
-							<div
-								class="flex aspect-video w-full items-center justify-center overflow-hidden rounded-md bg-black text-white"
-							>
-								<div class="text-center">
-									<span class="loading loading-lg loading-spinner"></span>
-									<p class="mt-2 text-sm opacity-70">
-										Starting {activeSource === 'ipfs' ? 'IPFS' : 'torrent'} stream…
-									</p>
-								</div>
-							</div>
-						{:else if activeSource === 'trailer' && trailerTabEnabled}
-							<CatalogTrailerPlayer
-								posterUrl={trailerThumb}
-								youtubeUrl={isYoutubeVideo ? youtubeVideoUrl : firstTrailerUrl}
-								title={firkin.title}
-								preferredClient={isYoutubeVideo ? youtubePreferredClient : null}
-								onResolved={isYoutubeVideo ? persistYoutubePreferredClient : undefined}
-								trailerOptions={isYoutubeVideo ? [] : playableTrailers}
-								{selectedTrailerKey}
-								onTrailerSelect={(k) => (selectedTrailerKey = k)}
-								onStartedChange={(s) => (trailerStarted = s)}
-							/>
-						{:else if firkin.images[1]}
-							<img
-								src={firkin.images[1].url}
-								alt={firkin.title}
-								loading="lazy"
-								class="w-full rounded-md object-cover"
-							/>
-						{/if}
+					{#snippet sourceButtons()}
+						<button
+							type="button"
+							class="btn"
+							disabled={!trailerTabEnabled}
+							onclick={() => handleSourceClick('trailer')}
+							title={trailerTabTitle}
+						>
+							{isYoutubeVideo ? 'Video' : 'Trailer'}
+						</button>
+						<button
+							type="button"
+							class="btn"
+							disabled={!ipfsTabEnabled || ipfsStarting}
+							onclick={() => handleSourceClick('ipfs')}
+							title={ipfsTabTitle}
+						>
+							IPFS Stream{ipfsStarting ? ' — starting…' : ''}
+						</button>
+						<button
+							type="button"
+							class="btn"
+							disabled={!torrentTabEnabled || torrentStreamStarting}
+							onclick={() => handleSourceClick('torrent')}
+							title={torrentTabTitle}
+						>
+							Torrent Stream{torrentTabSuffix}
+						</button>
+					{/snippet}
 
-						{#if showSourceButtons}
-							<div
-								class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/30"
-							>
-								<div
-									class="pointer-events-auto flex flex-wrap items-center justify-center gap-2 px-4"
-								>
-									<button
-										type="button"
-										class="btn btn-primary"
-										disabled={!trailerTabEnabled}
-										onclick={() => handleSourceClick('trailer')}
-										title={trailerTabTitle}
-									>
-										{isYoutubeVideo ? 'Video' : 'Trailer'}
-									</button>
-									<button
-										type="button"
-										class="btn btn-primary"
-										disabled={!ipfsTabEnabled || ipfsStarting}
-										onclick={() => handleSourceClick('ipfs')}
-										title={ipfsTabTitle}
-									>
-										IPFS Stream{ipfsStarting ? ' — starting…' : ''}
-									</button>
-									<button
-										type="button"
-										class="btn btn-primary"
-										disabled={!torrentTabEnabled || torrentStreamStarting}
-										onclick={() => handleSourceClick('torrent')}
-										title={torrentTabTitle}
-									>
-										Torrent Stream{torrentTabSuffix}
-									</button>
-								</div>
+					{#if (activeSource === 'ipfs' || activeSource === 'torrent') && isInlinePlayingThisFirkin}
+						<PlayerVideo
+							file={$playerState.currentFile}
+							connectionState={$playerState.connectionState}
+							positionSecs={$playerState.positionSecs}
+							durationSecs={$playerState.durationSecs}
+							buffering={$playerState.buffering}
+							poster={trailerThumb}
+							hideSubtitleSelect
+							subtitleUrl={currentSubtitleUrl}
+							directStreamUrl={$playerState.directStreamUrl}
+							directStreamMimeType={$playerState.directStreamMimeType}
+							streamOffsetSecs={$playerState.streamOffsetSecs}
+							onseekrequest={activeSource === 'ipfs' ? handleIpfsSeek : undefined}
+							extraControls={sourceButtons}
+						/>
+					{:else if (activeSource === 'ipfs' && ipfsStarting) || (activeSource === 'torrent' && torrentStreamStarting)}
+						<div
+							class="flex aspect-video w-full items-center justify-center overflow-hidden rounded-md bg-black text-white"
+						>
+							<div class="text-center">
+								<span class="loading loading-lg loading-spinner"></span>
+								<p class="mt-2 text-sm opacity-70">
+									Starting {activeSource === 'ipfs' ? 'IPFS' : 'torrent'} stream…
+								</p>
 							</div>
-						{/if}
-					</div>
+						</div>
+					{:else if activeSource === 'trailer' && trailerTabEnabled}
+						<CatalogTrailerPlayer
+							posterUrl={trailerThumb}
+							youtubeUrl={isYoutubeVideo ? youtubeVideoUrl : firstTrailerUrl}
+							title={firkin.title}
+							preferredClient={isYoutubeVideo ? youtubePreferredClient : null}
+							onResolved={isYoutubeVideo ? persistYoutubePreferredClient : undefined}
+							trailerOptions={isYoutubeVideo ? [] : playableTrailers}
+							{selectedTrailerKey}
+							onTrailerSelect={(k) => (selectedTrailerKey = k)}
+							extraControls={sourceButtons}
+						/>
+					{:else if firkin.images[1]}
+						<img
+							src={firkin.images[1].url}
+							alt={firkin.title}
+							loading="lazy"
+							class="w-full rounded-md object-cover"
+						/>
+					{/if}
 				</div>
 			{:else if firkin.images[1]}
 				<img
