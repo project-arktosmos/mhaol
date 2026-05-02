@@ -7,6 +7,7 @@
 		type CatalogLookupItem
 	} from '$components/firkins/FirkinMetadataLookupModal.svelte';
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
+	import { CatalogScoresCard } from 'cloud-ui';
 	import CatalogDescriptionPanel from '$components/catalog/CatalogDescriptionPanel.svelte';
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTvSeasonsCard from '$components/catalog/CatalogTvSeasonsCard.svelte';
@@ -1721,6 +1722,8 @@
 				/>
 			{/if}
 
+			<CatalogScoresCard reviews={firkin.reviews ?? []} />
+
 			<FirkinArtistsSection
 				artists={firkin.artists}
 				loading={artistsBackfillStatus === 'loading'}
@@ -1895,7 +1898,6 @@
 					version: firkin.version ?? 0
 				}}
 				versionHashes={firkin.version_hashes ?? []}
-				reviews={firkin.reviews ?? []}
 			/>
 
 			{#if isTmdbTv && tmdbTvId}
