@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { loadMusicbrainzAlbumsByArtist, type CatalogItem } from '$lib/catalog.service';
+	import { cachedImageUrl } from '$lib/image-cache';
 
 	interface Props {
 		releaseGroupId: string | null;
@@ -86,7 +87,7 @@
 								>
 									{#if item.posterUrl}
 										<img
-											src={item.posterUrl}
+											src={cachedImageUrl(item.posterUrl)}
 											alt={item.title}
 											class="h-full w-full object-cover"
 											loading="lazy"

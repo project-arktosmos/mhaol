@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { loadRelated, type CatalogItem } from '$lib/catalog.service';
+	import { cachedImageUrl } from '$lib/image-cache';
 
 	interface Props {
 		addon: string;
@@ -97,7 +98,7 @@
 								>
 									{#if item.posterUrl}
 										<img
-											src={item.posterUrl}
+											src={cachedImageUrl(item.posterUrl)}
 											alt={item.title}
 											class="h-full w-full object-cover"
 											loading="lazy"
@@ -142,7 +143,7 @@
 								>
 									{#if item.posterUrl}
 										<img
-											src={item.posterUrl}
+											src={cachedImageUrl(item.posterUrl)}
 											alt={item.title}
 											class="h-full w-full object-cover"
 											loading="lazy"
