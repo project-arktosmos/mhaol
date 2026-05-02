@@ -152,6 +152,24 @@
 	</div>
 {/snippet}
 
+{#snippet downloadHeader(info: AttachmentInfo | null)}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		viewBox="0 0 24 24"
+		fill="currentColor"
+		class="h-8 w-8 translate-x-0.5"
+		aria-hidden="true"
+	>
+		<polygon points="6 4 20 12 6 20 6 4" />
+	</svg>
+	<span class="text-xs font-medium">Download</span>
+	{#if info}
+		<span class="block max-w-full truncate text-[10px] text-base-content/70" title={info.title}>
+			{info.title}
+		</span>
+	{/if}
+{/snippet}
+
 {#snippet header(info: AttachmentInfo | null, iconName: string, label: string, iconTitle: string)}
 	<Icon name={iconName} size={32} title={iconTitle} />
 	<span class="text-xs font-medium">{label}</span>
@@ -243,7 +261,7 @@
 				class="col-span-2 flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-300/70 disabled:cursor-progress disabled:opacity-60"
 				aria-label="Play via IPFS"
 			>
-				{@render header(download, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				{@render downloadHeader(download)}
 				<span
 					class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
 					title={download.ipfsCid}
@@ -258,7 +276,7 @@
 			<div
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center text-base-content"
 			>
-				{@render header(download, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				{@render downloadHeader(download)}
 				{#if download.finished}
 					<span class="text-[10px] text-success">Seeding · pinning to IPFS…</span>
 				{:else if download.progress != null}
@@ -290,7 +308,7 @@
 				aria-label="Attach this torrent for download"
 				title="Suggested pick from the torrent search — click to attach and start downloading"
 			>
-				{@render header(info, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				{@render downloadHeader(info)}
 				{@render stats(info)}
 				<span class="text-[10px] font-medium text-base-content/70">
 					{attachingDownload ? 'Starting…' : 'Click to attach'}
@@ -300,7 +318,7 @@
 			<div
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
 			>
-				{@render header(null, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				{@render downloadHeader(null)}
 				<span class="text-[10px] text-base-content/60">Not attached</span>
 			</div>
 		{/if}
