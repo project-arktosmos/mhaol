@@ -13,7 +13,11 @@
 		type Firkin
 	} from 'cloud-ui';
 	import FirkinIpfsPlayer from '$components/FirkinIpfsPlayer.svelte';
-	import { playerIpfsConfig, playerIpfsConfigured, playerIpfsDiagnostic } from '$ipfs/config';
+	import {
+		fetchPlayerIpfsConfig,
+		type PlayerIpfsConfig,
+		type ConfigDiagnostic
+	} from '$ipfs/config';
 	import { getPlayerIpfsClient, catText, type PlayerIpfsClient } from '$ipfs/client';
 
 	type Status =
@@ -28,22 +32,38 @@
 	let client = $state<PlayerIpfsClient | null>(null);
 	let connectError = $state<string | null>(null);
 	let peerCount = $state(0);
+	let ipfsConfig = $state<PlayerIpfsConfig | null>(null);
+	let ipfsDiagnostic = $state<ConfigDiagnostic>({
+		bootstrapMultiaddrs: 0,
+		swarmKey: 'missing'
+	});
+	let ipfsConfigError = $state<string | null>(null);
+	let ipfsConfigLoaded = $state(false);
 
+	const ipfsConfigured = $derived(ipfsConfig !== null);
 	const firkin = $derived<Firkin | null>(status.kind === 'loaded' ? status.firkin : null);
 	const firkinKind = $derived(firkin ? addonKind(firkin.addon) : null);
 
 	onMount(() => {
-		if (!playerIpfsConfigured) return;
-		void connect();
+		void loadIpfsConfig();
 		const t = setInterval(() => {
 			peerCount = client?.peerCount() ?? 0;
 		}, 1500);
 		return () => clearInterval(t);
 	});
 
-	async function connect() {
+	async function loadIpfsConfig() {
+		const result = await fetchPlayerIpfsConfig();
+		ipfsConfigLoaded = true;
+		ipfsDiagnostic = result.diagnostic;
+		ipfsConfigError = result.error;
+		ipfsConfig = result.config;
+		if (result.config) void connect(result.config);
+	}
+
+	async function connect(cfg: PlayerIpfsConfig) {
 		try {
-			const c = await getPlayerIpfsClient(playerIpfsConfig);
+			const c = await getPlayerIpfsClient(cfg);
 			client = c;
 			peerCount = c.peerCount();
 		} catch (err) {
@@ -54,11 +74,11 @@
 	async function loadCid() {
 		const cid = cidInput.trim();
 		if (!cid) return;
-		if (!playerIpfsConfigured) return;
+		if (!ipfsConfig) return;
 		try {
 			if (!client) {
 				status = { kind: 'connecting' };
-				await connect();
+				await connect(ipfsConfig);
 			}
 			if (!client) throw new Error(connectError ?? 'IPFS client unavailable');
 			status = { kind: 'fetching', cid };
@@ -97,36 +117,38 @@
 </svelte:head>
 
 <div class="flex min-h-full flex-col gap-6 p-6">
-	{#if !playerIpfsConfigured}
+	{#if ipfsConfigLoaded && !ipfsConfigured}
 		<div class="alert alert-error">
 			<div class="flex flex-col gap-1">
 				<span class="font-semibold">IPFS connection not configured</span>
 				<span class="text-xs">
-					The player reads the rendezvous bootstrap multiaddrs and the swarm key from disk at
-					startup (via <code>scripts/run-vite.mjs</code>). Right now:
+					The player fetches the swarm key and bootstrap multiaddrs from
+					<code>/api/p2p/bootstrap</code> on the cloud. Right now:
 				</span>
 				<ul class="ml-4 list-disc text-xs">
+					{#if ipfsConfigError}
+						<li>
+							Bootstrap fetch failed: <span class="text-error">{ipfsConfigError}</span>
+						</li>
+					{/if}
 					<li>
 						Bootstrap addrs found:
-						<strong>{playerIpfsDiagnostic.bootstrapMultiaddrs}</strong>
-						{#if playerIpfsDiagnostic.bootstrapMultiaddrs === 0}
-							— start <code>pnpm app:rendezvous</code> first so it writes
-							<code>$DATA_DIR/rendezvous/bootstrap.multiaddr</code>, or set
-							<code>RENDEZVOUS_BOOTSTRAP</code>.
+						<strong>{ipfsDiagnostic.bootstrapMultiaddrs}</strong>
+						{#if ipfsDiagnostic.bootstrapMultiaddrs === 0}
+							— make sure the cloud is running and its IPFS node has reached
+							<code>Running</code> state.
 						{/if}
 					</li>
 					<li>
-						Swarm key: <strong>{playerIpfsDiagnostic.swarmKey}</strong>
-						{#if playerIpfsDiagnostic.swarmKey !== 'present'}
-							— expected at <code>$DATA_DIR/swarm.key</code> (or set
-							<code>IPFS_SWARM_KEY_FILE</code>).
-						{/if}
+						Swarm key: <strong>{ipfsDiagnostic.swarmKey}</strong>
 					</li>
 				</ul>
-				<span class="text-xs">
-					Restart <code>pnpm dev:player</code> after the rendezvous is up.
-				</span>
 			</div>
+		</div>
+	{:else if !ipfsConfigLoaded}
+		<div class="alert">
+			<span class="loading loading-sm loading-spinner"></span>
+			<span class="text-xs">Loading IPFS bootstrap from cloud…</span>
 		</div>
 	{:else}
 		<section class="card border border-base-content/10 bg-base-200 p-4">
@@ -161,14 +183,11 @@
 			<p class="mt-2 text-xs text-base-content/60">
 				{#if connectError}
 					Connection error: <span class="text-error">{connectError}</span>
-				{:else if client}
-					Connected to {peerCount} peer{peerCount === 1 ? '' : 's'} on the private swarm (rendezvous:
-					{playerIpfsConfig.bootstrapMultiaddrs.length} bootstrap addr{playerIpfsConfig
-						.bootstrapMultiaddrs.length === 1
-						? ''
-						: 's'}).
+				{:else if client && ipfsConfig}
+					Connected to {peerCount} peer{peerCount === 1 ? '' : 's'} on the private swarm ({ipfsConfig.bootstrapMultiaddrs
+						.length} bootstrap addr{ipfsConfig.bootstrapMultiaddrs.length === 1 ? '' : 's'}).
 				{:else}
-					Connecting to rendezvous…
+					Connecting to cloud…
 				{/if}
 			</p>
 		</section>
@@ -232,7 +251,7 @@
 				<CatalogFilesTable files={firkin.files} />
 			</section>
 		</div>
-	{:else if playerIpfsConfigured && status.kind !== 'connecting' && status.kind !== 'fetching'}
+	{:else if ipfsConfigured && status.kind !== 'connecting' && status.kind !== 'fetching'}
 		<div class="card border border-base-content/10 bg-base-200 p-6 text-center">
 			<p class="text-sm text-base-content/70">
 				Paste a firkin CID above and click Load to fetch it directly from the private IPFS swarm.
