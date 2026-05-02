@@ -238,13 +238,9 @@
 <div class="flex flex-col gap-2">
 	<div class="grid grid-cols-2 gap-3">
 		{#if trailer && onTrailerPlay}
-			<button
-				type="button"
-				onclick={() => onTrailerPlay?.()}
-				disabled={trailerPlaying}
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
+			<div
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
 				class:col-span-2={trailerSpansFull}
-				aria-label="Play trailer"
 			>
 				<Icon name="delapouite/film-strip" size={32} title="Trailer" />
 				<span class="text-xs font-medium">Trailer</span>
@@ -254,38 +250,27 @@
 				>
 					{trailer.youtubeId}
 				</span>
-				{#if trailerPlaying}
-					<span class="text-[10px] font-medium text-success">Starting…</span>
-				{/if}
-			</button>
+				<button
+					type="button"
+					onclick={() => onTrailerPlay?.()}
+					disabled={trailerPlaying}
+					class="btn btn-sm btn-primary"
+				>
+					{trailerPlaying ? 'Starting…' : 'Play'}
+				</button>
+			</div>
 		{/if}
 
 		{#if !downloadActionable}
 			{#if stream && onStreamPlay}
-				<div class="group relative">
-					<button
-						type="button"
-						onclick={() => onStreamPlay?.()}
-						disabled={streamPlaying}
-						class="flex w-full flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors group-hover:border-success/50 group-hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
-						aria-label="Play stream"
-					>
-						<div class="pointer-events-none flex flex-col items-center gap-1">
-							{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-							{#if streamPicksByQuality.length > 1 && onAttachStream}
-								<span class="invisible block h-6 text-[10px]">·</span>
-							{/if}
-							{@render stats(stream)}
-							<span class="text-[10px] font-medium text-success">
-								{streamPlaying ? 'Starting…' : 'Click to play'}
-							</span>
-						</div>
-					</button>
+				<div
+					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
+				>
+					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					{#if streamPicksByQuality.length > 1 && onAttachStream}
 						<select
-							class="select-bordered absolute top-[3.5rem] left-1/2 z-10 -translate-x-1/2 select select-xs"
+							class="select-bordered select select-xs"
 							value={actionableSelectedQuality ?? ''}
-							onclick={(e) => e.stopPropagation()}
 							onchange={(e) =>
 								changeStreamQuality((e.currentTarget as HTMLSelectElement).value, true)}
 							aria-label="Pick stream quality"
@@ -296,6 +281,15 @@
 							{/each}
 						</select>
 					{/if}
+					{@render stats(stream)}
+					<button
+						type="button"
+						onclick={() => onStreamPlay?.()}
+						disabled={streamPlaying}
+						class="btn btn-sm btn-primary"
+					>
+						{streamPlaying ? 'Starting…' : 'Play'}
+					</button>
 				</div>
 			{:else if stream}
 				<div
@@ -306,35 +300,14 @@
 				</div>
 			{:else if currentStreamPick && onAttachStream}
 				{@const info = torrentToInfo(currentStreamPick.torrent)}
-				<div class="group relative">
-					<button
-						type="button"
-						onclick={() => onAttachStream?.(currentStreamPick.torrent)}
-						disabled={attachingStream}
-						class="flex w-full flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors group-hover:border-success/50 group-hover:bg-base-200 disabled:cursor-progress disabled:opacity-40"
-						aria-label="Attach this torrent for streaming"
-						title="Suggested pick from the torrent search — click to start streaming"
-					>
-						<div class="pointer-events-none flex flex-col items-center gap-1 opacity-60 transition-opacity group-hover:opacity-90">
-							{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-							{#if streamPicksByQuality.length > 1}
-								<span class="invisible block h-6 text-[10px]">·</span>
-							{:else}
-								<span class="text-[10px] font-medium text-base-content/70">
-									{currentStreamPick.quality}
-								</span>
-							{/if}
-							{@render stats(info)}
-							<span class="text-[10px] font-medium text-base-content/70">
-								{attachingStream ? 'Starting…' : 'Click to attach'}
-							</span>
-						</div>
-					</button>
+				<div
+					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center opacity-60"
+				>
+					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					{#if streamPicksByQuality.length > 1}
 						<select
-							class="select-bordered absolute top-[3.5rem] left-1/2 z-10 -translate-x-1/2 select select-xs"
+							class="select-bordered select select-xs"
 							value={currentStreamPick.quality}
-							onclick={(e) => e.stopPropagation()}
 							onchange={(e) =>
 								changeStreamQuality((e.currentTarget as HTMLSelectElement).value, false)}
 							aria-label="Pick stream quality"
@@ -344,7 +317,20 @@
 								<option value={pick.quality}>{pick.quality}</option>
 							{/each}
 						</select>
+					{:else}
+						<span class="text-[10px] font-medium text-base-content/70">
+							{currentStreamPick.quality}
+						</span>
 					{/if}
+					{@render stats(info)}
+					<button
+						type="button"
+						onclick={() => onAttachStream?.(currentStreamPick.torrent)}
+						disabled={attachingStream}
+						class="btn btn-sm btn-primary"
+					>
+						{attachingStream ? 'Starting…' : 'Assign'}
+					</button>
 				</div>
 			{:else}
 				<div
@@ -357,13 +343,9 @@
 		{/if}
 
 		{#if download && download.ipfsCid && onDownloadPlay}
-			<button
-				type="button"
-				onclick={() => onDownloadPlay?.()}
-				disabled={downloadPlaying}
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
+			<div
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 				class:col-span-2={downloadSpansFull}
-				aria-label="Play via IPFS"
 			>
 				{@render downloadHeader()}
 				<span
@@ -372,10 +354,15 @@
 				>
 					{shortCid(download.ipfsCid)}
 				</span>
-				{#if downloadPlaying}
-					<span class="text-[10px] font-medium text-success">Starting…</span>
-				{/if}
-			</button>
+				<button
+					type="button"
+					onclick={() => onDownloadPlay?.()}
+					disabled={downloadPlaying}
+					class="btn btn-sm btn-primary"
+				>
+					{downloadPlaying ? 'Starting…' : 'Play'}
+				</button>
+			</div>
 		{:else if download}
 			<div
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
@@ -404,20 +391,20 @@
 			</div>
 		{:else if preferredDownload && onAttachDownload}
 			{@const info = torrentToInfo(preferredDownload)}
-			<button
-				type="button"
-				onclick={() => onAttachDownload?.(preferredDownload)}
-				disabled={attachingDownload}
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-200 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
-				aria-label="Attach this torrent for download"
-				title="Suggested pick from the torrent search — click to attach and start downloading"
+			<div
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center opacity-60"
 			>
 				{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
 				{@render stats(info)}
-				<span class="text-[10px] font-medium text-base-content/70">
-					{attachingDownload ? 'Starting…' : 'Click to attach'}
-				</span>
-			</button>
+				<button
+					type="button"
+					onclick={() => onAttachDownload?.(preferredDownload)}
+					disabled={attachingDownload}
+					class="btn btn-sm btn-primary"
+				>
+					{attachingDownload ? 'Starting…' : 'Assign'}
+				</button>
+			</div>
 		{:else}
 			<div
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
