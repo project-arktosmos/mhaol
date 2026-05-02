@@ -69,6 +69,35 @@
 		};
 	});
 
+	// Mirrors the catalog detail page's IPFS-stream gating: an `ipfs`-typed
+	// FileEntry whose title ends in a video container we can feed to the
+	// hlssink2 pipeline. Audio-only extensions are intentionally excluded
+	// — the cloud badge marks "watchable via IPFS Stream", not "playable".
+	const VIDEO_EXTS = new Set([
+		'.mkv',
+		'.mp4',
+		'.m4v',
+		'.mov',
+		'.webm',
+		'.avi',
+		'.ts',
+		'.m2ts',
+		'.mpg',
+		'.mpeg',
+		'.ogv',
+		'.wmv',
+		'.flv'
+	]);
+	let hasIpfsVideo = $derived(
+		firkin.files.some((f) => {
+			if (f.type !== 'ipfs') return false;
+			const title = (f.title ?? '').toLowerCase();
+			const dot = title.lastIndexOf('.');
+			if (dot < 0) return false;
+			return VIDEO_EXTS.has(title.slice(dot));
+		})
+	);
+
 	let reviews = $derived(firkin.reviews ?? []);
 
 	let tooltipImageUrl = $derived(firkin.images?.[firkin.images.length - 1]?.url ?? null);
@@ -138,6 +167,15 @@
 				aria-hidden="true"
 			>
 				<Icon name={placeholderIcon} size="40%" />
+			</div>
+		{/if}
+		{#if hasIpfsVideo}
+			<div
+				class="absolute right-2 bottom-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/20"
+				title="Available via IPFS Stream"
+				aria-label="Available via IPFS Stream"
+			>
+				<Icon name="lorc/fluffy-cloud" size={16} />
 			</div>
 		{/if}
 	</figure>
