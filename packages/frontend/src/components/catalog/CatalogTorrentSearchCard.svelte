@@ -113,8 +113,8 @@
 						<thead>
 							<tr>
 								<th class="w-56">Streamability</th>
-								<th class="w-20 text-success">Seeders</th>
-								<th class="w-20 text-warning">Leechers</th>
+								<th class="w-12 text-success" title="Seeders">↑</th>
+								<th class="w-12 text-warning" title="Leechers">↓</th>
 								<th class="w-20">Size</th>
 								<th>Title</th>
 								<th class="w-32"></th>
