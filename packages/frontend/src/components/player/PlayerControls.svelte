@@ -1,7 +1,6 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { untrack, type Snippet } from 'svelte';
-	import { Icon } from 'cloud-ui';
 	import type { PlayerConnectionState } from '$types/player.type';
 	import PlayerSeekBar from './PlayerSeekBar.svelte';
 
@@ -177,7 +176,28 @@
 				aria-label={isPaused ? 'Play' : 'Pause'}
 				title={isPaused ? 'Play' : 'Pause'}
 			>
-				<Icon name={isPaused ? 'guard13007/play-button' : 'guard13007/pause-button'} size="1em" />
+				{#if isPaused}
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						class="h-5 w-5 translate-x-0.5"
+						aria-hidden="true"
+					>
+						<polygon points="6 4 20 12 6 20 6 4" />
+					</svg>
+				{:else}
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						class="h-5 w-5"
+						aria-hidden="true"
+					>
+						<rect x="6" y="4" width="4" height="16" />
+						<rect x="14" y="4" width="4" height="16" />
+					</svg>
+				{/if}
 			</button>
 
 			{#if onnext}
