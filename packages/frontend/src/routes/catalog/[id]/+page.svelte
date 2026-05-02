@@ -9,13 +9,14 @@
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
 	import { CatalogScoresCard } from 'cloud-ui';
 	import CatalogDescriptionPanel from '$components/catalog/CatalogDescriptionPanel.svelte';
-	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTvSeasonsCard from '$components/catalog/CatalogTvSeasonsCard.svelte';
 	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
-	import CatalogTorrentAttachmentCard from '$components/catalog/CatalogTorrentAttachmentCard.svelte';
+	import CatalogTorrentAttachmentCard, {
+		type AttachmentInfo
+	} from '$components/catalog/CatalogTorrentAttachmentCard.svelte';
 	import CatalogTorrentProgressCard from '$components/catalog/CatalogTorrentProgressCard.svelte';
 	import CatalogSubsLyricsCard from '$components/catalog/CatalogSubsLyricsCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
@@ -171,9 +172,6 @@
 	const hasIpfsFiles = $derived(playableIpfsFiles.length > 0);
 	const firstIpfsCid = $derived(playableIpfsFiles[0]?.value ?? null);
 	const hasMagnetFiles = $derived(firkin.files.some((f) => f.type === 'torrent magnet'));
-	const hasStreamMagnetFiles = $derived(
-		firkin.files.some((f) => f.type === 'torrent stream magnet')
-	);
 	// "Real" files = anything playable on its own. URL-typed entries (TMDB
 	// source URL, MusicBrainz release-group URL, persisted YouTube track
 	// URLs) are pure metadata pointers and don't qualify.
@@ -819,12 +817,29 @@
 		persist: (resolved) =>
 			isBookmarked ? persistFirkinPatch({ trailers: resolved }) : Promise.resolve()
 	});
-	// First playable trailer URL — drives the inline `CatalogTrailerPlayer`
-	// above the description (replacing the second image). Stays null until
-	// the resolver finds a YouTube URL; the player keeps showing the poster
-	// in the meantime so the area never appears blank.
+	// All playable trailers — feeds the top-right select on the inline
+	// `CatalogTrailerPlayer` so the user can switch between movie + per-season
+	// trailers without a separate trailers list.
+	const playableTrailers = $derived(
+		trailerResolver.trailers
+			.filter((t): t is typeof t & { youtubeUrl: string } => Boolean(t.youtubeUrl))
+			.map((t) => ({ key: t.key, label: t.label, youtubeUrl: t.youtubeUrl }))
+	);
+	let selectedTrailerKey = $state<string | null>(null);
+	$effect(() => {
+		const keys = playableTrailers.map((t) => t.key);
+		if (keys.length === 0) {
+			selectedTrailerKey = null;
+			return;
+		}
+		if (!selectedTrailerKey || !keys.includes(selectedTrailerKey)) {
+			selectedTrailerKey = keys[0];
+		}
+	});
 	const firstTrailerUrl = $derived(
-		trailerResolver.trailers.find((t) => Boolean(t.youtubeUrl))?.youtubeUrl ?? null
+		playableTrailers.find((t) => t.key === selectedTrailerKey)?.youtubeUrl ??
+			playableTrailers[0]?.youtubeUrl ??
+			null
 	);
 	let trailersInitForFirkinId: string | null = null;
 
@@ -1100,6 +1115,32 @@
 	const existingHashes = $derived(
 		new Set(firkin.files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
 	);
+
+	/// Look up an attached magnet's metadata in the persisted torrent search
+	/// results so the attachment card can show seeders/leechers/size pulled
+	/// from the indexer's snapshot. Falls back to the FileEntry's own title
+	/// when the search cache doesn't carry the picked infoHash (e.g. the
+	/// user picked it before the indexer's results were persisted, or a
+	/// later refresh dropped it).
+	function attachmentInfoFor(
+		fileType: 'torrent magnet' | 'torrent stream magnet'
+	): AttachmentInfo | null {
+		const entry = firkin.files.find((f) => f.type === fileType && f.value);
+		if (!entry || !entry.value) return null;
+		const hash = infoHashFromMagnet(entry.value);
+		const match = hash
+			? torrentSearch.matches.find((m) => m.infoHash.toLowerCase() === hash.toLowerCase())
+			: null;
+		return {
+			title: match?.parsedTitle || match?.title || entry.title || 'Magnet attached',
+			seeders: match?.seeders ?? null,
+			leechers: match?.leechers ?? null,
+			sizeBytes: match?.sizeBytes ?? null
+		};
+	}
+
+	const downloadInfo = $derived(attachmentInfoFor('torrent magnet'));
+	const streamInfo = $derived(attachmentInfoFor('torrent stream magnet'));
 
 	function toggleTorrentSearch() {
 		torrentSearchOpen = !torrentSearchOpen;
@@ -1880,6 +1921,9 @@
 							title={firkin.title}
 							preferredClient={isYoutubeVideo ? youtubePreferredClient : null}
 							onResolved={isYoutubeVideo ? persistYoutubePreferredClient : undefined}
+							trailerOptions={isYoutubeVideo ? [] : playableTrailers}
+							{selectedTrailerKey}
+							onTrailerSelect={(k) => (selectedTrailerKey = k)}
 						/>
 					{:else if firkin.images[1]}
 						<img
@@ -1902,10 +1946,7 @@
 			<CatalogDescriptionPanel description={firkin.description} />
 
 			{#if isTmdbMovie}
-				<CatalogTorrentAttachmentCard
-					downloadAttached={hasMagnetFiles}
-					streamAttached={hasStreamMagnetFiles}
-				/>
+				<CatalogTorrentAttachmentCard download={downloadInfo} stream={streamInfo} />
 			{/if}
 
 			{#if isTmdbTv && tmdbTvId}
@@ -1925,10 +1966,6 @@
 			{/if}
 
 			<CatalogTorrentProgressCard rows={torrentProgressRows} />
-
-			{#if isTmdbMovie || isTmdbTv}
-				<CatalogTrailersCard resolver={trailerResolver} firkinTitle={firkin.title} {thumb} />
-			{/if}
 
 			{#if isMusicBrainz}
 				<CatalogTracksCard
