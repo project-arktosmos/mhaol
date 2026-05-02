@@ -3,13 +3,14 @@
 **Location:** `apps/player/`
 **Framework:** SvelteKit (static SPA, `@sveltejs/adapter-static`) + Tailwind 4 + DaisyUI 5 — same toolchain as the cloud WebUI.
 **Package:** `player` (pnpm workspace)
-**Default port:** 9797
+**Standalone dev port:** 9797
+**In production:** served by the cloud HTTP server at `http://<cloud-host>:9898/player/` — the cloud binary embeds `apps/player/dist-static/` via `rust-embed` and exposes it under the `/player/` prefix.
 
-The player is a **browser-only** static SPA that joins the same private IPFS swarm as the cloud and renders firkins fetched directly from IPFS. It **never** talks to the cloud HTTP API:
+The player is a **browser-only** static SPA that joins the same private IPFS swarm as the cloud and renders firkins fetched directly from IPFS. The HTTP fetch to `/api/p2p/bootstrap` is the *only* thing it asks of the cloud's HTTP API; everything else (firkin metadata + attached file bytes) is fetched as UnixFS blocks via libp2p:
 
 - Firkin metadata is fetched as a UnixFS file at the firkin's CID (the same body the cloud pinned via `pin_firkin_body`).
-- `ipfs`-typed `files` entries are fetched the same way and piped into a `<video>` / `<audio>` element via a Blob URL.
-- Connectivity is over **libp2p** (Helia) with `WebSocket` and `WebTransport` transports, dialing the rendezvous bootstrap multiaddr; the `pnet` connection protector enforces private-swarm membership using the same swarm key the cloud and rendezvous use.
+- `ipfs`-typed `files` entries are fetched the same way and piped into a `<video>` / `<audio>` element via the MSE-backed stream-player or a Blob URL fallback.
+- Connectivity is over **libp2p** (Helia) with `WebSocket` and `WebTransport` transports, dialing the cloud's `/ws` listener; the `pnet` connection protector enforces private-swarm membership using the same swarm key the cloud generated at startup.
 
 The player has exactly one route: `/player`. It is intentionally **not** a full feature parity port of the cloud catalog detail page — only the read-only display surfaces work. Trailers/tracks/torrent search require cloud-side APIs and are excluded.
 
@@ -17,14 +18,11 @@ The player has exactly one route: `/player`. It is intentionally **not** a full 
 
 ```
 apps/player/
-├── package.json
-├── svelte.config.js          # static adapter + aliases ($components, $ipfs, $types, $utils)
-├── vite.config.ts            # Helia/libp2p prebundling
+├── package.json              # `dev`/`build`/`preview` invoke vite directly; the cloud build sets BASE_PATH=/player.
+├── svelte.config.js          # static adapter + aliases ($components, $ipfs, $types, $utils). `paths.base` reads BASE_PATH.
+├── vite.config.ts            # Helia/libp2p prebundling + dev `/api` proxy → http://localhost:9898 (override with PLAYER_API_TARGET).
 ├── tsconfig.json
 ├── eslint.config.js
-├── .prettierrc / .prettierignore
-├── scripts/
-│   └── run-vite.mjs          # Dev/build wrapper: reads swarm.key + bootstrap.multiaddr from disk and injects them as VITE_* env vars before spawning Vite
 └── src/
     ├── app.html
     ├── app.d.ts
@@ -33,15 +31,15 @@ apps/player/
     ├── routes/
     │   ├── +layout.svelte    # Navbar + main slot
     │   ├── +layout.ts        # ssr=false, prerender=false
-    │   ├── +page.ts          # Redirects "/" to "/player"
+    │   ├── +page.ts          # Redirects "/" to `${base}/player` (so /player and /player/player both work)
     │   └── player/
-    │       ├── +page.svelte  # Auto-connects on mount → CID input → fetch firkin → render shared cloud-ui catalog cards → play media
+    │       ├── +page.svelte  # Auto-fetches /api/p2p/bootstrap on mount → connect → CID input → fetch firkin → render shared cloud-ui catalog cards → play media
     │       └── +page.ts      # static-only flags
     ├── components/
     │   └── FirkinIpfsPlayer.svelte   # Per-firkin file picker + IPFS-fetched <video>/<audio>
     ├── ipfs/
     │   ├── client.ts                  # createPlayerIpfsClient: Helia + libp2p (WebSockets + WebTransport + pnet + noise + yamux)
-    │   ├── config.ts                  # Reads playerIpfsConfig from import.meta.env.VITE_RENDEZVOUS_BOOTSTRAP / VITE_SWARM_KEY
+    │   ├── config.ts                  # `fetchPlayerIpfsConfig()` — runtime fetch of /api/p2p/bootstrap with diagnostic + error
     │   └── stream-player.ts           # MSE-fed streaming pipeline (mp4 via mp4box, webm direct, blob fallback)
     └── types/
         └── mp4box.d.ts                # Local type surface for the untyped `mp4box` package
@@ -71,18 +69,19 @@ For UI glyphs use `<Icon name="<author>/<icon>" />` from `cloud-ui` — **no emo
 
 ## Connectivity model
 
-The browser cannot speak raw TCP, so the player can only dial **WebSocket** / **WebTransport** multiaddrs. The rendezvous app exposes a `/ws` listener on `RENDEZVOUS_WS_LISTEN_PORT` (default `14002`); the transport stack on top is still `pnet → noise → yamux`, so browser peers must carry the same swarm key.
+The browser cannot speak raw TCP, so the player can only dial **WebSocket** / **WebTransport** multiaddrs. The cloud's embedded `mhaol-ipfs-core` node binds a libp2p `/ws` listener at `MHAOL_IPFS_WS_PORT` (default `9901`); the transport stack on top is still `pnet → noise → yamux`, so browser peers must carry the same swarm key.
 
-There is **no manual configuration UI** in the player. `scripts/run-vite.mjs` reads two files at startup and bakes their contents into the bundle as `VITE_*` env vars:
+There is **no manual configuration UI** in the player. On mount, `+page.svelte` calls `fetchPlayerIpfsConfig()` from `src/ipfs/config.ts`, which `GET`s `/api/p2p/bootstrap` and pulls back:
 
-| Source | Resolution order | What it becomes |
-|---|---|---|
-| Swarm key | `IPFS_SWARM_KEY_FILE` → `${DATA_DIR}/swarm.key` → `~/mhaol/swarm.key` → `~/mhaol-cloud/swarm.key` | `VITE_SWARM_KEY` |
-| Bootstrap | `RENDEZVOUS_BOOTSTRAP` (env, newline/comma-separated) → `RENDEZVOUS_BOOTSTRAP_FILE` → `${DATA_DIR}/rendezvous/bootstrap.multiaddr` → `~/mhaol/rendezvous/bootstrap.multiaddr` | `VITE_RENDEZVOUS_BOOTSTRAP` (filtered to `/ws` / `/wss` / `/webtransport` only) |
+| Field | Where it comes from on the cloud |
+|---|---|
+| `peerId` | The cloud IPFS node's libp2p peer id |
+| `swarmKey` | Plain text contents of `<DATA_DIR>/swarm.key` (server-side read) |
+| `multiaddrs` | The cloud's libp2p listen addrs filtered to `/ws` / `/wss` / `/webtransport`, with `0.0.0.0` rewritten to loopback + the cloud's primary LAN IP |
 
-`src/ipfs/config.ts` reads those at module load and exposes `playerIpfsConfig`, `playerIpfsConfigured`, and `playerIpfsDiagnostic`. The `/player` page calls `getPlayerIpfsClient(playerIpfsConfig)` on mount when configured, and otherwise renders an inline error explaining what's missing.
+`/api/p2p/bootstrap` returns `503` with `Retry-After: 1` while the IPFS node is still warming up; the page renders a "Loading IPFS bootstrap from cloud…" spinner until either a valid config arrives or `fetchPlayerIpfsConfig()` reports the error inline. If the cloud is unreachable (e.g. running standalone player dev without the cloud up), the page surfaces the fetch error directly.
 
-If you change either file (e.g. restart the rendezvous so it writes a new peer id) you have to **restart `pnpm dev:player`** — the values are baked in at Vite startup, not re-read on hot reload.
+Because the bootstrap is fetched at runtime (not baked at build time), rotating the swarm key on the cloud just requires restarting the cloud — the player picks up the new values on its next page load with no rebuild.
 
 ## Playback model
 
@@ -99,22 +98,24 @@ If you change either file (e.g. restart the rendezvous so it writes a new peer i
 Limitations to be aware of:
 
 - **`mp4` files without `faststart`**: `mp4box` can't produce an init segment until it has parsed the `moov` box, and tools like ffmpeg place `moov` at the *end* of the file by default. Such files end up effectively buffered (mp4box won't fire `onReady` until everything has arrived). To make these stream, re-encode with `-movflags +faststart` on the source.
-- **`mkv` / `avi` / `mov`**: not supported by `MediaSource` in any browser, so streaming wouldn't change the outcome — `blob` mode is what those get. Real fix is a server-side transmux (the cloud already has `mhaol-ipfs-stream` for this; the player intentionally skips it because it would require talking to the cloud).
+- **`mkv` / `avi` / `mov`**: not supported by `MediaSource` in any browser, so streaming wouldn't change the outcome — `blob` mode is what those get. Real fix is a server-side transmux (the cloud already has `mhaol-ipfs-stream` for this; the player intentionally skips it because it would require talking to the cloud beyond the bootstrap fetch).
 
 ## Running
 
 ```bash
-pnpm dev:player        # Dev — port 9797, no API proxy (the player has no API to proxy to). Alias for app:player.
+# Standalone dev (separate Vite on :9797) — useful for hot-reloading the player without rebuilding the cloud binary every time.
+pnpm dev:player        # Vite proxies /api → http://localhost:9898 (override via PLAYER_API_TARGET)
 pnpm app:player        # Same dev server, lower-level alias used by other scripts.
-pnpm build:player      # Static build → apps/player/dist-static/
+pnpm build:player      # Static build → apps/player/dist-static/ (no base path)
+
+# Production-like — built into the cloud binary.
+pnpm build             # Runs `BASE_PATH=/player pnpm --filter player build` then builds the cloud which embeds the result.
+# Then visit http://localhost:9898/player/ once the cloud is running.
 ```
 
-`pnpm dev` only starts the cloud strand (cloud Rust binary + cloud WebUI + Tauri shell); it does **not** start the player. Run `pnpm dev:player` in a separate terminal when you want the player up.
+`pnpm dev` builds the player with `BASE_PATH=/player` once at startup so the cloud's `rust-embed` finds something at compile time, then serves it at `http://localhost:9898/player/` alongside the cloud WebUI. It does **not** keep the player Vite dev server running — for hot-reload iteration on the player itself, run `pnpm dev:player` in a separate terminal (and visit `http://localhost:9797`).
 
-The player does not need the cloud running — it only needs:
-
-1. A reachable rendezvous (`pnpm app:rendezvous`).
-2. At least one peer on the same private swarm hosting the firkin and its files (typically the cloud, via `pnpm dev` / `pnpm app:cloud`).
+The player needs the cloud running to fetch its bootstrap multiaddrs and swarm key, and at least one peer (typically the cloud itself, in single-machine setups) hosting the firkin and its files.
 
 ## Logs
 

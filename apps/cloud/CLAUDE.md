@@ -40,7 +40,7 @@ web/                     # SvelteKit static SPA (pnpm package `cloud`); builds t
 │   ├── routes/          # SvelteKit routes
 │   ├── components/      # Svelte components, organised by feature
 │   ├── services/        # Frontend services + runes-driven service classes (`*.svelte.ts`)
-│   ├── adapters/        # Adapter classes wrapping external APIs / signaling
+│   ├── adapters/        # Adapter classes wrapping external APIs
 │   ├── transport/       # fetch / SSE / WebRTC RPC helpers (see "WebUI: transport layer" below)
 │   ├── types/           # Shared TS types
 │   ├── utils/           # Pure helpers
@@ -125,8 +125,6 @@ Everything the cloud writes lives under a single root:
 ├── db/                          # SurrealDB (RocksDB) store
 ├── identities/                  # Ethereum keystore (mhaol-identity)
 ├── swarm.key                    # IPFS PSK
-├── rendezvous/
-│   └── bootstrap.multiaddr      # written by the rendezvous app, read on startup
 └── downloads/
     ├── torrents/                # mhaol-torrent — long-lived downloads
     ├── torrent-streams/         # ephemeral payloads for /api/torrent/stream sessions; wiped on every fresh stream
@@ -139,7 +137,6 @@ Per-path env overrides still apply on top of `DATA_DIR`:
 
 - `DB_PATH` — full path to the SurrealDB store (skips `<data_root>/db`).
 - `IPFS_SWARM_KEY_FILE` — full path to the swarm key.
-- `RENDEZVOUS_BOOTSTRAP_FILE` — full path to the bootstrap multiaddr file.
 - `YTDL_OUTPUT_DIR` — full path to the yt-dlp output dir.
 
 `apps/cloud/src/paths.rs` is the single source of truth for these defaults.
@@ -157,7 +154,7 @@ The cloud crate directly depends on these mhaol packages and reports their healt
 
 - `mhaol-yt-dlp` — YouTube download manager (cfg(not(target_os = "android"))).
 - `mhaol-torrent` — `librqbit`-backed torrent session, initialized in the background on startup so the server can bind quickly (cfg(not(target_os = "android"))).
-- `mhaol-ipfs-core` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT), initialized in the background on startup. The blockstore lives at `<data_root>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node **always** runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<data_root>/swarm.key` (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped, mDNS is off, and the transport stack is constrained to TCP+pnet+noise+yamux. Non-PSK peers fail at the libp2p `pnet` handshake before anything reaches Kademlia or the application — that is the only enforcement layer needed. If the swarm key cannot be loaded or generated the IPFS subsystem refuses to start (no fallback to the public swarm). The cloud bootstraps against the rendezvous node: precedence is `RENDEZVOUS_BOOTSTRAP` env var (newline- or comma-separated multiaddrs), then `<data_root>/rendezvous/bootstrap.multiaddr` (override with `RENDEZVOUS_BOOTSTRAP_FILE`), then a localhost default of `/ip4/127.0.0.1/tcp/14001`.
+- `mhaol-ipfs-core` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT), initialized in the background on startup. The blockstore lives at `<data_root>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node **always** runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<data_root>/swarm.key` (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped and the transport stack is constrained to TCP+WS+pnet+noise+yamux. Non-PSK peers fail at the libp2p `pnet` handshake before anything reaches Kademlia or the application. If the swarm key cannot be loaded or generated the IPFS subsystem refuses to start (no fallback to the public swarm). Discovery on the LAN is **mDNS-based** (no standalone bootstrap node required); two cloud instances on the same network find each other automatically. **Listen ports** are fixed: TCP `9900` (`MHAOL_IPFS_TCP_PORT`) and WebSocket `9901` (`MHAOL_IPFS_WS_PORT`); the WebSocket listener is what the browser-only player dials, so the cloud is also the swarm's "browser entry point." The cloud surfaces its own peer id, swarm key, and dialable multiaddrs via `GET /api/p2p/bootstrap` so the player can join without out-of-band configuration.
 
 All download paths land under `<data_root>/downloads/{torrents,torrent-streams,ipfs,ipfs-stream,youtube}`. The `torrents/` dir holds long-lived torrents (firkin auto-update flow); `torrent-streams/` is reserved for `/api/torrent/stream` payloads — those are deleted (torrent + on-disk files) on every new stream request. yt-dlp uses `<data_root>/downloads/youtube` by default and still honors `YTDL_OUTPUT_DIR`/`YTDL_PO_TOKEN`/`YTDL_VISITOR_DATA`/`YTDL_COOKIES`.
 
@@ -205,17 +202,17 @@ pnpm build:cloud
 
 - `PORT` — Server port (default: 9898; `pnpm app:cloud` / `pnpm dev:cloud` / `pnpm dev` set it to 9899 so Vite can own 9898)
 - `HOST` — Bind address (default: 0.0.0.0; `pnpm app:cloud` / `pnpm dev:cloud` / `pnpm dev` set it to 127.0.0.1)
-- `DATA_DIR` — Root directory for all cloud-managed state. Default: `<home>/mhaol-cloud/`. The DB, identities, swarm key, rendezvous bootstrap and downloads all sit under this root.
+- `DATA_DIR` — Root directory for all cloud-managed state. Default: `<home>/mhaol-cloud/`. The DB, identities, swarm key, and downloads all sit under this root.
 - `DB_PATH` — Override the SurrealDB store path specifically (default: `<data_root>/db/`).
-- `SIGNALING_URL` — Base URL of the rendezvous WebSocket signaling server (default: `http://localhost:14080`). The cloud bakes this into the identity manager's passport metadata so peers can discover the right rendezvous endpoint.
-- `IPFS_SWARM_KEY_FILE` — Override the IPFS pre-shared swarm key path (default: `<data_root>/swarm.key`, auto-generated on first boot when missing). Note: the rendezvous app defaults to its own swarm key location; if you run both on the same machine, point one of them at the other's key (or symlink) so they share the same PSK.
-- `RENDEZVOUS_BOOTSTRAP` — Newline- or comma-separated rendezvous multiaddrs to dial on startup (e.g. `/ip4/192.168.1.10/tcp/14001/p2p/12D3...`). Takes precedence over the bootstrap file.
-- `RENDEZVOUS_BOOTSTRAP_FILE` — Override the rendezvous-written bootstrap multiaddr file path (default: `<data_root>/rendezvous/bootstrap.multiaddr`).
+- `IPFS_SWARM_KEY_FILE` — Override the IPFS pre-shared swarm key path (default: `<data_root>/swarm.key`, auto-generated on first boot when missing).
+- `MHAOL_IPFS_TCP_PORT` — Override the embedded IPFS node's libp2p TCP listen port (default: `9900`). Useful for running multiple cloud instances on one machine.
+- `MHAOL_IPFS_WS_PORT` — Override the embedded IPFS node's libp2p WebSocket listen port (default: `9901`). The browser-only player dials this address via `/api/p2p/bootstrap`.
 - `YTDL_OUTPUT_DIR` — Override the yt-dlp output directory (default: `<data_root>/downloads/youtube`).
 
 ## Public WebUI endpoints
 
-- `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, signaling/client wallet addresses, db engine/namespace/version, and a `packages` block reporting health for `ytDlp`, `torrent`, and `ipfs`. No auth required (used by the embedded WebUI).
+- `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, the client wallet address, db engine/namespace/version, and a `packages` block reporting health for `ytDlp`, `torrent`, and `ipfs`. No auth required (used by the embedded WebUI).
+- `GET /api/p2p/bootstrap` — JSON `{ peerId, swarmKey, multiaddrs }` so the browser-only player at `/player/` can dial the cloud's libp2p node and join the same private swarm. `multiaddrs` is filtered to browser-dialable transports (`/ws`, `/wss`, `/webtransport`) and `0.0.0.0` is rewritten to loopback + the cloud's primary LAN IP. Returns `503` with `Retry-After: 1` while the IPFS subsystem is still starting; player polls every second until ready. Trust boundary: anyone who can reach the cloud's HTTP server is presumed LAN-trusted, so the swarm key is served as plain JSON over plain HTTP.
 - `GET /api/users` — list registered users (`{ address, username, created_at, updated_at, last_login_at }`).
 - `GET /api/users/:address` — fetch one user by lowercased EVM address.
 - `POST /api/users/register` — body `{ address, username, message, signature }`. Username is `[A-Za-z0-9-]{1,32}` (case-insensitively unique). The signature must be EIP-191 over the literal message `Mhaol Cloud auth at <RFC3339 timestamp>` (timestamp must be within ±5 minutes of the server's clock); the recovered address must equal `address`. Conflicts on duplicate address or username return `409`. The WebUI auto-registers a fresh keypair on first visit when `localStorage["mhaol-cloud-identity"]` is missing.
