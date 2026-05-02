@@ -1,8 +1,10 @@
 import { get, writable, type Writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { ObjectServiceClass } from '$services/classes/object-service.class';
+import localStorageWritableStore from '$utils/localStorageWritableStore';
 import type {
 	PlayerSettings,
+	PlayerSnapshot,
 	PlayerState,
 	PlayerDisplayMode,
 	PlayableFile,
@@ -34,13 +36,32 @@ const initialState: PlayerState = {
 	firkinId: null,
 	trackId: null,
 	trackTitle: null,
-	syncedLyrics: null
+	syncedLyrics: null,
+	pendingSeekSecs: null
+};
+
+const initialSnapshot: PlayerSnapshot = {
+	displayMode: 'fullscreen',
+	currentFile: null,
+	positionSecs: 0,
+	directStreamUrl: null,
+	directStreamMimeType: null,
+	firkinId: null,
+	trackId: null,
+	trackTitle: null,
+	syncedLyrics: null,
+	playlist: null
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	public state: Writable<PlayerState> = writable(initialState);
 	public displayMode: Writable<PlayerDisplayMode> = writable('fullscreen');
 	public playlist: Writable<PlayerPlaylist | null> = writable(null);
+	// Restorable view of the navbar player. Read once at boot to rehydrate
+	// the panel after a refresh; written (throttled) by `startPersistingSnapshot`.
+	public snapshot: Writable<PlayerSnapshot> = browser
+		? localStorageWritableStore<PlayerSnapshot>('player-snapshot', initialSnapshot)
+		: writable(initialSnapshot);
 
 	setDisplayMode(mode: PlayerDisplayMode): void {
 		this.displayMode.set(mode);
@@ -83,6 +104,62 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		if (!browser || this._initialized) return;
 		this.state.update((s) => ({ ...s, initialized: true, loading: false, error: null }));
 		this._initialized = true;
+		this._startPersistingSnapshot();
+	}
+
+	// ===== Snapshot persistence =====
+	//
+	// Throttle snapshot writes so the ~4Hz `timeupdate` cadence doesn't hammer
+	// localStorage with full-state JSON. Cleared on `stop()`; otherwise updated
+	// on every state / playlist / displayMode change while the navbar player is
+	// active.
+	private _persistingStarted = false;
+	private _persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+	private _startPersistingSnapshot(): void {
+		if (!browser || this._persistingStarted) return;
+		this._persistingStarted = true;
+		const schedule = () => {
+			if (this._persistTimer !== null) return;
+			this._persistTimer = setTimeout(() => {
+				this._persistTimer = null;
+				this._flushSnapshot();
+			}, 750);
+		};
+		this.state.subscribe(schedule);
+		this.displayMode.subscribe(schedule);
+		this.playlist.subscribe(schedule);
+	}
+
+	private _flushSnapshot(): void {
+		const st = get(this.state);
+		const dm = get(this.displayMode);
+		const pl = get(this.playlist);
+		// Only persist while the bottom-right player is the active surface and
+		// there's a track loaded — otherwise we'd overwrite a still-relevant
+		// snapshot whenever some other route's `'inline'` player shows up.
+		// `stop()` is the explicit clearer.
+		if (!st.currentFile || dm !== 'navbar') return;
+		this.snapshot.set({
+			displayMode: dm,
+			currentFile: st.currentFile,
+			positionSecs: st.positionSecs,
+			directStreamUrl: st.directStreamUrl,
+			directStreamMimeType: st.directStreamMimeType,
+			firkinId: st.firkinId,
+			trackId: st.trackId,
+			trackTitle: st.trackTitle,
+			syncedLyrics: st.syncedLyrics,
+			playlist: pl
+		});
+	}
+
+	getSnapshot(): PlayerSnapshot {
+		return get(this.snapshot);
+	}
+
+	setPendingSeek(secs: number | null): void {
+		this.state.update((s) => ({ ...s, pendingSeekSecs: secs }));
 	}
 
 	// ===== Direct URL playback (yt-dlp / torrent stream / IPFS gateway) =====
@@ -244,7 +321,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			firkinId: null,
 			trackId: null,
 			trackTitle: null,
-			syncedLyrics: null
+			syncedLyrics: null,
+			pendingSeekSecs: null
 		}));
 		this.displayMode.set('fullscreen');
 	}
@@ -252,6 +330,13 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	async stop(): Promise<void> {
 		this._resetPlaybackState();
 		this.playlist.set(null);
+		if (browser) {
+			if (this._persistTimer !== null) {
+				clearTimeout(this._persistTimer);
+				this._persistTimer = null;
+			}
+			this.snapshot.set({ ...initialSnapshot });
+		}
 	}
 
 	// ===== Settings =====
@@ -262,9 +347,25 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	}
 
 	// ===== Lifecycle =====
+	//
+	// `destroy()` runs from the root layout's `onDestroy` — which fires on
+	// page refresh as part of the SPA teardown. Tearing down to `stop()`
+	// would wipe the snapshot before the next boot has a chance to restore
+	// it, so we only flush in-flight timers here. The snapshot is cleared
+	// only by an explicit user-driven `stop()` (the X button).
 
 	async destroy(): Promise<void> {
-		await this.stop();
+		if (this.seekTimeout !== null) {
+			clearTimeout(this.seekTimeout);
+			this.seekTimeout = null;
+		}
+		if (this._persistTimer !== null) {
+			clearTimeout(this._persistTimer);
+			// Final synchronous flush so the latest position lands in localStorage
+			// even if the unload races the throttle window.
+			this._persistTimer = null;
+			this._flushSnapshot();
+		}
 	}
 }
 

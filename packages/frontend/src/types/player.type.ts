@@ -71,6 +71,10 @@ export interface PlayerState {
 	// Synced LRC lines for the currently-playing track, when available.
 	// Drives the navbar lyrics panel; null disables the panel.
 	syncedLyrics: SubsLyricsSyncedLine[] | null;
+	// Seek target to apply once the media element fires `loadedmetadata`.
+	// Used by snapshot restoration to land at the saved position after a
+	// page refresh; cleared by the player component once applied.
+	pendingSeekSecs: number | null;
 }
 
 // ===== Player Playlist =====
@@ -111,4 +115,25 @@ export interface PlayerSettings {
 	id: ID;
 	preferredVolume: number;
 	autoplay: boolean;
+}
+
+// ===== Player Snapshot (localStorage) =====
+//
+// Restorable view of what's in the bottom-right navbar player. Persisted
+// on every state change (throttled) so a page refresh can rehydrate the
+// panel — the playing track, the playlist, and the seek position. YouTube
+// stream URLs expire, so the restore path re-resolves from the file id
+// rather than trusting `directStreamUrl` for those.
+
+export interface PlayerSnapshot {
+	displayMode: PlayerDisplayMode;
+	currentFile: PlayableFile | null;
+	positionSecs: number;
+	directStreamUrl: string | null;
+	directStreamMimeType: string | null;
+	firkinId: string | null;
+	trackId: string | null;
+	trackTitle: string | null;
+	syncedLyrics: SubsLyricsSyncedLine[] | null;
+	playlist: PlayerPlaylist | null;
 }

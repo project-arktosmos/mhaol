@@ -370,3 +370,75 @@ export async function playYouTubeVideo(
 	};
 	await playerService.playUrl(file, format.url, format.mimeType, 'sidebar');
 }
+
+/**
+ * Rehydrate the bottom-right navbar player from the localStorage snapshot
+ * so a page refresh preserves the playing track, the playlist, and the
+ * seek position. YouTube stream URLs expire (signed CDN URLs), so the
+ * YouTube branch re-resolves through `playYouTubeAudio`; IPFS pin URLs are
+ * stable and can be reused as-is.
+ *
+ * Always lands paused at the saved position — most browsers block
+ * programmatic playback without a fresh user gesture, and we want
+ * refresh-recovery to feel non-intrusive.
+ */
+export async function restorePlayerFromSnapshot(): Promise<void> {
+	if (typeof window === 'undefined') return;
+	const snap = playerService.getSnapshot();
+	if (!snap.currentFile || snap.displayMode !== 'navbar') return;
+
+	const file = snap.currentFile;
+	const id = file.id;
+	const seekTo = Math.max(0, snap.positionSecs ?? 0);
+
+	// Set the playlist first so prev/next work as soon as the panel renders.
+	if (snap.playlist) playerService.setPlaylist(snap.playlist);
+
+	// `playYouTubeAudio`'s error path calls `stop()` which clears the snapshot.
+	// Keep a copy so a transient resolve failure (offline, yt-dlp blip) doesn't
+	// permanently lose the user's playback state.
+	const savedSnap = snap;
+
+	try {
+		if (id.startsWith('youtube:')) {
+			const m = id.match(/^youtube:([^:]+):audio$/);
+			const videoId = m?.[1];
+			if (!videoId) return;
+			await playYouTubeAudio(
+				`https://www.youtube.com/watch?v=${videoId}`,
+				file.name,
+				file.thumbnailUrl,
+				file.durationSeconds,
+				snap.syncedLyrics,
+				snap.firkinId,
+				snap.trackId,
+				snap.trackTitle ?? file.name
+			);
+		} else if (snap.directStreamUrl) {
+			// Stable URL (IPFS pin / library file) — re-hydrate state directly.
+			await playerService.playUrl(
+				file,
+				snap.directStreamUrl,
+				snap.directStreamMimeType,
+				snap.displayMode,
+				snap.firkinId,
+				snap.syncedLyrics,
+				snap.trackId,
+				snap.trackTitle
+			);
+		} else {
+			return;
+		}
+	} catch {
+		if (savedSnap.currentFile) playerService.snapshot.set(savedSnap);
+		return;
+	}
+
+	// Pin restored playback in paused state at the saved position. The
+	// component's `loadedmetadata` handler reads `pendingSeekSecs` and
+	// applies it to the media element once the resource is ready; pre-seeding
+	// `positionSecs` keeps the seek bar from flashing 0:00 in the meantime.
+	playerService.setPaused(true);
+	playerService.setPendingSeek(seekTo);
+	playerService.state.update((s) => ({ ...s, positionSecs: seekTo }));
+}

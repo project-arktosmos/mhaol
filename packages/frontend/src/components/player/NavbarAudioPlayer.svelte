@@ -16,9 +16,7 @@
 	let attachedUrl: string | null = null;
 	let mediaError = $state<string | null>(null);
 
-	let visible = $derived(
-		$playerDisplayMode === 'navbar' && $playerState.currentFile !== null
-	);
+	let visible = $derived($playerDisplayMode === 'navbar' && $playerState.currentFile !== null);
 	let isLoading = $derived(visible && !$playerState.directStreamUrl);
 
 	$effect(() => {
@@ -39,13 +37,20 @@
 		el.src = url;
 		el.volume = playerService.getVolume();
 		el.load();
-		el.play().catch((err: Error) => {
-			mediaError =
-				err.name === 'NotAllowedError'
-					? 'Playback blocked. Click play to start.'
-					: err.message || 'Playback failed';
-			playerService.state.update((s) => ({ ...s, error: mediaError }));
-		});
+		// Snapshot restoration lands here with `isPaused: true` so the user
+		// has to click play to resume — both because most browsers block
+		// programmatic playback without a fresh user gesture, and because we
+		// want refresh-recovery to feel non-intrusive. Normal play paths set
+		// `isPaused: false` via `playUrl`, so the auto-play still fires.
+		if (!get(playerService.state).isPaused) {
+			el.play().catch((err: Error) => {
+				mediaError =
+					err.name === 'NotAllowedError'
+						? 'Playback blocked. Click play to start.'
+						: err.message || 'Playback failed';
+				playerService.state.update((s) => ({ ...s, error: mediaError }));
+			});
+		}
 	});
 
 	$effect(() => {
@@ -62,6 +67,19 @@
 			if (Number.isFinite(el.duration) && el.duration > 0) {
 				const d = el.duration;
 				playerService.state.update((s) => (s.durationSecs === d ? s : { ...s, durationSecs: d }));
+			}
+			// Snapshot restoration parks a seek target on `pendingSeekSecs` so we
+			// only land at the saved position once the resource is ready (otherwise
+			// `currentTime = …` is silently clamped to 0 before metadata arrives).
+			const cur = get(playerService.state);
+			const pending = cur.pendingSeekSecs;
+			if (pending !== null && Number.isFinite(pending) && pending > 0) {
+				const target =
+					el.duration && Number.isFinite(el.duration) ? Math.min(pending, el.duration) : pending;
+				el.currentTime = target;
+				playerService.state.update((s) => ({ ...s, pendingSeekSecs: null, positionSecs: target }));
+			} else if (pending !== null) {
+				playerService.state.update((s) => ({ ...s, pendingSeekSecs: null }));
 			}
 		};
 		const onPlay = () => {
@@ -197,17 +215,13 @@
 					<Icon name="delapouite/previous-button" size="1.25em" />
 				</button>
 				{#if isLoading}
-					<span
-						class="btn btn-circle btn-disabled btn-md"
-						aria-label="Loading"
-						title="Loading…"
-					>
+					<span class="btn btn-disabled btn-circle btn-md" aria-label="Loading" title="Loading…">
 						<span class="loading loading-sm loading-spinner"></span>
 					</span>
 				{:else if isPaused}
 					<button
 						type="button"
-						class="btn btn-circle btn-primary btn-md"
+						class="btn btn-circle btn-md btn-primary"
 						onclick={togglePlay}
 						aria-label="Play"
 						title="Play"
@@ -217,7 +231,7 @@
 				{:else}
 					<button
 						type="button"
-						class="btn btn-circle btn-primary btn-md"
+						class="btn btn-circle btn-md btn-primary"
 						onclick={togglePlay}
 						aria-label="Pause"
 						title="Pause"
