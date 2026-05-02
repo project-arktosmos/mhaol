@@ -312,6 +312,14 @@ pub struct ScanEntry {
     pub relative_path: String,
     pub size: u64,
     pub mime: String,
+    /// The `(title, year)` parsed from the relative path that's fed into
+    /// the TMDB search for video files in `local-movie` libraries. Surfaced
+    /// alongside `tmdb_match` so the UI can show *what* was searched, not
+    /// just *what came back*. Absent for non-video files and for libraries
+    /// that don't run the matcher.
+    #[cfg(not(target_os = "android"))]
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "extractedQuery")]
+    pub extracted_query: Option<crate::tmdb_match::MovieQuery>,
     /// TMDB match attached at scan time for video files in `local-movie`
     /// libraries. Populated by `tmdb_match::match_movies_parallel`. Absent
     /// from the JSON when no match was found / attempted.
@@ -389,6 +397,8 @@ fn scan_directory(root: PathBuf) -> ScanResponse {
             relative_path: relative,
             size,
             mime,
+            #[cfg(not(target_os = "android"))]
+            extracted_query: None,
             #[cfg(not(target_os = "android"))]
             tmdb_match: None,
         });
@@ -509,15 +519,20 @@ fn entry_is_video(entry: &ScanEntry) -> bool {
 
 #[cfg(not(target_os = "android"))]
 async fn attach_tmdb_movie_matches(response: &mut ScanResponse) {
-    let queries: Vec<(usize, crate::tmdb_match::MovieQuery)> = response
-        .entries
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| entry_is_video(e))
-        .filter_map(|(idx, e)| {
-            crate::tmdb_match::extract_movie_query(&e.relative_path).map(|q| (idx, q))
-        })
-        .collect();
+    // First pass: parse the (title, year) query for every video entry and
+    // stamp it onto the entry. This runs unconditionally — even when no
+    // TMDB key is configured the WebUI still shows what we *would* search
+    // with, so users can see why a movie did or didn't match.
+    let mut queries: Vec<(usize, crate::tmdb_match::MovieQuery)> = Vec::new();
+    for (idx, entry) in response.entries.iter_mut().enumerate() {
+        if !entry_is_video(entry) {
+            continue;
+        }
+        if let Some(q) = crate::tmdb_match::extract_movie_query(&entry.relative_path) {
+            entry.extracted_query = Some(q.clone());
+            queries.push((idx, q));
+        }
+    }
     if queries.is_empty() {
         return;
     }

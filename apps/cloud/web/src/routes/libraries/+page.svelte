@@ -491,6 +491,7 @@
 																<th class="w-72">CID</th>
 																<th class="w-24">MIME</th>
 																<th class="w-20 text-right">Size</th>
+																<th class="w-48">Query</th>
 																<th class="w-56">TMDB match</th>
 															</tr>
 														</thead>
@@ -513,6 +514,15 @@
 																		{formatBytes(entry.size)}
 																	</td>
 																	<td class="text-xs">
+																		{#if entry.extractedQuery}
+																			{entry.extractedQuery.title}{entry.extractedQuery.year
+																				? ` (${entry.extractedQuery.year})`
+																				: ''}
+																		{:else}
+																			<span class="text-base-content/30">—</span>
+																		{/if}
+																	</td>
+																	<td class="text-xs">
 																		{#if entry.tmdbMatch}
 																			<a
 																				class="link link-hover"
@@ -525,7 +535,7 @@
 																					? ` (${entry.tmdbMatch.year})`
 																					: ''}
 																			</a>
-																		{:else if entry.mime.startsWith('video/')}
+																		{:else if entry.extractedQuery}
 																			<span class="text-base-content/40">no match</span>
 																		{:else}
 																			<span class="text-base-content/30">—</span>

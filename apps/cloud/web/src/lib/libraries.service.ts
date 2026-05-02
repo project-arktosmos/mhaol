@@ -43,11 +43,17 @@ export interface TmdbMatch {
 	score: number;
 }
 
+export interface ExtractedQuery {
+	title: string;
+	year?: number;
+}
+
 export interface ScanEntry {
 	path: string;
 	relative_path: string;
 	size: number;
 	mime: string;
+	extractedQuery?: ExtractedQuery;
 	tmdbMatch?: TmdbMatch;
 }
 

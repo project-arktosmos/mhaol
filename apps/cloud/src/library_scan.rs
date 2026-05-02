@@ -172,6 +172,7 @@ mod tests {
             relative_path: rel.to_string(),
             size: 100,
             mime: mime.to_string(),
+            extracted_query: None,
             tmdb_match: None,
         }
     }
