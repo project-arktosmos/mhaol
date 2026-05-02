@@ -87,7 +87,18 @@
 		if (isStale(lib)) {
 			await scan(lib.id);
 		} else {
-			await loadPins(lib.id);
+			await Promise.all([loadPins(lib.id), loadScanResult(lib.id)]);
+		}
+	}
+
+	async function loadScanResult(id: string) {
+		try {
+			const result = await librariesService.lastScanResult(id);
+			if (result) {
+				scanResults = { ...scanResults, [id]: result };
+			}
+		} catch {
+			// no persisted scan result yet — leave scanResults untouched
 		}
 	}
 

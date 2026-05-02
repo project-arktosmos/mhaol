@@ -46,6 +46,11 @@ export interface ScanResponse {
 	entries: ScanEntry[];
 }
 
+export interface LastScanResult extends ScanResponse {
+	library_id: string;
+	scanned_at: string;
+}
+
 export interface LibrariesState {
 	loading: boolean;
 	libraries: Library[];
@@ -130,6 +135,15 @@ class LibrariesService {
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		return (await res.json()) as ScanResponse;
+	}
+
+	async lastScanResult(id: string): Promise<LastScanResult | null> {
+		const res = await fetch(`/api/libraries/${encodeURIComponent(id)}/scan-result`, {
+			cache: 'no-store'
+		});
+		if (res.status === 404) return null;
+		if (!res.ok) throw new Error(await parseError(res));
+		return (await res.json()) as LastScanResult;
 	}
 
 	async pins(id: string): Promise<IpfsPin[]> {

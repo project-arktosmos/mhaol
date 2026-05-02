@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use surrealdb::sql::Thing;
 
 const TABLE: &str = "library";
+const SCAN_RESULT_TABLE: &str = "library_scan_result";
 
 /// Addons a library may declare it contains. These are the `local-*` addon
 /// ids exposed by `/api/catalog/sources` for local media — picking one tells
@@ -106,6 +107,7 @@ pub fn router() -> Router<CloudState> {
         .route("/", get(list).post(create))
         .route("/{id}", put(update).delete(delete).get(get_one))
         .route("/{id}/scan", get(scan))
+        .route("/{id}/scan-result", get(scan_result))
         .route("/{id}/pins", get(pins))
         .route("/{id}/firkins", get(firkins))
 }
@@ -285,6 +287,14 @@ async fn delete(
     #[cfg(not(target_os = "android"))]
     clear_pins_for_library(&state, &lib.path).await;
 
+    if let Err(e) = state
+        .db
+        .delete::<Option<StoredLibraryScanResult>>((SCAN_RESULT_TABLE, id.as_str()))
+        .await
+    {
+        tracing::warn!("failed to delete scan result for library {id}: {e}");
+    }
+
     let removed: Option<Library> = state
         .db
         .delete((TABLE, id.as_str()))
@@ -296,7 +306,7 @@ async fn delete(
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanEntry {
     pub path: String,
     pub relative_path: String,
@@ -310,6 +320,43 @@ pub struct ScanResponse {
     pub total_files: usize,
     pub total_size: u64,
     pub entries: Vec<ScanEntry>,
+}
+
+/// Persisted snapshot of the most recent scan for a library. Stored under
+/// `library_scan_result` keyed by the library id, so each library has at
+/// most one row that gets replaced on every scan.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredLibraryScanResult {
+    pub id: Option<Thing>,
+    pub library_id: String,
+    pub root: String,
+    pub total_files: usize,
+    pub total_size: u64,
+    pub entries: Vec<ScanEntry>,
+    pub scanned_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LastScanResultDto {
+    pub library_id: String,
+    pub root: String,
+    pub total_files: usize,
+    pub total_size: u64,
+    pub entries: Vec<ScanEntry>,
+    pub scanned_at: DateTime<Utc>,
+}
+
+impl From<StoredLibraryScanResult> for LastScanResultDto {
+    fn from(r: StoredLibraryScanResult) -> Self {
+        Self {
+            library_id: r.library_id,
+            root: r.root,
+            total_files: r.total_files,
+            total_size: r.total_size,
+            entries: r.entries,
+            scanned_at: r.scanned_at,
+        }
+    }
 }
 
 fn scan_directory(root: PathBuf) -> ScanResponse {
@@ -392,9 +439,10 @@ async fn scan(
         response.total_size = response.entries.iter().map(|e| e.size).sum();
     }
 
+    let now = Utc::now();
     let mut updated = lib.clone();
     updated.id = None;
-    updated.last_scanned_at = Some(Utc::now());
+    updated.last_scanned_at = Some(now);
     if let Err(e) = state
         .db
         .update::<Option<Library>>((TABLE, id.as_str()))
@@ -403,6 +451,8 @@ async fn scan(
     {
         tracing::warn!("failed to record last_scanned_at for library {id}: {e}");
     }
+
+    persist_scan_result(&state, &id, &response, now).await;
 
     #[cfg(not(target_os = "android"))]
     {
@@ -417,6 +467,75 @@ async fn scan(
     }
 
     Ok(Json(response))
+}
+
+async fn persist_scan_result(
+    state: &CloudState,
+    library_id: &str,
+    response: &ScanResponse,
+    scanned_at: DateTime<Utc>,
+) {
+    let record = StoredLibraryScanResult {
+        id: None,
+        library_id: library_id.to_string(),
+        root: response.root.clone(),
+        total_files: response.total_files,
+        total_size: response.total_size,
+        entries: response.entries.clone(),
+        scanned_at,
+    };
+
+    let existing: Result<Option<StoredLibraryScanResult>, _> =
+        state.db.select((SCAN_RESULT_TABLE, library_id)).await;
+    let existing = match existing {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!("failed to load scan result for library {library_id}: {e}");
+            return;
+        }
+    };
+
+    let result: Result<Option<StoredLibraryScanResult>, _> = if existing.is_some() {
+        state
+            .db
+            .update((SCAN_RESULT_TABLE, library_id))
+            .content(record)
+            .await
+    } else {
+        state
+            .db
+            .create((SCAN_RESULT_TABLE, library_id))
+            .content(record)
+            .await
+    };
+    if let Err(e) = result {
+        tracing::warn!("failed to persist scan result for library {library_id}: {e}");
+    }
+}
+
+async fn scan_result(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<LastScanResultDto>, (StatusCode, Json<serde_json::Value>)> {
+    let lib: Option<Library> = state
+        .db
+        .select((TABLE, id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    if lib.is_none() {
+        return Err(err_response(StatusCode::NOT_FOUND, "library not found"));
+    }
+
+    let stored: Option<StoredLibraryScanResult> = state
+        .db
+        .select((SCAN_RESULT_TABLE, id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+
+    match stored {
+        Some(r) => Ok(Json(r.into())),
+        None => Err(err_response(StatusCode::NOT_FOUND, "no scan result yet")),
+    }
 }
 
 async fn pins(
