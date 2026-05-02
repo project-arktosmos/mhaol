@@ -290,21 +290,32 @@
 		return null;
 	}
 
+	const OMDB_REVIEW_LABELS = new Set(['Rotten Tomatoes', 'Metacritic', 'IMDb']);
+
 	$effect(() => {
 		const fid = firkin.id;
 		if (metadataBackfillForFirkinId === fid) return;
 		const upstreamId = metadataUpstreamId();
-		const reviewsMissing = (firkin.reviews ?? []).length === 0;
+		const existingReviews = firkin.reviews ?? [];
+		const reviewsMissing = existingReviews.length === 0;
+		// TMDB firkins created before OMDB_API_KEY was set (or before the key
+		// was activated) only carry the TMDB review. Re-fetch metadata so the
+		// server merges in Rotten Tomatoes / Metacritic / IMDb.
+		const omdbApplies = isTmdbMovie || isTmdbTv;
+		const omdbMissing =
+			omdbApplies &&
+			!existingReviews.some((r: { label: string }) => OMDB_REVIEW_LABELS.has(r.label));
+		const fetchReviews = reviewsMissing || omdbMissing;
 		const artistsMissing =
 			firkin.artists.length === 0 && (isMusicBrainz || isTmdbMovie || isTmdbTv);
-		if (!upstreamId || (!reviewsMissing && !artistsMissing)) {
+		if (!upstreamId || (!fetchReviews && !artistsMissing)) {
 			metadataBackfillForFirkinId = fid;
 			return;
 		}
 		metadataBackfillForFirkinId = fid;
 		void backfillFromMetadata(fid, firkin.addon, upstreamId, {
 			fetchArtists: artistsMissing,
-			fetchReviews: reviewsMissing
+			fetchReviews
 		});
 	});
 
