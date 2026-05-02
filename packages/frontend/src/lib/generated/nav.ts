@@ -26,12 +26,6 @@ export const NAV_ITEMS: NavItem[] = [
 		"children": []
 	},
 	{
-		"label": "Feed",
-		"href": "/feed",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
 		"label": "Profile",
 		"href": "/profile",
 		"hasOwnPage": true,
