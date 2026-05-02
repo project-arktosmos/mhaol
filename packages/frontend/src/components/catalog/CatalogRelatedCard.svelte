@@ -8,9 +8,10 @@
 		upstreamId: string | null;
 		/**
 		 * Fires once per `(addon, upstreamId)` change when the related list
-		 * has loaded. Used by `/catalog/[ipfsHash]` to feed the items into
-		 * the per-user recommendation counter; not used by `/catalog/virtual`
-		 * (virtual pages must not update counts).
+		 * has loaded. Used by `/catalog/[id]` to feed the items into the
+		 * per-user recommendation counter; only invoked when the source
+		 * firkin is bookmarked (the catalog detail page checks
+		 * `firkin.bookmarked` before forwarding the items).
 		 */
 		onItemsLoaded?: (items: CatalogItem[]) => void;
 	}
@@ -55,7 +56,7 @@
 		}
 	}
 
-	function virtualHref(item: CatalogItem): string {
+	function visitHref(item: CatalogItem): string {
 		const params = new URLSearchParams();
 		params.set('addon', addon);
 		params.set('id', item.id);
@@ -64,7 +65,10 @@
 		if (item.description) params.set('description', item.description);
 		if (item.posterUrl) params.set('posterUrl', item.posterUrl);
 		if (item.backdropUrl) params.set('backdropUrl', item.backdropUrl);
-		return `${base}/catalog/virtual?${params.toString()}`;
+		if (Array.isArray(item.reviews) && item.reviews.length > 0) {
+			params.set('reviews', JSON.stringify(item.reviews));
+		}
+		return `${base}/catalog/visit?${params.toString()}`;
 	}
 </script>
 
@@ -89,7 +93,7 @@
 					{#each items as item (item.id)}
 						<li>
 							<a
-								href={virtualHref(item)}
+								href={visitHref(item)}
 								title={item.title}
 								class="group flex items-start gap-3 rounded transition-all"
 							>
@@ -134,7 +138,7 @@
 					{#each items as item (item.id)}
 						<li>
 							<a
-								href={virtualHref(item)}
+								href={visitHref(item)}
 								title={item.title}
 								class="group flex flex-col gap-1.5 rounded transition-all"
 							>

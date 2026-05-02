@@ -538,6 +538,7 @@ async fn rollforward(
         version_hashes: new_hashes,
         trailers: doc.trailers.clone(),
         reviews: doc.reviews.clone(),
+        bookmarked: doc.bookmarked,
     };
 
     let updated: Option<Firkin> = state

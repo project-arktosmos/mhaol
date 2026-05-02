@@ -112,7 +112,7 @@
 		};
 	}
 
-	function virtualHref(item: CatalogItem): string {
+	function visitHref(item: CatalogItem): string {
 		const params = new URLSearchParams();
 		params.set('addon', addon);
 		params.set('id', item.id);
@@ -121,7 +121,12 @@
 		if (item.description) params.set('description', item.description);
 		if (item.posterUrl) params.set('posterUrl', item.posterUrl);
 		if (item.backdropUrl) params.set('backdropUrl', item.backdropUrl);
-		return `${base}/catalog/virtual?${params.toString()}`;
+		// Forward the upstream review snapshot so the detail page can
+		// render it before the metadata-backfill effect refetches.
+		if (Array.isArray(item.reviews) && item.reviews.length > 0) {
+			params.set('reviews', JSON.stringify(item.reviews));
+		}
+		return `${base}/catalog/visit?${params.toString()}`;
 	}
 
 	async function refreshGenres() {
@@ -488,7 +493,7 @@
 				>
 					{#each searchItems as item (item.id)}
 						<a
-							href={virtualHref(item)}
+							href={visitHref(item)}
 							class="block no-underline"
 							onclick={(e) => {
 								if ((e.target as HTMLElement).closest('button, summary')) {
@@ -549,7 +554,7 @@
 				>
 					{#each items as item (item.id)}
 						<a
-							href={virtualHref(item)}
+							href={visitHref(item)}
 							class="block no-underline"
 							onclick={(e) => {
 								if ((e.target as HTMLElement).closest('button, summary')) {

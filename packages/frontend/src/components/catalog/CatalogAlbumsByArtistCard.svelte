@@ -44,7 +44,7 @@
 		}
 	}
 
-	function virtualHref(item: CatalogItem): string {
+	function visitHref(item: CatalogItem): string {
 		const params = new URLSearchParams();
 		params.set('addon', 'musicbrainz');
 		params.set('id', item.id);
@@ -53,7 +53,10 @@
 		if (item.description) params.set('description', item.description);
 		if (item.posterUrl) params.set('posterUrl', item.posterUrl);
 		if (item.backdropUrl) params.set('backdropUrl', item.backdropUrl);
-		return `${base}/catalog/virtual?${params.toString()}`;
+		if (Array.isArray(item.reviews) && item.reviews.length > 0) {
+			params.set('reviews', JSON.stringify(item.reviews));
+		}
+		return `${base}/catalog/visit?${params.toString()}`;
 	}
 </script>
 
@@ -78,7 +81,7 @@
 					{#each items as item (item.id)}
 						<li>
 							<a
-								href={virtualHref(item)}
+								href={visitHref(item)}
 								title={item.title}
 								class="group flex items-center gap-3 rounded p-1 transition-colors hover:bg-base-300"
 							>

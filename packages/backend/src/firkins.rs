@@ -262,6 +262,20 @@ pub struct Firkin {
     /// the firkin was bookmarked or last enriched; see [`Review`].
     #[serde(default)]
     pub reviews: Vec<Review>,
+    /// `true` when the user has explicitly bookmarked this firkin from a
+    /// catalog detail page; `false` for "browse cache" firkins auto-created
+    /// when the user clicks through from the catalog grid into a detail
+    /// view. **Not** part of `serialize_firkin_payload` / `compute_firkin_cid`,
+    /// so flipping the flag doesn't roll the CID forward and the same
+    /// upstream item dedups to one firkin regardless of bookmark state.
+    /// Defaults to `true` on deserialise so legacy records (which predate
+    /// the flag) keep showing up in the bookmarked list.
+    #[serde(default = "default_true")]
+    pub bookmarked: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Serialize)]
@@ -293,6 +307,11 @@ pub struct FirkinDto {
     pub version_hashes: Vec<String>,
     pub trailers: Vec<Trailer>,
     pub reviews: Vec<Review>,
+    /// Mirrors [`Firkin::bookmarked`]. Drives the catalog detail page's
+    /// action bar (Bookmark vs. Play / Find / Delete) and the
+    /// `GET /api/firkins` listing filter (which only returns bookmarked
+    /// records by default).
+    pub bookmarked: bool,
 }
 
 impl FirkinDto {
@@ -328,6 +347,7 @@ impl FirkinDto {
             version_hashes: doc.version_hashes,
             trailers: doc.trailers,
             reviews: doc.reviews,
+            bookmarked: doc.bookmarked,
         }
     }
 }
@@ -366,6 +386,13 @@ pub struct CreateFirkinRequest {
     /// up-front so the bookmark already carries the upstream score.
     #[serde(default)]
     pub reviews: Vec<Review>,
+    /// Optional bookmark state. The catalog "Bookmark" button sends `true`
+    /// (default), the `/catalog/visit` resolver flow sends `false` so the
+    /// firkin is created as a non-bookmarked browse cache. Omitting the
+    /// field defaults to `true` to preserve the prior bookmark-on-create
+    /// contract for legacy callers.
+    #[serde(default)]
+    pub bookmarked: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -379,6 +406,10 @@ pub struct UpdateFirkinRequest {
     pub addon: Option<String>,
     pub trailers: Option<Vec<Trailer>>,
     pub reviews: Option<Vec<Review>>,
+    /// Flip the bookmark state. The catalog detail page sends `true` on
+    /// the Bookmark button. Not part of the firkin body / CID, so the
+    /// flip does not roll the version forward.
+    pub bookmarked: Option<bool>,
 }
 
 /// Request body for `POST /api/firkins/:id/enrich`. Carries the metadata
@@ -493,8 +524,20 @@ pub(crate) async fn assemble_firkin_dtos(
 }
 
 
+#[derive(Debug, serde::Deserialize, Default)]
+struct ListFirkinsQuery {
+    /// `?include=all` returns every firkin, including non-bookmarked
+    /// browse-cache rows created by the `/catalog/visit` resolver. The
+    /// default response only contains bookmarked records so the catalog
+    /// "Library" section, the `/firkins` page, and the recommendations
+    /// table aren't cluttered with every item the user has clicked on.
+    #[serde(default)]
+    include: Option<String>,
+}
+
 async fn list(
     State(state): State<CloudState>,
+    axum::extract::Query(query): axum::extract::Query<ListFirkinsQuery>,
 ) -> Result<Json<Vec<FirkinDto>>, (StatusCode, Json<serde_json::Value>)> {
     let docs: Vec<Firkin> = state
         .db
@@ -502,6 +545,12 @@ async fn list(
         .await
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
 
+    let include_all = query.include.as_deref() == Some("all");
+    let docs: Vec<Firkin> = if include_all {
+        docs
+    } else {
+        docs.into_iter().filter(|d| d.bookmarked).collect()
+    };
     let docs = collapse_to_chain_heads(docs);
     let mut dtos = assemble_firkin_dtos(&state, docs).await?;
     dtos.sort_by(|a, b| a.created_at.cmp(&b.created_at));
@@ -644,6 +693,10 @@ async fn create(
         .into_iter()
         .filter_map(sanitize_review)
         .collect();
+    // Defaults to `true` when omitted so legacy callers keep their
+    // bookmark-on-create contract; the new `/catalog/visit` resolver flow
+    // sends an explicit `false` to mark the firkin as a browse cache.
+    let bookmarked = req.bookmarked.unwrap_or(true);
 
     let now = Utc::now();
     let version: u32 = 0;
@@ -667,15 +720,43 @@ async fn create(
     // Dedup by content-address: if a firkin with the same body already
     // exists, return it instead of minting a duplicate UUID. This
     // preserves the previous "same bookmark twice" behaviour even though
-    // the record id is no longer the CID.
-    if let Some(existing) = find_by_cid(&state, &body_cid).await? {
+    // the record id is no longer the CID. When the incoming request
+    // bookmarks an existing browse-cache firkin, upgrade the stored
+    // `bookmarked` flag in place (no version roll — the flag is not part
+    // of the body) and kick off album resolution if it wasn't bookmarked
+    // before.
+    if let Some(mut existing) = find_by_cid(&state, &body_cid).await? {
         let existing_id = existing
             .id
             .as_ref()
             .map(|t| t.id.to_raw())
             .unwrap_or_default();
+        let upgraded = bookmarked && !existing.bookmarked;
+        if upgraded {
+            existing.bookmarked = true;
+            existing.updated_at = Utc::now();
+            existing.id = None;
+            let updated_doc: Option<Firkin> = state
+                .db
+                .update((TABLE, existing_id.as_str()))
+                .content(existing)
+                .await
+                .map_err(|e| {
+                    err_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("db update failed: {e}"),
+                    )
+                })?;
+            existing = updated_doc.ok_or_else(|| {
+                err_response(StatusCode::INTERNAL_SERVER_ERROR, "firkin update returned no row")
+            })?;
+        }
         #[cfg(not(target_os = "android"))]
-        if existing.addon == "musicbrainz" && !existing_id.is_empty() {
+        if existing.addon == "musicbrainz"
+            && !existing_id.is_empty()
+            && existing.bookmarked
+            && upgraded
+        {
             spawn_resolve_album_tracks(state.clone(), existing_id.clone());
         }
         #[cfg(target_os = "android")]
@@ -702,8 +783,10 @@ async fn create(
         version_hashes,
         trailers,
         reviews,
+        bookmarked,
     };
     let record_addon = record.addon.clone();
+    let record_bookmarked = record.bookmarked;
 
     let created: Option<Firkin> = state
         .db
@@ -718,16 +801,18 @@ async fn create(
 
     pin_firkin_body(&state, &new_id, body_json).await;
 
-    // Auto-trigger album track resolution for fresh musicbrainz firkins.
-    // Spawned as a background task so the bookmark response returns
-    // immediately and the resolution itself outlives the HTTP request /
-    // any client-side navigation.
+    // Auto-trigger album track resolution for fresh musicbrainz firkins,
+    // but only when the firkin is bookmarked — un-bookmarked browse-cache
+    // firkins (created via the catalog `/catalog/visit` resolver) skip
+    // the heavy YouTube + LRCLIB resolution until the user actually
+    // bookmarks them. Spawned as a background task so the response
+    // returns immediately and the resolution outlives the HTTP request.
     #[cfg(not(target_os = "android"))]
-    if record_addon == "musicbrainz" {
+    if record_addon == "musicbrainz" && record_bookmarked {
         spawn_resolve_album_tracks(state.clone(), new_id.clone());
     }
     #[cfg(target_os = "android")]
-    let _ = record_addon;
+    let _ = (record_addon, record_bookmarked);
 
     Ok((StatusCode::CREATED, Json(dto)))
 }
@@ -922,10 +1007,31 @@ async fn update(
         current.reviews = reviews.into_iter().filter_map(sanitize_review).collect();
     }
 
+    // `bookmarked` is not part of the CID body, so the rollforward below
+    // will detect "no body change" and persist the flag without rolling
+    // the version. We capture the false→true transition here so we can
+    // kick off the album resolver after the rollforward completes.
+    let bookmark_promoted = match req.bookmarked {
+        Some(next) => {
+            let was = current.bookmarked;
+            current.bookmarked = next;
+            !was && next
+        }
+        None => false,
+    };
+
     current.updated_at = Utc::now();
     current.id = None;
 
     let updated_doc = rollforward_firkin(&state, &id, current).await?;
+
+    #[cfg(not(target_os = "android"))]
+    if bookmark_promoted && updated_doc.addon == "musicbrainz" {
+        spawn_resolve_album_tracks(state.clone(), id.clone());
+    }
+    #[cfg(target_os = "android")]
+    let _ = bookmark_promoted;
+
     Ok(Json(assemble_firkin_dto(&state, updated_doc).await?))
 }
 
@@ -1652,6 +1758,7 @@ mod tests {
             version_hashes: version_hashes.iter().map(|s| s.to_string()).collect(),
             trailers: Vec::new(),
             reviews: Vec::new(),
+            bookmarked: true,
         }
     }
 

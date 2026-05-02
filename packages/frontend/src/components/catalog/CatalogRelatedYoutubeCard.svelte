@@ -78,12 +78,16 @@
 		}
 	}
 
-	function watchHref(item: RelatedItem): string {
-		// item.url is like `/watch?v=…`; render an absolute URL so the
-		// link opens on youtube.com directly. We don't currently route
-		// related clicks back into our own catalog.
-		if (item.url.startsWith('http')) return item.url;
-		return `https://www.youtube.com${item.url}`;
+	function visitHref(item: RelatedItem): string {
+		// Route through the local /catalog/visit resolver so a click
+		// lands on our own catalog detail page (creating a non-bookmarked
+		// firkin lazily) instead of bouncing the user to youtube.com.
+		const params = new URLSearchParams();
+		params.set('addon', 'youtube-video');
+		params.set('id', item.videoId);
+		params.set('title', item.title);
+		if (item.thumbnail) params.set('posterUrl', item.thumbnail);
+		return `${base}/catalog/visit?${params.toString()}`;
 	}
 
 	const visibleItems = $derived(response ? response.items.slice(0, limit) : []);
@@ -109,9 +113,7 @@
 				<li class="flex gap-2">
 					<a
 						class="flex flex-1 link gap-2 link-hover"
-						href={watchHref(item)}
-						target="_blank"
-						rel="noopener noreferrer"
+						href={visitHref(item)}
 						title={item.title}
 					>
 						{#if item.thumbnail}

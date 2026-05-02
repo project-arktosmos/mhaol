@@ -55,8 +55,18 @@
 
 	let { data }: Props = $props();
 	const firkin = $derived<Firkin>(data.firkin);
+	// `bookmarked` flips between two presentations of the same detail page:
+	// non-bookmarked firkins (created by the catalog `/catalog/visit`
+	// resolver) show only the Bookmark action and skip identity / version
+	// history / files / torrent-search / IPFS-Torrent tabs — the same
+	// surface the now-deleted `/catalog/virtual` page used to render. Once
+	// the user clicks Bookmark, the same record gains the full detail
+	// surface (Play / Find metadata / Delete, plus torrent search auto-fire).
+	const isBookmarked = $derived(firkin.bookmarked !== false);
 	let removing = $state(false);
 	let removeError = $state<string | null>(null);
+	let bookmarking = $state(false);
+	let bookmarkError = $state<string | null>(null);
 
 	const playerState = playerService.state;
 	const playerDisplayMode = playerService.displayMode;
@@ -182,6 +192,10 @@
 	function handleRelatedItemsLoaded(items: CatalogItem[]) {
 		const sourceFirkinId = firkin.id;
 		if (!sourceFirkinId) return;
+		// Recommendation counts only update from real bookmarked detail
+		// pages — non-bookmarked browse-cache firkins must behave like
+		// the legacy /catalog/virtual page, which never ingested.
+		if (!isBookmarked) return;
 		if (recommendationsIngestedFor === sourceFirkinId) return;
 		recommendationsIngestedFor = sourceFirkinId;
 		const address = $userIdentityState.identity?.address;
@@ -670,6 +684,9 @@
 	// is already accurate).
 	async function persistYoutubePreferredClient(clientName: string): Promise<void> {
 		if (!clientName) return;
+		// Skip the rollforward on browse-cache firkins; persisting would
+		// roll the CID forward on a record the user hasn't committed to.
+		if (!isBookmarked) return;
 		if (youtubePreferredClient === clientName) return;
 		const nextFiles = firkin.files.filter((f) => f.type !== 'youtube preferred client');
 		nextFiles.push({ type: 'youtube preferred client', value: clientName });
@@ -680,8 +697,12 @@
 		}
 	}
 
+	// Persist trailer / track resolutions back to the firkin only while
+	// bookmarked — browse-cache firkins behave like the legacy
+	// `/catalog/virtual` page (resolve for display, never roll the CID).
 	const trailerResolver = new TrailerResolver({
-		persist: (resolved) => persistFirkinPatch({ trailers: resolved })
+		persist: (resolved) =>
+			isBookmarked ? persistFirkinPatch({ trailers: resolved }) : Promise.resolve()
 	});
 	// First playable trailer URL — drives the inline `CatalogTrailerPlayer`
 	// above the description (replacing the second image). Stays null until
@@ -740,8 +761,14 @@
 	// makes polling robust to MusicBrainz being slow / rate-limited —
 	// even if the WebUI can't render the tracklist, the server is still
 	// processing and we still want to navigate to the rollforward.
+	//
+	// Browse-cache (non-bookmarked) firkins skip the poll entirely —
+	// the server only spawns `resolve_album_tracks` for bookmarked
+	// musicbrainz firkins, so polling here would chase a task that
+	// never started.
 	const tracksLikelyUnresolved = $derived(
-		isMusicBrainz &&
+		isBookmarked &&
+			isMusicBrainz &&
 			Boolean(musicBrainzReleaseGroupId) &&
 			firkin.files.filter((f) => f.type === 'lyrics').length === 0
 	);
@@ -846,10 +873,13 @@
 
 	// When the firkin is just bookmarked metadata (no IPFS files, no
 	// magnets), kick the torrent search off automatically so the user can
-	// pick a source without having to click into a collapsed card. Mirrors
-	// the auto-search the virtual page already does. MusicBrainz is
-	// excluded because albums get the tracks card, not torrents.
+	// pick a source without having to click into a collapsed card.
+	// MusicBrainz is excluded because albums get the tracks card, not
+	// torrents. Non-bookmarked browse-cache firkins skip the search
+	// entirely — they show only the Bookmark action; the search auto-fires
+	// once the user bookmarks.
 	$effect(() => {
+		if (!isBookmarked) return;
 		if (isMusicBrainz) return;
 		if (!hasNoRealFiles) return;
 		if (torrentSearchInitForFirkinId === firkin.id) return;
@@ -964,6 +994,25 @@
 			removing = false;
 		}
 	}
+
+	/// Promote a browse-cache firkin into a bookmarked one. The server
+	/// flips the flag in place (no CID roll, no version bump). On success
+	/// the local firkin reactively gains its bookmarked surface — torrent
+	/// search auto-fires, identity / version / files cards appear, and
+	/// the action bar swaps over to Play / Find metadata / Delete.
+	async function bookmark() {
+		if (bookmarking || isBookmarked) return;
+		bookmarking = true;
+		bookmarkError = null;
+		try {
+			const updated = await firkinsService.bookmark(firkin.id);
+			data.firkin = updated;
+		} catch (err) {
+			bookmarkError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			bookmarking = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -976,15 +1025,57 @@
 		addon={firkin.addon}
 		kindLabel={firkinKind}
 		year={firkin.year}
+		extraBadge={isBookmarked ? undefined : { label: 'browse', class: 'badge-warning' }}
 	>
 		{#snippet actions()}
-			{#if canPlay}
+			{#if isBookmarked}
+				{#if canPlay}
+					<button
+						type="button"
+						class="btn gap-2 btn-sm btn-primary"
+						onclick={play}
+						disabled={finalizing}
+						aria-label="Play"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 24 24"
+							fill="currentColor"
+							stroke="none"
+							class="h-4 w-4 shrink-0"
+							aria-hidden="true"
+						>
+							<polygon points="6 4 20 12 6 20 6 4" />
+						</svg>
+						<span>{finalizing ? 'Pinning…' : 'Play'}</span>
+					</button>
+				{/if}
+				{#if needsMetadata && lookupAddon}
+					<button
+						type="button"
+						class="btn btn-outline btn-sm btn-info"
+						onclick={() => (metadataLookupOpen = true)}
+						title="Search {lookupAddon} and bake matching metadata into this firkin (rolls the version forward)"
+					>
+						Find metadata
+					</button>
+				{/if}
+				<button
+					type="button"
+					class="btn btn-outline btn-sm btn-error"
+					onclick={remove}
+					disabled={removing}
+				>
+					{removing ? 'Deleting…' : 'Delete firkin'}
+				</button>
+			{:else}
 				<button
 					type="button"
 					class="btn gap-2 btn-sm btn-primary"
-					onclick={play}
-					disabled={finalizing}
-					aria-label="Play"
+					onclick={bookmark}
+					disabled={bookmarking}
+					aria-label="Bookmark"
+					title="Add this catalog item to your library"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -994,31 +1085,17 @@
 						class="h-4 w-4 shrink-0"
 						aria-hidden="true"
 					>
-						<polygon points="6 4 20 12 6 20 6 4" />
+						<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
 					</svg>
-					<span>{finalizing ? 'Pinning…' : 'Play'}</span>
+					<span>{bookmarking ? 'Bookmarking…' : 'Bookmark'}</span>
 				</button>
 			{/if}
-			{#if needsMetadata && lookupAddon}
-				<button
-					type="button"
-					class="btn btn-outline btn-sm btn-info"
-					onclick={() => (metadataLookupOpen = true)}
-					title="Search {lookupAddon} and bake matching metadata into this firkin (rolls the version forward)"
-				>
-					Find metadata
-				</button>
-			{/if}
-			<button
-				type="button"
-				class="btn btn-outline btn-sm btn-error"
-				onclick={remove}
-				disabled={removing}
-			>
-				{removing ? 'Deleting…' : 'Delete firkin'}
-			</button>
 		{/snippet}
 	</CatalogPageHeader>
+
+	{#if bookmarkError}
+		<div class="alert alert-error"><span>{bookmarkError}</span></div>
+	{/if}
 
 	{#if removeError}
 		<div class="alert alert-error"><span>{removeError}</span></div>
@@ -1063,7 +1140,7 @@
 		</aside>
 
 		<section class="flex flex-col gap-6">
-			{#if anyTabEnabled}
+			{#if isBookmarked && anyTabEnabled}
 				<div class="flex flex-col gap-2">
 					<div role="tablist" class="tabs-bordered tabs">
 						<button
@@ -1137,6 +1214,13 @@
 						/>
 					{/if}
 				</div>
+			{:else if !isBookmarked && (isYoutubeVideo || isTmdbMovie || isTmdbTv)}
+				<CatalogTrailerPlayer
+					posterUrl={trailerThumb}
+					youtubeUrl={isYoutubeVideo ? youtubeVideoUrl : firstTrailerUrl}
+					title={firkin.title}
+					preferredClient={isYoutubeVideo ? youtubePreferredClient : null}
+				/>
 			{:else if firkin.images[1]}
 				<img
 					src={firkin.images[1].url}
@@ -1148,17 +1232,32 @@
 
 			<CatalogDescriptionPanel
 				description={firkin.description}
-				identity={{
-					cid: firkin.cid,
-					createdAt: firkin.created_at,
-					updatedAt: firkin.updated_at,
-					version: firkin.version ?? 0
-				}}
-				versionHashes={firkin.version_hashes ?? []}
+				identity={isBookmarked
+					? {
+							cid: firkin.cid,
+							createdAt: firkin.created_at,
+							updatedAt: firkin.updated_at,
+							version: firkin.version ?? 0
+						}
+					: undefined}
+				versionHashes={isBookmarked ? (firkin.version_hashes ?? []) : []}
 				reviews={firkin.reviews ?? []}
 			/>
 
-			<CatalogTorrentProgressCard rows={torrentProgressRows} />
+			{#if !isBookmarked}
+				<div class="card border border-base-content/10 bg-base-200 p-4">
+					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>
+					<p class="text-xs text-base-content/70">
+						This item isn't bookmarked yet — no torrent search, IPFS pinning, or version
+						history runs against it. Bookmark it to add it to your library and unlock the
+						download / streaming flow.
+					</p>
+				</div>
+			{/if}
+
+			{#if isBookmarked}
+				<CatalogTorrentProgressCard rows={torrentProgressRows} />
+			{/if}
 
 			{#if isTmdbMovie || isTmdbTv}
 				<CatalogTrailersCard resolver={trailerResolver} firkinTitle={firkin.title} {thumb} />
@@ -1170,10 +1269,11 @@
 					{thumb}
 					albumTitle={firkin.title}
 					firkinId={firkin.id}
+					preview={!isBookmarked}
 				/>
 			{/if}
 
-			{#if hasMagnetFiles}
+			{#if isBookmarked && hasMagnetFiles}
 				<CatalogTorrentSearchCard
 					search={torrentSearch}
 					onAssign={assignTorrent}
@@ -1190,7 +1290,7 @@
 							year: firkin.year
 						})}
 				/>
-			{:else if hasNoRealFiles && !isMusicBrainz}
+			{:else if isBookmarked && hasNoRealFiles && !isMusicBrainz}
 				<CatalogTorrentSearchCard
 					search={torrentSearch}
 					onAssign={assignTorrent}
@@ -1206,7 +1306,7 @@
 				/>
 			{/if}
 
-			{#if subsLyricsKind}
+			{#if isBookmarked && subsLyricsKind}
 				<CatalogSubsLyricsCard
 					resolver={subsLyricsResolver}
 					kind={subsLyricsKind}
@@ -1214,7 +1314,9 @@
 				/>
 			{/if}
 
-			<CatalogFilesTable files={firkin.files} />
+			{#if isBookmarked}
+				<CatalogFilesTable files={firkin.files} />
+			{/if}
 		</section>
 
 		<aside class="flex flex-col gap-4">

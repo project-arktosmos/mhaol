@@ -123,6 +123,13 @@ class FirkinsService {
 		trailers?: Trailer[];
 		/** Optional reviews (upstream user-ratings) to bake into the firkin at create time. */
 		reviews?: Review[];
+		/**
+		 * Mark the firkin as bookmarked. Defaults to `true` server-side when
+		 * the field is omitted, so the catalog "Bookmark" button doesn't
+		 * need to set it. The `/catalog/visit` resolver flow passes `false`
+		 * to register a non-bookmarked browse-cache firkin.
+		 */
+		bookmarked?: boolean;
 	}): Promise<Firkin> {
 		// Auto-fill the creator from the browser-resident user identity (the
 		// same one the profile page manages). User identity is initialised on
@@ -190,6 +197,27 @@ class FirkinsService {
 	async resolveTracks(id: string): Promise<Firkin> {
 		const res = await fetch(`/api/firkins/${encodeURIComponent(id)}/resolve-tracks`, {
 			method: 'POST'
+		});
+		if (!res.ok) throw new Error(await parseError(res));
+		const updated = (await res.json()) as Firkin;
+		this.state.update((s) => {
+			const next = s.firkins.filter((d) => d.id !== id && d.id !== updated.id);
+			next.push(updated);
+			return { ...s, firkins: next };
+		});
+		return updated;
+	}
+
+	/// Promote a non-bookmarked browse-cache firkin (created by the
+	/// catalog `/catalog/visit` resolver) to a bookmarked one. The server
+	/// flips the flag in place — `bookmarked` is not part of the firkin
+	/// body, so the CID and version are unchanged. Returns the updated
+	/// firkin so the caller can refresh its local copy.
+	async bookmark(id: string): Promise<Firkin> {
+		const res = await fetch(`/api/firkins/${encodeURIComponent(id)}`, {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ bookmarked: true })
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const updated = (await res.json()) as Firkin;

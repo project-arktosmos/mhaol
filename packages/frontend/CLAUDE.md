@@ -61,23 +61,28 @@ Plus the SvelteKit-reserved `$lib` (→ `src/lib/`) and `$app/*` (SvelteKit modu
 
 ## Catalog detail routes
 
-`/catalog/virtual` and `/catalog/[ipfsHash]` share the same presentation through `$components/catalog/` and the same behaviour through resolver service classes in `$services/catalog/`. Each route only owns its route-specific wiring:
+There is only one catalog detail route, `/catalog/[id]`, and it presents both bookmarked and non-bookmarked firkins. Catalog grid clicks go through the `/catalog/visit` resolver route, whose `+page.ts` POSTs `/api/firkins` with `bookmarked: false` and `redirect(303, …)`s to `/catalog/<returnedId>`. The server dedups by content-address so revisits don't mint duplicate records, and the same record is later promoted in place when the user clicks **Bookmark** (a `PUT /api/firkins/:id` with `{ bookmarked: true }` — `bookmarked` is not part of the firkin body, so no CID roll).
 
-| Concern | `/catalog/virtual` | `/catalog/[ipfsHash]` |
+The detail page reads `firkin.bookmarked` and switches between two presentations of the same surface:
+
+| Concern | `firkin.bookmarked === false` (browse cache) | `firkin.bookmarked === true` (full library item) |
 |---|---|---|
-| Source of firkin data | URL query params (synthesised `CloudFirkin`) | `+page.ts` loader → real persisted firkin |
-| Header actions | `Bookmark` | `Play` / `IPFS Play` / `Torrent Stream` / `Find metadata` / `Delete firkin` |
+| Source of firkin data | `+page.ts` loader → real persisted firkin (created by `/catalog/visit`) | `+page.ts` loader → real persisted firkin |
+| Header actions | `Bookmark` only (plus a `browse` warning badge in the header) | `Play` / `IPFS Play` / `Torrent Stream` / `Find metadata` / `Delete firkin` |
 | Identity / version history / files table | omitted | rendered |
-| Resolver `persist` callbacks | none — discarded on navigate | `PUT /api/firkins/:id` (rolls the CID forward) |
-| Torrent search eval column | off | on (`/api/torrent/evaluate` per row) |
-| Torrent search collapsible | always open | collapsed by default |
+| Tracks card mode | `preview` (no per-track YT/lyrics badges, no playback) | full (server-side album resolver populates YT URLs + lyrics) |
+| Resolver `persist` callbacks | trailers no-op (return `Promise.resolve()`); YT preferred-client persist short-circuits | `PUT /api/firkins/:id` (rolls the CID forward) |
+| Torrent search card | hidden | shown (auto-fires when no real files yet) |
+| IPFS / Torrent stream tabs | hidden | shown when applicable |
+| Recommendation ingest on related items | skipped | runs once per source firkin |
+| Album resolver auto-spawn (server-side) | skipped — see `firkins.rs::create` | spawned for fresh musicbrainz creates and on the false→true bookmark flip |
 
 **Shared components** (`src/components/catalog/`):
 - `CatalogPageHeader.svelte` — back link, title, addon/kind/year badges, optional `extraBadge`, action snippet slot
 - `CatalogDescriptionPanel.svelte` — tabbed panel showing the description (default tab), identity (CID / created / updated / version, detail only), and version history (`version_hashes` chain, detail only). Tabs are only rendered when the corresponding props are supplied — virtual pages get a description-only single-tab layout with no tab strip. When `reviews` is non-empty (TMDB / MusicBrainz user-rating snapshots), the panel also renders a row of compact `label score / maxScore · votes` badges above the tabs — visible on every tab.
 - `CatalogImagesCard.svelte` — images grid with metadata
 - `CatalogTrailersCard.svelte` — trailers list driven by a `TrailerResolver`
-- `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`. `preview={true}` (used by `/catalog/virtual`) hides per-track YouTube/lyrics status badges and disables play, since nothing has been resolved yet — bookmarking is what kicks off the server-side per-track YouTube + LRCLIB resolution
+- `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`. `preview={true}` (used by the detail page when `!firkin.bookmarked`) hides per-track YouTube/lyrics status badges and disables play, since nothing has been resolved yet — bookmarking is what kicks off the server-side per-track YouTube + LRCLIB resolution
 - `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval
 - `CatalogSubsLyricsCard.svelte` — subs/lyrics search results driven by a `SubsLyricsResolver` (auto-fired on detail mount based on the firkin's addon: lyrics for MusicBrainz albums, subtitles for TMDB movies/TV). Read-only — clicking a row previews lyrics inline or opens the subtitle URL
 - `CatalogChannelLatestCard.svelte` — "Latest from channel" rail rendered on the left column of `youtube-video` catalog pages. Calls `GET /api/ytdl/channel/by-video?url=<watch URL>` once per page and renders the last ~8 entries from the channel's public Atom feed; the backend caches both the video → channel id resolve (24h) and the parsed feed (15min) so the public feed endpoint isn't hammered.

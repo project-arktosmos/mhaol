@@ -124,4 +124,14 @@ export interface Firkin {
 	version_hashes?: string[];
 	trailers?: FirkinTrailer[];
 	reviews?: FirkinReview[];
+	/**
+	 * `true` when the user has explicitly bookmarked the firkin from a
+	 * catalog detail page; `false` for the "browse cache" firkins
+	 * auto-created when the user clicks through from the catalog grid.
+	 * Drives the catalog detail page's action bar (Bookmark vs.
+	 * Play / Find / Delete) and which sections render. Optional in the
+	 * type so legacy `Firkin` blobs without the field are still accepted
+	 * — the cloud server defaults the field to `true` on deserialise.
+	 */
+	bookmarked?: boolean;
 }

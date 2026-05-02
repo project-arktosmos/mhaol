@@ -93,6 +93,19 @@
 	}
 
 	const visibleItems = $derived(feed ? feed.items.slice(0, limit) : []);
+
+	function visitHref(item: ChannelFeedItem): string {
+		// Route through the local /catalog/visit resolver so a click
+		// lands on our own catalog detail page (creating a non-bookmarked
+		// firkin lazily) instead of bouncing the user to youtube.com.
+		const params = new URLSearchParams();
+		params.set('addon', 'youtube-video');
+		params.set('id', item.videoId);
+		params.set('title', item.title);
+		if (item.thumbnailUrl) params.set('posterUrl', item.thumbnailUrl);
+		if (item.description) params.set('description', item.description);
+		return `${base}/catalog/visit?${params.toString()}`;
+	}
 </script>
 
 <section class="card border border-base-content/10 bg-base-200 p-4">
@@ -126,9 +139,7 @@
 				<li class="flex gap-2">
 					<a
 						class="link link-hover flex flex-1 gap-2"
-						href={item.link}
-						target="_blank"
-						rel="noopener noreferrer"
+						href={visitHref(item)}
 						title={item.title}
 					>
 						{#if item.thumbnailUrl}

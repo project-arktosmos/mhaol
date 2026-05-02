@@ -10,6 +10,12 @@ const OUT_FILE = path.resolve(__dirname, '../src/lib/generated/nav.ts');
 const isRouteGroup = (name) => name.startsWith('(') && name.endsWith(')');
 const isDynamic = (name) => name.startsWith('[');
 
+// Routes that exist as real `+page.svelte` files but are resolver pages —
+// their `+page.ts` redirects on every visit so the user never lands on
+// them, and they shouldn't appear in the generated nav. Matched against
+// the slash-joined segment path (e.g. `catalog/visit`).
+const SKIP_ROUTES = new Set(['catalog/visit']);
+
 function collectRoutes(dir, segments) {
 	const out = [];
 	let entries;
@@ -20,7 +26,10 @@ function collectRoutes(dir, segments) {
 	}
 
 	if (entries.some((e) => e.isFile() && e.name === '+page.svelte')) {
-		out.push([...segments]);
+		const slashed = segments.join('/');
+		if (!SKIP_ROUTES.has(slashed)) {
+			out.push([...segments]);
+		}
 	}
 
 	for (const entry of entries) {
