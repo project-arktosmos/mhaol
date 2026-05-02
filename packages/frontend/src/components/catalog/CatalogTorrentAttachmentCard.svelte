@@ -146,6 +146,52 @@
 <div class="flex flex-col gap-2">
 	<h2 class="text-sm font-semibold text-base-content/70 uppercase">Torrent attachment</h2>
 	<div class="grid grid-cols-2 gap-3">
+		{#if stream && onStreamPlay}
+			<button
+				type="button"
+				onclick={() => onStreamPlay?.()}
+				disabled={streamPlaying}
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-300/70 disabled:cursor-progress disabled:opacity-60"
+				aria-label="Play stream"
+			>
+				{@render header(stream, 'lorc/magnet', 'Stream', 'Stream mode')}
+				{@render stats(stream)}
+				<span class="text-[10px] font-medium text-success">
+					{streamPlaying ? 'Starting…' : 'Click to play'}
+				</span>
+			</button>
+		{:else if stream}
+			<div
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center text-base-content"
+			>
+				{@render header(stream, 'lorc/magnet', 'Stream', 'Stream mode')}
+				{@render stats(stream)}
+			</div>
+		{:else if preferredStream && onAttachStream}
+			{@const info = torrentToInfo(preferredStream)}
+			<button
+				type="button"
+				onclick={() => onAttachStream?.(preferredStream)}
+				disabled={attachingStream}
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-300/70 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
+				aria-label="Attach this torrent for streaming"
+				title="Suggested pick from the torrent search — click to start streaming"
+			>
+				{@render header(info, 'lorc/magnet', 'Stream', 'Stream mode')}
+				{@render stats(info)}
+				<span class="text-[10px] font-medium text-base-content/70">
+					{attachingStream ? 'Starting…' : 'Click to attach'}
+				</span>
+			</button>
+		{:else}
+			<div
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
+			>
+				{@render header(null, 'lorc/magnet', 'Stream', 'Stream mode')}
+				<span class="text-[10px] text-base-content/60">Not attached</span>
+			</div>
+		{/if}
+
 		{#if download && download.ipfsCid && onDownloadPlay}
 			<button
 				type="button"
@@ -212,52 +258,6 @@
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
 			>
 				{@render header(null, 'delapouite/cloud-download', 'Download', 'Download mode')}
-				<span class="text-[10px] text-base-content/60">Not attached</span>
-			</div>
-		{/if}
-
-		{#if stream && onStreamPlay}
-			<button
-				type="button"
-				onclick={() => onStreamPlay?.()}
-				disabled={streamPlaying}
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-300/70 disabled:cursor-progress disabled:opacity-60"
-				aria-label="Play stream"
-			>
-				{@render header(stream, 'lorc/magnet', 'Stream', 'Stream mode')}
-				{@render stats(stream)}
-				<span class="text-[10px] font-medium text-success">
-					{streamPlaying ? 'Starting…' : 'Click to play'}
-				</span>
-			</button>
-		{:else if stream}
-			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center text-base-content"
-			>
-				{@render header(stream, 'lorc/magnet', 'Stream', 'Stream mode')}
-				{@render stats(stream)}
-			</div>
-		{:else if preferredStream && onAttachStream}
-			{@const info = torrentToInfo(preferredStream)}
-			<button
-				type="button"
-				onclick={() => onAttachStream?.(preferredStream)}
-				disabled={attachingStream}
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-300/70 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
-				aria-label="Attach this torrent for streaming"
-				title="Suggested pick from the torrent search — click to start streaming"
-			>
-				{@render header(info, 'lorc/magnet', 'Stream', 'Stream mode')}
-				{@render stats(info)}
-				<span class="text-[10px] font-medium text-base-content/70">
-					{attachingStream ? 'Starting…' : 'Click to attach'}
-				</span>
-			</button>
-		{:else}
-			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
-			>
-				{@render header(null, 'lorc/magnet', 'Stream', 'Stream mode')}
 				<span class="text-[10px] text-base-content/60">Not attached</span>
 			</div>
 		{/if}
