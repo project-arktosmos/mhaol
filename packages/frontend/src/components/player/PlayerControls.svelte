@@ -81,39 +81,36 @@
 		isMuted = mediaElement.muted;
 	}
 
-	let currentElement: HTMLMediaElement | null = null;
 	let volumeInitialized = false;
 
 	$effect(() => {
-		if (mediaElement !== currentElement) {
-			if (currentElement) {
-				currentElement.removeEventListener('play', onPlay);
-				currentElement.removeEventListener('pause', onPause);
-				currentElement.removeEventListener('volumechange', onVolumeChange);
+		const el = mediaElement;
+		if (!el) return;
+
+		el.addEventListener('play', onPlay);
+		el.addEventListener('pause', onPause);
+		el.addEventListener('volumechange', onVolumeChange);
+
+		// Reads of `volume` / writes that would re-trigger this effect have to
+		// stay inside `untrack`. Otherwise the volume initializer below writes
+		// `volume`, the effect re-runs immediately, the cleanup detaches the
+		// `play` / `pause` listeners, and the play→pause icon swap silently
+		// stops working a few microseconds after mount.
+		untrack(() => {
+			if (!volumeInitialized) {
+				volume = initialVolume;
+				volumeBeforeMute = initialVolume;
+				volumeInitialized = true;
 			}
-			currentElement = mediaElement;
-			if (mediaElement) {
-				mediaElement.addEventListener('play', onPlay);
-				mediaElement.addEventListener('pause', onPause);
-				mediaElement.addEventListener('volumechange', onVolumeChange);
-				if (!volumeInitialized) {
-					const seed = untrack(() => initialVolume);
-					volume = seed;
-					volumeBeforeMute = seed;
-					volumeInitialized = true;
-				}
-				mediaElement.volume = volume;
-				isPaused = mediaElement.paused;
-				isMuted = mediaElement.muted;
-			}
-		}
+			el.volume = volume;
+			isPaused = el.paused;
+			isMuted = el.muted;
+		});
 
 		return () => {
-			if (currentElement) {
-				currentElement.removeEventListener('play', onPlay);
-				currentElement.removeEventListener('pause', onPause);
-				currentElement.removeEventListener('volumechange', onVolumeChange);
-			}
+			el.removeEventListener('play', onPlay);
+			el.removeEventListener('pause', onPause);
+			el.removeEventListener('volumechange', onVolumeChange);
 		};
 	});
 
