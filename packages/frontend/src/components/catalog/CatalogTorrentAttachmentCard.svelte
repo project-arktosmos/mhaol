@@ -223,14 +223,25 @@
 						{pick.torrent.sizeBytes != null ? formatSizeBytes(pick.torrent.sizeBytes) : '—'}
 					</td>
 					<td class="text-right">
-						<button
-							type="button"
-							onclick={() => onAttachStream?.(pick.torrent)}
-							disabled={attachingStream || isActive}
-							class="btn btn-xs btn-primary"
-						>
-							{isActive ? 'Active' : attachingStream ? '…' : 'Assign'}
-						</button>
+						{#if isActive}
+							<button
+								type="button"
+								onclick={() => onStreamPlay?.()}
+								disabled={streamPlaying}
+								class="btn btn-xs btn-primary"
+							>
+								{streamPlaying ? '…' : 'Play'}
+							</button>
+						{:else}
+							<button
+								type="button"
+								onclick={() => onAttachStream?.(pick.torrent)}
+								disabled={attachingStream}
+								class="btn btn-xs btn-primary"
+							>
+								{attachingStream ? '…' : 'Assign'}
+							</button>
+						{/if}
 					</td>
 				</tr>
 			{/each}
@@ -276,15 +287,15 @@
 						{@render streamPicksTable(attachedStreamQuality)}
 					{:else}
 						{@render stats(stream)}
+						<button
+							type="button"
+							onclick={() => onStreamPlay?.()}
+							disabled={streamPlaying}
+							class="btn btn-sm btn-primary"
+						>
+							{streamPlaying ? 'Starting…' : 'Play'}
+						</button>
 					{/if}
-					<button
-						type="button"
-						onclick={() => onStreamPlay?.()}
-						disabled={streamPlaying}
-						class="btn btn-sm btn-primary"
-					>
-						{streamPlaying ? 'Starting…' : 'Play'}
-					</button>
 				</div>
 			{:else if stream}
 				<div
