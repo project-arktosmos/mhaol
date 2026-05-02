@@ -174,6 +174,7 @@ mod tests {
             mime: mime.to_string(),
             extracted_query: None,
             tmdb_match: None,
+            extracted_tv_query: None,
         }
     }
 

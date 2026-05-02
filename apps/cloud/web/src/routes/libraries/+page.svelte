@@ -11,12 +11,7 @@
 		type Library
 	} from '$lib/libraries.service';
 	import type { IpfsPin } from '$lib/ipfs.service';
-	import {
-		firkinsService,
-		type Artist,
-		type Trailer,
-		type Review
-	} from '$lib/firkins.service';
+	import { firkinsService, type Artist, type Trailer, type Review } from '$lib/firkins.service';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import DirectoryPicker from '../../components/DirectoryPicker.svelte';
@@ -241,7 +236,17 @@
 	/// has a playable file. After create, navigate to the new content-
 	/// addressed detail page.
 	async function createFirkinFromMatch(
-		entry: { path: string; relative_path: string; tmdbMatch?: { tmdbId: number; title: string; year?: number; overview?: string; posterUrl?: string } },
+		entry: {
+			path: string;
+			relative_path: string;
+			tmdbMatch?: {
+				tmdbId: number;
+				title: string;
+				year?: number;
+				overview?: string;
+				posterUrl?: string;
+			};
+		},
 		cid: string
 	) {
 		if (!entry.tmdbMatch) return;
@@ -272,8 +277,7 @@
 				reviews?: Review[];
 			};
 
-			const fileTitle =
-				entry.relative_path.split('/').pop() ?? entry.relative_path;
+			const fileTitle = entry.relative_path.split('/').pop() ?? entry.relative_path;
 			const created = await firkinsService.create({
 				title: entry.tmdbMatch.title,
 				artists: meta.artists ?? [],
@@ -606,7 +610,12 @@
 																		{formatBytes(entry.size)}
 																	</td>
 																	<td class="text-xs">
-																		{#if entry.extractedQuery}
+																		{#if entry.extractedTvQuery}
+																			{entry.extractedTvQuery.show}{entry.extractedTvQuery.year
+																				? ` (${entry.extractedTvQuery.year})`
+																				: ''}
+																			{` S${String(entry.extractedTvQuery.season).padStart(2, '0')}E${String(entry.extractedTvQuery.episode).padStart(2, '0')}`}
+																		{:else if entry.extractedQuery}
 																			{entry.extractedQuery.title}{entry.extractedQuery.year
 																				? ` (${entry.extractedQuery.year})`
 																				: ''}
@@ -627,6 +636,8 @@
 																					? ` (${entry.tmdbMatch.year})`
 																					: ''}
 																			</a>
+																		{:else if entry.extractedTvQuery}
+																			<span class="text-base-content/40">tmdb lookup pending</span>
 																		{:else if entry.extractedQuery}
 																			<span class="text-base-content/40">no match</span>
 																		{:else}
@@ -636,11 +647,13 @@
 																	<td class="text-xs">
 																		{#if entry.tmdbMatch && cid}
 																			<button
-																				class="btn btn-primary btn-xs"
+																				class="btn btn-xs btn-primary"
 																				disabled={creatingFirkinFor[entry.path]}
 																				onclick={() => createFirkinFromMatch(entry, cid)}
 																			>
-																				{creatingFirkinFor[entry.path] ? 'Creating…' : 'Create firkin'}
+																				{creatingFirkinFor[entry.path]
+																					? 'Creating…'
+																					: 'Create firkin'}
 																			</button>
 																		{:else if entry.tmdbMatch}
 																			<span class="text-base-content/40">pinning…</span>
@@ -652,7 +665,7 @@
 																{#if createFirkinErrors[entry.path]}
 																	<tr>
 																		<td colspan="7" class="bg-base-100">
-																			<div class="my-1 alert alert-error py-1">
+																			<div class="my-1 alert py-1 alert-error">
 																				<span class="text-xs">
 																					Create firkin failed: {createFirkinErrors[entry.path]}
 																				</span>

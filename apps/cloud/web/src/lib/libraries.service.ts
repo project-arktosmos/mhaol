@@ -48,6 +48,13 @@ export interface ExtractedQuery {
 	year?: number;
 }
 
+export interface ExtractedTvQuery {
+	show: string;
+	year?: number;
+	season: number;
+	episode: number;
+}
+
 export interface ScanEntry {
 	path: string;
 	relative_path: string;
@@ -55,6 +62,7 @@ export interface ScanEntry {
 	mime: string;
 	extractedQuery?: ExtractedQuery;
 	tmdbMatch?: TmdbMatch;
+	extractedTvQuery?: ExtractedTvQuery;
 }
 
 export interface ScanResponse {

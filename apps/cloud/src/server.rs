@@ -23,6 +23,8 @@ mod search;
 mod state;
 #[cfg(not(target_os = "android"))]
 mod tmdb_match;
+#[cfg(not(target_os = "android"))]
+mod tv_match;
 mod torrent;
 mod torrent_completion;
 #[cfg(not(target_os = "android"))]

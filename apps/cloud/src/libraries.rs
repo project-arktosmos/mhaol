@@ -326,6 +326,14 @@ pub struct ScanEntry {
     #[cfg(not(target_os = "android"))]
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "tmdbMatch")]
     pub tmdb_match: Option<crate::tmdb_match::TmdbMatch>,
+    /// The `(show, season, episode, year?)` parsed from the relative path
+    /// for video files in `local-tv` libraries. Surfaced to the WebUI so
+    /// the libraries table can show what would be sent to TMDB. The actual
+    /// TMDB lookup is not yet wired in — this field stays as a query
+    /// preview until that lands.
+    #[cfg(not(target_os = "android"))]
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "extractedTvQuery")]
+    pub extracted_tv_query: Option<crate::tv_match::TvQuery>,
 }
 
 #[derive(Debug, Serialize)]
@@ -401,6 +409,8 @@ fn scan_directory(root: PathBuf) -> ScanResponse {
             extracted_query: None,
             #[cfg(not(target_os = "android"))]
             tmdb_match: None,
+            #[cfg(not(target_os = "android"))]
+            extracted_tv_query: None,
         });
     }
 
@@ -465,6 +475,14 @@ async fn scan(
     #[cfg(not(target_os = "android"))]
     if lib.addons.iter().any(|a| a == "local-movie") {
         attach_tmdb_movie_matches(&mut response).await;
+    }
+
+    // For `local-tv` libraries, parse `(show, season, episode, year?)` out
+    // of every video file's relative path so the WebUI can show what would
+    // be sent to TMDB. No upstream call is made yet — that's a follow-up.
+    #[cfg(not(target_os = "android"))]
+    if lib.addons.iter().any(|a| a == "local-tv") {
+        attach_tv_episode_queries(&mut response);
     }
 
     let now = Utc::now();
@@ -547,6 +565,29 @@ async fn attach_tmdb_movie_matches(response: &mut ScanResponse) {
         if let Some(entry) = response.entries.get_mut(idx) {
             entry.tmdb_match = Some(m);
         }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn attach_tv_episode_queries(response: &mut ScanResponse) {
+    let mut parsed = 0usize;
+    let mut total = 0usize;
+    for entry in response.entries.iter_mut() {
+        if !entry_is_video(entry) {
+            continue;
+        }
+        total += 1;
+        if let Some(q) = crate::tv_match::extract_tv_query(&entry.relative_path) {
+            entry.extracted_tv_query = Some(q);
+            parsed += 1;
+        }
+    }
+    if total > 0 {
+        tracing::info!(
+            "[libraries] tv extract: {}/{} video files parsed into (show, season, episode)",
+            parsed,
+            total
+        );
     }
 }
 
