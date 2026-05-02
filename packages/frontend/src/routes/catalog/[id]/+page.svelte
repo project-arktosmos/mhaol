@@ -18,6 +18,7 @@
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogAlbumsByArtistCard from '$components/catalog/CatalogAlbumsByArtistCard.svelte';
 	import CatalogChannelLatestCard from '$components/catalog/CatalogChannelLatestCard.svelte';
+	import CatalogRelatedYoutubeCard from '$components/catalog/CatalogRelatedYoutubeCard.svelte';
 	import CatalogFilesTable from '$components/catalog/CatalogFilesTable.svelte';
 	import { firkinPlaybackService } from '$services/firkin-playback.service';
 	import { firkinTorrentsService, infoHashFromMagnet } from '$services/firkin-torrents.service';
@@ -1235,6 +1236,8 @@
 					upstreamId={musicBrainzReleaseGroupId}
 					onItemsLoaded={handleRelatedItemsLoaded}
 				/>
+			{:else if isYoutubeVideo}
+				<CatalogRelatedYoutubeCard youtubeUrl={youtubeVideoUrl} />
 			{/if}
 		</aside>
 	</div>

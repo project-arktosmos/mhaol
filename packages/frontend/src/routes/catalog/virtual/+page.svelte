@@ -9,6 +9,7 @@
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogAlbumsByArtistCard from '$components/catalog/CatalogAlbumsByArtistCard.svelte';
 	import CatalogChannelLatestCard from '$components/catalog/CatalogChannelLatestCard.svelte';
+	import CatalogRelatedYoutubeCard from '$components/catalog/CatalogRelatedYoutubeCard.svelte';
 	import {
 		firkinsService,
 		addonKind,
@@ -345,6 +346,8 @@
 		<aside class="flex flex-col gap-4">
 			{#if isMusicBrainz || isTmdbMovie || isTmdbTv}
 				<CatalogRelatedCard {addon} upstreamId={itemId} />
+			{:else if isYoutubeVideo}
+				<CatalogRelatedYoutubeCard youtubeUrl={youtubeVideoUrl} />
 			{/if}
 		</aside>
 	</div>

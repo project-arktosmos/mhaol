@@ -24,7 +24,7 @@ use axum::{
     Router,
 };
 use mhaol_yt_dlp::{
-    manager::SseEvent, search, QueueDownloadRequest, QueuePlaylistRequest, YtDlpStatus,
+    manager::SseEvent, related, search, QueueDownloadRequest, QueuePlaylistRequest, YtDlpStatus,
 };
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +41,7 @@ pub fn router() -> Router<CloudState> {
         .route("/channel/by-video", get(get_channel_feed_by_video))
         .route("/channel/{channel_id}/rss", get(get_channel_feed))
         .route("/search", get(search_proxy))
+        .route("/related", get(related_proxy))
         .route("/downloads", get(list_downloads))
         .route("/downloads", post(queue_download))
         .route("/downloads/playlist", post(queue_playlist))
@@ -240,6 +241,10 @@ async fn get_channel_feed_by_video(
 
 async fn search_proxy(query: Query<search::SearchQuery>) -> impl IntoResponse {
     search::search(query).await
+}
+
+async fn related_proxy(query: Query<related::RelatedQuery>) -> impl IntoResponse {
+    related::related(query).await
 }
 
 async fn list_downloads(State(state): State<CloudState>) -> impl IntoResponse {

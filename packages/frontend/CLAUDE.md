@@ -81,6 +81,7 @@ Plus the SvelteKit-reserved `$lib` (→ `src/lib/`) and `$app/*` (SvelteKit modu
 - `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval
 - `CatalogSubsLyricsCard.svelte` — subs/lyrics search results driven by a `SubsLyricsResolver` (auto-fired on detail mount based on the firkin's addon: lyrics for MusicBrainz albums, subtitles for TMDB movies/TV). Read-only — clicking a row previews lyrics inline or opens the subtitle URL
 - `CatalogChannelLatestCard.svelte` — "Latest from channel" rail rendered on the left column of `youtube-video` catalog pages. Calls `GET /api/ytdl/channel/by-video?url=<watch URL>` once per page and renders the last ~8 entries from the channel's public Atom feed; the backend caches both the video → channel id resolve (24h) and the parsed feed (15min) so the public feed endpoint isn't hammered.
+- `CatalogRelatedYoutubeCard.svelte` — "Related videos" rail rendered on the right column of `youtube-video` catalog pages (both `/catalog/[ipfsHash]` and `/catalog/virtual`). Calls `GET /api/ytdl/related?url=<watch URL>` once per page and renders up to ~12 entries from the InnerTube `/next` watch-next sidebar. Click-throughs open `youtube.com/watch?v=…` in a new tab — there's no in-app navigation back into the catalog yet.
 - `CatalogFilesTable.svelte` — firkin `files` table (detail only)
 
 **Shared resolver services** (`src/services/catalog/`, all `.svelte.ts` so `$state` runes work):
