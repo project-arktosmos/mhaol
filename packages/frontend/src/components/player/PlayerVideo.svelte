@@ -88,12 +88,37 @@
 		text: string;
 	}
 	let subCues = $state<SubCue[]>([]);
-	// Drive subtitle display from `positionSecs` (the WebRTC stream's true source
-	// timestamp). `videoElement.currentTime` is meaningless here — for a MediaStream-fed
-	// element it's wall-clock since stream attach, not the position inside the source video.
+	// Direct-stream subtitle sync: poll `videoElement.currentTime` on
+	// every animation frame. The store-routed `positionSecs` prop is
+	// driven by the element's `timeupdate` event, which most browsers
+	// throttle to ~4 Hz — that leaves cues visibly lagging a couple
+	// hundred ms behind the picture. rAF gets us frame-accurate sync
+	// without changing the player's existing seek-bar semantics, which
+	// stay on the throttled path. WebRTC streams keep using the source
+	// timestamp because the element's `currentTime` there is wall-clock
+	// since stream attach, not source position.
+	let videoCurrentTime = $state(0);
+	$effect(() => {
+		if (!directStreamUrl) return;
+		const element = videoElement;
+		if (!element) return;
+		let cancelled = false;
+		let raf = 0;
+		const tick = () => {
+			if (cancelled) return;
+			const t = element.currentTime;
+			if (Number.isFinite(t)) videoCurrentTime = t;
+			raf = requestAnimationFrame(tick);
+		};
+		raf = requestAnimationFrame(tick);
+		return () => {
+			cancelled = true;
+			cancelAnimationFrame(raf);
+		};
+	});
 	let activeSubText = $derived.by(() => {
 		if (subCues.length === 0) return '';
-		const t = positionSecs;
+		const t = directStreamUrl ? videoCurrentTime : positionSecs;
 		const cue = subCues.find((c) => t >= c.start && t <= c.end);
 		return cue?.text ?? '';
 	});
