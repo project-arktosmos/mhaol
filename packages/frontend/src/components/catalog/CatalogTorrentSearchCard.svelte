@@ -114,7 +114,7 @@
 					<table class="table table-xs">
 						<thead>
 							<tr>
-								<th class="w-56">Streamability</th>
+								<th>Title</th>
 								<th class="w-12 text-success" title="Seeders">↑</th>
 								<th class="w-12 text-warning" title="Leechers">↓</th>
 								<th class="w-20">Size</th>
@@ -177,51 +177,41 @@
 										})}
 									>
 										<td>
-											{#if ev.kind === 'pending'}
-												<span class="text-xs text-base-content/50">Queued…</span>
-											{:else if ev.kind === 'evaluating'}
-												<div class="flex items-center gap-2">
-													<span
-														class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
-														aria-hidden="true"
-													></span>
-													<span class="text-xs text-base-content/60">Probing…</span>
-												</div>
-											{:else if ev.kind === 'streamable'}
+											<div class="flex flex-col gap-0.5">
 												<span
-													class="block max-w-[14rem] truncate text-xs text-base-content/60"
-													title={ev.fileName}
+													class="block max-w-[18rem] truncate text-xs text-base-content/80"
+													title={torrent.title}
 												>
-													{ev.fileName}
+													{torrent.parsedTitle || torrent.title}
 												</span>
-											{:else if ev.kind === 'skipped'}
-												<span class="text-xs text-base-content/40" title={ev.reason}>—</span>
-											{:else}
-												<div class="flex flex-col gap-0.5">
-													<span class="badge gap-1 badge-ghost badge-sm">
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															viewBox="0 0 24 24"
-															fill="none"
-															stroke="currentColor"
-															stroke-width="2.5"
-															stroke-linecap="round"
-															class="h-3 w-3 text-base-content/40"
+												{#if ev.kind === 'pending'}
+													<span class="text-[10px] text-base-content/50">Queued…</span>
+												{:else if ev.kind === 'evaluating'}
+													<div class="flex items-center gap-1.5">
+														<span
+															class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
 															aria-hidden="true"
-														>
-															<line x1="5" y1="5" x2="19" y2="19" />
-															<line x1="19" y1="5" x2="5" y2="19" />
-														</svg>
-														Not streamable
-													</span>
+														></span>
+														<span class="text-[10px] text-base-content/60">Probing…</span>
+													</div>
+												{:else if ev.kind === 'streamable'}
 													<span
-														class="max-w-[14rem] truncate text-[10px] text-base-content/60"
+														class="block max-w-[18rem] truncate text-[10px] text-success"
+														title={ev.fileName}
+													>
+														{ev.fileName}
+													</span>
+												{:else if ev.kind === 'skipped'}
+													<span class="text-[10px] text-base-content/40" title={ev.reason}>—</span>
+												{:else}
+													<span
+														class="block max-w-[18rem] truncate text-[10px] text-base-content/50"
 														title={ev.reason}
 													>
-														{ev.reason}
+														Not streamable: {ev.reason}
 													</span>
-												</div>
-											{/if}
+												{/if}
+											</div>
 										</td>
 										<td class="text-xs text-success">{torrent.seeders}</td>
 										<td class="text-xs text-warning">{torrent.leechers}</td>
