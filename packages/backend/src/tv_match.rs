@@ -16,9 +16,22 @@ use std::path::PathBuf;
 /// `1080p` doesn't end up in the TMDB query. Mirrors the list in
 /// `tmdb_match::NOISE_WORDS`.
 const NOISE_WORDS: &[&str] = &[
-    "1080p", "2160p", "720p", "480p", "4k", "uhd", "hdr", "dv", "bluray", "brrip", "bdrip",
-    "webrip", "web", "dl", "webdl", "hdrip", "dvdrip", "x264", "x265", "h264", "h265", "hevc",
-    "aac", "ac3", "dts", "ddp", "atmos", "remux", "proper", "repack", "extended",
+    // resolution / quality
+    "1080p", "2160p", "720p", "480p", "360p", "4k", "uhd", "hdr", "hdr10", "dv",
+    // sources
+    "bluray", "brrip", "bdrip", "webrip", "web", "dl", "webdl", "hdrip", "dvdrip", "dvd",
+    "hdtv", "pdtv", "cam", "ts", "screener", "dvdscr",
+    // codecs
+    "x264", "x265", "h264", "h265", "hevc", "avc", "xvid", "divx", "vp9", "av1",
+    // audio
+    "aac", "ac3", "dts", "ddp", "ddp5", "atmos", "truehd", "flac",
+    // misc release tags
+    "remux", "proper", "repack", "extended", "uncut", "unrated", "internal", "limited",
+    "complete",
+    // languages / subs
+    "multi", "dual", "dubbed", "subbed", "vostfr",
+    // file containers leaking from dir names
+    "mp4", "mkv", "avi", "m4v",
 ];
 
 static SXX_EXX_RE: Lazy<Regex> =
@@ -31,7 +44,12 @@ static SEASON_DIR_RE: Lazy<Regex> =
 static EPISODE_FILE_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)(?:^|[\s\._\-])(?:episode|ep|e)\s*(\d{1,3})(?:[\s\._\-]|$)").unwrap()
 });
-static YEAR_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\((\d{4})\)").unwrap());
+static YEAR_TAG_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[\(\[\{](\d{4})[\)\]\}]").unwrap());
+static PAREN_GROUP_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[\(\[\{][^\)\]\}]*[\)\]\}]").unwrap());
+static INLINE_SEASON_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\b(?:season\s*\d{1,3}|s\d{1,3})\b").unwrap());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TvQuery {
@@ -78,21 +96,23 @@ fn is_season_dir_name(name: &str) -> bool {
 /// dots/underscores, and known release-tag noise words.
 fn humanize_show_name(raw: &str) -> (String, Option<i32>) {
     let humanized = raw.replace(['.', '_'], " ");
-    let mut year: Option<i32> = None;
-    let stripped = if let Some(c) = YEAR_TAG_RE.captures(&humanized) {
-        year = c.get(1).and_then(|m| m.as_str().parse::<i32>().ok());
-        YEAR_TAG_RE.replace(&humanized, "").to_string()
-    } else {
-        humanized.clone()
-    };
-    let cleaned = stripped
+    let year: Option<i32> = YEAR_TAG_RE
+        .captures(&humanized)
+        .and_then(|c| c.get(1))
+        .and_then(|m| m.as_str().parse::<i32>().ok());
+    // Drop the entire parenthesised / bracketed group (year or otherwise)
+    // — release tags like `(1080p H265 Joy)` and `[GROUP]` go away with it.
+    let no_parens = PAREN_GROUP_RE.replace_all(&humanized, " ").to_string();
+    // Drop inline season tags (`Season 2`, `S02`) so a dir like
+    // "Andor Season 2 Mp4 1080p" reduces to just the show name.
+    let no_seasons = INLINE_SEASON_RE.replace_all(&no_parens, " ").to_string();
+    let cleaned = no_seasons
         .split_whitespace()
         .filter(|w| !NOISE_WORDS.contains(&w.to_ascii_lowercase().as_str()))
         .collect::<Vec<_>>()
         .join(" ");
     let trimmed = cleaned
-        .trim_end_matches(|c: char| matches!(c, '.' | '-' | '_' | ' '))
-        .trim()
+        .trim_matches(|c: char| matches!(c, '.' | '-' | '_' | ' '))
         .to_string();
     (trimmed, year)
 }
@@ -228,5 +248,24 @@ mod tests {
     fn returns_none_without_episode_marker() {
         assert!(extract_tv_query("random_file.mkv").is_none());
         assert!(extract_tv_query("Movies/The Matrix (1999).mkv").is_none());
+    }
+
+    #[test]
+    fn strips_inline_season_and_container_from_show_dir() {
+        let q = extract_tv_query("Andor Season 2 Mp4 1080p/Andor S02E02.mp4").unwrap();
+        assert_eq!(q.show, "Andor");
+        assert_eq!(q.season, 2);
+        assert_eq!(q.episode, 2);
+    }
+
+    #[test]
+    fn strips_paren_release_tag_from_show_dir() {
+        let q = extract_tv_query(
+            "Archer Season 1  (1080p H265 Joy)/Archer S01E02 Training Day (1080p H265 Joy).m4v",
+        )
+        .unwrap();
+        assert_eq!(q.show, "Archer");
+        assert_eq!(q.season, 1);
+        assert_eq!(q.episode, 2);
     }
 }
