@@ -9,6 +9,7 @@
 	import CatalogPageHeader from '$components/catalog/CatalogPageHeader.svelte';
 	import CatalogDescriptionPanel from '$components/catalog/CatalogDescriptionPanel.svelte';
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
+	import CatalogTvSeasonsCard from '$components/catalog/CatalogTvSeasonsCard.svelte';
 	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
@@ -1243,6 +1244,10 @@
 				versionHashes={isBookmarked ? (firkin.version_hashes ?? []) : []}
 				reviews={firkin.reviews ?? []}
 			/>
+
+			{#if isTmdbTv && tmdbTvId}
+				<CatalogTvSeasonsCard {tmdbTvId} />
+			{/if}
 
 			{#if !isBookmarked}
 				<div class="card border border-base-content/10 bg-base-200 p-4">
