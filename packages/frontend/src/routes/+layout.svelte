@@ -12,6 +12,7 @@
 	import ArtistsModal from '$components/artists/ArtistsModal.svelte';
 	import ConsumptionModal from '$components/consumption/ConsumptionModal.svelte';
 	import DiskModal from '$components/disk/DiskModal.svelte';
+	import HealthModal from '$components/health/HealthModal.svelte';
 	import IpfsModal from '$components/ipfs/IpfsModal.svelte';
 	import LibrariesModal from '$components/libraries/LibrariesModal.svelte';
 	import TorrentModal from '$components/torrent/TorrentModal.svelte';
@@ -135,6 +136,7 @@
 <ArtistsModal />
 <ConsumptionModal />
 <DiskModal />
+<HealthModal />
 <IpfsModal />
 <LibrariesModal />
 <TorrentModal />

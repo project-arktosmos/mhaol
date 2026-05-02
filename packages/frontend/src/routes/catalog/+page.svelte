@@ -31,6 +31,7 @@
 	import { artistsModalService } from '$services/artists-modal.service';
 	import { consumptionModalService } from '$services/consumption-modal.service';
 	import { diskModalService } from '$services/disk-modal.service';
+	import { healthModalService } from '$services/health-modal.service';
 	import { ipfsModalService } from '$services/ipfs-modal.service';
 	import { librariesModalService } from '$services/libraries-modal.service';
 	import { torrentModalService } from '$services/torrent-modal.service';
@@ -449,6 +450,14 @@
 			title="Browse content-addressed artist records"
 		>
 			Artists
+		</button>
+		<button
+			type="button"
+			class="btn btn-outline btn-sm"
+			onclick={() => healthModalService.open()}
+			title="Live health of this Mhaol cloud node"
+		>
+			Health
 		</button>
 	</div>
 </section>
