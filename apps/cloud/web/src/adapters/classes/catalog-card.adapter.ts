@@ -11,8 +11,6 @@ function getSubtitle(item: CatalogItem): string | null {
 			return formatAuthors(item.metadata.authors, 'artist') || null;
 		case 'youtube_video':
 			return item.metadata.authors.find((a) => a.role === 'channel')?.name ?? null;
-		case 'youtube_channel':
-			return item.metadata.subscriberText;
 		case 'photo':
 			return item.metadata.tags.map((t) => t.tag).join(', ') || null;
 		default:
@@ -29,7 +27,6 @@ function getAspectRatio(item: CatalogItem): 'poster' | 'square' | 'landscape' {
 		case 'photo':
 			return 'square';
 		case 'youtube_video':
-		case 'youtube_channel':
 			return 'landscape';
 		default:
 			return 'poster';

@@ -1,12 +1,6 @@
 // === Kind & Source ===
 
-export type CatalogKind =
-	| 'movie'
-	| 'tv_show'
-	| 'album'
-	| 'youtube_video'
-	| 'youtube_channel'
-	| 'photo';
+export type CatalogKind = 'movie' | 'tv_show' | 'album' | 'youtube_video' | 'photo';
 
 export type CatalogSource = 'tmdb' | 'musicbrainz' | 'youtube' | 'local';
 
@@ -190,19 +184,6 @@ export interface YoutubeVideoMetadata {
 	favoritedAt: string | null;
 }
 
-export interface CatalogYoutubeChannel extends CatalogItemBase {
-	kind: 'youtube_channel';
-	metadata: YoutubeChannelMetadata;
-}
-
-export interface YoutubeChannelMetadata {
-	channelId: string;
-	handle: string;
-	url: string;
-	subscriberText: string | null;
-	imageUrl: string | null;
-}
-
 export interface CatalogPhoto extends CatalogItemBase {
 	kind: 'photo';
 	metadata: PhotoMetadata;
@@ -239,7 +220,6 @@ export type CatalogItem =
 	| CatalogTvShow
 	| CatalogAlbum
 	| CatalogYoutubeVideo
-	| CatalogYoutubeChannel
 	| CatalogPhoto;
 
 // === Type guards ===
@@ -255,9 +235,6 @@ export function isAlbum(item: CatalogItem): item is CatalogAlbum {
 }
 export function isYoutubeVideo(item: CatalogItem): item is CatalogYoutubeVideo {
 	return item.kind === 'youtube_video';
-}
-export function isYoutubeChannel(item: CatalogItem): item is CatalogYoutubeChannel {
-	return item.kind === 'youtube_channel';
 }
 export function isPhoto(item: CatalogItem): item is CatalogPhoto {
 	return item.kind === 'photo';

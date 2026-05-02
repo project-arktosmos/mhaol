@@ -283,7 +283,7 @@
 		void (async () => {
 			try {
 				const fetched = await listSources();
-				sources = fetched.filter((s) => s.id !== 'youtube-video' && s.id !== 'youtube-channel');
+				sources = fetched.filter((s) => s.id !== 'youtube-video');
 			} catch (err) {
 				sourcesError = err instanceof Error ? err.message : 'Unknown error';
 			}

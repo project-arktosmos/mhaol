@@ -17,7 +17,6 @@
 		'tv show': 'delapouite/tv',
 		album: 'delapouite/compact-disc',
 		'youtube video': 'delapouite/video-camera',
-		'youtube channel': 'delapouite/tv-tower',
 		book: 'delapouite/book-cover',
 		game: 'delapouite/gamepad'
 	};

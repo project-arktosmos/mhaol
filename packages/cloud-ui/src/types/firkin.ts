@@ -11,7 +11,6 @@ export const FIRKIN_ADDONS = [
 	'tmdb-tv',
 	'musicbrainz',
 	'youtube-video',
-	'youtube-channel',
 	'wyzie-subs-movie',
 	'wyzie-subs-tv',
 	'lrclib',
@@ -29,7 +28,6 @@ export const FIRKIN_KINDS = [
 	'tv show',
 	'album',
 	'youtube video',
-	'youtube channel',
 	'book',
 	'game'
 ] as const;
@@ -41,7 +39,6 @@ export const ADDON_KIND: Record<FirkinAddon, FirkinKind> = {
 	'tmdb-tv': 'tv show',
 	musicbrainz: 'album',
 	'youtube-video': 'youtube video',
-	'youtube-channel': 'youtube channel',
 	'wyzie-subs-movie': 'movie',
 	'wyzie-subs-tv': 'tv show',
 	lrclib: 'album',

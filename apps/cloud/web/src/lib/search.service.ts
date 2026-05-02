@@ -141,7 +141,6 @@ function tpbCategoryFor(addon: string): TorrentCategory | null {
 		case 'movie':
 		case 'tv show':
 		case 'youtube video':
-		case 'youtube channel':
 			return TorrentCategory.Video;
 		case 'game':
 			return TorrentCategory.Games;

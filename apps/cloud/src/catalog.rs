@@ -52,14 +52,6 @@ pub const ADDONS: &[Addon] = &[
         has_filter: true,
         browsable: true,
     },
-    Addon {
-        id: "youtube-channel",
-        label: "YouTube Channels",
-        kind: "youtube channel",
-        filter_label: "Region",
-        has_filter: true,
-        browsable: true,
-    },
     // Subtitle / lyric lookups — valid firkin addons but not browsable.
     Addon {
         id: "wyzie-subs-movie",
@@ -361,8 +353,7 @@ async fn popular(
         "tmdb-movie" => tmdb_popular(false, q.filter.as_deref(), page).await,
         "tmdb-tv" => tmdb_popular(true, q.filter.as_deref(), page).await,
         "musicbrainz" => musicbrainz_popular(q.filter.as_deref(), page).await,
-        "youtube-video" => youtube_popular(false, q.filter.as_deref(), page).await,
-        "youtube-channel" => youtube_popular(true, q.filter.as_deref(), page).await,
+        "youtube-video" => youtube_popular(q.filter.as_deref(), page).await,
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page)),
         _ => Err(err(
             StatusCode::NOT_FOUND,
@@ -387,8 +378,7 @@ async fn search(
         "tmdb-movie" => tmdb_search(false, trimmed, page).await,
         "tmdb-tv" => tmdb_search(true, trimmed, page).await,
         "musicbrainz" => musicbrainz_search(trimmed, page, q.field.as_deref()).await,
-        "youtube-video" => youtube_search(false, trimmed, page).await,
-        "youtube-channel" => youtube_search(true, trimmed, page).await,
+        "youtube-video" => youtube_search(trimmed, page).await,
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page)),
         _ => Err(err(
             StatusCode::NOT_FOUND,
@@ -407,7 +397,7 @@ async fn genres(
         "tmdb-movie" => tmdb_genres(false).await,
         "tmdb-tv" => tmdb_genres(true).await,
         "musicbrainz" => Ok(static_music_genres()),
-        "youtube-video" | "youtube-channel" => Ok(static_youtube_regions()),
+        "youtube-video" => Ok(static_youtube_regions()),
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(Vec::new()),
         _ => Err(err(
             StatusCode::NOT_FOUND,
@@ -450,7 +440,6 @@ async fn metadata_for_item(
         "tmdb-movie" => tmdb_metadata(false, &id).await?,
         "tmdb-tv" => tmdb_metadata(true, &id).await?,
         "youtube-video" => (youtube_video_artists(&id).await?, Vec::new(), Vec::new()),
-        "youtube-channel" => (youtube_channel_artists(&id).await?, Vec::new(), Vec::new()),
         _ => (Vec::new(), Vec::new(), Vec::new()),
     };
     Ok(Json(CatalogMetadata {
@@ -1615,7 +1604,6 @@ fn static_youtube_regions() -> Vec<CatalogGenre> {
 }
 
 async fn youtube_popular(
-    want_channel: bool,
     region: Option<&str>,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
@@ -1641,7 +1629,7 @@ async fn youtube_popular(
         .iter()
         .skip(offset)
         .take(limit)
-        .map(|item| youtube_to_item(item, want_channel))
+        .map(youtube_to_item)
         .collect();
     Ok(CatalogPage {
         items,
@@ -1651,16 +1639,13 @@ async fn youtube_popular(
 }
 
 async fn youtube_search(
-    want_channel: bool,
     query: &str,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
-    let filter = if want_channel { "channels" } else { "videos" };
     let url = format!(
-        "{}/search?q={}&filter={}",
+        "{}/search?q={}&filter=videos",
         PIPED_BASE,
         urlencoding(query),
-        filter
     );
     let payload: serde_json::Value = http_get_json(
         &url,
@@ -1679,7 +1664,7 @@ async fn youtube_search(
         .iter()
         .skip(offset)
         .take(limit)
-        .map(|item| youtube_search_to_item(item, want_channel))
+        .map(youtube_to_item)
         .collect();
     Ok(CatalogPage {
         items,
@@ -1688,78 +1673,22 @@ async fn youtube_search(
     })
 }
 
-fn youtube_search_to_item(item: &serde_json::Value, want_channel: bool) -> CatalogItem {
-    // Piped's `/search` items use slightly different keys than `/trending`:
-    // - videos: `url` (e.g. "/watch?v=ID"), `title`, `uploaderName`, `thumbnail`, `views`
-    // - channels: `url` (e.g. "/channel/ID"), `name`, `description`, `thumbnail`
-    if want_channel {
-        let raw_url = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
-        let id = raw_url
-            .trim_start_matches('/')
-            .trim_start_matches("channel/")
-            .to_string();
-        let title = item
-            .get("name")
-            .and_then(|v| v.as_str())
-            .or_else(|| item.get("uploaderName").and_then(|v| v.as_str()))
-            .unwrap_or("")
-            .to_string();
-        let description = item
-            .get("description")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let poster_url = item
-            .get("thumbnail")
-            .and_then(|v| v.as_str())
-            .or_else(|| item.get("uploaderAvatar").and_then(|v| v.as_str()))
-            .map(|s| s.to_string());
-        CatalogItem {
-            id,
-            title,
-            year: None,
-            description,
-            poster_url,
-            backdrop_url: None,
-            artists: Vec::new(),
-            reviews: Vec::new(),
-            artist_name: None,
-        }
-    } else {
-        youtube_to_item(item, false)
-    }
-}
-
-fn youtube_to_item(item: &serde_json::Value, want_channel: bool) -> CatalogItem {
-    let raw_id = if want_channel {
-        item.get("uploaderUrl").and_then(|v| v.as_str()).map(|s| {
-            s.trim_start_matches('/')
-                .trim_start_matches("channel/")
-                .to_string()
-        })
-    } else {
-        item.get("url").and_then(|v| v.as_str()).map(|s| {
+fn youtube_to_item(item: &serde_json::Value) -> CatalogItem {
+    let id = item
+        .get("url")
+        .and_then(|v| v.as_str())
+        .map(|s| {
             s.split_once("v=")
                 .map(|(_, rest)| rest.to_string())
                 .unwrap_or_else(|| s.trim_start_matches('/').to_string())
         })
-    };
-    let id = raw_id.unwrap_or_default();
-    let title = if want_channel {
-        item.get("uploaderName")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string()
-    } else {
-        item.get("title")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string()
-    };
-    let description = if want_channel {
-        item.get("uploaderDescription")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-    } else {
+        .unwrap_or_default();
+    let title = item
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let description = {
         let uploader = item
             .get("uploaderName")
             .and_then(|v| v.as_str())
@@ -1778,15 +1707,10 @@ fn youtube_to_item(item: &serde_json::Value, want_channel: bool) -> CatalogItem 
             Some(parts.join(" · "))
         }
     };
-    let poster_url = if want_channel {
-        item.get("uploaderAvatar")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-    } else {
-        item.get("thumbnail")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-    };
+    let poster_url = item
+        .get("thumbnail")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     CatalogItem {
         id,
         title,
@@ -1819,34 +1743,6 @@ async fn youtube_video_artists(
     }
     let image_url = payload
         .get("uploaderAvatar")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    Ok(vec![CatalogArtist {
-        name,
-        role: Some("Channel".to_string()),
-        image_url,
-    }])
-}
-
-async fn youtube_channel_artists(
-    channel_id: &str,
-) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
-    let url = format!("{}/channel/{}", PIPED_BASE, urlencoding(channel_id));
-    let payload: serde_json::Value = http_get_json(
-        &url,
-        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
-    )
-    .await?;
-    let name = payload
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    if name.is_empty() {
-        return Ok(Vec::new());
-    }
-    let image_url = payload
-        .get("avatarUrl")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
     Ok(vec![CatalogArtist {
