@@ -9,12 +9,6 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
 	{
-		"label": "Artist",
-		"href": "/artist",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
 		"label": "Catalog",
 		"href": "/catalog",
 		"hasOwnPage": true,

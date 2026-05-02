@@ -28,6 +28,7 @@
 	} from '$lib/firkins.service';
 	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
 	import { userIdentityService } from '$lib/user-identity.service';
+	import { artistsModalService } from '$services/artists-modal.service';
 	import { consumptionModalService } from '$services/consumption-modal.service';
 	import { diskModalService } from '$services/disk-modal.service';
 	import { ipfsModalService } from '$services/ipfs-modal.service';
@@ -440,6 +441,14 @@
 			title="Show the embedded torrent client status"
 		>
 			Torrent
+		</button>
+		<button
+			type="button"
+			class="btn btn-outline btn-sm"
+			onclick={() => artistsModalService.open()}
+			title="Browse content-addressed artist records"
+		>
+			Artists
 		</button>
 	</div>
 </section>

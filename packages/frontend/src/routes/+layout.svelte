@@ -9,6 +9,7 @@
 	import NavbarLyricsPanel from '$components/player/NavbarLyricsPanel.svelte';
 	import NavbarPlaylistPanel from '$components/player/NavbarPlaylistPanel.svelte';
 	import FirkinTooltip from '$components/firkins/FirkinTooltip.svelte';
+	import ArtistsModal from '$components/artists/ArtistsModal.svelte';
 	import ConsumptionModal from '$components/consumption/ConsumptionModal.svelte';
 	import DiskModal from '$components/disk/DiskModal.svelte';
 	import IpfsModal from '$components/ipfs/IpfsModal.svelte';
@@ -131,6 +132,7 @@
 
 <ToastOutlet />
 <FirkinTooltip />
+<ArtistsModal />
 <ConsumptionModal />
 <DiskModal />
 <IpfsModal />
