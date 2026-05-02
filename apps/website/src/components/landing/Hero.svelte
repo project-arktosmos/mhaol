@@ -9,21 +9,21 @@
 	<div class="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-20 md:flex-row md:items-center">
 		<div class="flex-1">
 			<h1 class="text-4xl leading-tight font-bold tracking-tight md:text-6xl">
-				Your media library,<br />
-				<span class="text-primary">peer-to-peer</span> and<br />
-				self-hosted.
+				Your media.<br />
+				Your hardware.<br />
+				<span class="text-primary">Your rules.</span>
 			</h1>
 			<p class="mt-5 max-w-xl text-base text-base-content/80 md:text-lg">
-				Mhaol is a single binary that runs your private media cloud. It pins your library to IPFS,
-				groups files into content-addressed records, and streams them to every screen you own — no
-				accounts, no third-party servers.
+				Mhaol turns the drive of files you've been collecting into a streaming service for one —
+				yours. Movies, shows, music, and YouTube in a single library, on every device you own, with
+				no subscriptions, no accounts, and no platform that can take it away.
 			</p>
 			<div class="mt-7 flex flex-wrap items-center gap-3">
 				<a href="{base}/#install" class="btn gap-2 btn-lg btn-primary">
 					<Icon name="delapouite/cloud-download" size={20} />
 					Get Mhaol
 				</a>
-				<a href="{base}/#how-it-works" class="btn btn-ghost btn-lg">How it works</a>
+				<a href="{base}/#why" class="btn btn-ghost btn-lg">Why Mhaol</a>
 			</div>
 			<div class="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-base-content/60">
 				<span class="flex items-center gap-1">
@@ -48,40 +48,51 @@
 						<span class="h-3 w-3 rounded-full bg-error/70"></span>
 						<span class="h-3 w-3 rounded-full bg-warning/70"></span>
 						<span class="h-3 w-3 rounded-full bg-success/70"></span>
-						<span class="ml-3 font-mono text-xs text-base-content/60">mhaol-cloud</span>
+						<span class="ml-3 font-mono text-xs text-base-content/60">My library</span>
 					</div>
-					<div class="mt-3 grid grid-cols-3 gap-3 text-sm">
+
+					<div class="mt-3 grid grid-cols-4 gap-3 text-center">
 						<div class="rounded-md bg-base-200 p-3">
-							<div class="text-xs text-base-content/60">SurrealDB</div>
-							<div class="font-mono text-success">healthy</div>
+							<div class="text-lg font-bold">142</div>
+							<div class="text-[0.65rem] tracking-wide text-base-content/60 uppercase">Movies</div>
 						</div>
 						<div class="rounded-md bg-base-200 p-3">
-							<div class="text-xs text-base-content/60">IPFS</div>
-							<div class="font-mono text-success">42 pins</div>
+							<div class="text-lg font-bold">38</div>
+							<div class="text-[0.65rem] tracking-wide text-base-content/60 uppercase">Shows</div>
 						</div>
 						<div class="rounded-md bg-base-200 p-3">
-							<div class="text-xs text-base-content/60">Torrent</div>
-							<div class="font-mono text-success">idle</div>
-						</div>
-					</div>
-					<div class="mt-3 grid grid-cols-2 gap-3 text-sm">
-						<div class="rounded-md bg-base-200 p-3">
-							<div class="text-xs text-base-content/60">libp2p TCP</div>
-							<div class="font-mono">:9900</div>
+							<div class="text-lg font-bold">412</div>
+							<div class="text-[0.65rem] tracking-wide text-base-content/60 uppercase">Albums</div>
 						</div>
 						<div class="rounded-md bg-base-200 p-3">
-							<div class="text-xs text-base-content/60">libp2p /ws</div>
-							<div class="font-mono">:9901</div>
+							<div class="text-lg font-bold">86</div>
+							<div class="text-[0.65rem] tracking-wide text-base-content/60 uppercase">Videos</div>
 						</div>
 					</div>
-					<div class="mt-3 rounded-md border border-base-300 p-3 text-sm">
-						<div class="flex items-center gap-2">
-							<Icon name="delapouite/film-strip" size={16} class="text-primary" />
-							<span class="font-medium">Library scan complete</span>
+
+					<div class="mt-3 rounded-md border border-base-300 p-3">
+						<div class="flex items-center gap-2 text-xs text-base-content/60">
+							<Icon name="delapouite/film-strip" size={14} class="text-primary" />
+							Now playing
 						</div>
-						<div class="mt-1 text-xs text-base-content/60">
-							218 files · 14 firkins · grouped + pinned
+						<div class="mt-1 flex items-center justify-between text-sm">
+							<span class="font-medium">Dune: Part Two</span>
+							<span class="font-mono text-xs text-base-content/60">1:24:03 / 2:46:00</span>
 						</div>
+						<div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-base-200">
+							<div class="h-full w-[51%] bg-primary"></div>
+						</div>
+					</div>
+
+					<div class="mt-3 flex items-center justify-between text-xs text-base-content/60">
+						<span class="inline-flex items-center gap-1.5">
+							<Icon name="delapouite/wifi-router" size={14} />
+							3 devices on your network
+						</span>
+						<span class="inline-flex items-center gap-1.5">
+							<Icon name="delapouite/cube" size={14} />
+							Library pinned
+						</span>
 					</div>
 				</div>
 			</div>
