@@ -3,9 +3,8 @@
 This document guides Claude (and developers) on implementing features in this monorepo. Follow these conventions strictly to maintain consistency across all packages.
 
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
-- `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`) + cloud WebUI (components, services, types, adapters, utils, CSS/themes, transport layer all live here). The cloud's IPFS node also exposes a `/ws` listener for browser peers and the cloud HTTP server embeds + serves the player SPA under `/player/`.
-- `apps/player/CLAUDE.md` — Browser-only static SPA that joins the same private swarm directly via Helia and renders firkins fetched over UnixFS. Bootstrap multiaddrs + swarm key come from the cloud's `/api/p2p/bootstrap` at runtime.
-- `packages/cloud-ui/` — Shared Svelte 5 display components + firkin types used by both the cloud WebUI and the player app
+- `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`) + cloud WebUI (components, services, types, adapters, utils, CSS/themes, transport layer all live here). The cloud's IPFS node also exposes a `/ws` listener so future browser peers can join the swarm.
+- `packages/cloud-ui/` — Shared Svelte 5 display components + firkin types used by the cloud WebUI
 ---
 
 ## Monorepo Overview
@@ -13,12 +12,11 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 ```
 mhaol.git/
 ├── apps/
-│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + libp2p TCP 9900 + libp2p /ws 9901 + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud"). Also serves the player SPA under /player/.
-│   ├── player/                       # Browser-only Svelte static SPA — joins the private IPFS swarm directly via Helia, dialing the cloud's /ws listener (standalone dev port 9797; in prod served from cloud at /player/)
+│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + libp2p TCP 9900 + libp2p /ws 9901 + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud").
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subtitles, torrent search)
-│   ├── cloud-ui/                     # Shared Svelte 5 display components + firkin types + game-icons.net <Icon /> set (used by cloud WebUI and player)
+│   ├── cloud-ui/                     # Shared Svelte 5 display components + firkin types + game-icons.net <Icon /> set (used by the cloud WebUI)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── ipfs-stream/                  # Rust HLS-over-IPFS streaming (GStreamer hlssink2)
 │   ├── torrent/                      # Rust torrent implementation
@@ -59,8 +57,8 @@ The cloud is a Rust Axum server at `apps/cloud/` that bootstraps an embedded Sur
 - `apps/cloud/src/server.rs` — Binary entry point; opens SurrealDB, spawns workers, serves the embedded WebUI as a fallback to `/api/*`. Configures the embedded IPFS node with `enable_mdns: true` for LAN cloud-to-cloud discovery, fixed TCP listen `9900` (`MHAOL_IPFS_TCP_PORT`) and WebSocket listen `9901` (`MHAOL_IPFS_WS_PORT`) so browsers can dial the swarm directly.
 - `apps/cloud/src/cloud_status.rs` — Public `/api/cloud/status` route used by the WebUI for health polling
 - `apps/cloud/src/libraries.rs` — `/api/libraries` CRUD; library records are stored in SurrealDB and identified by their on-disk directory path
-- `apps/cloud/src/p2p.rs` — `GET /api/p2p/bootstrap` returns `{ peerId, swarmKey, multiaddrs }` so the browser-only player can join the same private swarm at runtime. Filters listen addrs to browser-dialable transports (`/ws`, `/wss`, `/webtransport`), substitutes `0.0.0.0` with loopback + LAN IP, and 503s with `Retry-After: 1` while the IPFS node is still starting.
-- `apps/cloud/src/frontend.rs` — Embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it as the fallback handler. Also embeds `apps/player/dist-static/` and serves it under the `/player/` prefix so the browser-only player ships in the same binary as the cloud.
+- `apps/cloud/src/p2p.rs` — `GET /api/p2p/bootstrap` returns `{ peerId, swarmKey, multiaddrs }` so any future browser-resident peer can join the same private swarm at runtime. Filters listen addrs to browser-dialable transports (`/ws`, `/wss`, `/webtransport`), substitutes `0.0.0.0` with loopback + LAN IP, and 503s with `Retry-After: 1` while the IPFS node is still starting.
+- `apps/cloud/src/frontend.rs` — Embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it as the fallback handler.
 - `apps/cloud/web/` — SvelteKit static SPA (pnpm package `cloud`). Builds to `apps/cloud/web/dist-static/`, which is what the cloud crate embeds at compile time.
 
 ### Tauri shell
@@ -203,15 +201,13 @@ Run these from the **repo root**:
 
 ```bash
 # Development
-pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): builds the player with BASE_PATH=/player so it's embeddable, then runs Rust loopback :9899 + Vite WebUI :9898 + libp2p TCP :9900 + libp2p /ws :9901 + tray icon (no window).
+pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): builds the mhaol-cloud binary, then runs Rust loopback :9899 + Vite WebUI :9898 + libp2p TCP :9900 + libp2p /ws :9901 + tray icon (no window).
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
-pnpm dev:player       # Vite dev server for the browser-only Player SPA (port 9797). Proxies /api → http://localhost:9898 so the player can fetch /api/p2p/bootstrap from the cloud.
 
 # Building
 pnpm build            # Alias for build:cloud (the only release artifact in this monorepo).
 pnpm build:cloud:web  # Build cloud WebUI static assets only
-pnpm build:cloud      # Builds the player with BASE_PATH=/player, then the cloud WebUI, then the mhaol-cloud release binary which embeds both.
-pnpm build:player     # Build the player static SPA (apps/player/dist-static/) without a base path — useful for standalone hosting.
+pnpm build:cloud      # Builds the cloud WebUI, then the mhaol-cloud release binary which embeds it.
 
 # Quality
 pnpm lint             # Lint all packages
@@ -237,11 +233,10 @@ Never cd into a package directory to run scripts — use the root workspace scri
 
 ## Logs
 
-The dev scripts tee full stdout+stderr (cargo build noise, panics, `tracing` events, Vite output — everything) into `./logs/` at the repo root. **When debugging the cloud or player, check these files first instead of asking the user to paste output.**
+The dev scripts tee full stdout+stderr (cargo build noise, panics, `tracing` events, Vite output — everything) into `./logs/` at the repo root. **When debugging the cloud, check these files first instead of asking the user to paste output.**
 
 | Script | Log file |
 |---|---|
-| `pnpm app:player` | `logs/player.log` |
 | `pnpm dev` (cloud strand) | `logs/cloud.log` |
 | `pnpm dev` (web strand) | `logs/web.log` |
 | `pnpm dev` (tauri strand) | `logs/tauri.log` |

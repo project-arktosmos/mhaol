@@ -8,18 +8,8 @@ use rust_embed::Embed;
 #[folder = "web/dist-static/"]
 struct CloudWebAssets;
 
-#[derive(Embed)]
-#[folder = "../player/dist-static/"]
-struct PlayerWebAssets;
-
-const PLAYER_PREFIX: &str = "player";
-
 pub async fn serve_frontend(uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
-
-    if let Some(rest) = path.strip_prefix(PLAYER_PREFIX) {
-        return serve_player(rest);
-    }
 
     if !path.is_empty() {
         if let Some(file) = CloudWebAssets::get(path) {
@@ -37,30 +27,6 @@ pub async fn serve_frontend(uri: Uri) -> Response {
         None => (
             StatusCode::NOT_FOUND,
             "cloud web frontend is not embedded. In dev, hit the Vite dev server on port 9898 instead. For prod, run `pnpm build:cloud`.",
-        )
-            .into_response(),
-    }
-}
-
-fn serve_player(rest: &str) -> Response {
-    let inner = rest.trim_start_matches('/');
-
-    if !inner.is_empty() {
-        if let Some(file) = PlayerWebAssets::get(inner) {
-            return serve_file(inner, &file);
-        }
-    }
-
-    match PlayerWebAssets::get("index.html") {
-        Some(file) => Html(
-            std::str::from_utf8(file.data.as_ref())
-                .unwrap_or("")
-                .to_string(),
-        )
-        .into_response(),
-        None => (
-            StatusCode::NOT_FOUND,
-            "player frontend is not embedded. Run `BASE_PATH=/player pnpm --filter player build` then rebuild the cloud binary.",
         )
             .into_response(),
     }

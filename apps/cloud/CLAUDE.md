@@ -154,7 +154,7 @@ The cloud crate directly depends on these mhaol packages and reports their healt
 
 - `mhaol-yt-dlp` — YouTube download manager (cfg(not(target_os = "android"))).
 - `mhaol-torrent` — `librqbit`-backed torrent session, initialized in the background on startup so the server can bind quickly (cfg(not(target_os = "android"))).
-- `mhaol-ipfs-core` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT), initialized in the background on startup. The blockstore lives at `<data_root>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node **always** runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<data_root>/swarm.key` (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped and the transport stack is constrained to TCP+WS+pnet+noise+yamux. Non-PSK peers fail at the libp2p `pnet` handshake before anything reaches Kademlia or the application. If the swarm key cannot be loaded or generated the IPFS subsystem refuses to start (no fallback to the public swarm). Discovery on the LAN is **mDNS-based** (no standalone bootstrap node required); two cloud instances on the same network find each other automatically. **Listen ports** are fixed: TCP `9900` (`MHAOL_IPFS_TCP_PORT`) and WebSocket `9901` (`MHAOL_IPFS_WS_PORT`); the WebSocket listener is what the browser-only player dials, so the cloud is also the swarm's "browser entry point." The cloud surfaces its own peer id, swarm key, and dialable multiaddrs via `GET /api/p2p/bootstrap` so the player can join without out-of-band configuration.
+- `mhaol-ipfs-core` — embedded `rust-ipfs` node (libp2p, Bitswap, Kademlia DHT), initialized in the background on startup. The blockstore lives at `<data_root>/downloads/ipfs/` (cfg(not(target_os = "android"))). The node **always** runs on a **private swarm**: cloud reads (or auto-generates on first boot) a swarm key at `<data_root>/swarm.key` (override with `IPFS_SWARM_KEY_FILE`). Only nodes carrying that exact key can connect; the public bootstrap list is skipped and the transport stack is constrained to TCP+WS+pnet+noise+yamux. Non-PSK peers fail at the libp2p `pnet` handshake before anything reaches Kademlia or the application. If the swarm key cannot be loaded or generated the IPFS subsystem refuses to start (no fallback to the public swarm). Discovery on the LAN is **mDNS-based** (no standalone bootstrap node required); two cloud instances on the same network find each other automatically. **Listen ports** are fixed: TCP `9900` (`MHAOL_IPFS_TCP_PORT`) and WebSocket `9901` (`MHAOL_IPFS_WS_PORT`); the WebSocket listener exists so any future browser-resident peer can dial the swarm directly. The cloud surfaces its own peer id, swarm key, and dialable multiaddrs via `GET /api/p2p/bootstrap` for that purpose.
 
 All download paths land under `<data_root>/downloads/{torrents,torrent-streams,ipfs,ipfs-stream,youtube}`. The `torrents/` dir holds long-lived torrents (firkin auto-update flow); `torrent-streams/` is reserved for `/api/torrent/stream` payloads — those are deleted (torrent + on-disk files) on every new stream request. yt-dlp uses `<data_root>/downloads/youtube` by default and still honors `YTDL_OUTPUT_DIR`/`YTDL_PO_TOKEN`/`YTDL_VISITOR_DATA`/`YTDL_COOKIES`.
 
@@ -173,7 +173,7 @@ Audio playback uses the dedicated `displayMode === 'navbar'` mode. `NavbarAudioP
 
 ### `/youtube` route
 
-`apps/cloud/web/src/routes/youtube/+page.svelte` is a self-contained yt-dlp UI ported from the player app. It talks **directly** to `/api/ytdl/*` via plain `fetch()` (no transport layer) — search, paste-URL info, queue audio/video/both, live progress via SSE on `/api/ytdl/downloads/events`, and "Stream" buttons that call `playerService.playUrl()` so the result plays in the right-side `PlayerVideo`.
+`apps/cloud/web/src/routes/youtube/+page.svelte` is a self-contained yt-dlp UI. It talks **directly** to `/api/ytdl/*` via plain `fetch()` (no transport layer) — search, paste-URL info, queue audio/video/both, live progress via SSE on `/api/ytdl/downloads/events`, and "Stream" buttons that call `playerService.playUrl()` so the result plays in the right-side `PlayerVideo`.
 
 ### Icons
 
@@ -182,7 +182,7 @@ Use `<Icon name="<author>/<icon>" />` from `cloud-ui` for every UI glyph. **No e
 ## Running
 
 ```bash
-# Dev — full desktop stack (cloud + Tauri shell + player Vite)
+# Dev — full desktop stack (cloud + Tauri shell)
 pnpm dev
 
 # Dev — cloud independently with its own Tauri wrapper (Rust loopback :9899 + Vite WebUI :9898 + Tauri shell)
@@ -206,13 +206,13 @@ pnpm build:cloud
 - `DB_PATH` — Override the SurrealDB store path specifically (default: `<data_root>/db/`).
 - `IPFS_SWARM_KEY_FILE` — Override the IPFS pre-shared swarm key path (default: `<data_root>/swarm.key`, auto-generated on first boot when missing).
 - `MHAOL_IPFS_TCP_PORT` — Override the embedded IPFS node's libp2p TCP listen port (default: `9900`). Useful for running multiple cloud instances on one machine.
-- `MHAOL_IPFS_WS_PORT` — Override the embedded IPFS node's libp2p WebSocket listen port (default: `9901`). The browser-only player dials this address via `/api/p2p/bootstrap`.
+- `MHAOL_IPFS_WS_PORT` — Override the embedded IPFS node's libp2p WebSocket listen port (default: `9901`). Any future browser-resident peer can dial this address via `/api/p2p/bootstrap`.
 - `YTDL_OUTPUT_DIR` — Override the yt-dlp output directory (default: `<data_root>/downloads/youtube`).
 
 ## Public WebUI endpoints
 
 - `GET /api/cloud/status` — JSON with status, version, uptime, host/port, local IP, the client wallet address, db engine/namespace/version, and a `packages` block reporting health for `ytDlp`, `torrent`, and `ipfs`. No auth required (used by the embedded WebUI).
-- `GET /api/p2p/bootstrap` — JSON `{ peerId, swarmKey, multiaddrs }` so the browser-only player at `/player/` can dial the cloud's libp2p node and join the same private swarm. `multiaddrs` is filtered to browser-dialable transports (`/ws`, `/wss`, `/webtransport`) and `0.0.0.0` is rewritten to loopback + the cloud's primary LAN IP. Returns `503` with `Retry-After: 1` while the IPFS subsystem is still starting; player polls every second until ready. Trust boundary: anyone who can reach the cloud's HTTP server is presumed LAN-trusted, so the swarm key is served as plain JSON over plain HTTP.
+- `GET /api/p2p/bootstrap` — JSON `{ peerId, swarmKey, multiaddrs }` so any future browser-resident peer can dial the cloud's libp2p node and join the same private swarm. `multiaddrs` is filtered to browser-dialable transports (`/ws`, `/wss`, `/webtransport`) and `0.0.0.0` is rewritten to loopback + the cloud's primary LAN IP. Returns `503` with `Retry-After: 1` while the IPFS subsystem is still starting; callers should poll every second until ready. Trust boundary: anyone who can reach the cloud's HTTP server is presumed LAN-trusted, so the swarm key is served as plain JSON over plain HTTP.
 - `GET /api/users` — list registered users (`{ address, username, created_at, updated_at, last_login_at }`).
 - `GET /api/users/:address` — fetch one user by lowercased EVM address.
 - `POST /api/users/register` — body `{ address, username, message, signature }`. Username is `[A-Za-z0-9-]{1,32}` (case-insensitively unique). The signature must be EIP-191 over the literal message `Mhaol Cloud auth at <RFC3339 timestamp>` (timestamp must be within ±5 minutes of the server's clock); the recovered address must equal `address`. Conflicts on duplicate address or username return `409`. The WebUI auto-registers a fresh keypair on first visit when `localStorage["mhaol-cloud-identity"]` is missing.

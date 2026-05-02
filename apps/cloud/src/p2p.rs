@@ -1,9 +1,11 @@
 //! Browser-side libp2p bootstrap endpoint.
 //!
-//! The browser-only player (`apps/player`) cannot dial raw TCP libp2p and
-//! cannot read the cloud's swarm-key off disk. Instead it fetches both via
-//! HTTP from this endpoint on mount, then hands the values to Helia so it
-//! joins the same private swarm as the cloud.
+//! Returns the cloud's libp2p peer id, swarm key, and browser-dialable
+//! multiaddrs as JSON so any browser-resident peer can join the same
+//! private swarm without out-of-band configuration. Browsers cannot dial
+//! raw TCP libp2p and cannot read the cloud's swarm-key off disk, so
+//! they fetch both via HTTP from this endpoint on mount and hand the
+//! values to Helia.
 //!
 //! Trust boundary: anyone who can reach `/api/p2p/bootstrap` is presumed
 //! to be on the LAN and is granted full membership in the private swarm.
