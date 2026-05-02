@@ -18,7 +18,7 @@
 	];
 </script>
 
-<section class="border-b border-base-300 bg-base-100">
+<section id="media" class="border-b border-base-300 bg-base-200">
 	<div class="mx-auto w-full max-w-6xl px-4 py-16">
 		<div class="mb-8 max-w-2xl">
 			<h2 class="text-3xl font-bold tracking-tight md:text-4xl">

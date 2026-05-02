@@ -27,9 +27,11 @@
 			</a>
 			<nav class="hidden items-center gap-5 text-sm md:flex">
 				<a href="{base}/#why" class="hover:text-primary">Why</a>
+				<a href="{base}/#media" class="hover:text-primary">Media</a>
 				<a href="{base}/#apps" class="hover:text-primary">Apps</a>
 				<a href="{base}/#how-it-works" class="hover:text-primary">How it works</a>
 				<a href="{base}/#install" class="hover:text-primary">Install</a>
+				<a href="{base}/#coming-up" class="hover:text-primary">Coming up</a>
 			</nav>
 			<div class="flex items-center gap-2">
 				<ThemeToggle />

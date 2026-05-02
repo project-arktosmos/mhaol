@@ -58,7 +58,7 @@
 	];
 </script>
 
-<section id="install" class="bg-base-100">
+<section id="install" class="border-b border-base-300 bg-base-100">
 	<div class="mx-auto w-full max-w-6xl px-4 py-20">
 		<div class="mb-8 max-w-3xl">
 			<h2 class="text-3xl font-bold tracking-tight md:text-4xl">Install</h2>

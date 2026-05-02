@@ -41,7 +41,7 @@
 	];
 </script>
 
-<section id="apps" class="border-b border-base-300 bg-base-200">
+<section id="apps" class="border-b border-base-300 bg-base-100">
 	<div class="mx-auto w-full max-w-6xl px-4 py-20">
 		<div class="mb-10 max-w-2xl">
 			<h2 class="text-3xl font-bold tracking-tight md:text-4xl">One backend, four shells</h2>
