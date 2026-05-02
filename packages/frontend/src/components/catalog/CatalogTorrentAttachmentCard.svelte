@@ -189,6 +189,18 @@
 	}
 </script>
 
+{#snippet playIcon(klass: string)}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		viewBox="0 0 24 24"
+		fill="currentColor"
+		class={klass}
+		aria-hidden="true"
+	>
+		<polygon points="6 4 20 12 6 20 6 4" />
+	</svg>
+{/snippet}
+
 {#snippet stats(info: AttachmentInfo)}
 	<div class="flex items-center gap-1.5 text-[10px] text-base-content/60">
 		<span class="text-success" title="Seeders">↑ {info.seeders ?? '—'}</span>
@@ -218,8 +230,13 @@
 							onclick={() => onTrailerPlay?.(t.key)}
 							disabled={trailerPlaying}
 							class="btn w-full btn-xs btn-primary"
+							aria-label="Play trailer"
 						>
-							{trailerPlaying ? '…' : 'Play'}
+							{#if trailerPlaying}
+								<span class="loading loading-spinner loading-xs"></span>
+							{:else}
+								{@render playIcon('h-3 w-3 translate-x-0.5')}
+							{/if}
 						</button>
 					</td>
 				</tr>
@@ -257,8 +274,13 @@
 								onclick={() => onStreamPlay?.()}
 								disabled={streamPlaying}
 								class="btn w-full btn-xs btn-primary"
+								aria-label="Play stream"
 							>
-								{streamPlaying ? '…' : 'Play'}
+								{#if streamPlaying}
+									<span class="loading loading-spinner loading-xs"></span>
+								{:else}
+									{@render playIcon('h-3 w-3 translate-x-0.5')}
+								{/if}
 							</button>
 						{:else if isProbing}
 							<button
@@ -276,8 +298,13 @@
 								onclick={() => onAttachStream?.(pick.torrent)}
 								disabled={attachingStream}
 								class="btn w-full btn-xs btn-primary"
+								aria-label="Play stream"
 							>
-								{attachingStream ? '…' : 'Play'}
+								{#if attachingStream}
+									<span class="loading loading-spinner loading-xs"></span>
+								{:else}
+									{@render playIcon('h-3 w-3 translate-x-0.5')}
+								{/if}
 							</button>
 						{/if}
 					</td>
@@ -300,8 +327,13 @@
 						onclick={() => onStreamPlay?.()}
 						disabled={streamPlaying}
 						class="btn btn-sm btn-primary"
+						aria-label="Play stream"
 					>
-						{streamPlaying ? 'Starting…' : 'Play'}
+						{#if streamPlaying}
+							<span class="loading loading-spinner loading-sm"></span>
+						{:else}
+							{@render playIcon('h-4 w-4 translate-x-0.5')}
+						{/if}
 					</button>
 				</div>
 			{/if}
@@ -315,7 +347,9 @@
 	{:else}
 		<div class="flex flex-col items-center gap-1">
 			<span class="text-[10px] text-base-content/60">Not attached</span>
-			<button type="button" disabled class="btn btn-sm btn-primary">Play</button>
+			<button type="button" disabled class="btn btn-sm btn-primary" aria-label="Play stream">
+				{@render playIcon('h-4 w-4 translate-x-0.5')}
+			</button>
 		</div>
 	{/if}
 {/snippet}
@@ -348,8 +382,13 @@
 								onclick={() => onDownloadPlay?.()}
 								disabled={downloadPlaying}
 								class="btn w-full btn-xs btn-primary"
+								aria-label="Play download"
 							>
-								{downloadPlaying ? '…' : 'Play'}
+								{#if downloadPlaying}
+									<span class="loading loading-spinner loading-xs"></span>
+								{:else}
+									{@render playIcon('h-3 w-3 translate-x-0.5')}
+								{/if}
 							</button>
 						{:else if isActive && download}
 							<button
@@ -377,8 +416,13 @@
 								onclick={() => onAttachDownload?.(pick.torrent)}
 								disabled={attachingDownload}
 								class="btn w-full btn-xs btn-primary"
+								aria-label="Download torrent"
 							>
-								{attachingDownload ? '…' : 'Download'}
+								{#if attachingDownload}
+									<span class="loading loading-spinner loading-xs"></span>
+								{:else}
+									<Icon name="delapouite/plain-arrow" size="0.75rem" />
+								{/if}
 							</button>
 						{/if}
 					</td>
@@ -404,8 +448,13 @@
 				onclick={() => onDownloadPlay?.()}
 				disabled={downloadPlaying}
 				class="btn btn-sm btn-primary"
+				aria-label="Play download"
 			>
-				{downloadPlaying ? 'Starting…' : 'Play'}
+				{#if downloadPlaying}
+					<span class="loading loading-spinner loading-sm"></span>
+				{:else}
+					{@render playIcon('h-4 w-4 translate-x-0.5')}
+				{/if}
 			</button>
 		</div>
 	{:else if download}
@@ -439,14 +488,21 @@
 				onclick={() => onAttachDownload?.(preferredDownload)}
 				disabled={attachingDownload}
 				class="btn btn-sm btn-primary"
+				aria-label="Download torrent"
 			>
-				{attachingDownload ? 'Starting…' : 'Download'}
+				{#if attachingDownload}
+					<span class="loading loading-spinner loading-sm"></span>
+				{:else}
+					<Icon name="delapouite/plain-arrow" size="1rem" />
+				{/if}
 			</button>
 		</div>
 	{:else}
 		<div class="flex flex-col items-center gap-1">
 			<span class="text-[10px] text-base-content/60">Not attached</span>
-			<button type="button" disabled class="btn btn-sm btn-primary">Download</button>
+			<button type="button" disabled class="btn btn-sm btn-primary" aria-label="Download torrent">
+				<Icon name="delapouite/plain-arrow" size="1rem" />
+			</button>
 		</div>
 	{/if}
 {/snippet}
