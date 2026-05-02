@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.arktosmos.mhaol.cloud",
   "build": {
-    "frontendDist": "../../../packages/frontend/dist-static",
+    "frontendDist": "../../packages/frontend/dist-static",
     "devUrl": "http://localhost:9898",
     "beforeBuildCommand": "pnpm --filter frontend build"
   },
