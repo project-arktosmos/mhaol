@@ -13,6 +13,8 @@
 		"build:dist": "pnpm run build:cloud && cd apps/cloud && cargo tauri build",
 		"build:headless": "pnpm --filter frontend build && cargo build --release --bin mhaol-headless",
 		"build:headless:linux": "pnpm --filter frontend build && cargo build --release --bin mhaol-headless",
+		"build:website": "pnpm --filter mhaol-website build",
+		"dev:website": "pnpm --filter mhaol-website dev",
 		"test": "pnpm -r run test",
 		"lint": "pnpm -r run lint",
 		"format": "pnpm -r run format",

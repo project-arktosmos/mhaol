@@ -1,0 +1,67 @@
+@plugin 'daisyui/theme' {
+	name: 'light';
+	default: true;
+	prefersdark: false;
+	--color-base-100: oklch(100% 0 0);
+	--color-base-200: oklch(96% 0 0);
+	--color-base-300: oklch(89% 0 0);
+	--color-base-content: oklch(28% 0.03 263);
+	--color-primary: oklch(0.637 0.237 25.331);
+	--color-primary-content: oklch(0.971 0.013 17.38);
+	--color-secondary: oklch(61.302% 0.202 261.294);
+	--color-secondary-content: oklch(100% 0 0);
+	--color-accent: oklch(72.772% 0.149 33.2);
+	--color-accent-content: oklch(0% 0 0);
+	--color-neutral: oklch(28% 0.03 263);
+	--color-neutral-content: oklch(98% 0 0);
+	--color-info: oklch(72.06% 0.191 231.6);
+	--color-info-content: oklch(0% 0 0);
+	--color-success: oklch(64.8% 0.15 160);
+	--color-success-content: oklch(0% 0 0);
+	--color-warning: oklch(84.71% 0.199 83.87);
+	--color-warning-content: oklch(0% 0 0);
+	--color-error: oklch(71.76% 0.221 22.18);
+	--color-error-content: oklch(0% 0 0);
+	--radius-selector: 1rem;
+	--radius-field: 0.5rem;
+	--radius-box: 1rem;
+	--size-selector: 0.25rem;
+	--size-field: 0.25rem;
+	--border: 1px;
+	--depth: 0;
+	--noise: 0;
+}
+
+@plugin 'daisyui/theme' {
+	name: 'dark';
+	default: false;
+	prefersdark: true;
+	--color-base-100: oklch(15% 0.01 264);
+	--color-base-200: oklch(20% 0.01 264);
+	--color-base-300: oklch(25% 0.01 264);
+	--color-base-content: oklch(92% 0 0);
+	--color-primary: oklch(0.7 0.22 25);
+	--color-primary-content: oklch(0.97 0.013 17.38);
+	--color-secondary: oklch(35% 0 0);
+	--color-secondary-content: oklch(100% 0 0);
+	--color-accent: oklch(72.772% 0.149 33.2);
+	--color-accent-content: oklch(0% 0 0);
+	--color-neutral: oklch(35% 0 0);
+	--color-neutral-content: oklch(100% 0 0);
+	--color-info: oklch(72.06% 0.191 231.6);
+	--color-info-content: oklch(0% 0 0);
+	--color-success: oklch(64.8% 0.15 160);
+	--color-success-content: oklch(0% 0 0);
+	--color-warning: oklch(84.71% 0.199 83.87);
+	--color-warning-content: oklch(0% 0 0);
+	--color-error: oklch(71.76% 0.221 22.18);
+	--color-error-content: oklch(0% 0 0);
+	--radius-selector: 1rem;
+	--radius-field: 0.5rem;
+	--radius-box: 1rem;
+	--size-selector: 0.25rem;
+	--size-field: 0.25rem;
+	--border: 1px;
+	--depth: 0;
+	--noise: 0;
+}

@@ -7,6 +7,7 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `apps/headless/CLAUDE.md` — Terminal-only counterpart of `apps/cloud` (`mhaol-headless`). Same backend + embedded SPA, no Tauri shell, no tray; designed for servers and CI hosts.
 - `apps/android-tv/CLAUDE.md` — Android TV Tauri shell (`mhaol-android-tv`, "Mhaol Android TV"). Renders the SPA in a full-screen WebView; **no backend embedded** — points at a remote `mhaol-cloud` / `mhaol-headless` via the in-app Settings page.
 - `apps/android-mobile/CLAUDE.md` — Android phone / tablet Tauri shell (`mhaol-android-mobile`, "Mhaol Mobile"). Renders the SPA in its own WebView and **embeds the backend** via `mhaol_backend::run()` spawned in the Tauri setup hook.
+- `apps/website/CLAUDE.md` — Public informational website (`mhaol-website`). Pure static SvelteKit SPA sharing `cloud-ui` for icons + display components; no backend, no auth, no API. Builds to `apps/website/dist-static/` for any static host.
 - `packages/backend/CLAUDE.md` — Rust Axum server crate (`mhaol-backend`, binary `mhaol-cloud`). API routes, SurrealDB store, IPFS / torrent / yt-dlp managers, on-disk layout.
 - `packages/frontend/CLAUDE.md` — Svelte SPA (`frontend`). Components, services, adapters, types, utils, CSS/themes, transport layer.
 - `packages/cloud-ui/` — Shared Svelte 5 display components + firkin types used by the frontend SPA.
@@ -20,7 +21,8 @@ mhaol.git/
 │   ├── cloud/                        # Tray-only Tauri shell (mhaol-cloud-shell, "Mhaol Cloud"). Depends on mhaol-backend; setup hook spawns mhaol_backend::run() so the release bundle is self-contained.
 │   ├── headless/                     # Thin Rust crate (mhaol-headless bin) that runs mhaol_backend::run() with no Tauri/tray. For servers and terminal-only hosts.
 │   ├── android-tv/                   # Android TV Tauri shell (mhaol-android-tv). Full-screen WebView, NO embedded backend; points at a remote mhaol-cloud via in-app Settings.
-│   └── android-mobile/               # Android phone/tablet Tauri shell (mhaol-android-mobile). WebView + embedded mhaol_backend::run() in the Tauri setup hook.
+│   ├── android-mobile/               # Android phone/tablet Tauri shell (mhaol-android-mobile). WebView + embedded mhaol_backend::run() in the Tauri setup hook.
+│   └── website/                      # Public informational site (mhaol-website). Static SvelteKit SPA sharing cloud-ui; no backend.
 ├── packages/
 │   ├── backend/                      # Rust Axum server crate (mhaol-backend lib + mhaol-cloud bin) — port 9898, libp2p TCP 9900, libp2p /ws 9901, embedded SurrealDB.
 │   ├── frontend/                     # Svelte SPA (pnpm package "frontend"). Builds to packages/frontend/dist-static which mhaol-backend embeds.
@@ -220,6 +222,7 @@ Run these from the **repo root**:
 pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): builds the mhaol-cloud binary, then runs Rust loopback :9899 + Vite WebUI :9898 + libp2p TCP :9900 + libp2p /ws :9901 + tray icon (no window).
 pnpm dev:headless     # Same backend stack as `pnpm dev` but skips the Tauri tray — builds mhaol-headless, then runs Rust loopback :9899 + Vite WebUI :9898 (no tray, no window).
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
+pnpm dev:website      # Vite dev server for the public marketing website (port 9897, no backend, no API).
 
 # Building
 pnpm build            # Alias for build:cloud (the only release artifact in this monorepo).
@@ -227,6 +230,7 @@ pnpm build:cloud:web  # Build cloud WebUI static assets only
 pnpm build:cloud      # Builds the cloud WebUI, then the mhaol-cloud release binary which embeds it.
 pnpm build:dist       # Cross-platform full build for the host: SPA + mhaol-cloud bin + Mhaol Cloud Tauri shell + platform installer (.dmg/.deb/.AppImage/.msi/.exe). Runs on macOS, Linux, and Windows once the matching `pnpm setup:*` has been run.
 pnpm build:headless   # Builds the cloud WebUI, then the mhaol-headless release binary which embeds it.
+pnpm build:website    # Build the public website static SPA → apps/website/dist-static/
 
 # Host bootstrap (one-time per machine; idempotent)
 pnpm setup:mac        # macOS — Xcode CLT, brew gstreamer, rustup, Node + pnpm, Tauri CLI
