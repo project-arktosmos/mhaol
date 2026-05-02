@@ -3,8 +3,10 @@
 This document guides Claude (and developers) on implementing features in this monorepo. Follow these conventions strictly to maintain consistency across all packages.
 
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
-- `apps/cloud/CLAUDE.md` — Cloud server + cloud desktop Tauri shell (`mhaol-cloud-shell`) + cloud WebUI (components, services, types, adapters, utils, CSS/themes, transport layer all live here). The cloud's IPFS node also exposes a `/ws` listener so future browser peers can join the swarm.
-- `packages/cloud-ui/` — Shared Svelte 5 display components + firkin types used by the cloud WebUI
+- `apps/cloud/CLAUDE.md` — Tray-only desktop Tauri shell (`mhaol-cloud-shell`, "Mhaol Cloud"). Thin wrapper that presents the system to users; actual logic lives in `packages/backend` and `packages/frontend`.
+- `packages/backend/CLAUDE.md` — Rust Axum server crate (`mhaol-backend`, binary `mhaol-cloud`). API routes, SurrealDB store, IPFS / torrent / yt-dlp managers, on-disk layout.
+- `packages/frontend/CLAUDE.md` — Svelte SPA (`frontend`). Components, services, adapters, types, utils, CSS/themes, transport layer.
+- `packages/cloud-ui/` — Shared Svelte 5 display components + firkin types used by the frontend SPA.
 ---
 
 ## Monorepo Overview
@@ -12,10 +14,12 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 ```
 mhaol.git/
 ├── apps/
-│   └── cloud/                        # Rust Axum server (port 9898) + libp2p TCP 9900 + libp2p /ws 9901 + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud").
+│   └── cloud/                        # Tray-only Tauri shell (mhaol-cloud-shell, "Mhaol Cloud"). Embeds packages/frontend, runs alongside the mhaol-cloud server bin.
 ├── packages/
+│   ├── backend/                      # Rust Axum server crate (mhaol-backend lib + mhaol-cloud bin) — port 9898, libp2p TCP 9900, libp2p /ws 9901, embedded SurrealDB.
+│   ├── frontend/                     # Svelte SPA (pnpm package "frontend"). Builds to packages/frontend/dist-static which mhaol-backend embeds.
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subtitles, torrent search)
-│   ├── cloud-ui/                     # Shared Svelte 5 display components + firkin types + game-icons.net <Icon /> set (used by the cloud WebUI)
+│   ├── cloud-ui/                     # Shared Svelte 5 display components + firkin types + game-icons.net <Icon /> set
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── ipfs-stream/                  # Rust HLS-over-IPFS streaming (GStreamer hlssink2)
 │   ├── torrent/                      # Rust torrent implementation
@@ -30,7 +34,25 @@ mhaol.git/
 
 ## App Architecture
 
-The cloud is the **only** frontend-facing app in this monorepo, so its WebUI owns its full stack — there is no separate shared UI package. The cloud SPA at `apps/cloud/web/` contains:
+The system splits into three cooperating pieces:
+
+- **`packages/backend/`** — Rust Axum server crate. Library `mhaol-backend` exposes `pub async fn run()` which boots SurrealDB, the identity manager, and the desktop-only managers (`mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ipfs-core`, `mhaol-ipfs-stream`), then serves `/api/*` plus the embedded frontend as a fallback. Bin `mhaol-cloud` is a thin `#[tokio::main]` wrapper over `mhaol_backend::run()`. Default port 9898 (in dev, the bin binds 127.0.0.1:9899 and Vite takes 9898 as the public port).
+- **`packages/frontend/`** — SvelteKit static SPA (pnpm package `frontend`). Builds to `packages/frontend/dist-static/`, which the backend crate embeds at compile time via `rust-embed`. Owns its full stack: components, services, adapters, types, utils, CSS / themes, transport layer. See `packages/frontend/CLAUDE.md` for layout, aliases, and the catalog-detail / transport conventions.
+- **`apps/cloud/`** — Tauri shell (`mhaol-cloud-shell`, productName "Mhaol Cloud"). Tray-only wrapper that **presents** the system to users — it does not host the SPA itself; the bin serves the SPA on 9898 and the tray's "Open" item launches that URL in the system browser. `tauri.conf.json`'s `frontendDist: ../../packages/frontend/dist-static` keeps Tauri's build tooling happy.
+
+### Backend (`packages/backend/`)
+
+- `packages/backend/Cargo.toml` — Crate manifest. Library target `mhaol_backend`, bin target `mhaol-cloud`.
+- `packages/backend/src/lib.rs` — Library entry point; declares all server modules and exposes `pub async fn run()` (opens SurrealDB, spawns workers, builds the Axum router, serves `/api/*` + the embedded frontend as a fallback). Configures the embedded IPFS node with `enable_mdns: true` for LAN cloud-to-cloud discovery, fixed TCP listen `9900` (`MHAOL_IPFS_TCP_PORT`) and WebSocket listen `9901` (`MHAOL_IPFS_WS_PORT`) so browsers can dial the swarm directly.
+- `packages/backend/src/bin/mhaol-cloud.rs` — Standalone binary entry; `#[tokio::main] async fn main() { mhaol_backend::run().await }`.
+- `packages/backend/src/cloud_status.rs` — Public `/api/cloud/status` route used by the frontend for health polling.
+- `packages/backend/src/libraries.rs` — `/api/libraries` CRUD; library records are stored in SurrealDB and identified by their on-disk directory path.
+- `packages/backend/src/p2p.rs` — `GET /api/p2p/bootstrap` returns `{ peerId, swarmKey, multiaddrs }` so any future browser-resident peer can join the same private swarm at runtime. Filters listen addrs to browser-dialable transports (`/ws`, `/wss`, `/webtransport`), substitutes `0.0.0.0` with loopback + LAN IP, and 503s with `Retry-After: 1` while the IPFS node is still starting.
+- `packages/backend/src/frontend.rs` — Embeds `../frontend/dist-static/` via `rust-embed` and serves it as the fallback handler.
+
+### Frontend (`packages/frontend/`)
+
+The Svelte SPA at `packages/frontend/` (pnpm package `frontend`) builds to `packages/frontend/dist-static/`, which the backend crate embeds at compile time:
 
 - `src/routes/` — SvelteKit route files (+page.svelte, +layout.svelte)
 - `src/components/` — Svelte components, organised by feature (`catalog/`, `firkins/`, `core/`, `player/`, `libraries/`, …)
@@ -48,29 +70,17 @@ The cloud is the **only** frontend-facing app in this monorepo, so its WebUI own
 
 Cross-module imports use the path aliases configured in `svelte.config.js` (see "Alias configuration" below): `$components`, `$services`, `$types`, `$adapters`, `$utils`, `$data`, `$transport`, plus the SvelteKit-reserved `$lib` and `$app/*`.
 
-### Cloud
+### Tauri shell (`apps/cloud/`)
 
-The cloud is a Rust Axum server at `apps/cloud/` that bootstraps an embedded SurrealDB store, an identity manager, and the desktop-only managers (`mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ipfs-core`). It hosts a nested Svelte WebUI that displays cloud health and library/IPFS state. Crate name `mhaol-cloud`, binary `mhaol-cloud`, default port 9898 (in dev, the binary binds 127.0.0.1:9899 and the Vite dev server takes 9898 as the public port).
+`apps/cloud/` — crate `mhaol-cloud-shell`, binary `mhaol-cloud-shell`. `productName: "Mhaol Cloud"`, identifier `com.arktosmos.mhaol.cloud`. **Tray-only**: `app.windows: []`, no window is ever created. macOS sets `ActivationPolicy::Accessory` (no dock icon), `RunEvent::ExitRequested` calls `prevent_exit()` so the process stays alive without windows. The system tray icon (id `mhaol-cloud-tray`, tooltip "Mhaol Cloud") has two items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`. `tauri.conf.json` keeps `frontendDist: ../../packages/frontend/dist-static` / `devUrl: http://localhost:9898` so build/dev tooling resolves cleanly; nothing actually renders the assets at runtime.
 
-- `apps/cloud/Cargo.toml` — Crate manifest
-- `apps/cloud/src/server.rs` — Binary entry point; opens SurrealDB, spawns workers, serves the embedded WebUI as a fallback to `/api/*`. Configures the embedded IPFS node with `enable_mdns: true` for LAN cloud-to-cloud discovery, fixed TCP listen `9900` (`MHAOL_IPFS_TCP_PORT`) and WebSocket listen `9901` (`MHAOL_IPFS_WS_PORT`) so browsers can dial the swarm directly.
-- `apps/cloud/src/cloud_status.rs` — Public `/api/cloud/status` route used by the WebUI for health polling
-- `apps/cloud/src/libraries.rs` — `/api/libraries` CRUD; library records are stored in SurrealDB and identified by their on-disk directory path
-- `apps/cloud/src/p2p.rs` — `GET /api/p2p/bootstrap` returns `{ peerId, swarmKey, multiaddrs }` so any future browser-resident peer can join the same private swarm at runtime. Filters listen addrs to browser-dialable transports (`/ws`, `/wss`, `/webtransport`), substitutes `0.0.0.0` with loopback + LAN IP, and 503s with `Retry-After: 1` while the IPFS node is still starting.
-- `apps/cloud/src/frontend.rs` — Embeds `apps/cloud/web/dist-static/` via `rust-embed` and serves it as the fallback handler.
-- `apps/cloud/web/` — SvelteKit static SPA (pnpm package `cloud`). Builds to `apps/cloud/web/dist-static/`, which is what the cloud crate embeds at compile time.
-
-### Tauri shell
-
-`apps/cloud/src-tauri/` — crate `mhaol-cloud-shell`, binary `mhaol-cloud-shell`. `productName: "Mhaol Cloud"`, identifier `com.arktosmos.mhaol.cloud`. **Tray-only**: `app.windows: []`, no window is ever created. macOS sets `ActivationPolicy::Accessory` (no dock icon), `RunEvent::ExitRequested` calls `prevent_exit()` so the process stays alive without windows. The system tray icon (id `mhaol-cloud-tray`, tooltip "Mhaol Cloud") has two items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`. `tauri.conf.json` keeps `frontendDist: ../web/dist-static` / `devUrl: http://localhost:9898` so build/dev tooling resolves cleanly; nothing actually renders the assets at runtime.
-
-The cloud WebUI stays browser-accessible at `http://localhost:9898`.
+The frontend stays browser-accessible at `http://localhost:9898`.
 
 Layout:
-- `apps/cloud/src-tauri/Cargo.toml` — crate manifest
-- `apps/cloud/src-tauri/src/{lib.rs,main.rs}` — Tauri entry point
-- `apps/cloud/src-tauri/tauri.conf.json` — desktop config
-- `apps/cloud/src-tauri/capabilities/default.json`, `icons/`, `build.rs`
+- `apps/cloud/Cargo.toml` — crate manifest
+- `apps/cloud/src/{lib.rs,main.rs}` — Tauri entry point
+- `apps/cloud/tauri.conf.json` — desktop config
+- `apps/cloud/capabilities/default.json`, `icons/`, `build.rs`
 
 The cloud frontend has these screens:
 - **Health** (`/`) — polls `/api/cloud/status` every 5 seconds and renders status, latency, uptime, bind, package health, and identities.
@@ -86,14 +96,14 @@ The cloud frontend has these screens:
 
 ### Transport Layer
 
-All frontend-to-backend communication goes through `apps/cloud/web/src/transport/`:
+All frontend-to-backend communication goes through `packages/frontend/src/transport/`:
 - `transport.type.ts` — `Transport` interface (fetch, subscribe, resolveUrl)
 - `fetch-helpers.ts` — `fetchJson()`, `fetchRaw()`, `subscribeSSE()` used by all services
 - `transport-context.ts` — Module-level singleton (`setTransport`/`getTransport`) that defaults to plain HTTP via `globalThis.fetch`. Kept indirect so tests can swap in a mocked transport.
 
-### How the cloud SPA wires up
+### How the frontend SPA wires up
 
-`apps/cloud/web/src/routes/+layout.svelte` assembles the shared components, all imported through the local aliases:
+`packages/frontend/src/routes/+layout.svelte` assembles the shared components, all imported through the local aliases:
 
 ```svelte
 <script>
@@ -111,7 +121,7 @@ All frontend-to-backend communication goes through `apps/cloud/web/src/transport
 
 ### Alias configuration
 
-The cloud SPA's `svelte.config.js` points aliases at its own `src/`:
+The frontend SPA's `svelte.config.js` points aliases at its own `src/`:
 
 ```javascript
 alias: {
@@ -141,7 +151,7 @@ alias: {
 
 The two catalog detail pages share their full presentation through components in `$components/catalog/` and behaviour through resolver services in `$services/catalog/`. The pages themselves only own route-specific wiring (URL params vs. loader-fed firkin, "Bookmark" vs. "Play / IPFS Play / Find metadata / Delete", and whether resolved data is persisted back to the firkin via `PUT /api/firkins/:id`).
 
-**Shared components** (`apps/cloud/web/src/components/catalog/`):
+**Shared components** (`packages/frontend/src/components/catalog/`):
 - `CatalogPageHeader.svelte` — back link, title, addon/kind/year badges, optional `extraBadge`, action snippet slot
 - `CatalogDescriptionPanel.svelte` — tabbed panel showing the description (default tab), identity (CID / created / updated / version, detail only), and version history (`version_hashes` chain, detail only). Tabs are only rendered when the corresponding props are supplied — virtual pages get a description-only single-tab layout with no tab strip
 - `CatalogImagesCard.svelte` — images grid with metadata
@@ -151,7 +161,7 @@ The two catalog detail pages share their full presentation through components in
 - `CatalogSubsLyricsCard.svelte` — subs/lyrics search results driven by a `SubsLyricsResolver` (auto-fired on detail mount: lyrics for MusicBrainz albums, subtitles for TMDB movies/TV). Read-only — clicking a row previews lyrics inline or opens the subtitle URL
 - `CatalogFilesTable.svelte` — firkin `files` table (detail only)
 
-**Shared resolver services** (`apps/cloud/web/src/services/catalog/`):
+**Shared resolver services** (`packages/frontend/src/services/catalog/`):
 - `trailer-resolver.svelte.ts` — `TrailerResolver` class. Holds `$state` for `trailers`, `status`, `playingKey`, `playError`. `resolveMovie(...)` / `resolveTv(...)` accept TMDB-sourced trailers via `stored`, prefer them when present, and only fall back to the YouTube fuzzy search when TMDB has nothing English. Optional `persist` callback (used by the detail page) lets each resolution write back to the firkin via `PUT /api/firkins/:id`.
 - `track-resolver.svelte.ts` — `TrackResolver` class. Holds `$state` for `tracks`, `status`, `playingIndex`, `playError`. Pure projection: `loadFromFirkin({ releaseGroupId, files })` fetches the MusicBrainz tracklist and pairs each track with its YouTube URL + lyrics from the firkin's persisted `files`. *No in-browser searches.* All YT + LRCLIB resolution happens server-side, auto-spawned as a `tokio::spawn` background task by `POST /api/firkins` for fresh musicbrainz albums (so closing the tab never interrupts it), and rolled forward on the server. The detail page polls the firkin while any track is missing data and navigates to the rolled-forward CID when the background task completes.
 - `torrent-search.svelte.ts` — `TorrentSearch` class. Holds `$state` for `matches`, `status`, `rowEvals`. Optional `evaluate: true` runs `/api/torrent/evaluate` per result with a sliding-window concurrency cap so the eval column on the detail page shows streamability without saturating the torrent client. Also exports `startTorrentDownload(magnet)`.
@@ -160,7 +170,7 @@ The two catalog detail pages share their full presentation through components in
 - `/catalog/virtual` synthesises a `CloudFirkin` from URL params, instantiates the three resolvers without a `persist` callback, and only writes anything via the **Bookmark** button (which calls `firkinsService.create(...)` with `resolvedTrackFiles()` and `resolvedTrailers()` from the resolvers, then redirects to the new content-addressed detail URL).
 - `/catalog/[ipfsHash]` loads the firkin via `+page.ts` and instantiates the same resolvers **with** `persist` callbacks pointing at a single `persistFirkinPatch(patch)` helper that calls `PUT /api/firkins/:id` and follows the response to its (potentially new) CID. The detail page also adds the playback / IPFS-play / torrent-stream actions, the `CatalogIdentityCard` / `CatalogVersionHistoryCard` / `CatalogFilesTable` extras, the artists backfill effect, the magnet auto-start effect, and the in-place `firkinsService.enrich(...)` flow used by the **Find metadata** modal.
 
-This is the canonical pattern for cross-route reuse in the cloud SPA: shared presentation in `$components/<feature>/`, shared behaviour in `$services/<feature>/<thing>.svelte.ts` (the `.svelte.ts` extension lets `$state` runes work in service classes), and per-route wiring stays in the route's `+page.svelte`.
+This is the canonical pattern for cross-route reuse in the frontend SPA: shared presentation in `$components/<feature>/`, shared behaviour in `$services/<feature>/<thing>.svelte.ts` (the `.svelte.ts` extension lets `$state` runes work in service classes), and per-route wiring stays in the route's `+page.svelte`.
 
 ### Media Route Architecture
 
@@ -183,7 +193,7 @@ Media routes use slug-based routing with a data-driven registry:
 └── photos/                     # Explicit (custom UI: gallery, tagging)
 ```
 
-**Key files** (all paths relative to `apps/cloud/web/`):
+**Key files** (all paths relative to `packages/frontend/`):
 - `src/data/media-registry.ts` — `MEDIA_REGISTRY` and `MUSIC_REGISTRY` mapping slugs to config (kind, label, services, features)
 - `src/components/catalog/CatalogBrowsePage.svelte` — Unified browse with search, tabs, filters, pinned/favorites, grid
 - `src/components/catalog/filters/CatalogFilterBar.svelte` — Switch component rendering the right filter UI per kind
@@ -215,7 +225,7 @@ pnpm test             # vitest
 pnpm format           # Prettier write
 
 # Tauri shell
-pnpm app:tauri:cloud         # Mhaol Cloud desktop shell (apps/cloud/src-tauri)
+pnpm app:tauri:cloud         # Mhaol Cloud desktop shell (apps/cloud)
 pnpm app:tauri:cloud:build   # Mhaol Cloud release build
 
 # Cleanup
@@ -255,7 +265,7 @@ After every change, immediately commit the affected files:
 pnpm lint && pnpm check && pnpm test
 
 # Then commit
-git add apps/cloud/web/src/components/media/MediaCard.svelte
+git add packages/frontend/src/components/media/MediaCard.svelte
 git commit -m "add thumbnail fallback to MediaCard"
 ```
 
@@ -265,13 +275,13 @@ git commit -m "add thumbnail fallback to MediaCard"
 
 When adding a new feature that spans the full stack:
 
-**Cloud server (`apps/cloud`)**
+**Backend (`packages/backend`)**
 - [ ] Create API module in `src/{feature}.rs` exposing a `pub fn router() -> Router<CloudState>`
-- [ ] Add `mod {feature};` to `src/server.rs`
-- [ ] Register route in `server.rs`: `.nest("/api/{feature}", {feature}::router())`
+- [ ] Add `mod {feature};` to `src/lib.rs`
+- [ ] Register route in `lib.rs::run`: `.nest("/api/{feature}", {feature}::router())`
 - [ ] Add any new managers/repos to `CloudState`
 
-**Cloud WebUI (`apps/cloud/web`)**
+**Frontend (`packages/frontend`)**
 - [ ] Define types in `src/types/{feature}.type.ts`
 - [ ] Create adapter in `src/adapters/classes/{feature}.adapter.ts` (when wrapping an external API or signaling channel)
 - [ ] Create/extend service in `src/services/{feature}.service.ts` (or `src/services/{feature}/{thing}.svelte.ts` for runes-driven service classes)
@@ -284,7 +294,7 @@ When adding a new feature that spans the full stack:
 
 **Always**
 - [ ] Commit each logical change immediately after completing it
-- [ ] Update `apps/cloud/CLAUDE.md` if adding new component directories, services, or adapters
+- [ ] Update the relevant `CLAUDE.md` (`packages/backend`, `packages/frontend`, `apps/cloud`) if adding new modules, components, services, or adapters
 
 ---
 
@@ -316,5 +326,7 @@ The icon inherits the surrounding text colour via `currentColor`, so colour it w
 When making significant structural changes (new packages, new component directories, new services, renaming files, changing the app architecture), update the relevant CLAUDE.md files immediately:
 
 - **Root CLAUDE.md** — Monorepo structure, app architecture, workspace scripts
-- **apps/cloud/CLAUDE.md** — Cloud server API modules + routes, **and** the cloud WebUI: components, services, adapters, types, utils, CSS/themes, transport layer
+- **apps/cloud/CLAUDE.md** — Tauri shell (`mhaol-cloud-shell`): tray menu, lifecycle, conf paths
+- **packages/backend/CLAUDE.md** — Server API modules + routes, SurrealDB store, paths, on-disk layout
+- **packages/frontend/CLAUDE.md** — SPA: components, services, adapters, types, utils, CSS/themes, transport layer
 - **apps/rendezvous/CLAUDE.md** — Rendezvous app
