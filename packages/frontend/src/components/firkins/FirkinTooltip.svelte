@@ -104,8 +104,7 @@
 		class="pointer-events-none fixed z-[60] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-base-content/20 bg-base-100/95 shadow-xl backdrop-blur"
 		style="left: {position.left}px; top: {position.top}px;"
 		role="tooltip"
-		in:fade={{ duration: 80 }}
-		out:fade={{ duration: 160 }}
+		transition:fade={{ duration: 120 }}
 	>
 		{#if resolvedImageUrl}
 			<img
