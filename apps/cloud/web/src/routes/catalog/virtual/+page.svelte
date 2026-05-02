@@ -5,7 +5,6 @@
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
-	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogAlbumsByArtistCard from '$components/catalog/CatalogAlbumsByArtistCard.svelte';
 	import {
@@ -18,10 +17,8 @@
 		type Trailer,
 		type Review
 	} from '$lib/firkins.service';
-	import type { TorrentResultItem } from '$lib/search.service';
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
 	import { TrackResolver } from '$services/catalog/track-resolver.svelte';
-	import { TorrentSearch, startTorrentDownload } from '$services/catalog/torrent-search.svelte';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
@@ -161,21 +158,8 @@
 		void trackResolver.loadFromFirkin({ releaseGroupId: itemId, files: [] });
 	});
 
-	const torrentSearch = new TorrentSearch();
-	let torrentSearchInitForKey: string | null = null;
-
-	$effect(() => {
-		if (!title || isMusicBrainz) return;
-		const key = `${addon}:${title}:${year ?? ''}`;
-		if (torrentSearchInitForKey === key) return;
-		torrentSearchInitForKey = key;
-		void torrentSearch.search({ addon, title, year });
-	});
-
 	let bookmarking = $state(false);
 	let bookmarkError = $state<string | null>(null);
-	let addingHash = $state<string | null>(null);
-	let assignError = $state<string | null>(null);
 
 	async function bookmark() {
 		if (bookmarking || !title) return;
@@ -232,34 +216,6 @@
 		}
 		return [];
 	}
-
-	async function assignTorrent(torrent: TorrentResultItem) {
-		if (!torrent.magnetLink || addingHash) return;
-		assignError = null;
-		addingHash = torrent.magnetLink;
-		try {
-			const created: Firkin = await firkinsService.create({
-				title,
-				artists,
-				description,
-				images,
-				files: [
-					...buildUpstreamSourceFiles(),
-					{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
-				],
-				year,
-				addon: addon as FirkinAddon,
-				trailers: trailerResolver.resolvedTrailers(),
-				reviews: upstreamReviews
-			});
-			await startTorrentDownload(torrent.magnetLink);
-			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
-		} catch (err) {
-			assignError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			addingHash = null;
-		}
-	}
 </script>
 
 <svelte:head>
@@ -304,9 +260,7 @@
 		</div>
 	{/if}
 
-	<div
-		class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr_minmax(0,_320px)]"
-	>
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr_minmax(0,_320px)]">
 		<aside class="flex flex-col gap-4">
 			{#if images[0]}
 				<img
@@ -349,8 +303,8 @@
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>
 				<p class="text-xs text-base-content/70">
 					This item is virtual — no record exists in the database yet, and nothing is pinned to
-					IPFS. Picking a torrent below will create the firkin, pin its files, and bring it into the
-					catalog properly.
+					IPFS. Bookmark it to create the firkin and continue from its detail page, where you can
+					pick a torrent.
 				</p>
 			</div>
 
@@ -360,14 +314,6 @@
 
 			{#if isMusicBrainz}
 				<CatalogTracksCard resolver={trackResolver} {thumb} albumTitle={title} preview />
-			{:else}
-				<CatalogTorrentSearchCard
-					search={torrentSearch}
-					onAssign={assignTorrent}
-					{addingHash}
-					{assignError}
-					onRefresh={() => torrentSearch.search({ addon, title, year })}
-				/>
 			{/if}
 		</section>
 
