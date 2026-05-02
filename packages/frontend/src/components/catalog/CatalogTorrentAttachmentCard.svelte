@@ -214,13 +214,13 @@
 					<td class="text-right text-[10px] text-base-content/70">
 						{pick.torrent.sizeBytes != null ? formatSizeBytes(pick.torrent.sizeBytes) : '—'}
 					</td>
-					<td class="text-right">
+					<td>
 						{#if isActive}
 							<button
 								type="button"
 								onclick={() => onStreamPlay?.()}
 								disabled={streamPlaying}
-								class="btn btn-xs btn-primary"
+								class="btn w-full btn-xs btn-primary"
 							>
 								{streamPlaying ? '…' : 'Play'}
 							</button>
@@ -229,7 +229,7 @@
 								type="button"
 								onclick={() => onAttachStream?.(pick.torrent)}
 								disabled={attachingStream}
-								class="btn btn-xs btn-primary"
+								class="btn w-full btn-xs btn-primary"
 							>
 								{attachingStream ? '…' : 'Assign'}
 							</button>
