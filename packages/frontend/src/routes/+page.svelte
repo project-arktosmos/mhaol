@@ -50,24 +50,23 @@
 		if (fromUrl && sources.some((s) => s.id === fromUrl)) return fromUrl;
 		return sources[0]?.id ?? '';
 	});
-	// MusicBrainz-only: which release-group field the user wants to search on.
-	// Default to artist because the typical free-text query is an artist name
-	// ("keane") and the user wants every release-group by that artist back.
-	let searchField = $state<'artist' | 'release'>('artist');
-	const showSearchFieldSelect = $derived(addon === 'musicbrainz');
+
+	// Search query + MusicBrainz field selector both flow from URL params
+	// (`?q=…` / `?field=…`), driven by NavbarSearch in the layout.
+	const trimmedQuery = $derived((pageStore.url.searchParams.get('q') ?? '').trim());
+	const searchField = $derived<'artist' | 'release'>(
+		(pageStore.url.searchParams.get('field') as 'artist' | 'release') ?? 'artist'
+	);
+	const hasSearch = $derived(trimmedQuery.length > 0);
 
 	let genres = $state<CatalogGenre[]>([]);
 
-	let query = $state<string>('');
 	let searchItems = $state<CatalogItem[]>([]);
 	let searchPage = $state<number>(1);
 	let searchTotalPages = $state<number>(1);
 	let searchLoading = $state(false);
 	let searchError = $state<string | null>(null);
 	let searchToken = 0;
-	let searchDebounce: ReturnType<typeof setTimeout> | null = null;
-	const trimmedQuery = $derived(query.trim());
-	const hasSearch = $derived(trimmedQuery.length > 0);
 
 	const currentSource = $derived(sources.find((s) => s.id === addon));
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
@@ -263,29 +262,9 @@
 		}
 	}
 
-	function scheduleSearch() {
-		if (searchDebounce) clearTimeout(searchDebounce);
-		if (!trimmedQuery) {
-			searchToken++;
-			searchItems = [];
-			searchTotalPages = 1;
-			searchPage = 1;
-			searchError = null;
-			searchLoading = false;
-			return;
-		}
-		searchDebounce = setTimeout(() => {
-			void runSearch(1);
-		}, 300);
-	}
-
 	async function goToSearchPage(next: number) {
 		if (next < 1 || next > searchTotalPages || next === searchPage) return;
 		await runSearch(next);
-	}
-
-	async function onSearchFieldChange() {
-		if (trimmedQuery) await runSearch(1);
 	}
 
 	// Library firkins are flagged as "needs metadata" when they're missing
@@ -334,19 +313,30 @@
 		};
 	});
 
-	// Whenever the URL-driven `addon` changes (initial load, addon click, or
-	// browser back/forward), reset search state and refetch genres.
+	// Refetch genres whenever the URL-driven `addon` changes.
 	$effect(() => {
-		const current = addon;
-		if (!current) return;
-		query = '';
-		searchToken++;
-		searchItems = [];
-		searchTotalPages = 1;
-		searchPage = 1;
-		searchError = null;
-		searchLoading = false;
+		if (!addon) return;
 		void refreshGenres();
+	});
+
+	// Re-run search when any of the URL-driven inputs change (addon, query,
+	// MusicBrainz field). NavbarSearch debounces URL writes so this fires
+	// at typing-pause cadence, not per keystroke.
+	$effect(() => {
+		const currentAddon = addon;
+		const q = trimmedQuery;
+		const f = searchField;
+		void f;
+		if (!currentAddon || !q) {
+			searchToken++;
+			searchItems = [];
+			searchTotalPages = 1;
+			searchPage = 1;
+			searchError = null;
+			searchLoading = false;
+			return;
+		}
+		void runSearch(1);
 	});
 </script>
 
@@ -356,27 +346,6 @@
 
 <section class="sticky top-0 z-50 border-b border-base-content/10 bg-base-200">
 	<div class="flex flex-wrap items-center gap-2 p-3">
-		{#if showSearchFieldSelect}
-			<select
-				class="select-bordered select w-40 select-sm"
-				bind:value={searchField}
-				onchange={onSearchFieldChange}
-				title="Which release-group field to search on"
-			>
-				<option value="artist">Artist name</option>
-				<option value="release">Album title</option>
-			</select>
-		{/if}
-		<input
-			type="search"
-			class="input-bordered input input-sm flex-1"
-			placeholder={addon ? `Search ${currentSource?.label ?? addon}…` : 'Pick an addon to search'}
-			disabled={!addon}
-			bind:value={query}
-			oninput={scheduleSearch}
-		/>
-	</div>
-	<div class="flex flex-wrap items-center gap-2 px-3 pb-3">
 		<button
 			type="button"
 			class="btn btn-outline btn-sm"

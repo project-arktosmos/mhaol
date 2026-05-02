@@ -3,6 +3,7 @@
 	import Identicon from '$components/core/Identicon.svelte';
 	import Navbar from '$components/core/Navbar.svelte';
 	import NavbarAddonPicker from '$components/core/NavbarAddonPicker.svelte';
+	import NavbarSearch from '$components/core/NavbarSearch.svelte';
 	import ThemeToggle from '$components/core/ThemeToggle.svelte';
 	import ToastOutlet from '$components/core/ToastOutlet.svelte';
 	import NavbarAudioPlayer from '$components/player/NavbarAudioPlayer.svelte';
@@ -57,7 +58,10 @@
 <div class="flex h-screen flex-col">
 	<Navbar brand={{ label: 'Mhaol', highlight: 'Cloud' }} classes="!bg-base-300">
 		{#snippet center()}
-			<NavbarAddonPicker />
+			<div class="flex flex-wrap items-center gap-3">
+				<NavbarAddonPicker />
+				<NavbarSearch />
+			</div>
 		{/snippet}
 		{#snippet end()}
 			<div class="flex items-center gap-2">
