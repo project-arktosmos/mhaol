@@ -1,6 +1,5 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { blo } from 'blo';
 	import { Icon, addonKind, type FirkinKind, type IconName } from 'cloud-ui';
 	import type { CloudFirkin } from '$types/firkin.type';
 	import { getCachedImageUrl } from '$services/image-cache.service';
@@ -69,9 +68,6 @@
 			cancelled = true;
 		};
 	});
-
-	let creatorAddress = $derived(firkin.creator ?? '');
-	let creatorIdenticon = $derived(creatorAddress ? blo(creatorAddress as `0x${string}`) : null);
 
 	let reviews = $derived(firkin.reviews ?? []);
 
@@ -143,15 +139,6 @@
 			>
 				<Icon name={placeholderIcon} size="40%" />
 			</div>
-		{/if}
-		{#if creatorIdenticon}
-			<img
-				src={creatorIdenticon}
-				alt=""
-				class="absolute right-2 bottom-2 z-10 h-8 w-8 rounded-full ring-2 ring-black/40"
-				title={`Creator: ${creatorAddress}`}
-				aria-label={`Creator: ${creatorAddress}`}
-			/>
 		{/if}
 	</figure>
 	{#if isAlbum}
