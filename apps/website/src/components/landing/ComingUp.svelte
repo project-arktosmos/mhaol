@@ -100,6 +100,17 @@
 				'Subtitles and lyrics filtered by language',
 				'Translatable UI with community-contributed locales'
 			]
+		},
+		{
+			icon: 'lorc/checked-shield',
+			title: 'Parental controls',
+			body: 'Lock the catalog to age-appropriate content per profile, with TMDB and OMDb certifications driving the filter and a PIN that survives device restarts and identity exports. Kids see what they are allowed to see; parents see everything.',
+			points: [
+				'Per-profile age limit using TMDB / OMDb certifications',
+				'PIN-protected toggle that survives identity export and re-import',
+				'Filtered firkins disappear from search, recommendations, and rooms',
+				'One-shot override codes for the “okay, just this once” case'
+			]
 		}
 	];
 </script>
