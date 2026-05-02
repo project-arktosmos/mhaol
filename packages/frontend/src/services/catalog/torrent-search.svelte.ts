@@ -94,6 +94,45 @@ export class TorrentSearch {
 		this.run++;
 	}
 
+	/// Run a focused query (e.g. `"Show Name S02"`) against the torrent
+	/// indexer and **append** any new matches to `matches` — does not reset
+	/// the existing list. `matchTitle` is the firkin's title (used by the
+	/// fuzzy matcher so season-tagged torrent titles like `Show.Name.S02`
+	/// still match the show). Aborts cleanly if a fresh `search()` was
+	/// initiated while this call was in flight.
+	async searchAppend(
+		addon: string,
+		query: string,
+		matchTitle: string,
+		year: number | null
+	): Promise<void> {
+		const tokenAtStart = this.run;
+		try {
+			const torrents = await searchTorrents(addon, query);
+			if (tokenAtStart !== this.run) return;
+			const isTv = addonKind(addon) === 'tv show';
+			const fresh = matchTorrentsForResult(
+				{
+					title: matchTitle,
+					description: '',
+					artists: [],
+					images: [],
+					files: [],
+					year,
+					raw: null
+				},
+				torrents,
+				{ skipYearFilter: isTv }
+			);
+			if (tokenAtStart !== this.run) return;
+			const existing = new Set(this.matches.map((m) => m.infoHash));
+			const additions = fresh.filter((t) => !existing.has(t.infoHash));
+			if (additions.length > 0) this.matches = [...this.matches, ...additions];
+		} catch (err) {
+			console.warn('[torrent-search] append failed:', err);
+		}
+	}
+
 	async search(args: RunArgs): Promise<void> {
 		const myRun = ++this.run;
 		this.status = 'searching';

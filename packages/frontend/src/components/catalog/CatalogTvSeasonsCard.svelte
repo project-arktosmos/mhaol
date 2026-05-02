@@ -15,6 +15,7 @@
 		existingHashes?: Set<string>;
 		addingHash?: string | null;
 		onAssign?: (torrent: TorrentResultItem) => void | Promise<void>;
+		onSeasonsLoaded?: (seasonNumbers: number[]) => void;
 	}
 	let {
 		tmdbTvId,
@@ -23,7 +24,8 @@
 		torrentsError = null,
 		existingHashes = new Set<string>(),
 		addingHash = null,
-		onAssign
+		onAssign,
+		onSeasonsLoaded
 	}: Props = $props();
 
 	interface Season {
@@ -82,6 +84,7 @@
 			if (!res.ok) throw new Error(await readError(res));
 			seasons = (await res.json()) as Season[];
 			seasonsStatus = 'done';
+			onSeasonsLoaded?.(seasons.map((s) => s.seasonNumber));
 		} catch (err) {
 			seasonsError = err instanceof Error ? err.message : 'Unknown error';
 			seasonsStatus = 'error';
