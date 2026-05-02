@@ -92,9 +92,11 @@ jobs:
           $base = "https://gstreamer.freedesktop.org/data/pkg/windows/$ver/msvc"
           $runtime = "$env:RUNNER_TEMP\gst-runtime.msi"
           $devel   = "$env:RUNNER_TEMP\gst-devel.msi"
-          $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          Invoke-WebRequest -UserAgent $ua -Uri "$base/gstreamer-1.0-msvc-x86_64-$ver.msi"       -OutFile $runtime
-          Invoke-WebRequest -UserAgent $ua -Uri "$base/gstreamer-1.0-devel-msvc-x86_64-$ver.msi" -OutFile $devel
+          $ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+          curl.exe -fL -A $ua -o $runtime "$base/gstreamer-1.0-msvc-x86_64-$ver.msi"
+          if ($LASTEXITCODE -ne 0) { throw "curl failed downloading gstreamer runtime msi" }
+          curl.exe -fL -A $ua -o $devel   "$base/gstreamer-1.0-devel-msvc-x86_64-$ver.msi"
+          if ($LASTEXITCODE -ne 0) { throw "curl failed downloading gstreamer devel msi" }
           Start-Process msiexec -ArgumentList "/i `"$runtime`" /qn /norestart ADDLOCAL=ALL" -Wait
           Start-Process msiexec -ArgumentList "/i `"$devel`" /qn /norestart ADDLOCAL=ALL" -Wait
           $root = "C:\gstreamer\1.0\msvc_x86_64"
