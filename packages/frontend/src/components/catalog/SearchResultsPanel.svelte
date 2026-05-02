@@ -7,7 +7,12 @@
 	import { page as pageStore } from '$app/state';
 	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import type { CloudFirkin } from '$types/firkin.type';
-	import { listSources, loadSearch, type CatalogItem, type CatalogSource } from '$lib/catalog.service';
+	import {
+		listSources,
+		loadSearch,
+		type CatalogItem,
+		type CatalogSource
+	} from '$lib/catalog.service';
 	import type { FirkinAddon } from '$lib/firkins.service';
 	import { onMount } from 'svelte';
 
@@ -167,7 +172,7 @@
 		<div
 			class="flex items-center justify-between gap-4 border-b border-base-content/10 bg-base-200 px-6 py-3"
 		>
-			<div class="flex flex-col gap-0.5 min-w-0">
+			<div class="flex min-w-0 flex-col gap-0.5">
 				<h2 class="truncate text-lg font-semibold">
 					Search results for "{trimmedQuery}"
 				</h2>
