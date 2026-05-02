@@ -115,6 +115,16 @@
 			});
 	}
 
+	function togglePlayPause(): void {
+		if (!videoElement) return;
+		if (!started) {
+			handleStart();
+			return;
+		}
+		if (videoElement.paused) videoElement.play().catch(console.error);
+		else videoElement.pause();
+	}
+
 	function handleSeek(pos: number): void {
 		if (!videoElement) return;
 		videoElement.currentTime = pos;
@@ -167,10 +177,11 @@
 			<video
 				bind:this={videoElement}
 				src={streamUrl}
-				class="absolute inset-0 h-full w-full bg-black"
+				class="absolute inset-0 h-full w-full cursor-pointer bg-black"
 				playsinline
 				preload="auto"
 				aria-label={title}
+				onclick={togglePlayPause}
 			></video>
 		{/if}
 
