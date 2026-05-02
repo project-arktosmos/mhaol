@@ -138,12 +138,7 @@
 													</span>
 												</div>
 											{:else if ev.kind === 'skipped'}
-												<span
-													class="text-xs text-base-content/40"
-													title="Skipped — a streamable candidate was found earlier in this quality group"
-												>
-													—
-												</span>
+												<span class="text-xs text-base-content/40" title={ev.reason}>—</span>
 											{:else}
 												<div class="flex flex-col gap-0.5">
 													<span class="badge gap-1 badge-ghost badge-sm">
