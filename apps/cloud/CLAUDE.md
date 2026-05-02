@@ -179,6 +179,10 @@ Audio playback uses the dedicated `displayMode === 'navbar'` mode, rendered by `
 
 `apps/cloud/web/src/routes/youtube/+page.svelte` is a self-contained yt-dlp UI ported from the player app. It talks **directly** to `/api/ytdl/*` via plain `fetch()` (no transport layer) — search, paste-URL info, queue audio/video/both, live progress via SSE on `/api/ytdl/downloads/events`, and "Stream" buttons that call `playerService.playUrl()` so the result plays in the right-side `PlayerVideo`.
 
+### Icons
+
+Use `<Icon name="<author>/<icon>" />` from `cloud-ui` for every UI glyph. **No emoji in the WebUI.** Icons inherit the surrounding text colour via `currentColor`, so colour them with the standard text utilities (`text-primary`, `text-error`, `text-base-content/60`, …). Before writing a name, verify the file exists at `packages/cloud-ui/src/icons/assets/<author>/<name>.svg` (or grep `packages/cloud-ui/src/icons/icon-names.ts`) — typos render an invisible icon, not a build error. See the root CLAUDE.md "Icons" section for the full rules.
+
 ## Running
 
 ```bash

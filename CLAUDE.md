@@ -297,6 +297,7 @@ When adding a new feature that spans the full stack:
 - [ ] Create/extend service in `src/services/{feature}.service.ts` (or `src/services/{feature}/{thing}.svelte.ts` for runes-driven service classes)
 - [ ] Create component(s) in `src/components/{feature}/` using the `$components`, `$services`, `$types`, `$adapters`, `$utils`, `$transport`, `$lib` aliases
 - [ ] Use `classnames` for all conditional styling — never `<style>` tags or inline styles
+- [ ] Use `<Icon name="<author>/<icon>" />` from `cloud-ui` for any UI glyph — never emoji (see "Icons" below)
 - [ ] Components stay presentational: callback props in, no business logic; resolvers/adapters/services own the state machines and side-effects
 - [ ] When two routes need the same UI, extract the markup into `$components/<feature>/` and the behaviour into `$services/<feature>/<thing>.svelte.ts` — see "Catalog detail routes" above for the canonical pattern
 - [ ] Write tests in `test/`
@@ -304,6 +305,29 @@ When adding a new feature that spans the full stack:
 **Always**
 - [ ] Commit each logical change immediately after completing it
 - [ ] Update `apps/cloud/CLAUDE.md` if adding new component directories, services, or adapters
+
+---
+
+## Icons
+
+UI glyphs come from the game-icons.net set bundled in `packages/cloud-ui/src/icons/assets/<author>/<name>.svg` (4180 SVGs across 36 contributors, all rewritten to `fill="currentColor"`). **Never use emoji in UI**; never inline a custom SVG when one of these will do.
+
+```svelte
+<script>
+  import { Icon } from 'cloud-ui';
+</script>
+
+<button class="text-primary hover:text-secondary">
+  <Icon name="delapouite/save" size={18} title="Save" />
+  Save
+</button>
+```
+
+The icon inherits the surrounding text colour via `currentColor`, so colour it with the usual Tailwind/DaisyUI text utilities (`text-primary`, `text-error`, `text-base-content/60`, etc.). `size` accepts a number (px) or any CSS length and defaults to `1em`. Pass `title` only when the icon stands alone semantically — when it sits next to a text label, leave it off so screen readers don't double-read.
+
+**Before writing `<Icon name="…" />`, verify the file exists on disk** — pick a name from `packages/cloud-ui/src/icons/assets/<author>/<name>.svg` (or grep `packages/cloud-ui/src/icons/icon-names.ts`). The component silently renders nothing when the name doesn't match a real file, so a typo produces an invisible icon, not a build error. If no existing icon fits, search the broader set first; only add a new SVG (under the same `<author>/<name>.svg` convention, with `fill="currentColor"`) when nothing in the set works, and re-run `node packages/cloud-ui/scripts/generate-icon-names.mjs` after adding one so the `IconName` union includes it.
+
+`Icon`, `ICON_NAMES`, and the `IconName` type are exported from the `cloud-ui` package root.
 
 ---
 

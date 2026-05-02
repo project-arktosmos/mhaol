@@ -59,12 +59,15 @@ import {
     CatalogImagesCard,
     CatalogTrailersDisplay,
     FirkinArtistsSection,
+    Icon,
     addonKind,
     type Firkin
 } from 'cloud-ui';
 ```
 
 The cloud WebUI's local catalog components are now thin wrappers around these same shared components, so layout/visuals stay synchronised between the two apps.
+
+For UI glyphs use `<Icon name="<author>/<icon>" />` from `cloud-ui` — **no emoji in the player UI**. Icons inherit `currentColor`, so colour them via the surrounding text colour. Verify the icon exists at `packages/cloud-ui/src/icons/assets/<author>/<name>.svg` before referencing it; the component renders nothing on a typo. Full rules in the root CLAUDE.md "Icons" section.
 
 ## Connectivity model
 
