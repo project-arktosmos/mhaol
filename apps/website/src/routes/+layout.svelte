@@ -26,7 +26,6 @@
 				<span class="text-base-content">Mhaol</span>
 			</a>
 			<nav class="hidden items-center gap-5 text-sm md:flex">
-				<a href="{base}/#features" class="hover:text-primary">Features</a>
 				<a href="{base}/#apps" class="hover:text-primary">Apps</a>
 				<a href="{base}/#how-it-works" class="hover:text-primary">How it works</a>
 				<a href="{base}/#install" class="hover:text-primary">Install</a>

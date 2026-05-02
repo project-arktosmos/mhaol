@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Hero from '$components/landing/Hero.svelte';
-	import Features from '$components/landing/Features.svelte';
 	import MediaTypes from '$components/landing/MediaTypes.svelte';
 	import HowItWorks from '$components/landing/HowItWorks.svelte';
 	import Apps from '$components/landing/Apps.svelte';
@@ -8,7 +7,6 @@
 </script>
 
 <Hero />
-<Features />
 <MediaTypes />
 <Apps />
 <HowItWorks />
