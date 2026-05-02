@@ -227,6 +227,32 @@
 		return map;
 	}
 
+	/// Poll the library's pins endpoint until a pin for `filePath` appears,
+	/// returning its CID. The library scan's pin task runs in the
+	/// background, so when the user clicks "Create firkin" right after a
+	/// scan the cid for that specific file may not be recorded yet — this
+	/// blocks until it is, instead of letting the firkin be created with no
+	/// `ipfs` file entry. Returns `undefined` only if the timeout elapses.
+	async function waitForPinForPath(
+		libId: string,
+		filePath: string,
+		timeoutMs = 60000
+	): Promise<string | undefined> {
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			try {
+				const pins = await librariesService.pins(libId);
+				libPins = { ...libPins, [libId]: pins };
+				const match = pins.find((p) => p.path === filePath);
+				if (match) return match.cid;
+			} catch {
+				// ignore and retry
+			}
+			await new Promise((r) => setTimeout(r, 1000));
+		}
+		return undefined;
+	}
+
 	/// Create a `tmdb-movie` firkin from a TMDB-matched scan entry. Mirrors
 	/// the /catalog/virtual bookmark flow: hit /metadata for artists +
 	/// trailers + reviews, build a payload identical to what the catalog
@@ -236,6 +262,7 @@
 	/// has a playable file. After create, navigate to the new content-
 	/// addressed detail page.
 	async function createFirkinFromMatch(
+		libId: string,
 		entry: {
 			path: string;
 			relative_path: string;
@@ -256,6 +283,16 @@
 		const { [key]: _ignored, ...errRest } = createFirkinErrors;
 		createFirkinErrors = errRest;
 		try {
+			let resolvedCid = cid;
+			if (!resolvedCid) {
+				resolvedCid = await waitForPinForPath(libId, entry.path);
+				if (!resolvedCid) {
+					throw new Error(
+						'IPFS pin for this file did not complete in time — try again once the CID column populates'
+					);
+				}
+			}
+
 			const tmdbId = String(entry.tmdbMatch.tmdbId);
 			const metaRes = await fetch(
 				`/api/catalog/tmdb-movie/${encodeURIComponent(tmdbId)}/metadata`,
@@ -299,7 +336,7 @@
 						value: `https://www.themoviedb.org/movie/${tmdbId}`,
 						title: 'TMDB Movie'
 					},
-					...(cid ? [{ type: 'ipfs' as const, value: cid, title: fileTitle }] : [])
+					{ type: 'ipfs' as const, value: resolvedCid, title: fileTitle }
 				],
 				year: entry.tmdbMatch.year ?? null,
 				addon: 'tmdb-movie',
@@ -649,16 +686,18 @@
 																			<button
 																				class="btn btn-xs btn-primary"
 																				disabled={creatingFirkinFor[entry.path]}
-																				onclick={() => createFirkinFromMatch(entry, cid)}
+																				onclick={() => createFirkinFromMatch(lib.id, entry, cid)}
 																				title={cid
 																					? undefined
-																					: 'IPFS pin still in progress — firkin will be created without a local file entry'}
+																					: 'IPFS pin still in progress — clicking will wait for the pin to complete before creating the firkin'}
 																			>
 																				{creatingFirkinFor[entry.path]
-																					? 'Creating…'
+																					? cid
+																						? 'Creating…'
+																						: 'Waiting for pin…'
 																					: cid
 																						? 'Create firkin'
-																						: 'Create firkin (no pin yet)'}
+																						: 'Create firkin (waits for pin)'}
 																			</button>
 																		{:else}
 																			<span class="text-base-content/30">—</span>
