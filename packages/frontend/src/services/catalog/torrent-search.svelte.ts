@@ -230,6 +230,10 @@ export class TorrentSearch {
 		for (const g of grouped) {
 			for (const t of g.rows) {
 				if (!t.magnetLink) continue;
+				if (t.seeders <= 0) {
+					seed[t.magnetLink] = { kind: 'skipped', reason: 'No seeders' };
+					continue;
+				}
 				seed[t.magnetLink] = g.probe
 					? { kind: 'pending' }
 					: { kind: 'skipped', reason: 'Unknown quality — not probed' };
@@ -245,6 +249,7 @@ export class TorrentSearch {
 		for (const t of group.rows) {
 			if (runToken !== this.run) return;
 			if (!t.magnetLink) continue;
+			if (t.seeders <= 0) continue;
 			if (foundStreamable) {
 				this.rowEvals = {
 					...this.rowEvals,
