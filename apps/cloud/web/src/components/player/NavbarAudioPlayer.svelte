@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
+	import { Icon } from 'cloud-ui';
 	import { playerService } from '$services/player.service';
+	import { playPlaylistTrack } from '$lib/youtube-match.service';
 
 	const playerState = playerService.state;
 	const playerDisplayMode = playerService.displayMode;
+	const playlist = playerService.playlist;
 
 	// Hidden `<video>` element drives the audio. Same rationale as
 	// `PlayerVideo` — `<audio>` is fussier with the muxed/fragmented MP4
@@ -133,75 +136,140 @@
 	let progress = $derived($playerState.positionSecs);
 	let total = $derived($playerState.durationSecs ?? 0);
 	let isPaused = $derived($playerState.isPaused);
+
+	// Walk the playlist in `direction` (-1 = prev, +1 = next) starting just
+	// past `from` and return the first index whose track has a playable
+	// YouTube URL. Skips non-playable rows so prev/next never lands on a
+	// dead entry. Returns null when none is reachable in that direction.
+	function findPlayableIndex(
+		tracks: { youtubeUrl: string | null }[],
+		from: number,
+		direction: 1 | -1
+	): number | null {
+		let i = from + direction;
+		while (i >= 0 && i < tracks.length) {
+			if (tracks[i].youtubeUrl) return i;
+			i += direction;
+		}
+		return null;
+	}
+
+	let prevIndex = $derived.by(() => {
+		const pl = $playlist;
+		if (!pl) return null;
+		return findPlayableIndex(pl.tracks, pl.currentIndex, -1);
+	});
+	let nextIndex = $derived.by(() => {
+		const pl = $playlist;
+		if (!pl) return null;
+		return findPlayableIndex(pl.tracks, pl.currentIndex, 1);
+	});
+
+	async function handlePrev(): Promise<void> {
+		const pl = $playlist;
+		if (!pl || prevIndex === null) return;
+		await playPlaylistTrack(pl, prevIndex);
+	}
+
+	async function handleNext(): Promise<void> {
+		const pl = $playlist;
+		if (!pl || nextIndex === null) return;
+		await playPlaylistTrack(pl, nextIndex);
+	}
 </script>
 
-<div
-	class={classNames('flex items-center gap-2 p-2', { hidden: !visible })}
-	aria-label="Audio player"
->
+<div class={classNames('flex flex-col', { hidden: !visible })} aria-label="Audio player">
 	<!-- Hidden media element kept mounted so attach/detach effects can run. -->
 	<!-- svelte-ignore a11y_media_has_caption -->
 	<video bind:this={mediaElement} class="hidden" playsinline></video>
 
 	{#if visible && $playerState.currentFile}
-		{#if $playerState.currentFile.thumbnailUrl}
-			<img
-				src={$playerState.currentFile.thumbnailUrl}
-				alt=""
-				class="h-8 w-8 shrink-0 rounded object-cover"
-			/>
-		{/if}
-		<div class="flex min-w-0 flex-1 flex-col leading-tight">
-			<span class="truncate text-xs font-medium" title={$playerState.currentFile.name}>
-				{$playerState.currentFile.name}
-			</span>
-			{#if mediaError}
-				<span class="truncate text-[10px] text-error" title={mediaError}>{mediaError}</span>
-			{:else if $playerState.buffering}
-				<span class="truncate text-[10px] opacity-60">Buffering…</span>
+		<div class="flex items-center justify-center gap-2 px-2 pt-2">
+			<button
+				type="button"
+				class="btn btn-circle btn-ghost btn-sm"
+				onclick={handlePrev}
+				disabled={prevIndex === null}
+				aria-label="Previous track"
+				title="Previous track"
+			>
+				<Icon name="delapouite/previous-button" size="1.25em" />
+			</button>
+			{#if isLoading}
+				<span class="btn btn-circle btn-disabled btn-md" aria-label="Loading" title="Loading…">
+					<span class="loading loading-sm loading-spinner"></span>
+				</span>
+			{:else}
+				<button
+					type="button"
+					class="btn btn-circle btn-primary btn-md"
+					onclick={togglePlay}
+					aria-label={isPaused ? 'Play' : 'Pause'}
+					title={isPaused ? 'Play' : 'Pause'}
+				>
+					<Icon
+						name={isPaused ? 'guard13007/play-button' : 'guard13007/pause-button'}
+						size="1.5em"
+					/>
+				</button>
 			{/if}
-			<input
-				type="range"
-				class="range w-full range-xs"
-				min="0"
-				max={total > 0 ? total : 0}
-				step="0.1"
-				value={progress}
-				disabled={total <= 0}
-				oninput={() => playerService.setSeeking(true)}
-				onchange={handleSeek}
-				aria-label="Seek"
-			/>
-			<div class="flex items-center justify-between font-mono text-[10px] tabular-nums opacity-70">
-				<span>{formatTime(progress)}</span>
-				<span>{formatTime(total > 0 ? total : null)}</span>
-			</div>
+			<button
+				type="button"
+				class="btn btn-circle btn-ghost btn-sm"
+				onclick={handleNext}
+				disabled={nextIndex === null}
+				aria-label="Next track"
+				title="Next track"
+			>
+				<Icon name="delapouite/next-button" size="1.25em" />
+			</button>
 		</div>
-		{#if isLoading}
-			<span
-				class="loading loading-sm loading-spinner text-primary"
-				aria-label="Loading"
-				title="Loading…"
-			></span>
-		{:else}
+
+		<div class="flex items-center gap-2 p-2">
+			{#if $playerState.currentFile.thumbnailUrl}
+				<img
+					src={$playerState.currentFile.thumbnailUrl}
+					alt=""
+					class="h-8 w-8 shrink-0 rounded object-cover"
+				/>
+			{/if}
+			<div class="flex min-w-0 flex-1 flex-col leading-tight">
+				<span class="truncate text-xs font-medium" title={$playerState.currentFile.name}>
+					{$playerState.currentFile.name}
+				</span>
+				{#if mediaError}
+					<span class="truncate text-[10px] text-error" title={mediaError}>{mediaError}</span>
+				{:else if $playerState.buffering}
+					<span class="truncate text-[10px] opacity-60">Buffering…</span>
+				{/if}
+				<input
+					type="range"
+					class="range w-full range-xs"
+					min="0"
+					max={total > 0 ? total : 0}
+					step="0.1"
+					value={progress}
+					disabled={total <= 0}
+					oninput={() => playerService.setSeeking(true)}
+					onchange={handleSeek}
+					aria-label="Seek"
+				/>
+				<div
+					class="flex items-center justify-between font-mono text-[10px] tabular-nums opacity-70"
+				>
+					<span>{formatTime(progress)}</span>
+					<span>{formatTime(total > 0 ? total : null)}</span>
+				</div>
+			</div>
 			<button
 				type="button"
 				class="btn btn-ghost btn-sm"
-				onclick={togglePlay}
-				aria-label={isPaused ? 'Play' : 'Pause'}
-				title={isPaused ? 'Play' : 'Pause'}
+				onclick={handleStop}
+				aria-label="Stop"
+				title="Stop"
 			>
-				{isPaused ? '▶' : '⏸'}
+				<Icon name="delapouite/plain-square" size="1em" />
 			</button>
-		{/if}
-		<button
-			type="button"
-			class="btn btn-ghost btn-sm"
-			onclick={handleStop}
-			aria-label="Stop"
-			title="Stop"
-		>
-			✕
-		</button>
+		</div>
 	{/if}
 </div>

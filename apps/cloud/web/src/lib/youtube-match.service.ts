@@ -1,7 +1,7 @@
 import type { YouTubeStreamFormat, YouTubeStreamUrlResult } from 'addons/youtube/types';
 import { extractVideoId } from 'addons/youtube/types';
 import { playerService } from '$services/player.service';
-import type { PlayableFile } from '$types/player.type';
+import type { PlayableFile, PlayerPlaylist } from '$types/player.type';
 import type { SubsLyricsSyncedLine } from '$types/subs-lyrics.type';
 
 export interface YouTubeSearchItem {
@@ -265,6 +265,29 @@ export async function playYouTubeAudio(
 	}
 	const file: PlayableFile = { ...placeholder, size: format.contentLength ?? 0 };
 	await playerService.playUrl(file, format.url, format.mimeType, 'navbar', null, syncedLyrics);
+}
+
+/**
+ * Update `playerService.playlist` to point at `index` and start streaming
+ * that track. Used by the floating player panel's prev/next/playlist
+ * controls so the swap path stays in one place.
+ */
+export async function playPlaylistTrack(
+	playlist: PlayerPlaylist,
+	index: number
+): Promise<void> {
+	if (index < 0 || index >= playlist.tracks.length) return;
+	if (index === playlist.currentIndex) return;
+	const t = playlist.tracks[index];
+	if (!t.youtubeUrl) return;
+	playerService.setPlaylistIndex(index);
+	await playYouTubeAudio(
+		t.youtubeUrl,
+		t.title,
+		t.thumbnailUrl,
+		t.durationSeconds,
+		t.syncedLyrics
+	);
 }
 
 /**

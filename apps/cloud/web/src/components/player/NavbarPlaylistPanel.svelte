@@ -2,7 +2,7 @@
 	import classNames from 'classnames';
 	import { tick } from 'svelte';
 	import { playerService } from '$services/player.service';
-	import { playYouTubeAudio } from '$lib/youtube-match.service';
+	import { playPlaylistTrack } from '$lib/youtube-match.service';
 
 	const playerState = playerService.state;
 	const playerDisplayMode = playerService.displayMode;
@@ -43,17 +43,8 @@
 		if (!t || !t.youtubeUrl) return;
 		switchingIndex = index;
 		switchError = null;
-		// Update the playlist's currentIndex first so the UI shows the
-		// active row immediately while the YouTube stream URL resolves.
-		playerService.setPlaylistIndex(index);
 		try {
-			await playYouTubeAudio(
-				t.youtubeUrl,
-				t.title,
-				t.thumbnailUrl,
-				t.durationSeconds,
-				t.syncedLyrics
-			);
+			await playPlaylistTrack(pl, index);
 		} catch (err) {
 			switchError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
