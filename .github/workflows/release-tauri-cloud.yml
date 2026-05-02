@@ -54,6 +54,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install GStreamer (macOS, universal)
+        if: matrix.app == 'cloud' && startsWith(matrix.platform, 'macos')
+        run: |
+          PKG_VER=1.24.10
+          BASE="https://gstreamer.freedesktop.org/data/pkg/osx/${PKG_VER}"
+          curl -fsSL -o /tmp/gst-runtime.pkg "${BASE}/gstreamer-1.0-${PKG_VER}-universal.pkg"
+          curl -fsSL -o /tmp/gst-devel.pkg   "${BASE}/gstreamer-1.0-devel-${PKG_VER}-universal.pkg"
+          sudo installer -pkg /tmp/gst-runtime.pkg -target /
+          sudo installer -pkg /tmp/gst-devel.pkg   -target /
+          echo "PKG_CONFIG_PATH=/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=/Library/Frameworks/GStreamer.framework/Versions/1.0/lib" >> "$GITHUB_ENV"
+
       - name: Install Linux deps (cloud Tauri shell)
         if: matrix.app == 'cloud' && startsWith(matrix.platform, 'ubuntu')
         run: |
@@ -69,6 +81,23 @@ jobs:
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev
+
+      - name: Install GStreamer (Windows, MSVC x86_64)
+        if: matrix.app == 'cloud' && startsWith(matrix.platform, 'windows')
+        shell: pwsh
+        run: |
+          $ver = "1.24.10"
+          $base = "https://gstreamer.freedesktop.org/data/pkg/windows/$ver/msvc"
+          $runtime = "$env:RUNNER_TEMP\gst-runtime.msi"
+          $devel   = "$env:RUNNER_TEMP\gst-devel.msi"
+          Invoke-WebRequest -Uri "$base/gstreamer-1.0-msvc-x86_64-$ver.msi"       -OutFile $runtime
+          Invoke-WebRequest -Uri "$base/gstreamer-1.0-devel-msvc-x86_64-$ver.msi" -OutFile $devel
+          Start-Process msiexec -ArgumentList "/i `"$runtime`" /qn /norestart ADDLOCAL=ALL" -Wait
+          Start-Process msiexec -ArgumentList "/i `"$devel`" /qn /norestart ADDLOCAL=ALL" -Wait
+          $root = "C:\gstreamer\1.0\msvc_x86_64"
+          "GSTREAMER_1_0_ROOT_MSVC_X86_64=$root\"      | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PKG_CONFIG_PATH=$root\lib\pkgconfig"        | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "$root\bin"                                  | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
       - name: Install Linux deps (headless bin)
         if: matrix.app == 'headless' && startsWith(matrix.platform, 'ubuntu')
