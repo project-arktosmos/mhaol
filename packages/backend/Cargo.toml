@@ -44,6 +44,7 @@ sysinfo = { version = "0.33", default-features = false, features = ["disk"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 async-stream = "0.3"
+async-trait = "0.1"
 tokio-stream = "0.1"
 mhaol-ipfs-stream = { path = "../ipfs-stream" }
 mhaol-yt-dlp = { path = "../yt-dlp" }

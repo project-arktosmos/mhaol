@@ -35,6 +35,7 @@ url = "2"
 axum = { version = "0.8", features = ["ws"] }
 tokio-stream = "0.1"
 async-stream = "0.3"
+async-trait = "0.1"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 
 [dev-dependencies]

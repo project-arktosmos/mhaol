@@ -1,4 +1,8 @@
 use std::path::PathBuf;
+use std::sync::Arc;
+
+#[cfg(not(target_arch = "wasm32"))]
+use crate::filestore::FilestoreIndex;
 
 /// Bootstrap multiaddrs for the public IPFS DHT. Picked from the official
 /// Kubo defaults — the same nodes Kubo and rust-ipfs use out of the box.
@@ -46,6 +50,19 @@ pub struct IpfsConfig {
     /// must run in Server mode so other peers can store and look up records
     /// against them; regular peers can leave this off.
     pub dht_server_mode: bool,
+    /// Optional filestore index. When set, the node initialises with a
+    /// `FilestoreBlockStore` decorator wrapping `FsBlockStore`: bitswap /
+    /// `repo.get_block` reads consult the filestore first (reconstructing
+    /// leaf blocks from their source files on disk) and fall through to
+    /// the inner blockstore on miss. The library scan path uses
+    /// `compute_and_index_file_cid` to populate this index without
+    /// duplicating leaf bytes into `<data_root>/downloads/ipfs/`.
+    ///
+    /// `None` keeps the legacy behaviour: every block goes through the
+    /// inner `FsBlockStore` via `put_block`, which duplicates leaf
+    /// bytes byte-for-byte.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub filestore_index: Option<Arc<dyn FilestoreIndex>>,
 }
 
 impl Default for IpfsConfig {
@@ -61,6 +78,8 @@ impl Default for IpfsConfig {
             agent_version: format!("mhaol-ipfs-core/{}", env!("CARGO_PKG_VERSION")),
             swarm_key: None,
             dht_server_mode: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            filestore_index: None,
         }
     }
 }

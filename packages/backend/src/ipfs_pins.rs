@@ -304,14 +304,18 @@ async fn serve_pin_file(
 
 /// On-demand materialisation: take a previously lite-pinned CID, look up
 /// its on-disk path on the matching `ipfs_pin` row, run the file through
-/// `IpfsManager::add` so its bytes land in the blockstore as UnixFS
-/// blocks, then flip the row's `materialised` flag to `true`. Idempotent
-/// — calling on an already-materialised pin returns 200 without re-adding.
+/// `IpfsManager::add` so its bytes are tracked by the blockstore (the
+/// filestore decorator records leaf entries; absent the decorator, the
+/// inner `FsBlockStore` writes leaf bytes through). The pin row's
+/// `materialised` flag is flipped to `true` either way. Idempotent —
+/// calling on an already-materialised pin returns 200 without re-adding.
 ///
-/// Used by peers / other clouds that want to bitswap-fetch the CID, and
-/// by any future "share with the swarm" UI affordance. Local playback
-/// (via `serve_pin_file`) does not require this — that handler streams
-/// the file directly from disk.
+/// With the filestore decorator wired in (the default for cloud servers),
+/// `compute_file_cid` already populates the filestore index during the
+/// scan and bitswap reads work transparently. The endpoint is preserved
+/// because (a) the filestore decorator may be unconfigured on some
+/// deployments, and (b) some callers want the explicit pin entry for
+/// cross-peer reachability semantics.
 #[cfg(not(target_os = "android"))]
 async fn materialise(
     State(state): State<CloudState>,

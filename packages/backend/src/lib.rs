@@ -4,6 +4,8 @@ mod cloud_status;
 mod database;
 mod db;
 mod disk;
+#[cfg(not(target_os = "android"))]
+mod filestore_index;
 mod firkins;
 mod frontend;
 mod fs_browse;
@@ -120,11 +122,28 @@ pub async fn run() {
         manager
     };
 
+    // Load the filestore index up-front so the IPFS node can start with a
+    // populated `FilestoreBlockStore` decorator. Library-scan-recorded
+    // leaves were saved to SurrealDB on previous runs; without loading
+    // them here, bitswap would 404 every leaf until a fresh re-scan.
+    #[cfg(not(target_os = "android"))]
+    let filestore_index_for_ipfs: Option<Arc<dyn mhaol_ipfs_core::FilestoreIndex>> =
+        match filestore_index::SurrealFilestoreIndex::load(surreal.clone()).await {
+            Ok(idx) => Some(Arc::new(idx) as Arc<dyn mhaol_ipfs_core::FilestoreIndex>),
+            Err(e) => {
+                tracing::warn!(
+                    "[filestore] failed to load index: {e} — IPFS will run without filestore decorator"
+                );
+                None
+            }
+        };
+
     #[cfg(not(target_os = "android"))]
     let ipfs_manager = {
         let manager = Arc::new(IpfsManager::new());
         let manager_clone = Arc::clone(&manager);
         let repo_path = paths::ipfs_repo_dir();
+        let filestore_index_for_ipfs = filestore_index_for_ipfs.clone();
         tokio::spawn(async move {
             // The IPFS node always runs on a private network: read an
             // existing swarm key off disk or generate one on first boot.
@@ -167,6 +186,7 @@ pub async fn run() {
                 enable_mdns: true,
                 bootstrap_on_start: false,
                 extra_bootstrap: vec![],
+                filestore_index: filestore_index_for_ipfs,
                 ..IpfsConfig::default()
             };
             if let Err(e) = manager_clone.initialize(config).await {

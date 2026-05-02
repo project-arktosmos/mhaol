@@ -136,7 +136,45 @@ impl IpfsManager {
 
         if !config.repo_path.as_os_str().is_empty() {
             std::fs::create_dir_all(&config.repo_path).ok();
-            builder = builder.set_path(&config.repo_path);
+            // When a `FilestoreIndex` is wired in, we swap rust-ipfs's default
+            // `FsBlockStore` for a `FilestoreBlockStore` decorator. The
+            // datastore + lockfile come from the same on-disk paths
+            // rust-ipfs would have used itself (matching `Repo::new_fs`'s
+            // layout), so the swap is transparent to anything that already
+            // sits in `<repo>/datastore/`. Without an index we keep the
+            // legacy `set_path` call so existing callers see no behaviour
+            // change.
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(index) = config.filestore_index.clone() {
+                let mut blockstore_path = config.repo_path.clone();
+                let mut datastore_path = config.repo_path.clone();
+                let mut lockfile_path = config.repo_path.clone();
+                blockstore_path.push("blockstore");
+                datastore_path.push("datastore");
+                lockfile_path.push("repo_lock");
+
+                let blockstore = Box::new(crate::filestore::FilestoreBlockStore::new(
+                    blockstore_path,
+                    index,
+                ));
+                let datastore = Box::new(
+                    rust_ipfs::repo::datastore::flatfs::FsDataStore::new(datastore_path),
+                );
+                let lock = Box::new(rust_ipfs::repo::lock::FsLock::new(lockfile_path));
+
+                let storage = rust_ipfs::StorageType::Custom {
+                    blockstore: Some(blockstore),
+                    datastore: Some(datastore),
+                    lock: Some(lock),
+                };
+                builder = builder.set_storage_type(storage);
+            } else {
+                builder = builder.set_path(&config.repo_path);
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                builder = builder.set_path(&config.repo_path);
+            }
         }
 
         if config.listen_port != 0 {
@@ -355,12 +393,22 @@ impl IpfsManager {
     /// what makes a library scan no longer write the file's bytes a second
     /// time into the data root.
     ///
-    /// The IPFS node does NOT need to be initialised for this call. The
-    /// returned CID is a "lite" reference: it identifies the bytes
-    /// uniquely, the libraries page and firkin layer can use it as a
-    /// pointer, and `serve_pin_file` streams the on-disk file directly.
-    /// Bitswap peers can NOT fetch the blocks until `add()` is called for
-    /// the same path (materialisation).
+    /// When the manager is configured with a `FilestoreIndex` (see
+    /// `IpfsConfig::filestore_index`) and the IPFS node is running, this
+    /// method ALSO populates the index: every leaf block emitted by
+    /// `FileAdder` is recorded as a `(cid, path, offset, length)` entry,
+    /// and the small inner-tree link blocks go through `repo.put_block`
+    /// so the regular blockstore can serve them. Bitswap reads then work
+    /// transparently: leaves are reconstructed from the source file on
+    /// demand by `FilestoreBlockStore::get`, link blocks come from the
+    /// inner blockstore.
+    ///
+    /// When no filestore index is configured (or the IPFS node hasn't
+    /// initialised yet), this falls back to the simpler "compute the
+    /// final CID, drop every block" path. The CID is still a valid
+    /// reference and `serve_pin_file` can stream the on-disk bytes
+    /// directly, but other peers cannot bitswap-fetch the blocks until
+    /// `add()` materialises them.
     pub async fn compute_file_cid(&self, path: &std::path::Path) -> Result<(String, u64)> {
         if !path.exists() {
             return Err(anyhow!("Source path does not exist: {}", path.display()));
@@ -372,6 +420,29 @@ impl IpfsManager {
             ));
         }
         let size = path_size_bytes(path);
+
+        // Filestore fast path: when both the index and the running IPFS
+        // handle are available, drive the indexed compute so leaves end
+        // up in the filestore index and link blocks land in the inner
+        // blockstore. Bitswap can then serve the file without any further
+        // materialisation step.
+        let index = self.config.read().filestore_index.clone();
+        if let (Some(index), Some(ipfs)) = (index, self.handle()) {
+            let repo = ipfs.repo().clone();
+            let put_link = move |block: rust_ipfs::Block| {
+                let repo = repo.clone();
+                async move {
+                    repo.put_block(&block)
+                        .await
+                        .map(|_| ())
+                        .map_err(|e| anyhow!("put_block link: {e}"))
+                }
+            };
+            let (cid, total_size) =
+                crate::filestore::compute_and_index_file_cid(path, &index, put_link).await?;
+            return Ok((cid, total_size.max(size)));
+        }
+
         let cid = compute_file_cid_inner(path).await?;
         Ok((cid, size))
     }

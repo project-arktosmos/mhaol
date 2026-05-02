@@ -1,10 +1,17 @@
 pub mod api;
 pub mod config;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod filestore;
 pub mod manager;
 pub mod types;
 pub mod util;
 
 pub use config::{IpfsConfig, DEFAULT_BOOTSTRAP};
+#[cfg(not(target_arch = "wasm32"))]
+pub use filestore::{
+    compute_and_index_file_cid, FilestoreBlockStore, FilestoreEntry, FilestoreIndex,
+    InMemoryFilestoreIndex,
+};
 pub use manager::IpfsManager;
 pub use types::{
     AddIpfsRequest, IpfsFileInfo, IpfsPeerInfo, IpfsState, IpfsStats,
