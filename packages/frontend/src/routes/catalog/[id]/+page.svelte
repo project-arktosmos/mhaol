@@ -608,10 +608,11 @@
 		}
 	}
 
-	// Tracks trailer playback state lifted from <CatalogTrailerPlayer> via
-	// `onStartedChange`, plus a monotonic counter the parent increments to
-	// kick off playback when the user clicks the centered "Trailer" button.
-	let trailerPlayRequest = $state(0);
+	// Trailer playback state lifted from <CatalogTrailerPlayer> via
+	// `onStartedChange`. Used to hide the source-button overlay while the
+	// trailer is playing — the source buttons are pointer-events-none on
+	// their container, so before playback starts the user can still click
+	// the trailer's underlying play button by clicking outside the labels.
 	let trailerStarted = $state(false);
 
 	$effect(() => {
@@ -628,7 +629,6 @@
 	function handleSourceClick(source: StreamSource): void {
 		if (source === 'trailer') {
 			if (activeSource !== 'trailer') selectSource('trailer');
-			trailerPlayRequest++;
 			return;
 		}
 		if (source === activeSource) {
@@ -1953,8 +1953,6 @@
 								trailerOptions={isYoutubeVideo ? [] : playableTrailers}
 								{selectedTrailerKey}
 								onTrailerSelect={(k) => (selectedTrailerKey = k)}
-								hideStartOverlay
-								playRequest={trailerPlayRequest}
 								onStartedChange={(s) => (trailerStarted = s)}
 							/>
 						{:else if firkin.images[1]}

@@ -25,14 +25,6 @@
 		trailerOptions?: { key: string; label: string | null; youtubeUrl: string }[];
 		selectedTrailerKey?: string | null;
 		onTrailerSelect?: (key: string) => void;
-		/// Suppress the central play button overlay. The parent controls
-		/// playback externally (e.g. via its own button group).
-		hideStartOverlay?: boolean;
-		/// Monotonic counter; incrementing it from the parent triggers a
-		/// `handleStart()` call as soon as the stream URL is ready. Lets the
-		/// parent kick off playback even after the trailer has been stopped
-		/// once.
-		playRequest?: number;
 		/// Fires whenever the internal `started` state flips, so the parent
 		/// can mirror it (used to hide its own controls overlay during
 		/// playback).
@@ -48,8 +40,6 @@
 		trailerOptions = [],
 		selectedTrailerKey = null,
 		onTrailerSelect,
-		hideStartOverlay = false,
-		playRequest = 0,
 		onStartedChange
 	}: Props = $props();
 
@@ -163,19 +153,6 @@
 	// seek bar / buttons stay greyed out.
 	const synthConnectionState = $derived<'idle' | 'streaming'>(streamUrl ? 'streaming' : 'idle');
 
-	let lastPlayRequest = -1;
-	let pendingPlayRequest = $state(false);
-	$effect(() => {
-		if (playRequest !== lastPlayRequest) {
-			lastPlayRequest = playRequest;
-			pendingPlayRequest = true;
-		}
-		if (pendingPlayRequest && streamUrl && !started && !starting) {
-			pendingPlayRequest = false;
-			handleStart();
-		}
-	});
-
 	$effect(() => {
 		onStartedChange?.(started);
 	});
@@ -226,7 +203,7 @@
 			</select>
 		{/if}
 
-		{#if !hideStartOverlay && !started && (streamUrl || posterUrl)}
+		{#if !started && (streamUrl || posterUrl)}
 			<button
 				type="button"
 				class="absolute inset-0 z-20 flex items-center justify-center bg-black/30 transition-colors hover:bg-black/40 disabled:cursor-wait"
