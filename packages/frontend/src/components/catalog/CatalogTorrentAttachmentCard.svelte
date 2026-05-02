@@ -125,12 +125,16 @@
 		trailerPlaying = false
 	}: Props = $props();
 
-	// Once the download has been pinned to IPFS the Download cell becomes a
-	// click-to-play button, which is strictly better than streaming the
-	// torrent (same bytes, faster start, no peer churn). Hide the Stream
-	// cell entirely in that state so the user lands on the obvious choice;
-	// the Download cell promotes to `col-span-2` so the row stays balanced.
+	// Once the download has been pinned to IPFS the Download tab is the
+	// strictly-better path (same bytes, faster start, no peer churn) so we
+	// flip the merged tab panel to it by default; the user can still pick
+	// Stream manually.
 	const downloadActionable = $derived(Boolean(download && download.ipfsCid && onDownloadPlay));
+
+	let userPickedAttachmentTab = $state<'stream' | 'download' | null>(null);
+	const activeAttachmentTab = $derived(
+		userPickedAttachmentTab ?? (downloadActionable ? 'download' : 'stream')
+	);
 
 	// Quality of the currently-attached stream, mapped to a bucket label
 	// from `streamPicksByQuality`. Tries the bucket label first (most
@@ -179,24 +183,6 @@
 		<span title="File size">· {info.sizeBytes != null ? formatSizeBytes(info.sizeBytes) : '—'}</span
 		>
 	</div>
-{/snippet}
-
-{#snippet downloadHeader()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		viewBox="0 0 24 24"
-		fill="currentColor"
-		class="h-8 w-8 translate-x-0.5"
-		aria-hidden="true"
-	>
-		<polygon points="6 4 20 12 6 20 6 4" />
-	</svg>
-	<span class="text-xs font-medium">Play</span>
-{/snippet}
-
-{#snippet header(iconName: string, label: string, iconTitle: string)}
-	<Icon name={iconName} size={32} title={iconTitle} />
-	<span class="text-xs font-medium">{label}</span>
 {/snippet}
 
 {#snippet streamPicksTable(activeQuality: string | null)}
@@ -258,6 +244,100 @@
 	</table>
 {/snippet}
 
+{#snippet streamContent()}
+	{#if stream && onStreamPlay}
+		<div class="flex flex-col items-stretch gap-2">
+			{#if streamPicksByQuality.length > 0 && onAttachStream}
+				{@render streamPicksTable(attachedStreamQuality)}
+			{:else}
+				<div class="flex flex-col items-center gap-1">
+					{@render stats(stream)}
+					<button
+						type="button"
+						onclick={() => onStreamPlay?.()}
+						disabled={streamPlaying}
+						class="btn btn-sm btn-primary"
+					>
+						{streamPlaying ? 'Starting…' : 'Play'}
+					</button>
+				</div>
+			{/if}
+		</div>
+	{:else if stream}
+		<div class="flex flex-col items-center gap-1">
+			{@render stats(stream)}
+		</div>
+	{:else if streamPicksByQuality.length > 0 && onAttachStream}
+		{@render streamPicksTable(null)}
+	{:else}
+		<div class="flex flex-col items-center gap-1">
+			<span class="text-[10px] text-base-content/60">Not attached</span>
+			<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet downloadContent()}
+	{#if download && download.ipfsCid && onDownloadPlay}
+		<div class="flex flex-col items-center gap-1">
+			<span
+				class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
+				title={download.ipfsCid}
+			>
+				{shortCid(download.ipfsCid)}
+			</span>
+			<button
+				type="button"
+				onclick={() => onDownloadPlay?.()}
+				disabled={downloadPlaying}
+				class="btn btn-sm btn-primary"
+			>
+				{downloadPlaying ? 'Starting…' : 'Play'}
+			</button>
+		</div>
+	{:else if download}
+		<div class="flex flex-col items-stretch gap-1">
+			{#if download.finished}
+				<span class="text-center text-[10px] text-success">Seeding · pinning to IPFS…</span>
+			{:else if download.progress != null}
+				<progress class="progress h-1.5 w-full progress-primary" value={download.progress} max="1"
+				></progress>
+				<span class="text-center text-[10px] text-base-content/70">
+					{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
+					download.downloadSpeed > 0
+						? ` · ${formatSpeed(download.downloadSpeed)}`
+						: ''}{download.etaSeconds != null && download.etaSeconds > 0
+						? ` · ETA ${formatEta(download.etaSeconds)}`
+						: ''}
+				</span>
+			{:else}
+				<span class="text-center text-[10px] text-base-content/50">Queued</span>
+			{/if}
+			<div class="flex justify-center">
+				{@render stats(download)}
+			</div>
+		</div>
+	{:else if preferredDownload && onAttachDownload}
+		{@const info = torrentToInfo(preferredDownload)}
+		<div class="flex flex-col items-center gap-1">
+			{@render stats(info)}
+			<button
+				type="button"
+				onclick={() => onAttachDownload?.(preferredDownload)}
+				disabled={attachingDownload}
+				class="btn btn-sm btn-primary"
+			>
+				{attachingDownload ? 'Starting…' : 'Assign'}
+			</button>
+		</div>
+	{:else}
+		<div class="flex flex-col items-center gap-1">
+			<span class="text-[10px] text-base-content/60">Not attached</span>
+			<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
+		</div>
+	{/if}
+{/snippet}
+
 <div class="flex flex-col gap-3">
 	{#if trailer && onTrailerPlay}
 		<div
@@ -282,121 +362,37 @@
 		</div>
 	{/if}
 
-	{#if !downloadActionable}
-		{#if stream && onStreamPlay}
-			<div
-				class="flex flex-col items-stretch gap-2 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-			>
-				<div class="flex flex-col items-center gap-1">
-					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-				</div>
-				{#if streamPicksByQuality.length > 0 && onAttachStream}
-					{@render streamPicksTable(attachedStreamQuality)}
-				{:else}
-					{@render stats(stream)}
-					<button
-						type="button"
-						onclick={() => onStreamPlay?.()}
-						disabled={streamPlaying}
-						class="btn btn-sm btn-primary"
-					>
-						{streamPlaying ? 'Starting…' : 'Play'}
-					</button>
-				{/if}
-			</div>
-		{:else if stream}
-			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-			>
-				{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-				{@render stats(stream)}
-			</div>
-		{:else if streamPicksByQuality.length > 0 && onAttachStream}
-			<div
-				class="flex flex-col items-stretch gap-2 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
-			>
-				<div class="flex flex-col items-center gap-1">
-					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-				</div>
-				{@render streamPicksTable(null)}
-			</div>
-		{:else}
-			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-			>
-				{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-				<span class="text-[10px] text-base-content/60">Not attached</span>
-				<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
-			</div>
-		{/if}
-	{/if}
-
-	{#if download && download.ipfsCid && onDownloadPlay}
-		<div
-			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-		>
-			{@render downloadHeader()}
-			<span
-				class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
-				title={download.ipfsCid}
-			>
-				{shortCid(download.ipfsCid)}
-			</span>
+	<div class="rounded-md border border-base-content/10 bg-base-300">
+		<div role="tablist" class="tabs-bordered tabs">
 			<button
 				type="button"
-				onclick={() => onDownloadPlay?.()}
-				disabled={downloadPlaying}
-				class="btn btn-sm btn-primary"
+				role="tab"
+				class="tab gap-2"
+				class:tab-active={activeAttachmentTab === 'stream'}
+				onclick={() => (userPickedAttachmentTab = 'stream')}
+				aria-selected={activeAttachmentTab === 'stream'}
 			>
-				{downloadPlaying ? 'Starting…' : 'Play'}
+				<Icon name="lorc/magnet" size={20} title="Stream mode" />
+				<span class="text-xs font-medium">Stream</span>
+			</button>
+			<button
+				type="button"
+				role="tab"
+				class="tab gap-2"
+				class:tab-active={activeAttachmentTab === 'download'}
+				onclick={() => (userPickedAttachmentTab = 'download')}
+				aria-selected={activeAttachmentTab === 'download'}
+			>
+				<Icon name="delapouite/cloud-download" size={20} title="Download mode" />
+				<span class="text-xs font-medium">Download</span>
 			</button>
 		</div>
-	{:else if download}
-		<div
-			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-		>
-			{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
-			{#if download.finished}
-				<span class="text-[10px] text-success">Seeding · pinning to IPFS…</span>
-			{:else if download.progress != null}
-				<progress class="progress h-1.5 w-full progress-primary" value={download.progress} max="1"
-				></progress>
-				<span class="text-[10px] text-base-content/70">
-					{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
-					download.downloadSpeed > 0
-						? ` · ${formatSpeed(download.downloadSpeed)}`
-						: ''}{download.etaSeconds != null && download.etaSeconds > 0
-						? ` · ETA ${formatEta(download.etaSeconds)}`
-						: ''}
-				</span>
+		<div class="p-3">
+			{#if activeAttachmentTab === 'stream'}
+				{@render streamContent()}
 			{:else}
-				<span class="text-[10px] text-base-content/50">Queued</span>
+				{@render downloadContent()}
 			{/if}
-			{@render stats(download)}
 		</div>
-	{:else if preferredDownload && onAttachDownload}
-		{@const info = torrentToInfo(preferredDownload)}
-		<div
-			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
-		>
-			{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
-			{@render stats(info)}
-			<button
-				type="button"
-				onclick={() => onAttachDownload?.(preferredDownload)}
-				disabled={attachingDownload}
-				class="btn btn-sm btn-primary"
-			>
-				{attachingDownload ? 'Starting…' : 'Assign'}
-			</button>
-		</div>
-	{:else}
-		<div
-			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-		>
-			{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
-			<span class="text-[10px] text-base-content/60">Not attached</span>
-			<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
-		</div>
-	{/if}
+	</div>
 </div>
