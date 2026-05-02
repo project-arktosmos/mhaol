@@ -55,6 +55,22 @@ pnpm build:headless:linux
 
 All env vars from [packages/backend/CLAUDE.md](../../packages/backend/CLAUDE.md) apply unchanged: `PORT`, `HOST`, `DATA_DIR`, `DB_PATH`, `IPFS_SWARM_KEY_FILE`, `MHAOL_IPFS_TCP_PORT`, `MHAOL_IPFS_WS_PORT`, `YTDL_OUTPUT_DIR`.
 
+## Releases (CI)
+
+A published GitHub Release triggers `.github/workflows/release-headless-linux.yml`, which builds `mhaol-headless` natively on `ubuntu-latest` (x86_64) with the SPA embedded and uploads three assets to the release:
+
+- `mhaol-headless-<tag>-linux-x86_64` — the bare binary
+- `mhaol-headless-<tag>-linux-x86_64.tar.gz` — tarball of the bare binary
+- `mhaol-headless-<tag>-linux-x86_64.sha256` — sha256 sums for both of the above
+
+The same workflow can be triggered manually via the **Actions → Release Headless (Linux) → Run workflow** button (`workflow_dispatch`); manual runs only upload as a workflow artifact and do not touch any release.
+
+To cut a release locally:
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+gh release create v0.1.0 --generate-notes   # CI takes over from here
+```
+
 ## Logs
 
 `pnpm dev:headless` tees the bin's stdout+stderr into `logs/headless.log` and the Vite dev server into `logs/web.log`. Each file is overwritten on the next run.
