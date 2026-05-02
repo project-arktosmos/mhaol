@@ -80,15 +80,30 @@
 		musicbrainz: 'local-album'
 	};
 
-	const libraryFirkins = $derived<Firkin[]>(
+	const LIBRARY_COLLAPSED_LIMIT = 6;
+	let libraryExpanded = $state(false);
+
+	const libraryAllFirkins = $derived<Firkin[]>(
 		addon
 			? $firkinsStore.firkins
 					.filter((d) => d.addon === addon || d.addon === LOCAL_ADDON_FOR[addon])
 					.slice()
 					.sort((a, b) => b.created_at.localeCompare(a.created_at))
-					.slice(0, 6)
 			: []
 	);
+	const libraryFirkins = $derived<Firkin[]>(
+		libraryExpanded ? libraryAllFirkins : libraryAllFirkins.slice(0, LIBRARY_COLLAPSED_LIMIT)
+	);
+	const libraryHasMore = $derived(libraryAllFirkins.length > LIBRARY_COLLAPSED_LIMIT);
+
+	// Collapse the library back to one row whenever the user switches
+	// addons — otherwise an "expanded" toggle from a prior addon's grid
+	// silently sticks across the addon change.
+	$effect(() => {
+		// Re-trigger on addon change.
+		void addon;
+		libraryExpanded = false;
+	});
 
 	function virtualFirkin(item: CatalogItem): CloudFirkin {
 		const images = [item.posterUrl, item.backdropUrl]
@@ -467,6 +482,19 @@
 					</div>
 				{/each}
 			</div>
+			{#if libraryHasMore}
+				<div class="flex justify-center">
+					<button
+						type="button"
+						class="btn btn-outline btn-sm"
+						onclick={() => (libraryExpanded = !libraryExpanded)}
+					>
+						{libraryExpanded
+							? 'Show less'
+							: `More (${libraryAllFirkins.length - LIBRARY_COLLAPSED_LIMIT})`}
+					</button>
+				</div>
+			{/if}
 		{/if}
 	</section>
 
