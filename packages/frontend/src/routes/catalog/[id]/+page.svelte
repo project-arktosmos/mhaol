@@ -36,7 +36,8 @@
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
 	import {
 		TrackResolver,
-		type AlbumProgressPayload
+		type AlbumProgressPayload,
+		type AlbumDownloadProgressPayload
 	} from '$services/catalog/track-resolver.svelte';
 	import { TorrentSearch, startTorrentDownload } from '$services/catalog/torrent-search.svelte';
 	import { SubsLyricsResolver } from '$services/catalog/subs-lyrics-resolver.svelte';
@@ -55,7 +56,15 @@
 	}
 
 	let { data }: Props = $props();
-	const firkin = $derived<Firkin>(data.firkin);
+	// Local override so client-side mutations (bookmark flip, metadata
+	// enrich, trailer/track persist, polling rollforward) trigger
+	// reactivity. Props from `$props()` are read-only in Svelte 5 —
+	// `data.firkin = updated` silently fails to propagate, so the
+	// `bookmarked` flip required a page refresh to surface. The override
+	// is dropped on navigation (a new loader payload arrives via
+	// `data.firkin`) so the page always stays in sync with SvelteKit.
+	let firkinOverride = $state<Firkin | null>(null);
+	const firkin = $derived<Firkin>(firkinOverride ?? data.firkin);
 	// `bookmarked` flips between two presentations of the same detail page:
 	// non-bookmarked firkins (created by the catalog `/catalog/visit`
 	// resolver) show only the Bookmark action and skip identity / version
@@ -232,7 +241,7 @@
 			backdropUrl: item.backdropUrl
 		});
 		metadataLookupOpen = false;
-		data.firkin = updated;
+		firkinOverride = updated;
 	}
 
 	function parseMusicBrainzReleaseGroupId(value: string): string | null {
@@ -362,7 +371,7 @@
 				throw new Error(message);
 			}
 			const updated = (await putRes.json()) as Firkin;
-			data.firkin = updated;
+			firkinOverride = updated;
 			if (want.fetchArtists) artistsBackfillStatus = 'done';
 		} catch (err) {
 			artistsBackfillError = err instanceof Error ? err.message : 'Unknown error';
@@ -370,15 +379,32 @@
 		}
 	}
 
-	async function startIpfsPlay(): Promise<void> {
-		if (!firstIpfsCid || ipfsStarting) return;
+	// Map "S{:02}E{:02}" → CID for every ipfs file whose title carries the
+	// episode tag set by `tv_build.rs` (local-tv libraries) and
+	// `torrent_completion.rs` (torrent downloads on tmdb-tv firkins).
+	// Drives the seasons card's per-episode "Play" button.
+	const episodeCidByKey = $derived.by(() => {
+		const map = new Map<string, string>();
+		for (const f of firkin.files) {
+			if (f.type !== 'ipfs') continue;
+			const m = (f.title ?? '').match(/^S(\d{1,3})E(\d{1,3})/i);
+			if (!m) continue;
+			const key = `S${m[1].padStart(2, '0')}E${m[2].padStart(2, '0')}`;
+			if (!map.has(key)) map.set(key, f.value);
+		}
+		return map;
+	});
+	const availableEpisodeKeys = $derived(new Set(episodeCidByKey.keys()));
+
+	async function playIpfsCid(cid: string, label: string): Promise<void> {
+		if (!cid || ipfsStarting) return;
 		ipfsStarting = true;
 		ipfsError = null;
 		try {
 			const res = await fetch(`${base}/api/ipfs-stream/sessions`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ cid: firstIpfsCid })
+				body: JSON.stringify({ cid })
 			});
 			if (!res.ok) {
 				let message = `HTTP ${res.status}`;
@@ -400,9 +426,9 @@
 					? body.durationSeconds
 					: null;
 			const file: PlayableFile = {
-				id: `firkin:${firkin.id}:ipfs:${firstIpfsCid}`,
+				id: `firkin:${firkin.id}:ipfs:${cid}`,
 				type: 'library',
-				name: firkin.title,
+				name: label,
 				outputPath: '',
 				mode: 'video',
 				format: null,
@@ -428,6 +454,22 @@
 		} finally {
 			ipfsStarting = false;
 		}
+	}
+
+	async function startIpfsPlay(): Promise<void> {
+		if (!firstIpfsCid) return;
+		await playIpfsCid(firstIpfsCid, firkin.title);
+	}
+
+	async function playEpisode(season: number, episode: number): Promise<void> {
+		const key = `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
+		const cid = episodeCidByKey.get(key);
+		if (!cid) return;
+		// Switch the player tab so the inline pane renders the episode.
+		// The IPFS tab is gated on `ipfsTabEnabled` (= `hasIpfsFiles`),
+		// which is true whenever any episode has a CID.
+		activeSource = 'ipfs';
+		await playIpfsCid(cid, `${firkin.title} — ${key}`);
 	}
 
 	const torrentsState = firkinTorrentsService.state;
@@ -858,6 +900,107 @@
 		};
 		void tick();
 		const timer = setInterval(tick, 1000);
+		return () => {
+			cancelled = true;
+			clearInterval(timer);
+		};
+	});
+
+	// Album download — kicked by the tracks card's "Download album" button.
+	// `POST /api/firkins/:id/download-album` spawns a server-side task that
+	// walks the tracklist, downloads each track's persisted YouTube URL via
+	// yt-dlp (audio-only), pins the file to IPFS, and rolls the firkin
+	// forward. The browser only triggers and observes — the task survives
+	// page reloads and tab closures.
+	let albumDownloadInFlight = $state(false);
+	let albumDownloadError = $state<string | null>(null);
+
+	async function startAlbumDownload(): Promise<void> {
+		if (albumDownloadInFlight) return;
+		albumDownloadInFlight = true;
+		albumDownloadError = null;
+		try {
+			const res = await fetch(
+				`${base}/api/firkins/${encodeURIComponent(firkin.id)}/download-album`,
+				{ method: 'POST' }
+			);
+			if (!res.ok) {
+				let message = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+		} catch (err) {
+			albumDownloadError = err instanceof Error ? err.message : 'Unknown error';
+			albumDownloadInFlight = false;
+		}
+	}
+
+	// Re-hydrate album-download state when a task is already running
+	// server-side (e.g. the user reloaded the page mid-download). The
+	// progress endpoint returns 404 when nothing is in flight; any 200
+	// with `completed: false` flips the in-flight flag back on so the
+	// poll below picks up where it left off.
+	$effect(() => {
+		if (!isMusicBrainz || !isBookmarked) return;
+		const id = firkin.id;
+		let cancelled = false;
+		void (async () => {
+			try {
+				const res = await fetch(
+					`${base}/api/firkins/${encodeURIComponent(id)}/download-progress`,
+					{ cache: 'no-store' }
+				);
+				if (cancelled || !res.ok) return;
+				const payload = (await res.json()) as AlbumDownloadProgressPayload;
+				trackResolver.applyDownloadProgress(payload);
+				if (!payload.completed) albumDownloadInFlight = true;
+				else if (payload.error) albumDownloadError = payload.error;
+			} catch {
+				// no in-flight task — ignore
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	// Poll album download progress while the task is running, projecting
+	// per-track status onto the existing tracks via `applyDownloadProgress`.
+	// The firkin poll above picks up rolled-forward `ipfs` file entries and
+	// re-projects them via `loadFromFirkin`, so the per-row "Play" button
+	// surfaces as soon as a track finishes — without waiting for the
+	// entire album to complete.
+	$effect(() => {
+		if (!isMusicBrainz || !isBookmarked) return;
+		if (!albumDownloadInFlight) return;
+		const id = firkin.id;
+		let cancelled = false;
+		const tick = async () => {
+			if (cancelled) return;
+			try {
+				const res = await fetch(
+					`${base}/api/firkins/${encodeURIComponent(id)}/download-progress`,
+					{ cache: 'no-store' }
+				);
+				if (cancelled) return;
+				if (!res.ok) return;
+				const payload = (await res.json()) as AlbumDownloadProgressPayload;
+				trackResolver.applyDownloadProgress(payload);
+				if (payload.completed) {
+					albumDownloadInFlight = false;
+					if (payload.error) albumDownloadError = payload.error;
+				}
+			} catch {
+				// swallow — try again on next tick
+			}
+		};
+		void tick();
+		const timer = setInterval(tick, 1500);
 		return () => {
 			cancelled = true;
 			clearInterval(timer);
@@ -1383,6 +1526,8 @@
 					{addingHash}
 					onAssign={isBookmarked ? assignTorrent : undefined}
 					onSeasonsLoaded={(nums) => (tvSeasonNumbers = nums)}
+					{availableEpisodeKeys}
+					onPlayEpisode={isBookmarked ? playEpisode : undefined}
 				/>
 			{/if}
 
@@ -1412,6 +1557,9 @@
 					albumTitle={firkin.title}
 					firkinId={firkin.id}
 					preview={!isBookmarked}
+					onDownloadAlbum={isBookmarked ? startAlbumDownload : undefined}
+					downloadInFlight={albumDownloadInFlight}
+					downloadError={albumDownloadError}
 				/>
 			{/if}
 

@@ -17,7 +17,8 @@ The full toolchain (Rust, Node, pnpm, Tauri CLI, GStreamer, platform build tools
 |------|-------|
 | macOS | `pnpm setup:mac` (needs [Homebrew](https://brew.sh)) |
 | Ubuntu / Debian | `pnpm setup:linux` (uses `apt`, prompts for `sudo`) |
-| Windows 10 / 11 | install [WSL](https://learn.microsoft.com/windows/wsl/install) with the Ubuntu distro, clone the repo inside the WSL filesystem, then run `pnpm setup:linux` — produces a Linux Tauri bundle |
+| Windows 10 / 11 — native | open an **elevated** PowerShell, then `pnpm setup:windows` (uses `winget`) — produces native `.msi` / NSIS `.exe` |
+| Windows 10 / 11 — WSL | install [WSL](https://learn.microsoft.com/windows/wsl/install) with Ubuntu, clone inside the WSL filesystem, then `pnpm setup:linux` — produces a Linux `.deb` / `.AppImage` (not a Windows-native installer) |
 
 The scripts are idempotent — re-running them only installs what's missing. They install everything required to build both the `mhaol-cloud` backend bin and the `Mhaol Cloud` Tauri shell on that host.
 
@@ -27,11 +28,13 @@ If you don't have `pnpm` yet, run the script directly first (`bash scripts/setup
 
 - **macOS**: Xcode Command Line Tools, GStreamer (Homebrew), Rust (rustup), Node + pnpm (Homebrew + Corepack), Tauri CLI.
 - **Linux (Ubuntu/Debian, including WSL)**: `build-essential`, `libwebkit2gtk-4.1-dev`, `libxdo-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libsoup-3.0-dev`, the GStreamer 1.0 dev + plugin packages, Rust (rustup), Node 20 (NodeSource) + pnpm, Tauri CLI.
+- **Windows (native)**: Visual Studio 2022 Build Tools (Desktop C++ workload), WebView2, Rust (rustup, MSVC toolchain), Node LTS + pnpm, NSIS, GStreamer MSVC (runtime + development), Tauri CLI. If `winget` can't find a working GStreamer MSVC package, grab the two MSVC MSIs from <https://gstreamer.freedesktop.org/download/#windows> and re-run.
 
-### Windows / WSL notes
+### Windows native vs WSL
 
-- Clone the repo **inside the WSL filesystem** (e.g. `~/mhaol`), not under `/mnt/c/...` — building from `/mnt/c` cripples cargo and pnpm performance and trips file-watcher quirks.
-- The build produced by `pnpm build:dist` inside WSL is a **Linux** Tauri bundle (`.deb` / `.AppImage`); it runs under WSLg or a real Linux host, not on Windows natively. There is no native Windows installer in this setup.
+- **Native** (`pnpm setup:windows`) is the only path that yields a Windows-installable artifact (`.msi` + NSIS `.exe`). Use this when you want to ship to Windows users.
+- **WSL Ubuntu** (`pnpm setup:linux` inside WSL) is faster to set up, builds a Linux bundle that runs under WSLg, and is fine for development on a Windows host. It cannot produce a Windows `.exe`/`.msi`.
+- Clone the repo **inside the WSL filesystem** when going the WSL route (e.g. `~/mhaol`), not under `/mnt/c/...` — cargo and pnpm I/O are an order of magnitude slower across the 9P bridge.
 
 ---
 
@@ -46,7 +49,8 @@ cd mhaol
 
 # Install host toolchain — pick the line for your OS
 pnpm setup:mac       # macOS
-pnpm setup:linux     # Ubuntu / Debian (including WSL on Windows)
+pnpm setup:linux     # Ubuntu / Debian (or WSL Ubuntu — produces a Linux bundle only)
+pnpm setup:windows   # Windows native (elevated PowerShell — produces .msi / NSIS .exe)
 
 # Install JavaScript dependencies
 pnpm install

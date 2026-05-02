@@ -18,6 +18,11 @@
 		addingHash?: string | null;
 		onAssign?: (torrent: TorrentResultItem) => void | Promise<void>;
 		onSeasonsLoaded?: (seasonNumbers: number[]) => void;
+		/** Set of `S{:02}E{:02}` keys for episodes that have a local IPFS file
+		 * attached to the firkin. When set, the matching episode rows render
+		 * a Play button that calls `onPlayEpisode`. */
+		availableEpisodeKeys?: Set<string>;
+		onPlayEpisode?: (seasonNumber: number, episodeNumber: number) => void | Promise<void>;
 	}
 	let {
 		tmdbTvId,
@@ -28,8 +33,23 @@
 		existingHashes = new Set<string>(),
 		addingHash = null,
 		onAssign,
-		onSeasonsLoaded
+		onSeasonsLoaded,
+		availableEpisodeKeys = new Set<string>(),
+		onPlayEpisode
 	}: Props = $props();
+
+	function episodeKey(s: number, e: number): string {
+		return `S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
+	}
+
+	function availableCountForSeason(seasonNumber: number): number {
+		const prefix = `S${String(seasonNumber).padStart(2, '0')}E`;
+		let n = 0;
+		for (const k of availableEpisodeKeys) {
+			if (k.startsWith(prefix)) n++;
+		}
+		return n;
+	}
 
 	interface Season {
 		seasonNumber: number;
@@ -322,6 +342,7 @@
 				{@const epStatus = episodesStatus[season.seasonNumber] ?? 'idle'}
 				{@const epError = episodesError[season.seasonNumber] ?? null}
 				{@const seasonTorrents = torrentsForSeason(season.seasonNumber)}
+				{@const localCount = availableCountForSeason(season.seasonNumber)}
 				<li class="rounded border border-base-content/10 bg-base-100">
 					<button
 						type="button"
@@ -352,6 +373,9 @@
 							</div>
 							<p class="text-xs text-base-content/60">
 								{season.episodeCount ?? 0} episode{season.episodeCount === 1 ? '' : 's'}
+								{#if localCount > 0}
+									· <span class="text-success">{localCount} local</span>
+								{/if}
 								{#if seasonTorrents.length > 0}
 									· <span class="text-success">{seasonTorrents.length} torrent{seasonTorrents.length === 1 ? '' : 's'}</span>
 								{/if}
@@ -384,6 +408,8 @@
 							{:else}
 								<ol class="flex flex-col gap-1">
 									{#each epList as ep (ep.episodeNumber)}
+										{@const epK = episodeKey(ep.seasonNumber, ep.episodeNumber)}
+										{@const epAvailable = availableEpisodeKeys.has(epK)}
 										<li
 											class="flex items-start gap-2 rounded border border-base-content/10 bg-base-200 p-2 text-xs"
 										>
@@ -403,6 +429,9 @@
 														).padStart(2, '0')}
 													</span>
 													<span class="font-medium">{ep.name}</span>
+													{#if epAvailable}
+														<span class="badge badge-success badge-xs">local</span>
+													{/if}
 													{#if ep.airDate}
 														<span class="text-base-content/60">{ep.airDate}</span>
 													{/if}
@@ -419,6 +448,18 @@
 													<p class="mt-1 text-base-content/70">{ep.overview}</p>
 												{/if}
 											</div>
+											{#if epAvailable && onPlayEpisode}
+												<button
+													type="button"
+													class="btn btn-xs btn-primary shrink-0"
+													onclick={() =>
+														void onPlayEpisode?.(ep.seasonNumber, ep.episodeNumber)}
+													aria-label="Play episode"
+													title="Play this episode"
+												>
+													▶
+												</button>
+											{/if}
 										</li>
 									{/each}
 								</ol>
