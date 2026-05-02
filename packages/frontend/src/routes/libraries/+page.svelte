@@ -623,7 +623,9 @@
 																<th class="w-72">CID</th>
 																<th class="w-24">MIME</th>
 																<th class="w-20 text-right">Size</th>
-																<th class="w-48">Query</th>
+																<th class="w-40">Show / Title</th>
+																<th class="w-12">S</th>
+																<th class="w-12">E</th>
 																<th class="w-56">TMDB match</th>
 																<th class="w-32"></th>
 															</tr>
@@ -651,11 +653,24 @@
 																			{entry.extractedTvQuery.show}{entry.extractedTvQuery.year
 																				? ` (${entry.extractedTvQuery.year})`
 																				: ''}
-																			{` S${String(entry.extractedTvQuery.season).padStart(2, '0')}E${String(entry.extractedTvQuery.episode).padStart(2, '0')}`}
 																		{:else if entry.extractedQuery}
 																			{entry.extractedQuery.title}{entry.extractedQuery.year
 																				? ` (${entry.extractedQuery.year})`
 																				: ''}
+																		{:else}
+																			<span class="text-base-content/30">—</span>
+																		{/if}
+																	</td>
+																	<td class="text-xs">
+																		{#if entry.extractedTvQuery}
+																			{String(entry.extractedTvQuery.season).padStart(2, '0')}
+																		{:else}
+																			<span class="text-base-content/30">—</span>
+																		{/if}
+																	</td>
+																	<td class="text-xs">
+																		{#if entry.extractedTvQuery}
+																			{String(entry.extractedTvQuery.episode).padStart(2, '0')}
 																		{:else}
 																			<span class="text-base-content/30">—</span>
 																		{/if}
@@ -706,7 +721,7 @@
 																</tr>
 																{#if createFirkinErrors[entry.path]}
 																	<tr>
-																		<td colspan="7" class="bg-base-100">
+																		<td colspan="9" class="bg-base-100">
 																			<div class="my-1 alert py-1 alert-error">
 																				<span class="text-xs">
 																					Create firkin failed: {createFirkinErrors[entry.path]}
