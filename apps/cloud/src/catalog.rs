@@ -179,6 +179,12 @@ pub(crate) struct CatalogItem {
     /// data has ratings). Empty when the source has no inline ratings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reviews: Vec<CatalogReview>,
+    /// Compact "creator" handle for the item — release-group artist
+    /// credit for music. Populated by addons that have a clear single-
+    /// string handle on the listing endpoint; left absent for movies /
+    /// TV shows where there's no equivalent.
+    #[serde(rename = "artistName", default, skip_serializing_if = "Option::is_none")]
+    pub artist_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -607,6 +613,7 @@ fn tmdb_to_item(r: &serde_json::Value) -> CatalogItem {
         backdrop_url,
         artists: Vec::new(),
         reviews,
+        artist_name: None,
     }
 }
 
@@ -1508,6 +1515,11 @@ fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
         Some(format!("{}/release-group/{}/front", COVERART_BASE, id))
     };
     let reviews = parse_musicbrainz_reviews(rg);
+    let artist_name = if credits.is_empty() {
+        None
+    } else {
+        Some(credits.clone())
+    };
     CatalogItem {
         id,
         title,
@@ -1521,6 +1533,7 @@ fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
         backdrop_url: None,
         artists: Vec::new(),
         reviews,
+        artist_name,
     }
 }
 
@@ -1660,6 +1673,7 @@ fn youtube_search_to_item(item: &serde_json::Value, want_channel: bool) -> Catal
             backdrop_url: None,
             artists: Vec::new(),
             reviews: Vec::new(),
+            artist_name: None,
         }
     } else {
         youtube_to_item(item, false)
@@ -1733,6 +1747,7 @@ fn youtube_to_item(item: &serde_json::Value, want_channel: bool) -> CatalogItem 
         backdrop_url: None,
         artists: Vec::new(),
         reviews: Vec::new(),
+        artist_name: None,
     }
 }
 

@@ -13,6 +13,7 @@ export interface CatalogItem {
 	posterUrl: string | null;
 	backdropUrl: string | null;
 	reviews?: CatalogReview[];
+	artistName?: string;
 }
 
 export interface CatalogPage {
