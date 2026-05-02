@@ -90,8 +90,6 @@
 	// the user clicks Bookmark, the same record gains the full detail
 	// surface (Play / Find metadata / Delete, plus torrent search auto-fire).
 	const isBookmarked = $derived(firkin.bookmarked !== false);
-	let removing = $state(false);
-	let removeError = $state<string | null>(null);
 	let bookmarking = $state(false);
 	let bookmarkError = $state<string | null>(null);
 
@@ -1630,19 +1628,6 @@
 		}
 	}
 
-	async function remove() {
-		if (removing) return;
-		removing = true;
-		removeError = null;
-		try {
-			await firkinsService.remove(firkin.id);
-			window.location.href = `${base}/catalog`;
-		} catch (err) {
-			removeError = err instanceof Error ? err.message : 'Unknown error';
-			removing = false;
-		}
-	}
-
 	/// Promote a browse-cache firkin into a bookmarked one. The server
 	/// flips the flag in place (no CID roll, no version bump). On success
 	/// the local firkin reactively gains its bookmarked surface — torrent
@@ -1724,7 +1709,6 @@
 				</button>
 			{/if}
 			<span class="flex items-center gap-1">
-				<span class="badge badge-outline badge-sm">{firkin.addon}</span>
 				{#if firkinKind}
 					<span class="badge badge-outline badge-sm">{firkinKind}</span>
 				{/if}
@@ -1732,14 +1716,6 @@
 					<span class="badge badge-outline badge-sm">{firkin.year}</span>
 				{/if}
 			</span>
-			<button
-				type="button"
-				class="btn btn-outline btn-sm btn-error"
-				onclick={remove}
-				disabled={removing}
-			>
-				{removing ? 'Deleting…' : 'Delete firkin'}
-			</button>
 		{/snippet}
 	</CatalogPageHeader>
 
@@ -1747,9 +1723,6 @@
 		<div class="alert alert-error"><span>{bookmarkError}</span></div>
 	{/if}
 
-	{#if removeError}
-		<div class="alert alert-error"><span>{removeError}</span></div>
-	{/if}
 	{#if finalizeError}
 		<div class="alert alert-error"><span>{finalizeError}</span></div>
 	{/if}
