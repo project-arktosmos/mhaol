@@ -37,6 +37,18 @@ pnpm app:headless
 # Production build — embeds the SPA into the release bin
 pnpm build:headless
 ./target/release/mhaol-headless     # binds 0.0.0.0:9898 by default
+
+# Cross-compile a Linux x86_64 release from any host (handy when the target server
+# is too small to run `cargo build`). Uses `cross` (https://github.com/cross-rs/cross)
+# which runs the build inside a Docker image — see ../../Cross.toml for the pre-build
+# hook that installs GStreamer + libssl headers needed by mhaol-ipfs-stream / reqwest.
+#
+# Prereqs (build host):
+#   - Docker running
+#   - `cargo install cross --git https://github.com/cross-rs/cross`
+pnpm build:headless:linux
+# Output: ./target/x86_64-unknown-linux-gnu/release/mhaol-headless
+# Ship it: scp ./target/x86_64-unknown-linux-gnu/release/mhaol-headless server:/usr/local/bin/
 ```
 
 ## Environment
