@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import classNames from 'classnames';
 	import { base } from '$app/paths';
 	import { page as pageStore } from '$app/state';
-	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import FirkinLibraryGrid from '$components/catalog/FirkinLibraryGrid.svelte';
 	import LazyRow from '$components/catalog/LazyRow.svelte';
 	import PopularGenreRow from '$components/catalog/PopularGenreRow.svelte';
@@ -14,8 +12,6 @@
 	import {
 		listSources,
 		loadGenres,
-		loadSearch,
-		type CatalogItem,
 		type CatalogGenre,
 		type CatalogSource
 	} from '$lib/catalog.service';

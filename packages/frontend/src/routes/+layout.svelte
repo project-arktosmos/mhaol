@@ -10,6 +10,7 @@
 	import NavbarLyricsPanel from '$components/player/NavbarLyricsPanel.svelte';
 	import NavbarPlaylistPanel from '$components/player/NavbarPlaylistPanel.svelte';
 	import FirkinTooltip from '$components/firkins/FirkinTooltip.svelte';
+	import SearchResultsPanel from '$components/catalog/SearchResultsPanel.svelte';
 	import ArtistsModal from '$components/artists/ArtistsModal.svelte';
 	import ConsumptionModal from '$components/consumption/ConsumptionModal.svelte';
 	import DiskModal from '$components/disk/DiskModal.svelte';
@@ -96,10 +97,11 @@
 		</div>
 	{/if}
 
-	<main class="flex min-w-0 flex-1 overflow-hidden">
+	<main class="relative flex min-w-0 flex-1 overflow-hidden">
 		<div class="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
 			{@render children?.()}
 		</div>
+		<SearchResultsPanel />
 	</main>
 </div>
 

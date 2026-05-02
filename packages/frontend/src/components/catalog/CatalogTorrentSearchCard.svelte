@@ -6,7 +6,9 @@
 	interface Props {
 		search: TorrentSearch;
 		onAssign: (torrent: TorrentResultItem) => void | Promise<void>;
+		onStream?: (torrent: TorrentResultItem) => void | Promise<void>;
 		addingHash: string | null;
+		streamingHash?: string | null;
 		assignError?: string | null;
 		existingHashes?: Set<string>;
 		collapsible?: boolean;
@@ -18,7 +20,9 @@
 	let {
 		search,
 		onAssign,
+		onStream,
 		addingHash,
+		streamingHash = null,
 		assignError = null,
 		existingHashes = new Set<string>(),
 		collapsible = false,
@@ -201,14 +205,17 @@
 											>{formatSizeBytes(torrent.sizeBytes)}</td
 										>
 										<td class="text-right">
+											{@const streaming = streamingHash === torrent.magnetLink}
 											<div class="flex items-center justify-end gap-1">
-												{#if ev.kind === 'streamable'}
+												{#if ev.kind === 'streamable' && onStream}
 													<button
 														type="button"
 														class="btn btn-xs btn-success"
+														disabled={streamingHash !== null}
+														onclick={() => onStream?.(torrent)}
 														aria-label="Stream this torrent"
 													>
-														Stream
+														{streaming ? '…' : 'Stream'}
 													</button>
 												{/if}
 												{#if added}

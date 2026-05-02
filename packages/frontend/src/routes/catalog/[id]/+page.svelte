@@ -673,15 +673,19 @@
 		}
 	}
 
-	async function startTorrentStream(): Promise<void> {
-		if (!firstMagnet || torrentStreamStarting) return;
+	let streamingHash = $state<string | null>(null);
+
+	async function startTorrentStream(magnetOverride?: string): Promise<void> {
+		const magnet = magnetOverride ?? firstMagnet;
+		if (!magnet || torrentStreamStarting) return;
 		torrentStreamStarting = true;
+		streamingHash = magnet;
 		torrentStreamError = null;
 		try {
 			const res = await fetch(`${base}/api/torrent/stream`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ magnet: firstMagnet })
+				body: JSON.stringify({ magnet })
 			});
 			if (!res.ok) {
 				let message = `HTTP ${res.status}`;
@@ -722,7 +726,19 @@
 			if (activeSource === 'torrent') activeSource = 'trailer';
 		} finally {
 			torrentStreamStarting = false;
+			streamingHash = null;
 		}
+	}
+
+	/// Start a torrent stream straight from a search-result row (instead of
+	/// the user having to first attach the magnet via Download). The torrent
+	/// manager's `start_stream` writes to the dedicated `downloads/torrent-streams/`
+	/// directory and wipes any prior stream payload, so calling this multiple
+	/// times in a row is safe — only the latest pick keeps disk space.
+	async function streamTorrentFromRow(torrent: TorrentResultItem): Promise<void> {
+		if (!torrent.magnetLink || torrentStreamStarting) return;
+		activeSource = 'torrent';
+		await startTorrentStream(torrent.magnetLink);
 	}
 
 	const completedTorrents = $derived.by(() => {
@@ -1967,7 +1983,9 @@
 				<CatalogTorrentSearchCard
 					search={torrentSearch}
 					onAssign={assignTorrent}
+					onStream={streamTorrentFromRow}
 					{addingHash}
+					{streamingHash}
 					{assignError}
 					{existingHashes}
 					collapsible
@@ -1986,7 +2004,9 @@
 				<CatalogTorrentSearchCard
 					search={torrentSearch}
 					onAssign={assignTorrent}
+					onStream={streamTorrentFromRow}
 					{addingHash}
+					{streamingHash}
 					{assignError}
 					{existingHashes}
 					onRefresh={() =>
