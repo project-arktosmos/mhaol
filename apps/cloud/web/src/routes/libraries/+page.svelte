@@ -11,6 +11,14 @@
 		type Library
 	} from '$lib/libraries.service';
 	import type { IpfsPin } from '$lib/ipfs.service';
+	import {
+		firkinsService,
+		type Artist,
+		type Trailer,
+		type Review
+	} from '$lib/firkins.service';
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import DirectoryPicker from '../../components/DirectoryPicker.svelte';
 
 	const libsStore = librariesService.state;
@@ -31,6 +39,8 @@
 	let editAddons = $state<LibraryAddon[]>([]);
 	let savingKinds = $state(false);
 	let addonsError = $state<string | null>(null);
+	let creatingFirkinFor = $state<Record<string, boolean>>({});
+	let createFirkinErrors = $state<Record<string, string>>({});
 
 	function toggleNewAddon(addon: LibraryAddon) {
 		newAddons = newAddons.includes(addon)
@@ -220,6 +230,87 @@
 		if (!pins) return map;
 		for (const p of pins) map.set(p.path, p.cid);
 		return map;
+	}
+
+	/// Create a `tmdb-movie` firkin from a TMDB-matched scan entry. Mirrors
+	/// the /catalog/virtual bookmark flow: hit /metadata for artists +
+	/// trailers + reviews, build a payload identical to what the catalog
+	/// virtual page sends, then POST to /api/firkins. The only difference
+	/// is `files`: in addition to the canonical `url` entry pointing at
+	/// TMDB, we attach the pinned IPFS cid so the resulting firkin already
+	/// has a playable file. After create, navigate to the new content-
+	/// addressed detail page.
+	async function createFirkinFromMatch(
+		entry: { path: string; relative_path: string; tmdbMatch?: { tmdbId: number; title: string; year?: number; overview?: string; posterUrl?: string } },
+		cid: string
+	) {
+		if (!entry.tmdbMatch) return;
+		const key = entry.path;
+		if (creatingFirkinFor[key]) return;
+		creatingFirkinFor = { ...creatingFirkinFor, [key]: true };
+		const { [key]: _ignored, ...errRest } = createFirkinErrors;
+		createFirkinErrors = errRest;
+		try {
+			const tmdbId = String(entry.tmdbMatch.tmdbId);
+			const metaRes = await fetch(
+				`/api/catalog/tmdb-movie/${encodeURIComponent(tmdbId)}/metadata`,
+				{ cache: 'no-store' }
+			);
+			if (!metaRes.ok) {
+				let message = `HTTP ${metaRes.status}`;
+				try {
+					const body = await metaRes.json();
+					if (body && typeof body.error === 'string') message = body.error;
+				} catch {
+					// ignore
+				}
+				throw new Error(message);
+			}
+			const meta = (await metaRes.json()) as {
+				artists?: Artist[];
+				trailers?: Trailer[];
+				reviews?: Review[];
+			};
+
+			const fileTitle =
+				entry.relative_path.split('/').pop() ?? entry.relative_path;
+			const created = await firkinsService.create({
+				title: entry.tmdbMatch.title,
+				artists: meta.artists ?? [],
+				description: entry.tmdbMatch.overview ?? '',
+				images: entry.tmdbMatch.posterUrl
+					? [
+							{
+								url: entry.tmdbMatch.posterUrl,
+								mimeType: 'image/jpeg',
+								fileSize: 0,
+								width: 0,
+								height: 0
+							}
+						]
+					: [],
+				files: [
+					{
+						type: 'url',
+						value: `https://www.themoviedb.org/movie/${tmdbId}`,
+						title: 'TMDB Movie'
+					},
+					{ type: 'ipfs', value: cid, title: fileTitle }
+				],
+				year: entry.tmdbMatch.year ?? null,
+				addon: 'tmdb-movie',
+				trailers: meta.trailers ?? [],
+				reviews: meta.reviews ?? []
+			});
+			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
+		} catch (err) {
+			createFirkinErrors = {
+				...createFirkinErrors,
+				[key]: err instanceof Error ? err.message : 'Unknown error'
+			};
+		} finally {
+			creatingFirkinFor = { ...creatingFirkinFor, [key]: false };
+		}
 	}
 
 	function formatBytes(bytes: number): string {
@@ -493,6 +584,7 @@
 																<th class="w-20 text-right">Size</th>
 																<th class="w-48">Query</th>
 																<th class="w-56">TMDB match</th>
+																<th class="w-32"></th>
 															</tr>
 														</thead>
 														<tbody>
@@ -541,7 +633,33 @@
 																			<span class="text-base-content/30">—</span>
 																		{/if}
 																	</td>
+																	<td class="text-xs">
+																		{#if entry.tmdbMatch && cid}
+																			<button
+																				class="btn btn-primary btn-xs"
+																				disabled={creatingFirkinFor[entry.path]}
+																				onclick={() => createFirkinFromMatch(entry, cid)}
+																			>
+																				{creatingFirkinFor[entry.path] ? 'Creating…' : 'Create firkin'}
+																			</button>
+																		{:else if entry.tmdbMatch}
+																			<span class="text-base-content/40">pinning…</span>
+																		{:else}
+																			<span class="text-base-content/30">—</span>
+																		{/if}
+																	</td>
 																</tr>
+																{#if createFirkinErrors[entry.path]}
+																	<tr>
+																		<td colspan="7" class="bg-base-100">
+																			<div class="my-1 alert alert-error py-1">
+																				<span class="text-xs">
+																					Create firkin failed: {createFirkinErrors[entry.path]}
+																				</span>
+																			</div>
+																		</td>
+																	</tr>
+																{/if}
 															{/each}
 														</tbody>
 													</table>

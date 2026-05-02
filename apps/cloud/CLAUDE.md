@@ -277,7 +277,7 @@ pnpm build:cloud
 - Empty `addons`: the directory walk still runs (the WebUI's scan-results table populates), but no files are pinned — without a declared addon there is no "library type" to filter by.
 - Non-empty `addons`: only entries whose type is relevant to one of the declared addons get pinned. Relevance is `local-movie`/`local-tv` → video (mime `video/*` or known video extension), `local-album` → audio, `local-book` → epub/pdf/mobi/azw3/cbz/cbr/djvu/fb2, `local-game` → iso/rom/smc/sfc/gba/nes/gb/gbc/n64/z64/v64/md/sms/gg/nds/3ds/wad/cue/chd/gcm.
 
-Each pinned file lands as one row in the `ipfs_pin` table (deduped by `(cid, path)` so re-scans don't create duplicates). **No firkin records are created from a library scan** — the firkin store is only written to by explicit bookmarks (`POST /api/firkins`) and the catalog flows.
+Each pinned file lands as one row in the `ipfs_pin` table (deduped by `(cid, path)` so re-scans don't create duplicates). **No firkin records are created automatically from a library scan** — the firkin store is only written to by explicit user actions: bookmarking from `/catalog/virtual`, picking a torrent on a virtual catalog page, or clicking the per-row **Create firkin** button on `/libraries` (which fires for any TMDB-matched + pinned video file: it fetches `/api/catalog/tmdb-movie/<tmdbId>/metadata` for artists/trailers/reviews and POSTs to `/api/firkins` with the same shape `/catalog/virtual`'s Bookmark uses, plus an extra `{ type: "ipfs", value: <cid>, title: <filename> }` file entry for the on-disk pin, then navigates to the new content-addressed detail page).
 
 ## Firkin versioning
 
