@@ -301,7 +301,7 @@
 			{:else if currentStreamPick && onAttachStream}
 				{@const info = torrentToInfo(currentStreamPick.torrent)}
 				<div
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center opacity-60"
+					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
 				>
 					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					{#if streamPicksByQuality.length > 1}
@@ -334,10 +334,11 @@
 				</div>
 			{:else}
 				<div
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
+					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 				>
 					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					<span class="text-[10px] text-base-content/60">Not attached</span>
+					<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
 				</div>
 			{/if}
 		{/if}
@@ -392,7 +393,7 @@
 		{:else if preferredDownload && onAttachDownload}
 			{@const info = torrentToInfo(preferredDownload)}
 			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center opacity-60"
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
 			>
 				{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
 				{@render stats(info)}
@@ -407,10 +408,11 @@
 			</div>
 		{:else}
 			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 			>
 				{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
 				<span class="text-[10px] text-base-content/60">Not attached</span>
+				<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
 			</div>
 		{/if}
 	</div>
