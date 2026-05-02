@@ -22,11 +22,12 @@
 		{
 			icon: 'delapouite/gamepad',
 			title: 'Games',
-			body: 'A ROM and game library with the same content-addressed semantics as the rest of Mhaol — point at a folder, get a clean catalog with cover art, ready to hand off to the emulator of your choice.',
+			body: 'A ROM and game library with the same content-addressed semantics as the rest of Mhaol — point at a folder, get a clean catalog with cover art, then play retro games right inside Mhaol with bundled web emulators or hand off to your desktop emulator of choice.',
 			points: [
 				'ROM library scanning by platform',
+				'Bundled in-browser emulators for NES, SNES, Mega Drive, GB / GBA, and more',
 				'Cover art + metadata for every system',
-				'Launch hand-off to your installed emulator'
+				'Optional launch hand-off to your installed desktop emulator'
 			]
 		},
 		{
