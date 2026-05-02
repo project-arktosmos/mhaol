@@ -216,7 +216,9 @@ export class TorrentSearch {
 				this.updateStackEntry(entryId, { status: 'error', error: 'cancelled' });
 				return;
 			}
-			const isTv = addonKind(addon) === 'tv show';
+			const kind = addonKind(addon);
+			const isTv = kind === 'tv show';
+			const isMovie = kind === 'movie';
 			const fresh = matchTorrentsForResult(
 				{
 					title: matchTitle,
@@ -228,7 +230,7 @@ export class TorrentSearch {
 					raw: null
 				},
 				torrents,
-				{ skipYearFilter: isTv }
+				{ skipYearFilter: isTv, excludeTvSeries: isMovie }
 			);
 			if (tokenAtStart !== this.run) {
 				this.updateStackEntry(entryId, { status: 'error', error: 'cancelled' });
@@ -254,7 +256,9 @@ export class TorrentSearch {
 		this.searchStack = [];
 		const entryId = this.pushStackEntry('Show', args.title);
 		try {
-			const isTv = addonKind(args.addon) === 'tv show';
+			const kind = addonKind(args.addon);
+			const isTv = kind === 'tv show';
+			const isMovie = kind === 'movie';
 			let raw: RawTorrent[] | null = null;
 			let evals: Record<string, unknown> = {};
 
@@ -298,7 +302,7 @@ export class TorrentSearch {
 					raw: null
 				},
 				torrents,
-				{ skipYearFilter: isTv }
+				{ skipYearFilter: isTv, excludeTvSeries: isMovie }
 			);
 			this.matches = matches;
 
