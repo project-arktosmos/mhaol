@@ -188,7 +188,7 @@
 				type="button"
 				onclick={() => onTrailerPlay?.()}
 				disabled={trailerPlaying}
-				class="col-span-2 flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-300/70 disabled:cursor-progress disabled:opacity-60"
+				class="col-span-2 flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
 				aria-label="Play trailer"
 			>
 				<Icon name="delapouite/film-strip" size={32} title="Trailer" />
@@ -211,7 +211,7 @@
 					type="button"
 					onclick={() => onStreamPlay?.()}
 					disabled={streamPlaying}
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-300/70 disabled:cursor-progress disabled:opacity-60"
+					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
 					aria-label="Play stream"
 				>
 					{@render header(stream, 'lorc/magnet', 'Stream', 'Stream mode')}
@@ -222,7 +222,7 @@
 				</button>
 			{:else if stream}
 				<div
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center text-base-content"
+					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 				>
 					{@render header(stream, 'lorc/magnet', 'Stream', 'Stream mode')}
 					{@render stats(stream)}
@@ -233,7 +233,7 @@
 					type="button"
 					onclick={() => onAttachStream?.(preferredStream)}
 					disabled={attachingStream}
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-300/70 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
+					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-200 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
 					aria-label="Attach this torrent for streaming"
 					title="Suggested pick from the torrent search — click to start streaming"
 				>
@@ -258,7 +258,7 @@
 				type="button"
 				onclick={() => onDownloadPlay?.()}
 				disabled={downloadPlaying}
-				class="col-span-2 flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-300/70 disabled:cursor-progress disabled:opacity-60"
+				class="col-span-2 flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
 				aria-label="Play via IPFS"
 			>
 				{@render downloadHeader(download)}
@@ -274,7 +274,7 @@
 			</button>
 		{:else if download}
 			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center text-base-content"
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 			>
 				{@render header(download, 'delapouite/cloud-download', 'Download', 'Download mode')}
 				{#if download.finished}
@@ -304,7 +304,7 @@
 				type="button"
 				onclick={() => onAttachDownload?.(preferredDownload)}
 				disabled={attachingDownload}
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-300/70 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-200 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
 				aria-label="Attach this torrent for download"
 				title="Suggested pick from the torrent search — click to attach and start downloading"
 			>
