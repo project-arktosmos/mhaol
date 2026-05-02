@@ -134,35 +134,12 @@
 	const trailerSpansFull = $derived(hasTrailer && !downloadActionable);
 	const downloadSpansFull = $derived(downloadActionable && !hasTrailer);
 
-	// User's quality pick from the Stream cell's selector (suggestion mode).
-	// `null` falls back to `streamPicksByQuality[0]` — the best available
-	// quality. The pick is reset when the available qualities change so a
-	// stale selection (e.g. user picked 1080p, results refreshed and 1080p
-	// is no longer streamable) doesn't strand the cell.
-	let selectedStreamQuality = $state<string | null>(null);
-	$effect(() => {
-		if (
-			selectedStreamQuality !== null &&
-			!streamPicksByQuality.some((p) => p.quality === selectedStreamQuality)
-		) {
-			selectedStreamQuality = null;
-		}
-	});
-	const currentStreamPick = $derived.by(() => {
-		if (streamPicksByQuality.length === 0) return null;
-		if (selectedStreamQuality === null) return streamPicksByQuality[0];
-		return (
-			streamPicksByQuality.find((p) => p.quality === selectedStreamQuality) ??
-			streamPicksByQuality[0]
-		);
-	});
-
 	// Quality of the currently-attached stream, mapped to a bucket label
 	// from `streamPicksByQuality`. Tries the bucket label first (most
 	// indexer rows already use the bucket name), falls back to the raw
-	// `torrent.quality` field. Used to default the actionable Stream
-	// cell's quality selector so the attached row is the one shown
-	// selected.
+	// `torrent.quality` field. Used to highlight the matching row in the
+	// stream picks table and disable that row's Assign button (it's
+	// already the active stream).
 	const attachedStreamQuality = $derived.by<string | null>(() => {
 		if (!stream?.quality) return null;
 		const byLabel = streamPicksByQuality.find((p) => p.quality === stream.quality);
@@ -170,17 +147,6 @@
 		const byRaw = streamPicksByQuality.find((p) => p.torrent.quality === stream.quality);
 		return byRaw?.quality ?? null;
 	});
-	const actionableSelectedQuality = $derived(
-		selectedStreamQuality ?? attachedStreamQuality ?? streamPicksByQuality[0]?.quality ?? null
-	);
-
-	function changeStreamQuality(quality: string, attach: boolean): void {
-		selectedStreamQuality = quality;
-		if (attach && onAttachStream) {
-			const pick = streamPicksByQuality.find((p) => p.quality === quality);
-			if (pick) void onAttachStream(pick.torrent);
-		}
-	}
 
 	function torrentToInfo(t: TorrentResultItem): AttachmentInfo {
 		return {
@@ -235,6 +201,43 @@
 	<span class="text-xs font-medium">{label}</span>
 {/snippet}
 
+{#snippet streamPicksTable(activeQuality: string | null)}
+	<table class="table table-xs w-full">
+		<thead>
+			<tr class="text-[10px] text-base-content/60 uppercase">
+				<th class="text-left">Quality</th>
+				<th class="text-success" title="Seeders">↑</th>
+				<th class="text-warning" title="Leechers">↓</th>
+				<th class="text-right">Size</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tbody>
+			{#each streamPicksByQuality as pick (pick.quality)}
+				{@const isActive = activeQuality === pick.quality}
+				<tr class={isActive ? 'bg-base-200' : ''}>
+					<td class="text-left text-xs font-medium">{pick.quality}</td>
+					<td class="text-success">{pick.torrent.seeders ?? '—'}</td>
+					<td class="text-warning">{pick.torrent.leechers ?? '—'}</td>
+					<td class="text-right text-[10px] text-base-content/70">
+						{pick.torrent.sizeBytes != null ? formatSizeBytes(pick.torrent.sizeBytes) : '—'}
+					</td>
+					<td class="text-right">
+						<button
+							type="button"
+							onclick={() => onAttachStream?.(pick.torrent)}
+							disabled={attachingStream || isActive}
+							class="btn btn-xs btn-primary"
+						>
+							{isActive ? 'Active' : attachingStream ? '…' : 'Assign'}
+						</button>
+					</td>
+				</tr>
+			{/each}
+		</tbody>
+	</table>
+{/snippet}
+
 <div class="flex flex-col gap-2">
 	<div class="grid grid-cols-2 gap-3">
 		{#if trailer && onTrailerPlay}
@@ -264,24 +267,16 @@
 		{#if !downloadActionable}
 			{#if stream && onStreamPlay}
 				<div
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
+					class="flex flex-col items-stretch gap-2 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 				>
-					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-					{#if streamPicksByQuality.length > 1 && onAttachStream}
-						<select
-							class="select-bordered select select-xs"
-							value={actionableSelectedQuality ?? ''}
-							onchange={(e) =>
-								changeStreamQuality((e.currentTarget as HTMLSelectElement).value, true)}
-							aria-label="Pick stream quality"
-							title="Pick stream quality — switching re-attaches the stream"
-						>
-							{#each streamPicksByQuality as pick (pick.quality)}
-								<option value={pick.quality}>{pick.quality}</option>
-							{/each}
-						</select>
+					<div class="flex flex-col items-center gap-1">
+						{@render header('lorc/magnet', 'Stream', 'Stream mode')}
+					</div>
+					{#if streamPicksByQuality.length > 0 && onAttachStream}
+						{@render streamPicksTable(attachedStreamQuality)}
+					{:else}
+						{@render stats(stream)}
 					{/if}
-					{@render stats(stream)}
 					<button
 						type="button"
 						onclick={() => onStreamPlay?.()}
@@ -298,39 +293,14 @@
 					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					{@render stats(stream)}
 				</div>
-			{:else if currentStreamPick && onAttachStream}
-				{@const info = torrentToInfo(currentStreamPick.torrent)}
+			{:else if streamPicksByQuality.length > 0 && onAttachStream}
 				<div
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
+					class="flex flex-col items-stretch gap-2 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
 				>
-					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-					{#if streamPicksByQuality.length > 1}
-						<select
-							class="select-bordered select select-xs"
-							value={currentStreamPick.quality}
-							onchange={(e) =>
-								changeStreamQuality((e.currentTarget as HTMLSelectElement).value, false)}
-							aria-label="Pick stream quality"
-							title="Pick stream quality"
-						>
-							{#each streamPicksByQuality as pick (pick.quality)}
-								<option value={pick.quality}>{pick.quality}</option>
-							{/each}
-						</select>
-					{:else}
-						<span class="text-[10px] font-medium text-base-content/70">
-							{currentStreamPick.quality}
-						</span>
-					{/if}
-					{@render stats(info)}
-					<button
-						type="button"
-						onclick={() => onAttachStream?.(currentStreamPick.torrent)}
-						disabled={attachingStream}
-						class="btn btn-sm btn-primary"
-					>
-						{attachingStream ? 'Starting…' : 'Assign'}
-					</button>
+					<div class="flex flex-col items-center gap-1">
+						{@render header('lorc/magnet', 'Stream', 'Stream mode')}
+					</div>
+					{@render streamPicksTable(null)}
 				</div>
 			{:else}
 				<div
