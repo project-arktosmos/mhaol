@@ -248,9 +248,9 @@
 														class="btn btn-xs btn-primary"
 														disabled={addingHash !== null}
 														onclick={() => onAssign(torrent)}
-														aria-label="Use this torrent"
+														aria-label="Download this torrent"
 													>
-														{adding ? '…' : 'Use'}
+														{adding ? '…' : 'Download'}
 													</button>
 												{/if}
 												{#if showMoreToggle}
