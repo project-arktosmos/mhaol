@@ -13,6 +13,7 @@
 		emptyMessage?: string;
 		hrefBuilder?: (firkin: CloudFirkin) => string;
 		actions?: Snippet<[CloudFirkin]>;
+		progressFor?: (firkin: CloudFirkin) => number | null;
 	}
 
 	let {
@@ -22,7 +23,8 @@
 		moreHref,
 		emptyMessage = 'No firkins yet.',
 		hrefBuilder,
-		actions
+		actions,
+		progressFor
 	}: Props = $props();
 
 	const PREVIEW_COUNT = 4;
@@ -71,6 +73,7 @@
 {:else}
 	<div class="grid grid-cols-7 gap-4">
 		{#each visibleFirkins as doc (doc.id)}
+			{@const progress = progressFor ? progressFor(doc) : null}
 			<div class="relative">
 				<a
 					href={hrefBuilder ? hrefBuilder(doc) : defaultHref(doc)}
@@ -83,6 +86,16 @@
 				>
 					<FirkinCard firkin={doc} />
 				</a>
+				{#if progress !== null && progress > 0}
+					<div
+						class="pointer-events-none absolute right-0 bottom-0 left-0 h-1 overflow-hidden bg-base-100/40"
+					>
+						<div
+							class="h-full bg-primary"
+							style="width: {Math.min(1, progress) * 100}%;"
+						></div>
+					</div>
+				{/if}
 				{#if actions}
 					{@render actions(doc)}
 				{/if}

@@ -24,7 +24,9 @@
 		type FirkinAddon
 	} from '$lib/firkins.service';
 	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
+	import { listMediaTrackers, type MediaTracker } from '$lib/media-tracker.service';
 	import { userIdentityService } from '$lib/user-identity.service';
+	import { addonKind, type FirkinKind } from 'cloud-ui';
 
 	const firkinsStore = firkinsService.state;
 	const firkinsIncludeAll = firkinsService.includeAll;
@@ -98,6 +100,70 @@
 	const addonRecommendationFirkins = $derived<CloudFirkin[]>(
 		addon
 			? recommendations.filter((r) => r.addon === addon).map((r) => recommendationToFirkin(r))
+			: []
+	);
+
+	let trackers = $state<MediaTracker[]>([]);
+	let lastTrackersAddress: string | null = null;
+
+	$effect(() => {
+		const address = $userIdentityState.identity?.address;
+		if (!address) {
+			trackers = [];
+			lastTrackersAddress = null;
+			return;
+		}
+		if (lastTrackersAddress === address) return;
+		lastTrackersAddress = address;
+		void (async () => {
+			try {
+				trackers = await listMediaTrackers(address);
+			} catch {
+				trackers = [];
+			}
+		})();
+	});
+
+	// Per-kind playback duration in seconds — used as the denominator for the
+	// progress bar on the Continue row. We don't persist real runtimes on the
+	// firkin record, so these are sensible upper bounds: the bar caps at 100%
+	// once accumulated playtime crosses the typical full-watch duration.
+	const KIND_FULL_SECONDS: Record<FirkinKind, number> = {
+		movie: 7200,
+		'tv show': 2700,
+		album: 2700,
+		'youtube video': 600,
+		book: 3600,
+		game: 3600
+	};
+
+	const continueProgressById = $derived.by<Record<string, number>>(() => {
+		const map: Record<string, number> = {};
+		const totals = new Map<string, number>();
+		for (const row of trackers) {
+			totals.set(row.firkinId, (totals.get(row.firkinId) ?? 0) + row.totalSeconds);
+		}
+		for (const f of $firkinsStore.firkins) {
+			const total = totals.get(f.id);
+			if (!total || total <= 0) continue;
+			const kind = addonKind(f.addon) ?? 'movie';
+			const denom = KIND_FULL_SECONDS[kind] ?? 7200;
+			map[f.id] = Math.min(0.99, total / denom);
+		}
+		return map;
+	});
+
+	const continueFirkins = $derived<Firkin[]>(
+		addon
+			? $firkinsStore.firkins
+					.filter((f) => f.addon === addon || f.addon === LOCAL_ADDON_FOR[addon])
+					.filter((f) => (continueProgressById[f.id] ?? 0) > 0)
+					.slice()
+					.sort((a, b) => {
+						const ta = trackers.find((t) => t.firkinId === a.id)?.last_played_at ?? '';
+						const tb = trackers.find((t) => t.firkinId === b.id)?.last_played_at ?? '';
+						return tb.localeCompare(ta);
+					})
 			: []
 	);
 
