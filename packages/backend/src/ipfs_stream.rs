@@ -31,8 +31,18 @@ use tokio_util::io::ReaderStream;
 use crate::ipfs_pins::{IpfsPin, TABLE as PIN_TABLE};
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartSessionRequest {
     pub cid: String,
+    /// Optional source-time offset (seconds) at which the stream should
+    /// begin. The pipeline does a flush seek to this position before
+    /// emitting any segments, so the first segment in the playlist
+    /// corresponds to the requested timestamp instead of the start of
+    /// the source. Used by the catalog detail page for "click anywhere
+    /// on the seek bar": the player stops the running session and
+    /// starts a new one whose offset matches the click target.
+    #[serde(default)]
+    pub seek_position_seconds: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -106,8 +116,11 @@ async fn start_session(
 
     let manager = state.ipfs_stream_manager.clone();
     let manager_for_wait = manager.clone();
+    let seek_pos = req
+        .seek_position_seconds
+        .filter(|s| s.is_finite() && *s > 0.0);
     let started = manager
-        .start_session(cid.clone(), PathBuf::from(&pin.path))
+        .start_session_at(cid.clone(), PathBuf::from(&pin.path), seek_pos)
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("start_session: {e}")))?;
     let session_id = started.session_id.clone();
 
@@ -140,8 +153,9 @@ async fn start_session(
     .flatten();
 
     tracing::info!(
-        "[ipfs-stream] session {session_id} cid={cid} ready={ready} duration={:?}s",
-        duration_seconds
+        "[ipfs-stream] session {session_id} cid={cid} ready={ready} duration={:?}s seek={:?}s",
+        duration_seconds,
+        seek_pos
     );
 
     // If hlssink2 never flushed the first segment within the warm-up

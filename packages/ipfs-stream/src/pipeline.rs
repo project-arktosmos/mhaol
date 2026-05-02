@@ -44,6 +44,15 @@ pub struct HlsPipelineConfig {
     pub segment_duration: u32,
     /// How many segments the playlist keeps. `0` keeps all segments (VOD).
     pub playlist_length: u32,
+    /// Optional source-time seek position (seconds) to start the stream
+    /// from. The pipeline issues a flush keyframe-aligned seek to this
+    /// position once it reaches PAUSED, so the first segment in the
+    /// emitted playlist starts at the requested timestamp instead of
+    /// the source's beginning. Used for "seek past the buffer" — the
+    /// frontend stops the current session and starts a new one at the
+    /// target source time, then offsets the player's position math by
+    /// the same amount.
+    pub start_position_seconds: Option<f64>,
 }
 
 impl HlsPipelineConfig {
@@ -55,6 +64,7 @@ impl HlsPipelineConfig {
             segment_pattern: "segment%05d.ts".into(),
             segment_duration: DEFAULT_SEGMENT_DURATION,
             playlist_length: DEFAULT_PLAYLIST_LENGTH,
+            start_position_seconds: None,
         }
     }
 }
@@ -64,6 +74,7 @@ pub struct HlsPipeline {
     pipeline: gst::Pipeline,
     output_dir: PathBuf,
     playlist_name: String,
+    start_position_seconds: Option<f64>,
 }
 
 impl HlsPipeline {
@@ -81,6 +92,14 @@ impl HlsPipeline {
 
     pub fn playlist_path(&self) -> PathBuf {
         self.output_dir.join(&self.playlist_name)
+    }
+
+    /// Source-time start offset (seconds) the pipeline was built with,
+    /// or `None` for a from-the-beginning stream. Callers use this so
+    /// the seek-to-start-position can be re-issued from the bus watcher
+    /// once the pipeline reaches PAUSED.
+    pub fn start_position_seconds(&self) -> Option<f64> {
+        self.start_position_seconds
     }
 
     pub fn play(&self) -> Result<()> {
@@ -216,6 +235,7 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
         pipeline,
         output_dir: config.output_dir,
         playlist_name: config.playlist_name,
+        start_position_seconds: config.start_position_seconds,
     })
 }
 
