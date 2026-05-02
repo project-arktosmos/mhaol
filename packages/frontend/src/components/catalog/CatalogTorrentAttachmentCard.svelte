@@ -106,8 +106,8 @@
 	{/if}
 {/snippet}
 
-<div class="card border border-base-content/10 bg-base-200 p-4">
-	<h2 class="mb-3 text-sm font-semibold text-base-content/70 uppercase">Torrent attachment</h2>
+<div class="flex flex-col gap-2">
+	<h2 class="text-sm font-semibold text-base-content/70 uppercase">Torrent attachment</h2>
 	<div class="grid grid-cols-2 gap-3">
 		{#if download && download.ipfsCid && onDownloadPlay}
 			<button
