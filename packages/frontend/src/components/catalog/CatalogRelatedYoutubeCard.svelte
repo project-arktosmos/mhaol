@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { materializeBrowseFirkin } from '$lib/catalog-firkin';
 
 	interface RelatedItem {
 		videoId: string;
@@ -34,6 +35,7 @@
 	let response = $state<RelatedResponse | null>(null);
 	let status = $state<'idle' | 'loading' | 'done' | 'error' | 'empty'>('idle');
 	let error = $state<string | null>(null);
+	let firkinIds = $state<Record<string, string>>({});
 	let initFor: string | null = null;
 
 	$effect(() => {
@@ -41,6 +43,7 @@
 		if (!url) {
 			status = 'idle';
 			response = null;
+			firkinIds = {};
 			return;
 		}
 		if (initFor === url) return;
@@ -52,6 +55,7 @@
 		status = 'loading';
 		error = null;
 		response = null;
+		firkinIds = {};
 		try {
 			const res = await fetch(`${base}/api/ytdl/related?url=${encodeURIComponent(url)}`, {
 				cache: 'no-store'
@@ -71,6 +75,7 @@
 			if (initFor !== url) return;
 			response = body;
 			status = body.items.length === 0 ? 'empty' : 'done';
+			void materializeAll(url, body.items.slice(0, limit));
 		} catch (err) {
 			if (initFor !== url) return;
 			error = err instanceof Error ? err.message : 'Unknown error';
@@ -78,16 +83,28 @@
 		}
 	}
 
-	function visitHref(item: RelatedItem): string {
-		// Route through the local /catalog/visit resolver so a click
-		// lands on our own catalog detail page (creating a non-bookmarked
-		// firkin lazily) instead of bouncing the user to youtube.com.
-		const params = new URLSearchParams();
-		params.set('addon', 'youtube-video');
-		params.set('id', item.videoId);
-		params.set('title', item.title);
-		if (item.thumbnail) params.set('posterUrl', item.thumbnail);
-		return `${base}/catalog/visit?${params.toString()}`;
+	async function materializeAll(forUrl: string, list: RelatedItem[]): Promise<void> {
+		await Promise.all(
+			list.map(async (item) => {
+				try {
+					const created = await materializeBrowseFirkin({
+						addon: 'youtube-video',
+						upstreamId: item.videoId,
+						title: item.title,
+						posterUrl: item.thumbnail
+					});
+					if (initFor !== forUrl) return;
+					firkinIds = { ...firkinIds, [item.videoId]: created.id };
+				} catch (err) {
+					console.warn('[related-youtube] failed to materialize firkin for', item.videoId, err);
+				}
+			})
+		);
+	}
+
+	function hrefFor(item: RelatedItem): string | undefined {
+		const id = firkinIds[item.videoId];
+		return id ? `${base}/catalog/${encodeURIComponent(id)}` : undefined;
 	}
 
 	const visibleItems = $derived(response ? response.items.slice(0, limit) : []);
@@ -110,11 +127,15 @@
 	{:else if visibleItems.length > 0}
 		<ul class="flex flex-col gap-3">
 			{#each visibleItems as item (item.videoId)}
+				{@const href = hrefFor(item)}
 				<li class="flex gap-2">
 					<a
 						class="flex flex-1 link gap-2 link-hover"
-						href={visitHref(item)}
+						{href}
 						title={item.title}
+						class:pointer-events-none={!href}
+						class:opacity-60={!href}
+						aria-disabled={!href}
 					>
 						{#if item.thumbnail}
 							<img

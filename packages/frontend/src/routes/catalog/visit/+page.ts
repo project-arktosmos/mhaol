@@ -1,13 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { base } from '$app/paths';
-import {
-	firkinsService,
-	type Artist,
-	type FirkinAddon,
-	type FileEntry,
-	type ImageMeta,
-	type Review
-} from '$lib/firkins.service';
+import { materializeBrowseFirkin } from '$lib/catalog-firkin';
+import type { FirkinAddon, Review } from '$lib/firkins.service';
 
 export const prerender = false;
 
@@ -15,7 +9,9 @@ export const prerender = false;
 /// in the URL query, we POST a non-bookmarked browse-cache firkin against
 /// `/api/firkins`, then redirect to the canonical `/catalog/[id]` detail
 /// page. The server dedups by content-address so revisits don't mint
-/// duplicate records.
+/// duplicate records. Related-card clicks bypass this route entirely —
+/// see `materializeBrowseFirkin` in `$lib/catalog-firkin`, which the
+/// related cards call eagerly so their hrefs already point at /catalog/<id>.
 export const load = async ({ url }) => {
 	const params = url.searchParams;
 	const addon = (params.get('addon') ?? '').trim();
@@ -33,52 +29,6 @@ export const load = async ({ url }) => {
 				? Number.parseInt(yearParam, 10)
 				: null
 			: null;
-	const description = (params.get('description') ?? '').trim();
-	const posterUrl = (params.get('posterUrl') ?? '').trim();
-	const backdropUrl = (params.get('backdropUrl') ?? '').trim();
-	const artistName = (params.get('artistName') ?? '').trim();
-
-	const images: ImageMeta[] = [posterUrl, backdropUrl]
-		.filter((u) => u.length > 0)
-		.map((u) => ({ url: u, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
-
-	// Mirrors `buildUpstreamSourceFiles()` from the legacy /catalog/virtual
-	// page: bake the canonical upstream URL into a `url`-typed file entry
-	// so the detail page can extract the upstream id and resume metadata
-	// resolution (artists, trailers, tracks).
-	const files: FileEntry[] = [];
-	if (upstreamId) {
-		switch (addon) {
-			case 'musicbrainz':
-				files.push({
-					type: 'url',
-					value: `https://musicbrainz.org/release-group/${upstreamId}`,
-					title: 'MusicBrainz Release Group'
-				});
-				break;
-			case 'tmdb-tv':
-				files.push({
-					type: 'url',
-					value: `https://www.themoviedb.org/tv/${upstreamId}`,
-					title: 'TMDB TV Show'
-				});
-				break;
-			case 'tmdb-movie':
-				files.push({
-					type: 'url',
-					value: `https://www.themoviedb.org/movie/${upstreamId}`,
-					title: 'TMDB Movie'
-				});
-				break;
-			case 'youtube-video':
-				files.push({
-					type: 'url',
-					value: `https://www.youtube.com/watch?v=${upstreamId}`,
-					title: 'YouTube Video'
-				});
-				break;
-		}
-	}
 
 	let reviews: Review[] = [];
 	const reviewsParam = params.get('reviews');
@@ -92,23 +42,16 @@ export const load = async ({ url }) => {
 		}
 	}
 
-	const artists: Artist[] = artistName
-		? artistName
-				.split(/\s*,\s*/)
-				.filter((n) => n.length > 0)
-				.map((name) => ({ name, role: 'artist' }))
-		: [];
-
-	const created = await firkinsService.create({
-		title,
-		artists,
-		description,
-		images,
-		files,
-		year,
+	const created = await materializeBrowseFirkin({
 		addon: addon as FirkinAddon,
-		reviews,
-		bookmarked: false
+		upstreamId,
+		title,
+		year,
+		description: params.get('description') ?? '',
+		posterUrl: params.get('posterUrl') ?? '',
+		backdropUrl: params.get('backdropUrl') ?? '',
+		artistName: params.get('artistName') ?? '',
+		reviews
 	});
 
 	throw redirect(303, `${base}/catalog/${encodeURIComponent(created.id)}`);

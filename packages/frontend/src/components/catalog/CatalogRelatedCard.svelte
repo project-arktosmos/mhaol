@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { loadRelated, type CatalogItem } from '$lib/catalog.service';
+	import { materializeBrowseFirkin } from '$lib/catalog-firkin';
+	import type { FirkinAddon } from '$lib/firkins.service';
 	import { cachedImageUrl } from '$lib/image-cache';
 
 	interface Props {
@@ -24,11 +26,13 @@
 	let status = $state<Status>('idle');
 	let error = $state<string | null>(null);
 	let items = $state<CatalogItem[]>([]);
+	let firkinIds = $state<Record<string, string>>({});
 	let loadedKey: string | null = null;
 
 	$effect(() => {
 		if (!addon || !upstreamId) {
 			items = [];
+			firkinIds = {};
 			status = 'idle';
 			error = null;
 			return;
@@ -43,12 +47,14 @@
 		status = 'loading';
 		error = null;
 		items = [];
+		firkinIds = {};
 		try {
 			const fetched = await loadRelated(currentAddon, currentId);
 			if (loadedKey !== `${currentAddon}:${currentId}`) return;
 			items = fetched;
 			status = 'done';
 			onItemsLoaded?.(fetched);
+			void materializeAll(currentAddon, currentId, fetched);
 		} catch (err) {
 			if (loadedKey !== `${currentAddon}:${currentId}`) return;
 			error = err instanceof Error ? err.message : 'Unknown error';
@@ -56,20 +62,33 @@
 		}
 	}
 
-	function visitHref(item: CatalogItem): string {
-		const params = new URLSearchParams();
-		params.set('addon', addon);
-		params.set('id', item.id);
-		params.set('title', item.title);
-		if (item.year !== null && item.year !== undefined) params.set('year', String(item.year));
-		if (item.description) params.set('description', item.description);
-		if (item.posterUrl) params.set('posterUrl', item.posterUrl);
-		if (item.backdropUrl) params.set('backdropUrl', item.backdropUrl);
-		if (item.artistName) params.set('artistName', item.artistName);
-		if (Array.isArray(item.reviews) && item.reviews.length > 0) {
-			params.set('reviews', JSON.stringify(item.reviews));
-		}
-		return `${base}/catalog/visit?${params.toString()}`;
+	async function materializeAll(currentAddon: string, currentId: string, list: CatalogItem[]) {
+		await Promise.all(
+			list.map(async (item) => {
+				try {
+					const created = await materializeBrowseFirkin({
+						addon: currentAddon as FirkinAddon,
+						upstreamId: item.id,
+						title: item.title,
+						year: item.year,
+						description: item.description,
+						posterUrl: item.posterUrl,
+						backdropUrl: item.backdropUrl,
+						artistName: item.artistName,
+						reviews: item.reviews
+					});
+					if (loadedKey !== `${currentAddon}:${currentId}`) return;
+					firkinIds = { ...firkinIds, [item.id]: created.id };
+				} catch (err) {
+					console.warn('[related] failed to materialize firkin for', item.id, err);
+				}
+			})
+		);
+	}
+
+	function hrefFor(item: CatalogItem): string | undefined {
+		const id = firkinIds[item.id];
+		return id ? `${base}/catalog/${encodeURIComponent(id)}` : undefined;
 	}
 </script>
 
@@ -92,11 +111,15 @@
 			{:else if items.length > 0 && isMusicBrainz}
 				<ul class="flex flex-col gap-2">
 					{#each items as item (item.id)}
+						{@const href = hrefFor(item)}
 						<li>
 							<a
-								href={visitHref(item)}
+								{href}
 								title={item.title}
 								class="group flex items-start gap-3 rounded transition-all"
+								class:pointer-events-none={!href}
+								class:opacity-60={!href}
+								aria-disabled={!href}
 							>
 								<div
 									class="aspect-square w-16 shrink-0 overflow-hidden rounded border border-base-content/10 bg-base-300 transition-all group-hover:border-base-content/30 group-hover:shadow-md"
@@ -121,7 +144,7 @@
 									{/if}
 								</div>
 								<div class="flex min-w-0 flex-col gap-0.5">
-									<span class="line-clamp-2 text-xs font-medium leading-snug">
+									<span class="line-clamp-2 text-xs leading-snug font-medium">
 										{item.title}
 									</span>
 									{#if item.artistName}
@@ -137,11 +160,15 @@
 			{:else if items.length > 0}
 				<ul class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-2">
 					{#each items as item (item.id)}
+						{@const href = hrefFor(item)}
 						<li>
 							<a
-								href={visitHref(item)}
+								{href}
 								title={item.title}
 								class="group flex flex-col gap-1.5 rounded transition-all"
+								class:pointer-events-none={!href}
+								class:opacity-60={!href}
+								aria-disabled={!href}
 							>
 								<div
 									class="aspect-[2/3] overflow-hidden rounded border border-base-content/10 bg-base-300 transition-all group-hover:border-base-content/30 group-hover:shadow-md"
@@ -166,7 +193,7 @@
 									{/if}
 								</div>
 								<div class="flex flex-col gap-0.5">
-									<span class="line-clamp-2 text-xs font-medium leading-snug">
+									<span class="line-clamp-2 text-xs leading-snug font-medium">
 										{item.title}
 									</span>
 									{#if item.artistName}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { materializeBrowseFirkin } from '$lib/catalog-firkin';
 
 	interface ChannelFeedItem {
 		videoId: string;
@@ -27,6 +28,7 @@
 	let feed = $state<ChannelFeed | null>(null);
 	let status = $state<'idle' | 'loading' | 'done' | 'error' | 'empty'>('idle');
 	let error = $state<string | null>(null);
+	let firkinIds = $state<Record<string, string>>({});
 	let initFor: string | null = null;
 
 	$effect(() => {
@@ -34,6 +36,7 @@
 		if (!url) {
 			status = 'idle';
 			feed = null;
+			firkinIds = {};
 			return;
 		}
 		if (initFor === url) return;
@@ -45,11 +48,11 @@
 		status = 'loading';
 		error = null;
 		feed = null;
+		firkinIds = {};
 		try {
-			const res = await fetch(
-				`${base}/api/ytdl/channel/by-video?url=${encodeURIComponent(url)}`,
-				{ cache: 'no-store' }
-			);
+			const res = await fetch(`${base}/api/ytdl/channel/by-video?url=${encodeURIComponent(url)}`, {
+				cache: 'no-store'
+			});
 			if (initFor !== url) return;
 			if (!res.ok) {
 				let message = `HTTP ${res.status}`;
@@ -65,11 +68,32 @@
 			if (initFor !== url) return;
 			feed = body;
 			status = body.items.length === 0 ? 'empty' : 'done';
+			void materializeAll(url, body.items.slice(0, limit));
 		} catch (err) {
 			if (initFor !== url) return;
 			error = err instanceof Error ? err.message : 'Unknown error';
 			status = 'error';
 		}
+	}
+
+	async function materializeAll(forUrl: string, list: ChannelFeedItem[]): Promise<void> {
+		await Promise.all(
+			list.map(async (item) => {
+				try {
+					const created = await materializeBrowseFirkin({
+						addon: 'youtube-video',
+						upstreamId: item.videoId,
+						title: item.title,
+						description: item.description,
+						posterUrl: item.thumbnailUrl
+					});
+					if (initFor !== forUrl) return;
+					firkinIds = { ...firkinIds, [item.videoId]: created.id };
+				} catch (err) {
+					console.warn('[channel-latest] failed to materialize firkin for', item.videoId, err);
+				}
+			})
+		);
 	}
 
 	function formatRelative(iso: string | null): string {
@@ -94,17 +118,9 @@
 
 	const visibleItems = $derived(feed ? feed.items.slice(0, limit) : []);
 
-	function visitHref(item: ChannelFeedItem): string {
-		// Route through the local /catalog/visit resolver so a click
-		// lands on our own catalog detail page (creating a non-bookmarked
-		// firkin lazily) instead of bouncing the user to youtube.com.
-		const params = new URLSearchParams();
-		params.set('addon', 'youtube-video');
-		params.set('id', item.videoId);
-		params.set('title', item.title);
-		if (item.thumbnailUrl) params.set('posterUrl', item.thumbnailUrl);
-		if (item.description) params.set('description', item.description);
-		return `${base}/catalog/visit?${params.toString()}`;
+	function hrefFor(item: ChannelFeedItem): string | undefined {
+		const id = firkinIds[item.videoId];
+		return id ? `${base}/catalog/${encodeURIComponent(id)}` : undefined;
 	}
 </script>
 
@@ -113,7 +129,7 @@
 		<h2 class="text-sm font-semibold text-base-content/70 uppercase">Latest from channel</h2>
 		{#if feed?.channelTitle}
 			<a
-				class="link link-hover truncate text-xs text-base-content/60"
+				class="link truncate text-xs text-base-content/60 link-hover"
 				href={`https://www.youtube.com/channel/${encodeURIComponent(feed.channelId)}`}
 				target="_blank"
 				rel="noopener noreferrer"
@@ -136,11 +152,15 @@
 	{:else if visibleItems.length > 0}
 		<ul class="flex flex-col gap-3">
 			{#each visibleItems as item (item.videoId)}
+				{@const href = hrefFor(item)}
 				<li class="flex gap-2">
 					<a
-						class="link link-hover flex flex-1 gap-2"
-						href={visitHref(item)}
+						class="flex flex-1 link gap-2 link-hover"
+						{href}
 						title={item.title}
+						class:pointer-events-none={!href}
+						class:opacity-60={!href}
+						aria-disabled={!href}
 					>
 						{#if item.thumbnailUrl}
 							<img
