@@ -72,6 +72,14 @@ pub fn youtube_dir() -> PathBuf {
     downloads_dir().join("youtube")
 }
 
+/// VTT files downloaded by `POST /api/firkins/:id/subtitle`. Each file
+/// is also pinned to IPFS so it's discoverable across the swarm; the
+/// on-disk copy is what `serve_pin_file` reads when the in-page player
+/// fetches `/api/ipfs/pins/<cid>/file`.
+pub fn subtitles_dir() -> PathBuf {
+    downloads_dir().join("subtitles")
+}
+
 /// IPFS pre-shared swarm key. Override with `IPFS_SWARM_KEY_FILE`.
 pub fn swarm_key_path() -> PathBuf {
     if let Ok(p) = std::env::var("IPFS_SWARM_KEY_FILE") {

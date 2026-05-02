@@ -262,10 +262,20 @@ async fn serve_pin_file(
     let pins: Vec<IpfsPin> = state.db.select(TABLE).await.map_err(|e| {
         err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}"))
     })?;
-    let pin = pins
-        .into_iter()
-        .find(|p| p.cid == cid)
-        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, format!("no pin for cid {cid}")))?;
+    // Same cid can be referenced by multiple pin rows when an entity
+    // (e.g. a firkin) carries a metadata pin under `firkin://…` and a
+    // separate fully-materialised on-disk pin pointing at the same
+    // bytes. Prefer the latter so synthetic-prefix metadata rows don't
+    // mask a real file we could be serving.
+    let matches: Vec<IpfsPin> = pins.into_iter().filter(|p| p.cid == cid).collect();
+    if matches.is_empty() {
+        return Err(err_response(StatusCode::NOT_FOUND, format!("no pin for cid {cid}")));
+    }
+    let pin = matches
+        .iter()
+        .find(|p| !p.path.starts_with("firkin://") && !p.path.starts_with("artist://"))
+        .cloned()
+        .unwrap_or_else(|| matches[0].clone());
     if pin.path.starts_with("firkin://") || pin.path.starts_with("artist://") {
         return Err(err_response(
             StatusCode::BAD_REQUEST,

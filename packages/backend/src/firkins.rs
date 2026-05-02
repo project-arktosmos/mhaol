@@ -1046,6 +1046,13 @@ async fn update(
     Path(id): Path<String>,
     Json(req): Json<UpdateFirkinRequest>,
 ) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    // Serialise with every other mutation on this firkin. Without this
+    // lock, two concurrent `PUT /api/firkins/:id` calls (or a PUT racing
+    // a subtitle attach / files mutation) would both load the same
+    // starting record, produce a `current` from a stale snapshot of
+    // `files`, and the later writer would silently clobber the earlier
+    // one. See `state::FirkinLockMap` for the canonical write-up.
+    let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
     let existing: Option<Firkin> = state
         .db
         .select((TABLE, id.as_str()))
@@ -1329,6 +1336,7 @@ async fn finalize(
     State(state): State<CloudState>,
     Path(id): Path<String>,
 ) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
     let latest_id = crate::torrent_completion::finalize_firkin(&state, &id)
         .await
         .map_err(|e| {
@@ -1372,6 +1380,7 @@ async fn enrich(
     Path(id): Path<String>,
     Json(req): Json<EnrichFirkinRequest>,
 ) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
     let existing: Option<Firkin> = state
         .db
         .select((TABLE, id.as_str()))
@@ -1435,6 +1444,7 @@ async fn roms(
     Path(id): Path<String>,
     axum::extract::Query(query): axum::extract::Query<RomsQuery>,
 ) -> Result<Json<crate::rom_extract::RomsResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
     let result = match query.archive {
         Some(rel) => crate::rom_extract::extract_single_archive(&state, &id, &rel).await,
         None => crate::rom_extract::extract_roms_for_firkin(&state, &id).await,
@@ -1556,6 +1566,7 @@ async fn attach_subtitle(
         return Err(err_response(StatusCode::BAD_REQUEST, "externalId is required"));
     }
 
+    let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
     let existing: Option<Firkin> = state
         .db
         .select((TABLE, id.as_str()))
@@ -1617,7 +1628,7 @@ async fn attach_subtitle(
     let pin_name = format!("firkin-{id}-sub-{language}-{external_id}.vtt");
     let info = state
         .ipfs_manager
-        .add_bytes(pin_name, vtt_bytes)
+        .add_bytes(pin_name, vtt_bytes.clone())
         .await
         .map_err(|e| {
             err_response(
@@ -1626,7 +1637,26 @@ async fn attach_subtitle(
             )
         })?;
     let cid = info.cid.clone();
-    let pin_path = format!("firkin://{id}/subtitle/{language}/{external_id}");
+
+    // Write the VTT bytes to disk under `<data_root>/downloads/subtitles/`
+    // and use that on-disk path on the pin row. `serve_pin_file` rejects
+    // synthetic `firkin://` / `artist://` paths as metadata pins, so the
+    // subtitle file has to live somewhere it can read off the filesystem;
+    // pinning to IPFS is what makes the bytes discoverable across the
+    // swarm, but the in-page player fetches over HTTP through the pin
+    // endpoint, so we need both.
+    let subs_dir = crate::paths::subtitles_dir();
+    if let Err(e) = std::fs::create_dir_all(&subs_dir) {
+        tracing::warn!("[firkins] failed to create subtitles dir: {e}");
+    }
+    let on_disk = subs_dir.join(format!("{cid}.vtt"));
+    if let Err(e) = std::fs::write(&on_disk, &vtt_bytes) {
+        return Err(err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("subtitle write failed: {e}"),
+        ));
+    }
+    let pin_path = on_disk.to_string_lossy().into_owned();
     if let Err(e) = crate::ipfs_pins::record_pin(
         &state,
         cid.clone(),
@@ -1981,11 +2011,43 @@ pub(crate) async fn resolve_album_tracks(
         return Ok(current);
     }
 
-    current.files = new_files;
-    current.updated_at = Utc::now();
-    current.id = None;
+    // Compute the diff between the snapshot we started with and the
+    // resolver's output, then re-read the firkin under the per-firkin
+    // lock and apply just those new entries on top of the *current*
+    // files. This avoids stomping on a `torrent magnet` (or any other
+    // file entry) that the user attached while the YT/LRCLIB lookups
+    // were running. Without this merge, the resolver would write back
+    // its stale snapshot and silently drop those concurrent mutations.
+    let snapshot_files = current.files.clone();
+    let mut additions: Vec<FileEntry> = Vec::new();
+    for entry in new_files.into_iter() {
+        let already = snapshot_files.iter().any(|f| {
+            f.kind == entry.kind
+                && f.title == entry.title
+                && f.value == entry.value
+        });
+        if !already {
+            additions.push(entry);
+        }
+    }
 
-    let updated = rollforward_firkin(state, id, current)
+    let _firkin_guard = state.firkin_lock(id).lock_owned().await;
+    let fresh: Option<Firkin> = state
+        .db
+        .select((TABLE, id))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let mut fresh = fresh
+        .ok_or((StatusCode::NOT_FOUND, "firkin not found".to_string()))?;
+    let mut merged_files = fresh.files.clone();
+    for addition in additions {
+        merged_files = track_resolve::upsert_track_file(merged_files, addition);
+    }
+    fresh.files = merged_files;
+    fresh.updated_at = Utc::now();
+    fresh.id = None;
+
+    let updated = rollforward_firkin(state, id, fresh)
         .await
         .map_err(|(s, j)| {
             let msg = j

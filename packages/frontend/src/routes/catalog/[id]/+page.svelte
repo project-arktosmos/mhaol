@@ -1325,6 +1325,24 @@
 		isBookmarked && (activeSource === 'ipfs' || activeSource === 'torrent') && Boolean(subsLyricsKind)
 	);
 
+	// Controlled active-subtitle URL fed to `<PlayerVideo subtitleUrl=…>`.
+	// Resolves to the first attached subtitle whose language matches the
+	// user's pick in the toolbar; when the toolbar's specific release is
+	// also attached, that wins (so a fresh download instantly shows on the
+	// player even when an older same-language sub is still on the firkin).
+	// Returns `null` to mean "subs off" — switching to a language with no
+	// downloads yet hides any prior selection.
+	const currentSubtitleUrl = $derived.by<string | null>(() => {
+		const lang = selectedSubLanguage.toLowerCase();
+		const candidates = attachedSubtitles.filter((s) => s.language.toLowerCase() === lang);
+		if (candidates.length === 0) return null;
+		const preferred = selectedSubExternalId
+			? candidates.find((s) => s.externalId === selectedSubExternalId)
+			: undefined;
+		const pick = preferred ?? candidates[candidates.length - 1];
+		return `${base}/api/ipfs/pins/${encodeURIComponent(pick.cid)}/file`;
+	});
+
 	$effect(() => {
 		if (!hasMagnetFiles || hasIpfsFiles) return;
 		const id = firkin.id;
@@ -1730,6 +1748,8 @@
 							durationSecs={$playerState.durationSecs}
 							buffering={$playerState.buffering}
 							poster={trailerThumb}
+							hideSubtitleSelect
+							subtitleUrl={currentSubtitleUrl}
 							directStreamUrl={$playerState.directStreamUrl}
 							directStreamMimeType={$playerState.directStreamMimeType}
 						/>

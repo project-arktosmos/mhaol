@@ -23,6 +23,8 @@
 		fullscreen = false,
 		poster = null,
 		subtitleSearchContext = null,
+		hideSubtitleSelect = false,
+		subtitleUrl = null,
 		directStreamUrl = null,
 		directStreamMimeType = null,
 		onprev,
@@ -36,6 +38,16 @@
 		fullscreen?: boolean;
 		poster?: string | null;
 		subtitleSearchContext?: SubtitleSearchContext | null;
+		/// Hide the built-in subtitle `<select>` and "CC" search button
+		/// rendered in the corner of the player. Set when an external
+		/// picker (e.g. the catalog detail page's subtitle toolbar) is the
+		/// authoritative control point so the user only sees one chooser.
+		hideSubtitleSelect?: boolean;
+		/// Controlled subtitle URL — when non-null, overrides the
+		/// player's internal auto-pick and `<select>`-driven selection.
+		/// Pass through this prop when an external picker should be the
+		/// sole source of truth for which subtitle is rendered.
+		subtitleUrl?: string | null;
 		directStreamUrl?: string | null;
 		directStreamMimeType?: string | null;
 		onprev?: () => void;
@@ -385,11 +397,23 @@
 		}
 	});
 
+	// Controlled mode: when a parent passes `subtitleUrl`, it wins over
+	// the corner-select / auto-pick logic below. Whitespace-only values
+	// are treated as "off" so callers can pass an empty string to clear.
+	$effect(() => {
+		if (subtitleUrl === undefined) return;
+		const next = subtitleUrl ?? null;
+		if (activeSubUrl !== next) activeSubUrl = next;
+	});
+
 	// Auto-pick the user's UI locale subtitle the first time options arrive.
 	let autoSelected = $state(false);
 	$effect(() => {
 		if (autoSelected || activeSubUrl) return;
 		if (subtitleOptions.length === 0) return;
+		// Skip auto-pick when the parent is in controlled mode — the prop
+		// drives display, so guessing here would race the parent's effect.
+		if (subtitleUrl !== null && subtitleUrl !== undefined) return;
 		const ui = (typeof navigator !== 'undefined' ? navigator.language || '' : '')
 			.toLowerCase()
 			.slice(0, 2);
@@ -564,7 +588,7 @@
 
 		{#if isVideo && isStreaming}
 			<div class="absolute top-2 right-2 z-10 flex items-center gap-1">
-				{#if subtitleOptions.length > 0}
+				{#if subtitleOptions.length > 0 && !hideSubtitleSelect}
 					<select
 						class="select-bordered select bg-black/60 select-xs text-white"
 						value={activeSubUrl ?? ''}
@@ -589,7 +613,7 @@
 						{/each}
 					</select>
 				{/if}
-				{#if subtitleSearchContext}
+				{#if subtitleSearchContext && !hideSubtitleSelect}
 					<button
 						class="btn border-none bg-black/60 text-white btn-xs hover:bg-black/80"
 						aria-label="Search subtitles"
