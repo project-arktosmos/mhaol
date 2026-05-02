@@ -247,7 +247,7 @@
 				posterUrl?: string;
 			};
 		},
-		cid: string
+		cid: string | undefined
 	) {
 		if (!entry.tmdbMatch) return;
 		const key = entry.path;
@@ -299,7 +299,7 @@
 						value: `https://www.themoviedb.org/movie/${tmdbId}`,
 						title: 'TMDB Movie'
 					},
-					{ type: 'ipfs', value: cid, title: fileTitle }
+					...(cid ? [{ type: 'ipfs' as const, value: cid, title: fileTitle }] : [])
 				],
 				year: entry.tmdbMatch.year ?? null,
 				addon: 'tmdb-movie',
@@ -645,18 +645,21 @@
 																		{/if}
 																	</td>
 																	<td class="text-xs">
-																		{#if entry.tmdbMatch && cid}
+																		{#if entry.tmdbMatch}
 																			<button
 																				class="btn btn-xs btn-primary"
 																				disabled={creatingFirkinFor[entry.path]}
 																				onclick={() => createFirkinFromMatch(entry, cid)}
+																				title={cid
+																					? undefined
+																					: 'IPFS pin still in progress — firkin will be created without a local file entry'}
 																			>
 																				{creatingFirkinFor[entry.path]
 																					? 'Creating…'
-																					: 'Create firkin'}
+																					: cid
+																						? 'Create firkin'
+																						: 'Create firkin (no pin yet)'}
 																			</button>
-																		{:else if entry.tmdbMatch}
-																			<span class="text-base-content/40">pinning…</span>
 																		{:else}
 																			<span class="text-base-content/30">—</span>
 																		{/if}
