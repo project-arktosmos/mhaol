@@ -32,6 +32,19 @@
 		return search.rowEvals[magnet] ?? { kind: 'pending' };
 	}
 
+	function firstStreamableIndex(rows: TorrentResultItem[]): number {
+		for (let i = 0; i < rows.length; i++) {
+			if (rowEval(rows[i].magnetLink).kind === 'streamable') return i;
+		}
+		return -1;
+	}
+
+	let expandedGroups = $state<Record<string, boolean>>({});
+
+	function toggleGroup(label: string) {
+		expandedGroups = { ...expandedGroups, [label]: !expandedGroups[label] };
+	}
+
 	const heading = $derived(
 		`Torrent search${(!collapsible || open) && search.matches.length > 0 ? ` (${search.matches.length})` : ''}`
 	);
@@ -87,11 +100,13 @@
 								<th class="w-20 text-warning">Leechers</th>
 								<th class="w-20">Size</th>
 								<th>Title</th>
-								<th class="w-16"></th>
+								<th class="w-32"></th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each search.groupedMatches as group (group.label)}
+								{@const streamableIdx = firstStreamableIndex(group.rows)}
+								{@const expanded = expandedGroups[group.label] ?? false}
 								<tr class="bg-base-300/40">
 									<th
 										colspan="7"
@@ -100,11 +115,21 @@
 										{group.label} ({group.rows.length})
 									</th>
 								</tr>
-								{#each group.rows as torrent (torrent.infoHash)}
+								{#each group.rows as torrent, rowIdx (torrent.infoHash)}
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
 									{@const ev = rowEval(torrent.magnetLink)}
-									<tr class={classNames('hover', { 'opacity-60': added || adding })}>
+									{@const hidden = streamableIdx >= 0 && rowIdx > streamableIdx && !expanded}
+									{@const showMoreToggle =
+										streamableIdx >= 0 &&
+										rowIdx === streamableIdx &&
+										group.rows.length > streamableIdx + 1}
+									<tr
+										class={classNames('hover', {
+											'opacity-60': added || adding,
+											hidden
+										})}
+									>
 										<td>
 											{#if ev.kind === 'pending'}
 												<span class="text-xs text-base-content/50">Queued…</span>
@@ -179,19 +204,34 @@
 											{torrent.parsedTitle || torrent.title}
 										</td>
 										<td class="text-right">
-											{#if added}
-												<span class="badge badge-sm badge-success">added</span>
-											{:else}
-												<button
-													type="button"
-													class="btn btn-xs btn-primary"
-													disabled={addingHash !== null}
-													onclick={() => onAssign(torrent)}
-													aria-label="Use this torrent"
-												>
-													{adding ? '…' : 'Use'}
-												</button>
-											{/if}
+											<div class="flex items-center justify-end gap-1">
+												{#if added}
+													<span class="badge badge-sm badge-success">added</span>
+												{:else}
+													<button
+														type="button"
+														class="btn btn-xs btn-primary"
+														disabled={addingHash !== null}
+														onclick={() => onAssign(torrent)}
+														aria-label="Use this torrent"
+													>
+														{adding ? '…' : 'Use'}
+													</button>
+												{/if}
+												{#if showMoreToggle}
+													<button
+														type="button"
+														class="btn btn-ghost btn-xs"
+														onclick={() => toggleGroup(group.label)}
+														aria-expanded={expanded}
+														title={expanded
+															? `Hide other ${group.label} candidates`
+															: `Show ${group.rows.length - streamableIdx - 1} more ${group.label} candidates`}
+													>
+														{expanded ? 'Less' : 'More'}
+													</button>
+												{/if}
+											</div>
 										</td>
 									</tr>
 								{/each}
