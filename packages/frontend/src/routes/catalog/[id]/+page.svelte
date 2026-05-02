@@ -1213,6 +1213,33 @@
 	});
 	const streamInfo = $derived(attachmentInfoFor('torrent stream magnet'));
 
+	// Surface a faded "preferred pick" preview in each empty attachment cell.
+	// Walks `torrentSearch.groupedMatches` top-down — groups are already in
+	// quality priority order (4K → 2160p → 1080p → 720p → 480p → 360p → Other)
+	// and rows within a group are sorted by seeders desc — so the first row
+	// that matches the per-cell criteria is the highest-quality / most-seeded
+	// option whose corresponding button would be enabled in the search table.
+	const preferredDownloadTorrent = $derived.by<TorrentResultItem | null>(() => {
+		for (const group of torrentSearch.groupedMatches) {
+			for (const row of group.rows) {
+				if (!row.magnetLink) continue;
+				if (existingHashes.has(row.magnetLink)) continue;
+				return row;
+			}
+		}
+		return null;
+	});
+	const preferredStreamTorrent = $derived.by<TorrentResultItem | null>(() => {
+		for (const group of torrentSearch.groupedMatches) {
+			for (const row of group.rows) {
+				if (!row.magnetLink) continue;
+				if (torrentSearch.rowEvals[row.magnetLink]?.kind !== 'streamable') continue;
+				return row;
+			}
+		}
+		return null;
+	});
+
 	function toggleTorrentSearch() {
 		torrentSearchOpen = !torrentSearchOpen;
 		if (torrentSearchOpen && torrentSearchInitForFirkinId !== firkin.id) {
@@ -1235,9 +1262,17 @@
 	// search results to classify torrents per-season, and the user typically
 	// adds one torrent per season — so even when the firkin already has a
 	// magnet attached, fresh results are still useful.
+	//
+	// Movies also ignore the gate when either attachment cell is empty: the
+	// `CatalogTorrentAttachmentCard` renders a faded preferred-pick preview
+	// in the empty cell, and the preview needs `torrentSearch.matches` to
+	// have populated regardless of whether the *other* cell is already
+	// filled.
 	$effect(() => {
 		if (isMusicBrainz) return;
-		if (!isTmdbTv && !hasNoRealFiles) return;
+		const movieAttachmentEmpty =
+			isTmdbMovie && (downloadInfo === null || streamInfo === null);
+		if (!isTmdbTv && !hasNoRealFiles && !movieAttachmentEmpty) return;
 		if (torrentSearchInitForFirkinId === firkin.id) return;
 		torrentSearchInitForFirkinId = firkin.id;
 		void torrentSearch.search({
@@ -2013,6 +2048,14 @@
 					streamPlaying={torrentStreamStarting}
 					onDownloadPlay={playFromAttachmentDownload}
 					downloadPlaying={ipfsStarting}
+					preferredDownload={preferredDownloadTorrent}
+					preferredStream={preferredStreamTorrent}
+					attachingDownload={addingHash !== null &&
+						preferredDownloadTorrent?.magnetLink === addingHash}
+					attachingStream={streamingHash !== null &&
+						preferredStreamTorrent?.magnetLink === streamingHash}
+					onAttachDownload={assignTorrent}
+					onAttachStream={streamTorrentFromRow}
 				/>
 			{/if}
 

@@ -32,9 +32,8 @@
 </script>
 
 <script lang="ts">
-	import classNames from 'classnames';
 	import { Icon } from 'cloud-ui';
-	import { formatSizeBytes } from '$lib/search.service';
+	import { formatSizeBytes, type TorrentResultItem } from '$lib/search.service';
 
 	interface Props {
 		/** The persisted `torrent magnet` (Download flow — long-lived in
@@ -59,6 +58,29 @@
 		onDownloadPlay?: () => void | Promise<void>;
 		/** True while an IPFS-stream-start round-trip is in flight. */
 		downloadPlaying?: boolean;
+		/** Best non-attached torrent from the current search (highest quality
+		 * first, most seeders within that quality). Surfaced as a faded
+		 * preview in the Download cell when nothing's attached yet, so the
+		 * user can attach the obvious pick in one click instead of opening
+		 * the search table. `null` when no eligible row exists. */
+		preferredDownload?: TorrentResultItem | null;
+		/** Best `streamable`-probed torrent (highest quality first, most
+		 * seeders within that quality). Surfaced as a faded preview in the
+		 * Stream cell when nothing's attached yet. `null` when no row has
+		 * been probed `streamable` yet. */
+		preferredStream?: TorrentResultItem | null;
+		/** Click handler for the faded Download preview — should run the
+		 * same flow as the Download button on the search table row (attach
+		 * the magnet to the firkin and start the torrent client). */
+		onAttachDownload?: (torrent: TorrentResultItem) => void | Promise<void>;
+		/** Click handler for the faded Stream preview — should run the same
+		 * flow as the Stream button on the search table row (start the
+		 * torrent stream and persist the picked magnet). */
+		onAttachStream?: (torrent: TorrentResultItem) => void | Promise<void>;
+		/** True while `preferredDownload` is being attached. */
+		attachingDownload?: boolean;
+		/** True while `preferredStream` is being attached. */
+		attachingStream?: boolean;
 	}
 
 	let {
@@ -67,8 +89,23 @@
 		onStreamPlay,
 		streamPlaying = false,
 		onDownloadPlay,
-		downloadPlaying = false
+		downloadPlaying = false,
+		preferredDownload = null,
+		preferredStream = null,
+		onAttachDownload,
+		onAttachStream,
+		attachingDownload = false,
+		attachingStream = false
 	}: Props = $props();
+
+	function torrentToInfo(t: TorrentResultItem): AttachmentInfo {
+		return {
+			title: t.parsedTitle || t.title,
+			seeders: t.seeders,
+			leechers: t.leechers,
+			sizeBytes: t.sizeBytes
+		};
+	}
 
 	function shortCid(cid: string): string {
 		if (cid.length <= 16) return cid;
@@ -128,38 +165,54 @@
 					{downloadPlaying ? 'Starting…' : 'Click to play'}
 				</span>
 			</button>
-		{:else}
+		{:else if download}
 			<div
-				class={classNames(
-					'flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center',
-					download ? 'bg-base-300/40 text-base-content' : 'text-base-content/40'
-				)}
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center text-base-content"
 			>
 				{@render header(download, 'delapouite/cloud-download', 'Download', 'Download mode')}
-				{#if download}
-					{#if download.finished}
-						<span class="text-[10px] text-success">Seeding · pinning to IPFS…</span>
-					{:else if download.progress != null}
-						<progress
-							class="progress h-1.5 w-full progress-primary"
-							value={download.progress}
-							max="1"
-						></progress>
-						<span class="text-[10px] text-base-content/70">
-							{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
-							download.downloadSpeed > 0
-								? ` · ${formatSpeed(download.downloadSpeed)}`
-								: ''}{download.etaSeconds != null && download.etaSeconds > 0
-								? ` · ETA ${formatEta(download.etaSeconds)}`
-								: ''}
-						</span>
-					{:else}
-						<span class="text-[10px] text-base-content/50">Queued</span>
-					{/if}
-					{@render stats(download)}
+				{#if download.finished}
+					<span class="text-[10px] text-success">Seeding · pinning to IPFS…</span>
+				{:else if download.progress != null}
+					<progress
+						class="progress h-1.5 w-full progress-primary"
+						value={download.progress}
+						max="1"
+					></progress>
+					<span class="text-[10px] text-base-content/70">
+						{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
+						download.downloadSpeed > 0
+							? ` · ${formatSpeed(download.downloadSpeed)}`
+							: ''}{download.etaSeconds != null && download.etaSeconds > 0
+							? ` · ETA ${formatEta(download.etaSeconds)}`
+							: ''}
+					</span>
 				{:else}
-					<span class="text-[10px] text-base-content/60">Not attached</span>
+					<span class="text-[10px] text-base-content/50">Queued</span>
 				{/if}
+				{@render stats(download)}
+			</div>
+		{:else if preferredDownload && onAttachDownload}
+			{@const info = torrentToInfo(preferredDownload)}
+			<button
+				type="button"
+				onclick={() => onAttachDownload?.(preferredDownload)}
+				disabled={attachingDownload}
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-300/70 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
+				aria-label="Attach this torrent for download"
+				title="Suggested pick from the torrent search — click to attach and start downloading"
+			>
+				{@render header(info, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				{@render stats(info)}
+				<span class="text-[10px] font-medium text-base-content/70">
+					{attachingDownload ? 'Starting…' : 'Click to attach'}
+				</span>
+			</button>
+		{:else}
+			<div
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
+			>
+				{@render header(null, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				<span class="text-[10px] text-base-content/60">Not attached</span>
 			</div>
 		{/if}
 
@@ -177,19 +230,35 @@
 					{streamPlaying ? 'Starting…' : 'Click to play'}
 				</span>
 			</button>
-		{:else}
+		{:else if stream}
 			<div
-				class={classNames(
-					'flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center',
-					stream ? 'bg-base-300/40 text-base-content' : 'text-base-content/40'
-				)}
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center text-base-content"
 			>
 				{@render header(stream, 'lorc/magnet', 'Stream', 'Stream mode')}
-				{#if stream}
-					{@render stats(stream)}
-				{:else}
-					<span class="text-[10px] text-base-content/60">Not attached</span>
-				{/if}
+				{@render stats(stream)}
+			</div>
+		{:else if preferredStream && onAttachStream}
+			{@const info = torrentToInfo(preferredStream)}
+			<button
+				type="button"
+				onclick={() => onAttachStream?.(preferredStream)}
+				disabled={attachingStream}
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-300/70 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
+				aria-label="Attach this torrent for streaming"
+				title="Suggested pick from the torrent search — click to start streaming"
+			>
+				{@render header(info, 'lorc/magnet', 'Stream', 'Stream mode')}
+				{@render stats(info)}
+				<span class="text-[10px] font-medium text-base-content/70">
+					{attachingStream ? 'Starting…' : 'Click to attach'}
+				</span>
+			</button>
+		{:else}
+			<div
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
+			>
+				{@render header(null, 'lorc/magnet', 'Stream', 'Stream mode')}
+				<span class="text-[10px] text-base-content/60">Not attached</span>
 			</div>
 		{/if}
 	</div>
