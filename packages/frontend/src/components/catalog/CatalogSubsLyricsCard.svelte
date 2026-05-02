@@ -41,12 +41,45 @@
 			const track = item.trackName ?? '';
 			return [artist, track].filter(Boolean).join(' — ') || item.source;
 		}
-		return item.display ?? item.language ?? item.source;
+		// In the subs view rows are nested inside a per-language <details>,
+		// so the row label is the OpenSubtitles file id (or source-prefixed
+		// fallback) rather than the language name.
+		return item.externalId
+			? `#${item.externalId}`
+			: (item.display ?? item.language ?? item.source);
 	}
 
 	function rowKey(item: SubsLyricsItem, index: number): string {
 		return `${item.source}::${item.externalId || index}`;
 	}
+
+	function languageLabel(item: SubsLyricsItem): string {
+		return item.display ?? item.language ?? '—';
+	}
+
+	type LanguageGroup = { label: string; items: SubsLyricsItem[] };
+
+	// Group subtitle results by language (display name preferred, falls
+	// back to the 3-letter code, then "—"). Ordering: English first if
+	// present, then by descending count, then alphabetical.
+	const grouped = $derived.by<LanguageGroup[]>(() => {
+		if (kind !== 'subs') return [];
+		const map = new Map<string, SubsLyricsItem[]>();
+		for (const item of resolver.results) {
+			const key = languageLabel(item);
+			const arr = map.get(key);
+			if (arr) arr.push(item);
+			else map.set(key, [item]);
+		}
+		const groups = Array.from(map, ([label, items]) => ({ label, items }));
+		groups.sort((a, b) => {
+			if (a.label === 'English' && b.label !== 'English') return -1;
+			if (b.label === 'English' && a.label !== 'English') return 1;
+			if (b.items.length !== a.items.length) return b.items.length - a.items.length;
+			return a.label.localeCompare(b.label);
+		});
+		return groups;
+	});
 </script>
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
@@ -84,6 +117,42 @@
 			</p>
 		{:else if resolver.status === 'idle'}
 			<p class="text-sm text-base-content/60">Idle.</p>
+		{:else if kind === 'subs'}
+			<div class="flex flex-col gap-1">
+				{#each grouped as group, gi (group.label + gi)}
+					<details
+						class="rounded border border-base-content/10 bg-base-100 open:bg-base-200"
+						open={group.label === 'English' || gi === 0}
+					>
+						<summary
+							class="flex cursor-pointer items-center justify-between gap-2 px-2 py-1 text-xs font-medium select-none"
+						>
+							<span class="truncate">{group.label}</span>
+							<span class="text-[10px] text-base-content/60">{group.items.length}</span>
+						</summary>
+						<ul class="flex flex-col gap-1 border-t border-base-content/10 p-1">
+							{#each group.items as item, i (rowKey(item, i))}
+								{@const isSelected = selected === item}
+								<li>
+									<button
+										type="button"
+										class={classNames(
+											'flex w-full flex-col gap-0.5 rounded border border-base-content/10 bg-base-100 px-2 py-1 text-left text-xs hover:bg-base-200',
+											{ 'border-primary': isSelected }
+										)}
+										onclick={() => (selected = isSelected ? null : item)}
+									>
+										<span class="truncate font-medium">{rowLabel(item)}</span>
+										<span class="truncate text-[10px] text-base-content/60">
+											{describe(item)}
+										</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					</details>
+				{/each}
+			</div>
 		{:else}
 			<ul class="flex flex-col gap-1">
 				{#each resolver.results as item, i (rowKey(item, i))}
