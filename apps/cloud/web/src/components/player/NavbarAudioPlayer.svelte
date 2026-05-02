@@ -14,10 +14,9 @@
 	let mediaError = $state<string | null>(null);
 
 	let visible = $derived(
-		$playerDisplayMode === 'navbar' &&
-			$playerState.currentFile !== null &&
-			Boolean($playerState.directStreamUrl)
+		$playerDisplayMode === 'navbar' && $playerState.currentFile !== null
 	);
+	let isLoading = $derived(visible && !$playerState.directStreamUrl);
 
 	$effect(() => {
 		const el = mediaElement;
@@ -178,15 +177,23 @@
 				<span>{formatTime(total > 0 ? total : null)}</span>
 			</div>
 		</div>
-		<button
-			type="button"
-			class="btn btn-ghost btn-sm"
-			onclick={togglePlay}
-			aria-label={isPaused ? 'Play' : 'Pause'}
-			title={isPaused ? 'Play' : 'Pause'}
-		>
-			{isPaused ? '▶' : '⏸'}
-		</button>
+		{#if isLoading}
+			<span
+				class="loading loading-sm loading-spinner text-primary"
+				aria-label="Loading"
+				title="Loading…"
+			></span>
+		{:else}
+			<button
+				type="button"
+				class="btn btn-ghost btn-sm"
+				onclick={togglePlay}
+				aria-label={isPaused ? 'Play' : 'Pause'}
+				title={isPaused ? 'Play' : 'Pause'}
+			>
+				{isPaused ? '▶' : '⏸'}
+			</button>
+		{/if}
 		<button
 			type="button"
 			class="btn btn-ghost btn-sm"

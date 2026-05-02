@@ -101,7 +101,7 @@
 		{/snippet}
 	</Navbar>
 
-	{#if $playerDisplayMode === 'navbar' && $playerState.currentFile && $playerState.directStreamUrl}
+	{#if $playerDisplayMode === 'navbar' && $playerState.currentFile}
 		<div
 			class="fixed right-2 bottom-2 z-40 flex w-96 max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-lg"
 		>

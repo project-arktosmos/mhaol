@@ -61,6 +61,39 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	// ===== Direct URL playback (yt-dlp / torrent stream / IPFS gateway) =====
 
+	/// Surface the currently-selected track in the floating panel **before**
+	/// the stream URL has been resolved, so the user gets immediate feedback
+	/// while the upstream resolver (yt-dlp / etc.) does its work. The eventual
+	/// `playUrl()` call upgrades this same currentFile in place — when the
+	/// file ids match, `playUrl` skips its `stop()` reset so the loading state
+	/// flows directly into the streaming state without a flicker.
+	async beginLoad(
+		file: PlayableFile,
+		displayMode?: PlayerDisplayMode,
+		syncedLyrics?: SubsLyricsSyncedLine[] | null
+	): Promise<void> {
+		if (!browser) return;
+
+		await this.stop();
+		this.playGeneration++;
+		if (displayMode) this.displayMode.set(displayMode);
+
+		this.state.update((s) => ({
+			...s,
+			currentFile: file,
+			connectionState: 'connecting',
+			error: null,
+			positionSecs: 0,
+			durationSecs: file.durationSeconds,
+			isPaused: true,
+			buffering: true,
+			directStreamUrl: null,
+			directStreamMimeType: null,
+			firkinId: null,
+			syncedLyrics: syncedLyrics && syncedLyrics.length > 0 ? syncedLyrics : null
+		}));
+	}
+
 	async playUrl(
 		file: PlayableFile,
 		streamUrl: string,
@@ -71,7 +104,14 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	): Promise<void> {
 		if (!browser) return;
 
-		await this.stop();
+		// When upgrading from a `beginLoad` of the same file (audio callers
+		// surface the panel immediately while the stream URL resolves), skip
+		// the stop() reset so the in-flight loading state isn't wiped.
+		const cur = get(this.state);
+		const sameFile = cur.currentFile !== null && cur.currentFile.id === file.id;
+		if (!sameFile) {
+			await this.stop();
+		}
 		this.playGeneration++;
 		if (displayMode) this.displayMode.set(displayMode);
 

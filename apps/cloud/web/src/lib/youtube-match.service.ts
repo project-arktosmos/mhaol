@@ -223,19 +223,13 @@ export async function playYouTubeAudio(
 	durationSeconds: number | null = null,
 	syncedLyrics: SubsLyricsSyncedLine[] | null = null
 ): Promise<void> {
-	const res = await fetch(
-		`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`
-	);
-	if (!res.ok) {
-		const body = await res.text();
-		throw new Error(body || `HTTP ${res.status}`);
-	}
-	const result = (await res.json()) as YouTubeStreamUrlResult;
-	const format = pickAudioFormat(result);
-	if (!format) throw new Error('No playable audio format');
+	// Surface the floating panel immediately with the chosen track's
+	// metadata so the user gets a loading indicator the moment they hit
+	// play, rather than waiting for the yt-dlp stream-url resolver.
 	const videoId = extractVideoId(youtubeUrl) ?? youtubeUrl;
-	const file: PlayableFile = {
-		id: `youtube:${videoId}:audio`,
+	const fileId = `youtube:${videoId}:audio`;
+	const placeholder: PlayableFile = {
+		id: fileId,
 		type: 'youtube',
 		name: title,
 		outputPath: '',
@@ -244,9 +238,32 @@ export async function playYouTubeAudio(
 		videoFormat: null,
 		thumbnailUrl,
 		durationSeconds,
-		size: format.contentLength ?? 0,
+		size: 0,
 		completedAt: ''
 	};
+	await playerService.beginLoad(placeholder, 'navbar', syncedLyrics);
+
+	let res: Response;
+	try {
+		res = await fetch(
+			`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`
+		);
+	} catch (err) {
+		await playerService.stop();
+		throw err;
+	}
+	if (!res.ok) {
+		const body = await res.text();
+		await playerService.stop();
+		throw new Error(body || `HTTP ${res.status}`);
+	}
+	const result = (await res.json()) as YouTubeStreamUrlResult;
+	const format = pickAudioFormat(result);
+	if (!format) {
+		await playerService.stop();
+		throw new Error('No playable audio format');
+	}
+	const file: PlayableFile = { ...placeholder, size: format.contentLength ?? 0 };
 	await playerService.playUrl(file, format.url, format.mimeType, 'navbar', null, syncedLyrics);
 }
 
