@@ -98,6 +98,17 @@
 		const onVolume = () => {
 			playerService.setVolume(el.muted ? 0 : el.volume);
 		};
+		// Auto-advance: when the current track finishes, look up the playlist
+		// fresh (avoid closing over a stale `$derived` snapshot), find the next
+		// playable row, and swap the player into it via the same path the
+		// next-button uses.
+		const onEnded = () => {
+			const pl = get(playerService.playlist);
+			if (!pl) return;
+			const next = findPlayableIndex(pl.tracks, pl.currentIndex, 1);
+			if (next === null) return;
+			void playPlaylistTrack(pl, next);
+		};
 		el.addEventListener('timeupdate', onTime);
 		el.addEventListener('loadedmetadata', onMeta);
 		el.addEventListener('durationchange', onMeta);
@@ -107,6 +118,7 @@
 		el.addEventListener('playing', onPlaying);
 		el.addEventListener('error', onError);
 		el.addEventListener('volumechange', onVolume);
+		el.addEventListener('ended', onEnded);
 		return () => {
 			el.removeEventListener('timeupdate', onTime);
 			el.removeEventListener('loadedmetadata', onMeta);
@@ -117,6 +129,7 @@
 			el.removeEventListener('playing', onPlaying);
 			el.removeEventListener('error', onError);
 			el.removeEventListener('volumechange', onVolume);
+			el.removeEventListener('ended', onEnded);
 		};
 	});
 
