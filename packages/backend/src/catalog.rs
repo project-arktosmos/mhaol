@@ -2184,27 +2184,56 @@ async fn youtube_video_artists(
 
 // ---------- helpers ----------
 
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(30))
+            .pool_idle_timeout(std::time::Duration::from_secs(20))
+            .user_agent(USER_AGENT)
+            .build()
+            .expect("reqwest client builder")
+    })
+}
+
+fn error_chain(err: &(dyn std::error::Error + 'static)) -> String {
+    let mut out = err.to_string();
+    let mut cur = err.source();
+    while let Some(e) = cur {
+        out.push_str(": ");
+        out.push_str(&e.to_string());
+        cur = e.source();
+    }
+    out
+}
+
 async fn http_get_json(
     url: &str,
     headers: &[(&str, &str)],
 ) -> Result<serde_json::Value, (StatusCode, Json<serde_json::Value>)> {
-    let mut req = reqwest::Client::new().get(url);
+    let mut req = http_client().get(url);
     for (k, v) in headers {
         req = req.header(*k, *v);
     }
-    let res = req
-        .send()
-        .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("upstream request failed: {e}")))?;
+    let res = req.send().await.map_err(|e| {
+        err(
+            StatusCode::BAD_GATEWAY,
+            format!("upstream request failed: {}", error_chain(&e)),
+        )
+    })?;
     if !res.status().is_success() {
         return Err(err(
             StatusCode::BAD_GATEWAY,
             format!("upstream returned {}", res.status()),
         ));
     }
-    res.json::<serde_json::Value>()
-        .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("upstream parse failed: {e}")))
+    res.json::<serde_json::Value>().await.map_err(|e| {
+        err(
+            StatusCode::BAD_GATEWAY,
+            format!("upstream parse failed: {}", error_chain(&e)),
+        )
+    })
 }
 
 fn capitalize_words(s: &str) -> String {
