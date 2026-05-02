@@ -3,8 +3,9 @@
 //! Walks the on-disk download directory of every completed torrent attached
 //! to a firkin, extracts compressed archives in place (zip / 7z), pins every
 //! ROM file (whether already there or freshly extracted) to IPFS, appends
-//! them as `ipfs` file entries, and rolls the firkin's CID forward — same
-//! versioning contract as `torrent_completion::rollforward`.
+//! them as `ipfs` file entries, and updates the firkin in place
+//! (recomputes CID, bumps version) — same contract as
+//! `torrent_completion::rollforward`.
 
 #![cfg(not(target_os = "android"))]
 
@@ -15,7 +16,7 @@ use chrono::Utc;
 use serde::Serialize;
 
 use crate::firkins::{
-    compute_firkin_cid, pin_firkin_body, serialize_firkin_payload, FileEntry, Firkin,
+    compute_body_cid, pin_firkin_body, serialize_firkin_payload, FileEntry, Firkin,
     TABLE as FIRKIN_TABLE,
 };
 use crate::ipfs_pins;
@@ -61,8 +62,7 @@ pub async fn extract_roms_for_firkin(
     state: &CloudState,
     firkin_id: &str,
 ) -> anyhow::Result<RomsResponse> {
-    let (mut current, mut current_id) =
-        resolve_head_firkin(state, firkin_id).await?;
+    let (mut current, current_id) = load_firkin(state, firkin_id).await?;
 
     let mut response = RomsResponse {
         firkin_id: current_id.clone(),
@@ -250,15 +250,14 @@ pub async fn extract_roms_for_firkin(
     }
 
     if !new_entries.is_empty() {
-        current_id = rollforward(state, &current, new_entries).await?;
-        // Refresh the in-memory copy for callers that walk version_hashes.
+        rollforward(state, &current, new_entries).await?;
         if let Some(refreshed) = state
             .db
             .select((FIRKIN_TABLE, current_id.as_str()))
             .await?
         {
             current = refreshed;
-            let _ = current; // silence unused-assignment lint when no further reads
+            let _ = current;
         }
     }
 
@@ -271,8 +270,8 @@ pub async fn extract_roms_for_firkin(
 /// Extract a single archive identified by its firkin-relative title
 /// (e.g. `roms/Foo.7z`). Walks the firkin's torrents to find the archive
 /// on disk, extracts it if not already, pins every resulting ROM and
-/// rolls the firkin forward. The response only contains entries for that
-/// one archive — callers can scan archives one at a time without
+/// updates the firkin in place. The response only contains entries for
+/// that one archive — callers can scan archives one at a time without
 /// blocking on the full pack (a No-Intro torrent has hundreds of `.7z`
 /// files; doing them all in one request takes ages).
 pub async fn extract_single_archive(
@@ -280,12 +279,7 @@ pub async fn extract_single_archive(
     firkin_id: &str,
     archive_relative: &str,
 ) -> anyhow::Result<RomsResponse> {
-    // If the user clicked Scan against an already-rolled-forward firkin
-    // (e.g. `torrent_completion` rolled it while the page was open and
-    // the auto-poller hasn't caught up yet), walk forward to the head
-    // of the version chain instead of failing.
-    let (mut current, mut current_id) =
-        resolve_head_firkin(state, firkin_id).await?;
+    let (mut current, current_id) = load_firkin(state, firkin_id).await?;
 
     let mut response = RomsResponse {
         firkin_id: current_id.clone(),
@@ -467,7 +461,7 @@ pub async fn extract_single_archive(
     }
 
     if !new_entries.is_empty() {
-        current_id = rollforward(state, &current, new_entries).await?;
+        rollforward(state, &current, new_entries).await?;
         if let Some(refreshed) = state
             .db
             .select((FIRKIN_TABLE, current_id.as_str()))
@@ -484,43 +478,32 @@ pub async fn extract_single_archive(
     Ok(response)
 }
 
-/// Roll the firkin forward with `new_entries` appended to `files`. Returns the
-/// new firkin id (the new CID).
+/// Update the firkin in place with `new_entries` appended to `files`.
+/// Recomputes the body CID, increments version, appends the prior CID
+/// to `version_hashes`, and re-pins the new body. Returns the firkin's
+/// id (unchanged across updates since the record id is a stable UUID).
 async fn rollforward(
     state: &CloudState,
     doc: &Firkin,
     new_entries: Vec<FileEntry>,
 ) -> anyhow::Result<String> {
-    let old_id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
-    if old_id.is_empty() {
+    let id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
+    if id.is_empty() {
         anyhow::bail!("firkin has no id");
     }
+
+    let prior_cid = if doc.cid.is_empty() {
+        id.clone()
+    } else {
+        doc.cid.clone()
+    };
 
     let mut updated_files = doc.files.clone();
     updated_files.extend(new_entries);
 
     let new_version = doc.version.saturating_add(1);
     let mut new_hashes = doc.version_hashes.clone();
-    new_hashes.push(old_id.clone());
-
-    let new_id = compute_firkin_cid(
-        &doc.title,
-        &doc.description,
-        &doc.artists,
-        &doc.images,
-        &updated_files,
-        doc.year,
-        &doc.addon,
-        &doc.creator,
-        new_version,
-        &new_hashes,
-        &doc.trailers,
-        &doc.reviews,
-    );
-
-    if new_id == old_id {
-        return Ok(old_id);
-    }
+    new_hashes.push(prior_cid);
 
     let new_body_json = serialize_firkin_payload(
         &doc.title,
@@ -536,6 +519,7 @@ async fn rollforward(
         &doc.trailers,
         &doc.reviews,
     );
+    let new_cid = compute_body_cid(&new_body_json);
 
     let new_record = Firkin {
         id: None,
@@ -547,6 +531,7 @@ async fn rollforward(
         year: doc.year,
         addon: doc.addon.clone(),
         creator: doc.creator.clone(),
+        cid: new_cid.clone(),
         created_at: doc.created_at,
         updated_at: Utc::now(),
         version: new_version,
@@ -555,66 +540,32 @@ async fn rollforward(
         reviews: doc.reviews.clone(),
     };
 
-    let _: Option<Firkin> = state.db.delete((FIRKIN_TABLE, old_id.as_str())).await?;
-    let create_result: Result<Option<Firkin>, _> = state
+    let updated: Option<Firkin> = state
         .db
-        .create((FIRKIN_TABLE, new_id.as_str()))
+        .update((FIRKIN_TABLE, id.as_str()))
         .content(new_record)
-        .await;
-    match create_result {
-        Ok(_) => {}
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("already exists") {
-                tracing::info!(
-                    "[rom-extract] {} → {} already created by a concurrent attempt",
-                    old_id,
-                    new_id,
-                );
-                return Ok(new_id);
-            }
-            return Err(e.into());
-        }
+        .await?;
+    if updated.is_none() {
+        anyhow::bail!("firkin {} disappeared during update", id);
     }
 
-    pin_firkin_body(state, &new_id, new_body_json).await;
+    pin_firkin_body(state, &id, new_body_json).await;
 
     tracing::info!(
-        "[rom-extract] {} → {} (v{})",
-        old_id,
-        new_id,
+        "[rom-extract] {} → cid {} (v{})",
+        id,
+        new_cid,
         new_version,
     );
 
-    Ok(new_id)
+    Ok(id)
 }
 
-/// Walk the version chain forward from `firkin_id` to the latest
-/// existing record. Falls back to `firkin_id` if it's still the head.
-/// Bails when the id can't be resolved at all (truly deleted firkin).
-async fn resolve_head_firkin(
-    state: &CloudState,
-    firkin_id: &str,
-) -> anyhow::Result<(Firkin, String)> {
-    if let Some(doc) = state
-        .db
-        .select::<Option<Firkin>>((FIRKIN_TABLE, firkin_id))
-        .await?
-    {
-        return Ok((doc, firkin_id.to_string()));
-    }
-    let docs: Vec<Firkin> = state.db.select(FIRKIN_TABLE).await?;
-    let successor = docs
-        .into_iter()
-        .find(|d| d.version_hashes.iter().any(|h| h == firkin_id));
-    match successor {
-        Some(doc) => {
-            let id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
-            if id.is_empty() {
-                anyhow::bail!("firkin not found");
-            }
-            Ok((doc, id))
-        }
+/// Load the firkin record by its UUID id. Bails when not found.
+async fn load_firkin(state: &CloudState, firkin_id: &str) -> anyhow::Result<(Firkin, String)> {
+    let doc: Option<Firkin> = state.db.select((FIRKIN_TABLE, firkin_id)).await?;
+    match doc {
+        Some(d) => Ok((d, firkin_id.to_string())),
         None => anyhow::bail!("firkin not found"),
     }
 }

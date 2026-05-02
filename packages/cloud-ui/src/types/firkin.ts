@@ -99,7 +99,10 @@ export interface FirkinReview {
 }
 
 export interface Firkin {
+	/** Stable UUID record id — assigned at create time and never changed. */
 	id: string;
+	/** Content-addressed CID of the body, recomputed on every update. */
+	cid: string;
 	title: string;
 	artistIds?: string[];
 	artists: FirkinArtist[];

@@ -187,9 +187,7 @@
 			backdropUrl: item.backdropUrl
 		});
 		metadataLookupOpen = false;
-		if (updated.id !== firkin.id) {
-			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
-		}
+		data.firkin = updated;
 	}
 
 	function parseMusicBrainzReleaseGroupId(value: string): string | null {
@@ -310,9 +308,6 @@
 			const updated = (await putRes.json()) as Firkin;
 			data.firkin = updated;
 			if (want.fetchArtists) artistsBackfillStatus = 'done';
-			if (updated.id !== firkinId) {
-				void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
-			}
 		} catch (err) {
 			artistsBackfillError = err instanceof Error ? err.message : 'Unknown error';
 			if (want.fetchArtists) artistsBackfillStatus = 'error';
@@ -603,11 +598,7 @@
 				throw new Error(message);
 			}
 			const next = (await res.json()) as Firkin;
-			if (next.id !== firkin.id) {
-				await goto(`${base}/catalog/${encodeURIComponent(next.id)}`);
-			} else {
-				data.firkin = next;
-			}
+			data.firkin = next;
 			if (next.files.some((f) => f.type === 'ipfs')) {
 				firkinPlaybackService.select(next as unknown as CloudFirkin);
 			}
@@ -619,11 +610,11 @@
 	}
 
 	// Detail mode persists trailer/track URLs back to the firkin so they
-	// don't have to be re-resolved every visit. The PUT may roll the firkin
-	// forward to a new content-addressed id; in that case we navigate.
+	// don't have to be re-resolved every visit. The PUT updates the
+	// record in place — the firkin's UUID id is stable across versions —
+	// and the response carries the recomputed `cid`.
 	async function persistFirkinPatch(patch: Partial<Firkin>): Promise<void> {
-		const oldId = firkin.id;
-		const res = await fetch(`${base}/api/firkins/${encodeURIComponent(oldId)}`, {
+		const res = await fetch(`${base}/api/firkins/${encodeURIComponent(firkin.id)}`, {
 			method: 'PUT',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(patch)
@@ -640,9 +631,6 @@
 		}
 		const updated = (await res.json()) as Firkin;
 		data.firkin = updated;
-		if (updated.id !== oldId) {
-			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
-		}
 	}
 
 	const trailerResolver = new TrailerResolver({
@@ -712,10 +700,9 @@
 	);
 
 	// While the server's background album-resolution task is still
-	// running, poll the firkin every few seconds. When it rolls forward
-	// to a new content-addressed id, navigate to it; if the body comes
-	// back at the same id with new files (rare — only when no rollforward
-	// was needed), refresh the in-memory copy and re-project tracks.
+	// running, poll the firkin every few seconds. The record id (UUID)
+	// is stable across version updates; we just need to refresh the body
+	// so the resolved track URLs / lyrics show up.
 	$effect(() => {
 		if (!tracksLikelyUnresolved) return;
 		const id = firkin.id;
@@ -728,24 +715,9 @@
 					cache: 'no-store'
 				});
 				if (cancelled) return;
-				if (res.status === 404) {
-					const listRes = await fetch(`${base}/api/firkins`, { cache: 'no-store' });
-					if (!listRes.ok) return;
-					const list = (await listRes.json()) as Firkin[];
-					if (cancelled) return;
-					const successor = list.find((d) => (d.version_hashes ?? []).includes(id));
-					if (successor) {
-						await goto(`${base}/catalog/${encodeURIComponent(successor.id)}`);
-					}
-					return;
-				}
 				if (!res.ok) return;
 				const fresh = (await res.json()) as Firkin;
 				if (cancelled) return;
-				if (fresh.id !== id) {
-					await goto(`${base}/catalog/${encodeURIComponent(fresh.id)}`);
-					return;
-				}
 				const freshHasMore =
 					fresh.files.length !== firkin.files.length || fresh.updated_at !== firkin.updated_at;
 				if (freshHasMore) {
@@ -873,17 +845,6 @@
 					cache: 'no-store'
 				});
 				if (cancelled) return;
-				if (res.status === 404) {
-					const listRes = await fetch(`${base}/api/firkins`, { cache: 'no-store' });
-					if (!listRes.ok) return;
-					const list = (await listRes.json()) as Firkin[];
-					if (cancelled) return;
-					const successor = list.find((d) => (d.version_hashes ?? []).includes(id));
-					if (successor) {
-						await goto(`${base}/catalog/${encodeURIComponent(successor.id)}`);
-					}
-					return;
-				}
 				if (!res.ok) return;
 				const fresh = (await res.json()) as Firkin;
 				if (cancelled) return;
@@ -1025,9 +986,7 @@
 		<div class="alert alert-error"><span>{torrentStreamError}</span></div>
 	{/if}
 
-	<div
-		class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr_minmax(0,_320px)]"
-	>
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr_minmax(0,_320px)]">
 		<aside class="flex flex-col gap-4">
 			{#if firkin.images[0]}
 				<img
@@ -1137,7 +1096,7 @@
 			<CatalogDescriptionPanel
 				description={firkin.description}
 				identity={{
-					cid: firkin.id,
+					cid: firkin.cid,
 					createdAt: firkin.created_at,
 					updatedAt: firkin.updated_at,
 					version: firkin.version ?? 0

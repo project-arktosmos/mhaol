@@ -153,10 +153,10 @@ class FirkinsService {
 		return created;
 	}
 
-	/// Apply catalog-derived metadata to a firkin and roll its version
-	/// forward. The server returns the new firkin (under a new CID). The
-	/// caller is responsible for navigating to the new id, since the URL
-	/// of the detail page is content-addressed.
+	/// Apply catalog-derived metadata to a firkin in place. The server
+	/// recomputes the body CID and bumps the version, but the record id
+	/// (UUID) stays the same — the response is just the updated firkin
+	/// at the same id.
 	async enrich(
 		id: string,
 		payload: {
@@ -185,8 +185,8 @@ class FirkinsService {
 	/// Run the server-side track resolver: fetch the album's tracks from
 	/// MusicBrainz, search YouTube + LRCLIB per track, pick the best match
 	/// for each, pack the resulting URL / lyrics entries into `files`, and
-	/// roll the firkin forward to a new content-addressed id (which the
-	/// caller must navigate to). Only valid for `musicbrainz` firkins.
+	/// update the firkin in place (recomputed body CID, bumped version).
+	/// Only valid for `musicbrainz` firkins.
 	async resolveTracks(id: string): Promise<Firkin> {
 		const res = await fetch(`/api/firkins/${encodeURIComponent(id)}/resolve-tracks`, {
 			method: 'POST'

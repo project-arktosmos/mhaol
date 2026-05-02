@@ -211,8 +211,8 @@ pub struct Firkin {
     pub title: String,
     /// CIDs of the `artist` records this firkin references. The artist
     /// bodies live in their own table + IPFS pins; the firkin only stores
-    /// the content-addressed handles so its own CID stays stable across
-    /// presentation-only edits to an artist (e.g. a new image URL).
+    /// the content-addressed handles so the firkin's own CID stays stable
+    /// across presentation-only edits to an artist (e.g. a new image URL).
     #[serde(default)]
     pub artists: Vec<String>,
     pub description: String,
@@ -231,10 +231,17 @@ pub struct Firkin {
     /// server-side auto-creates (library scan).
     #[serde(default)]
     pub creator: String,
+    /// Content-addressed CID of the firkin's body, recomputed on every
+    /// update. The SurrealDB record id is a stable UUID; this field
+    /// carries the IPFS hash so callers can still resolve the body via
+    /// UnixFS without hitting the DB.
+    #[serde(default)]
+    pub cid: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
     pub version: u32,
+    /// History of past CIDs, oldest first, one per body change. Append-only.
     #[serde(default)]
     pub version_hashes: Vec<String>,
     /// YouTube trailers resolved against this firkin. Movies hold one
@@ -253,10 +260,13 @@ pub struct Firkin {
 
 #[derive(Debug, Serialize)]
 pub struct FirkinDto {
+    /// Stable UUID identifier — assigned at create time and never changed.
     pub id: String,
+    /// Content-addressed CID of the firkin body, recomputed on every update.
+    pub cid: String,
     pub title: String,
-    /// Artist CIDs as persisted on the firkin record. Drives version
-    /// hashing and lets clients re-fetch artist docs by CID.
+    /// Artist CIDs as persisted on the firkin record. Drives the body
+    /// hash and lets clients re-fetch artist docs by CID.
     #[serde(rename = "artistIds")]
     pub artist_ids: Vec<String>,
     /// Resolved artist bodies, in the same order as `artist_ids`. CIDs
@@ -286,8 +296,17 @@ impl FirkinDto {
             .as_ref()
             .map(|t| t.id.to_raw())
             .unwrap_or_default();
+        // Records created before the schema split carry the CID *as* the
+        // record id and have an empty `cid` field. Fall back to the id so
+        // callers always see the content-address.
+        let cid = if doc.cid.is_empty() {
+            id.clone()
+        } else {
+            doc.cid
+        };
         Self {
             id,
+            cid,
             title: doc.title,
             artist_ids: doc.artists,
             artists,
@@ -483,40 +502,21 @@ async fn list(
     Ok(Json(dtos))
 }
 
-/// Reduce a raw `firkin` table dump to one record per logical media item.
+/// Reduce a raw `firkin` table dump to one record per logical media
+/// item. Two distinct firkins can share the same `(addon, title, year)`
+/// — one created via the catalog "Bookmark" button (no files), another
+/// from a library scan (files attached, may have been updated several
+/// times). Keep the one with the higher `version` (and the more recent
+/// `updated_at` if tied) so callers see exactly one row per logical
+/// item.
 ///
-/// Runs in two passes:
-///
-/// 1. **Drop superseded versions.** A firkin is "superseded" when its id
-///    appears in another firkin's `version_hashes` — i.e. it's an earlier
-///    link in a version chain that has since been rolled forward. This
-///    catches stragglers left behind by a crashed or partial rollforward.
-///
-/// 2. **Collapse parallel chains.** Two distinct chains can share the
-///    same `(addon, title, year)` — one created via the catalog "Bookmark"
-///    button (no files), another from a library scan (files attached, may
-///    have rolled forward several times). Neither references the other,
-///    so the version-hash filter alone leaves both heads visible. Keep
-///    the head with the higher `version` (and the more recent `updated_at`
-///    if tied) so callers see exactly one row per logical item.
+/// Updates are now applied in place against a stable UUID record id, so
+/// no record ever appears in another record's `version_hashes`. The
+/// legacy version-chain dedup is therefore unnecessary.
 pub(crate) fn collapse_to_chain_heads(docs: Vec<Firkin>) -> Vec<Firkin> {
-    let mut superseded: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for d in &docs {
-        for h in &d.version_hashes {
-            superseded.insert(h.clone());
-        }
-    }
-    let heads: Vec<Firkin> = docs
-        .into_iter()
-        .filter(|d| {
-            let id = d.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
-            !superseded.contains(&id)
-        })
-        .collect();
-
     let mut by_key: std::collections::HashMap<(String, String, Option<i32>), Firkin> =
         std::collections::HashMap::new();
-    for d in heads {
+    for d in docs {
         let key = (d.addon.clone(), d.title.clone(), d.year);
         match by_key.get(&key) {
             Some(existing)
@@ -656,28 +656,28 @@ async fn create(
         &trailers,
         &reviews,
     );
-    let digest = Sha256::digest(body_json.as_bytes());
-    let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
-        .expect("sha2-256 digest fits in multihash");
-    let new_id = Cid::new_v1(RAW_CODEC, mh).to_string();
+    let body_cid = compute_body_cid(&body_json);
 
-    let existing: Option<Firkin> = state
-        .db
-        .select((TABLE, new_id.as_str()))
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
-    if let Some(existing) = existing {
-        // Same body already on disk — re-trigger album resolution in the
-        // background in case a prior attempt was interrupted before
-        // rolling the firkin forward. The inner loop is idempotent: if
-        // every track already has both YT URL + lyrics it returns the
-        // record unchanged.
+    // Dedup by content-address: if a firkin with the same body already
+    // exists, return it instead of minting a duplicate UUID. This
+    // preserves the previous "same bookmark twice" behaviour even though
+    // the record id is no longer the CID.
+    if let Some(existing) = find_by_cid(&state, &body_cid).await? {
+        let existing_id = existing
+            .id
+            .as_ref()
+            .map(|t| t.id.to_raw())
+            .unwrap_or_default();
         #[cfg(not(target_os = "android"))]
-        if existing.addon == "musicbrainz" {
-            spawn_resolve_album_tracks(state.clone(), new_id.clone());
+        if existing.addon == "musicbrainz" && !existing_id.is_empty() {
+            spawn_resolve_album_tracks(state.clone(), existing_id.clone());
         }
+        #[cfg(target_os = "android")]
+        let _ = existing_id;
         return Ok((StatusCode::OK, Json(assemble_firkin_dto(&state, existing).await?)));
     }
+
+    let new_id = uuid::Uuid::new_v4().to_string();
 
     let record = Firkin {
         id: None,
@@ -689,6 +689,7 @@ async fn create(
         year,
         addon: addon.to_string(),
         creator,
+        cid: body_cid.clone(),
         created_at: now,
         updated_at: now,
         version,
@@ -723,6 +724,41 @@ async fn create(
     let _ = record_addon;
 
     Ok((StatusCode::CREATED, Json(dto)))
+}
+
+pub(crate) fn compute_body_cid(body_json: &str) -> String {
+    let digest = Sha256::digest(body_json.as_bytes());
+    let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
+        .expect("sha2-256 digest fits in multihash");
+    Cid::new_v1(RAW_CODEC, mh).to_string()
+}
+
+/// Look up a firkin by its content-addressed `cid` field. Returns the
+/// first match (uuid records keep `cid` populated; legacy records with
+/// the cid stored as the record id are matched by id as well so dedup
+/// keeps working during the schema transition).
+async fn find_by_cid(
+    state: &CloudState,
+    cid: &str,
+) -> Result<Option<Firkin>, (StatusCode, Json<serde_json::Value>)> {
+    let mut resp = state
+        .db
+        .query("SELECT * FROM firkin WHERE cid = $cid OR id = type::thing('firkin', $cid) LIMIT 1")
+        .bind(("cid", cid.to_string()))
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db query failed: {e}"),
+            )
+        })?;
+    let docs: Vec<Firkin> = resp.take(0).map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db take failed: {e}"),
+        )
+    })?;
+    Ok(docs.into_iter().next())
 }
 
 /// Pin the firkin body's JSON bytes to the embedded IPFS node and record an
@@ -887,30 +923,45 @@ async fn update(
     Ok(Json(assemble_firkin_dto(&state, updated_doc).await?))
 }
 
-/// Apply a mutated firkin to the store, rolling forward to a new
-/// content-addressed id whenever the mutation changes a body-affecting
-/// field. When the new CID matches `old_id` (the caller's mutations
-/// didn't actually change any field that participates in the CID),
-/// updates the existing record in place so non-CID fields like
-/// `updated_at` still get persisted without minting a stale version.
-///
-/// On rollforward: increments `version`, pushes `old_id` onto
-/// `version_hashes`, recomputes the CID over the mutated body, deletes
-/// the old record, creates a new one at the new CID, and pins the new
-/// body JSON to IPFS via `pin_firkin_body`. Idempotent against a
-/// concurrent rollforward landing at the same new id (adopts the
-/// existing record). Caller is expected to have set `updated.id = None`
-/// and bumped `updated.updated_at` before calling.
+/// Apply a mutated firkin to the store, in place. Recomputes the body
+/// CID; when the mutation changes a body-affecting field, increments
+/// `version`, appends the prior CID to `version_hashes`, updates the
+/// record's `cid` field, and re-pins the new body JSON to IPFS. When the
+/// new CID matches the existing one (mutations didn't actually change a
+/// CID-participating field), the record is still updated so non-CID
+/// fields like `updated_at` get persisted, but `version` /
+/// `version_hashes` are left alone. The SurrealDB record id (a stable
+/// UUID) is never changed. Caller is expected to have set
+/// `updated.id = None` and bumped `updated.updated_at` before calling.
 pub(crate) async fn rollforward_firkin(
     state: &CloudState,
-    old_id: &str,
+    id: &str,
     mut updated: Firkin,
 ) -> Result<Firkin, (StatusCode, Json<serde_json::Value>)> {
-    let new_version = updated.version.saturating_add(1);
-    let mut new_hashes = updated.version_hashes.clone();
-    new_hashes.push(old_id.to_string());
+    // Look up the prior record so we can read its cid field for the
+    // version_hashes append. Falls back to the id itself for legacy
+    // records where the record id was the CID and the cid field is empty.
+    let prior: Option<Firkin> = state
+        .db
+        .select((TABLE, id))
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db select failed: {e}"),
+            )
+        })?;
+    let prior = prior.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+    let prior_cid = if prior.cid.is_empty() {
+        id.to_string()
+    } else {
+        prior.cid.clone()
+    };
 
-    let new_id = compute_firkin_cid(
+    // Trial-compute the new body's CID against the prior version /
+    // version_hashes so a no-op mutation is detected before we touch the
+    // version chain.
+    let trial_cid = compute_firkin_cid(
         &updated.title,
         &updated.description,
         &updated.artists,
@@ -919,18 +970,19 @@ pub(crate) async fn rollforward_firkin(
         updated.year,
         &updated.addon,
         &updated.creator,
-        new_version,
-        &new_hashes,
+        updated.version,
+        &updated.version_hashes,
         &updated.trailers,
         &updated.reviews,
     );
 
-    if new_id == old_id {
-        // No body change — keep the same id but persist mutable fields
-        // like `updated_at`. Don't bump version / version_hashes.
+    if trial_cid == prior_cid {
+        // No body change — persist mutable fields like `updated_at` but
+        // leave version / version_hashes alone.
+        updated.cid = prior_cid;
         let res: Option<Firkin> = state
             .db
-            .update((TABLE, old_id))
+            .update((TABLE, id))
             .content(updated)
             .await
             .map_err(|e| {
@@ -942,8 +994,9 @@ pub(crate) async fn rollforward_firkin(
         return res.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"));
     }
 
-    updated.version = new_version;
-    updated.version_hashes = new_hashes.clone();
+    let new_version = updated.version.saturating_add(1);
+    let mut new_hashes = updated.version_hashes.clone();
+    new_hashes.push(prior_cid);
 
     let new_body_json = serialize_firkin_payload(
         &updated.title,
@@ -959,63 +1012,29 @@ pub(crate) async fn rollforward_firkin(
         &updated.trailers,
         &updated.reviews,
     );
+    let new_cid = compute_body_cid(&new_body_json);
 
-    let _: Option<Firkin> = state
+    updated.version = new_version;
+    updated.version_hashes = new_hashes;
+    updated.cid = new_cid;
+
+    let updated_doc: Option<Firkin> = state
         .db
-        .delete((TABLE, old_id))
+        .update((TABLE, id))
+        .content(updated)
         .await
         .map_err(|e| {
             err_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("db delete failed: {e}"),
+                format!("db update failed: {e}"),
             )
         })?;
-    let create_result: Result<Option<Firkin>, _> = state
-        .db
-        .create((TABLE, new_id.as_str()))
-        .content(updated)
-        .await;
-    let created_doc = match create_result {
-        Ok(Some(d)) => d,
-        Ok(None) => {
-            return Err(err_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "firkin was not persisted",
-            ))
-        }
-        Err(e) => {
-            // A concurrent rollforward landed first at the same new id.
-            // Adopt the existing record rather than failing.
-            let msg = e.to_string();
-            if msg.contains("already exists") {
-                let doc: Option<Firkin> = state
-                    .db
-                    .select((TABLE, new_id.as_str()))
-                    .await
-                    .map_err(|e| {
-                        err_response(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("db select failed: {e}"),
-                        )
-                    })?;
-                doc.ok_or_else(|| {
-                    err_response(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "rolled-forward firkin missing",
-                    )
-                })?
-            } else {
-                return Err(err_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("db create failed: {e}"),
-                ));
-            }
-        }
-    };
+    let updated_doc =
+        updated_doc.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
 
-    pin_firkin_body(state, &new_id, new_body_json).await;
+    pin_firkin_body(state, id, new_body_json).await;
 
-    Ok(created_doc)
+    Ok(updated_doc)
 }
 
 async fn delete(
@@ -1620,6 +1639,7 @@ mod tests {
             year: None,
             addon: addon.to_string(),
             creator: String::new(),
+            cid: String::new(),
             created_at: now,
             updated_at: now,
             version,
