@@ -138,8 +138,8 @@ Services should never call `fetch` directly when they need transport-aware behav
 `src/lib/api-base.ts` is the single source of truth for the API base URL:
 
 - **Browser** (cloud / headless served from the same backend): defaults to `''` (same-origin).
-- **Tauri shells** (cloud tray, android-tv, android-mobile): defaults to `http://127.0.0.1:9898`. For `android-mobile` this matches the embedded backend; for `android-tv` the user must override via the in-app **Settings** page (`/settings`); for `apps/cloud` the tray-only shell never opens a window so the default is academic.
-- **Override**: `localStorage["mhaol-api-base"]` wins. The `/settings` page exposes get/set/reset and a **Test connection** button that hits `/api/cloud/status`.
+- **Tauri shells** (cloud tray, android-tv, android-mobile): defaults to `http://127.0.0.1:9898`. For `android-mobile` this matches the embedded backend; for `android-tv` the user must override via the **Backend URL** section on the `/profile` page; for `apps/cloud` the tray-only shell never opens a window so the default is academic.
+- **Override**: `localStorage["mhaol-api-base"]` wins. The `/profile` page exposes get/set/reset and a **Test connection** button that hits `/api/cloud/status`.
 
 `src/lib/install-fetch-interceptor.ts` wraps `globalThis.fetch` so any request whose path starts with `/api/` is rewritten through `apiUrl(...)`. This catches the many service files that call `fetch('/api/…')` directly without going through the transport layer; without the interceptor, those would never reach the backend from a Tauri shell. The interceptor is installed by `src/routes/+layout.svelte` at module load.
 

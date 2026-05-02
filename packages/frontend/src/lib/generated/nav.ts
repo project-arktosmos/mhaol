@@ -36,11 +36,5 @@ export const NAV_ITEMS: NavItem[] = [
 		"href": "/profile",
 		"hasOwnPage": true,
 		"children": []
-	},
-	{
-		"label": "Settings",
-		"href": "/settings",
-		"hasOwnPage": true,
-		"children": []
 	}
 ];
