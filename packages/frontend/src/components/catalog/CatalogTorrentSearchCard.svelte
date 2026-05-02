@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { formatSizeBytes, type TorrentResultItem } from '$lib/search.service';
-	import type { TorrentSearch, TorrentRowEval } from '$services/catalog/torrent-search.svelte';
+	import type { TorrentSearch } from '$services/catalog/torrent-search.svelte';
 
 	interface Props {
 		search: TorrentSearch;
@@ -30,36 +30,6 @@
 		onToggle,
 		onRefresh
 	}: Props = $props();
-
-	function rowEval(magnet: string | undefined | null): TorrentRowEval {
-		if (!magnet) return { kind: 'not-streamable', reason: 'no magnet' };
-		return search.rowEvals[magnet] ?? { kind: 'pending' };
-	}
-
-	function firstStreamableIndex(rows: TorrentResultItem[]): number {
-		for (let i = 0; i < rows.length; i++) {
-			if (rowEval(rows[i].magnetLink).kind === 'streamable') return i;
-		}
-		return -1;
-	}
-
-	function hasInflight(rows: TorrentResultItem[]): boolean {
-		for (const r of rows) {
-			const k = rowEval(r.magnetLink).kind;
-			if (k === 'pending' || k === 'evaluating') return true;
-		}
-		return false;
-	}
-
-	function activeProbeIndex(rows: TorrentResultItem[]): number {
-		for (let i = 0; i < rows.length; i++) {
-			if (rowEval(rows[i].magnetLink).kind === 'evaluating') return i;
-		}
-		for (let i = 0; i < rows.length; i++) {
-			if (rowEval(rows[i].magnetLink).kind === 'pending') return i;
-		}
-		return -1;
-	}
 
 	let expandedGroups = $state<Record<string, boolean>>({});
 
@@ -127,48 +97,38 @@
 						</thead>
 						<tbody>
 							{#each search.groupedMatches as group (group.label)}
-								{@const streamableIdx = firstStreamableIndex(group.rows)}
-								{@const probing = group.probe && hasInflight(group.rows)}
-								{@const probeIdx = probing ? activeProbeIndex(group.rows) : -1}
-								{@const defaultCollapsed = !group.probe}
 								{@const expanded = expandedGroups[group.label] ?? false}
-								<tr class="bg-base-300/40">
-									<th colspan="5" class="p-0">
-										<button
-											type="button"
-											class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase hover:bg-base-300/60"
-											onclick={() => toggleGroup(group.label)}
-											aria-expanded={expanded}
-										>
-											<span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
-											<span>{group.label} ({group.rows.length})</span>
-										</button>
-									</th>
-								</tr>
 								{#each group.rows as torrent, rowIdx (torrent.infoHash)}
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
 									{@const streaming = streamingHash === torrent.magnetLink}
-									{@const hidden = expanded
-										? false
-										: defaultCollapsed
-											? true
-											: probing
-												? rowIdx !== probeIdx
-												: streamableIdx >= 0 && rowIdx > streamableIdx}
+									{@const hidden = rowIdx > 0 && !expanded}
 									<tr
 										class={classNames('hover', {
 											'opacity-60': added || adding,
-											hidden
+											hidden,
+											'bg-base-300/40': rowIdx === 0
 										})}
 									>
 										<td>
-											<span
-												class="block max-w-[18rem] truncate text-xs text-base-content/80"
-												title={torrent.title}
-											>
-												{torrent.parsedTitle || torrent.title}
-											</span>
+											{#if rowIdx === 0}
+												<button
+													type="button"
+													class="flex w-full items-center gap-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase"
+													onclick={() => toggleGroup(group.label)}
+													aria-expanded={expanded}
+												>
+													<span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
+													<span>{group.label} ({group.rows.length})</span>
+												</button>
+											{:else}
+												<span
+													class="block max-w-[18rem] truncate text-xs text-base-content/80"
+													title={torrent.title}
+												>
+													{torrent.parsedTitle || torrent.title}
+												</span>
+											{/if}
 										</td>
 										<td class="text-xs text-success">{torrent.seeders}</td>
 										<td class="text-xs text-warning">{torrent.leechers}</td>
