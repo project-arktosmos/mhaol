@@ -22,8 +22,6 @@
 
 	let { addon, upstreamId, onItemsLoaded }: Props = $props();
 
-	const isMusicBrainz = $derived(addon === 'musicbrainz');
-
 	type Status = 'idle' | 'loading' | 'done' | 'error';
 	let status = $state<Status>('idle');
 	let error = $state<string | null>(null);
@@ -169,7 +167,7 @@
 			{:else if status === 'done' && items.length === 0}
 				<p class="text-xs text-base-content/60">No related items found upstream.</p>
 			{:else if items.length > 0}
-				<div class={isMusicBrainz ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
+				<div class="grid grid-cols-2 gap-3">
 					{#each items as item (item.id)}
 						<a
 							href={hrefFor(item)}
