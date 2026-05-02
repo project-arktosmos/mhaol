@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "apps/cloud",
+    "apps/headless",
     "packages/backend",
     "packages/identity",
     "packages/yt-dlp",

@@ -1,0 +1,13 @@
+[package]
+name = "mhaol-headless"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "mhaol-headless"
+path = "src/main.rs"
+
+[dependencies]
+mhaol-backend = { path = "../../packages/backend" }
+tokio = { version = "1", features = ["full"] }

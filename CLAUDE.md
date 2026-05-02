@@ -4,6 +4,7 @@ This document guides Claude (and developers) on implementing features in this mo
 
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `apps/cloud/CLAUDE.md` — Tray-only desktop Tauri shell (`mhaol-cloud-shell`, "Mhaol Cloud"). Thin wrapper that presents the system to users; actual logic lives in `packages/backend` and `packages/frontend`.
+- `apps/headless/CLAUDE.md` — Terminal-only counterpart of `apps/cloud` (`mhaol-headless`). Same backend + embedded SPA, no Tauri shell, no tray; designed for servers and CI hosts.
 - `packages/backend/CLAUDE.md` — Rust Axum server crate (`mhaol-backend`, binary `mhaol-cloud`). API routes, SurrealDB store, IPFS / torrent / yt-dlp managers, on-disk layout.
 - `packages/frontend/CLAUDE.md` — Svelte SPA (`frontend`). Components, services, adapters, types, utils, CSS/themes, transport layer.
 - `packages/cloud-ui/` — Shared Svelte 5 display components + firkin types used by the frontend SPA.
@@ -14,7 +15,8 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 ```
 mhaol.git/
 ├── apps/
-│   └── cloud/                        # Tray-only Tauri shell (mhaol-cloud-shell, "Mhaol Cloud"). Embeds packages/frontend, runs alongside the mhaol-cloud server bin.
+│   ├── cloud/                        # Tray-only Tauri shell (mhaol-cloud-shell, "Mhaol Cloud"). Embeds packages/frontend, runs alongside the mhaol-cloud server bin.
+│   └── headless/                     # Thin Rust crate (mhaol-headless bin) that runs mhaol_backend::run() with no Tauri/tray. For servers and terminal-only hosts.
 ├── packages/
 │   ├── backend/                      # Rust Axum server crate (mhaol-backend lib + mhaol-cloud bin) — port 9898, libp2p TCP 9900, libp2p /ws 9901, embedded SurrealDB.
 │   ├── frontend/                     # Svelte SPA (pnpm package "frontend"). Builds to packages/frontend/dist-static which mhaol-backend embeds.
@@ -34,11 +36,12 @@ mhaol.git/
 
 ## App Architecture
 
-The system splits into three cooperating pieces:
+The system splits into a backend, a frontend, and one or more thin app shells that present the backend on a host:
 
 - **`packages/backend/`** — Rust Axum server crate. Library `mhaol-backend` exposes `pub async fn run()` which boots SurrealDB, the identity manager, and the desktop-only managers (`mhaol-yt-dlp`, `mhaol-torrent`, `mhaol-ipfs-core`, `mhaol-ipfs-stream`), then serves `/api/*` plus the embedded frontend as a fallback. Bin `mhaol-cloud` is a thin `#[tokio::main]` wrapper over `mhaol_backend::run()`. Default port 9898 (in dev, the bin binds 127.0.0.1:9899 and Vite takes 9898 as the public port).
 - **`packages/frontend/`** — SvelteKit static SPA (pnpm package `frontend`). Builds to `packages/frontend/dist-static/`, which the backend crate embeds at compile time via `rust-embed`. Owns its full stack: components, services, adapters, types, utils, CSS / themes, transport layer. See `packages/frontend/CLAUDE.md` for layout, aliases, and the catalog-detail / transport conventions.
 - **`apps/cloud/`** — Tauri shell (`mhaol-cloud-shell`, productName "Mhaol Cloud"). Tray-only wrapper that **presents** the system to users — it does not host the SPA itself; the bin serves the SPA on 9898 and the tray's "Open" item launches that URL in the system browser. `tauri.conf.json`'s `frontendDist: ../../packages/frontend/dist-static` keeps Tauri's build tooling happy.
+- **`apps/headless/`** — Terminal-only equivalent of `apps/cloud`. Crate `mhaol-headless` (binary `mhaol-headless`) is a thin `#[tokio::main]` wrapper over `mhaol_backend::run()` — no Tauri, no tray, no window. Same SPA embedded via `rust-embed`, same `/api/*` surface, same env vars. Use it on servers, CI hosts, and any machine where opening a window is impossible or unwanted.
 
 ### Backend (`packages/backend/`)
 
@@ -211,12 +214,14 @@ Run these from the **repo root**:
 ```bash
 # Development
 pnpm dev              # Cloud + tray-only Tauri shell ("Mhaol Cloud"): builds the mhaol-cloud binary, then runs Rust loopback :9899 + Vite WebUI :9898 + libp2p TCP :9900 + libp2p /ws :9901 + tray icon (no window).
+pnpm dev:headless     # Same backend stack as `pnpm dev` but skips the Tauri tray — builds mhaol-headless, then runs Rust loopback :9899 + Vite WebUI :9898 (no tray, no window).
 pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, proxies /api → 127.0.0.1:9899)
 
 # Building
 pnpm build            # Alias for build:cloud (the only release artifact in this monorepo).
 pnpm build:cloud:web  # Build cloud WebUI static assets only
 pnpm build:cloud      # Builds the cloud WebUI, then the mhaol-cloud release binary which embeds it.
+pnpm build:headless   # Builds the cloud WebUI, then the mhaol-headless release binary which embeds it.
 
 # Quality
 pnpm lint             # Lint all packages
@@ -227,6 +232,10 @@ pnpm format           # Prettier write
 # Tauri shell
 pnpm app:tauri:cloud         # Mhaol Cloud desktop shell (apps/cloud)
 pnpm app:tauri:cloud:build   # Mhaol Cloud release build
+
+# Headless (no Tauri, no Vite — bin only with the embedded SPA)
+pnpm app:headless            # Run via cargo (rebuilds on source change)
+pnpm app:headless:bin        # Run the precompiled debug bin from ./target/debug/mhaol-headless
 
 # Cleanup
 pnpm clean            # Clean build artifacts, cargo clean, remove SQLite DBs
@@ -245,6 +254,9 @@ The dev scripts tee full stdout+stderr (cargo build noise, panics, `tracing` eve
 | `pnpm dev` (cloud strand) | `logs/cloud.log` |
 | `pnpm dev` (web strand) | `logs/web.log` |
 | `pnpm dev` (tauri strand) | `logs/tauri.log` |
+| `pnpm dev:headless` (headless strand) | `logs/headless.log` |
+| `pnpm dev:headless` (web strand) | `logs/web.log` |
+| `pnpm app:headless` / `pnpm app:headless:bin` | `logs/headless.log` |
 
 Each file is overwritten on the next run, so it always reflects the latest run. The `logs/` directory is gitignored.
 
@@ -327,6 +339,7 @@ When making significant structural changes (new packages, new component director
 
 - **Root CLAUDE.md** — Monorepo structure, app architecture, workspace scripts
 - **apps/cloud/CLAUDE.md** — Tauri shell (`mhaol-cloud-shell`): tray menu, lifecycle, conf paths
+- **apps/headless/CLAUDE.md** — Terminal-only shell (`mhaol-headless`): thin bin over `mhaol_backend::run()`
 - **packages/backend/CLAUDE.md** — Server API modules + routes, SurrealDB store, paths, on-disk layout
 - **packages/frontend/CLAUDE.md** — SPA: components, services, adapters, types, utils, CSS/themes, transport layer
 - **apps/rendezvous/CLAUDE.md** — Rendezvous app
