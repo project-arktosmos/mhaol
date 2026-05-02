@@ -1889,16 +1889,7 @@
 				/>
 			{/if}
 
-			<CatalogDescriptionPanel
-				description={firkin.description}
-				identity={{
-					cid: firkin.cid,
-					createdAt: firkin.created_at,
-					updatedAt: firkin.updated_at,
-					version: firkin.version ?? 0
-				}}
-				versionHashes={firkin.version_hashes ?? []}
-			/>
+			<CatalogDescriptionPanel description={firkin.description} />
 
 			{#if isTmdbTv && tmdbTvId}
 				<CatalogTvSeasonsCard
