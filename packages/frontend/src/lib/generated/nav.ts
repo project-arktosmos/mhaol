@@ -32,12 +32,6 @@ export const NAV_ITEMS: NavItem[] = [
 		"children": []
 	},
 	{
-		"label": "Disk",
-		"href": "/disk",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
 		"label": "Feed",
 		"href": "/feed",
 		"hasOwnPage": true,

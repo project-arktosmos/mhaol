@@ -10,6 +10,7 @@
 	import NavbarPlaylistPanel from '$components/player/NavbarPlaylistPanel.svelte';
 	import FirkinTooltip from '$components/firkins/FirkinTooltip.svelte';
 	import ConsumptionModal from '$components/consumption/ConsumptionModal.svelte';
+	import DiskModal from '$components/disk/DiskModal.svelte';
 	import { playerService } from '$services/player.service';
 	import { restorePlayerFromSnapshot } from '$lib/youtube-match.service';
 	import { themeService } from '$services/theme.service';
@@ -128,3 +129,4 @@
 <ToastOutlet />
 <FirkinTooltip />
 <ConsumptionModal />
+<DiskModal />
