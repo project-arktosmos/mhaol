@@ -130,28 +130,15 @@
 								{@const expanded = expandedGroups[group.label] ?? false}
 								<tr class="bg-base-300/40">
 									<th colspan="5" class="p-0">
-										{#if defaultCollapsed}
-											<button
-												type="button"
-												class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase hover:bg-base-300/60"
-												onclick={() => toggleGroup(group.label)}
-												aria-expanded={expanded}
-											>
-												<span class="flex items-center gap-2">
-													<span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
-													<span>{group.label} ({group.rows.length})</span>
-												</span>
-												<span class="text-[10px] text-base-content/50 normal-case">
-													{expanded ? 'Click to hide' : 'Click to show'}
-												</span>
-											</button>
-										{:else}
-											<div
-												class="px-3 py-2 text-xs font-semibold tracking-wider text-base-content/70 uppercase"
-											>
-												{group.label} ({group.rows.length})
-											</div>
-										{/if}
+										<button
+											type="button"
+											class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase hover:bg-base-300/60"
+											onclick={() => toggleGroup(group.label)}
+											aria-expanded={expanded}
+										>
+											<span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
+											<span>{group.label} ({group.rows.length})</span>
+										</button>
 									</th>
 								</tr>
 								{#each group.rows as torrent, rowIdx (torrent.infoHash)}
@@ -165,11 +152,6 @@
 											: probing
 												? rowIdx !== probeIdx
 												: streamableIdx >= 0 && rowIdx > streamableIdx}
-									{@const showMoreToggle =
-										!probing &&
-										streamableIdx >= 0 &&
-										rowIdx === streamableIdx &&
-										group.rows.length > streamableIdx + 1}
 									<tr
 										class={classNames('hover', {
 											'opacity-60': added || adding,
@@ -240,19 +222,6 @@
 														aria-label="Download this torrent"
 													>
 														{adding ? '…' : 'Download'}
-													</button>
-												{/if}
-												{#if showMoreToggle}
-													<button
-														type="button"
-														class="btn btn-ghost btn-xs"
-														onclick={() => toggleGroup(group.label)}
-														aria-expanded={expanded}
-														title={expanded
-															? `Hide other ${group.label} candidates`
-															: `Show ${group.rows.length - streamableIdx - 1} more ${group.label} candidates`}
-													>
-														{expanded ? 'Less' : 'More'}
 													</button>
 												{/if}
 											</div>
