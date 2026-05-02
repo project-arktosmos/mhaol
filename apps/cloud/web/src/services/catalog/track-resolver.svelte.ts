@@ -196,7 +196,11 @@ export class TrackResolver {
 		this.playError = null;
 		try {
 			const durationSeconds = t.lengthMs ? Math.round(t.lengthMs / 1000) : null;
-			await playYouTubeAudio(t.youtubeUrl, t.title, opts.thumb, durationSeconds);
+			const syncedLyrics =
+				t.lyrics?.syncedLyrics && t.lyrics.syncedLyrics.length > 0
+					? t.lyrics.syncedLyrics
+					: null;
+			await playYouTubeAudio(t.youtubeUrl, t.title, opts.thumb, durationSeconds, syncedLyrics);
 		} catch (err) {
 			this.playError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {

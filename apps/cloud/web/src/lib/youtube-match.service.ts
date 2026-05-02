@@ -2,6 +2,7 @@ import type { YouTubeStreamFormat, YouTubeStreamUrlResult } from 'addons/youtube
 import { extractVideoId } from 'addons/youtube/types';
 import { playerService } from '$services/player.service';
 import type { PlayableFile } from '$types/player.type';
+import type { SubsLyricsSyncedLine } from '$types/subs-lyrics.type';
 
 export interface YouTubeSearchItem {
 	videoId: string;
@@ -219,7 +220,8 @@ export async function playYouTubeAudio(
 	youtubeUrl: string,
 	title: string,
 	thumbnailUrl: string | null = null,
-	durationSeconds: number | null = null
+	durationSeconds: number | null = null,
+	syncedLyrics: SubsLyricsSyncedLine[] | null = null
 ): Promise<void> {
 	const res = await fetch(
 		`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`
@@ -245,7 +247,7 @@ export async function playYouTubeAudio(
 		size: format.contentLength ?? 0,
 		completedAt: ''
 	};
-	await playerService.playUrl(file, format.url, format.mimeType, 'navbar');
+	await playerService.playUrl(file, format.url, format.mimeType, 'navbar', null, syncedLyrics);
 }
 
 /**

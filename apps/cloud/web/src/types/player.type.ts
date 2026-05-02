@@ -1,4 +1,5 @@
 import type { ID } from '$types/core.type';
+import type { SubsLyricsSyncedLine } from '$types/subs-lyrics.type';
 
 // ===== Playable File =====
 
@@ -63,6 +64,9 @@ export interface PlayerState {
 	// consumption tracker — heartbeats only accumulate while this is set
 	// (set by playUrl callers that have a firkin context).
 	firkinId: string | null;
+	// Synced LRC lines for the currently-playing track, when available.
+	// Drives the navbar lyrics panel; null disables the panel.
+	syncedLyrics: SubsLyricsSyncedLine[] | null;
 }
 
 // ===== Player Settings (localStorage) =====

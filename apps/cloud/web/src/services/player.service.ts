@@ -7,6 +7,7 @@ import type {
 	PlayerDisplayMode,
 	PlayableFile
 } from '$types/player.type';
+import type { SubsLyricsSyncedLine } from '$types/subs-lyrics.type';
 
 const initialSettings: PlayerSettings = {
 	id: 'player-settings',
@@ -32,7 +33,8 @@ const initialState: PlayerState = {
 	buffering: false,
 	directStreamUrl: null,
 	directStreamMimeType: null,
-	firkinId: null
+	firkinId: null,
+	syncedLyrics: null
 };
 
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
@@ -64,7 +66,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 		streamUrl: string,
 		mimeType?: string | null,
 		displayMode?: PlayerDisplayMode,
-		firkinId?: string | null
+		firkinId?: string | null,
+		syncedLyrics?: SubsLyricsSyncedLine[] | null
 	): Promise<void> {
 		if (!browser) return;
 
@@ -83,7 +86,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			buffering: false,
 			directStreamUrl: streamUrl,
 			directStreamMimeType: mimeType ?? null,
-			firkinId: firkinId ?? null
+			firkinId: firkinId ?? null,
+			syncedLyrics: syncedLyrics && syncedLyrics.length > 0 ? syncedLyrics : null
 		}));
 	}
 
@@ -163,7 +167,8 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			buffering: false,
 			directStreamUrl: null,
 			directStreamMimeType: null,
-			firkinId: null
+			firkinId: null,
+			syncedLyrics: null
 		}));
 		this.displayMode.set('fullscreen');
 	}

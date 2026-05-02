@@ -7,6 +7,7 @@
 	import ToastOutlet from '$components/core/ToastOutlet.svelte';
 	import FirkinFilesPanel from '$components/firkins/FirkinFilesPanel.svelte';
 	import NavbarAudioPlayer from '$components/player/NavbarAudioPlayer.svelte';
+	import NavbarLyricsPanel from '$components/player/NavbarLyricsPanel.svelte';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import SubsLyricsFinder from '$components/player/SubsLyricsFinder.svelte';
 	import { firkinPlaybackService } from '$services/firkin-playback.service';
@@ -100,6 +101,8 @@
 			</div>
 		{/snippet}
 	</Navbar>
+
+	<NavbarLyricsPanel />
 
 	<main class="flex min-w-0 flex-1 overflow-hidden">
 		<div class="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
