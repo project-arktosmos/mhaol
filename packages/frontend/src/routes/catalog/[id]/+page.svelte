@@ -1111,15 +1111,15 @@
 		};
 	});
 
-	// No per-row streamability probes: every probe is an `api_add_torrent`
-	// with `list_only: true` against the indexer's magnet, and a "streamable"
-	// verdict was misleading anyway — it only meant the metadata had a video
-	// file, not that the torrent could actually be streamed without going
-	// through the full add/initialize handshake. The Stream button posts
-	// `/api/torrent/stream` directly; the backend resolves metadata + waits
-	// for the torrent to leave `Initializing` before returning, so any real
-	// failure surfaces synchronously instead of as a 404 on the byte stream.
-	const torrentSearch = new TorrentSearch();
+	// Per-row streamability probes drive the Stream button's enabled state in
+	// `CatalogTorrentSearchCard`. With the streamability whitelist now narrowed
+	// to mp4/m4v/webm (the only containers a Tauri WebView <video> element can
+	// actually progressive-stream), the eval verdict is meaningful: rows that
+	// come back `not-streamable` get the button disabled instead of letting
+	// the user click and get hit with "no streamable video file in torrent"
+	// from the Stream endpoint. Probes are cached server-side in `torrent_eval`
+	// keyed by info_hash, so repeated visits are instant.
+	const torrentSearch = new TorrentSearch({ evaluate: true });
 
 	// Season-aware fan-out for tv shows. After the initial show-name search
 	// settles, we look at how its results classify by season — any season

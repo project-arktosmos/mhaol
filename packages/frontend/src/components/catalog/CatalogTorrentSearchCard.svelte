@@ -117,6 +117,22 @@
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
 									{@const streaming = streamingHash === torrent.magnetLink}
+									{@const rowEval = torrent.magnetLink
+										? search.rowEvals[torrent.magnetLink]
+										: undefined}
+									{@const streamReady = rowEval?.kind === 'streamable'}
+									{@const streamProbing =
+										rowEval?.kind === 'pending' || rowEval?.kind === 'evaluating'}
+									{@const streamBlockedReason =
+										rowEval?.kind === 'not-streamable'
+											? rowEval.reason
+											: rowEval?.kind === 'skipped'
+												? rowEval.reason
+												: streamProbing
+													? 'Probing streamability…'
+													: !rowEval
+														? 'Not yet probed'
+														: null}
 									{@const hidden = rowIdx > 0 && !expanded}
 									<tr
 										class={classNames('hover', {
@@ -156,11 +172,18 @@
 													<button
 														type="button"
 														class="btn btn-xs btn-success"
-														disabled={streamingHash !== null}
+														disabled={streamingHash !== null || !streamReady}
 														onclick={() => onStream?.(torrent)}
 														aria-label="Stream this torrent"
+														title={streamBlockedReason ?? undefined}
 													>
-														{streaming ? '…' : 'Stream'}
+														{#if streaming}
+															…
+														{:else if streamProbing}
+															Probing…
+														{:else}
+															Stream
+														{/if}
 													</button>
 												{/if}
 												{#if added}
