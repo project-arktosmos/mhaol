@@ -39,6 +39,10 @@
 	const isMusicBrainz = $derived(addon === 'musicbrainz');
 	const isTmdbMovie = $derived(addon === 'tmdb-movie');
 	const isTmdbTv = $derived(addon === 'tmdb-tv');
+	const isYoutubeVideo = $derived(addon === 'youtube-video');
+	const youtubeVideoUrl = $derived(
+		isYoutubeVideo && itemId ? `https://www.youtube.com/watch?v=${itemId}` : null
+	);
 
 	const images = $derived<ImageMeta[]>(
 		[posterUrl, backdropUrl]
@@ -214,6 +218,15 @@
 				}
 			];
 		}
+		if (isYoutubeVideo) {
+			return [
+				{
+					type: 'url' as const,
+					value: `https://www.youtube.com/watch?v=${itemId}`,
+					title: 'YouTube Video'
+				}
+			];
+		}
 		return [];
 	}
 </script>
@@ -286,7 +299,9 @@
 		</aside>
 
 		<section class="flex flex-col gap-6">
-			{#if isTmdbMovie || isTmdbTv}
+			{#if isYoutubeVideo}
+				<CatalogTrailerPlayer posterUrl={trailerThumb} youtubeUrl={youtubeVideoUrl} {title} />
+			{:else if isTmdbMovie || isTmdbTv}
 				<CatalogTrailerPlayer posterUrl={trailerThumb} youtubeUrl={firstTrailerUrl} {title} />
 			{:else if images[1]}
 				<img

@@ -141,6 +141,27 @@
 	const isMusicBrainz = $derived(firkin.addon === 'musicbrainz');
 	const isTmdbMovie = $derived(firkin.addon === 'tmdb-movie');
 	const isTmdbTv = $derived(firkin.addon === 'tmdb-tv');
+	const isYoutubeVideo = $derived(firkin.addon === 'youtube-video');
+
+	function parseYouTubeWatchUrl(value: string): string | null {
+		try {
+			const u = new URL(value);
+			const host = u.hostname.toLowerCase();
+			if (host === 'youtu.be') return value;
+			if (host === 'www.youtube.com' || host === 'youtube.com' || host === 'm.youtube.com') {
+				if (u.pathname === '/watch' && u.searchParams.get('v')) return value;
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	}
+
+	const youtubeVideoUrl = $derived(
+		firkin.files
+			.map((f) => (f.type === 'url' ? parseYouTubeWatchUrl(f.value) : null))
+			.find((u): u is string => Boolean(u)) ?? null
+	);
 	const thumb = $derived(firkin.images[0]?.url ?? null);
 	// Trailers prefer the last image (typically the backdrop / wide art) so
 	// the right-side player surfaces a 16:9 still rather than the poster.
@@ -438,7 +459,7 @@
 		})();
 	});
 
-	const trailerTabEnabled = $derived(isTmdbMovie || isTmdbTv);
+	const trailerTabEnabled = $derived(isTmdbMovie || isTmdbTv || (isYoutubeVideo && Boolean(youtubeVideoUrl)));
 	const ipfsTabEnabled = $derived(hasIpfsFiles);
 	const torrentTabEnabled = $derived(streamEval.kind === 'streamable');
 	const anyTabEnabled = $derived(trailerTabEnabled || ipfsTabEnabled || torrentTabEnabled);
@@ -1023,7 +1044,7 @@
 							onclick={() => selectSource('trailer')}
 							title={trailerTabTitle}
 						>
-							Trailer
+							{isYoutubeVideo ? 'Video' : 'Trailer'}
 						</button>
 						<button
 							type="button"
@@ -1072,7 +1093,7 @@
 					{:else if activeSource === 'trailer' && trailerTabEnabled}
 						<CatalogTrailerPlayer
 							posterUrl={trailerThumb}
-							youtubeUrl={firstTrailerUrl}
+							youtubeUrl={isYoutubeVideo ? youtubeVideoUrl : firstTrailerUrl}
 							title={firkin.title}
 						/>
 					{:else if firkin.images[1]}
