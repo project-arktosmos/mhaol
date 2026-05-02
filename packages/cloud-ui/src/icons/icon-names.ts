@@ -910,6 +910,7 @@ export const ICON_NAMES = [
 	"delapouite/fishing-lure",
 	"delapouite/fishing-pole",
 	"delapouite/fishing-spoon",
+	"delapouite/five-pointed-star",
 	"delapouite/flag-objective",
 	"delapouite/flail",
 	"delapouite/flamethrower",

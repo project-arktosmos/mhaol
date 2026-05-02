@@ -316,7 +316,7 @@
 									aria-label={`${star} star${star === 1 ? '' : 's'}`}
 									title={`Rate ${star * 20} / 100`}
 								>
-									<Icon name="lorc/flat-star" size={24} />
+									<Icon name="delapouite/five-pointed-star" size={24} />
 								</button>
 							{/each}
 						</div>
