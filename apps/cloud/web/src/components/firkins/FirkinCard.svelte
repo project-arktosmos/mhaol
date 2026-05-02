@@ -34,31 +34,24 @@
 </script>
 
 <article class={classNames('group card overflow-hidden rounded-md bg-base-200 shadow-sm', classes)}>
-	{#if !coverImage}
-		<header
-			class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
-		>
-			<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
-				{firkin.title}
-			</h3>
-			{#if creatorIdenticon}
-				<img
-					src={creatorIdenticon}
-					alt=""
-					class="h-6 w-6 shrink-0 rounded-full"
-					title={`Creator: ${creatorAddress}`}
-					aria-label={`Creator: ${creatorAddress}`}
-				/>
-			{/if}
-		</header>
-	{/if}
+	<header
+		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
+	>
+		<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
+			{firkin.title}
+		</h3>
+		{#if creatorIdenticon && !coverImage}
+			<img
+				src={creatorIdenticon}
+				alt=""
+				class="h-6 w-6 shrink-0 rounded-full"
+				title={`Creator: ${creatorAddress}`}
+				aria-label={`Creator: ${creatorAddress}`}
+			/>
+		{/if}
+	</header>
 	{#if coverImage}
 		<figure class="relative overflow-hidden bg-base-300">
-			<h3
-				class="absolute inset-x-0 top-0 z-10 bg-black/60 px-4 py-2 text-center text-base font-semibold [overflow-wrap:anywhere] text-white"
-			>
-				{firkin.title}
-			</h3>
 			{#if resolvedCoverUrl}
 				<img
 					src={resolvedCoverUrl}
