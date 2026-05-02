@@ -62,6 +62,18 @@ pub struct Recommendation {
     /// review counts change upstream.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reviews: Vec<CatalogReview>,
+    /// User-assigned 1-100 score, set via `POST /api/recommendations/rating`.
+    /// `None` until the user has rated this item from the feed page; once
+    /// set, used as the secondary sort key in the listing (between count
+    /// and the upstream review-rating tiebreaker). Preserved across
+    /// re-ingests of the same `(user, recommendation)` pair.
+    #[serde(
+        rename = "userRating",
+        alias = "user_rating",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub user_rating: Option<u8>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -96,6 +108,8 @@ pub struct RecommendationDto {
     pub count: u32,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub reviews: Vec<CatalogReview>,
+    #[serde(rename = "userRating", skip_serializing_if = "Option::is_none")]
+    pub user_rating: Option<u8>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -120,6 +134,7 @@ impl From<Recommendation> for RecommendationDto {
             backdrop_url: r.backdrop_url,
             count: r.count,
             reviews: r.reviews,
+            user_rating: r.user_rating,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -164,6 +179,22 @@ pub struct ActionRequest {
 pub struct ActionResponse {
     pub action: String,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RatingRequest {
+    pub address: String,
+    #[serde(rename = "firkinId")]
+    pub firkin_id: String,
+    /// 1-100 inclusive.
+    pub rating: u8,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RatingResponse {
+    #[serde(rename = "userRating")]
+    pub user_rating: u8,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -215,6 +246,7 @@ pub fn router() -> Router<CloudState> {
         .route("/", get(list))
         .route("/ingest", post(ingest))
         .route("/action", post(record_action))
+        .route("/rating", post(set_rating))
 }
 
 /// Mean of `score / max_score` across all reviews. Returns `0.0` for an
@@ -384,6 +416,7 @@ async fn list(
     dtos.sort_by(|a, b| {
         b.count
             .cmp(&a.count)
+            .then_with(|| b.user_rating.unwrap_or(0).cmp(&a.user_rating.unwrap_or(0)))
             .then_with(|| {
                 rating_score(&b.reviews)
                     .partial_cmp(&rating_score(&a.reviews))
@@ -476,6 +509,67 @@ async fn record_action(
     Ok(Json(ActionResponse {
         action: row.action,
         created_at: row.created_at,
+        updated_at: row.updated_at,
+    }))
+}
+
+async fn set_rating(
+    State(state): State<CloudState>,
+    Json(req): Json<RatingRequest>,
+) -> Result<Json<RatingResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let address = normalize_address(&req.address)
+        .ok_or_else(|| err_response(StatusCode::BAD_REQUEST, "invalid address"))?;
+    let firkin_id = req.firkin_id.trim().to_string();
+    if firkin_id.is_empty() {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "firkinId is required",
+        ));
+    }
+    if req.rating < 1 || req.rating > 100 {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "rating must be between 1 and 100",
+        ));
+    }
+
+    let rec_id = record_id("recommendation", &address, &firkin_id);
+    let existing: Option<Recommendation> = state
+        .db
+        .select((TABLE, rec_id.as_str()))
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db select failed: {e}"),
+            )
+        })?;
+    let mut current = existing.ok_or_else(|| {
+        err_response(StatusCode::NOT_FOUND, "recommendation not found")
+    })?;
+    current.id = None;
+    current.user_rating = Some(req.rating);
+    let now = Utc::now();
+    current.updated_at = now;
+    let saved: Option<Recommendation> = state
+        .db
+        .update((TABLE, rec_id.as_str()))
+        .content(current)
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db update failed: {e}"),
+            )
+        })?;
+    let row = saved.ok_or_else(|| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "rating upsert returned no row",
+        )
+    })?;
+    Ok(Json(RatingResponse {
+        user_rating: row.user_rating.unwrap_or(req.rating),
         updated_at: row.updated_at,
     }))
 }
@@ -585,6 +679,7 @@ async fn ingest(
                     backdrop_url: item.backdrop_url.clone(),
                     count: 1,
                     reviews: item.reviews.clone(),
+                    user_rating: None,
                     created_at: now,
                     updated_at: now,
                 };

@@ -13,6 +13,8 @@ export interface Recommendation {
 	backdropUrl: string | null;
 	count: number;
 	reviews?: CatalogReview[];
+	/** User-assigned 1-100 score, set via `POST /api/recommendations/rating`. */
+	userRating?: number;
 	created_at: string;
 	updated_at: string;
 }
@@ -80,6 +82,26 @@ export async function recordRecommendationAction(input: {
 	});
 	if (!res.ok) throw new Error(await parseError(res));
 	return (await res.json()) as ActionResponse;
+}
+
+export interface RatingResponse {
+	userRating: number;
+	updated_at: string;
+}
+
+export async function setRecommendationRating(input: {
+	address: string;
+	firkinId: string;
+	/** 1-100 inclusive. */
+	rating: number;
+}): Promise<RatingResponse> {
+	const res = await fetch('/api/recommendations/rating', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	if (!res.ok) throw new Error(await parseError(res));
+	return (await res.json()) as RatingResponse;
 }
 
 export async function ingestRecommendations(req: IngestRequest): Promise<IngestResponse> {

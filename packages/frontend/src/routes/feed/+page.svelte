@@ -5,6 +5,7 @@
 	import {
 		listRecommendations,
 		recordRecommendationAction,
+		setRecommendationRating,
 		type Recommendation,
 		type RecommendationAction
 	} from '$lib/recommendations.service';
@@ -23,12 +24,14 @@
 	let queue = $state<Recommendation[]>([]);
 	let loading = $state(false);
 	let actioning = $state<RecommendationAction | null>(null);
+	let rating = $state(false);
 	let error = $state<string | null>(null);
 	let lastLoadedAddress: string | null = null;
 
 	let current = $derived<Recommendation | null>(queue[0] ?? null);
 	let cardFirkin = $derived<CloudFirkin | null>(current ? toCardFirkin(current) : null);
 	let upcoming = $derived<Recommendation[]>(queue.slice(1, 21));
+	let activeStars = $derived(current?.userRating ? Math.round(current.userRating / 20) : 0);
 
 	function ratingLabel(row: Recommendation): string {
 		const reviews = row.reviews ?? [];
@@ -146,6 +149,27 @@
 		}
 	}
 
+	async function rate(stars: number) {
+		const row = current;
+		const address = $userIdentityState.identity?.address;
+		if (!row || !address || rating || actioning) return;
+		const score = Math.max(1, Math.min(5, stars)) * 20;
+		rating = true;
+		error = null;
+		try {
+			const res = await setRecommendationRating({
+				address,
+				firkinId: row.firkinId,
+				rating: score
+			});
+			queue = queue.map((r, i) => (i === 0 ? { ...r, userRating: res.userRating } : r));
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			rating = false;
+		}
+	}
+
 	async function act(action: RecommendationAction) {
 		const row = current;
 		const address = $userIdentityState.identity?.address;
@@ -228,6 +252,30 @@
 
 					<div class="text-xs text-base-content/60">
 						Suggested {current?.count}× · {queue.length} item{queue.length === 1 ? '' : 's'} left
+					</div>
+
+					<div class="flex items-center justify-between gap-2">
+						<div class="flex items-center gap-1" role="radiogroup" aria-label="Your rating">
+							{#each [1, 2, 3, 4, 5] as star (star)}
+								<button
+									type="button"
+									class={star <= activeStars
+										? 'text-warning'
+										: 'text-base-content/30 hover:text-base-content/60'}
+									onclick={() => rate(star)}
+									disabled={rating || actioning !== null}
+									role="radio"
+									aria-checked={star === activeStars}
+									aria-label={`${star} star${star === 1 ? '' : 's'}`}
+									title={`Rate ${star * 20} / 100`}
+								>
+									<Icon name="lorc/flat-star" size={24} />
+								</button>
+							{/each}
+						</div>
+						<span class="text-xs text-base-content/60">
+							{current?.userRating ? `${current.userRating} / 100` : 'Not rated'}
+						</span>
 					</div>
 
 					<div class="grid grid-cols-3 gap-2">
