@@ -4,6 +4,7 @@
 	import { Icon, addonKind, type FirkinKind, type IconName } from 'cloud-ui';
 	import type { CloudFirkin } from '$types/firkin.type';
 	import { getCachedImageUrl } from '$services/image-cache.service';
+	import { firkinTooltipService } from '$services/firkins/firkin-tooltip.svelte';
 
 	interface Props {
 		firkin: CloudFirkin;
@@ -23,6 +24,15 @@
 
 	let placeholderIcon = $derived<IconName>(
 		KIND_ICON[addonKind(firkin.addon) ?? 'movie'] ?? 'delapouite/film-strip'
+	);
+
+	let kind = $derived(addonKind(firkin.addon));
+	let isAlbum = $derived(kind === 'album');
+	let artistNames = $derived(
+		(firkin.artists ?? [])
+			.map((a) => a.name)
+			.filter((n) => n && n.length > 0)
+			.join(', ')
 	);
 
 	let coverImage = $derived(firkin.images?.[0] ?? null);
@@ -48,99 +58,91 @@
 
 	let reviews = $derived(firkin.reviews ?? []);
 
-	function formatScore(value: number): string {
-		const rounded = Math.round(value * 10) / 10;
-		return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+	let tooltipImageUrl = $derived(firkin.images?.[firkin.images.length - 1]?.url ?? null);
+
+	function handlePointerEnter(event: PointerEvent) {
+		firkinTooltipService.show(
+			{
+				title: firkin.title,
+				description: firkin.description ?? null,
+				imageUrl: tooltipImageUrl,
+				reviews
+			},
+			event.clientX,
+			event.clientY
+		);
 	}
 
-	function formatVotes(count: number): string {
-		if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M votes`;
-		if (count >= 1000) return `${(count / 1000).toFixed(1)}k votes`;
-		return `${count} vote${count === 1 ? '' : 's'}`;
+	function handlePointerMove(event: PointerEvent) {
+		firkinTooltipService.move(event.clientX, event.clientY);
+	}
+
+	function handlePointerLeave() {
+		firkinTooltipService.hide();
+	}
+
+	// Hide the hover tooltip the instant a firkin card is clicked — the
+	// click typically navigates away to a detail page and otherwise the
+	// tooltip would linger over the new view until the next pointer move.
+	function handleClick() {
+		firkinTooltipService.hide();
 	}
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 <article
 	class={classNames(
-		'group card flex aspect-[1/2] w-full flex-col justify-between overflow-hidden rounded-md bg-base-200 shadow-sm',
+		'card w-full overflow-hidden rounded-md bg-base-200 shadow-sm',
 		classes
 	)}
+	onpointerenter={handlePointerEnter}
+	onpointermove={handlePointerMove}
+	onpointerleave={handlePointerLeave}
+	onclick={handleClick}
 >
-	<header
-		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
+	<figure
+		class={classNames('relative overflow-hidden bg-base-300', {
+			'aspect-square w-full': isAlbum
+		})}
 	>
-		<h3 class="flex-1 text-center text-base font-semibold [overflow-wrap:anywhere]">
-			{firkin.title}
-		</h3>
-		{#if creatorIdenticon && !coverImage}
+		{#if coverImage && resolvedCoverUrl}
+			<img
+				src={resolvedCoverUrl}
+				alt={firkin.title}
+				width={coverImage.width || undefined}
+				height={coverImage.height || undefined}
+				class={classNames('block w-full', isAlbum ? 'h-full object-cover' : 'h-auto')}
+				loading="lazy"
+			/>
+		{:else}
+			<div
+				class={classNames(
+					'flex w-full items-center justify-center text-base-content/30',
+					isAlbum ? 'h-full' : 'aspect-[2/3]'
+				)}
+				aria-hidden="true"
+			>
+				<Icon name={placeholderIcon} size="40%" />
+			</div>
+		{/if}
+		{#if creatorIdenticon}
 			<img
 				src={creatorIdenticon}
 				alt=""
-				class="h-6 w-6 shrink-0 rounded-full"
+				class="absolute right-2 bottom-2 z-10 h-8 w-8 rounded-full ring-2 ring-black/40"
 				title={`Creator: ${creatorAddress}`}
 				aria-label={`Creator: ${creatorAddress}`}
 			/>
 		{/if}
-	</header>
-	{#if coverImage}
-		<figure class="relative min-h-0 flex-1 overflow-hidden bg-base-300">
-			{#if resolvedCoverUrl}
-				<img
-					src={resolvedCoverUrl}
-					alt={firkin.title}
-					width={coverImage.width || undefined}
-					height={coverImage.height || undefined}
-					class="block h-full w-full object-cover"
-					loading="lazy"
-				/>
-			{:else}
-				<div
-					class="flex h-full w-full items-center justify-center text-base-content/30"
-					aria-hidden="true"
-				>
-					<Icon name={placeholderIcon} size="40%" />
+	</figure>
+	{#if isAlbum}
+		<div class="px-3 py-2">
+			<div class="truncate text-sm font-semibold" title={firkin.title}>{firkin.title}</div>
+			{#if artistNames}
+				<div class="truncate text-xs text-base-content/70" title={artistNames}>
+					{artistNames}
 				</div>
 			{/if}
-			{#if firkin.description}
-				<figcaption
-					class="pointer-events-none absolute inset-x-0 bottom-0 bg-black/50 px-4 py-3 text-xs [overflow-wrap:anywhere] whitespace-pre-wrap text-white opacity-0 transition-opacity group-hover:opacity-100"
-				>
-					{firkin.description}
-				</figcaption>
-			{/if}
-			{#if creatorIdenticon}
-				<img
-					src={creatorIdenticon}
-					alt=""
-					class="absolute right-2 bottom-2 z-10 h-8 w-8 rounded-full ring-2 ring-black/40"
-					title={`Creator: ${creatorAddress}`}
-					aria-label={`Creator: ${creatorAddress}`}
-				/>
-			{/if}
-		</figure>
-	{:else if firkin.description}
-		<p
-			class="border-b border-base-content/10 px-4 py-3 text-xs [overflow-wrap:anywhere] whitespace-pre-wrap text-base-content/80"
-		>
-			{firkin.description}
-		</p>
-	{/if}
-	{#if reviews.length > 0}
-		<div class="flex flex-wrap items-center gap-1.5 border-t border-base-content/10 px-4 py-2">
-			{#each reviews as review (review.label)}
-				<span
-					class="badge gap-1 badge-outline font-mono badge-sm"
-					title={review.voteCount !== undefined
-						? `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)} (${formatVotes(review.voteCount)})`
-						: `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)}`}
-				>
-					<span class="font-semibold">{review.label}</span>
-					<span>{formatScore(review.score)} / {formatScore(review.maxScore)}</span>
-					{#if review.voteCount !== undefined}
-						<span class="text-base-content/60">· {formatVotes(review.voteCount)}</span>
-					{/if}
-				</span>
-			{/each}
 		</div>
 	{/if}
 </article>
