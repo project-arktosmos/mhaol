@@ -2043,7 +2043,7 @@
 
 			{#snippet torrentAttachmentOverlay(startTrailer: () => void)}
 				<CatalogTorrentAttachmentCard
-					trailer={trailerTabEnabled ? { title: firkin.title } : null}
+					trailer={trailerTabEnabled}
 					onTrailerPlay={startTrailer}
 					download={downloadInfo}
 					stream={streamInfo}

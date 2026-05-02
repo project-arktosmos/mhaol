@@ -81,11 +81,11 @@
 		attachingDownload?: boolean;
 		/** True while `preferredStream` is being attached. */
 		attachingStream?: boolean;
-		/** Trailer cell payload. When set with `onTrailerPlay`, a "Trailer"
-		 * button is rendered as a `col-span-2` row above Stream / Download
-		 * and click runs the callback (typically the trailer player's
-		 * `handleStart`). `null` hides the cell. */
-		trailer?: { title: string } | null;
+		/** Show the Trailer cell. When `true` and `onTrailerPlay` is set a
+		 * "Trailer" button is rendered above Stream / Download (col-span-2
+		 * when both are visible, single column when paired only with the
+		 * actionable Play cell). */
+		trailer?: boolean;
 		/** Click handler for the Trailer cell. */
 		onTrailerPlay?: () => void | Promise<void>;
 		/** True while a trailer-start round-trip is in flight. */
@@ -105,7 +105,7 @@
 		onAttachStream,
 		attachingDownload = false,
 		attachingStream = false,
-		trailer = null,
+		trailer = false,
 		onTrailerPlay,
 		trailerPlaying = false
 	}: Props = $props();
@@ -160,7 +160,7 @@
 	</div>
 {/snippet}
 
-{#snippet downloadHeader(info: AttachmentInfo | null)}
+{#snippet downloadHeader()}
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
 		viewBox="0 0 24 24"
@@ -171,21 +171,11 @@
 		<polygon points="6 4 20 12 6 20 6 4" />
 	</svg>
 	<span class="text-xs font-medium">Play</span>
-	{#if info}
-		<span class="block max-w-full truncate text-[10px] text-base-content/70" title={info.title}>
-			{info.title}
-		</span>
-	{/if}
 {/snippet}
 
-{#snippet header(info: AttachmentInfo | null, iconName: string, label: string, iconTitle: string)}
+{#snippet header(iconName: string, label: string, iconTitle: string)}
 	<Icon name={iconName} size={32} title={iconTitle} />
 	<span class="text-xs font-medium">{label}</span>
-	{#if info}
-		<span class="block max-w-full truncate text-[10px] text-base-content/70" title={info.title}>
-			{info.title}
-		</span>
-	{/if}
 {/snippet}
 
 <div class="flex flex-col gap-2">
@@ -201,12 +191,6 @@
 			>
 				<Icon name="delapouite/film-strip" size={32} title="Trailer" />
 				<span class="text-xs font-medium">Trailer</span>
-				<span
-					class="block max-w-full truncate text-[10px] text-base-content/70"
-					title={trailer.title}
-				>
-					{trailer.title}
-				</span>
 				{#if trailerPlaying}
 					<span class="text-[10px] font-medium text-success">Starting…</span>
 				{/if}
@@ -222,7 +206,7 @@
 					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
 					aria-label="Play stream"
 				>
-					{@render header(stream, 'lorc/magnet', 'Stream', 'Stream mode')}
+					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					{@render stats(stream)}
 					<span class="text-[10px] font-medium text-success">
 						{streamPlaying ? 'Starting…' : 'Click to play'}
@@ -232,7 +216,7 @@
 				<div
 					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 				>
-					{@render header(stream, 'lorc/magnet', 'Stream', 'Stream mode')}
+					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					{@render stats(stream)}
 				</div>
 			{:else if preferredStream && onAttachStream}
@@ -245,7 +229,7 @@
 					aria-label="Attach this torrent for streaming"
 					title="Suggested pick from the torrent search — click to start streaming"
 				>
-					{@render header(info, 'lorc/magnet', 'Stream', 'Stream mode')}
+					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					{@render stats(info)}
 					<span class="text-[10px] font-medium text-base-content/70">
 						{attachingStream ? 'Starting…' : 'Click to attach'}
@@ -255,7 +239,7 @@
 				<div
 					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
 				>
-					{@render header(null, 'lorc/magnet', 'Stream', 'Stream mode')}
+					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					<span class="text-[10px] text-base-content/60">Not attached</span>
 				</div>
 			{/if}
@@ -270,7 +254,7 @@
 				class:col-span-2={downloadSpansFull}
 				aria-label="Play via IPFS"
 			>
-				{@render downloadHeader(download)}
+				{@render downloadHeader()}
 				<span
 					class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
 					title={download.ipfsCid}
@@ -285,7 +269,7 @@
 			<div
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 			>
-				{@render header(download, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
 				{#if download.finished}
 					<span class="text-[10px] text-success">Seeding · pinning to IPFS…</span>
 				{:else if download.progress != null}
@@ -317,7 +301,7 @@
 				aria-label="Attach this torrent for download"
 				title="Suggested pick from the torrent search — click to attach and start downloading"
 			>
-				{@render header(info, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
 				{@render stats(info)}
 				<span class="text-[10px] font-medium text-base-content/70">
 					{attachingDownload ? 'Starting…' : 'Click to attach'}
@@ -327,7 +311,7 @@
 			<div
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
 			>
-				{@render header(null, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
 				<span class="text-[10px] text-base-content/60">Not attached</span>
 			</div>
 		{/if}
