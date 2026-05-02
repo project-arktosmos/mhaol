@@ -36,11 +36,8 @@ const QUALITY_GROUPS: {
 	probe: boolean;
 	matches: (q: string | null) => boolean;
 }[] = [
-	{
-		label: '4K / 2160p',
-		probe: true,
-		matches: (q) => q === '2160p' || q === '4K' || q === '4K UHD'
-	},
+	{ label: '4K', probe: true, matches: (q) => q === '4K' || q === '4K UHD' },
+	{ label: '2160p', probe: true, matches: (q) => q === '2160p' },
 	{ label: '1080p', probe: true, matches: (q) => q === '1080p' },
 	{ label: '720p', probe: true, matches: (q) => q === '720p' },
 	{ label: '480p', probe: true, matches: (q) => q === '480p' },
