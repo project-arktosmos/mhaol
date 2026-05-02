@@ -17,4 +17,6 @@ fn main() {
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../frontend/dist-static");
+    println!("cargo:rerun-if-env-changed=TMDB_API_KEY");
+    println!("cargo:rerun-if-env-changed=OMDB_API_KEY");
 }

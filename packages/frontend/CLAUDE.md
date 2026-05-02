@@ -138,8 +138,8 @@ Services should never call `fetch` directly when they need transport-aware behav
 `src/lib/api-base.ts` is the single source of truth for the API base URL:
 
 - **Browser** (cloud / headless served from the same backend): defaults to `''` (same-origin).
-- **Tauri shells** (cloud tray, android-tv, android-mobile): defaults to `http://127.0.0.1:9898`. For `android-mobile` this matches the embedded backend; for `android-tv` the user must override via the in-app **Settings** page (`/settings`); for `apps/cloud` the tray-only shell never opens a window so the default is academic.
-- **Override**: `localStorage["mhaol-api-base"]` wins. The `/settings` page exposes get/set/reset and a **Test connection** button that hits `/api/cloud/status`.
+- **Tauri shells** (cloud tray, android-tv, android-mobile): defaults to `http://127.0.0.1:9898`. For `android-mobile` this matches the embedded backend; for `android-tv` the user must override via the **Backend URL** section on the `/profile` page; for `apps/cloud` the tray-only shell never opens a window so the default is academic.
+- **Override**: `localStorage["mhaol-api-base"]` wins. The `/profile` page exposes get/set/reset and a **Test connection** button that hits `/api/cloud/status`.
 
 `src/lib/install-fetch-interceptor.ts` wraps `globalThis.fetch` so any request whose path starts with `/api/` is rewritten through `apiUrl(...)`. This catches the many service files that call `fetch('/api/…')` directly without going through the transport layer; without the interceptor, those would never reach the backend from a Tauri shell. The interceptor is installed by `src/routes/+layout.svelte` at module load.
 
@@ -147,11 +147,7 @@ Services should never call `fetch` directly when they need transport-aware behav
 
 `src/routes/+layout.svelte` is navbar + main only; there is no right-side aside. The only persistent overlay is the fixed bottom-right `NavbarAudioPlayer` (with `NavbarLyricsPanel` and `NavbarPlaylistPanel`), shown when `playerService.displayMode === 'navbar'` and a file is loaded. The layout calls `playerService.initialize()` on mount so the player's stores wake up; the backend's `/api/player/stream-status` and `/api/player/playable` stubs let initialize settle without errors.
 
-Audio playback uses the dedicated `displayMode === 'navbar'` mode. `NavbarAudioPlayer.svelte` is a compact horizontal strip (thumbnail, title, play/pause, position, seek bar, duration, stop) that owns its own hidden `<video>` element wired to `playerService.state.directStreamUrl`. Audio callers (the catalog tracks card via `playYouTubeAudio` in `src/lib/youtube-match.service.ts`, and the `/youtube` page when `mode === 'audio'`) call `playerService.playUrl(file, url, mime, 'navbar')` to surface playback here. Firkin in-page playback (`/catalog/[ipfsHash]`) uses `'inline'`.
-
-## `/youtube` route
-
-`src/routes/youtube/+page.svelte` is a self-contained yt-dlp UI. It talks **directly** to `/api/ytdl/*` via plain `fetch()` (no transport layer) — search, paste-URL info, queue audio/video/both, live progress via SSE on `/api/ytdl/downloads/events`, and "Stream" buttons that call `playerService.playUrl()` so the result plays in the navbar audio player.
+Audio playback uses the dedicated `displayMode === 'navbar'` mode. `NavbarAudioPlayer.svelte` is a compact horizontal strip (thumbnail, title, play/pause, position, seek bar, duration, stop) that owns its own hidden `<video>` element wired to `playerService.state.directStreamUrl`. Audio callers (the catalog tracks card via `playYouTubeAudio` in `src/lib/youtube-match.service.ts`) call `playerService.playUrl(file, url, mime, 'navbar')` to surface playback here. Firkin in-page playback (`/catalog/[ipfsHash]`) uses `'inline'`.
 
 ## YouTube extraction (music + trailers)
 

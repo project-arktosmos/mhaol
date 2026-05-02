@@ -1,6 +1,5 @@
 <script lang="ts">
 	import classNames from 'classnames';
-	import { blo } from 'blo';
 	import { Icon, addonKind, type FirkinKind, type IconName } from 'cloud-ui';
 	import type { CloudFirkin } from '$types/firkin.type';
 	import { getCachedImageUrl } from '$services/image-cache.service';
@@ -70,8 +69,39 @@
 		};
 	});
 
-	let creatorAddress = $derived(firkin.creator ?? '');
-	let creatorIdenticon = $derived(creatorAddress ? blo(creatorAddress as `0x${string}`) : null);
+	// Mirrors the catalog detail page's IPFS-stream gating: an `ipfs`-typed
+	// FileEntry whose title ends in a video container we can feed to the
+	// hlssink2 pipeline. For musicbrainz albums the gating is broader —
+	// any `ipfs`-typed entry counts, because the per-track download flow
+	// (POST /api/firkins/:id/download-album) only ever mints audio files
+	// and a partially-downloaded album is still meaningfully "in cloud".
+	const VIDEO_EXTS = new Set([
+		'.mkv',
+		'.mp4',
+		'.m4v',
+		'.mov',
+		'.webm',
+		'.avi',
+		'.ts',
+		'.m2ts',
+		'.mpg',
+		'.mpeg',
+		'.ogv',
+		'.wmv',
+		'.flv'
+	]);
+	let hasIpfsPlayable = $derived.by(() => {
+		if (firkin.addon === 'musicbrainz') {
+			return firkin.files.some((f) => f.type === 'ipfs');
+		}
+		return firkin.files.some((f) => {
+			if (f.type !== 'ipfs') return false;
+			const title = (f.title ?? '').toLowerCase();
+			const dot = title.lastIndexOf('.');
+			if (dot < 0) return false;
+			return VIDEO_EXTS.has(title.slice(dot));
+		});
+	});
 
 	let reviews = $derived(firkin.reviews ?? []);
 
@@ -144,14 +174,14 @@
 				<Icon name={placeholderIcon} size="40%" />
 			</div>
 		{/if}
-		{#if creatorIdenticon}
-			<img
-				src={creatorIdenticon}
-				alt=""
-				class="absolute right-2 bottom-2 z-10 h-8 w-8 rounded-full ring-2 ring-black/40"
-				title={`Creator: ${creatorAddress}`}
-				aria-label={`Creator: ${creatorAddress}`}
-			/>
+		{#if hasIpfsPlayable}
+			<div
+				class="absolute right-2 bottom-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/20"
+				title="Available via IPFS Stream"
+				aria-label="Available via IPFS Stream"
+			>
+				<Icon name="lorc/fluffy-cloud" size={16} />
+			</div>
 		{/if}
 	</figure>
 	{#if isAlbum}

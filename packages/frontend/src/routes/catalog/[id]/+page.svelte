@@ -673,15 +673,19 @@
 		}
 	}
 
-	async function startTorrentStream(): Promise<void> {
-		if (!firstMagnet || torrentStreamStarting) return;
+	let streamingHash = $state<string | null>(null);
+
+	async function startTorrentStream(magnetOverride?: string): Promise<void> {
+		const magnet = magnetOverride ?? firstMagnet;
+		if (!magnet || torrentStreamStarting) return;
 		torrentStreamStarting = true;
+		streamingHash = magnet;
 		torrentStreamError = null;
 		try {
 			const res = await fetch(`${base}/api/torrent/stream`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ magnet: firstMagnet })
+				body: JSON.stringify({ magnet })
 			});
 			if (!res.ok) {
 				let message = `HTTP ${res.status}`;
@@ -722,7 +726,19 @@
 			if (activeSource === 'torrent') activeSource = 'trailer';
 		} finally {
 			torrentStreamStarting = false;
+			streamingHash = null;
 		}
+	}
+
+	/// Start a torrent stream straight from a search-result row (instead of
+	/// the user having to first attach the magnet via Download). The torrent
+	/// manager's `start_stream` writes to the dedicated `downloads/torrent-streams/`
+	/// directory and wipes any prior stream payload, so calling this multiple
+	/// times in a row is safe — only the latest pick keeps disk space.
+	async function streamTorrentFromRow(torrent: TorrentResultItem): Promise<void> {
+		if (!torrent.magnetLink || torrentStreamStarting) return;
+		activeSource = 'torrent';
+		await startTorrentStream(torrent.magnetLink);
 	}
 
 	const completedTorrents = $derived.by(() => {
@@ -1133,7 +1149,12 @@
 		torrentSearchOpen = !torrentSearchOpen;
 		if (torrentSearchOpen && torrentSearchInitForFirkinId !== firkin.id) {
 			torrentSearchInitForFirkinId = firkin.id;
-			void torrentSearch.search({ addon: firkin.addon, title: firkin.title, year: firkin.year });
+			void torrentSearch.search({
+				addon: firkin.addon,
+				title: firkin.title,
+				year: firkin.year,
+				firkinId: firkin.id
+			});
 		}
 	}
 
@@ -1151,7 +1172,12 @@
 		if (!isTmdbTv && !hasNoRealFiles) return;
 		if (torrentSearchInitForFirkinId === firkin.id) return;
 		torrentSearchInitForFirkinId = firkin.id;
-		void torrentSearch.search({ addon: firkin.addon, title: firkin.title, year: firkin.year });
+		void torrentSearch.search({
+			addon: firkin.addon,
+			title: firkin.title,
+			year: firkin.year,
+			firkinId: firkin.id
+		});
 	});
 
 	// Once the initial show-name search settles, classify its results by
@@ -1558,41 +1584,16 @@
 		}
 	});
 
-	async function assignTorrent(torrent: TorrentResultItem, sub?: SubsLyricsItem) {
+	async function assignTorrent(torrent: TorrentResultItem) {
 		if (!torrent.magnetLink || addingHash || existingHashes.has(torrent.magnetLink)) {
 			return;
 		}
 		assignError = null;
 		addingHash = torrent.magnetLink;
 		try {
-			// Build the new file entries this click produces. Subtitles are
-			// stored as a reference, not a download — we keep the upstream
-			// URL plus enough metadata to render a label and re-fetch on
-			// demand. The ETL stays server-side / on-demand; this row just
-			// declares "this firkin has been paired with release X of sub
-			// Y" so playback can pick it up later.
 			const additions: FileEntry[] = [
 				{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
 			];
-			if (sub) {
-				const subPayload = {
-					source: sub.source,
-					externalId: sub.externalId,
-					url: sub.url ?? null,
-					language: sub.language ?? null,
-					display: sub.display ?? null,
-					release: sub.release ?? null,
-					format: sub.format ?? null,
-					isHearingImpaired: sub.isHearingImpaired ?? false
-				};
-				const lang = sub.display ?? sub.language ?? 'sub';
-				const release = sub.release ?? `#${sub.externalId}`;
-				additions.push({
-					type: 'subtitle',
-					value: JSON.stringify(subPayload),
-					title: `${lang}: ${release}`
-				});
-			}
 			if (isTmdbTv) {
 				// TV shows accumulate one magnet per season on the same firkin.
 				// Use the granular files endpoint so the server reads the
@@ -1982,11 +1983,11 @@
 				<CatalogTorrentSearchCard
 					search={torrentSearch}
 					onAssign={assignTorrent}
+					onStream={streamTorrentFromRow}
 					{addingHash}
+					{streamingHash}
 					{assignError}
 					{existingHashes}
-					subs={subsLyricsResolver.results}
-					autoSelectFirstSub={isTmdbMovie}
 					collapsible
 					open={torrentSearchOpen}
 					onToggle={toggleTorrentSearch}
@@ -1994,23 +1995,27 @@
 						torrentSearch.search({
 							addon: firkin.addon,
 							title: firkin.title,
-							year: firkin.year
+							year: firkin.year,
+							firkinId: firkin.id,
+							forceRefresh: true
 						})}
 				/>
 			{:else if hasNoRealFiles && !isMusicBrainz}
 				<CatalogTorrentSearchCard
 					search={torrentSearch}
 					onAssign={assignTorrent}
+					onStream={streamTorrentFromRow}
 					{addingHash}
+					{streamingHash}
 					{assignError}
 					{existingHashes}
-					subs={subsLyricsResolver.results}
-					autoSelectFirstSub={isTmdbMovie}
 					onRefresh={() =>
 						torrentSearch.search({
 							addon: firkin.addon,
 							title: firkin.title,
-							year: firkin.year
+							year: firkin.year,
+							firkinId: firkin.id,
+							forceRefresh: true
 						})}
 				/>
 			{/if}

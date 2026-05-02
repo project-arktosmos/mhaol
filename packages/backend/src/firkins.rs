@@ -604,7 +604,11 @@ pub fn router() -> Router<CloudState> {
         .route("/{id}/resolution-progress", get(resolution_progress))
         .route("/{id}/download-album", post(download_album))
         .route("/{id}/download-progress", get(download_progress))
-        .route("/{id}/subtitle", post(attach_subtitle));
+        .route("/{id}/subtitle", post(attach_subtitle))
+        .route(
+            "/{id}/torrent-search",
+            get(crate::torrent::get_firkin_search).post(crate::torrent::refresh_firkin_search),
+        );
     r
 }
 

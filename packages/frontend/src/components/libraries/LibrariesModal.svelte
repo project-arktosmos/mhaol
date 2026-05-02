@@ -1,7 +1,9 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
+	import Modal from '$components/core/Modal.svelte';
+	import { librariesModalService } from '$services/libraries-modal.service';
 	import {
 		librariesService,
 		LIBRARY_ADDONS,
@@ -12,18 +14,19 @@
 		type Library
 	} from '$lib/libraries.service';
 	import type { IpfsPin } from '$lib/ipfs.service';
-	import {
-		firkinsService,
-		type Artist,
-		type Trailer,
-		type Review
-	} from '$lib/firkins.service';
+	import { firkinsService, type Artist, type Trailer, type Review } from '$lib/firkins.service';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import DirectoryPicker from '../../components/DirectoryPicker.svelte';
+	import DirectoryPicker from '$components/DirectoryPicker.svelte';
 
 	const libsStore = librariesService.state;
+	const modalStore = librariesModalService.store;
 	const SCAN_STALE_MS = 60 * 60 * 1000;
+	let firstOpenSeen = false;
+
+	function close() {
+		librariesModalService.close();
+	}
 
 	let pickedDir = $state('');
 	let newSubfolder = $state('');
@@ -81,15 +84,19 @@
 		}
 	}
 
-	onMount(async () => {
-		await librariesService.refresh();
-		const { libraries } = get(libsStore);
-		await Promise.all(libraries.map(handleLibraryOnMount));
-		// Re-hydrate the in-progress badge for any TV firkin builds the
-		// server is still running. Polling kicks in only when at least one
-		// non-terminal job exists; the loop self-stops once everything is
-		// either completed or errored.
-		await Promise.all(libraries.map(hydrateTvBuildsForLibrary));
+	$effect(() => {
+		if (!$modalStore.open || firstOpenSeen) return;
+		firstOpenSeen = true;
+		void (async () => {
+			await librariesService.refresh();
+			const { libraries } = get(libsStore);
+			await Promise.all(libraries.map(handleLibraryOnMount));
+			// Re-hydrate the in-progress badge for any TV firkin builds the
+			// server is still running. Polling kicks in only when at least one
+			// non-terminal job exists; the loop self-stops once everything is
+			// either completed or errored.
+			await Promise.all(libraries.map(hydrateTvBuildsForLibrary));
+		})();
 	});
 
 	onDestroy(() => {
@@ -490,9 +497,7 @@
 	function hasActiveBuild(libId: string): boolean {
 		const map = tvBuildJobs[libId];
 		if (!map) return false;
-		return Object.values(map).some(
-			(p) => p.phase !== 'completed' && p.phase !== 'error'
-		);
+		return Object.values(map).some((p) => p.phase !== 'completed' && p.phase !== 'error');
 	}
 
 	function ensureTvBuildPolling(libId: string) {
@@ -707,440 +712,446 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Mhaol Cloud — Libraries</title>
-</svelte:head>
-
-<div class="flex min-h-full flex-col gap-6 p-6">
-	<header class="flex items-center justify-between gap-4">
-		<div>
-			<h1 class="text-2xl font-bold">Libraries</h1>
-			<p class="text-sm text-base-content/60">
-				Each library is a directory on this machine. Browse to an existing folder to use it as a
-				library, or pick a parent and create a new subfolder.
-			</p>
-		</div>
-		<button
-			class="btn btn-outline btn-sm"
-			onclick={() => librariesService.refresh()}
-			disabled={$libsStore.loading}
-		>
-			Refresh
-		</button>
-	</header>
-
-	{#if $libsStore.error}
-		<div class="alert alert-error">
-			<span>{$libsStore.error}</span>
-		</div>
-	{/if}
-
-	<section class="card border border-base-content/10 bg-base-200 p-4">
-		<h2 class="mb-3 text-lg font-semibold">Add a library</h2>
-		<form class="flex flex-col gap-3" onsubmit={submit}>
-			<div class="form-control">
-				<span class="label-text mb-1 text-xs">Directory</span>
-				<DirectoryPicker value={pickedDir} disabled={creating} onChange={(p) => (pickedDir = p)} />
-			</div>
-			<label class="form-control">
-				<span class="label-text text-xs">
-					New subfolder (optional — created inside the picked directory)
-				</span>
-				<input
-					type="text"
-					class="input-bordered input input-sm"
-					placeholder="leave empty to use the picked folder"
-					bind:value={newSubfolder}
-					disabled={creating}
-				/>
-			</label>
-			<div class="form-control">
-				<span class="label-text mb-1 text-xs">
-					Kinds (which catalog types this library contains)
-				</span>
-				<div class="flex flex-wrap gap-2">
-					{#each LIBRARY_ADDONS as kind (kind)}
-						<label
-							class={classNames('btn btn-sm', {
-								'btn-primary': newAddons.includes(kind),
-								'btn-outline': !newAddons.includes(kind)
-							})}
-						>
-							<input
-								type="checkbox"
-								class="hidden"
-								checked={newAddons.includes(kind)}
-								disabled={creating}
-								onchange={() => toggleNewAddon(kind)}
-							/>
-							{LIBRARY_ADDON_LABELS[kind]}
-						</label>
-					{/each}
-				</div>
-				<p class="mt-1 text-xs text-base-content/60">
-					Files matching the selected kinds are pinned to IPFS on scan. Leave empty to skip pinning.
+<Modal open={$modalStore.open} maxWidth="max-w-7xl" onclose={close}>
+	<div class="flex flex-col gap-6">
+		<header class="flex items-center justify-between gap-4">
+			<div>
+				<h2 class="text-2xl font-bold">Libraries</h2>
+				<p class="text-sm text-base-content/60">
+					Each library is a directory on this machine. Browse to an existing folder to use it as a
+					library, or pick a parent and create a new subfolder.
 				</p>
 			</div>
-			<p class="text-xs text-base-content/60">
-				Library directory: <span class="font-mono">{finalPath || '—'}</span>
-			</p>
-			<div>
-				<button
-					type="submit"
-					class={classNames('btn btn-sm btn-primary', {
-						'btn-disabled': creating || !finalPath
-					})}
-					disabled={creating || !finalPath}
-				>
-					{creating ? 'Creating…' : 'Create'}
-				</button>
-			</div>
-		</form>
-		{#if createError}
-			<p class="mt-2 text-sm text-error">{createError}</p>
-		{/if}
-	</section>
+			<button
+				class="btn btn-outline btn-sm"
+				onclick={() => librariesService.refresh()}
+				disabled={$libsStore.loading}
+			>
+				Refresh
+			</button>
+		</header>
 
-	<section class="flex flex-col gap-3">
-		<h2 class="text-lg font-semibold">Existing libraries</h2>
-		{#if $libsStore.loading && $libsStore.libraries.length === 0}
-			<p class="text-sm text-base-content/60">Loading…</p>
-		{:else if $libsStore.libraries.length === 0}
-			<p class="text-sm text-base-content/60">No libraries yet.</p>
-		{:else}
-			<div class="overflow-x-auto rounded-box border border-base-content/10">
-				<table class="table table-sm">
-					<thead>
-						<tr>
-							<th>Path</th>
-							<th>Kinds</th>
-							<th>Created</th>
-							<th>Last scanned</th>
-							<th class="w-24"></th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each $libsStore.libraries as lib (lib.id)}
+		{#if $libsStore.error}
+			<div class="alert alert-error">
+				<span>{$libsStore.error}</span>
+			</div>
+		{/if}
+
+		<section class="card border border-base-content/10 bg-base-200 p-4">
+			<h2 class="mb-3 text-lg font-semibold">Add a library</h2>
+			<form class="flex flex-col gap-3" onsubmit={submit}>
+				<div class="form-control">
+					<span class="label-text mb-1 text-xs">Directory</span>
+					<DirectoryPicker
+						value={pickedDir}
+						disabled={creating}
+						onChange={(p) => (pickedDir = p)}
+					/>
+				</div>
+				<label class="form-control">
+					<span class="label-text text-xs">
+						New subfolder (optional — created inside the picked directory)
+					</span>
+					<input
+						type="text"
+						class="input-bordered input input-sm"
+						placeholder="leave empty to use the picked folder"
+						bind:value={newSubfolder}
+						disabled={creating}
+					/>
+				</label>
+				<div class="form-control">
+					<span class="label-text mb-1 text-xs">
+						Kinds (which catalog types this library contains)
+					</span>
+					<div class="flex flex-wrap gap-2">
+						{#each LIBRARY_ADDONS as kind (kind)}
+							<label
+								class={classNames('btn btn-sm', {
+									'btn-primary': newAddons.includes(kind),
+									'btn-outline': !newAddons.includes(kind)
+								})}
+							>
+								<input
+									type="checkbox"
+									class="hidden"
+									checked={newAddons.includes(kind)}
+									disabled={creating}
+									onchange={() => toggleNewAddon(kind)}
+								/>
+								{LIBRARY_ADDON_LABELS[kind]}
+							</label>
+						{/each}
+					</div>
+					<p class="mt-1 text-xs text-base-content/60">
+						Files matching the selected kinds are pinned to IPFS on scan. Leave empty to skip
+						pinning.
+					</p>
+				</div>
+				<p class="text-xs text-base-content/60">
+					Library directory: <span class="font-mono">{finalPath || '—'}</span>
+				</p>
+				<div>
+					<button
+						type="submit"
+						class={classNames('btn btn-sm btn-primary', {
+							'btn-disabled': creating || !finalPath
+						})}
+						disabled={creating || !finalPath}
+					>
+						{creating ? 'Creating…' : 'Create'}
+					</button>
+				</div>
+			</form>
+			{#if createError}
+				<p class="mt-2 text-sm text-error">{createError}</p>
+			{/if}
+		</section>
+
+		<section class="flex flex-col gap-3">
+			<h2 class="text-lg font-semibold">Existing libraries</h2>
+			{#if $libsStore.loading && $libsStore.libraries.length === 0}
+				<p class="text-sm text-base-content/60">Loading…</p>
+			{:else if $libsStore.libraries.length === 0}
+				<p class="text-sm text-base-content/60">No libraries yet.</p>
+			{:else}
+				<div class="overflow-x-auto rounded-box border border-base-content/10">
+					<table class="table table-sm">
+						<thead>
 							<tr>
-								<td class="font-mono text-xs break-all">{lib.path}</td>
-								<td class="text-xs">
-									{#if editingKindsFor === lib.id}
-										<div class="flex flex-wrap items-center gap-1">
-											{#each LIBRARY_ADDONS as kind (kind)}
-												<label
-													class={classNames('btn btn-xs', {
-														'btn-primary': editAddons.includes(kind),
-														'btn-outline': !editAddons.includes(kind)
-													})}
-												>
-													<input
-														type="checkbox"
-														class="hidden"
-														checked={editAddons.includes(kind)}
-														disabled={savingKinds}
-														onchange={() => toggleEditAddon(kind)}
-													/>
-													{LIBRARY_ADDON_LABELS[kind]}
-												</label>
-											{/each}
-											<button
-												class="btn btn-xs btn-primary"
-												disabled={savingKinds}
-												onclick={() => saveKinds(lib.id)}
-											>
-												{savingKinds ? 'Saving…' : 'Save'}
-											</button>
-											<button
-												class="btn btn-ghost btn-xs"
-												disabled={savingKinds}
-												onclick={cancelEditKinds}
-											>
-												Cancel
-											</button>
-										</div>
-										{#if addonsError}
-											<p class="mt-1 text-error">{addonsError}</p>
-										{/if}
-									{:else if (lib.addons ?? []).length === 0}
-										<button class="btn btn-ghost btn-xs" onclick={() => startEditKinds(lib)}>
-											Set kinds
-										</button>
-									{:else}
-										<button
-											class="badge flex flex-wrap gap-1 badge-outline badge-sm"
-											onclick={() => startEditKinds(lib)}
-										>
-											{(lib.addons ?? []).map((k) => LIBRARY_ADDON_LABELS[k] ?? k).join(', ')}
-										</button>
-									{/if}
-								</td>
-								<td class="text-xs text-base-content/60">{formatDate(lib.created_at)}</td>
-								<td class="text-xs text-base-content/60">
-									{lib.last_scanned_at ? formatDate(lib.last_scanned_at) : '—'}
-								</td>
-								<td class="text-right">
-									<div class="flex justify-end gap-1">
-										<button
-											class="btn btn-ghost btn-xs"
-											onclick={() => scan(lib.id)}
-											disabled={scanningId === lib.id}
-										>
-											{scanningId === lib.id ? 'Scanning…' : 'Scan'}
-										</button>
-										<button
-											class="btn text-error btn-ghost btn-xs"
-											onclick={() => remove(lib.id)}
-											disabled={deletingId === lib.id}
-										>
-											{deletingId === lib.id ? 'Removing…' : 'Remove'}
-										</button>
-									</div>
-								</td>
+								<th>Path</th>
+								<th>Kinds</th>
+								<th>Created</th>
+								<th>Last scanned</th>
+								<th class="w-24"></th>
 							</tr>
-							{#if scanErrors[lib.id]}
+						</thead>
+						<tbody>
+							{#each $libsStore.libraries as lib (lib.id)}
 								<tr>
-									<td colspan="5" class="bg-base-100">
-										<div class="my-2 alert alert-error">
-											<span class="text-sm">{scanErrors[lib.id]}</span>
-											<button class="btn btn-ghost btn-xs" onclick={() => clearScan(lib.id)}>
-												Dismiss
-											</button>
-										</div>
-									</td>
-								</tr>
-							{:else if pinsErrors[lib.id]}
-								<tr>
-									<td colspan="5" class="bg-base-100">
-										<div class="my-2 alert alert-warning">
-											<span class="text-sm">Pins: {pinsErrors[lib.id]}</span>
-										</div>
-									</td>
-								</tr>
-							{:else if scanResults[lib.id]}
-								{@const cidByPath = pinIndex(libPins[lib.id])}
-								<tr>
-									<td colspan="5" class="bg-base-100 p-3">
-										<div class="flex flex-col gap-2">
-											<div class="flex items-center justify-between gap-2">
-												<p class="text-xs text-base-content/70">
-													{scanResults[lib.id].total_files} files —
-													{formatBytes(scanResults[lib.id].total_size)} total
-												</p>
-												<button class="btn btn-ghost btn-xs" onclick={() => clearScan(lib.id)}>
-													Hide
+									<td class="font-mono text-xs break-all">{lib.path}</td>
+									<td class="text-xs">
+										{#if editingKindsFor === lib.id}
+											<div class="flex flex-wrap items-center gap-1">
+												{#each LIBRARY_ADDONS as kind (kind)}
+													<label
+														class={classNames('btn btn-xs', {
+															'btn-primary': editAddons.includes(kind),
+															'btn-outline': !editAddons.includes(kind)
+														})}
+													>
+														<input
+															type="checkbox"
+															class="hidden"
+															checked={editAddons.includes(kind)}
+															disabled={savingKinds}
+															onchange={() => toggleEditAddon(kind)}
+														/>
+														{LIBRARY_ADDON_LABELS[kind]}
+													</label>
+												{/each}
+												<button
+													class="btn btn-xs btn-primary"
+													disabled={savingKinds}
+													onclick={() => saveKinds(lib.id)}
+												>
+													{savingKinds ? 'Saving…' : 'Save'}
+												</button>
+												<button
+													class="btn btn-ghost btn-xs"
+													disabled={savingKinds}
+													onclick={cancelEditKinds}
+												>
+													Cancel
 												</button>
 											</div>
-											{#if scanResults[lib.id].entries.length === 0}
-												<p class="text-xs text-base-content/60">No files in this directory.</p>
-											{:else}
-												<div class="max-h-96 overflow-y-auto rounded border border-base-content/10">
-													<table class="table table-xs">
-														<thead class="sticky top-0 bg-base-200">
-															<tr>
-																<th>File</th>
-																<th class="w-72">CID</th>
-																<th class="w-24">MIME</th>
-																<th class="w-20 text-right">Size</th>
-																<th class="w-40">Show / Title</th>
-																<th class="w-12">S</th>
-																<th class="w-12">E</th>
-																<th class="w-56">TMDB match</th>
-																<th class="w-32"></th>
-															</tr>
-														</thead>
-														<tbody>
-															{#snippet entryRow(entry: ScanEntry)}
-																{@const cid = cidByPath.get(entry.path)}
-																<tr>
-																	<td class="font-mono text-xs break-all">
-																		{entry.relative_path}
-																	</td>
-																	<td class="font-mono text-xs break-all">
-																		{#if cid}
-																			{cid}
-																		{:else}
-																			<span class="text-base-content/40">pinning…</span>
-																		{/if}
-																	</td>
-																	<td class="font-mono text-xs">{entry.mime}</td>
-																	<td class="text-right text-xs">
-																		{formatBytes(entry.size)}
-																	</td>
-																	<td class="text-xs">
-																		{#if entry.extractedTvQuery}
-																			{entry.extractedTvQuery.show}{entry.extractedTvQuery.year
-																				? ` (${entry.extractedTvQuery.year})`
-																				: ''}
-																		{:else if entry.extractedQuery}
-																			{entry.extractedQuery.title}{entry.extractedQuery.year
-																				? ` (${entry.extractedQuery.year})`
-																				: ''}
-																		{:else}
-																			<span class="text-base-content/30">—</span>
-																		{/if}
-																	</td>
-																	<td class="text-xs">
-																		{#if entry.extractedTvQuery}
-																			{String(entry.extractedTvQuery.season).padStart(2, '0')}
-																		{:else}
-																			<span class="text-base-content/30">—</span>
-																		{/if}
-																	</td>
-																	<td class="text-xs">
-																		{#if entry.extractedTvQuery}
-																			{String(entry.extractedTvQuery.episode).padStart(2, '0')}
-																		{:else}
-																			<span class="text-base-content/30">—</span>
-																		{/if}
-																	</td>
-																	<td class="text-xs">
-																		{#if entry.tmdbMatch}
-																			<a
-																				class="link link-hover"
-																				href={`https://www.themoviedb.org/movie/${entry.tmdbMatch.tmdbId}`}
-																				target="_blank"
-																				rel="noreferrer"
-																				title={entry.tmdbMatch.overview ?? ''}
-																			>
-																				{entry.tmdbMatch.title}{entry.tmdbMatch.year
-																					? ` (${entry.tmdbMatch.year})`
-																					: ''}
-																			</a>
-																		{:else if entry.extractedTvQuery}
-																			<span class="text-base-content/40">tmdb lookup pending</span>
-																		{:else if entry.extractedQuery}
-																			<span class="text-base-content/40">no match</span>
-																		{:else}
-																			<span class="text-base-content/30">—</span>
-																		{/if}
-																	</td>
-																	<td class="text-xs">
-																		{#if entry.tmdbMatch}
-																			<button
-																				class="btn btn-xs btn-primary"
-																				disabled={creatingFirkinFor[entry.path]}
-																				onclick={() => createFirkinFromMatch(lib.id, entry, cid)}
-																				title={cid
-																					? undefined
-																					: 'IPFS pin still in progress — clicking will wait for the pin to complete before creating the firkin'}
-																			>
-																				{creatingFirkinFor[entry.path]
-																					? cid
-																						? 'Creating…'
-																						: 'Waiting for pin…'
-																					: cid
-																						? 'Create firkin'
-																						: 'Create firkin (waits for pin)'}
-																			</button>
-																		{:else}
-																			<span class="text-base-content/30">—</span>
-																		{/if}
-																	</td>
-																</tr>
-																{#if createFirkinErrors[entry.path]}
-																	<tr>
-																		<td colspan="9" class="bg-base-100">
-																			<div class="my-1 alert py-1 alert-error">
-																				<span class="text-xs">
-																					Create firkin failed: {createFirkinErrors[entry.path]}
-																				</span>
-																			</div>
-																		</td>
-																	</tr>
-																{/if}
-															{/snippet}
-															{#each groupEntries(scanResults[lib.id].entries) as group, gi (gi)}
-																{#if group.kind === 'show'}
-																	{@const sKey = showKey(lib.id, group)}
-																	{@const job = tvBuildJobs[lib.id]?.[sKey]}
-																	{@const inFlight =
-																		!!job &&
-																		job.phase !== 'completed' &&
-																		job.phase !== 'error'}
-																	<tr class="bg-base-200/60">
-																		<td colspan="9" class="text-sm font-semibold">
-																			<div class="flex items-center justify-between gap-2">
-																				<span>
-																					{group.show}{group.year ? ` (${group.year})` : ''}
-																				</span>
-																				<div class="flex items-center gap-2">
-																					{#if job?.phase === 'completed' && job.completedFirkinId}
-																						<a
-																							class="btn btn-xs btn-success"
-																							href={`${base}/catalog/${encodeURIComponent(job.completedFirkinId)}`}
-																						>
-																							View firkin
-																						</a>
-																					{/if}
-																					<button
-																						class="btn btn-xs btn-primary"
-																						disabled={inFlight}
-																						onclick={() => startTvFirkinBuild(lib.id, group)}
-																					>
-																						{inFlight
-																							? progressLabel(job!)
-																							: job?.phase === 'completed'
-																								? 'Re-run match'
-																								: 'Match TMDB & build firkin'}
-																					</button>
-																				</div>
-																			</div>
-																			{#if inFlight && job?.total !== undefined && job.total > 0}
-																				{@const pct = Math.round(
-																					((job.current ?? 0) / job.total) * 100
-																				)}
-																				<progress
-																					class="mt-1 w-full progress progress-primary"
-																					value={pct}
-																					max="100"
-																				></progress>
-																			{/if}
-																			{#if job?.phase === 'error'}
-																				<div class="mt-1 flex items-center gap-2">
-																					<p class="text-xs font-normal text-error">
-																						{job.error ?? 'Failed'}
-																					</p>
-																					<button
-																						class="btn btn-ghost btn-xs"
-																						onclick={() => clearTerminalTvBuilds(lib.id)}
-																					>
-																						Dismiss
-																					</button>
-																				</div>
-																			{/if}
-																		</td>
-																	</tr>
-																	{#each group.seasons as season (season.season)}
-																		<tr class="bg-base-200/30">
-																			<td colspan="9" class="pl-4 text-xs font-medium opacity-80">
-																				Season {String(season.season).padStart(2, '0')}
-																			</td>
-																		</tr>
-																		{#each season.entries as entry (entry.path)}
-																			{@render entryRow(entry)}
-																		{/each}
-																	{/each}
-																{:else}
-																	<tr class="bg-base-200/60">
-																		<td colspan="9" class="text-sm font-semibold">{group.label}</td>
-																	</tr>
-																	{#each group.entries as entry (entry.path)}
-																		{@render entryRow(entry)}
-																	{/each}
-																{/if}
-															{/each}
-														</tbody>
-													</table>
-												</div>
+											{#if addonsError}
+												<p class="mt-1 text-error">{addonsError}</p>
 											{/if}
+										{:else if (lib.addons ?? []).length === 0}
+											<button class="btn btn-ghost btn-xs" onclick={() => startEditKinds(lib)}>
+												Set kinds
+											</button>
+										{:else}
+											<button
+												class="badge flex flex-wrap gap-1 badge-outline badge-sm"
+												onclick={() => startEditKinds(lib)}
+											>
+												{(lib.addons ?? []).map((k) => LIBRARY_ADDON_LABELS[k] ?? k).join(', ')}
+											</button>
+										{/if}
+									</td>
+									<td class="text-xs text-base-content/60">{formatDate(lib.created_at)}</td>
+									<td class="text-xs text-base-content/60">
+										{lib.last_scanned_at ? formatDate(lib.last_scanned_at) : '—'}
+									</td>
+									<td class="text-right">
+										<div class="flex justify-end gap-1">
+											<button
+												class="btn btn-ghost btn-xs"
+												onclick={() => scan(lib.id)}
+												disabled={scanningId === lib.id}
+											>
+												{scanningId === lib.id ? 'Scanning…' : 'Scan'}
+											</button>
+											<button
+												class="btn text-error btn-ghost btn-xs"
+												onclick={() => remove(lib.id)}
+												disabled={deletingId === lib.id}
+											>
+												{deletingId === lib.id ? 'Removing…' : 'Remove'}
+											</button>
 										</div>
 									</td>
 								</tr>
-							{/if}
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-	</section>
-</div>
+								{#if scanErrors[lib.id]}
+									<tr>
+										<td colspan="5" class="bg-base-100">
+											<div class="my-2 alert alert-error">
+												<span class="text-sm">{scanErrors[lib.id]}</span>
+												<button class="btn btn-ghost btn-xs" onclick={() => clearScan(lib.id)}>
+													Dismiss
+												</button>
+											</div>
+										</td>
+									</tr>
+								{:else if pinsErrors[lib.id]}
+									<tr>
+										<td colspan="5" class="bg-base-100">
+											<div class="my-2 alert alert-warning">
+												<span class="text-sm">Pins: {pinsErrors[lib.id]}</span>
+											</div>
+										</td>
+									</tr>
+								{:else if scanResults[lib.id]}
+									{@const cidByPath = pinIndex(libPins[lib.id])}
+									<tr>
+										<td colspan="5" class="bg-base-100 p-3">
+											<div class="flex flex-col gap-2">
+												<div class="flex items-center justify-between gap-2">
+													<p class="text-xs text-base-content/70">
+														{scanResults[lib.id].total_files} files —
+														{formatBytes(scanResults[lib.id].total_size)} total
+													</p>
+													<button class="btn btn-ghost btn-xs" onclick={() => clearScan(lib.id)}>
+														Hide
+													</button>
+												</div>
+												{#if scanResults[lib.id].entries.length === 0}
+													<p class="text-xs text-base-content/60">No files in this directory.</p>
+												{:else}
+													<div
+														class="max-h-96 overflow-y-auto rounded border border-base-content/10"
+													>
+														<table class="table table-xs">
+															<thead class="sticky top-0 bg-base-200">
+																<tr>
+																	<th>File</th>
+																	<th class="w-72">CID</th>
+																	<th class="w-24">MIME</th>
+																	<th class="w-20 text-right">Size</th>
+																	<th class="w-40">Show / Title</th>
+																	<th class="w-12">S</th>
+																	<th class="w-12">E</th>
+																	<th class="w-56">TMDB match</th>
+																	<th class="w-32"></th>
+																</tr>
+															</thead>
+															<tbody>
+																{#snippet entryRow(entry: ScanEntry)}
+																	{@const cid = cidByPath.get(entry.path)}
+																	<tr>
+																		<td class="font-mono text-xs break-all">
+																			{entry.relative_path}
+																		</td>
+																		<td class="font-mono text-xs break-all">
+																			{#if cid}
+																				{cid}
+																			{:else}
+																				<span class="text-base-content/40">pinning…</span>
+																			{/if}
+																		</td>
+																		<td class="font-mono text-xs">{entry.mime}</td>
+																		<td class="text-right text-xs">
+																			{formatBytes(entry.size)}
+																		</td>
+																		<td class="text-xs">
+																			{#if entry.extractedTvQuery}
+																				{entry.extractedTvQuery.show}{entry.extractedTvQuery.year
+																					? ` (${entry.extractedTvQuery.year})`
+																					: ''}
+																			{:else if entry.extractedQuery}
+																				{entry.extractedQuery.title}{entry.extractedQuery.year
+																					? ` (${entry.extractedQuery.year})`
+																					: ''}
+																			{:else}
+																				<span class="text-base-content/30">—</span>
+																			{/if}
+																		</td>
+																		<td class="text-xs">
+																			{#if entry.extractedTvQuery}
+																				{String(entry.extractedTvQuery.season).padStart(2, '0')}
+																			{:else}
+																				<span class="text-base-content/30">—</span>
+																			{/if}
+																		</td>
+																		<td class="text-xs">
+																			{#if entry.extractedTvQuery}
+																				{String(entry.extractedTvQuery.episode).padStart(2, '0')}
+																			{:else}
+																				<span class="text-base-content/30">—</span>
+																			{/if}
+																		</td>
+																		<td class="text-xs">
+																			{#if entry.tmdbMatch}
+																				<a
+																					class="link link-hover"
+																					href={`https://www.themoviedb.org/movie/${entry.tmdbMatch.tmdbId}`}
+																					target="_blank"
+																					rel="noreferrer"
+																					title={entry.tmdbMatch.overview ?? ''}
+																				>
+																					{entry.tmdbMatch.title}{entry.tmdbMatch.year
+																						? ` (${entry.tmdbMatch.year})`
+																						: ''}
+																				</a>
+																			{:else if entry.extractedTvQuery}
+																				<span class="text-base-content/40">tmdb lookup pending</span
+																				>
+																			{:else if entry.extractedQuery}
+																				<span class="text-base-content/40">no match</span>
+																			{:else}
+																				<span class="text-base-content/30">—</span>
+																			{/if}
+																		</td>
+																		<td class="text-xs">
+																			{#if entry.tmdbMatch}
+																				<button
+																					class="btn btn-xs btn-primary"
+																					disabled={creatingFirkinFor[entry.path]}
+																					onclick={() => createFirkinFromMatch(lib.id, entry, cid)}
+																					title={cid
+																						? undefined
+																						: 'IPFS pin still in progress — clicking will wait for the pin to complete before creating the firkin'}
+																				>
+																					{creatingFirkinFor[entry.path]
+																						? cid
+																							? 'Creating…'
+																							: 'Waiting for pin…'
+																						: cid
+																							? 'Create firkin'
+																							: 'Create firkin (waits for pin)'}
+																				</button>
+																			{:else}
+																				<span class="text-base-content/30">—</span>
+																			{/if}
+																		</td>
+																	</tr>
+																	{#if createFirkinErrors[entry.path]}
+																		<tr>
+																			<td colspan="9" class="bg-base-100">
+																				<div class="my-1 alert py-1 alert-error">
+																					<span class="text-xs">
+																						Create firkin failed: {createFirkinErrors[entry.path]}
+																					</span>
+																				</div>
+																			</td>
+																		</tr>
+																	{/if}
+																{/snippet}
+																{#each groupEntries(scanResults[lib.id].entries) as group, gi (gi)}
+																	{#if group.kind === 'show'}
+																		{@const sKey = showKey(lib.id, group)}
+																		{@const job = tvBuildJobs[lib.id]?.[sKey]}
+																		{@const inFlight =
+																			!!job && job.phase !== 'completed' && job.phase !== 'error'}
+																		<tr class="bg-base-200/60">
+																			<td colspan="9" class="text-sm font-semibold">
+																				<div class="flex items-center justify-between gap-2">
+																					<span>
+																						{group.show}{group.year ? ` (${group.year})` : ''}
+																					</span>
+																					<div class="flex items-center gap-2">
+																						{#if job?.phase === 'completed' && job.completedFirkinId}
+																							<a
+																								class="btn btn-xs btn-success"
+																								href={`${base}/catalog/${encodeURIComponent(job.completedFirkinId)}`}
+																							>
+																								View firkin
+																							</a>
+																						{/if}
+																						<button
+																							class="btn btn-xs btn-primary"
+																							disabled={inFlight}
+																							onclick={() => startTvFirkinBuild(lib.id, group)}
+																						>
+																							{inFlight
+																								? progressLabel(job!)
+																								: job?.phase === 'completed'
+																									? 'Re-run match'
+																									: 'Match TMDB & build firkin'}
+																						</button>
+																					</div>
+																				</div>
+																				{#if inFlight && job?.total !== undefined && job.total > 0}
+																					{@const pct = Math.round(
+																						((job.current ?? 0) / job.total) * 100
+																					)}
+																					<progress
+																						class="progress mt-1 w-full progress-primary"
+																						value={pct}
+																						max="100"
+																					></progress>
+																				{/if}
+																				{#if job?.phase === 'error'}
+																					<div class="mt-1 flex items-center gap-2">
+																						<p class="text-xs font-normal text-error">
+																							{job.error ?? 'Failed'}
+																						</p>
+																						<button
+																							class="btn btn-ghost btn-xs"
+																							onclick={() => clearTerminalTvBuilds(lib.id)}
+																						>
+																							Dismiss
+																						</button>
+																					</div>
+																				{/if}
+																			</td>
+																		</tr>
+																		{#each group.seasons as season (season.season)}
+																			<tr class="bg-base-200/30">
+																				<td colspan="9" class="pl-4 text-xs font-medium opacity-80">
+																					Season {String(season.season).padStart(2, '0')}
+																				</td>
+																			</tr>
+																			{#each season.entries as entry (entry.path)}
+																				{@render entryRow(entry)}
+																			{/each}
+																		{/each}
+																	{:else}
+																		<tr class="bg-base-200/60">
+																			<td colspan="9" class="text-sm font-semibold"
+																				>{group.label}</td
+																			>
+																		</tr>
+																		{#each group.entries as entry (entry.path)}
+																			{@render entryRow(entry)}
+																		{/each}
+																	{/if}
+																{/each}
+															</tbody>
+														</table>
+													</div>
+												{/if}
+											</div>
+										</td>
+									</tr>
+								{/if}
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
+	</div>
+</Modal>

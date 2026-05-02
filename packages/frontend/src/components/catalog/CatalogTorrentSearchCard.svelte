@@ -2,77 +2,34 @@
 	import classNames from 'classnames';
 	import { formatSizeBytes, type TorrentResultItem } from '$lib/search.service';
 	import type { TorrentSearch, TorrentRowEval } from '$services/catalog/torrent-search.svelte';
-	import type { SubsLyricsItem } from '$types/subs-lyrics.type';
-	import { matchSubsToTorrent, type MatchedSub } from '$utils/match-subs-to-torrent';
 
 	interface Props {
 		search: TorrentSearch;
-		onAssign: (torrent: TorrentResultItem, sub?: SubsLyricsItem) => void | Promise<void>;
+		onAssign: (torrent: TorrentResultItem) => void | Promise<void>;
+		onStream?: (torrent: TorrentResultItem) => void | Promise<void>;
 		addingHash: string | null;
+		streamingHash?: string | null;
 		assignError?: string | null;
 		existingHashes?: Set<string>;
 		collapsible?: boolean;
 		open?: boolean;
 		onToggle?: () => void;
 		onRefresh?: () => void;
-		subs?: SubsLyricsItem[];
-		autoSelectFirstSub?: boolean;
 	}
 
 	let {
 		search,
 		onAssign,
+		onStream,
 		addingHash,
+		streamingHash = null,
 		assignError = null,
 		existingHashes = new Set<string>(),
 		collapsible = false,
 		open = true,
 		onToggle,
-		onRefresh,
-		subs = [],
-		autoSelectFirstSub = false
+		onRefresh
 	}: Props = $props();
-
-	function subOptionLabel(m: MatchedSub): string {
-		const lang = m.sub.display ?? m.sub.language ?? '—';
-		const release = m.sub.release ?? `#${m.sub.externalId}`;
-		const flag = m.groupMatched ? '★' : '';
-		return `${flag}${lang}: ${release}`.trim();
-	}
-
-	// Per-torrent-row sub selection. Keyed by infoHash so the choice
-	// survives `subMatches` re-derivation. The `Use` button reads from
-	// here and forwards the picked sub to `onAssign`, which persists it
-	// onto the firkin alongside the torrent magnet — no download or
-	// preview happens on selection. `null` means the user explicitly
-	// cleared their pick (placeholder option) — distinct from "not
-	// interacted yet", so the `autoSelectFirstSub` default doesn't
-	// override an explicit clear.
-	let selectedSubByHash = $state<Record<string, SubsLyricsItem | null>>({});
-
-	function chooseSub(infoHash: string, matches: MatchedSub[], event: Event) {
-		const select = event.currentTarget as HTMLSelectElement;
-		const idx = select.selectedIndex - 1;
-		const next = { ...selectedSubByHash };
-		if (idx < 0 || idx >= matches.length) {
-			next[infoHash] = null;
-		} else {
-			next[infoHash] = matches[idx].sub;
-		}
-		selectedSubByHash = next;
-	}
-
-	function defaultSubFor(matches: MatchedSub[]): SubsLyricsItem | undefined {
-		if (!autoSelectFirstSub) return undefined;
-		return matches.find((m) => m.sub.url)?.sub;
-	}
-
-	function effectiveSubFor(infoHash: string, matches: MatchedSub[]): SubsLyricsItem | undefined {
-		if (infoHash in selectedSubByHash) {
-			return selectedSubByHash[infoHash] ?? undefined;
-		}
-		return defaultSubFor(matches);
-	}
 
 	function rowEval(magnet: string | undefined | null): TorrentRowEval {
 		if (!magnet) return { kind: 'not-streamable', reason: 'no magnet' };
@@ -107,7 +64,9 @@
 	let expandedGroups = $state<Record<string, boolean>>({});
 
 	function toggleGroup(label: string) {
-		expandedGroups = { ...expandedGroups, [label]: !expandedGroups[label] };
+		const wasExpanded = expandedGroups[label] ?? false;
+		expandedGroups = { ...expandedGroups, [label]: !wasExpanded };
+		if (!wasExpanded) void search.probeRemaining(label);
 	}
 
 	const heading = $derived(
@@ -159,13 +118,10 @@
 					<table class="table table-xs">
 						<thead>
 							<tr>
-								<th class="w-56">Streamability</th>
-								<th class="w-20">Quality</th>
-								<th class="w-20 text-success">Seeders</th>
-								<th class="w-20 text-warning">Leechers</th>
-								<th class="w-20">Size</th>
 								<th>Title</th>
-								<th class="w-44">Subtitles</th>
+								<th class="w-12 text-success" title="Seeders">↑</th>
+								<th class="w-12 text-warning" title="Leechers">↓</th>
+								<th class="w-20">Size</th>
 								<th class="w-32"></th>
 							</tr>
 						</thead>
@@ -177,47 +133,29 @@
 								{@const defaultCollapsed = !group.probe}
 								{@const expanded = expandedGroups[group.label] ?? false}
 								<tr class="bg-base-300/40">
-									<th colspan="8" class="p-0">
-										{#if defaultCollapsed}
-											<button
-												type="button"
-												class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase hover:bg-base-300/60"
-												onclick={() => toggleGroup(group.label)}
-												aria-expanded={expanded}
-											>
-												<span class="flex items-center gap-2">
-													<span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
-													<span>{group.label} ({group.rows.length})</span>
-												</span>
-												<span class="text-[10px] text-base-content/50 normal-case">
-													{expanded ? 'Click to hide' : 'Click to show'}
-												</span>
-											</button>
-										{:else}
-											<div
-												class="px-3 py-2 text-xs font-semibold tracking-wider text-base-content/70 uppercase"
-											>
-												{group.label} ({group.rows.length})
-											</div>
-										{/if}
+									<th colspan="5" class="p-0">
+										<button
+											type="button"
+											class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase hover:bg-base-300/60"
+											onclick={() => toggleGroup(group.label)}
+											aria-expanded={expanded}
+										>
+											<span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
+											<span>{group.label} ({group.rows.length})</span>
+										</button>
 									</th>
 								</tr>
 								{#each group.rows as torrent, rowIdx (torrent.infoHash)}
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
 									{@const ev = rowEval(torrent.magnetLink)}
-									{@const subMatches = matchSubsToTorrent(torrent.title, subs)}
-									{@const effectiveSub = effectiveSubFor(torrent.infoHash, subMatches)}
-									{@const hidden = defaultCollapsed
-										? !expanded
-										: probing
-											? rowIdx !== probeIdx
-											: streamableIdx >= 0 && rowIdx > streamableIdx && !expanded}
-									{@const showMoreToggle =
-										!probing &&
-										streamableIdx >= 0 &&
-										rowIdx === streamableIdx &&
-										group.rows.length > streamableIdx + 1}
+									{@const hidden = expanded
+										? false
+										: defaultCollapsed
+											? true
+											: probing
+												? rowIdx !== probeIdx
+												: streamableIdx >= 0 && rowIdx > streamableIdx}
 									<tr
 										class={classNames('hover', {
 											'opacity-60': added || adding,
@@ -225,103 +163,61 @@
 										})}
 									>
 										<td>
-											{#if ev.kind === 'pending'}
-												<span class="text-xs text-base-content/50">Queued…</span>
-											{:else if ev.kind === 'evaluating'}
-												<div class="flex items-center gap-2">
-													<span
-														class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
-														aria-hidden="true"
-													></span>
-													<span class="text-xs text-base-content/60">Probing…</span>
-												</div>
-											{:else if ev.kind === 'streamable'}
-												<div class="flex flex-col gap-0.5">
-													<span class="badge gap-1 badge-sm badge-success">
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															viewBox="0 0 24 24"
-															fill="currentColor"
-															class="h-3 w-3"
+											<div class="flex flex-col gap-0.5">
+												<span
+													class="block max-w-[18rem] truncate text-xs text-base-content/80"
+													title={torrent.title}
+												>
+													{torrent.parsedTitle || torrent.title}
+												</span>
+												{#if ev.kind === 'pending'}
+													<span class="text-[10px] text-base-content/50">Queued…</span>
+												{:else if ev.kind === 'evaluating'}
+													<div class="flex items-center gap-1.5">
+														<span
+															class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
 															aria-hidden="true"
-														>
-															<polygon points="6 4 20 12 6 20 6 4" />
-														</svg>
-														Streamable
-													</span>
+														></span>
+														<span class="text-[10px] text-base-content/60">Probing…</span>
+													</div>
+												{:else if ev.kind === 'streamable'}
 													<span
-														class="max-w-[14rem] truncate text-[10px] text-base-content/60"
+														class="block max-w-[18rem] truncate text-[10px] text-success"
 														title={ev.fileName}
 													>
 														{ev.fileName}
 													</span>
-												</div>
-											{:else if ev.kind === 'skipped'}
-												<span class="text-xs text-base-content/40" title={ev.reason}>—</span>
-											{:else}
-												<div class="flex flex-col gap-0.5">
-													<span class="badge gap-1 badge-ghost badge-sm">
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															viewBox="0 0 24 24"
-															fill="none"
-															stroke="currentColor"
-															stroke-width="2.5"
-															stroke-linecap="round"
-															class="h-3 w-3 text-base-content/40"
-															aria-hidden="true"
-														>
-															<line x1="5" y1="5" x2="19" y2="19" />
-															<line x1="19" y1="5" x2="5" y2="19" />
-														</svg>
-														Not streamable
-													</span>
+												{:else if ev.kind === 'skipped'}
+													<span class="text-[10px] text-base-content/40" title={ev.reason}>—</span>
+												{:else}
 													<span
-														class="max-w-[14rem] truncate text-[10px] text-base-content/60"
+														class="block max-w-[18rem] truncate text-[10px] text-base-content/50"
 														title={ev.reason}
 													>
-														{ev.reason}
+														Not streamable: {ev.reason}
 													</span>
-												</div>
-											{/if}
+												{/if}
+											</div>
 										</td>
-										<td class="text-xs font-medium">{torrent.quality ?? '—'}</td>
 										<td class="text-xs text-success">{torrent.seeders}</td>
 										<td class="text-xs text-warning">{torrent.leechers}</td>
 										<td class="text-xs text-base-content/70"
 											>{formatSizeBytes(torrent.sizeBytes)}</td
 										>
-										<td
-											class="max-w-md truncate text-xs text-base-content/80"
-											title={torrent.title}
-										>
-											{torrent.parsedTitle || torrent.title}
-										</td>
-										<td>
-											{#if subMatches.length === 0}
-												<span class="text-xs text-base-content/40">—</span>
-											{:else}
-												<select
-													class="select-bordered select w-full max-w-[10rem] select-xs"
-													value={effectiveSub?.externalId ?? ''}
-													onchange={(e) => chooseSub(torrent.infoHash, subMatches, e)}
-													title="{subMatches.length} matching subtitle{subMatches.length === 1
-														? ''
-														: 's'} (★ = release-group match) — picked sub is saved on the firkin when you click Use"
-												>
-													<option value=""
-														>{subMatches.length} sub{subMatches.length === 1 ? '' : 's'}…</option
-													>
-													{#each subMatches as m (m.sub.externalId)}
-														<option value={m.sub.externalId} disabled={!m.sub.url}>
-															{subOptionLabel(m)}
-														</option>
-													{/each}
-												</select>
-											{/if}
-										</td>
 										<td class="text-right">
+											{@const streaming = streamingHash === torrent.magnetLink}
 											<div class="flex items-center justify-end gap-1">
+												{#if ev.kind === 'streamable' && onStream}
+													<button
+														type="button"
+														class="btn btn-xs btn-success"
+														disabled={streamingHash !== null}
+														onclick={() => onStream?.(torrent)}
+														aria-label="Stream this torrent"
+													>
+														{streaming ? '…' : 'Stream'}
+													</button>
+												{/if}
 												{#if added}
 													<span class="badge badge-sm badge-success">added</span>
 												{:else}
@@ -329,23 +225,10 @@
 														type="button"
 														class="btn btn-xs btn-primary"
 														disabled={addingHash !== null}
-														onclick={() => onAssign(torrent, effectiveSub)}
-														aria-label="Use this torrent"
+														onclick={() => onAssign(torrent)}
+														aria-label="Download this torrent"
 													>
-														{adding ? '…' : 'Use'}
-													</button>
-												{/if}
-												{#if showMoreToggle}
-													<button
-														type="button"
-														class="btn btn-ghost btn-xs"
-														onclick={() => toggleGroup(group.label)}
-														aria-expanded={expanded}
-														title={expanded
-															? `Hide other ${group.label} candidates`
-															: `Show ${group.rows.length - streamableIdx - 1} more ${group.label} candidates`}
-													>
-														{expanded ? 'Less' : 'More'}
+														{adding ? '…' : 'Download'}
 													</button>
 												{/if}
 											</div>

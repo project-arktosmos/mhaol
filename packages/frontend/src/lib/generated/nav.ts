@@ -9,12 +9,6 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
 	{
-		"label": "Artist",
-		"href": "/artist",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
 		"label": "Catalog",
 		"href": "/catalog",
 		"hasOwnPage": true,
@@ -26,62 +20,8 @@ export const NAV_ITEMS: NavItem[] = [
 		]
 	},
 	{
-		"label": "Database",
-		"href": "/database",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Feed",
-		"href": "/feed",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Firkins",
-		"href": "/firkins",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Ipfs",
-		"href": "/ipfs",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Libraries",
-		"href": "/libraries",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
 		"label": "Profile",
 		"href": "/profile",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Recommendations",
-		"href": "/recommendations",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Settings",
-		"href": "/settings",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Torrent",
-		"href": "/torrent",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Youtube",
-		"href": "/youtube",
 		"hasOwnPage": true,
 		"children": []
 	}

@@ -173,7 +173,7 @@ export function isTorrentSearchableAddon(addon: string): boolean {
 	return tpbCategoryFor(addon) !== null;
 }
 
-function tpbCategoryFor(addon: string): TorrentCategory | null {
+export function tpbCategoryFor(addon: string): TorrentCategory | null {
 	const kind = addonKind(addon);
 	switch (kind) {
 		case 'album':
