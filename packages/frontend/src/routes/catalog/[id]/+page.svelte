@@ -863,14 +863,8 @@
 	// makes polling robust to MusicBrainz being slow / rate-limited —
 	// even if the WebUI can't render the tracklist, the server is still
 	// processing and we still want to navigate to the rollforward.
-	//
-	// Browse-cache (non-bookmarked) firkins skip the poll entirely —
-	// the server only spawns `resolve_album_tracks` for bookmarked
-	// musicbrainz firkins, so polling here would chase a task that
-	// never started.
 	const tracksLikelyUnresolved = $derived(
-		isBookmarked &&
-			isMusicBrainz &&
+		isMusicBrainz &&
 			Boolean(musicBrainzReleaseGroupId) &&
 			firkin.files.filter((f) => f.type === 'lyrics').length === 0
 	);
@@ -994,7 +988,7 @@
 	// with `completed: false` flips the in-flight flag back on so the
 	// poll below picks up where it left off.
 	$effect(() => {
-		if (!isMusicBrainz || !isBookmarked) return;
+		if (!isMusicBrainz) return;
 		const id = firkin.id;
 		let cancelled = false;
 		void (async () => {
@@ -1023,7 +1017,7 @@
 	// surfaces as soon as a track finishes — without waiting for the
 	// entire album to complete.
 	$effect(() => {
-		if (!isMusicBrainz || !isBookmarked) return;
+		if (!isMusicBrainz) return;
 		if (!albumDownloadInFlight) return;
 		const id = firkin.id;
 		let cancelled = false;
@@ -1095,20 +1089,16 @@
 		}
 	}
 
-	// When the firkin is just bookmarked metadata (no IPFS files, no
-	// magnets), kick the torrent search off automatically so the user can
-	// pick a source without having to click into a collapsed card.
-	// MusicBrainz is excluded because albums get the tracks card, not
-	// torrents. Non-bookmarked browse-cache firkins skip the search
-	// entirely — they show only the Bookmark action; the search auto-fires
-	// once the user bookmarks.
+	// When the firkin is just metadata (no IPFS files, no magnets), kick
+	// the torrent search off automatically so the user can pick a source
+	// without having to click into a collapsed card. MusicBrainz is
+	// excluded because albums get the tracks card, not torrents.
 	//
 	// TV shows ignore the `hasNoRealFiles` gate: the seasons card needs the
 	// search results to classify torrents per-season, and the user typically
 	// adds one torrent per season — so even when the firkin already has a
 	// magnet attached, fresh results are still useful.
 	$effect(() => {
-		if (!isBookmarked) return;
 		if (isMusicBrainz) return;
 		if (!isTmdbTv && !hasNoRealFiles) return;
 		if (torrentSearchInitForFirkinId === firkin.id) return;
@@ -1123,7 +1113,6 @@
 	// Per-season fires are guarded by `perSeasonSearched` so each season
 	// only ever runs once per firkin id.
 	$effect(() => {
-		if (!isBookmarked) return;
 		if (!isTmdbTv) return;
 		if (tvSeasonNumbers.length === 0) return;
 		if (torrentSearch.status !== 'done') return;
@@ -1420,7 +1409,6 @@
 			)
 	);
 	const subPickerEnabled = $derived.by(() => {
-		if (!isBookmarked) return false;
 		if (activeSource !== 'ipfs' && activeSource !== 'torrent') return false;
 		if (!subsLyricsKind) return false;
 		if (isTmdbTv) return currentSeason !== null && currentEpisode !== null;
@@ -1643,50 +1631,9 @@
 		addon={firkin.addon}
 		kindLabel={firkinKind}
 		year={firkin.year}
-		extraBadge={isBookmarked ? undefined : { label: 'browse', class: 'badge-warning' }}
 	>
 		{#snippet actions()}
-			{#if isBookmarked}
-				{#if canPlay}
-					<button
-						type="button"
-						class="btn gap-2 btn-sm btn-primary"
-						onclick={play}
-						disabled={finalizing}
-						aria-label="Play"
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 24 24"
-							fill="currentColor"
-							stroke="none"
-							class="h-4 w-4 shrink-0"
-							aria-hidden="true"
-						>
-							<polygon points="6 4 20 12 6 20 6 4" />
-						</svg>
-						<span>{finalizing ? 'Pinning…' : 'Play'}</span>
-					</button>
-				{/if}
-				{#if needsMetadata && lookupAddon}
-					<button
-						type="button"
-						class="btn btn-outline btn-sm btn-info"
-						onclick={() => (metadataLookupOpen = true)}
-						title="Search {lookupAddon} and bake matching metadata into this firkin (rolls the version forward)"
-					>
-						Find metadata
-					</button>
-				{/if}
-				<button
-					type="button"
-					class="btn btn-outline btn-sm btn-error"
-					onclick={remove}
-					disabled={removing}
-				>
-					{removing ? 'Deleting…' : 'Delete firkin'}
-				</button>
-			{:else}
+			{#if !isBookmarked}
 				<button
 					type="button"
 					class="btn gap-2 btn-sm btn-primary"
@@ -1708,6 +1655,45 @@
 					<span>{bookmarking ? 'Bookmarking…' : 'Bookmark'}</span>
 				</button>
 			{/if}
+			{#if canPlay}
+				<button
+					type="button"
+					class="btn gap-2 btn-sm btn-primary"
+					onclick={play}
+					disabled={finalizing}
+					aria-label="Play"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						stroke="none"
+						class="h-4 w-4 shrink-0"
+						aria-hidden="true"
+					>
+						<polygon points="6 4 20 12 6 20 6 4" />
+					</svg>
+					<span>{finalizing ? 'Pinning…' : 'Play'}</span>
+				</button>
+			{/if}
+			{#if needsMetadata && lookupAddon}
+				<button
+					type="button"
+					class="btn btn-outline btn-sm btn-info"
+					onclick={() => (metadataLookupOpen = true)}
+					title="Search {lookupAddon} and bake matching metadata into this firkin (rolls the version forward)"
+				>
+					Find metadata
+				</button>
+			{/if}
+			<button
+				type="button"
+				class="btn btn-outline btn-sm btn-error"
+				onclick={remove}
+				disabled={removing}
+			>
+				{removing ? 'Deleting…' : 'Delete firkin'}
+			</button>
 		{/snippet}
 	</CatalogPageHeader>
 
@@ -1728,8 +1714,8 @@
 		<div class="alert alert-error"><span>{torrentStreamError}</span></div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,_320px)_1fr_minmax(0,_320px)]">
-		<aside class="flex flex-col gap-4">
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-4">
+		<aside class="flex w-full flex-col gap-4">
 			{#if firkin.images[0]}
 				<img
 					src={firkin.images[0].url}
@@ -1757,8 +1743,8 @@
 			{/if}
 		</aside>
 
-		<section class="flex flex-col gap-6">
-			{#if isBookmarked && anyTabEnabled}
+		<section class="flex w-full flex-col gap-6 lg:col-span-2">
+			{#if anyTabEnabled}
 				<div class="flex flex-col gap-2">
 					<div role="tablist" class="tabs-bordered tabs">
 						<button
@@ -1895,13 +1881,6 @@
 						/>
 					{/if}
 				</div>
-			{:else if !isBookmarked && (isYoutubeVideo || isTmdbMovie || isTmdbTv)}
-				<CatalogTrailerPlayer
-					posterUrl={trailerThumb}
-					youtubeUrl={isYoutubeVideo ? youtubeVideoUrl : firstTrailerUrl}
-					title={firkin.title}
-					preferredClient={isYoutubeVideo ? youtubePreferredClient : null}
-				/>
 			{:else if firkin.images[1]}
 				<img
 					src={firkin.images[1].url}
@@ -1913,48 +1892,33 @@
 
 			<CatalogDescriptionPanel
 				description={firkin.description}
-				identity={isBookmarked
-					? {
-							cid: firkin.cid,
-							createdAt: firkin.created_at,
-							updatedAt: firkin.updated_at,
-							version: firkin.version ?? 0
-						}
-					: undefined}
-				versionHashes={isBookmarked ? (firkin.version_hashes ?? []) : []}
+				identity={{
+					cid: firkin.cid,
+					createdAt: firkin.created_at,
+					updatedAt: firkin.updated_at,
+					version: firkin.version ?? 0
+				}}
+				versionHashes={firkin.version_hashes ?? []}
 				reviews={firkin.reviews ?? []}
 			/>
 
 			{#if isTmdbTv && tmdbTvId}
 				<CatalogTvSeasonsCard
 					{tmdbTvId}
-					torrents={isBookmarked ? torrentSearch.matches : []}
+					torrents={torrentSearch.matches}
 					torrentsStatus={torrentSearch.status}
 					torrentsError={torrentSearch.error}
-					searchStack={isBookmarked ? torrentSearch.searchStack : []}
+					searchStack={torrentSearch.searchStack}
 					{existingHashes}
 					{addingHash}
-					onAssign={isBookmarked ? assignTorrent : undefined}
+					onAssign={assignTorrent}
 					onSeasonsLoaded={(nums) => (tvSeasonNumbers = nums)}
 					{availableEpisodeKeys}
-					onPlayEpisode={isBookmarked ? playEpisode : undefined}
+					onPlayEpisode={playEpisode}
 				/>
 			{/if}
 
-			{#if !isBookmarked}
-				<div class="card border border-base-content/10 bg-base-200 p-4">
-					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>
-					<p class="text-xs text-base-content/70">
-						This item isn't bookmarked yet — no torrent search, IPFS pinning, or version history
-						runs against it. Bookmark it to add it to your library and unlock the download /
-						streaming flow.
-					</p>
-				</div>
-			{/if}
-
-			{#if isBookmarked}
-				<CatalogTorrentProgressCard rows={torrentProgressRows} />
-			{/if}
+			<CatalogTorrentProgressCard rows={torrentProgressRows} />
 
 			{#if isTmdbMovie || isTmdbTv}
 				<CatalogTrailersCard resolver={trailerResolver} firkinTitle={firkin.title} {thumb} />
@@ -1966,18 +1930,17 @@
 					{thumb}
 					albumTitle={firkin.title}
 					firkinId={firkin.id}
-					preview={!isBookmarked}
-					onDownloadAlbum={isBookmarked ? startAlbumDownload : undefined}
+					onDownloadAlbum={startAlbumDownload}
 					downloadInFlight={albumDownloadInFlight}
 					downloadError={albumDownloadError}
 				/>
 			{/if}
 
-			{#if isBookmarked && isTmdbTv}
+			{#if isTmdbTv}
 				{#if assignError}
 					<div class="alert alert-error"><span>{assignError}</span></div>
 				{/if}
-			{:else if isBookmarked && hasMagnetFiles}
+			{:else if hasMagnetFiles}
 				<CatalogTorrentSearchCard
 					search={torrentSearch}
 					onAssign={assignTorrent}
@@ -1996,7 +1959,7 @@
 							year: firkin.year
 						})}
 				/>
-			{:else if isBookmarked && hasNoRealFiles && !isMusicBrainz}
+			{:else if hasNoRealFiles && !isMusicBrainz}
 				<CatalogTorrentSearchCard
 					search={torrentSearch}
 					onAssign={assignTorrent}
@@ -2014,7 +1977,7 @@
 				/>
 			{/if}
 
-			{#if isBookmarked && subsLyricsKind}
+			{#if subsLyricsKind}
 				<CatalogSubsLyricsCard
 					resolver={subsLyricsResolver}
 					kind={subsLyricsKind}
@@ -2023,12 +1986,12 @@
 				/>
 			{/if}
 
-			{#if isBookmarked && !isMusicBrainz}
+			{#if !isMusicBrainz}
 				<CatalogFilesTable files={firkin.files} />
 			{/if}
 		</section>
 
-		<aside class="flex flex-col gap-4">
+		<aside class="flex w-full flex-col gap-4">
 			{#if isTmdbMovie}
 				<CatalogRelatedCard
 					addon={firkin.addon}
