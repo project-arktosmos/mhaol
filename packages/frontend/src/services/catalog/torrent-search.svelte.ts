@@ -10,6 +10,9 @@ export type TorrentSearchStatus = 'idle' | 'searching' | 'done' | 'error';
 
 export interface SearchStackEntry {
 	id: number;
+	/** Human-readable label (e.g. `"Show"`, `"Season 5"`). */
+	label: string;
+	/** Actual query sent to the indexer. */
 	query: string;
 	status: 'searching' | 'done' | 'error';
 	/** Result count: total matches for the initial `search()`, or new
@@ -111,9 +114,9 @@ export class TorrentSearch {
 		this.run++;
 	}
 
-	private pushStackEntry(query: string): number {
+	private pushStackEntry(label: string, query: string): number {
 		const id = ++this.nextEntryId;
-		this.searchStack = [...this.searchStack, { id, query, status: 'searching' }];
+		this.searchStack = [...this.searchStack, { id, label, query, status: 'searching' }];
 		return id;
 	}
 
@@ -131,10 +134,11 @@ export class TorrentSearch {
 		addon: string,
 		query: string,
 		matchTitle: string,
-		year: number | null
+		year: number | null,
+		label?: string
 	): Promise<void> {
 		const tokenAtStart = this.run;
-		const entryId = this.pushStackEntry(query);
+		const entryId = this.pushStackEntry(label ?? query, query);
 		try {
 			const torrents = await searchTorrents(addon, query);
 			if (tokenAtStart !== this.run) {
@@ -177,7 +181,7 @@ export class TorrentSearch {
 		this.matches = [];
 		this.rowEvals = {};
 		this.searchStack = [];
-		const entryId = this.pushStackEntry(args.title);
+		const entryId = this.pushStackEntry('Show', args.title);
 		try {
 			const torrents = await searchTorrents(args.addon, args.title);
 			if (myRun !== this.run) return;

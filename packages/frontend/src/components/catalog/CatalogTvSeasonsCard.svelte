@@ -241,7 +241,11 @@
 							{:else}
 								<span class="shrink-0 text-error" aria-hidden="true">✕</span>
 							{/if}
-							<span class="flex-1 truncate font-mono text-base-content/80" title={entry.query}>
+							<span class="w-20 shrink-0 font-semibold text-base-content/80">{entry.label}</span>
+							<span
+								class="min-w-0 flex-1 truncate font-mono text-base-content/50"
+								title={entry.query}
+							>
 								{entry.query}
 							</span>
 							<span

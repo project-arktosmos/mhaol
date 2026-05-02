@@ -869,18 +869,18 @@
 	// it's safe to leave on here.
 	const torrentSearch = new TorrentSearch({ evaluate: true });
 
-	// Season-aware coverage state for tv shows. Once at least one magnet is
-	// attached, we fan out per-season searches for any season the attached
-	// magnets don't already cover — but only when no whole-show pack is
-	// attached (whole-show covers everything by definition).
+	// Season-aware fan-out for tv shows. After the initial show-name search
+	// settles, we look at how its results classify by season — any season
+	// the show has but the results don't cover gets its own focused search
+	// (`Show Name S05`). Skipped entirely when a whole-show pack already
+	// appears in results (it covers every season by definition).
 	let tvSeasonNumbers = $state<number[]>([]);
 	let perSeasonSearched: { firkinId: string; seasons: Set<number> } | null = null;
-	const tvCoverage = $derived.by<{ covered: Set<number>; hasWholeShow: boolean }>(() => {
+	const tvResultCoverage = $derived.by<{ covered: Set<number>; hasWholeShow: boolean }>(() => {
 		const covered = new Set<number>();
 		let hasWholeShow = false;
-		for (const f of firkin.files) {
-			if (f.type !== 'torrent magnet') continue;
-			const range = parseTorrentSeasons(f.title ?? '');
+		for (const t of torrentSearch.matches) {
+			const range = parseTorrentSeasons(t.parsedTitle || t.title);
 			if (!range) {
 				hasWholeShow = true;
 				continue;
@@ -928,17 +928,18 @@
 		void torrentSearch.search({ addon: firkin.addon, title: firkin.title, year: firkin.year });
 	});
 
-	// After the first torrent is assigned to a TV firkin, scan attached
-	// magnets to see which seasons are still missing coverage and fan out
-	// season-specific searches (`Show Title S02`, `Show Title S03`, …) so
-	// the seasons card shows targeted results per row. Skipped entirely when
-	// a whole-show pack is attached (it already covers every season).
+	// Once the initial show-name search settles, classify its results by
+	// season and fan out a focused `Show Title S0N` search for every season
+	// that has zero matches in the initial pool. Skipped entirely if a
+	// whole-show pack already appeared in results — that covers everything.
+	// Per-season fires are guarded by `perSeasonSearched` so each season
+	// only ever runs once per firkin id.
 	$effect(() => {
 		if (!isBookmarked) return;
 		if (!isTmdbTv) return;
 		if (tvSeasonNumbers.length === 0) return;
-		const { covered, hasWholeShow } = tvCoverage;
-		if (covered.size === 0) return;
+		if (torrentSearch.status !== 'done') return;
+		const { covered, hasWholeShow } = tvResultCoverage;
 		if (hasWholeShow) return;
 		if (perSeasonSearched?.firkinId !== firkin.id) {
 			perSeasonSearched = { firkinId: firkin.id, seasons: new Set() };
@@ -954,7 +955,8 @@
 				firkin.addon,
 				`${firkin.title} ${tag}`,
 				firkin.title,
-				firkin.year
+				firkin.year,
+				`Season ${n}`
 			);
 		}
 	});
