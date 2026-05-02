@@ -163,10 +163,8 @@
 	const visibleItems = $derived(response ? response.items.slice(0, limit) : []);
 </script>
 
-<section class="card border border-base-content/10 bg-base-200 p-4">
-	<header class="mb-3 flex items-baseline justify-between gap-2">
-		<h2 class="text-sm font-semibold text-base-content/70 uppercase">Related videos</h2>
-	</header>
+<section class="flex flex-col gap-2">
+	<h2 class="text-sm font-semibold text-base-content/70 uppercase">Related videos</h2>
 
 	{#if status === 'loading' && !response}
 		<div class="flex items-center gap-2 text-xs text-base-content/60">

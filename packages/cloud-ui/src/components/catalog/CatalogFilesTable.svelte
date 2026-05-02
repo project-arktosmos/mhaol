@@ -13,7 +13,7 @@
 	const heading = $derived(`Files (${files.length})`);
 </script>
 
-<div class="card border border-base-content/10 bg-base-200 p-4">
+<div class="flex flex-col gap-2">
 	<div class="flex items-center justify-between gap-2">
 		{#if collapsible}
 			<button

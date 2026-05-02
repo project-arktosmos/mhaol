@@ -178,8 +178,8 @@
 	}
 </script>
 
-<section class="card border border-base-content/10 bg-base-200 p-4">
-	<header class="mb-3 flex items-baseline justify-between gap-2">
+<section class="flex flex-col gap-2">
+	<header class="flex items-baseline justify-between gap-2">
 		<h2 class="text-sm font-semibold text-base-content/70 uppercase">Latest from channel</h2>
 		{#if feed?.channelTitle}
 			<a

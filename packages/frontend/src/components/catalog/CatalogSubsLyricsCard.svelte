@@ -86,7 +86,7 @@
 	}
 </script>
 
-<div class="card border border-base-content/10 bg-base-200 p-4">
+<div class="flex flex-col gap-2">
 	<div class="flex items-center justify-between gap-2">
 		{#if collapsible}
 			<button
@@ -124,114 +124,119 @@
 
 	{#if !collapsible || open}
 		<div class="mt-2">
-		{#if resolver.status === 'searching' && resolver.results.length === 0}
-			<p class="text-sm text-base-content/60">Searching…</p>
-		{:else if resolver.status === 'error'}
-			<p class="text-sm text-error">{resolver.error ?? 'Failed'}</p>
-		{:else if resolver.status === 'done' && resolver.results.length === 0}
-			<p class="text-sm text-base-content/60">
-				No {kind === 'lyrics' ? 'lyrics' : 'subtitles'} found.
-			</p>
-		{:else if resolver.status === 'idle'}
-			<p class="text-sm text-base-content/60">Idle.</p>
-		{:else if kind === 'subs'}
-			<div class="max-h-96 overflow-y-auto rounded border border-base-content/10 bg-base-100">
-				<table class="table table-xs">
-					<thead class="sticky top-0 bg-base-200 text-[10px] uppercase">
-						<tr>
-							<th class="w-28">Language</th>
-							<th>Filename</th>
-							<th class="w-12">Ext</th>
-							<th class="w-10">HI</th>
-							<th class="w-24">ID</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each sortedSubs as item, i (rowKey(item, i))}
-							{@const lang = languageOf(item, i)}
-							{@const ext = filenameExt(item)}
-							<tr
-								class={classNames('cursor-pointer hover:bg-base-200', {
-									'bg-primary/10': selected === item
-								})}
-								onclick={() => (selected = selected === item ? null : item)}
-							>
-								<td class="font-medium">{lang ?? ''}</td>
-								<td
-									class="max-w-[1px] truncate text-[11px] text-base-content/70"
-									title={item.release ?? ''}
+			{#if resolver.status === 'searching' && resolver.results.length === 0}
+				<p class="text-sm text-base-content/60">Searching…</p>
+			{:else if resolver.status === 'error'}
+				<p class="text-sm text-error">{resolver.error ?? 'Failed'}</p>
+			{:else if resolver.status === 'done' && resolver.results.length === 0}
+				<p class="text-sm text-base-content/60">
+					No {kind === 'lyrics' ? 'lyrics' : 'subtitles'} found.
+				</p>
+			{:else if resolver.status === 'idle'}
+				<p class="text-sm text-base-content/60">Idle.</p>
+			{:else if kind === 'subs'}
+				<div class="max-h-96 overflow-y-auto rounded border border-base-content/10 bg-base-100">
+					<table class="table table-xs">
+						<thead class="sticky top-0 bg-base-200 text-[10px] uppercase">
+							<tr>
+								<th class="w-28">Language</th>
+								<th>Filename</th>
+								<th class="w-12">Ext</th>
+								<th class="w-10">HI</th>
+								<th class="w-24">ID</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each sortedSubs as item, i (rowKey(item, i))}
+								{@const lang = languageOf(item, i)}
+								{@const ext = filenameExt(item)}
+								<tr
+									class={classNames('cursor-pointer hover:bg-base-200', {
+										'bg-primary/10': selected === item
+									})}
+									onclick={() => (selected = selected === item ? null : item)}
 								>
-									{item.release ?? '…'}
-								</td>
-								<td class="font-mono text-[10px] uppercase text-base-content/60">
-									{ext ?? item.format ?? '—'}
-								</td>
-								<td class="text-center">{item.isHearingImpaired ? 'HI' : ''}</td>
-								<td class="font-mono text-[10px] text-base-content/60">{item.externalId}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{:else}
-			<div class="max-h-96 overflow-y-auto rounded border border-base-content/10 bg-base-100">
-				<table class="table table-xs">
-					<thead class="sticky top-0 bg-base-200 text-[10px] uppercase">
-						<tr>
-							<th>Track</th>
-							<th>Artist</th>
-							<th>Album</th>
-							<th class="w-24">Type</th>
-							<th class="w-20">Source</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each resolver.results as item, i (rowKey(item, i))}
-							<tr
-								class={classNames('cursor-pointer hover:bg-base-200', {
-									'bg-primary/10': selected === item
-								})}
-								onclick={() => (selected = selected === item ? null : item)}
-							>
-								<td class="font-medium">{item.trackName ?? '—'}</td>
-								<td class="text-base-content/70">{item.artistName ?? '—'}</td>
-								<td class="text-base-content/70">{item.albumName ?? '—'}</td>
-								<td>{lyricsType(item)}</td>
-								<td class="text-base-content/70">{item.source}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-
-		{#if selected}
-			{@const sel = selected}
-			<div class="mt-2 flex flex-col gap-1 rounded border border-base-content/10 bg-base-100 p-2">
-				{#if sel.kind === 'lyrics'}
-					{#if sel.syncedLyrics && sel.syncedLyrics.length > 0}
-						<div class="flex max-h-64 flex-col gap-0.5 overflow-y-auto text-xs leading-tight">
-							{#each sel.syncedLyrics as line, idx (idx)}
-								<span class="text-base-content/80">{line.text || '…'}</span>
+									<td class="font-medium">{lang ?? ''}</td>
+									<td
+										class="max-w-[1px] truncate text-[11px] text-base-content/70"
+										title={item.release ?? ''}
+									>
+										{item.release ?? '…'}
+									</td>
+									<td class="font-mono text-[10px] text-base-content/60 uppercase">
+										{ext ?? item.format ?? '—'}
+									</td>
+									<td class="text-center">{item.isHearingImpaired ? 'HI' : ''}</td>
+									<td class="font-mono text-[10px] text-base-content/60">{item.externalId}</td>
+								</tr>
 							{/each}
-						</div>
-					{:else if sel.plainLyrics}
-						<pre
-							class="max-h-64 overflow-y-auto text-xs whitespace-pre-wrap text-base-content/80">{sel.plainLyrics}</pre>
-					{:else if sel.instrumental}
-						<span class="text-xs text-base-content/60">Instrumental.</span>
+						</tbody>
+					</table>
+				</div>
+			{:else}
+				<div class="max-h-96 overflow-y-auto rounded border border-base-content/10 bg-base-100">
+					<table class="table table-xs">
+						<thead class="sticky top-0 bg-base-200 text-[10px] uppercase">
+							<tr>
+								<th>Track</th>
+								<th>Artist</th>
+								<th>Album</th>
+								<th class="w-24">Type</th>
+								<th class="w-20">Source</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each resolver.results as item, i (rowKey(item, i))}
+								<tr
+									class={classNames('cursor-pointer hover:bg-base-200', {
+										'bg-primary/10': selected === item
+									})}
+									onclick={() => (selected = selected === item ? null : item)}
+								>
+									<td class="font-medium">{item.trackName ?? '—'}</td>
+									<td class="text-base-content/70">{item.artistName ?? '—'}</td>
+									<td class="text-base-content/70">{item.albumName ?? '—'}</td>
+									<td>{lyricsType(item)}</td>
+									<td class="text-base-content/70">{item.source}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+
+			{#if selected}
+				{@const sel = selected}
+				<div class="mt-2 flex flex-col gap-1 rounded border border-base-content/10 bg-base-100 p-2">
+					{#if sel.kind === 'lyrics'}
+						{#if sel.syncedLyrics && sel.syncedLyrics.length > 0}
+							<div class="flex max-h-64 flex-col gap-0.5 overflow-y-auto text-xs leading-tight">
+								{#each sel.syncedLyrics as line, idx (idx)}
+									<span class="text-base-content/80">{line.text || '…'}</span>
+								{/each}
+							</div>
+						{:else if sel.plainLyrics}
+							<pre
+								class="max-h-64 overflow-y-auto text-xs whitespace-pre-wrap text-base-content/80">{sel.plainLyrics}</pre>
+						{:else if sel.instrumental}
+							<span class="text-xs text-base-content/60">Instrumental.</span>
+						{:else}
+							<span class="text-xs text-base-content/60">No lyrics in this entry.</span>
+						{/if}
+					{:else if sel.url}
+						<a
+							class="link text-xs break-all link-primary"
+							href={sel.url}
+							target="_blank"
+							rel="noopener"
+						>
+							Open subtitle ({sel.format ?? 'file'})
+						</a>
 					{:else}
-						<span class="text-xs text-base-content/60">No lyrics in this entry.</span>
+						<span class="text-xs text-base-content/60">No URL provided.</span>
 					{/if}
-				{:else if sel.url}
-					<a class="link text-xs break-all link-primary" href={sel.url} target="_blank" rel="noopener">
-						Open subtitle ({sel.format ?? 'file'})
-					</a>
-				{:else}
-					<span class="text-xs text-base-content/60">No URL provided.</span>
-				{/if}
-			</div>
-		{/if}
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>

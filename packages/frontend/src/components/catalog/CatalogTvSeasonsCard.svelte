@@ -205,17 +205,20 @@
 	});
 </script>
 
-<div class="card border border-base-content/10 bg-base-200 p-4">
-	<div class="mb-2 flex items-center justify-between gap-2">
+<div class="flex flex-col gap-2">
+	<div class="flex items-center justify-between gap-2">
 		<h2 class="text-sm font-semibold text-base-content/70 uppercase">
 			Seasons{seasons.length > 0 ? ` (${seasons.length})` : ''}
 		</h2>
 		{#if torrentsStatus === 'searching' && torrents.length === 0}
 			<span class="text-xs text-base-content/60">Searching torrents…</span>
 		{:else if torrentsStatus === 'error'}
-			<span class="text-xs text-error" title={torrentsError ?? 'Failed'}>Torrent search failed</span>
+			<span class="text-xs text-error" title={torrentsError ?? 'Failed'}>Torrent search failed</span
+			>
 		{:else if torrents.length > 0}
-			<span class="text-xs text-base-content/60">{torrents.length} torrent{torrents.length === 1 ? '' : 's'}</span>
+			<span class="text-xs text-base-content/60"
+				>{torrents.length} torrent{torrents.length === 1 ? '' : 's'}</span
+			>
 		{/if}
 	</div>
 
@@ -314,8 +317,7 @@
 						<div class="min-w-0 flex-1">
 							<p class="font-medium">Whole show</p>
 							<p class="text-xs text-base-content/60">
-								{wsRows.length} torrent{wsRows.length === 1 ? '' : 's'} not tagged to a specific
-								season
+								{wsRows.length} torrent{wsRows.length === 1 ? '' : 's'} not tagged to a specific season
 							</p>
 						</div>
 						<span
@@ -377,7 +379,9 @@
 									· <span class="text-success">{localCount} local</span>
 								{/if}
 								{#if seasonTorrents.length > 0}
-									· <span class="text-success">{seasonTorrents.length} torrent{seasonTorrents.length === 1 ? '' : 's'}</span>
+									· <span class="text-success"
+										>{seasonTorrents.length} torrent{seasonTorrents.length === 1 ? '' : 's'}</span
+									>
 								{/if}
 							</p>
 							{#if season.overview}
@@ -430,7 +434,7 @@
 													</span>
 													<span class="font-medium">{ep.name}</span>
 													{#if epAvailable}
-														<span class="badge badge-success badge-xs">local</span>
+														<span class="badge badge-xs badge-success">local</span>
 													{/if}
 													{#if ep.airDate}
 														<span class="text-base-content/60">{ep.airDate}</span>
@@ -451,9 +455,8 @@
 											{#if epAvailable && onPlayEpisode}
 												<button
 													type="button"
-													class="btn btn-xs btn-primary shrink-0"
-													onclick={() =>
-														void onPlayEpisode?.(ep.seasonNumber, ep.episodeNumber)}
+													class="btn shrink-0 btn-xs btn-primary"
+													onclick={() => void onPlayEpisode?.(ep.seasonNumber, ep.episodeNumber)}
 													aria-label="Play episode"
 													title="Play this episode"
 												>

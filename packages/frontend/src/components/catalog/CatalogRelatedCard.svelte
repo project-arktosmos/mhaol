@@ -151,34 +151,28 @@
 </script>
 
 {#if upstreamId}
-	<div class="card border border-base-content/10 bg-base-200">
-		<div class="card-body p-4">
-			<h2 class="text-sm font-semibold text-base-content/70 uppercase">Related</h2>
+	<div class="flex flex-col gap-2">
+		<h2 class="text-sm font-semibold text-base-content/70 uppercase">Related</h2>
 
-			{#if status === 'loading'}
-				<div class="flex items-center gap-2 text-xs text-base-content/60">
-					<span class="loading loading-xs loading-spinner"></span>
-					<span>Loading related items…</span>
-				</div>
-			{:else if status === 'error'}
-				<div class="alert alert-error">
-					<span class="text-xs">{error ?? 'Failed to load related items'}</span>
-				</div>
-			{:else if status === 'done' && items.length === 0}
-				<p class="text-xs text-base-content/60">No related items found upstream.</p>
-			{:else if items.length > 0}
-				<div class="grid grid-cols-2 gap-3">
-					{#each items as item (item.id)}
-						<a
-							href={hrefFor(item)}
-							onclick={(e) => handleClick(e, item)}
-							class="block no-underline"
-						>
-							<FirkinCard firkin={toFirkin(item)} />
-						</a>
-					{/each}
-				</div>
-			{/if}
-		</div>
+		{#if status === 'loading'}
+			<div class="flex items-center gap-2 text-xs text-base-content/60">
+				<span class="loading loading-xs loading-spinner"></span>
+				<span>Loading related items…</span>
+			</div>
+		{:else if status === 'error'}
+			<div class="alert alert-error">
+				<span class="text-xs">{error ?? 'Failed to load related items'}</span>
+			</div>
+		{:else if status === 'done' && items.length === 0}
+			<p class="text-xs text-base-content/60">No related items found upstream.</p>
+		{:else if items.length > 0}
+			<div class="grid grid-cols-2 gap-3">
+				{#each items as item (item.id)}
+					<a href={hrefFor(item)} onclick={(e) => handleClick(e, item)} class="block no-underline">
+						<FirkinCard firkin={toFirkin(item)} />
+					</a>
+				{/each}
+			</div>
+		{/if}
 	</div>
 {/if}
