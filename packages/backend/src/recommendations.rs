@@ -411,6 +411,10 @@ async fn list(
             None => true,
         })
         .filter(|r| !q.exclude_actioned || !actioned_ids.contains(&r.firkin_id))
+        // Discard semantics: a `userRating` of 0 means "I don't want to see
+        // this again". The feed page sets it to 0 from the Discard button;
+        // the recommendations table can opt out via `excludeActioned=false`.
+        .filter(|r| !q.exclude_actioned || r.user_rating != Some(0))
         .map(Into::into)
         .collect();
     dtos.sort_by(|a, b| {
@@ -526,10 +530,10 @@ async fn set_rating(
             "firkinId is required",
         ));
     }
-    if req.rating < 1 || req.rating > 100 {
+    if req.rating > 100 {
         return Err(err_response(
             StatusCode::BAD_REQUEST,
-            "rating must be between 1 and 100",
+            "rating must be between 0 and 100",
         ));
     }
 

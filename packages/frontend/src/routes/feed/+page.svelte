@@ -6,8 +6,7 @@
 		listRecommendations,
 		recordRecommendationAction,
 		setRecommendationRating,
-		type Recommendation,
-		type RecommendationAction
+		type Recommendation
 	} from '$lib/recommendations.service';
 	import {
 		firkinsService,
@@ -22,16 +21,21 @@
 	const userIdentityState = userIdentityService.state;
 
 	let queue = $state<Recommendation[]>([]);
+	let cursor = $state(0);
 	let loading = $state(false);
-	let actioning = $state<RecommendationAction | null>(null);
+	let discarding = $state(false);
+	let bookmarking = $state(false);
 	let rating = $state(false);
 	let error = $state<string | null>(null);
 	let lastLoadedAddress: string | null = null;
 
-	let current = $derived<Recommendation | null>(queue[0] ?? null);
+	let busy = $derived(discarding || bookmarking || rating);
+	let current = $derived<Recommendation | null>(queue[cursor] ?? null);
 	let cardFirkin = $derived<CloudFirkin | null>(current ? toCardFirkin(current) : null);
-	let upcoming = $derived<Recommendation[]>(queue.slice(1, 21));
+	let upcoming = $derived<Recommendation[]>(queue.slice(cursor + 1, cursor + 21));
 	let activeStars = $derived(current?.userRating ? Math.round(current.userRating / 20) : 0);
+	let canPrev = $derived(cursor > 0);
+	let canNext = $derived(cursor + 1 < queue.length);
 
 	function ratingLabel(row: Recommendation): string {
 		const reviews = row.reviews ?? [];
@@ -62,11 +66,23 @@
 		error = null;
 		try {
 			queue = await listRecommendations(address, { excludeActioned: true });
+			cursor = 0;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
 			loading = false;
 		}
+	}
+
+	function dropCurrent() {
+		queue = queue.filter((_, i) => i !== cursor);
+		if (cursor >= queue.length) cursor = Math.max(0, queue.length - 1);
+	}
+
+	function go(delta: number) {
+		const next = cursor + delta;
+		if (next < 0 || next >= queue.length) return;
+		cursor = next;
 	}
 
 	function toCardFirkin(row: Recommendation): CloudFirkin {
@@ -149,20 +165,25 @@
 		}
 	}
 
-	async function rate(stars: number) {
+	async function applyRating(score: number) {
 		const row = current;
 		const address = $userIdentityState.identity?.address;
-		if (!row || !address || rating || actioning) return;
+		if (!row || !address) return;
+		const res = await setRecommendationRating({
+			address,
+			firkinId: row.firkinId,
+			rating: score
+		});
+		queue = queue.map((r, i) => (i === cursor ? { ...r, userRating: res.userRating } : r));
+	}
+
+	async function rate(stars: number) {
+		if (busy) return;
 		const score = Math.max(1, Math.min(5, stars)) * 20;
 		rating = true;
 		error = null;
 		try {
-			const res = await setRecommendationRating({
-				address,
-				firkinId: row.firkinId,
-				rating: score
-			});
-			queue = queue.map((r, i) => (i === 0 ? { ...r, userRating: res.userRating } : r));
+			await applyRating(score);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
@@ -170,47 +191,62 @@
 		}
 	}
 
-	async function act(action: RecommendationAction) {
-		const row = current;
-		const address = $userIdentityState.identity?.address;
-		if (!row || !address || actioning) return;
-		actioning = action;
+	async function discard() {
+		if (busy || !current) return;
+		discarding = true;
 		error = null;
 		try {
-			if (action === 'bookmark') {
-				if (!row.upstreamId) throw new Error('recommendation is missing its upstream id');
-				const { artists, trailers } = await fetchUpstreamMetadata(row.addon, row.upstreamId);
-				await firkinsService.create({
-					title: row.title,
-					artists,
-					description: row.description ?? '',
-					images: row.posterUrl
-						? [
-								{
-									url: row.posterUrl,
-									mimeType: 'image/jpeg',
-									fileSize: 0,
-									width: 0,
-									height: 0
-								}
-							]
-						: [],
-					files: buildUpstreamSourceFiles(row.addon, row.upstreamId),
-					year: row.year,
-					addon: row.addon as FirkinAddon,
-					trailers
-				});
-			}
-			await recordRecommendationAction({
-				address,
-				firkinId: row.firkinId,
-				action
-			});
-			queue = queue.slice(1);
+			await applyRating(0);
+			dropCurrent();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
-			actioning = null;
+			discarding = false;
+		}
+	}
+
+	async function bookmark() {
+		const row = current;
+		const address = $userIdentityState.identity?.address;
+		if (!row || !address || busy) return;
+		if (!row.upstreamId) {
+			error = 'recommendation is missing its upstream id';
+			return;
+		}
+		bookmarking = true;
+		error = null;
+		try {
+			const { artists, trailers } = await fetchUpstreamMetadata(row.addon, row.upstreamId);
+			await firkinsService.create({
+				title: row.title,
+				artists,
+				description: row.description ?? '',
+				images: row.posterUrl
+					? [
+							{
+								url: row.posterUrl,
+								mimeType: 'image/jpeg',
+								fileSize: 0,
+								width: 0,
+								height: 0
+							}
+						]
+					: [],
+				files: buildUpstreamSourceFiles(row.addon, row.upstreamId),
+				year: row.year,
+				addon: row.addon as FirkinAddon,
+				trailers
+			});
+			await recordRecommendationAction({
+				address,
+				firkinId: row.firkinId,
+				action: 'bookmark'
+			});
+			dropCurrent();
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			bookmarking = false;
 		}
 	}
 </script>
@@ -224,7 +260,8 @@
 		<h1 class="text-2xl font-semibold">Feed</h1>
 		<p class="text-sm text-base-content/60">
 			One recommendation at a time, sorted by how often it's been suggested and (as a tiebreaker)
-			its rating. Like or discard to advance; bookmark to mint a real firkin.
+			its rating. Rate with stars; discard to set rating 0 and drop it; bookmark to mint a real
+			firkin; previous and next walk the queue without acting on it.
 		</p>
 	</header>
 
@@ -251,7 +288,7 @@
 					<FirkinCard firkin={cardFirkin} />
 
 					<div class="text-xs text-base-content/60">
-						Suggested {current?.count}× · {queue.length} item{queue.length === 1 ? '' : 's'} left
+						Suggested {current?.count}× · item {cursor + 1} of {queue.length}
 					</div>
 
 					<div class="flex items-center justify-between gap-2">
@@ -263,7 +300,7 @@
 										? 'text-warning'
 										: 'text-base-content/30 hover:text-base-content/60'}
 									onclick={() => rate(star)}
-									disabled={rating || actioning !== null}
+									disabled={busy}
 									role="radio"
 									aria-checked={star === activeStars}
 									aria-label={`${star} star${star === 1 ? '' : 's'}`}
@@ -278,36 +315,49 @@
 						</span>
 					</div>
 
-					<div class="grid grid-cols-3 gap-2">
+					<div class="grid grid-cols-2 gap-2">
 						<button
 							type="button"
 							class="btn gap-2 btn-outline btn-error"
-							onclick={() => act('discard')}
-							disabled={actioning !== null}
-							title="Never show this recommendation again"
+							onclick={discard}
+							disabled={busy}
+							title="Set rating to 0 and remove from the feed"
 						>
 							<Icon name="delapouite/trash-can" size={18} />
-							<span>{actioning === 'discard' ? 'Discarding…' : 'Discard'}</span>
-						</button>
-						<button
-							type="button"
-							class="btn gap-2 btn-outline btn-secondary"
-							onclick={() => act('like')}
-							disabled={actioning !== null}
-							title="Record a positive signal and move on"
-						>
-							<Icon name="zeromancer/heart-plus" size={18} />
-							<span>{actioning === 'like' ? 'Liking…' : 'Like'}</span>
+							<span>{discarding ? 'Discarding…' : 'Discard'}</span>
 						</button>
 						<button
 							type="button"
 							class="btn gap-2 btn-primary"
-							onclick={() => act('bookmark')}
-							disabled={actioning !== null || !current?.upstreamId}
+							onclick={bookmark}
+							disabled={busy || !current?.upstreamId}
 							title="Persist this recommendation as a firkin"
 						>
 							<Icon name="lorc/bookmark" size={18} />
-							<span>{actioning === 'bookmark' ? 'Bookmarking…' : 'Bookmark'}</span>
+							<span>{bookmarking ? 'Bookmarking…' : 'Bookmark'}</span>
+						</button>
+					</div>
+
+					<div class="grid grid-cols-2 gap-2">
+						<button
+							type="button"
+							class="btn gap-2 btn-outline"
+							onclick={() => go(-1)}
+							disabled={busy || !canPrev}
+							title="Go to the previous recommendation"
+						>
+							<Icon name="delapouite/player-previous" size={18} />
+							<span>Previous</span>
+						</button>
+						<button
+							type="button"
+							class="btn gap-2 btn-outline"
+							onclick={() => go(1)}
+							disabled={busy || !canNext}
+							title="Skip to the next recommendation"
+						>
+							<span>Next</span>
+							<Icon name="delapouite/player-next" size={18} />
 						</button>
 					</div>
 				</div>
@@ -341,7 +391,7 @@
 										{#each upcoming as row, idx (row.firkinId)}
 											<tr>
 												<td class="text-right font-mono text-xs text-base-content/60">
-													{idx + 2}
+													{cursor + idx + 2}
 												</td>
 												<td>
 													{#if row.posterUrl}
