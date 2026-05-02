@@ -11,12 +11,12 @@
 		{
 			icon: 'delapouite/files',
 			title: 'Point Mhaol at a folder',
-			body: 'Add a library directory and tag it with the addons that belong there — local-movie, local-tv, local-album, local-book, local-game.'
+			body: 'Add a library directory and tag it with the addons that belong there — local-movie, local-tv, or local-album.'
 		},
 		{
 			icon: 'delapouite/cube',
 			title: 'It pins and groups',
-			body: 'Mhaol walks the directory, pins each file to the embedded IPFS node, and groups them into firkins — TV by season, music by album, one record per book or game.'
+			body: 'Mhaol walks the directory, pins each file to the embedded IPFS node, and groups them into firkins — movies as one record each, TV by season, music by album.'
 		},
 		{
 			icon: 'lorc/aerial-signal',

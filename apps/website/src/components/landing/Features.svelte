@@ -11,7 +11,7 @@
 		{
 			icon: 'delapouite/cube',
 			title: 'Content-addressed firkins',
-			body: 'Every record (movie, show, album, book, game) gets a stable CID derived from its serialized body. Edits roll the version forward without losing history.'
+			body: 'Every record (movie, show, album, YouTube video) gets a stable CID derived from its serialized body. Edits roll the version forward without losing history.'
 		},
 		{
 			icon: 'delapouite/share',
@@ -31,7 +31,7 @@
 		{
 			icon: 'delapouite/files',
 			title: 'Smart library scanning',
-			body: 'Walks library directories, fingerprints files, and groups them into firkins per type — TV seasons, music albums, books, games.'
+			body: 'Walks library directories, fingerprints files, and groups them into firkins per type — movies, TV seasons, and music albums today; books and games coming soon.'
 		},
 		{
 			icon: 'lorc/aerial-signal',
