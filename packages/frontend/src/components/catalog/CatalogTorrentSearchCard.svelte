@@ -116,7 +116,6 @@
 								<th class="w-12 text-success" title="Seeders">↑</th>
 								<th class="w-12 text-warning" title="Leechers">↓</th>
 								<th class="w-20">Size</th>
-								<th>Title</th>
 								<th class="w-32"></th>
 							</tr>
 						</thead>
@@ -128,7 +127,7 @@
 								{@const defaultCollapsed = !group.probe}
 								{@const expanded = expandedGroups[group.label] ?? false}
 								<tr class="bg-base-300/40">
-									<th colspan="6" class="p-0">
+									<th colspan="5" class="p-0">
 										{#if defaultCollapsed}
 											<button
 												type="button"
@@ -239,12 +238,6 @@
 										<td class="text-xs text-base-content/70"
 											>{formatSizeBytes(torrent.sizeBytes)}</td
 										>
-										<td
-											class="max-w-md truncate text-xs text-base-content/80"
-											title={torrent.title}
-										>
-											{torrent.parsedTitle || torrent.title}
-										</td>
 										<td class="text-right">
 											<div class="flex items-center justify-end gap-1">
 												{#if added}
