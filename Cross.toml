@@ -1,6 +1,9 @@
 [target.x86_64-unknown-linux-gnu]
+# Use the :main image (Ubuntu 24.04 / GCC 13) instead of the default tagged release
+# (Ubuntu 20.04 / GCC 9) — aws-lc-sys 0.39 refuses to compile against GCC 9 because
+# of https://gcc.gnu.org/bugzilla/show_bug.cgi?id=95189.
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main"
 pre-build = [
-    "dpkg --add-architecture $CROSS_DEB_ARCH",
     "apt-get update",
     "apt-get install -y --no-install-recommends pkg-config libssl-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev clang libclang-dev",
 ]
