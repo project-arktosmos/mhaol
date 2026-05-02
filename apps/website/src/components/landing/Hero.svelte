@@ -26,20 +26,6 @@
 				</a>
 				<a href="{base}/#why" class="btn btn-ghost btn-lg">Why Mhaol</a>
 			</div>
-			<div class="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-base-content/60">
-				<span class="flex items-center gap-1">
-					<Icon name="delapouite/laptop" size={14} /> macOS · Linux · Windows
-				</span>
-				<span class="flex items-center gap-1">
-					<Icon name="delapouite/server-rack" size={14} /> Headless server
-				</span>
-				<span class="flex items-center gap-1">
-					<Icon name="delapouite/tv" size={14} /> Android TV
-				</span>
-				<span class="flex items-center gap-1">
-					<Icon name="delapouite/smartphone" size={14} /> Android Mobile
-				</span>
-			</div>
 		</div>
 
 		<div class="flex-1">
