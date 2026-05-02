@@ -15,7 +15,8 @@
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
 	import CatalogTorrentAttachmentCard, {
-		type AttachmentInfo
+		type AttachmentInfo,
+		type DownloadAttachmentInfo
 	} from '$components/catalog/CatalogTorrentAttachmentCard.svelte';
 	import CatalogTorrentProgressCard from '$components/catalog/CatalogTorrentProgressCard.svelte';
 	import CatalogSubsLyricsCard from '$components/catalog/CatalogSubsLyricsCard.svelte';
@@ -1137,7 +1138,34 @@
 		};
 	}
 
-	const downloadInfo = $derived(attachmentInfoFor('torrent magnet'));
+	/// Same lookup as `attachmentInfoFor('torrent magnet')` but joined with
+	/// the live `firkinTorrentsService` snapshot so the attachment card can
+	/// render actual download progress / speed / ETA. Live `size` (resolved
+	/// post-metadata) wins over the indexer's static `sizeBytes`.
+	const downloadInfo = $derived.by<DownloadAttachmentInfo | null>(() => {
+		const base = attachmentInfoFor('torrent magnet');
+		if (!base) return null;
+		const entry = firkin.files.find((f) => f.type === 'torrent magnet' && f.value);
+		const hash = entry?.value ? infoHashFromMagnet(entry.value) : null;
+		const live = hash ? $torrentsState.byHash[hash] : null;
+		if (!live) {
+			return {
+				...base,
+				progress: null,
+				downloadSpeed: null,
+				etaSeconds: null,
+				finished: false
+			};
+		}
+		return {
+			...base,
+			sizeBytes: live.size > 0 ? live.size : base.sizeBytes,
+			progress: live.progress,
+			downloadSpeed: live.downloadSpeed,
+			etaSeconds: live.eta,
+			finished: live.state === 'seeding' || live.progress >= 1
+		};
+	});
 	const streamInfo = $derived(attachmentInfoFor('torrent stream magnet'));
 
 	function toggleTorrentSearch() {
@@ -1686,14 +1714,6 @@
 					Find metadata
 				</button>
 			{/if}
-			<span class="flex items-center gap-1">
-				{#if firkinKind}
-					<span class="badge badge-outline badge-sm">{firkinKind}</span>
-				{/if}
-				{#if firkin.year !== null && firkin.year !== undefined && Number.isFinite(firkin.year)}
-					<span class="badge badge-outline badge-sm">{firkin.year}</span>
-				{/if}
-			</span>
 			<button
 				type="button"
 				class="btn gap-2 btn-sm btn-primary"
@@ -1748,6 +1768,17 @@
 					loading="lazy"
 					class="w-full rounded-md object-cover"
 				/>
+			{/if}
+
+			{#if firkinKind || (firkin.year !== null && firkin.year !== undefined && Number.isFinite(firkin.year))}
+				<div class="flex flex-wrap items-center gap-1">
+					{#if firkinKind}
+						<span class="badge badge-outline badge-sm">{firkinKind}</span>
+					{/if}
+					{#if firkin.year !== null && firkin.year !== undefined && Number.isFinite(firkin.year)}
+						<span class="badge badge-outline badge-sm">{firkin.year}</span>
+					{/if}
+				</div>
 			{/if}
 
 			<CatalogScoresCard reviews={firkin.reviews ?? []} />
