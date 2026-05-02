@@ -184,26 +184,12 @@
 													<span class="text-xs text-base-content/60">Probing…</span>
 												</div>
 											{:else if ev.kind === 'streamable'}
-												<div class="flex flex-col gap-0.5">
-													<span class="badge gap-1 badge-sm badge-success">
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															viewBox="0 0 24 24"
-															fill="currentColor"
-															class="h-3 w-3"
-															aria-hidden="true"
-														>
-															<polygon points="6 4 20 12 6 20 6 4" />
-														</svg>
-														Streamable
-													</span>
-													<span
-														class="max-w-[14rem] truncate text-[10px] text-base-content/60"
-														title={ev.fileName}
-													>
-														{ev.fileName}
-													</span>
-												</div>
+												<span
+													class="block max-w-[14rem] truncate text-xs text-base-content/60"
+													title={ev.fileName}
+												>
+													{ev.fileName}
+												</span>
 											{:else if ev.kind === 'skipped'}
 												<span class="text-xs text-base-content/40" title={ev.reason}>—</span>
 											{:else}
@@ -240,6 +226,15 @@
 										>
 										<td class="text-right">
 											<div class="flex items-center justify-end gap-1">
+												{#if ev.kind === 'streamable'}
+													<button
+														type="button"
+														class="btn btn-xs btn-success"
+														aria-label="Stream this torrent"
+													>
+														Stream
+													</button>
+												{/if}
 												{#if added}
 													<span class="badge badge-sm badge-success">added</span>
 												{:else}
