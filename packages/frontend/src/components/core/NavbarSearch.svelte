@@ -1,9 +1,14 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { listSources, type CatalogSource } from '$lib/catalog.service';
+
+	let {
+		classes = 'flex items-center gap-2',
+		inputClasses = 'input-bordered input input-sm w-64'
+	}: { classes?: string; inputClasses?: string } = $props();
 
 	let sources = $state<CatalogSource[]>([]);
 
@@ -36,11 +41,15 @@
 
 	$effect(() => {
 		const urlQ = page.url.searchParams.get('q') ?? '';
-		if (urlQ !== query) query = urlQ;
+		untrack(() => {
+			if (urlQ !== query) query = urlQ;
+		});
 	});
 	$effect(() => {
 		const urlField = (page.url.searchParams.get('field') as 'artist' | 'release') ?? 'artist';
-		if (urlField !== searchField) searchField = urlField;
+		untrack(() => {
+			if (urlField !== searchField) searchField = urlField;
+		});
 	});
 
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -72,10 +81,10 @@
 	}
 </script>
 
-<div class="flex items-center gap-2">
+<div class={classes}>
 	{#if showSearchFieldSelect}
 		<select
-			class="select-bordered select w-32 select-sm"
+			class="select-bordered select h-full w-32 select-sm"
 			bind:value={searchField}
 			onchange={onFieldChange}
 			title="Which release-group field to search on"
@@ -86,7 +95,7 @@
 	{/if}
 	<input
 		type="search"
-		class="input-bordered input input-sm w-64"
+		class={inputClasses}
 		placeholder={activeAddon
 			? `Search ${currentSource?.label ?? activeAddon}…`
 			: 'Pick an addon to search'}

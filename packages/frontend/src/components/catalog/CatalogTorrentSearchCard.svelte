@@ -148,7 +148,7 @@
 								{#each group.rows as torrent, rowIdx (torrent.infoHash)}
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
-									{@const ev = rowEval(torrent.magnetLink)}
+									{@const streaming = streamingHash === torrent.magnetLink}
 									{@const hidden = expanded
 										? false
 										: defaultCollapsed
@@ -163,41 +163,12 @@
 										})}
 									>
 										<td>
-											<div class="flex flex-col gap-0.5">
-												<span
-													class="block max-w-[18rem] truncate text-xs text-base-content/80"
-													title={torrent.title}
-												>
-													{torrent.parsedTitle || torrent.title}
-												</span>
-												{#if ev.kind === 'pending'}
-													<span class="text-[10px] text-base-content/50">Queued…</span>
-												{:else if ev.kind === 'evaluating'}
-													<div class="flex items-center gap-1.5">
-														<span
-															class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
-															aria-hidden="true"
-														></span>
-														<span class="text-[10px] text-base-content/60">Probing…</span>
-													</div>
-												{:else if ev.kind === 'streamable'}
-													<span
-														class="block max-w-[18rem] truncate text-[10px] text-success"
-														title={ev.fileName}
-													>
-														{ev.fileName}
-													</span>
-												{:else if ev.kind === 'skipped'}
-													<span class="text-[10px] text-base-content/40" title={ev.reason}>—</span>
-												{:else}
-													<span
-														class="block max-w-[18rem] truncate text-[10px] text-base-content/50"
-														title={ev.reason}
-													>
-														Not streamable: {ev.reason}
-													</span>
-												{/if}
-											</div>
+											<span
+												class="block max-w-[18rem] truncate text-xs text-base-content/80"
+												title={torrent.title}
+											>
+												{torrent.parsedTitle || torrent.title}
+											</span>
 										</td>
 										<td class="text-xs text-success">{torrent.seeders}</td>
 										<td class="text-xs text-warning">{torrent.leechers}</td>
@@ -205,9 +176,8 @@
 											>{formatSizeBytes(torrent.sizeBytes)}</td
 										>
 										<td class="text-right">
-											{@const streaming = streamingHash === torrent.magnetLink}
 											<div class="flex items-center justify-end gap-1">
-												{#if ev.kind === 'streamable' && onStream}
+												{#if torrent.magnetLink && onStream}
 													<button
 														type="button"
 														class="btn btn-xs btn-success"

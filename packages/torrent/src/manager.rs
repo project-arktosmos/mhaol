@@ -937,9 +937,26 @@ impl TorrentManager {
             ..Default::default()
         };
 
-        api.api_add_torrent(AddTorrent::from_url(magnet), Some(opts))
+        let response = api
+            .api_add_torrent(AddTorrent::from_url(magnet), Some(opts))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to start torrent stream: {}", e))?;
+
+        // The torrent is in `Initializing` state until storage init + the
+        // start handshake complete. `mgr.stream(file_id)` (api_stream)
+        // requires `Paused` or `Live` state — calling it during
+        // initialization returns `with_storage_and_file: invalid state:
+        // Initializing` which the HTTP layer surfaces as 404, breaking the
+        // <video> element with "src not supported". Wait for the transition
+        // here so the streamUrl we return is immediately consumable.
+        if let Some(id) = response.id {
+            if let Ok(handle) = api.mgr_handle(id.into()) {
+                handle
+                    .wait_until_initialized()
+                    .await
+                    .map_err(|e| anyhow::anyhow!("stream torrent init failed: {}", e))?;
+            }
+        }
 
         self.set_tracking_info(
             probe.info_hash.clone(),

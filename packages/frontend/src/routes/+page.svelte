@@ -5,6 +5,8 @@
 	import FirkinLibraryGrid from '$components/catalog/FirkinLibraryGrid.svelte';
 	import LazyRow from '$components/catalog/LazyRow.svelte';
 	import PopularGenreRow from '$components/catalog/PopularGenreRow.svelte';
+	import NavbarAddonPicker from '$components/core/NavbarAddonPicker.svelte';
+	import NavbarSearch from '$components/core/NavbarSearch.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
 	} from '$components/firkins/FirkinMetadataLookupModal.svelte';
@@ -22,14 +24,9 @@
 		type FirkinAddon
 	} from '$lib/firkins.service';
 	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
+	import { listMediaTrackers, type MediaTracker } from '$lib/media-tracker.service';
 	import { userIdentityService } from '$lib/user-identity.service';
-	import { artistsModalService } from '$services/artists-modal.service';
-	import { consumptionModalService } from '$services/consumption-modal.service';
-	import { diskModalService } from '$services/disk-modal.service';
-	import { healthModalService } from '$services/health-modal.service';
-	import { ipfsModalService } from '$services/ipfs-modal.service';
-	import { librariesModalService } from '$services/libraries-modal.service';
-	import { torrentModalService } from '$services/torrent-modal.service';
+	import { addonKind, type FirkinKind } from 'cloud-ui';
 
 	const firkinsStore = firkinsService.state;
 	const firkinsIncludeAll = firkinsService.includeAll;
@@ -47,22 +44,7 @@
 		return sources[0]?.id ?? '';
 	});
 
-	// Search query + MusicBrainz field selector both flow from URL params
-	// (`?q=…` / `?field=…`), driven by NavbarSearch in the layout.
-	const trimmedQuery = $derived((pageStore.url.searchParams.get('q') ?? '').trim());
-	const searchField = $derived<'artist' | 'release'>(
-		(pageStore.url.searchParams.get('field') as 'artist' | 'release') ?? 'artist'
-	);
-	const hasSearch = $derived(trimmedQuery.length > 0);
-
 	let genres = $state<CatalogGenre[]>([]);
-
-	let searchItems = $state<CatalogItem[]>([]);
-	let searchPage = $state<number>(1);
-	let searchTotalPages = $state<number>(1);
-	let searchLoading = $state(false);
-	let searchError = $state<string | null>(null);
-	let searchToken = 0;
 
 	const currentSource = $derived(sources.find((s) => s.id === addon));
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
@@ -121,34 +103,69 @@
 			: []
 	);
 
-	function virtualFirkin(item: CatalogItem): CloudFirkin {
-		const images = [item.posterUrl, item.backdropUrl]
-			.filter((url): url is string => Boolean(url))
-			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
-		const artists = item.artistName
-			? item.artistName
-					.split(/\s*,\s*/)
-					.filter((n) => n.length > 0)
-					.map((name) => ({ name, role: 'artist' }))
-			: [];
-		return {
-			id: `virtual:${addon}:${item.id}`,
-			cid: '',
-			title: item.title,
-			artists,
-			description: item.description ?? '',
-			images,
-			files: [],
-			year: item.year,
-			addon,
-			creator: '',
-			created_at: '',
-			updated_at: '',
-			version: 0,
-			version_hashes: [],
-			reviews: item.reviews ?? []
-		};
-	}
+	let trackers = $state<MediaTracker[]>([]);
+	let lastTrackersAddress: string | null = null;
+
+	$effect(() => {
+		const address = $userIdentityState.identity?.address;
+		if (!address) {
+			trackers = [];
+			lastTrackersAddress = null;
+			return;
+		}
+		if (lastTrackersAddress === address) return;
+		lastTrackersAddress = address;
+		void (async () => {
+			try {
+				trackers = await listMediaTrackers(address);
+			} catch {
+				trackers = [];
+			}
+		})();
+	});
+
+	// Per-kind playback duration in seconds — used as the denominator for the
+	// progress bar on the Continue row. We don't persist real runtimes on the
+	// firkin record, so these are sensible upper bounds: the bar caps at 100%
+	// once accumulated playtime crosses the typical full-watch duration.
+	const KIND_FULL_SECONDS: Record<FirkinKind, number> = {
+		movie: 7200,
+		'tv show': 2700,
+		album: 2700,
+		'youtube video': 600,
+		book: 3600,
+		game: 3600
+	};
+
+	const continueProgressById = $derived.by<Record<string, number>>(() => {
+		const map: Record<string, number> = {};
+		const totals = new Map<string, number>();
+		for (const row of trackers) {
+			totals.set(row.firkinId, (totals.get(row.firkinId) ?? 0) + row.totalSeconds);
+		}
+		for (const f of $firkinsStore.firkins) {
+			const total = totals.get(f.id);
+			if (!total || total <= 0) continue;
+			const kind = addonKind(f.addon) ?? 'movie';
+			const denom = KIND_FULL_SECONDS[kind] ?? 7200;
+			map[f.id] = Math.min(0.99, total / denom);
+		}
+		return map;
+	});
+
+	const continueFirkins = $derived<Firkin[]>(
+		addon
+			? $firkinsStore.firkins
+					.filter((f) => f.addon === addon || f.addon === LOCAL_ADDON_FOR[addon])
+					.filter((f) => (continueProgressById[f.id] ?? 0) > 0)
+					.slice()
+					.sort((a, b) => {
+						const ta = trackers.find((t) => t.firkinId === a.id)?.last_played_at ?? '';
+						const tb = trackers.find((t) => t.firkinId === b.id)?.last_played_at ?? '';
+						return tb.localeCompare(ta);
+					})
+			: []
+	);
 
 	function recommendationToFirkin(row: Recommendation): CloudFirkin {
 		const images = [row.posterUrl, row.backdropUrl]
@@ -171,24 +188,6 @@
 			version_hashes: [],
 			reviews: row.reviews ?? []
 		};
-	}
-
-	function visitHref(item: CatalogItem): string {
-		const params = new URLSearchParams();
-		params.set('addon', addon);
-		params.set('id', item.id);
-		params.set('title', item.title);
-		if (item.year !== null && item.year !== undefined) params.set('year', String(item.year));
-		if (item.description) params.set('description', item.description);
-		if (item.posterUrl) params.set('posterUrl', item.posterUrl);
-		if (item.backdropUrl) params.set('backdropUrl', item.backdropUrl);
-		if (item.artistName) params.set('artistName', item.artistName);
-		// Forward the upstream review snapshot so the detail page can
-		// render it before the metadata-backfill effect refetches.
-		if (Array.isArray(item.reviews) && item.reviews.length > 0) {
-			params.set('reviews', JSON.stringify(item.reviews));
-		}
-		return `${base}/catalog/visit?${params.toString()}`;
 	}
 
 	function visitHrefForFirkin(firkin: CloudFirkin): string {
@@ -226,41 +225,6 @@
 		} catch {
 			genres = [];
 		}
-	}
-
-	async function runSearch(nextPage = 1) {
-		if (!addon || !trimmedQuery) {
-			searchItems = [];
-			searchTotalPages = 1;
-			searchPage = 1;
-			searchError = null;
-			return;
-		}
-		const token = ++searchToken;
-		searchLoading = true;
-		searchError = null;
-		try {
-			const result = await loadSearch(addon, trimmedQuery, {
-				page: nextPage,
-				field: addon === 'musicbrainz' ? searchField : undefined
-			});
-			if (token !== searchToken) return;
-			searchItems = result.items;
-			searchTotalPages = result.totalPages;
-			searchPage = result.page;
-		} catch (err) {
-			if (token !== searchToken) return;
-			searchItems = [];
-			searchTotalPages = 1;
-			searchError = err instanceof Error ? err.message : 'Unknown error';
-		} finally {
-			if (token === searchToken) searchLoading = false;
-		}
-	}
-
-	async function goToSearchPage(next: number) {
-		if (next < 1 || next > searchTotalPages || next === searchPage) return;
-		await runSearch(next);
 	}
 
 	// Library firkins are flagged as "needs metadata" when they're missing
@@ -314,26 +278,6 @@
 		if (!addon) return;
 		void refreshGenres();
 	});
-
-	// Re-run search when any of the URL-driven inputs change (addon, query,
-	// MusicBrainz field). NavbarSearch debounces URL writes so this fires
-	// at typing-pause cadence, not per keystroke.
-	$effect(() => {
-		const currentAddon = addon;
-		const q = trimmedQuery;
-		const f = searchField;
-		void f;
-		if (!currentAddon || !q) {
-			searchToken++;
-			searchItems = [];
-			searchTotalPages = 1;
-			searchPage = 1;
-			searchError = null;
-			searchLoading = false;
-			return;
-		}
-		void runSearch(1);
-	});
 </script>
 
 <svelte:head>
@@ -341,63 +285,12 @@
 </svelte:head>
 
 <section class="sticky top-0 z-50 border-b border-base-content/10 bg-base-200">
-	<div class="flex flex-wrap items-center gap-2 p-3">
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => consumptionModalService.open()}
-			title="Show playback time per firkin"
-		>
-			Consumption
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => diskModalService.open()}
-			title="Show host volumes and the data-root breakdown"
-		>
-			Disk
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => librariesModalService.open()}
-			title="Manage libraries on this machine"
-		>
-			Libraries
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => ipfsModalService.open()}
-			title="Show IPFS pins recorded by the cloud"
-		>
-			IPFS
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => torrentModalService.open()}
-			title="Show the embedded torrent client status"
-		>
-			Torrent
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => artistsModalService.open()}
-			title="Browse content-addressed artist records"
-		>
-			Artists
-		</button>
-		<button
-			type="button"
-			class="btn btn-outline btn-sm"
-			onclick={() => healthModalService.open()}
-			title="Live health of this Mhaol cloud node"
-		>
-			Health
-		</button>
+	<div class="grid w-full grid-cols-2 items-stretch gap-3 p-3">
+		<NavbarAddonPicker classes="grid grid-cols-4 gap-1" />
+		<NavbarSearch
+			classes="flex items-stretch gap-2 w-full"
+			inputClasses="input-bordered input input-sm flex-1 min-w-0 h-full"
+		/>
 	</div>
 </section>
 
@@ -466,66 +359,6 @@
 					hrefBuilder={visitHrefForFirkin}
 					emptyMessage="No recommendations for this addon yet."
 				/>
-			</section>
-		</LazyRow>
-	{/if}
-
-	{#if hasSearch}
-		<LazyRow>
-			<section class="flex flex-col gap-3">
-				<div class="flex items-center justify-between gap-4">
-					<h2 class="text-lg font-semibold">Search results</h2>
-					<div class="flex items-center gap-2">
-						<button
-							class="btn btn-outline btn-xs"
-							onclick={() => goToSearchPage(searchPage - 1)}
-							disabled={searchLoading || searchPage <= 1}
-						>
-							Prev
-						</button>
-						<span class="text-xs text-base-content/60">Page {searchPage} / {searchTotalPages}</span>
-						<button
-							class="btn btn-outline btn-xs"
-							onclick={() => goToSearchPage(searchPage + 1)}
-							disabled={searchLoading || searchPage >= searchTotalPages}
-						>
-							Next
-						</button>
-					</div>
-				</div>
-
-				{#if searchError}
-					<div class="alert alert-error">
-						<span>{searchError}</span>
-					</div>
-				{/if}
-
-				{#if searchLoading && searchItems.length === 0}
-					<p class="text-sm text-base-content/60">Searching…</p>
-				{:else if searchItems.length === 0}
-					<p class="text-sm text-base-content/60">No matches.</p>
-				{:else}
-					<div
-						class={classNames(
-							'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
-							{ 'opacity-60': searchLoading }
-						)}
-					>
-						{#each searchItems as item (item.id)}
-							<a
-								href={visitHref(item)}
-								class="block no-underline"
-								onclick={(e) => {
-									if ((e.target as HTMLElement).closest('button, summary')) {
-										e.preventDefault();
-									}
-								}}
-							>
-								<FirkinCard firkin={virtualFirkin(item)} />
-							</a>
-						{/each}
-					</div>
-				{/if}
 			</section>
 		</LazyRow>
 	{/if}

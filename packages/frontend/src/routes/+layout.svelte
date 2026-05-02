@@ -2,8 +2,6 @@
 	import '../css/app.css';
 	import Identicon from '$components/core/Identicon.svelte';
 	import Navbar from '$components/core/Navbar.svelte';
-	import NavbarAddonPicker from '$components/core/NavbarAddonPicker.svelte';
-	import NavbarSearch from '$components/core/NavbarSearch.svelte';
 	import ThemeToggle from '$components/core/ThemeToggle.svelte';
 	import ToastOutlet from '$components/core/ToastOutlet.svelte';
 	import NavbarAudioPlayer from '$components/player/NavbarAudioPlayer.svelte';
@@ -18,6 +16,13 @@
 	import IpfsModal from '$components/ipfs/IpfsModal.svelte';
 	import LibrariesModal from '$components/libraries/LibrariesModal.svelte';
 	import TorrentModal from '$components/torrent/TorrentModal.svelte';
+	import { artistsModalService } from '$services/artists-modal.service';
+	import { consumptionModalService } from '$services/consumption-modal.service';
+	import { diskModalService } from '$services/disk-modal.service';
+	import { healthModalService } from '$services/health-modal.service';
+	import { ipfsModalService } from '$services/ipfs-modal.service';
+	import { librariesModalService } from '$services/libraries-modal.service';
+	import { torrentModalService } from '$services/torrent-modal.service';
 	import { playerService } from '$services/player.service';
 	import { restorePlayerFromSnapshot } from '$lib/youtube-match.service';
 	import { themeService } from '$services/theme.service';
@@ -59,9 +64,63 @@
 <div class="flex h-screen flex-col">
 	<Navbar brand={{ label: 'Mhaol', highlight: 'Cloud' }} classes="!bg-base-300">
 		{#snippet center()}
-			<div class="flex flex-wrap items-center gap-3">
-				<NavbarAddonPicker />
-				<NavbarSearch />
+			<div class="flex flex-wrap items-center gap-2">
+				<button
+					type="button"
+					class="btn btn-outline btn-sm"
+					onclick={() => artistsModalService.open()}
+					title="Browse content-addressed artist records"
+				>
+					Artists
+				</button>
+				<button
+					type="button"
+					class="btn btn-outline btn-sm"
+					onclick={() => consumptionModalService.open()}
+					title="Show playback time per firkin"
+				>
+					Consumption
+				</button>
+				<button
+					type="button"
+					class="btn btn-outline btn-sm"
+					onclick={() => diskModalService.open()}
+					title="Show host volumes and the data-root breakdown"
+				>
+					Disk
+				</button>
+				<button
+					type="button"
+					class="btn btn-outline btn-sm"
+					onclick={() => healthModalService.open()}
+					title="Live health of this Mhaol cloud node"
+				>
+					Health
+				</button>
+				<button
+					type="button"
+					class="btn btn-outline btn-sm"
+					onclick={() => ipfsModalService.open()}
+					title="Show IPFS pins recorded by the cloud"
+				>
+					IPFS
+				</button>
+				<button
+					type="button"
+					class="btn btn-outline btn-sm"
+					onclick={() => librariesModalService.open()}
+					title="Manage libraries on this machine"
+				>
+					Libraries
+				</button>
+				<button
+					type="button"
+					class="btn btn-outline btn-sm"
+					onclick={() => torrentModalService.open()}
+					title="Show the embedded torrent client status"
+				>
+					Torrent
+				</button>
 			</div>
 		{/snippet}
 		{#snippet end()}
