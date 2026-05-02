@@ -18,7 +18,12 @@ export const NAV_ITEMS: NavItem[] = [
 		"label": "Catalog",
 		"href": "/catalog",
 		"hasOwnPage": true,
-		"children": []
+		"children": [
+			{
+				"label": "Gallery",
+				"href": "/catalog/gallery"
+			}
+		]
 	},
 	{
 		"label": "Consumption",
@@ -71,6 +76,12 @@ export const NAV_ITEMS: NavItem[] = [
 	{
 		"label": "Recommendations",
 		"href": "/recommendations",
+		"hasOwnPage": true,
+		"children": []
+	},
+	{
+		"label": "Settings",
+		"href": "/settings",
 		"hasOwnPage": true,
 		"children": []
 	},

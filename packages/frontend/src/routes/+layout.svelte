@@ -14,7 +14,10 @@
 	import { cachedImageUrl } from '$lib/image-cache';
 	import { mediaTrackerService } from '$lib/media-tracker.service';
 	import { userIdentityService } from '$lib/user-identity.service';
+	import { installFetchInterceptor } from '$lib/install-fetch-interceptor';
 	import { onMount, onDestroy } from 'svelte';
+
+	installFetchInterceptor();
 	import { base } from '$app/paths';
 	import { NAV_ITEMS, type NavItem } from '$lib/generated/nav';
 
