@@ -67,6 +67,7 @@ use mhaol_yt_dlp::{DownloadManager, YtDownloadConfig};
 
 pub async fn run() {
     load_env();
+    load_embedded_defaults();
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -313,4 +314,27 @@ fn load_env() {
             }
         }
     }
+}
+
+/// Apply values that were baked into the binary at compile time via
+/// `option_env!`. Released artifacts built by CI ship with public-tier
+/// API keys for the catalog / metadata routes so end users get a working
+/// app without any setup. Runtime env (or `.env`) always wins so
+/// self-hosters can override the embedded defaults.
+fn load_embedded_defaults() {
+    fn set_if_missing(key: &str, value: Option<&str>) {
+        if let Ok(existing) = std::env::var(key) {
+            if !existing.is_empty() {
+                return;
+            }
+        }
+        let Some(value) = value else { return };
+        if value.is_empty() {
+            return;
+        }
+        std::env::set_var(key, value);
+    }
+
+    set_if_missing("TMDB_API_KEY", option_env!("TMDB_API_KEY"));
+    set_if_missing("OMDB_API_KEY", option_env!("OMDB_API_KEY"));
 }

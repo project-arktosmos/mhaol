@@ -38,6 +38,14 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.app }} for ${{ matrix.arch_label }}
+    # Public-tier API keys baked into release artifacts via `option_env!`
+    # in `packages/backend/src/lib.rs::load_embedded_defaults`. Exposing
+    # them is intentional — the released app ships with a working catalog
+    # / metadata flow out of the box. Self-hosters can override at runtime
+    # via `.env` or process env.
+    env:
+      TMDB_API_KEY: b89969fa17583b9f1cf07486dc609d25
+      OMDB_API_KEY: 43c10357
     strategy:
       fail-fast: false
       matrix:
