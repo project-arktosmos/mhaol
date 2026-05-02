@@ -698,7 +698,7 @@
 				throw new Error(message);
 			}
 			const next = (await res.json()) as Firkin;
-			data.firkin = next;
+			firkinOverride = next;
 			if (next.files.some((f) => f.type === 'ipfs')) {
 				firkinPlaybackService.select(next as unknown as CloudFirkin);
 			}
@@ -730,7 +730,7 @@
 			throw new Error(message);
 		}
 		const updated = (await res.json()) as Firkin;
-		data.firkin = updated;
+		firkinOverride = updated;
 	}
 
 	// Cache the Innertube client that produced a successful trailer / video
@@ -851,7 +851,7 @@
 				const freshHasMore =
 					fresh.files.length !== firkin.files.length || fresh.updated_at !== firkin.updated_at;
 				if (freshHasMore) {
-					data.firkin = fresh;
+					firkinOverride = fresh;
 					if (releaseGroupId) {
 						void trackResolver.loadFromFirkin({
 							releaseGroupId,
@@ -1151,7 +1151,7 @@
 				const fresh = (await res.json()) as Firkin;
 				if (cancelled) return;
 				if (fresh.files.some((f) => f.type === 'ipfs')) {
-					data.firkin = fresh;
+					firkinOverride = fresh;
 				}
 			} catch {
 				// swallow — try again on next tick
@@ -1277,7 +1277,7 @@
 		bookmarkError = null;
 		try {
 			const updated = await firkinsService.bookmark(firkin.id);
-			data.firkin = updated;
+			firkinOverride = updated;
 		} catch (err) {
 			bookmarkError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
