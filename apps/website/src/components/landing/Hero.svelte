@@ -14,9 +14,9 @@
 				<span class="text-primary">Your rules.</span>
 			</h1>
 			<p class="mt-5 max-w-xl text-base text-base-content/80 md:text-lg">
-				A single binary you run on your own hardware. Mhaol browses TMDB, MusicBrainz, and YouTube,
-				fetches what you pick through its built-in torrent client and yt-dlp, and streams the
-				result back to any device on your network — laptop, server, TV, or phone.
+				A Netflix-grade experience, ad-free and subscription-free. Mhaol pulls movies and TV shows
+				through its built-in torrent client, downloads music and videos straight from YouTube with
+				yt-dlp (no embedded iframes), and streams the result to any device on your network.
 			</p>
 			<div class="mt-7 flex flex-wrap items-center gap-3">
 				<a href="{base}/#install" class="btn gap-2 btn-lg btn-primary">
