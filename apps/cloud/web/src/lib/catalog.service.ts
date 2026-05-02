@@ -1,3 +1,10 @@
+export interface CatalogReview {
+	label: string;
+	score: number;
+	maxScore: number;
+	voteCount?: number;
+}
+
 export interface CatalogItem {
 	id: string;
 	title: string;
@@ -5,6 +12,7 @@ export interface CatalogItem {
 	description: string | null;
 	posterUrl: string | null;
 	backdropUrl: string | null;
+	reviews?: CatalogReview[];
 }
 
 export interface CatalogPage {

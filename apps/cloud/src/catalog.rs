@@ -173,6 +173,12 @@ pub(crate) struct CatalogItem {
     /// endpoints remain unchanged on the wire.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artists: Vec<CatalogArtist>,
+    /// Upstream rating snapshots when the listing response carries them
+    /// inline (TMDB's `/popular` + `/search` + `/recommendations` always
+    /// do; MusicBrainz `/release-group?query=…` does when the upstream
+    /// data has ratings). Empty when the source has no inline ratings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reviews: Vec<CatalogReview>,
 }
 
 #[derive(Serialize)]
@@ -252,14 +258,14 @@ struct CatalogTrailer {
 /// `score` is the raw upstream value, `max_score` is the scale (TMDB
 /// reports out of 10, MusicBrainz out of 5), `vote_count` is the number
 /// of ratings the average is computed over when known.
-#[derive(Serialize)]
-struct CatalogReview {
-    label: String,
-    score: f64,
+#[derive(Clone, Serialize)]
+pub(crate) struct CatalogReview {
+    pub label: String,
+    pub score: f64,
     #[serde(rename = "maxScore")]
-    max_score: f64,
+    pub max_score: f64,
     #[serde(rename = "voteCount", skip_serializing_if = "Option::is_none")]
-    vote_count: Option<u32>,
+    pub vote_count: Option<u32>,
 }
 
 /// Combined metadata payload for a single catalog item. Returned by
@@ -586,6 +592,7 @@ fn tmdb_to_item(r: &serde_json::Value) -> CatalogItem {
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .map(|p| format!("{}/w1280{}", TMDB_IMG_BASE, p));
+    let reviews = parse_tmdb_reviews(r);
     CatalogItem {
         id,
         title,
@@ -594,6 +601,7 @@ fn tmdb_to_item(r: &serde_json::Value) -> CatalogItem {
         poster_url,
         backdrop_url,
         artists: Vec::new(),
+        reviews,
     }
 }
 
@@ -1401,6 +1409,7 @@ fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
     } else {
         Some(format!("{}/release-group/{}/front", COVERART_BASE, id))
     };
+    let reviews = parse_musicbrainz_reviews(rg);
     CatalogItem {
         id,
         title,
@@ -1413,6 +1422,7 @@ fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
         poster_url,
         backdrop_url: None,
         artists: Vec::new(),
+        reviews,
     }
 }
 
@@ -1551,6 +1561,7 @@ fn youtube_search_to_item(item: &serde_json::Value, want_channel: bool) -> Catal
             poster_url,
             backdrop_url: None,
             artists: Vec::new(),
+            reviews: Vec::new(),
         }
     } else {
         youtube_to_item(item, false)
@@ -1623,6 +1634,7 @@ fn youtube_to_item(item: &serde_json::Value, want_channel: bool) -> CatalogItem 
         poster_url,
         backdrop_url: None,
         artists: Vec::new(),
+        reviews: Vec::new(),
     }
 }
 

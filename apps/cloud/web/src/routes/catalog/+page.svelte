@@ -105,7 +105,8 @@
 			created_at: '',
 			updated_at: '',
 			version: 0,
-			version_hashes: []
+			version_hashes: [],
+			reviews: item.reviews ?? []
 		};
 	}
 
