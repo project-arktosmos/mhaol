@@ -15,7 +15,17 @@ export default function localStorageWritableStore<T>(key: string, initialValue: 
 		: initialValue;
 	const store = writable<T>(parsedValue);
 	store.subscribe((value) => {
-		localStorage.setItem(key, JSON.stringify(value));
+		try {
+			localStorage.setItem(key, JSON.stringify(value));
+		} catch {
+			// Quota exceeded or storage disabled — drop this entry and keep going
+			// rather than letting an unhandled rejection escape into app boot.
+			try {
+				localStorage.removeItem(key);
+			} catch {
+				// ignore — nothing more we can do
+			}
+		}
 	});
 	return store;
 }

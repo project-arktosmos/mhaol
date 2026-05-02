@@ -11,6 +11,7 @@
 	import FirkinTooltip from '$components/firkins/FirkinTooltip.svelte';
 	import ConsumptionModal from '$components/consumption/ConsumptionModal.svelte';
 	import { playerService } from '$services/player.service';
+	import { restorePlayerFromSnapshot } from '$lib/youtube-match.service';
 	import { themeService } from '$services/theme.service';
 	import { setBrowserImageCacheResolver } from '$services/image-cache.service';
 	import { cachedImageUrl } from '$lib/image-cache';
@@ -40,6 +41,11 @@
 
 	onMount(() => {
 		themeService.initialize('flix');
+		// Rehydrate the navbar player synchronously *before* `initialize` so the
+		// snapshot persister sees the restored state on its first flush instead
+		// of an empty placeholder. The async tail of `restorePlayerFromSnapshot`
+		// (YouTube URL re-resolve) doesn't need to block the rest of init.
+		void restorePlayerFromSnapshot();
 		playerService.initialize();
 		userIdentityService.initialize();
 		mediaTrackerService.initialize();
