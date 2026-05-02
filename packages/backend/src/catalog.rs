@@ -25,7 +25,7 @@ const USER_AGENT: &str = "Mhaol/0.0.1 (https://github.com/project-arktosmos/mhao
 pub const ADDONS: &[Addon] = &[
     Addon {
         id: "tmdb-movie",
-        label: "TMDB Movies",
+        label: "Movies",
         kind: "movie",
         filter_label: "Genre",
         has_filter: true,
@@ -34,7 +34,7 @@ pub const ADDONS: &[Addon] = &[
     },
     Addon {
         id: "tmdb-tv",
-        label: "TMDB TV Shows",
+        label: "TV Shows",
         kind: "tv show",
         filter_label: "Genre",
         has_filter: true,
@@ -43,7 +43,7 @@ pub const ADDONS: &[Addon] = &[
     },
     Addon {
         id: "musicbrainz",
-        label: "MusicBrainz",
+        label: "Music",
         kind: "album",
         filter_label: "Genre",
         has_filter: true,
