@@ -2092,12 +2092,16 @@
 
 			<CatalogDescriptionPanel description={firkin.description} />
 
-			{#snippet torrentAttachmentOverlay(startTrailer: () => void)}
+			{#snippet torrentAttachmentOverlay(playTrailerByKey: (key: string) => void)}
 				<CatalogTorrentAttachmentCard
-					trailer={trailerTabEnabled && firstTrailerUrl
-						? { youtubeId: extractVideoId(firstTrailerUrl) ?? firstTrailerUrl }
-						: null}
-					onTrailerPlay={startTrailer}
+					trailers={trailerTabEnabled
+						? playableTrailers.map((t) => ({
+								key: t.key,
+								label: t.label,
+								youtubeId: extractVideoId(t.youtubeUrl) ?? t.youtubeUrl
+							}))
+						: []}
+					onTrailerPlay={playTrailerByKey}
 					download={downloadInfo}
 					stream={streamInfo}
 					onStreamPlay={replayStreamMagnet}

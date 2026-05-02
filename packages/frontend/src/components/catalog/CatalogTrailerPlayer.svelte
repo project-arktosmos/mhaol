@@ -30,13 +30,14 @@
 		/// fullscreen buttons.
 		extraControls?: Snippet;
 		/// Optional snippet rendered absolutely inside the player container,
-		/// in place of the circular play button. The snippet receives the
-		/// trailer's `handleStart` so its content can offer a "play" action
-		/// (e.g. a Trailer cell rendered alongside Stream / Download in the
-		/// torrent attachment grid). The trailer can also be started via the
-		/// play/pause button in `<PlayerControls>` below the player. When
-		/// omitted, the legacy circular play overlay is shown.
-		playOverlay?: Snippet<[() => void]>;
+		/// in place of the circular play button. The snippet receives a
+		/// `playByKey(key)` callback so its content can offer per-trailer
+		/// play actions (e.g. a Trailer tab in the torrent attachment
+		/// panel that lists every season/version with its own Play
+		/// button). Calling `playByKey` switches `selectedTrailerKey` to
+		/// that key and starts playback once the stream URL has resolved.
+		/// When omitted, the legacy circular play overlay is shown.
+		playOverlay?: Snippet<[(key: string) => void]>;
 	}
 
 	let {
@@ -134,6 +135,36 @@
 		else videoElement.pause();
 	}
 
+	// Switch to a different trailer key and start playback once the
+	// stream URL for it has resolved. The picks table in the attachment
+	// card calls this with each row's key. If the requested key is
+	// already the active one and the URL is ready, plays immediately.
+	let pendingPlayKey = $state<string | null>(null);
+
+	function playByKey(key: string): void {
+		const target = trailerOptions.find((t) => t.key === key);
+		if (!target) return;
+		if (target.youtubeUrl === youtubeUrl && streamUrl) {
+			handleStart();
+			return;
+		}
+		pendingPlayKey = key;
+		onTrailerSelect?.(key);
+	}
+
+	$effect(() => {
+		if (!pendingPlayKey) return;
+		const target = trailerOptions.find((t) => t.key === pendingPlayKey);
+		if (!target) {
+			pendingPlayKey = null;
+			return;
+		}
+		if (target.youtubeUrl === youtubeUrl && streamUrl) {
+			pendingPlayKey = null;
+			handleStart();
+		}
+	});
+
 	function handleSeek(pos: number): void {
 		if (!videoElement) return;
 		videoElement.currentTime = pos;
@@ -225,7 +256,7 @@
 					class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
 				>
 					<div class="w-full max-w-md">
-						{@render playOverlay(handleStart)}
+						{@render playOverlay(playByKey)}
 					</div>
 				</div>
 			{:else}

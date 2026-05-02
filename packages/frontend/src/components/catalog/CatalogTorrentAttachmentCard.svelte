@@ -99,15 +99,16 @@
 		attachingDownload?: boolean;
 		/** True while `preferredStream` is being attached. */
 		attachingStream?: boolean;
-		/** Trailer cell payload. When set with `onTrailerPlay`, a "Trailer"
-		 * button is rendered above Stream / Download (col-span-2 when both
-		 * are visible, single column when paired only with the actionable
-		 * Play cell). The YouTube video id is shown beneath the label in
-		 * the same monospace style as the actionable Play cell's IPFS CID.
-		 * `null` hides the cell. */
-		trailer?: { youtubeId: string } | null;
-		/** Click handler for the Trailer cell. */
-		onTrailerPlay?: () => void | Promise<void>;
+		/** All available trailers (movie + per-season). When non-empty and
+		 * `onTrailerPlay` is provided, the merged Stream / Download tabbed
+		 * panel grows a Trailer tab as its first tab; the tab body is a
+		 * picks table mirroring the Stream and Download tables — one row
+		 * per trailer with its YouTube id and a Play button. */
+		trailers?: Array<{ key: string; label: string | null; youtubeId: string }>;
+		/** Click handler for a Trailer row. Receives the row's `key` so the
+		 * trailer player can switch to that trailer before starting
+		 * playback. */
+		onTrailerPlay?: (key: string) => void | Promise<void>;
 		/** True while a trailer-start round-trip is in flight. */
 		trailerPlaying?: boolean;
 	}
@@ -126,7 +127,7 @@
 		onAttachStream,
 		attachingDownload = false,
 		attachingStream = false,
-		trailer = null,
+		trailers = [],
 		onTrailerPlay,
 		trailerPlaying = false
 	}: Props = $props();
@@ -137,10 +138,17 @@
 	// Stream manually.
 	const downloadActionable = $derived(Boolean(download && download.ipfsCid && onDownloadPlay));
 
-	let userPickedAttachmentTab = $state<'stream' | 'download' | null>(null);
-	const activeAttachmentTab = $derived(
-		userPickedAttachmentTab ?? (downloadActionable ? 'download' : 'stream')
-	);
+	const hasTrailers = $derived(trailers.length > 0 && Boolean(onTrailerPlay));
+	let userPickedAttachmentTab = $state<'trailer' | 'stream' | 'download' | null>(null);
+	const activeAttachmentTab = $derived.by<'trailer' | 'stream' | 'download'>(() => {
+		if (userPickedAttachmentTab) {
+			if (userPickedAttachmentTab === 'trailer' && !hasTrailers) return 'stream';
+			return userPickedAttachmentTab;
+		}
+		if (downloadActionable) return 'download';
+		if (hasTrailers) return 'trailer';
+		return 'stream';
+	});
 
 	// Quality of the currently-attached stream, mapped to a bucket label
 	// from `streamPicksByQuality`. Tries the bucket label first (most
@@ -198,6 +206,40 @@
 		<span title="File size">· {info.sizeBytes != null ? formatSizeBytes(info.sizeBytes) : '—'}</span
 		>
 	</div>
+{/snippet}
+
+{#snippet trailerContent()}
+	<table class="table table-xs w-full">
+		<thead>
+			<tr class="text-[10px] text-base-content/60 uppercase">
+				<th class="text-left">Trailer</th>
+				<th class="text-left">YouTube id</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tbody>
+			{#each trailers as t (t.key)}
+				<tr>
+					<td class="text-left text-xs font-medium">
+						{t.label ?? 'Trailer'}
+					</td>
+					<td class="text-left font-mono text-[10px] text-base-content/70" title={t.youtubeId}>
+						{t.youtubeId}
+					</td>
+					<td>
+						<button
+							type="button"
+							onclick={() => onTrailerPlay?.(t.key)}
+							disabled={trailerPlaying}
+							class="btn w-full btn-xs btn-primary"
+						>
+							{trailerPlaying ? '…' : 'Play'}
+						</button>
+					</td>
+				</tr>
+			{/each}
+		</tbody>
+	</table>
 {/snippet}
 
 {#snippet streamPicksTable(activeQuality: string | null)}
@@ -423,61 +465,51 @@
 	{/if}
 {/snippet}
 
-<div class="flex flex-col gap-3">
-	{#if trailer && onTrailerPlay}
-		<div
-			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
+<div class="rounded-md border border-base-content/10 bg-base-300">
+	<div role="tablist" class="tabs-bordered tabs">
+		{#if hasTrailers}
+			<button
+				type="button"
+				role="tab"
+				class="tab gap-2"
+				class:tab-active={activeAttachmentTab === 'trailer'}
+				onclick={() => (userPickedAttachmentTab = 'trailer')}
+				aria-selected={activeAttachmentTab === 'trailer'}
+			>
+				<Icon name="delapouite/film-strip" size={20} title="Trailer" />
+				<span class="text-xs font-medium">Trailer</span>
+			</button>
+		{/if}
+		<button
+			type="button"
+			role="tab"
+			class="tab gap-2"
+			class:tab-active={activeAttachmentTab === 'stream'}
+			onclick={() => (userPickedAttachmentTab = 'stream')}
+			aria-selected={activeAttachmentTab === 'stream'}
 		>
-			<Icon name="delapouite/film-strip" size={32} title="Trailer" />
-			<span class="text-xs font-medium">Trailer</span>
-			<span
-				class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
-				title={trailer.youtubeId}
-			>
-				{trailer.youtubeId}
-			</span>
-			<button
-				type="button"
-				onclick={() => onTrailerPlay?.()}
-				disabled={trailerPlaying}
-				class="btn btn-sm btn-primary"
-			>
-				{trailerPlaying ? 'Starting…' : 'Play'}
-			</button>
-		</div>
-	{/if}
-
-	<div class="rounded-md border border-base-content/10 bg-base-300">
-		<div role="tablist" class="tabs-bordered tabs">
-			<button
-				type="button"
-				role="tab"
-				class="tab gap-2"
-				class:tab-active={activeAttachmentTab === 'stream'}
-				onclick={() => (userPickedAttachmentTab = 'stream')}
-				aria-selected={activeAttachmentTab === 'stream'}
-			>
-				<Icon name="lorc/magnet" size={20} title="Stream mode" />
-				<span class="text-xs font-medium">Stream</span>
-			</button>
-			<button
-				type="button"
-				role="tab"
-				class="tab gap-2"
-				class:tab-active={activeAttachmentTab === 'download'}
-				onclick={() => (userPickedAttachmentTab = 'download')}
-				aria-selected={activeAttachmentTab === 'download'}
-			>
-				<Icon name="delapouite/cloud-download" size={20} title="Download mode" />
-				<span class="text-xs font-medium">Download</span>
-			</button>
-		</div>
-		<div class="p-3">
-			{#if activeAttachmentTab === 'stream'}
-				{@render streamContent()}
-			{:else}
-				{@render downloadContent()}
-			{/if}
-		</div>
+			<Icon name="lorc/magnet" size={20} title="Stream mode" />
+			<span class="text-xs font-medium">Stream</span>
+		</button>
+		<button
+			type="button"
+			role="tab"
+			class="tab gap-2"
+			class:tab-active={activeAttachmentTab === 'download'}
+			onclick={() => (userPickedAttachmentTab = 'download')}
+			aria-selected={activeAttachmentTab === 'download'}
+		>
+			<Icon name="delapouite/cloud-download" size={20} title="Download mode" />
+			<span class="text-xs font-medium">Download</span>
+		</button>
+	</div>
+	<div class="p-3">
+		{#if activeAttachmentTab === 'trailer' && hasTrailers}
+			{@render trailerContent()}
+		{:else if activeAttachmentTab === 'stream'}
+			{@render streamContent()}
+		{:else}
+			{@render downloadContent()}
+		{/if}
 	</div>
 </div>
