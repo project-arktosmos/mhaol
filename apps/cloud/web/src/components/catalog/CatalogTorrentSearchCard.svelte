@@ -39,6 +39,24 @@
 		return -1;
 	}
 
+	function hasInflight(rows: TorrentResultItem[]): boolean {
+		for (const r of rows) {
+			const k = rowEval(r.magnetLink).kind;
+			if (k === 'pending' || k === 'evaluating') return true;
+		}
+		return false;
+	}
+
+	function activeProbeIndex(rows: TorrentResultItem[]): number {
+		for (let i = 0; i < rows.length; i++) {
+			if (rowEval(rows[i].magnetLink).kind === 'evaluating') return i;
+		}
+		for (let i = 0; i < rows.length; i++) {
+			if (rowEval(rows[i].magnetLink).kind === 'pending') return i;
+		}
+		return -1;
+	}
+
 	let expandedGroups = $state<Record<string, boolean>>({});
 
 	function toggleGroup(label: string) {
@@ -106,21 +124,47 @@
 						<tbody>
 							{#each search.groupedMatches as group (group.label)}
 								{@const streamableIdx = firstStreamableIndex(group.rows)}
+								{@const probing = group.probe && hasInflight(group.rows)}
+								{@const probeIdx = probing ? activeProbeIndex(group.rows) : -1}
+								{@const defaultCollapsed = !group.probe}
 								{@const expanded = expandedGroups[group.label] ?? false}
 								<tr class="bg-base-300/40">
-									<th
-										colspan="7"
-										class="text-xs font-semibold tracking-wider text-base-content/70 uppercase"
-									>
-										{group.label} ({group.rows.length})
+									<th colspan="7" class="p-0">
+										{#if defaultCollapsed}
+											<button
+												type="button"
+												class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase hover:bg-base-300/60"
+												onclick={() => toggleGroup(group.label)}
+												aria-expanded={expanded}
+											>
+												<span class="flex items-center gap-2">
+													<span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
+													<span>{group.label} ({group.rows.length})</span>
+												</span>
+												<span class="text-[10px] text-base-content/50 normal-case">
+													{expanded ? 'Click to hide' : 'Click to show'}
+												</span>
+											</button>
+										{:else}
+											<div
+												class="px-3 py-2 text-xs font-semibold tracking-wider text-base-content/70 uppercase"
+											>
+												{group.label} ({group.rows.length})
+											</div>
+										{/if}
 									</th>
 								</tr>
 								{#each group.rows as torrent, rowIdx (torrent.infoHash)}
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
 									{@const ev = rowEval(torrent.magnetLink)}
-									{@const hidden = streamableIdx >= 0 && rowIdx > streamableIdx && !expanded}
+									{@const hidden = defaultCollapsed
+										? !expanded
+										: probing
+											? rowIdx !== probeIdx
+											: streamableIdx >= 0 && rowIdx > streamableIdx && !expanded}
 									{@const showMoreToggle =
+										!probing &&
 										streamableIdx >= 0 &&
 										rowIdx === streamableIdx &&
 										group.rows.length > streamableIdx + 1}
