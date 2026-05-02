@@ -55,12 +55,6 @@
 		}
 	}
 
-	function formatVotes(count: number): string {
-		if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M votes`;
-		if (count >= 1000) return `${(count / 1000).toFixed(1)}k votes`;
-		return `${count} vote${count === 1 ? '' : 's'}`;
-	}
-
 	function reviewPercent(review: Review): number | null {
 		if (!Number.isFinite(review.maxScore) || review.maxScore <= 0) return null;
 		const ratio = review.score / review.maxScore;
@@ -92,7 +86,6 @@
 					<tr>
 						<th>Source</th>
 						<th class="text-right">Score</th>
-						<th class="w-32 text-right">Votes</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -107,20 +100,12 @@
 									—
 								{/if}
 							</td>
-							<td class="text-right text-base-content/60">
-								{#if review.voteCount !== undefined}
-									{formatVotes(review.voteCount)}
-								{:else}
-									—
-								{/if}
-							</td>
 						</tr>
 					{/each}
 					{#if averagePercent !== null && reviewPercents.length > 1}
 						<tr class="border-t-2 border-base-content/20 bg-base-300/40 font-semibold">
 							<td>Average</td>
 							<td class="text-right font-mono">{formatPercent(averagePercent)}</td>
-							<td></td>
 						</tr>
 					{/if}
 				</tbody>
