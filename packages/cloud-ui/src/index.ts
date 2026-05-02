@@ -1,4 +1,5 @@
 export * from './types/index.js';
+export { Icon, ICON_NAMES, type IconName } from './icons/index.js';
 
 export { default as CatalogPageHeader } from './components/catalog/CatalogPageHeader.svelte';
 export { default as CatalogDescriptionCard } from './components/catalog/CatalogDescriptionCard.svelte';

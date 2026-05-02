@@ -20,7 +20,7 @@ mhaol.git/
 │   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
 ├── packages/
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subtitles, torrent search)
-│   ├── cloud-ui/                     # Shared Svelte 5 display components + firkin types (used by cloud WebUI and player)
+│   ├── cloud-ui/                     # Shared Svelte 5 display components + firkin types + game-icons.net <Icon /> set (used by cloud WebUI and player)
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── ipfs-stream/                  # Rust HLS-over-IPFS streaming (GStreamer hlssink2)
 │   ├── torrent/                      # Rust torrent implementation
