@@ -28,15 +28,21 @@
 
 	let kind = $derived(addonKind(firkin.addon));
 	let isAlbum = $derived(kind === 'album');
+	let isYoutube = $derived(kind === 'youtube video');
 	let artistNames = $derived(
 		(firkin.artists ?? [])
 			.map((a) => a.name)
 			.filter((n) => n && n.length > 0)
 			.join(', ')
 	);
-	let albumBgColor = $derived(
-		isAlbum ? `#${hashColor(`${firkin.title}::${artistNames}`)}` : null
+	let channelName = $derived(
+		isYoutube
+			? ((firkin.artists ?? []).find((a) => a.role === 'Channel')?.name ??
+					firkin.artists?.[0]?.name ??
+					'')
+			: ''
 	);
+	let albumBgColor = $derived(isAlbum ? `#${hashColor(`${firkin.title}::${artistNames}`)}` : null);
 
 	// Musicbrainz firkins are created with description = "credits · primary_type"
 	// (or just one of the two). Strip the credits prefix to surface the type.
@@ -138,10 +144,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 <article
-	class={classNames(
-		'card w-full overflow-hidden rounded-md bg-base-200 shadow-sm',
-		classes
-	)}
+	class={classNames('card w-full overflow-hidden rounded-md bg-base-200 shadow-sm', classes)}
 	onpointerenter={handlePointerEnter}
 	onpointermove={handlePointerMove}
 	onpointerleave={handlePointerLeave}
@@ -150,6 +153,7 @@
 	<figure
 		class={classNames('relative overflow-hidden', {
 			'aspect-square w-full': isAlbum,
+			'aspect-video w-full': isYoutube,
 			'bg-base-300': !isAlbum
 		})}
 		style={albumBgColor ? `background-color: ${albumBgColor};` : undefined}
@@ -160,14 +164,14 @@
 				alt={isAlbum ? '' : firkin.title}
 				width={coverImage.width || undefined}
 				height={coverImage.height || undefined}
-				class={classNames('block w-full', isAlbum ? 'h-full object-cover' : 'h-auto')}
+				class={classNames('block w-full', isAlbum || isYoutube ? 'h-full object-cover' : 'h-auto')}
 				loading="lazy"
 			/>
 		{:else}
 			<div
 				class={classNames(
 					'flex w-full items-center justify-center text-base-content/30',
-					isAlbum ? 'h-full' : 'aspect-[2/3]'
+					isAlbum || isYoutube ? 'h-full' : 'aspect-[2/3]'
 				)}
 				aria-hidden="true"
 			>
@@ -194,6 +198,15 @@
 				>
 					{artistNames}{#if artistNames && albumType}<span class="mx-1 text-base-content/40">·</span
 						>{/if}{#if albumType}<span class="text-base-content/50">{albumType}</span>{/if}
+				</div>
+			{/if}
+		</div>
+	{:else if isYoutube}
+		<div class="px-3 py-2">
+			<div class="line-clamp-2 text-sm font-semibold" title={firkin.title}>{firkin.title}</div>
+			{#if channelName}
+				<div class="truncate text-xs text-base-content/70" title={channelName}>
+					{channelName}
 				</div>
 			{/if}
 		</div>
