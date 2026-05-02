@@ -55,36 +55,76 @@
 		}
 	}
 
-	function formatScore(value: number): string {
-		const rounded = Math.round(value * 10) / 10;
-		return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
-	}
-
 	function formatVotes(count: number): string {
 		if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M votes`;
 		if (count >= 1000) return `${(count / 1000).toFixed(1)}k votes`;
 		return `${count} vote${count === 1 ? '' : 's'}`;
 	}
+
+	function reviewPercent(review: Review): number | null {
+		if (!Number.isFinite(review.maxScore) || review.maxScore <= 0) return null;
+		const ratio = review.score / review.maxScore;
+		if (!Number.isFinite(ratio)) return null;
+		return Math.max(0, Math.min(100, ratio * 100));
+	}
+
+	function formatPercent(value: number): string {
+		return `${Math.round(value)}%`;
+	}
+
+	const reviewPercents = $derived(
+		reviews
+			.map((r) => reviewPercent(r))
+			.filter((v): v is number => typeof v === 'number')
+	);
+	const averagePercent = $derived(
+		reviewPercents.length > 0
+			? reviewPercents.reduce((sum, v) => sum + v, 0) / reviewPercents.length
+			: null
+	);
 </script>
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
 	{#if reviews.length > 0}
-		<div class="mb-3 flex flex-wrap items-center gap-2">
-			<span class="text-xs font-semibold text-base-content/70 uppercase">Reviews</span>
-			{#each reviews as review (review.label)}
-				<span
-					class="badge badge-outline gap-1 font-mono text-xs"
-					title={review.voteCount !== undefined
-						? `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)} (${formatVotes(review.voteCount)})`
-						: `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)}`}
-				>
-					<span class="font-semibold">{review.label}</span>
-					<span>{formatScore(review.score)} / {formatScore(review.maxScore)}</span>
-					{#if review.voteCount !== undefined}
-						<span class="text-base-content/60">· {formatVotes(review.voteCount)}</span>
+		<div class="mb-3 overflow-x-auto rounded border border-base-content/10">
+			<table class="table table-xs">
+				<thead>
+					<tr>
+						<th>Source</th>
+						<th class="text-right">Score</th>
+						<th class="w-32 text-right">Votes</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each reviews as review (review.label)}
+						{@const pct = reviewPercent(review)}
+						<tr>
+							<td class="font-semibold">{review.label}</td>
+							<td class="text-right font-mono">
+								{#if pct !== null}
+									{formatPercent(pct)}
+								{:else}
+									—
+								{/if}
+							</td>
+							<td class="text-right text-base-content/60">
+								{#if review.voteCount !== undefined}
+									{formatVotes(review.voteCount)}
+								{:else}
+									—
+								{/if}
+							</td>
+						</tr>
+					{/each}
+					{#if averagePercent !== null && reviewPercents.length > 1}
+						<tr class="border-t-2 border-base-content/20 bg-base-300/40 font-semibold">
+							<td>Average</td>
+							<td class="text-right font-mono">{formatPercent(averagePercent)}</td>
+							<td></td>
+						</tr>
 					{/if}
-				</span>
-			{/each}
+				</tbody>
+			</table>
 		</div>
 	{/if}
 

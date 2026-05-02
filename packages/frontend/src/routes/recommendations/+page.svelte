@@ -56,9 +56,25 @@
 		return `${cid.slice(0, 10)}…${cid.slice(-6)}`;
 	}
 
-	function formatScore(value: number): string {
-		const rounded = Math.round(value * 10) / 10;
-		return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+	function reviewPercent(review: Review): number | null {
+		if (!Number.isFinite(review.maxScore) || review.maxScore <= 0) return null;
+		const ratio = review.score / review.maxScore;
+		if (!Number.isFinite(ratio)) return null;
+		return Math.max(0, Math.min(100, ratio * 100));
+	}
+
+	function formatPercent(value: number): string {
+		return `${Math.round(value)}%`;
+	}
+
+	function averagePercent(reviews: Review[]): number | null {
+		const pcts: number[] = [];
+		for (const r of reviews) {
+			const p = reviewPercent(r);
+			if (p !== null) pcts.push(p);
+		}
+		if (pcts.length === 0) return null;
+		return pcts.reduce((sum, v) => sum + v, 0) / pcts.length;
 	}
 
 	function formatVotes(count: number): string {
@@ -289,20 +305,29 @@
 										<td class="text-right font-mono text-sm">{row.count}</td>
 										<td>
 											{#if row.reviews && row.reviews.length > 0}
+												{@const avg = averagePercent(row.reviews)}
 												<div class="flex flex-wrap items-center gap-1">
 													{#each row.reviews as review (review.label)}
+														{@const pct = reviewPercent(review)}
 														<span
 															class="badge gap-1 badge-outline font-mono badge-sm"
 															title={review.voteCount !== undefined
-																? `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)} (${formatVotes(review.voteCount)})`
-																: `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)}`}
+																? `${review.label}: ${pct !== null ? formatPercent(pct) : '—'} (${formatVotes(review.voteCount)})`
+																: `${review.label}: ${pct !== null ? formatPercent(pct) : '—'}`}
 														>
 															<span class="font-semibold">{review.label}</span>
-															<span
-																>{formatScore(review.score)} / {formatScore(review.maxScore)}</span
-															>
+															<span>{pct !== null ? formatPercent(pct) : '—'}</span>
 														</span>
 													{/each}
+													{#if avg !== null && row.reviews.length > 1}
+														<span
+															class="badge gap-1 font-mono badge-sm badge-primary"
+															title={`Average across ${row.reviews.length} sources`}
+														>
+															<span class="font-semibold">Avg</span>
+															<span>{formatPercent(avg)}</span>
+														</span>
+													{/if}
 												</div>
 											{:else}
 												<span class="text-xs text-base-content/40">—</span>
