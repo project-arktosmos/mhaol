@@ -6111,6 +6111,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "log",
+ "mhaol-backend",
  "reqwest 0.12.28",
  "sha3 0.10.8",
  "tauri",
