@@ -83,19 +83,19 @@
 		{/if}
 	</header>
 	{#if coverImage}
-		<figure class="relative overflow-hidden bg-base-300">
+		<figure class="relative min-h-0 flex-1 overflow-hidden bg-base-300">
 			{#if resolvedCoverUrl}
 				<img
 					src={resolvedCoverUrl}
 					alt={firkin.title}
 					width={coverImage.width || undefined}
 					height={coverImage.height || undefined}
-					class="block h-auto w-full"
+					class="block h-full w-full object-cover"
 					loading="lazy"
 				/>
 			{:else}
 				<div
-					class="flex aspect-[2/3] w-full items-center justify-center text-base-content/30"
+					class="flex h-full w-full items-center justify-center text-base-content/30"
 					aria-hidden="true"
 				>
 					<Icon name={placeholderIcon} size="40%" />
