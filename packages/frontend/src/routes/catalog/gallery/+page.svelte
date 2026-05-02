@@ -376,12 +376,6 @@
 <div class="flex min-h-full flex-col gap-4 p-6">
 	<header class="flex flex-wrap items-center justify-between gap-3">
 		<div class="flex items-center gap-3">
-			<a
-				href={addon ? `${base}/catalog?addon=${encodeURIComponent(addon)}` : `${base}/catalog`}
-				class="btn btn-ghost btn-sm"
-			>
-				← Back to catalog
-			</a>
 			<h1 class="text-xl font-semibold">{headingLabel}</h1>
 			{#if mode === 'library'}
 				<span class="badge badge-ghost">{galleryFirkins.length}</span>
