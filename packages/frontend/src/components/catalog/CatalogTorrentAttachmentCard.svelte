@@ -139,16 +139,6 @@
 	const downloadActionable = $derived(Boolean(download && download.ipfsCid && onDownloadPlay));
 
 	const hasTrailers = $derived(trailers.length > 0 && Boolean(onTrailerPlay));
-	let userPickedAttachmentTab = $state<'trailer' | 'stream' | 'download' | null>(null);
-	const activeAttachmentTab = $derived.by<'trailer' | 'stream' | 'download'>(() => {
-		if (userPickedAttachmentTab) {
-			if (userPickedAttachmentTab === 'trailer' && !hasTrailers) return 'stream';
-			return userPickedAttachmentTab;
-		}
-		if (downloadActionable) return 'download';
-		if (hasTrailers) return 'trailer';
-		return 'stream';
-	});
 
 	// Quality of the currently-attached stream, mapped to a bucket label
 	// from `streamPicksByQuality`. Tries the bucket label first (most
@@ -461,51 +451,36 @@
 	{/if}
 {/snippet}
 
-<div class="rounded-md border border-base-content/10 bg-base-300">
-	<div role="tablist" class="tabs-bordered tabs">
-		{#if hasTrailers}
-			<button
-				type="button"
-				role="tab"
-				class="tab gap-2"
-				class:tab-active={activeAttachmentTab === 'trailer'}
-				onclick={() => (userPickedAttachmentTab = 'trailer')}
-				aria-selected={activeAttachmentTab === 'trailer'}
+<div class="grid w-full grid-cols-3 gap-3">
+	{#if hasTrailers}
+		<div class="flex flex-col rounded-md border border-base-content/10 bg-base-300">
+			<div
+				class="flex items-center justify-center gap-2 border-b border-base-content/10 px-3 py-2"
 			>
 				<Icon name="delapouite/film-strip" size={20} title="Trailer" />
 				<span class="text-xs font-medium">Trailer</span>
-			</button>
-		{/if}
-		<button
-			type="button"
-			role="tab"
-			class="tab gap-2"
-			class:tab-active={activeAttachmentTab === 'stream'}
-			onclick={() => (userPickedAttachmentTab = 'stream')}
-			aria-selected={activeAttachmentTab === 'stream'}
-		>
+			</div>
+			<div class="p-3">
+				{@render trailerContent()}
+			</div>
+		</div>
+	{/if}
+	<div class="flex flex-col rounded-md border border-base-content/10 bg-base-300">
+		<div class="flex items-center justify-center gap-2 border-b border-base-content/10 px-3 py-2">
 			<Icon name="lorc/magnet" size={20} title="Stream mode" />
 			<span class="text-xs font-medium">Stream</span>
-		</button>
-		<button
-			type="button"
-			role="tab"
-			class="tab gap-2"
-			class:tab-active={activeAttachmentTab === 'download'}
-			onclick={() => (userPickedAttachmentTab = 'download')}
-			aria-selected={activeAttachmentTab === 'download'}
-		>
+		</div>
+		<div class="p-3">
+			{@render streamContent()}
+		</div>
+	</div>
+	<div class="flex flex-col rounded-md border border-base-content/10 bg-base-300">
+		<div class="flex items-center justify-center gap-2 border-b border-base-content/10 px-3 py-2">
 			<Icon name="delapouite/cloud-download" size={20} title="Download mode" />
 			<span class="text-xs font-medium">Download</span>
-		</button>
-	</div>
-	<div class="p-3">
-		{#if activeAttachmentTab === 'trailer' && hasTrailers}
-			{@render trailerContent()}
-		{:else if activeAttachmentTab === 'stream'}
-			{@render streamContent()}
-		{:else}
+		</div>
+		<div class="p-3">
 			{@render downloadContent()}
-		{/if}
+		</div>
 	</div>
 </div>
