@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { loadRelated, type CatalogItem } from '$lib/catalog.service';
 	import { materializeBrowseFirkin } from '$lib/catalog-firkin';
 	import type { FirkinAddon } from '$lib/firkins.service';
@@ -86,9 +87,38 @@
 		);
 	}
 
-	function hrefFor(item: CatalogItem): string | undefined {
+	function hrefFor(item: CatalogItem): string {
 		const id = firkinIds[item.id];
-		return id ? `${base}/catalog/${encodeURIComponent(id)}` : undefined;
+		return id ? `${base}/catalog/${encodeURIComponent(id)}` : `${base}/catalog/visit`;
+	}
+
+	async function handleClick(event: MouseEvent, item: CatalogItem) {
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+			return;
+		}
+		event.preventDefault();
+		let id = firkinIds[item.id];
+		if (!id) {
+			try {
+				const created = await materializeBrowseFirkin({
+					addon: addon as FirkinAddon,
+					upstreamId: item.id,
+					title: item.title,
+					year: item.year,
+					description: item.description,
+					posterUrl: item.posterUrl,
+					backdropUrl: item.backdropUrl,
+					artistName: item.artistName,
+					reviews: item.reviews
+				});
+				id = created.id;
+				firkinIds = { ...firkinIds, [item.id]: id };
+			} catch (err) {
+				console.warn('[related] click materialize failed for', item.id, err);
+				return;
+			}
+		}
+		await goto(`${base}/catalog/${encodeURIComponent(id)}`);
 	}
 </script>
 
@@ -111,15 +141,12 @@
 			{:else if items.length > 0 && isMusicBrainz}
 				<ul class="flex flex-col gap-2">
 					{#each items as item (item.id)}
-						{@const href = hrefFor(item)}
 						<li>
 							<a
-								{href}
+								href={hrefFor(item)}
+								onclick={(e) => handleClick(e, item)}
 								title={item.title}
 								class="group flex items-start gap-3 rounded transition-all"
-								class:pointer-events-none={!href}
-								class:opacity-60={!href}
-								aria-disabled={!href}
 							>
 								<div
 									class="aspect-square w-16 shrink-0 overflow-hidden rounded border border-base-content/10 bg-base-300 transition-all group-hover:border-base-content/30 group-hover:shadow-md"
@@ -160,15 +187,12 @@
 			{:else if items.length > 0}
 				<ul class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-2">
 					{#each items as item (item.id)}
-						{@const href = hrefFor(item)}
 						<li>
 							<a
-								{href}
+								href={hrefFor(item)}
+								onclick={(e) => handleClick(e, item)}
 								title={item.title}
 								class="group flex flex-col gap-1.5 rounded transition-all"
-								class:pointer-events-none={!href}
-								class:opacity-60={!href}
-								aria-disabled={!href}
 							>
 								<div
 									class="aspect-[2/3] overflow-hidden rounded border border-base-content/10 bg-base-300 transition-all group-hover:border-base-content/30 group-hover:shadow-md"

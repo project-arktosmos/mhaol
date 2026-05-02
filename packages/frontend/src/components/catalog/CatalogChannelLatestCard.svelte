@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { materializeBrowseFirkin } from '$lib/catalog-firkin';
 
 	interface ChannelFeedItem {
@@ -118,9 +119,34 @@
 
 	const visibleItems = $derived(feed ? feed.items.slice(0, limit) : []);
 
-	function hrefFor(item: ChannelFeedItem): string | undefined {
+	function hrefFor(item: ChannelFeedItem): string {
 		const id = firkinIds[item.videoId];
-		return id ? `${base}/catalog/${encodeURIComponent(id)}` : undefined;
+		return id ? `${base}/catalog/${encodeURIComponent(id)}` : `${base}/catalog/visit`;
+	}
+
+	async function handleClick(event: MouseEvent, item: ChannelFeedItem) {
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+			return;
+		}
+		event.preventDefault();
+		let id = firkinIds[item.videoId];
+		if (!id) {
+			try {
+				const created = await materializeBrowseFirkin({
+					addon: 'youtube-video',
+					upstreamId: item.videoId,
+					title: item.title,
+					description: item.description,
+					posterUrl: item.thumbnailUrl
+				});
+				id = created.id;
+				firkinIds = { ...firkinIds, [item.videoId]: id };
+			} catch (err) {
+				console.warn('[channel-latest] click materialize failed for', item.videoId, err);
+				return;
+			}
+		}
+		await goto(`${base}/catalog/${encodeURIComponent(id)}`);
 	}
 </script>
 
@@ -152,15 +178,12 @@
 	{:else if visibleItems.length > 0}
 		<ul class="flex flex-col gap-3">
 			{#each visibleItems as item (item.videoId)}
-				{@const href = hrefFor(item)}
 				<li class="flex gap-2">
 					<a
 						class="flex flex-1 link gap-2 link-hover"
-						{href}
+						href={hrefFor(item)}
+						onclick={(e) => handleClick(e, item)}
 						title={item.title}
-						class:pointer-events-none={!href}
-						class:opacity-60={!href}
-						aria-disabled={!href}
 					>
 						{#if item.thumbnailUrl}
 							<img

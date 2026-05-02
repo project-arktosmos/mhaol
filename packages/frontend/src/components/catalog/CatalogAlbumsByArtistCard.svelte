@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { loadMusicbrainzAlbumsByArtist, type CatalogItem } from '$lib/catalog.service';
 	import { materializeBrowseFirkin } from '$lib/catalog-firkin';
 	import { cachedImageUrl } from '$lib/image-cache';
@@ -73,9 +74,38 @@
 		);
 	}
 
-	function hrefFor(item: CatalogItem): string | undefined {
+	function hrefFor(item: CatalogItem): string {
 		const id = firkinIds[item.id];
-		return id ? `${base}/catalog/${encodeURIComponent(id)}` : undefined;
+		return id ? `${base}/catalog/${encodeURIComponent(id)}` : `${base}/catalog/visit`;
+	}
+
+	async function handleClick(event: MouseEvent, item: CatalogItem) {
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+			return;
+		}
+		event.preventDefault();
+		let id = firkinIds[item.id];
+		if (!id) {
+			try {
+				const created = await materializeBrowseFirkin({
+					addon: 'musicbrainz',
+					upstreamId: item.id,
+					title: item.title,
+					year: item.year,
+					description: item.description,
+					posterUrl: item.posterUrl,
+					backdropUrl: item.backdropUrl,
+					artistName: item.artistName,
+					reviews: item.reviews
+				});
+				id = created.id;
+				firkinIds = { ...firkinIds, [item.id]: id };
+			} catch (err) {
+				console.warn('[albums-by-artist] click materialize failed for', item.id, err);
+				return;
+			}
+		}
+		await goto(`${base}/catalog/${encodeURIComponent(id)}`);
 	}
 </script>
 
@@ -98,15 +128,12 @@
 			{:else if items.length > 0}
 				<ul class="flex flex-col gap-2">
 					{#each items as item (item.id)}
-						{@const href = hrefFor(item)}
 						<li>
 							<a
-								{href}
+								href={hrefFor(item)}
+								onclick={(e) => handleClick(e, item)}
 								title={item.title}
 								class="group flex items-center gap-3 rounded p-1 transition-colors hover:bg-base-300"
-								class:pointer-events-none={!href}
-								class:opacity-60={!href}
-								aria-disabled={!href}
 							>
 								<div
 									class="aspect-square h-12 w-12 shrink-0 overflow-hidden rounded border border-base-content/10 bg-base-300"
