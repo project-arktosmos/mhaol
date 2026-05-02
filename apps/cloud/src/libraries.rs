@@ -476,7 +476,7 @@ async fn scan(
     {
         let addons = lib.addons.clone();
         let lib_root = lib.path.clone();
-        crate::library_scan::schedule_pins_and_firkins(
+        crate::library_scan::schedule_pins(
             &state,
             &response.entries,
             addons,

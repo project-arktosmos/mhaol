@@ -215,6 +215,13 @@
 		scanErrors = errRest;
 	}
 
+	function pinIndex(pins: IpfsPin[] | undefined): Map<string, string> {
+		const map = new Map<string, string>();
+		if (!pins) return map;
+		for (const p of pins) map.set(p.path, p.cid);
+		return map;
+	}
+
 	function formatBytes(bytes: number): string {
 		if (bytes < 1024) return `${bytes} B`;
 		const units = ['KB', 'MB', 'GB', 'TB'];
@@ -321,8 +328,7 @@
 					{/each}
 				</div>
 				<p class="mt-1 text-xs text-base-content/60">
-					Files matching the selected kinds are turned into <code>firkin</code> records on scan. Leave
-					empty to skip media detection.
+					Files matching the selected kinds are pinned to IPFS on scan. Leave empty to skip pinning.
 				</p>
 			</div>
 			<p class="text-xs text-base-content/60">
@@ -441,55 +447,6 @@
 									</div>
 								</td>
 							</tr>
-							{#if pinsErrors[lib.id]}
-								<tr>
-									<td colspan="5" class="bg-base-100">
-										<div class="my-2 alert alert-warning">
-											<span class="text-sm">Pins: {pinsErrors[lib.id]}</span>
-										</div>
-									</td>
-								</tr>
-							{:else if libPins[lib.id]}
-								<tr>
-									<td colspan="5" class="bg-base-100 p-3">
-										<div class="flex flex-col gap-2">
-											<p class="text-xs text-base-content/70">
-												IPFS pins ({libPins[lib.id].length})
-											</p>
-											{#if libPins[lib.id].length === 0}
-												<p class="text-xs text-base-content/60">
-													No pinned media yet for this library.
-												</p>
-											{:else}
-												<div class="max-h-72 overflow-y-auto rounded border border-base-content/10">
-													<table class="table table-xs">
-														<thead class="sticky top-0 bg-base-200">
-															<tr>
-																<th>CID</th>
-																<th>Path</th>
-																<th class="w-32">MIME</th>
-																<th class="w-24 text-right">Size</th>
-															</tr>
-														</thead>
-														<tbody>
-															{#each libPins[lib.id] as pin (pin.id)}
-																<tr>
-																	<td class="font-mono text-xs break-all">{pin.cid}</td>
-																	<td class="font-mono text-xs break-all">{pin.path}</td>
-																	<td class="font-mono text-xs">{pin.mime}</td>
-																	<td class="text-right text-xs">
-																		{formatBytes(pin.size)}
-																	</td>
-																</tr>
-															{/each}
-														</tbody>
-													</table>
-												</div>
-											{/if}
-										</div>
-									</td>
-								</tr>
-							{/if}
 							{#if scanErrors[lib.id]}
 								<tr>
 									<td colspan="5" class="bg-base-100">
@@ -501,7 +458,16 @@
 										</div>
 									</td>
 								</tr>
+							{:else if pinsErrors[lib.id]}
+								<tr>
+									<td colspan="5" class="bg-base-100">
+										<div class="my-2 alert alert-warning">
+											<span class="text-sm">Pins: {pinsErrors[lib.id]}</span>
+										</div>
+									</td>
+								</tr>
 							{:else if scanResults[lib.id]}
+								{@const cidByPath = pinIndex(libPins[lib.id])}
 								<tr>
 									<td colspan="5" class="bg-base-100 p-3">
 										<div class="flex flex-col gap-2">
@@ -517,21 +483,30 @@
 											{#if scanResults[lib.id].entries.length === 0}
 												<p class="text-xs text-base-content/60">No files in this directory.</p>
 											{:else}
-												<div class="max-h-72 overflow-y-auto rounded border border-base-content/10">
+												<div class="max-h-96 overflow-y-auto rounded border border-base-content/10">
 													<table class="table table-xs">
 														<thead class="sticky top-0 bg-base-200">
 															<tr>
-																<th>Path</th>
-																<th class="w-32">MIME</th>
-																<th class="w-24 text-right">Size</th>
+																<th>File</th>
+																<th class="w-72">CID</th>
+																<th class="w-24">MIME</th>
+																<th class="w-20 text-right">Size</th>
 																<th class="w-56">TMDB match</th>
 															</tr>
 														</thead>
 														<tbody>
 															{#each scanResults[lib.id].entries as entry (entry.path)}
+																{@const cid = cidByPath.get(entry.path)}
 																<tr>
 																	<td class="font-mono text-xs break-all">
 																		{entry.relative_path}
+																	</td>
+																	<td class="font-mono text-xs break-all">
+																		{#if cid}
+																			{cid}
+																		{:else}
+																			<span class="text-base-content/40">pinning…</span>
+																		{/if}
 																	</td>
 																	<td class="font-mono text-xs">{entry.mime}</td>
 																	<td class="text-right text-xs">

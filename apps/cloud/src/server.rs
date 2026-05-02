@@ -14,8 +14,6 @@ mod libraries;
 #[cfg(not(target_os = "android"))]
 mod library_scan;
 mod media_trackers;
-#[cfg(not(target_os = "android"))]
-mod metadata_enrich;
 mod paths;
 mod player;
 mod recommendations;
