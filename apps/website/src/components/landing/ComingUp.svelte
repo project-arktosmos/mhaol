@@ -38,6 +38,56 @@
 				'Rip to a firkin with cover art and tracklist',
 				'Burn audio CDs and data discs from your library'
 			]
+		},
+		{
+			icon: 'lorc/tune-pitch',
+			title: 'Audio EQ and video tuning',
+			body: 'Sculpt the sound and the picture to your room and your screen — a per-device audio equalizer for music and films, plus video presets (gamma, contrast, denoise, sharpening) you can save and switch between.',
+			points: [
+				'Per-device audio equalizer with savable profiles',
+				'Video presets for screen, room, and time of day',
+				'Loudness normalization across the library'
+			]
+		},
+		{
+			icon: 'delapouite/network-bars',
+			title: 'ed2k client and search',
+			body: 'An embedded eDonkey / eMule client sitting next to the existing torrent stack — search, queue, and pull files from the long tail of the network without leaving the Mhaol catalog.',
+			points: [
+				'In-app ed2k search across Kad and server lists',
+				'Downloads pinned to your IPFS node on completion',
+				'Same firkin auto-attach the torrent client already uses'
+			]
+		},
+		{
+			icon: 'lorc/rss',
+			title: 'Torrent RSS for new episodes',
+			body: 'Subscribe a TV show to a torrent RSS feed and Mhaol grabs new episodes the moment they drop — picked, streamability-checked, downloaded, and pinned to the right season firkin without you opening the app.',
+			points: [
+				'Per-show RSS feed configuration',
+				'Quality, language, and release-group filters',
+				'Auto-attach to the matching firkin season'
+			]
+		},
+		{
+			icon: 'lorc/satellite',
+			title: 'YouTube channel subscriptions',
+			body: 'Follow the creators you actually watch via the public channel Atom feed. New uploads appear in your YouTube library, with an option to auto-download them to play offline next time the device is online.',
+			points: [
+				'Channel feed subscription — no Google login required',
+				'Optional auto-download for offline playback',
+				'Per-channel notification and retention policy'
+			]
+		},
+		{
+			icon: 'lorc/world',
+			title: 'Full multilingual support',
+			body: 'The catalog, the player, the Settings page, every modal — all translatable, with the right language picked up from your device locale or set explicitly on your identity. Catalog metadata, subtitles, and lyrics all follow the same preference.',
+			points: [
+				'Catalog metadata in your preferred language (TMDB / OMDb)',
+				'Subtitles and lyrics filtered by language',
+				'Translatable UI with community-contributed locales'
+			]
 		}
 	];
 </script>
