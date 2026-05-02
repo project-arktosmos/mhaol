@@ -12,7 +12,13 @@
 		type Library
 	} from '$lib/libraries.service';
 	import type { IpfsPin } from '$lib/ipfs.service';
-	import { firkinsService, type Artist, type Trailer, type Review } from '$lib/firkins.service';
+	import {
+		firkinsService,
+		type Artist,
+		type Trailer,
+		type Review,
+		type FileEntry
+	} from '$lib/firkins.service';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import DirectoryPicker from '../../components/DirectoryPicker.svelte';
@@ -37,6 +43,9 @@
 	let addonsError = $state<string | null>(null);
 	let creatingFirkinFor = $state<Record<string, boolean>>({});
 	let createFirkinErrors = $state<Record<string, string>>({});
+	let matchingShowFor = $state<Record<string, boolean>>({});
+	let matchShowProgress = $state<Record<string, string>>({});
+	let matchShowErrors = $state<Record<string, string>>({});
 
 	function toggleNewAddon(addon: LibraryAddon) {
 		newAddons = newAddons.includes(addon)
@@ -352,6 +361,263 @@
 			};
 		} finally {
 			creatingFirkinFor = { ...creatingFirkinFor, [key]: false };
+		}
+	}
+
+	interface TmdbCatalogItem {
+		id: string;
+		title: string;
+		year: number | null;
+		description: string | null;
+		posterUrl: string | null;
+		backdropUrl?: string | null;
+	}
+
+	interface TmdbCatalogPage {
+		items: TmdbCatalogItem[];
+		page: number;
+		totalPages: number;
+	}
+
+	interface TmdbSeasonDto {
+		seasonNumber: number;
+		name: string;
+		airYear?: number | null;
+		episodeCount?: number | null;
+		posterUrl?: string | null;
+		overview?: string | null;
+	}
+
+	interface TmdbEpisodeDto {
+		episodeNumber: number;
+		seasonNumber: number;
+		name: string;
+		overview?: string | null;
+		airDate?: string | null;
+		runtime?: number | null;
+		stillUrl?: string | null;
+		voteAverage?: number | null;
+	}
+
+	interface TmdbMetadataDto {
+		artists?: Artist[];
+		trailers?: Trailer[];
+		reviews?: Review[];
+	}
+
+	async function fetchJsonOrThrow<T>(url: string): Promise<T> {
+		const res = await fetch(url, { cache: 'no-store' });
+		if (!res.ok) {
+			let message = `HTTP ${res.status}`;
+			try {
+				const body = await res.json();
+				if (body && typeof body.error === 'string') message = body.error;
+			} catch {
+				// ignore
+			}
+			throw new Error(message);
+		}
+		return (await res.json()) as T;
+	}
+
+	function showKey(libId: string, group: { show: string; year?: number }): string {
+		return `${libId}::${group.show.toLowerCase()}::${group.year ?? ''}`;
+	}
+
+	/// Pick the best TMDB-search candidate for a parsed show name. TMDB
+	/// already orders results by relevance, so we lean on that and only
+	/// override when the parsed query carries a year hint that picks out
+	/// one specific candidate (a show + a reboot of the same name share
+	/// the title but never the year). Falls back to the top result when
+	/// no year hint is available.
+	function pickBestTvMatch(
+		items: TmdbCatalogItem[],
+		year: number | undefined
+	): TmdbCatalogItem | null {
+		if (items.length === 0) return null;
+		if (typeof year === 'number') {
+			const exact = items.find((it) => it.year === year);
+			if (exact) return exact;
+			const close = items.find((it) => it.year && Math.abs(it.year - year) <= 1);
+			if (close) return close;
+		}
+		return items[0];
+	}
+
+	/// TMDB-match an entire TV show group from the scan results, fetch all
+	/// of its seasons + episodes, map every local file to its (S, E) episode
+	/// metadata, and assemble a single `tmdb-tv` firkin. Episodes without a
+	/// local file are still represented as `url`-typed file entries pointing
+	/// at the per-episode TMDB URL so the firkin records what's missing as
+	/// well as what's available.
+	async function matchAndCreateTvFirkin(
+		libId: string,
+		group: {
+			show: string;
+			year?: number;
+			seasons: Array<{ season: number; entries: ScanEntry[] }>;
+		},
+		cidByPath: Map<string, string>
+	) {
+		const key = showKey(libId, group);
+		if (matchingShowFor[key]) return;
+		matchingShowFor = { ...matchingShowFor, [key]: true };
+		matchShowProgress = { ...matchShowProgress, [key]: 'Searching TMDB…' };
+		const { [key]: _ignored, ...errRest } = matchShowErrors;
+		matchShowErrors = errRest;
+		try {
+			const searchUrl = `/api/catalog/tmdb-tv/search?query=${encodeURIComponent(group.show)}&page=1`;
+			const page = await fetchJsonOrThrow<TmdbCatalogPage>(searchUrl);
+			const match = pickBestTvMatch(page.items, group.year);
+			if (!match) {
+				throw new Error(`No TMDB result for "${group.show}"`);
+			}
+			matchShowProgress = {
+				...matchShowProgress,
+				[key]: `Matched ${match.title}${match.year ? ` (${match.year})` : ''} — fetching seasons…`
+			};
+
+			const seasons = await fetchJsonOrThrow<TmdbSeasonDto[]>(
+				`/api/catalog/tmdb-tv/${encodeURIComponent(match.id)}/seasons`
+			);
+			if (seasons.length === 0) {
+				throw new Error('TMDB returned no seasons for this show');
+			}
+
+			matchShowProgress = {
+				...matchShowProgress,
+				[key]: `Fetching episodes (0/${seasons.length})…`
+			};
+			const episodesBySeason = new Map<number, TmdbEpisodeDto[]>();
+			let fetched = 0;
+			const seasonResults = await Promise.allSettled(
+				seasons.map((s) =>
+					fetchJsonOrThrow<TmdbEpisodeDto[]>(
+						`/api/catalog/tmdb-tv/${encodeURIComponent(match.id)}/season/${s.seasonNumber}/episodes`
+					).then((eps) => {
+						episodesBySeason.set(s.seasonNumber, eps);
+						fetched += 1;
+						matchShowProgress = {
+							...matchShowProgress,
+							[key]: `Fetching episodes (${fetched}/${seasons.length})…`
+						};
+						return eps;
+					})
+				)
+			);
+			if (seasonResults.every((r) => r.status === 'rejected')) {
+				throw new Error('Failed to fetch episodes for any season from TMDB');
+			}
+
+			matchShowProgress = {
+				...matchShowProgress,
+				[key]: 'Fetching artists, trailers & reviews…'
+			};
+			let metadata: TmdbMetadataDto = { artists: [], trailers: [], reviews: [] };
+			try {
+				metadata = await fetchJsonOrThrow<TmdbMetadataDto>(
+					`/api/catalog/tmdb-tv/${encodeURIComponent(match.id)}/metadata`
+				);
+			} catch {
+				// metadata is non-essential — keep the firkin creation flowing
+			}
+
+			const fileBySE = new Map<string, ScanEntry>();
+			for (const season of group.seasons) {
+				for (const entry of season.entries) {
+					const tv = entry.extractedTvQuery;
+					if (!tv) continue;
+					const k = `S${String(tv.season).padStart(2, '0')}E${String(tv.episode).padStart(2, '0')}`;
+					if (!fileBySE.has(k)) fileBySE.set(k, entry);
+				}
+			}
+
+			const pendingPins: ScanEntry[] = [];
+			for (const entry of fileBySE.values()) {
+				if (!cidByPath.get(entry.path)) pendingPins.push(entry);
+			}
+			const cidByEntryPath = new Map<string, string>();
+			for (const [, entry] of fileBySE) {
+				const existing = cidByPath.get(entry.path);
+				if (existing) cidByEntryPath.set(entry.path, existing);
+			}
+			if (pendingPins.length > 0) {
+				matchShowProgress = {
+					...matchShowProgress,
+					[key]: `Waiting for IPFS pins (0/${pendingPins.length})…`
+				};
+				let pinned = 0;
+				for (const entry of pendingPins) {
+					const cid = await waitForPinForPath(libId, entry.path);
+					if (cid) cidByEntryPath.set(entry.path, cid);
+					pinned += 1;
+					matchShowProgress = {
+						...matchShowProgress,
+						[key]: `Waiting for IPFS pins (${pinned}/${pendingPins.length})…`
+					};
+				}
+			}
+
+			const files: FileEntry[] = [
+				{
+					type: 'url',
+					value: `https://www.themoviedb.org/tv/${match.id}`,
+					title: 'TMDB TV'
+				}
+			];
+			for (const season of seasons) {
+				const eps = episodesBySeason.get(season.seasonNumber) ?? [];
+				for (const ep of eps) {
+					const seKey = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
+					const epLabel = `${seKey} — ${ep.name}`;
+					const entry = fileBySE.get(seKey);
+					const cid = entry ? cidByEntryPath.get(entry.path) : undefined;
+					if (cid) {
+						files.push({ type: 'ipfs', value: cid, title: epLabel });
+					} else {
+						files.push({
+							type: 'url',
+							value: `https://www.themoviedb.org/tv/${match.id}/season/${season.seasonNumber}/episode/${ep.episodeNumber}`,
+							title: epLabel
+						});
+					}
+				}
+			}
+
+			const images = match.posterUrl
+				? [
+						{
+							url: match.posterUrl,
+							mimeType: 'image/jpeg',
+							fileSize: 0,
+							width: 0,
+							height: 0
+						}
+					]
+				: [];
+
+			matchShowProgress = { ...matchShowProgress, [key]: 'Creating firkin…' };
+			const created = await firkinsService.create({
+				title: match.title,
+				artists: metadata.artists ?? [],
+				description: match.description ?? '',
+				images,
+				files,
+				year: match.year ?? null,
+				addon: 'tmdb-tv',
+				trailers: metadata.trailers ?? [],
+				reviews: metadata.reviews ?? []
+			});
+			await goto(`${base}/catalog/${encodeURIComponent(created.id)}`);
+		} catch (err) {
+			matchShowErrors = {
+				...matchShowErrors,
+				[key]: err instanceof Error ? err.message : 'Unknown error'
+			};
+		} finally {
+			matchingShowFor = { ...matchingShowFor, [key]: false };
+			const { [key]: _p, ...progRest } = matchShowProgress;
+			matchShowProgress = progRest;
 		}
 	}
 
@@ -806,9 +1072,30 @@
 															{/snippet}
 															{#each groupEntries(scanResults[lib.id].entries) as group, gi (gi)}
 																{#if group.kind === 'show'}
+																	{@const sKey = showKey(lib.id, group)}
+																	{@const matching = !!matchingShowFor[sKey]}
 																	<tr class="bg-base-200/60">
 																		<td colspan="9" class="text-sm font-semibold">
-																			{group.show}{group.year ? ` (${group.year})` : ''}
+																			<div class="flex items-center justify-between gap-2">
+																				<span>
+																					{group.show}{group.year ? ` (${group.year})` : ''}
+																				</span>
+																				<button
+																					class="btn btn-xs btn-primary"
+																					disabled={matching}
+																					onclick={() =>
+																						matchAndCreateTvFirkin(lib.id, group, cidByPath)}
+																				>
+																					{matching
+																						? (matchShowProgress[sKey] ?? 'Working…')
+																						: 'Match TMDB & build firkin'}
+																				</button>
+																			</div>
+																			{#if matchShowErrors[sKey]}
+																				<p class="mt-1 text-xs font-normal text-error">
+																					{matchShowErrors[sKey]}
+																				</p>
+																			{/if}
 																		</td>
 																	</tr>
 																	{#each group.seasons as season (season.season)}
