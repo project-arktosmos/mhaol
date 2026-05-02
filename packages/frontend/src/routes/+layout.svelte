@@ -1,8 +1,8 @@
 <script lang="ts">
 	import '../css/app.css';
-	import classNames from 'classnames';
 	import Identicon from '$components/core/Identicon.svelte';
 	import Navbar from '$components/core/Navbar.svelte';
+	import NavbarAddonPicker from '$components/core/NavbarAddonPicker.svelte';
 	import ThemeToggle from '$components/core/ThemeToggle.svelte';
 	import ToastOutlet from '$components/core/ToastOutlet.svelte';
 	import NavbarAudioPlayer from '$components/player/NavbarAudioPlayer.svelte';
@@ -28,7 +28,6 @@
 
 	installFetchInterceptor();
 	import { base } from '$app/paths';
-	import { NAV_ITEMS, type NavItem } from '$lib/generated/nav';
 
 	setBrowserImageCacheResolver(cachedImageUrl);
 
@@ -37,15 +36,6 @@
 	const playerState = playerService.state;
 	const playerDisplayMode = playerService.displayMode;
 	const identityState = userIdentityService.state;
-
-	// `/profile` lives on the right side of the navbar (as the identity menu),
-	// so hide it from the auto-generated central menu.
-	const centralNavItems = NAV_ITEMS.filter(
-		(item) => item.href !== '/profile' && item.href !== '/catalog'
-	);
-
-	const triggerClass = (item: NavItem) =>
-		classNames('btn btn-outline btn-sm', { 'btn-disabled': !item.hasOwnPage });
 
 	onMount(() => {
 		themeService.initialize('flix');
@@ -67,31 +57,7 @@
 <div class="flex h-screen flex-col">
 	<Navbar brand={{ label: 'Mhaol', highlight: 'Cloud' }} classes="!bg-base-300">
 		{#snippet center()}
-			<div class="flex flex-wrap items-center gap-1">
-				{#each centralNavItems as item (item.href)}
-					{#if item.children.length === 0}
-						<a href="{base}{item.href}" class="btn btn-outline btn-sm">{item.label}</a>
-					{:else}
-						<div class="dropdown dropdown-bottom">
-							{#if item.hasOwnPage}
-								<a href="{base}{item.href}" class={triggerClass(item)}>{item.label}</a>
-							{:else}
-								<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-								<div tabindex="0" role="button" class={triggerClass(item)}>{item.label}</div>
-							{/if}
-							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-							<ul
-								tabindex="0"
-								class="dropdown-content menu z-50 mt-1 min-w-48 rounded-box bg-base-200 p-2 shadow-lg"
-							>
-								{#each item.children as child (child.href)}
-									<li><a href="{base}{child.href}">{child.label}</a></li>
-								{/each}
-							</ul>
-						</div>
-					{/if}
-				{/each}
-			</div>
+			<NavbarAddonPicker />
 		{/snippet}
 		{#snippet end()}
 			<div class="flex items-center gap-2">

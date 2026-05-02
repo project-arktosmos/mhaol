@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import classNames from 'classnames';
 	import { base } from '$app/paths';
-	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
 	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import FirkinLibraryGrid from '$components/catalog/FirkinLibraryGrid.svelte';
@@ -285,13 +284,6 @@
 		await runSearch(next);
 	}
 
-	async function selectAddon(source: CatalogSource) {
-		if (addon === source.id) return;
-		const url = new URL(pageStore.url);
-		url.searchParams.set('addon', source.id);
-		await goto(`${url.pathname}${url.search}`, { keepFocus: true, noScroll: true });
-	}
-
 	async function onSearchFieldChange() {
 		if (trimmedQuery) await runSearch(1);
 	}
@@ -363,44 +355,26 @@
 </svelte:head>
 
 <section class="sticky top-0 z-50 border-b border-base-content/10 bg-base-200">
-	<div class="grid grid-cols-2 gap-4 p-3">
-		<div class="grid grid-cols-4 gap-2">
-			{#each sources as source (source.id)}
-				{@const active = addon === source.id}
-				<button
-					type="button"
-					class={classNames('btn w-full btn-sm', {
-						'btn-primary': active,
-						'btn-outline': !active
-					})}
-					onclick={() => selectAddon(source)}
-					title={source.kind}
-				>
-					{source.label}
-				</button>
-			{/each}
-		</div>
-		<div class="flex flex-wrap items-center gap-2">
-			{#if showSearchFieldSelect}
-				<select
-					class="select-bordered select w-40 select-sm"
-					bind:value={searchField}
-					onchange={onSearchFieldChange}
-					title="Which release-group field to search on"
-				>
-					<option value="artist">Artist name</option>
-					<option value="release">Album title</option>
-				</select>
-			{/if}
-			<input
-				type="search"
-				class="input-bordered input input-sm flex-1"
-				placeholder={addon ? `Search ${currentSource?.label ?? addon}…` : 'Pick an addon to search'}
-				disabled={!addon}
-				bind:value={query}
-				oninput={scheduleSearch}
-			/>
-		</div>
+	<div class="flex flex-wrap items-center gap-2 p-3">
+		{#if showSearchFieldSelect}
+			<select
+				class="select-bordered select w-40 select-sm"
+				bind:value={searchField}
+				onchange={onSearchFieldChange}
+				title="Which release-group field to search on"
+			>
+				<option value="artist">Artist name</option>
+				<option value="release">Album title</option>
+			</select>
+		{/if}
+		<input
+			type="search"
+			class="input-bordered input input-sm flex-1"
+			placeholder={addon ? `Search ${currentSource?.label ?? addon}…` : 'Pick an addon to search'}
+			disabled={!addon}
+			bind:value={query}
+			oninput={scheduleSearch}
+		/>
 	</div>
 	<div class="flex flex-wrap items-center gap-2 px-3 pb-3">
 		<button
