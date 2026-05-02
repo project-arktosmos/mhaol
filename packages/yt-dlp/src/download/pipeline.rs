@@ -126,6 +126,7 @@ impl DownloadPipeline {
             thumbnail_url: player_response.thumbnail_url(),
             uploader: details.author.clone(),
             video_id: details.video_id.clone(),
+            channel_id: details.channel_id.clone(),
             subtitle_tracks,
         })
     }

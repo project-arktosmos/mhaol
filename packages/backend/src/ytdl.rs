@@ -38,6 +38,8 @@ pub fn router() -> Router<CloudState> {
         .route("/info/playlist", get(get_playlist_info))
         .route("/info/stream-urls", get(get_stream_urls))
         .route("/info/stream-urls-browser", get(get_stream_urls_browser))
+        .route("/channel/by-video", get(get_channel_feed_by_video))
+        .route("/channel/{channel_id}/rss", get(get_channel_feed))
         .route("/search", get(search_proxy))
         .route("/downloads", get(list_downloads))
         .route("/downloads", post(queue_download))
@@ -149,6 +151,87 @@ async fn get_playlist_info(
 ) -> impl IntoResponse {
     match state.ytdl_manager.fetch_playlist_info(&query.url).await {
         Ok(info) => (StatusCode::OK, Json(serde_json::to_value(info).unwrap())).into_response(),
+        Err(e) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
+    }
+}
+
+/// Returns the cached Atom feed for a YouTube channel id, fetching it from
+/// `https://www.youtube.com/feeds/videos.xml?channel_id=…` only when no
+/// fresh entry is in the in-memory cache. The TTL lives in
+/// [`crate::ytdl_channel_cache`].
+async fn get_channel_feed(
+    State(state): State<CloudState>,
+    Path(channel_id): Path<String>,
+) -> impl IntoResponse {
+    let trimmed = channel_id.trim();
+    if trimmed.is_empty() {
+        return error_response(StatusCode::BAD_REQUEST, "channel_id is empty").into_response();
+    }
+    if let Some(feed) = state.ytdl_channel_cache.get_feed(trimmed) {
+        return (StatusCode::OK, Json(serde_json::to_value(feed).unwrap())).into_response();
+    }
+    match state.ytdl_manager.fetch_channel_feed(trimmed).await {
+        Ok(feed) => {
+            state.ytdl_channel_cache.put_feed(trimmed, feed.clone());
+            (StatusCode::OK, Json(serde_json::to_value(feed).unwrap())).into_response()
+        }
+        Err(e) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
+    }
+}
+
+/// Convenience entry point for the catalog detail pages: takes a YouTube
+/// watch URL, resolves it to its channel id (cached), and returns the
+/// cached channel feed in one call. Avoids the frontend having to make two
+/// round-trips per page load.
+async fn get_channel_feed_by_video(
+    State(state): State<CloudState>,
+    Query(query): Query<UrlQuery>,
+) -> impl IntoResponse {
+    let video_id = match mhaol_yt_dlp::util::extract_video_id(&query.url) {
+        Ok(id) => id,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+    };
+
+    let channel_id = if let Some(cached) = state.ytdl_channel_cache.get_channel_id(&video_id) {
+        cached
+    } else {
+        // Cold path: pull the player response so we can read the channel id
+        // off `videoDetails`. `fetch_video_info` only does the player call
+        // (no signature decryption / format resolve), so this is the
+        // cheapest way to get the channel id without bypassing the manager.
+        match state.ytdl_manager.fetch_video_info(&query.url).await {
+            Ok(info) => match info.channel_id {
+                Some(cid) if !cid.is_empty() => {
+                    state.ytdl_channel_cache.put_channel_id(&video_id, &cid);
+                    cid
+                }
+                _ => {
+                    return error_response(
+                        StatusCode::NOT_FOUND,
+                        "video has no channel id",
+                    )
+                    .into_response();
+                }
+            },
+            Err(e) => {
+                return error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                    .into_response();
+            }
+        }
+    };
+
+    if let Some(feed) = state.ytdl_channel_cache.get_feed(&channel_id) {
+        return (StatusCode::OK, Json(serde_json::to_value(feed).unwrap())).into_response();
+    }
+    match state.ytdl_manager.fetch_channel_feed(&channel_id).await {
+        Ok(feed) => {
+            state.ytdl_channel_cache.put_feed(&channel_id, feed.clone());
+            (StatusCode::OK, Json(serde_json::to_value(feed).unwrap())).into_response()
+        }
         Err(e) => {
             error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
         }

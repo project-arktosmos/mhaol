@@ -17,7 +17,7 @@ src/
 ├── bin/mhaol-cloud.rs   # Standalone binary — #[tokio::main] async fn main() { mhaol_backend::run().await }
 ├── paths.rs             # Single source of truth for on-disk paths under <data_root>
 ├── db.rs                # SurrealDB connection helper (RocksDB engine)
-├── state.rs             # CloudState: { db, identity_manager, ytdl_manager, torrent_manager, ipfs_manager, ipfs_stream_manager, track_progress }
+├── state.rs             # CloudState: { db, identity_manager, ytdl_manager, torrent_manager, ipfs_manager, ipfs_stream_manager, track_progress, ytdl_channel_cache }
 ├── cloud_status.rs      # GET /api/cloud/status
 ├── users.rs             # /api/users — secp256k1 user registry (id = lowercased EVM address); register/login require an EIP-191 signature over a fresh `Mhaol Cloud auth at <RFC3339>` message
 ├── libraries.rs         # /api/libraries CRUD — SurrealDB-backed library records identified by their on-disk dir; carries an `addons` list of `local-*` ids
@@ -34,6 +34,7 @@ src/
 ├── tmdb_match.rs        # Per-file TMDB match used at scan time for `local-movie` libraries. cfg(not(target_os = "android"))
 ├── player.rs            # /api/player/{stream-status,playable} — stubs so `playerService.initialize()` settles cleanly in the frontend
 ├── ytdl.rs              # /api/ytdl/* — mounts `mhaol_yt_dlp::build_router(state.ytdl_manager)`. cfg(not(target_os = "android"))
+├── ytdl_channel_cache.rs# In-memory cache for `/api/ytdl/channel/*` (video id → channel id, long TTL; channel id → parsed Atom feed, short TTL). cfg(not(target_os = "android"))
 └── frontend.rs          # rust-embed wrapper that serves ../frontend/dist-static/
 ```
 
@@ -170,6 +171,8 @@ In dev, the bin binds `127.0.0.1:9899` and Vite owns `0.0.0.0:9898` (proxying `/
 - `POST /api/search/subs-lyrics` — LRCLIB / Wyzie subtitle proxy.
 - `GET /api/player/stream-status` / `GET /api/player/playable` — stubs so `playerService.initialize()` settles cleanly.
 - `/api/ytdl/*` — full surface from `mhaol_yt_dlp::build_router(state.ytdl_manager)` mounted under the cloud router. The frontend's `/youtube` page talks to this directly. cfg(not(target_os = "android")).
+- `GET /api/ytdl/channel/:channel_id/rss` — returns the parsed Atom feed (`https://www.youtube.com/feeds/videos.xml?channel_id=…`) for the channel. Cached in-process for 15 minutes via `state.ytdl_channel_cache` so the public feed endpoint isn't hammered. Body: `{ channelId, channelTitle, items: [{ videoId, title, link, thumbnailUrl, publishedAt, description }] }`.
+- `GET /api/ytdl/channel/by-video?url=<watch URL>` — convenience endpoint used by the catalog detail pages: resolves the video URL → video id → channel id (cached for 24h) and returns the same channel-feed JSON in one round-trip. Falls back to `fetch_video_info` only when the video → channel mapping is cold.
 
 ## Library scan → IPFS pins
 

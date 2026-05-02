@@ -5,6 +5,8 @@ use surrealdb::Surreal;
 #[cfg(not(target_os = "android"))]
 use crate::track_progress::AlbumProgressMap;
 #[cfg(not(target_os = "android"))]
+use crate::ytdl_channel_cache::YoutubeChannelCache;
+#[cfg(not(target_os = "android"))]
 use mhaol_ipfs_core::IpfsManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_ipfs_stream::manager::IpfsStreamManager;
@@ -37,6 +39,13 @@ pub struct CloudState {
     /// background task resolves them.
     #[cfg(not(target_os = "android"))]
     pub track_progress: AlbumProgressMap,
+    /// In-memory cache for the YouTube channel RSS surface used by the
+    /// catalog detail pages. Holds two layers: video id → channel id
+    /// (long TTL since channel ownership is stable) and channel id →
+    /// parsed feed (short TTL so the public Atom endpoint isn't
+    /// hammered). See [`crate::ytdl_channel_cache`] for details.
+    #[cfg(not(target_os = "android"))]
+    pub ytdl_channel_cache: YoutubeChannelCache,
 }
 
 impl CloudState {
@@ -62,6 +71,8 @@ impl CloudState {
             ipfs_stream_manager,
             #[cfg(not(target_os = "android"))]
             track_progress: AlbumProgressMap::new(),
+            #[cfg(not(target_os = "android"))]
+            ytdl_channel_cache: YoutubeChannelCache::new(),
         }
     }
 }

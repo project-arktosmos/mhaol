@@ -8,6 +8,7 @@
 	import CatalogTvSeasonsCard from '$components/catalog/CatalogTvSeasonsCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogAlbumsByArtistCard from '$components/catalog/CatalogAlbumsByArtistCard.svelte';
+	import CatalogChannelLatestCard from '$components/catalog/CatalogChannelLatestCard.svelte';
 	import {
 		firkinsService,
 		addonKind,
@@ -296,6 +297,10 @@
 
 			{#if isMusicBrainz && itemId}
 				<CatalogAlbumsByArtistCard releaseGroupId={itemId} />
+			{/if}
+
+			{#if isYoutubeVideo}
+				<CatalogChannelLatestCard youtubeUrl={youtubeVideoUrl} />
 			{/if}
 		</aside>
 

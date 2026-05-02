@@ -17,6 +17,7 @@
 	import CatalogSubsLyricsCard from '$components/catalog/CatalogSubsLyricsCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogAlbumsByArtistCard from '$components/catalog/CatalogAlbumsByArtistCard.svelte';
+	import CatalogChannelLatestCard from '$components/catalog/CatalogChannelLatestCard.svelte';
 	import CatalogFilesTable from '$components/catalog/CatalogFilesTable.svelte';
 	import { firkinPlaybackService } from '$services/firkin-playback.service';
 	import { firkinTorrentsService, infoHashFromMagnet } from '$services/firkin-torrents.service';
@@ -1053,6 +1054,10 @@
 
 			{#if isMusicBrainz}
 				<CatalogAlbumsByArtistCard releaseGroupId={musicBrainzReleaseGroupId} />
+			{/if}
+
+			{#if isYoutubeVideo}
+				<CatalogChannelLatestCard youtubeUrl={youtubeVideoUrl} />
 			{/if}
 		</aside>
 

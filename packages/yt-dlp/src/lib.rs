@@ -1,3 +1,4 @@
+pub mod channel_feed;
 pub mod config;
 pub mod download;
 pub mod error;
@@ -9,6 +10,7 @@ pub mod search;
 pub mod types;
 pub mod util;
 
+pub use channel_feed::{ChannelFeed, ChannelFeedItem};
 pub use config::YtDownloadConfig;
 pub use download::pipeline::StreamUrlResult;
 pub use error::YtDlpError;

@@ -36,6 +36,8 @@ mod track_resolve;
 mod users;
 #[cfg(not(target_os = "android"))]
 mod ytdl;
+#[cfg(not(target_os = "android"))]
+mod ytdl_channel_cache;
 
 use axum::Router;
 use mhaol_identity::IdentityManager;
