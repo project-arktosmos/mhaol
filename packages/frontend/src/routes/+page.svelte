@@ -222,8 +222,8 @@
 	<div class="grid w-full grid-cols-2 items-stretch gap-3 p-3">
 		<NavbarAddonPicker classes="grid grid-cols-4 gap-1" />
 		<NavbarSearch
-			classes="flex items-center gap-2 w-full"
-			inputClasses="input-bordered input input-sm flex-1 min-w-0"
+			classes="flex items-stretch gap-2 w-full"
+			inputClasses="input-bordered input input-sm flex-1 min-w-0 h-full"
 		/>
 	</div>
 </section>

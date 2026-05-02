@@ -84,7 +84,7 @@
 <div class={classes}>
 	{#if showSearchFieldSelect}
 		<select
-			class="select-bordered select w-32 select-sm"
+			class="select-bordered select h-full w-32 select-sm"
 			bind:value={searchField}
 			onchange={onFieldChange}
 			title="Which release-group field to search on"
