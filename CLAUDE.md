@@ -227,7 +227,14 @@ pnpm dev:cloud:web    # Vite dev server for the cloud WebUI only (port 9898, pro
 pnpm build            # Alias for build:cloud (the only release artifact in this monorepo).
 pnpm build:cloud:web  # Build cloud WebUI static assets only
 pnpm build:cloud      # Builds the cloud WebUI, then the mhaol-cloud release binary which embeds it.
+pnpm build:dist       # Cross-platform full build for the host: SPA + mhaol-cloud bin + Mhaol Cloud Tauri shell + platform installer (.dmg/.deb/.AppImage/.msi/.exe). Runs on macOS, Linux, and Windows once the matching `pnpm setup:*` has been run.
 pnpm build:headless   # Builds the cloud WebUI, then the mhaol-headless release binary which embeds it.
+
+# Host bootstrap (one-time per machine; idempotent)
+pnpm setup:mac        # macOS — Xcode CLT, brew gstreamer, rustup, Node + pnpm, Tauri CLI
+pnpm setup:linux      # Ubuntu/Debian — apt deps for Tauri webkit2gtk + GStreamer, rustup, Node 20, pnpm, Tauri CLI
+pnpm setup:windows    # Windows 10/11 (elevated PowerShell) — winget VS Build Tools / WebView2 / Rustup / Node LTS / NSIS / GStreamer MSVC, Tauri CLI
+pnpm install:deps     # Alias for setup:linux (kept for backwards compatibility)
 
 # Quality
 pnpm lint             # Lint all packages

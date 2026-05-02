@@ -11,41 +11,39 @@ A family of self-hosted media apps built on shared core components. Each app shi
 
 ## Prerequisites
 
-| Tool | Version | Install |
-|------|---------|---------|
-| Node.js | >= 18 | [nodejs.org](https://nodejs.org) or `nvm install 18` |
-| pnpm | >= 9 | `corepack enable && corepack prepare pnpm@latest --activate` |
-| Rust | stable | [rustup.rs](https://rustup.rs) |
+The full toolchain (Rust, Node, pnpm, Tauri CLI, GStreamer, platform build tools) is installed by a single per-OS bootstrap script. Pick the one for the host you cloned onto:
 
-### System dependencies (Linux only)
+| Host | Setup |
+|------|-------|
+| macOS | `pnpm setup:mac` (needs [Homebrew](https://brew.sh)) |
+| Ubuntu / Debian | `pnpm setup:linux` (uses `apt`, prompts for `sudo`) |
+| Windows 10 / 11 | open an **elevated** PowerShell, then `pnpm setup:windows` (uses `winget`) |
 
-The Rust cloud binary requires GStreamer and native build tools on Linux:
+The scripts are idempotent — re-running them only installs what's missing. They install everything required to build both the `mhaol-cloud` backend bin and the `Mhaol Cloud` Tauri shell on that host.
 
-```bash
-pnpm install:deps
-```
+If you don't have `pnpm` yet, run the script directly first (`bash scripts/setup-mac.sh`, etc.) — it will install Node + pnpm for you.
 
-This runs:
+### What each script installs
 
-```bash
-sudo apt-get install -y \
-  build-essential pkg-config libssl-dev libonig-dev \
-  libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-  libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base \
-  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
-  gstreamer1.0-plugins-ugly gstreamer1.0-libav
-```
-
-On **macOS**, the required native libraries (GStreamer, Metal for LLM) are handled automatically by Cargo.
+- **macOS**: Xcode Command Line Tools, GStreamer (Homebrew), Rust (rustup), Node + pnpm (Homebrew + Corepack), Tauri CLI.
+- **Linux (Ubuntu/Debian)**: `build-essential`, `libwebkit2gtk-4.1-dev`, `libxdo-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libsoup-3.0-dev`, the GStreamer 1.0 dev + plugin packages, Rust (rustup), Node 20 (NodeSource) + pnpm, Tauri CLI.
+- **Windows**: Visual Studio 2022 Build Tools (Desktop C++ workload), WebView2, Rust (rustup, MSVC toolchain), Node LTS + pnpm, NSIS, GStreamer MSVC (runtime + development), Tauri CLI. If `winget` can't find a GStreamer package on your machine, grab the two MSVC MSIs from <https://gstreamer.freedesktop.org/download/#windows>.
 
 ---
 
 ## Initial Setup
 
+Run on each host you want to build on:
+
 ```bash
 # Clone the repo
 git clone <repo-url> mhaol
 cd mhaol
+
+# Install host toolchain — pick the line for your OS
+pnpm setup:mac       # macOS
+pnpm setup:linux     # Ubuntu / Debian
+pnpm setup:windows   # Windows (elevated PowerShell)
 
 # Install JavaScript dependencies
 pnpm install
@@ -117,13 +115,27 @@ pnpm app:rendezvous:setup
 
 ## Building for Production
 
-### Cloud
+### Cloud — full distributable for the current host
+
+```bash
+pnpm build:dist
+```
+
+Runs everywhere (macOS, Linux, Windows) and produces, in order:
+
+1. The Svelte SPA at `packages/frontend/dist-static/`
+2. The release backend bin at `target/release/mhaol-cloud` (`.exe` on Windows) — the SPA is embedded into it
+3. The Tauri tray shell + platform installer at `target/release/bundle/...` — `.app` / `.dmg` on macOS, `.deb` / `.AppImage` on Linux, `.exe` (NSIS) / `.msi` on Windows
+
+Tauri's `apps/cloud/tauri.conf.json` carries `beforeBuildCommand: pnpm --filter frontend build`, so step 1 is also re-run by step 3 — this is harmless (Vite caches) and is what guarantees the bundle ships the latest SPA.
+
+### Cloud — backend bin only
 
 ```bash
 pnpm build:cloud
 ```
 
-Builds the cloud WebUI and the release binary at `target/release/mhaol-cloud` (the WebUI is embedded into the binary).
+Builds the SPA and the release backend binary at `target/release/mhaol-cloud`. Useful when you don't need the Tauri shell.
 
 ### Rendezvous
 
