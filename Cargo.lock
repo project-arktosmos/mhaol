@@ -6070,6 +6070,7 @@ dependencies = [
  "sha2 0.10.9",
  "sha3 0.10.8",
  "surrealdb",
+ "sysinfo",
  "tokio",
  "tokio-stream",
  "tokio-util",

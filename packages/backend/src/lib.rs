@@ -3,6 +3,7 @@ mod catalog;
 mod cloud_status;
 mod database;
 mod db;
+mod disk;
 mod firkins;
 mod frontend;
 mod fs_browse;
@@ -218,6 +219,7 @@ pub async fn run() {
         .nest("/api/recommendations", recommendations::router())
         .nest("/api/artists", artists::router())
         .nest("/api/database", database::router())
+        .nest("/api/disk", disk::router())
         .nest("/api/ipfs", ipfs_pins::router())
         .nest("/api/fs", fs_browse::router())
         .nest("/api/image-cache", image_cache::router())
