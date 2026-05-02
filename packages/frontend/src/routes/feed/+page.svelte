@@ -13,6 +13,7 @@
 		type Artist,
 		type FirkinAddon,
 		type FileEntry,
+		type Review,
 		type Trailer
 	} from '$lib/firkins.service';
 	import type { CloudFirkin } from '$types/firkin.type';
@@ -148,20 +149,25 @@
 	async function fetchUpstreamMetadata(
 		addon: string,
 		upstreamId: string
-	): Promise<{ artists: Artist[]; trailers: Trailer[] }> {
+	): Promise<{ artists: Artist[]; trailers: Trailer[]; reviews: Review[] }> {
 		try {
 			const res = await fetch(
 				`${base}/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(upstreamId)}/metadata`,
 				{ cache: 'no-store' }
 			);
-			if (!res.ok) return { artists: [], trailers: [] };
-			const body = (await res.json()) as { artists?: Artist[]; trailers?: Trailer[] };
+			if (!res.ok) return { artists: [], trailers: [], reviews: [] };
+			const body = (await res.json()) as {
+				artists?: Artist[];
+				trailers?: Trailer[];
+				reviews?: Review[];
+			};
 			return {
 				artists: Array.isArray(body.artists) ? body.artists : [],
-				trailers: Array.isArray(body.trailers) ? body.trailers : []
+				trailers: Array.isArray(body.trailers) ? body.trailers : [],
+				reviews: Array.isArray(body.reviews) ? body.reviews : []
 			};
 		} catch {
-			return { artists: [], trailers: [] };
+			return { artists: [], trailers: [], reviews: [] };
 		}
 	}
 
@@ -219,7 +225,7 @@
 		bookmarking = true;
 		error = null;
 		try {
-			const { artists, trailers } = await fetchUpstreamMetadata(row.addon, row.upstreamId);
+			const { artists, trailers, reviews } = await fetchUpstreamMetadata(row.addon, row.upstreamId);
 			await firkinsService.create({
 				title: row.title,
 				artists,
@@ -238,7 +244,8 @@
 				files: buildUpstreamSourceFiles(row.addon, row.upstreamId),
 				year: row.year,
 				addon: row.addon as FirkinAddon,
-				trailers
+				trailers,
+				reviews: reviews.length > 0 ? reviews : (row.reviews ?? [])
 			});
 			await recordRecommendationAction({
 				address,

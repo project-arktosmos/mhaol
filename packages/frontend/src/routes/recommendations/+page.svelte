@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { page as pageStore } from '$app/state';
 	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
 	import {
 		firkinsService,
@@ -9,6 +10,7 @@
 		type FirkinAddon,
 		type ImageMeta,
 		type FileEntry,
+		type Review,
 		type Trailer
 	} from '$lib/firkins.service';
 	import { userIdentityService } from '$lib/user-identity.service';
@@ -21,6 +23,9 @@
 	let lastLoadedAddress: string | null = null;
 	let bookmarkingId = $state<string | null>(null);
 	let bookmarkError = $state<string | null>(null);
+
+	const addonFilter = $derived(pageStore.url.searchParams.get('addon') ?? '');
+	const visibleRows = $derived(addonFilter ? rows.filter((r) => r.addon === addonFilter) : rows);
 
 	$effect(() => {
 		const address = $userIdentityState.identity?.address;
@@ -109,20 +114,25 @@
 	async function fetchUpstreamMetadata(
 		addon: string,
 		upstreamId: string
-	): Promise<{ artists: Artist[]; trailers: Trailer[] }> {
+	): Promise<{ artists: Artist[]; trailers: Trailer[]; reviews: Review[] }> {
 		try {
 			const res = await fetch(
 				`${base}/api/catalog/${encodeURIComponent(addon)}/${encodeURIComponent(upstreamId)}/metadata`,
 				{ cache: 'no-store' }
 			);
-			if (!res.ok) return { artists: [], trailers: [] };
-			const body = (await res.json()) as { artists?: Artist[]; trailers?: Trailer[] };
+			if (!res.ok) return { artists: [], trailers: [], reviews: [] };
+			const body = (await res.json()) as {
+				artists?: Artist[];
+				trailers?: Trailer[];
+				reviews?: Review[];
+			};
 			return {
 				artists: Array.isArray(body.artists) ? body.artists : [],
-				trailers: Array.isArray(body.trailers) ? body.trailers : []
+				trailers: Array.isArray(body.trailers) ? body.trailers : [],
+				reviews: Array.isArray(body.reviews) ? body.reviews : []
 			};
 		} catch {
-			return { artists: [], trailers: [] };
+			return { artists: [], trailers: [], reviews: [] };
 		}
 	}
 
@@ -135,7 +145,7 @@
 		bookmarkingId = row.firkinId;
 		bookmarkError = null;
 		try {
-			const { artists, trailers } = await fetchUpstreamMetadata(row.addon, row.upstreamId);
+			const { artists, trailers, reviews } = await fetchUpstreamMetadata(row.addon, row.upstreamId);
 			const created = await firkinsService.create({
 				title: row.title,
 				artists,
@@ -144,7 +154,8 @@
 				files: buildUpstreamSourceFiles(row.addon, row.upstreamId),
 				year: row.year,
 				addon: row.addon as FirkinAddon,
-				trailers
+				trailers,
+				reviews: reviews.length > 0 ? reviews : (row.reviews ?? [])
 			});
 			// The detail page fires `loadRelated` + `ingestRecommendations`
 			// on mount, so navigating there is what "pulls their
@@ -172,7 +183,15 @@
 
 <div class="flex min-h-full flex-col gap-6 p-6">
 	<header class="flex flex-col gap-1">
-		<h1 class="text-2xl font-semibold">Recommendations</h1>
+		<div class="flex flex-wrap items-center gap-3">
+			<h1 class="text-2xl font-semibold">Recommendations</h1>
+			{#if addonFilter}
+				<span class="badge gap-2 badge-outline">
+					<code>{addonFilter}</code>
+					<a href={`${base}/recommendations`} class="link" title="Clear addon filter">×</a>
+				</span>
+			{/if}
+		</div>
 		<p class="text-sm text-base-content/60">
 			Items the catalog API has recommended to you, indexed by their virtual IPFS hash. Counts only
 			update when you visit a real <code>/catalog/[ipfsHash]</code> detail page; virtual catalog pages
@@ -208,19 +227,23 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#if loading && rows.length === 0}
+							{#if loading && visibleRows.length === 0}
 								<tr>
 									<td colspan="6" class="text-center text-base-content/60">Loading…</td>
 								</tr>
-							{:else if rows.length === 0}
+							{:else if visibleRows.length === 0}
 								<tr>
 									<td colspan="6" class="text-center text-base-content/60">
-										No recommendations yet — visit a movie, TV show, or album detail page to start
-										collecting.
+										{#if addonFilter}
+											No recommendations for <code>{addonFilter}</code> yet.
+										{:else}
+											No recommendations yet — visit a movie, TV show, or album detail page to start
+											collecting.
+										{/if}
 									</td>
 								</tr>
 							{:else}
-								{#each rows as row (row.firkinId)}
+								{#each visibleRows as row (row.firkinId)}
 									<tr>
 										<td>
 											{#if row.posterUrl}
@@ -269,13 +292,15 @@
 												<div class="flex flex-wrap items-center gap-1">
 													{#each row.reviews as review (review.label)}
 														<span
-															class="badge badge-outline badge-sm gap-1 font-mono"
+															class="badge gap-1 badge-outline font-mono badge-sm"
 															title={review.voteCount !== undefined
 																? `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)} (${formatVotes(review.voteCount)})`
 																: `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)}`}
 														>
 															<span class="font-semibold">{review.label}</span>
-															<span>{formatScore(review.score)} / {formatScore(review.maxScore)}</span>
+															<span
+																>{formatScore(review.score)} / {formatScore(review.maxScore)}</span
+															>
 														</span>
 													{/each}
 												</div>
