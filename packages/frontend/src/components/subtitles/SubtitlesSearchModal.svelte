@@ -115,8 +115,7 @@
 								target="_blank"
 								rel="noreferrer noopener">sub.wyzie.io/redeem</a
 							>
-							and save it under <code>wyzie-subs.apiKey</code> in addon settings (or set
-							<code>WYZIE_API_KEY</code> before starting the node).
+							and save it under <code>wyzie-subs.apiKey</code> in addon settings.
 						</span>
 					{/if}
 				</div>

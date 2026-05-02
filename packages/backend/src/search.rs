@@ -8,7 +8,6 @@ const TMDB_BASE: &str = "https://api.themoviedb.org/3";
 const TMDB_IMG_BASE: &str = "https://image.tmdb.org/t/p";
 const PIRATEBAY_BASE: &str = "https://apibay.org";
 const LRCLIB_BASE: &str = "https://lrclib.net/api";
-const WYZIE_BASE: &str = "https://sub.wyzie.io";
 /// Stremio's public OpenSubtitles v3 addon. No API key required and no
 /// rate-limit gating. Endpoint shape:
 ///   /subtitles/movie/<imdb_id>.json
@@ -407,7 +406,7 @@ pub struct TorrentSearchRequest {
     pub category: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TorrentResult {
     pub title: String,
     pub description: String,
@@ -431,15 +430,15 @@ fn build_magnet_link(info_hash: &str, name: &str) -> String {
     format!("magnet:?xt=urn:btih:{info_hash}&dn={encoded_name}{trackers}")
 }
 
-async fn search_torrents(
-    State(_state): State<CloudState>,
-    Json(req): Json<TorrentSearchRequest>,
-) -> Result<Json<Vec<TorrentResult>>, (StatusCode, Json<serde_json::Value>)> {
-    let query = req.query.trim();
+/// Run a single PirateBay query and return the parsed result list.
+/// Shared between the public `/api/search/torrents` route and the
+/// firkin-scoped torrent search persistence in `crate::torrent`.
+pub async fn run_torrent_query(query: &str, category: &str) -> Result<Vec<TorrentResult>, String> {
+    let query = query.trim();
     if query.is_empty() {
-        return Ok(Json(Vec::new()));
+        return Ok(Vec::new());
     }
-    let category = req.category.as_deref().unwrap_or("0");
+    let category = if category.is_empty() { "0" } else { category };
 
     let url = format!(
         "{}/q.php?q={}&cat={}",
@@ -450,38 +449,31 @@ async fn search_torrents(
 
     let res = reqwest::Client::new()
         .get(&url)
-        .header(
-            "User-Agent",
-            "Mozilla/5.0 (compatible; Mhaol/1.0)",
-        )
+        .header("User-Agent", "Mozilla/5.0 (compatible; Mhaol/1.0)")
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("piratebay request failed: {e}")))?;
+        .map_err(|e| format!("piratebay request failed: {e}"))?;
 
     if !res.status().is_success() {
-        return Err(err(
-            StatusCode::BAD_GATEWAY,
-            format!("piratebay returned {}", res.status()),
-        ));
+        return Err(format!("piratebay returned {}", res.status()));
     }
 
     let raw: serde_json::Value = res
         .json()
         .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("piratebay parse failed: {e}")))?;
+        .map_err(|e| format!("piratebay parse failed: {e}"))?;
 
     let arr = match raw.as_array() {
         Some(a) => a,
-        None => return Ok(Json(Vec::new())),
+        None => return Ok(Vec::new()),
     };
 
-    // The API returns a single sentinel row when there are no results.
     if arr.len() == 1
         && arr[0].get("id").and_then(|v| v.as_str()) == Some("0")
         && arr[0].get("name").and_then(|v| v.as_str()) == Some("No results returned")
     {
-        return Ok(Json(Vec::new()));
+        return Ok(Vec::new());
     }
 
     let parsed: Vec<TorrentResult> = arr
@@ -532,7 +524,18 @@ async fn search_torrents(
         })
         .collect();
 
-    Ok(Json(parsed))
+    Ok(parsed)
+}
+
+async fn search_torrents(
+    State(_state): State<CloudState>,
+    Json(req): Json<TorrentSearchRequest>,
+) -> Result<Json<Vec<TorrentResult>>, (StatusCode, Json<serde_json::Value>)> {
+    let category = req.category.as_deref().unwrap_or("0").to_string();
+    run_torrent_query(&req.query, &category)
+        .await
+        .map(Json)
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, e))
 }
 
 fn urlencoding(s: &str) -> String {
@@ -1134,125 +1137,3 @@ fn parse_content_disposition_filename(value: &str) -> Option<String> {
     }
 }
 
-#[allow(dead_code)]
-async fn search_wyzie(
-    kind: &str,
-    external_ids: &[String],
-    languages: &[String],
-) -> Result<Vec<SubsLyrics>, (StatusCode, Json<serde_json::Value>)> {
-    let api_key = std::env::var("WYZIE_API_KEY").unwrap_or_default();
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("http client failed: {e}")))?;
-
-    let mut tasks = Vec::with_capacity(external_ids.len());
-    for ext_id in external_ids {
-        let trimmed = ext_id.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let mut params: Vec<(&str, String)> = vec![("id", trimmed.to_string())];
-        if !languages.is_empty() {
-            params.push(("language", languages.join(",")));
-        }
-        if !api_key.is_empty() {
-            params.push(("key", api_key.clone()));
-        }
-        let qs = params
-            .iter()
-            .map(|(k, v)| format!("{}={}", k, urlencoding(v)))
-            .collect::<Vec<_>>()
-            .join("&");
-        let url = format!("{}/search?{}", WYZIE_BASE, qs);
-        let client = client.clone();
-        let ext_id_owned = trimmed.to_string();
-        let kind_owned = kind.to_string();
-        tasks.push(tokio::spawn(async move {
-            fetch_wyzie_one(&client, &url, &ext_id_owned, &kind_owned).await
-        }));
-    }
-
-    let mut out: Vec<SubsLyrics> = Vec::new();
-    for task in tasks {
-        if let Ok(Ok(items)) = task.await {
-            out.extend(items);
-        }
-    }
-    Ok(out)
-}
-
-#[allow(dead_code)]
-async fn fetch_wyzie_one(
-    client: &reqwest::Client,
-    url: &str,
-    external_id: &str,
-    kind: &str,
-) -> Result<Vec<SubsLyrics>, ()> {
-    let res = client
-        .get(url)
-        .header("Accept", "application/json")
-        .header("User-Agent", "Mhaol/1.0")
-        .send()
-        .await
-        .map_err(|_| ())?;
-    if !res.status().is_success() {
-        return Err(());
-    }
-    let payload: serde_json::Value = res.json().await.map_err(|_| ())?;
-    let arr = match payload.as_array() {
-        Some(a) => a,
-        None => return Ok(Vec::new()),
-    };
-    let out = arr
-        .iter()
-        .map(|item| {
-            let id = item
-                .get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let language = item
-                .get("language")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let display = item
-                .get("display")
-                .and_then(|v| v.as_str())
-                .or_else(|| item.get("language").and_then(|v| v.as_str()))
-                .map(|s| s.to_string());
-            let url_str = item
-                .get("url")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let format_str = item
-                .get("format")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let is_hi = item
-                .get("isHearingImpaired")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            SubsLyrics {
-                kind: "subtitle".to_string(),
-                source: format!("wyzie:{}", kind),
-                external_id: id,
-                language,
-                track_name: None,
-                artist_name: None,
-                album_name: None,
-                duration: None,
-                format: format_str,
-                url: url_str,
-                plain_lyrics: None,
-                synced_lyrics: None,
-                instrumental: false,
-                is_hearing_impaired: is_hi,
-                display,
-                source_external_id: Some(external_id.to_string()),
-                release: None,
-            }
-        })
-        .collect();
-    Ok(out)
-}
