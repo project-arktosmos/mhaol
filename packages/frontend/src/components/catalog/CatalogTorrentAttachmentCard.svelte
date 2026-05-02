@@ -81,11 +81,13 @@
 		attachingDownload?: boolean;
 		/** True while `preferredStream` is being attached. */
 		attachingStream?: boolean;
-		/** Show the Trailer cell. When `true` and `onTrailerPlay` is set a
-		 * "Trailer" button is rendered above Stream / Download (col-span-2
-		 * when both are visible, single column when paired only with the
-		 * actionable Play cell). */
-		trailer?: boolean;
+		/** Trailer cell payload. When set with `onTrailerPlay`, a "Trailer"
+		 * button is rendered above Stream / Download (col-span-2 when both
+		 * are visible, single column when paired only with the actionable
+		 * Play cell). The YouTube video id is shown beneath the label in
+		 * the same monospace style as the actionable Play cell's IPFS CID.
+		 * `null` hides the cell. */
+		trailer?: { youtubeId: string } | null;
 		/** Click handler for the Trailer cell. */
 		onTrailerPlay?: () => void | Promise<void>;
 		/** True while a trailer-start round-trip is in flight. */
@@ -105,7 +107,7 @@
 		onAttachStream,
 		attachingDownload = false,
 		attachingStream = false,
-		trailer = false,
+		trailer = null,
 		onTrailerPlay,
 		trailerPlaying = false
 	}: Props = $props();
@@ -191,6 +193,12 @@
 			>
 				<Icon name="delapouite/film-strip" size={32} title="Trailer" />
 				<span class="text-xs font-medium">Trailer</span>
+				<span
+					class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
+					title={trailer.youtubeId}
+				>
+					{trailer.youtubeId}
+				</span>
 				{#if trailerPlaying}
 					<span class="text-[10px] font-medium text-success">Starting…</span>
 				{/if}

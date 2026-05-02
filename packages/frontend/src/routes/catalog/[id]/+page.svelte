@@ -2,6 +2,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
+	import { extractVideoId } from 'addons/youtube/types';
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
@@ -2043,7 +2044,9 @@
 
 			{#snippet torrentAttachmentOverlay(startTrailer: () => void)}
 				<CatalogTorrentAttachmentCard
-					trailer={trailerTabEnabled}
+					trailer={trailerTabEnabled && firstTrailerUrl
+						? { youtubeId: extractVideoId(firstTrailerUrl) ?? firstTrailerUrl }
+						: null}
 					onTrailerPlay={startTrailer}
 					download={downloadInfo}
 					stream={streamInfo}
