@@ -1048,22 +1048,52 @@ async fn search_stremio_opensubs(
 
 /// Resolve every subtitle's release filename in parallel by HEADing the
 /// download URL and parsing `Content-Disposition: attachment; filename=…`.
-/// All HEADs run concurrently via `tokio::task::JoinSet`; the upstream is
-/// behind Cloudflare and shrugs off a burst of ~100 in-flight HEADs.
-/// Per-URL failures are silently skipped — the row still renders, just
-/// without a filename.
+/// Concurrency is bounded with a semaphore (firing ~100 parallel HEADs at
+/// the same Cloudflare-fronted host produced scattered failures mid-batch),
+/// and each request gets a short timeout + one retry. Per-URL failures
+/// fall through silently — the row still renders, just without a filename.
 async fn resolve_release_filenames(client: &reqwest::Client, items: &mut [SubsLyrics]) {
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::sync::Semaphore;
     use tokio::task::JoinSet;
+
+    const CONCURRENCY: usize = 12;
+    const PER_REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
+    let semaphore = Arc::new(Semaphore::new(CONCURRENCY));
 
     let mut set: JoinSet<Option<(usize, String)>> = JoinSet::new();
     for (idx, item) in items.iter().enumerate() {
         let Some(url) = item.url.clone() else { continue };
         let client = client.clone();
+        let semaphore = Arc::clone(&semaphore);
         set.spawn(async move {
-            let res = client.head(&url).send().await.ok()?;
-            let header = res.headers().get(reqwest::header::CONTENT_DISPOSITION)?;
-            let value = header.to_str().ok()?;
-            Some((idx, parse_content_disposition_filename(value)?))
+            let _permit = semaphore.acquire_owned().await.ok()?;
+            for attempt in 0..2 {
+                let req = client
+                    .head(&url)
+                    .header("User-Agent", "Mhaol/1.0")
+                    .timeout(PER_REQUEST_TIMEOUT)
+                    .send();
+                if let Ok(res) = req.await {
+                    if res.status().is_success() {
+                        if let Some(header) = res.headers().get(reqwest::header::CONTENT_DISPOSITION)
+                        {
+                            if let Ok(value) = header.to_str() {
+                                if let Some(name) = parse_content_disposition_filename(value) {
+                                    return Some((idx, name));
+                                }
+                            }
+                        }
+                        // No CD header on a 200 — no point retrying.
+                        return None;
+                    }
+                }
+                if attempt == 0 {
+                    tokio::time::sleep(Duration::from_millis(150)).await;
+                }
+            }
+            None
         });
     }
 
