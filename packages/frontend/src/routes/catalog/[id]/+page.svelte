@@ -660,33 +660,50 @@
 		}
 	}
 
-	/// Start a torrent stream straight from a search-result row (instead of
-	/// the user having to first attach the magnet via Download). The torrent
-	/// manager's `start_stream` writes to the dedicated `downloads/torrent-streams/`
-	/// directory and wipes any prior stream payload, so calling this multiple
-	/// times in a row is safe — only the latest pick keeps disk space.
+	/// Start a torrent stream for a magnet, switch the player to the
+	/// inline torrent source, and persist the user's pick on the firkin so
+	/// the attachment card remembers it across reloads. Re-playing the same
+	/// magnet (e.g. via the attachment card's stream cell) skips the
+	/// persist round-trip — the firkin already records this exact magnet.
 	///
-	/// On success we persist a `torrent stream magnet` entry on the firkin so
-	/// the attachment card remembers the user's pick across page reloads.
-	/// Singular: only the most-recent stream pick is kept; the prior one is
-	/// dropped via `removeTypes`. The on-disk stream payload is also wiped by
-	/// the next `start_stream`, so the persisted magnet always matches the
-	/// torrent currently in `downloads/torrent-streams/`.
-	async function streamTorrentFromRow(torrent: TorrentResultItem): Promise<void> {
-		if (!torrent.magnetLink || torrentStreamStarting) return;
+	/// `start_stream` writes to the dedicated `downloads/torrent-streams/`
+	/// directory and wipes any prior stream payload, so the persisted
+	/// magnet always matches the torrent currently in that directory.
+	async function playStreamFor(magnet: string, title: string | null): Promise<void> {
+		if (!magnet || torrentStreamStarting) return;
 		activeSource = 'torrent';
-		const magnet = torrent.magnetLink;
 		const ok = await startTorrentStream(magnet);
 		if (!ok) return;
+		const alreadyPersisted = firkin.files.some(
+			(f) => f.type === 'torrent stream magnet' && f.value === magnet
+		);
+		if (alreadyPersisted) return;
 		try {
 			const updated = await firkinsService.mutateFiles(firkin.id, {
 				removeTypes: ['torrent stream magnet'],
-				add: [{ type: 'torrent stream magnet', value: magnet, title: torrent.title }]
+				add: [{ type: 'torrent stream magnet', value: magnet, title: title ?? undefined }]
 			});
 			firkinOverride = updated;
 		} catch (err) {
 			console.warn('[catalog detail] failed to persist stream magnet:', err);
 		}
+	}
+
+	/// Search-row Stream button — pick a brand-new torrent for streaming.
+	async function streamTorrentFromRow(torrent: TorrentResultItem): Promise<void> {
+		if (!torrent.magnetLink) return;
+		await playStreamFor(torrent.magnetLink, torrent.title);
+	}
+
+	/// Attachment-card Stream cell click — re-run the torrent-stream stack
+	/// on whatever's already persisted on the firkin. Useful after a page
+	/// reload (the on-disk stream payload may have been wiped by another
+	/// firkin's pick) or for replaying the current pick after the player
+	/// was stopped.
+	async function replayStreamMagnet(): Promise<void> {
+		const entry = firkin.files.find((f) => f.type === 'torrent stream magnet' && f.value);
+		if (!entry || !entry.value) return;
+		await playStreamFor(entry.value, entry.title ?? null);
 	}
 
 	const completedTorrents = $derived.by(() => {
@@ -1956,7 +1973,12 @@
 			<CatalogDescriptionPanel description={firkin.description} />
 
 			{#if isTmdbMovie}
-				<CatalogTorrentAttachmentCard download={downloadInfo} stream={streamInfo} />
+				<CatalogTorrentAttachmentCard
+					download={downloadInfo}
+					stream={streamInfo}
+					onStreamPlay={replayStreamMagnet}
+					streamPlaying={torrentStreamStarting}
+				/>
 			{/if}
 
 			{#if isTmdbTv && tmdbTvId}
