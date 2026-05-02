@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -36,11 +36,15 @@
 
 	$effect(() => {
 		const urlQ = page.url.searchParams.get('q') ?? '';
-		if (urlQ !== query) query = urlQ;
+		untrack(() => {
+			if (urlQ !== query) query = urlQ;
+		});
 	});
 	$effect(() => {
 		const urlField = (page.url.searchParams.get('field') as 'artist' | 'release') ?? 'artist';
-		if (urlField !== searchField) searchField = urlField;
+		untrack(() => {
+			if (urlField !== searchField) searchField = urlField;
+		});
 	});
 
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
