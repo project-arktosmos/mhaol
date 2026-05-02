@@ -83,8 +83,8 @@
 							<tr>
 								<th class="w-56">Streamability</th>
 								<th class="w-20">Quality</th>
-								<th class="w-14 text-success">↑</th>
-								<th class="w-14 text-warning">↓</th>
+								<th class="w-20 text-success">Seeders</th>
+								<th class="w-20 text-warning">Leechers</th>
 								<th class="w-20">Size</th>
 								<th>Title</th>
 								<th class="w-16"></th>
