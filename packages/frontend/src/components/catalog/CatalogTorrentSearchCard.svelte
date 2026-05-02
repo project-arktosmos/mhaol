@@ -98,6 +98,21 @@
 						<tbody>
 							{#each search.groupedMatches as group (group.label)}
 								{@const expanded = expandedGroups[group.label] ?? false}
+								{#if expanded}
+									<tr class="bg-base-300/40">
+										<th colspan="5" class="p-0">
+											<button
+												type="button"
+												class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase hover:bg-base-300/60"
+												onclick={() => toggleGroup(group.label)}
+												aria-expanded={expanded}
+											>
+												<span aria-hidden="true">▼</span>
+												<span>{group.label} ({group.rows.length})</span>
+											</button>
+										</th>
+									</tr>
+								{/if}
 								{#each group.rows as torrent, rowIdx (torrent.infoHash)}
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
@@ -107,18 +122,18 @@
 										class={classNames('hover', {
 											'opacity-60': added || adding,
 											hidden,
-											'bg-base-300/40': rowIdx === 0
+											'bg-base-300/40': rowIdx === 0 && !expanded
 										})}
 									>
 										<td>
-											{#if rowIdx === 0}
+											{#if rowIdx === 0 && !expanded}
 												<button
 													type="button"
 													class="flex w-full items-center gap-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase"
 													onclick={() => toggleGroup(group.label)}
 													aria-expanded={expanded}
 												>
-													<span aria-hidden="true">{expanded ? '▼' : '▶'}</span>
+													<span aria-hidden="true">▶</span>
 													<span>{group.label} ({group.rows.length})</span>
 												</button>
 											{:else}
