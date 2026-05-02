@@ -186,13 +186,26 @@ class FirkinsService {
 		});
 		if (!res.ok) throw new Error(await parseError(res));
 		const created = (await res.json()) as Firkin;
+		// Keep local state in sync with what `GET /api/firkins` would return
+		// for the current toggle. Non-bookmarked browse-cache firkins from
+		// the `/catalog/visit` resolver (created by SvelteKit prefetch on
+		// hover) must NOT appear in bookmarked-only mode — otherwise the
+		// catalog Library row briefly gains items the user only hovered.
+		const includeAllNow = get(this.includeAll);
+		const visibleInCurrentMode = includeAllNow || created.bookmarked !== false;
 		this.state.update((s) => {
 			const existing = s.firkins.findIndex((d) => d.id === created.id);
 			if (existing >= 0) {
+				if (!visibleInCurrentMode) {
+					const next = s.firkins.slice();
+					next.splice(existing, 1);
+					return { ...s, firkins: next };
+				}
 				const next = s.firkins.slice();
 				next[existing] = created;
 				return { ...s, firkins: next };
 			}
+			if (!visibleInCurrentMode) return s;
 			return { ...s, firkins: [...s.firkins, created] };
 		});
 		return created;
