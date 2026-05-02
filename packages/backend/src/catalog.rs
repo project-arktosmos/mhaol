@@ -6,6 +6,9 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{OnceLock, RwLock};
+use tokio::task::JoinSet;
 
 const TMDB_BASE: &str = "https://api.themoviedb.org/3";
 const TMDB_IMG_BASE: &str = "https://image.tmdb.org/t/p";
@@ -560,16 +563,90 @@ async fn tmdb_popular(
         .get("total_pages")
         .and_then(|v| v.as_i64())
         .unwrap_or(1);
-    let items = payload
+    let mut items: Vec<CatalogItem> = payload
         .get("results")
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().map(tmdb_to_item).collect())
         .unwrap_or_default();
+    enrich_items_with_omdb(is_tv, &mut items).await;
     Ok(CatalogPage {
         items,
         page,
         total_pages,
     })
+}
+
+/// Process-wide cache of `(kind, tmdb_id) -> merged review list`. Keys
+/// look like `"movie:278"` or `"tv:1399"`. Populated by
+/// [`enrich_items_with_omdb`]; entries persist for the life of the
+/// process so a refresh of `/popular` doesn't re-burn the OMDb / TMDB
+/// quota for the same items.
+fn tmdb_review_cache() -> &'static RwLock<HashMap<String, Vec<CatalogReview>>> {
+    static CACHE: OnceLock<RwLock<HashMap<String, Vec<CatalogReview>>>> = OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+/// Replace each item's TMDB-only `reviews` with the full TMDB+OMDb list
+/// returned by [`tmdb_metadata`]. Per-item lookups run concurrently via
+/// `JoinSet` and hit the in-process cache before going upstream so
+/// repeat `/popular` page loads are free. Failures (TMDB outage, no
+/// IMDb id, OMDb miss) leave the original TMDB-only review in place.
+async fn enrich_items_with_omdb(is_tv: bool, items: &mut [CatalogItem]) {
+    if items.is_empty() {
+        return;
+    }
+    let kind = if is_tv { "tv" } else { "movie" };
+    // Pass 1 (immutable borrow): partition work into "already cached"
+    // and "needs upstream call". The cache lookup is cheap; doing it
+    // here avoids spawning tasks for hot items.
+    let mut cached_hits: Vec<(usize, Vec<CatalogReview>)> = Vec::new();
+    let mut set: JoinSet<(usize, String, Option<Vec<CatalogReview>>)> = JoinSet::new();
+    for (idx, item) in items.iter().enumerate() {
+        if item.id.is_empty() {
+            continue;
+        }
+        let key = format!("{kind}:{}", item.id);
+        if let Some(cached) = tmdb_review_cache()
+            .read()
+            .ok()
+            .and_then(|c| c.get(&key).cloned())
+        {
+            cached_hits.push((idx, cached));
+            continue;
+        }
+        let id = item.id.clone();
+        let key_owned = key;
+        set.spawn(async move {
+            let reviews = match tmdb_metadata(is_tv, &id).await {
+                Ok((_, _, r)) => Some(r),
+                Err(_) => None,
+            };
+            (idx, key_owned, reviews)
+        });
+    }
+    // Pass 2 (mutable borrow): apply cached hits, then drain JoinSet
+    // results — populating the cache and writing back.
+    for (idx, reviews) in cached_hits {
+        if let Some(item) = items.get_mut(idx) {
+            if !reviews.is_empty() {
+                item.reviews = reviews;
+            }
+        }
+    }
+    while let Some(joined) = set.join_next().await {
+        let Ok((idx, key, Some(reviews))) = joined else {
+            continue;
+        };
+        if reviews.is_empty() {
+            continue;
+        }
+        if let Ok(mut c) = tmdb_review_cache().write() {
+            c.insert(key, reviews.clone());
+        }
+        if let Some(item) = items.get_mut(idx) {
+            item.reviews = reviews;
+        }
+    }
 }
 
 pub(crate) async fn tmdb_search(
