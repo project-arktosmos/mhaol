@@ -44,10 +44,10 @@
 		// `isPaused: false` via `playUrl`, so the auto-play still fires.
 		if (!get(playerService.state).isPaused) {
 			el.play().catch((err: Error) => {
-				mediaError =
-					err.name === 'NotAllowedError'
-						? 'Playback blocked. Click play to start.'
-						: err.message || 'Playback failed';
+				// Browser autoplay blocks (NotAllowedError) are routine — the user
+				// just needs to click play. Don't surface them as errors.
+				if (err.name === 'NotAllowedError') return;
+				mediaError = err.message || 'Playback failed';
 				playerService.state.update((s) => ({ ...s, error: mediaError }));
 			});
 		}
