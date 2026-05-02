@@ -569,7 +569,8 @@ pub fn router() -> Router<CloudState> {
         .route("/{id}/resolve-tracks", post(resolve_tracks))
         .route("/{id}/resolution-progress", get(resolution_progress))
         .route("/{id}/download-album", post(download_album))
-        .route("/{id}/download-progress", get(download_progress));
+        .route("/{id}/download-progress", get(download_progress))
+        .route("/{id}/subtitle", post(attach_subtitle));
     r
 }
 
@@ -1459,6 +1460,244 @@ async fn roms(
         "rom extraction is not supported on this platform",
     ))
 }
+
+/// Body for `POST /api/firkins/:id/subtitle`. Mirrors the relevant fields
+/// of a `SubsLyrics` row from `/api/search/subs-lyrics` so the frontend
+/// can pass the picked entry through unchanged. The handler downloads
+/// `url`, converts SRT to VTT (the only format the in-page player parses),
+/// pins the result to IPFS, and rolls a `subtitle`-typed `FileEntry` onto
+/// the firkin's `files` array. The persisted `value` is a JSON blob whose
+/// `cid` field is what `<PlayerVideo>` actually streams (via
+/// `/api/ipfs/pins/<cid>/file`).
+#[cfg(not(target_os = "android"))]
+#[derive(Debug, serde::Deserialize)]
+pub struct AttachSubtitleRequest {
+    pub source: String,
+    #[serde(rename = "externalId")]
+    pub external_id: String,
+    pub url: String,
+    pub language: String,
+    #[serde(default)]
+    pub display: Option<String>,
+    #[serde(default)]
+    pub release: Option<String>,
+    /// Upstream-reported format (`srt`, `vtt`, …). Currently unused — we
+    /// always sniff the payload and re-encode to VTT before pinning — but
+    /// kept on the request shape so the frontend can pass the picked
+    /// `SubsLyricsItem` through unchanged.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub format: Option<String>,
+    #[serde(rename = "isHearingImpaired", default)]
+    pub is_hearing_impaired: bool,
+}
+
+/// Persisted shape of a `subtitle`-typed FileEntry's `value`. Stored as a
+/// JSON-serialised string on the firkin; `cid` points at the VTT bytes
+/// pinned to IPFS, which the in-page player resolves via
+/// `/api/ipfs/pins/<cid>/file`. `url` is kept around for re-fetch /
+/// debugging only.
+#[cfg(not(target_os = "android"))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SubtitleFileValue {
+    pub source: String,
+    #[serde(rename = "externalId")]
+    pub external_id: String,
+    pub url: String,
+    pub cid: String,
+    pub language: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release: Option<String>,
+    pub format: String,
+    #[serde(rename = "isHearingImpaired", default)]
+    pub is_hearing_impaired: bool,
+}
+
+/// SRT timestamps look like `00:01:23,456`; VTT requires `.` as the
+/// decimal separator and a `WEBVTT` magic on the first line. Everything
+/// else (cue numbers, blank lines between blocks, plain-text payload) is
+/// already valid VTT, so we just rewrite the timecode lines and prepend
+/// the magic. BOM at the start (commonly emitted by Windows-encoded SRTs)
+/// is stripped so the magic actually lands at offset 0.
+#[cfg(not(target_os = "android"))]
+fn srt_to_vtt(input: &str) -> String {
+    let stripped = input.strip_prefix('\u{FEFF}').unwrap_or(input);
+    let mut out = String::with_capacity(stripped.len() + 16);
+    out.push_str("WEBVTT\n\n");
+    for line in stripped.lines() {
+        if line.contains("-->") {
+            out.push_str(&line.replace(',', "."));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+#[cfg(not(target_os = "android"))]
+async fn attach_subtitle(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+    Json(req): Json<AttachSubtitleRequest>,
+) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    let url = req.url.trim();
+    if url.is_empty() {
+        return Err(err_response(StatusCode::BAD_REQUEST, "url is required"));
+    }
+    let language = req.language.trim().to_string();
+    if language.is_empty() {
+        return Err(err_response(StatusCode::BAD_REQUEST, "language is required"));
+    }
+    let external_id = req.external_id.trim().to_string();
+    if external_id.is_empty() {
+        return Err(err_response(StatusCode::BAD_REQUEST, "externalId is required"));
+    }
+
+    let existing: Option<Firkin> = state
+        .db
+        .select((TABLE, id.as_str()))
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db select failed: {e}"),
+            )
+        })?;
+    let mut current = existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+
+    // Pull the SRT (or VTT) bytes from the upstream subtitle host.
+    // OpenSubtitles serves through Cloudflare and typically redirects, so
+    // the client follows up to 5 hops. A short timeout + 1MB hard cap
+    // keeps a misbehaving upstream from holding the request open or
+    // ballooning memory.
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("http client failed: {e}"),
+            )
+        })?;
+    let res = client
+        .get(url)
+        .header("User-Agent", "Mhaol/1.0")
+        .timeout(std::time::Duration::from_secs(20))
+        .send()
+        .await
+        .map_err(|e| err_response(StatusCode::BAD_GATEWAY, format!("subtitle fetch failed: {e}")))?;
+    if !res.status().is_success() {
+        return Err(err_response(
+            StatusCode::BAD_GATEWAY,
+            format!("subtitle fetch returned {}", res.status()),
+        ));
+    }
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|e| err_response(StatusCode::BAD_GATEWAY, format!("subtitle read failed: {e}")))?;
+    if bytes.len() > 1_048_576 {
+        return Err(err_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "subtitle larger than 1MB",
+        ));
+    }
+    let raw_text = String::from_utf8_lossy(&bytes).into_owned();
+    let vtt = if raw_text.trim_start_matches('\u{FEFF}').starts_with("WEBVTT") {
+        raw_text
+    } else {
+        srt_to_vtt(&raw_text)
+    };
+    let vtt_bytes = vtt.into_bytes();
+    let size = vtt_bytes.len() as u64;
+
+    let pin_name = format!("firkin-{id}-sub-{language}-{external_id}.vtt");
+    let info = state
+        .ipfs_manager
+        .add_bytes(pin_name, vtt_bytes)
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("ipfs add failed: {e}"),
+            )
+        })?;
+    let cid = info.cid.clone();
+    let pin_path = format!("firkin://{id}/subtitle/{language}/{external_id}");
+    if let Err(e) = crate::ipfs_pins::record_pin(
+        &state,
+        cid.clone(),
+        pin_path,
+        "text/vtt".to_string(),
+        size,
+    )
+    .await
+    {
+        tracing::warn!("[firkins] failed to record subtitle pin row for {id}: {e}");
+    }
+
+    let display = req
+        .display
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let release = req
+        .release
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let value = SubtitleFileValue {
+        source: req.source.trim().to_string(),
+        external_id: external_id.clone(),
+        url: url.to_string(),
+        cid: cid.clone(),
+        language: language.clone(),
+        display: display.clone(),
+        release,
+        format: "vtt".to_string(),
+        is_hearing_impaired: req.is_hearing_impaired,
+    };
+    let value_json = serde_json::to_string(&value).map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("subtitle serialize failed: {e}"),
+        )
+    })?;
+
+    // Replace any prior subtitle entry with the same (language, externalId).
+    // Re-running the attach for the same pick is a no-op rollforward
+    // because the persisted value is identical (same cid).
+    let lang_marker = format!("\"language\":\"{language}\"");
+    let key_marker = format!("\"externalId\":\"{external_id}\"");
+    let mut next_files: Vec<FileEntry> = Vec::with_capacity(current.files.len() + 1);
+    for f in current.files.into_iter() {
+        if f.kind == "subtitle"
+            && f.value.contains(&lang_marker)
+            && f.value.contains(&key_marker)
+        {
+            continue;
+        }
+        next_files.push(f);
+    }
+    let title = display.clone().unwrap_or_else(|| language.clone());
+    next_files.push(FileEntry {
+        kind: "subtitle".to_string(),
+        value: value_json,
+        title: Some(title),
+    });
+    current.files = next_files;
+    current.updated_at = Utc::now();
+    current.id = None;
+
+    let updated_doc = rollforward_firkin(&state, &id, current).await?;
+    Ok(Json(assemble_firkin_dto(&state, updated_doc).await?))
+}
+
 
 #[cfg(not(target_os = "android"))]
 async fn resolve_tracks(

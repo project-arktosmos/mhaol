@@ -280,6 +280,39 @@ class FirkinsService {
 		return updated;
 	}
 
+	/// Download a picked subtitle, pin it to IPFS, and attach it to the
+	/// firkin as a `subtitle`-typed FileEntry. The backend converts SRT
+	/// to VTT before pinning so the in-page player's parser can read it
+	/// directly from `/api/ipfs/pins/<cid>/file`. Returns the rolled-
+	/// forward firkin so the caller can refresh local state.
+	async attachSubtitle(
+		id: string,
+		payload: {
+			source: string;
+			externalId: string;
+			url: string;
+			language: string;
+			display?: string | null;
+			release?: string | null;
+			format?: string | null;
+			isHearingImpaired?: boolean;
+		}
+	): Promise<Firkin> {
+		const res = await fetch(`/api/firkins/${encodeURIComponent(id)}/subtitle`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(payload)
+		});
+		if (!res.ok) throw new Error(await parseError(res));
+		const updated = (await res.json()) as Firkin;
+		this.state.update((s) => {
+			const next = s.firkins.filter((d) => d.id !== id && d.id !== updated.id);
+			next.push(updated);
+			return { ...s, firkins: next };
+		});
+		return updated;
+	}
+
 	async remove(id: string): Promise<void> {
 		const res = await fetch(`/api/firkins/${encodeURIComponent(id)}`, { method: 'DELETE' });
 		if (!res.ok && res.status !== 204) throw new Error(await parseError(res));

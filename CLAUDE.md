@@ -169,7 +169,7 @@ There is one catalog detail route. Catalog grid clicks land on `/catalog/visit?.
 - `CatalogTrailersCard.svelte` — trailers list driven by a `TrailerResolver`
 - `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`
 - `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval. Hidden entirely when `!firkin.bookmarked`
-- `CatalogSubsLyricsCard.svelte` — subs/lyrics search results driven by a `SubsLyricsResolver` (auto-fired on bookmarked-detail mount: lyrics for MusicBrainz albums, subtitles for TMDB movies/TV). Read-only — clicking a row previews lyrics inline or opens the subtitle URL. Hidden when `!firkin.bookmarked`
+- `CatalogSubsLyricsCard.svelte` — subs/lyrics search results driven by a `SubsLyricsResolver`. Lyrics for MusicBrainz albums fire on bookmarked-detail mount; subtitles defer until the user actually starts a stream (the IPFS or torrent tab on a `tmdb-movie` firkin) so we don't burn an OpenSubtitles round-trip on every page visit. Read-only — clicking a row previews lyrics inline or opens the subtitle URL. Hidden when `!firkin.bookmarked`. The actual subtitle download / attach flow lives above the player as a language-then-pick toolbar; the picked entry is `POST`ed to `/api/firkins/:id/subtitle`, which fetches the SRT, converts it to VTT, pins it to IPFS, and rolls a `subtitle`-typed FileEntry onto the firkin so the player can render it from `/api/ipfs/pins/<cid>/file`
 - `CatalogFilesTable.svelte` — firkin `files` table (bookmarked only; suppressed for `musicbrainz` firkins since the tracks card already surfaces every per-track entry)
 
 **Shared resolver services** (`packages/frontend/src/services/catalog/`):
