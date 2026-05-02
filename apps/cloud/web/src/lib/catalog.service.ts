@@ -36,6 +36,7 @@ export interface CatalogSource {
 	kind: string;
 	filterLabel: string;
 	hasFilter: boolean;
+	hasPopular: boolean;
 }
 
 async function parseError(res: Response): Promise<string> {

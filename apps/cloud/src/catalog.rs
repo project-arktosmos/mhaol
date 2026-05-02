@@ -26,6 +26,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "movie",
         filter_label: "Genre",
         has_filter: true,
+        has_popular: true,
         browsable: true,
     },
     Addon {
@@ -34,6 +35,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "tv show",
         filter_label: "Genre",
         has_filter: true,
+        has_popular: true,
         browsable: true,
     },
     Addon {
@@ -42,14 +44,16 @@ pub const ADDONS: &[Addon] = &[
         kind: "album",
         filter_label: "Genre",
         has_filter: true,
+        has_popular: true,
         browsable: true,
     },
     Addon {
         id: "youtube-video",
-        label: "YouTube Videos",
+        label: "YouTube",
         kind: "youtube video",
-        filter_label: "Region",
+        filter_label: "Type",
         has_filter: true,
+        has_popular: false,
         browsable: true,
     },
     // Subtitle / lyric lookups — valid firkin addons but not browsable.
@@ -59,6 +63,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "movie",
         filter_label: "Filter",
         has_filter: false,
+        has_popular: false,
         browsable: false,
     },
     Addon {
@@ -67,6 +72,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "tv show",
         filter_label: "Filter",
         has_filter: false,
+        has_popular: false,
         browsable: false,
     },
     Addon {
@@ -75,6 +81,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "album",
         filter_label: "Filter",
         has_filter: false,
+        has_popular: false,
         browsable: false,
     },
     // Local addons — used by libraries to declare which media kinds they
@@ -85,6 +92,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "movie",
         filter_label: "Filter",
         has_filter: false,
+        has_popular: false,
         browsable: false,
     },
     Addon {
@@ -93,6 +101,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "tv show",
         filter_label: "Filter",
         has_filter: false,
+        has_popular: false,
         browsable: false,
     },
     Addon {
@@ -101,6 +110,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "album",
         filter_label: "Filter",
         has_filter: false,
+        has_popular: false,
         browsable: false,
     },
     Addon {
@@ -109,6 +119,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "book",
         filter_label: "Filter",
         has_filter: false,
+        has_popular: false,
         browsable: false,
     },
     Addon {
@@ -117,6 +128,7 @@ pub const ADDONS: &[Addon] = &[
         kind: "game",
         filter_label: "Filter",
         has_filter: false,
+        has_popular: false,
         browsable: false,
     },
 ];
@@ -128,6 +140,7 @@ pub struct Addon {
     pub kind: &'static str,
     pub filter_label: &'static str,
     pub has_filter: bool,
+    pub has_popular: bool,
     pub browsable: bool,
 }
 
@@ -296,6 +309,8 @@ struct CatalogSource {
     filter_label: &'static str,
     #[serde(rename = "hasFilter")]
     has_filter: bool,
+    #[serde(rename = "hasPopular")]
+    has_popular: bool,
 }
 
 async fn list_sources() -> Json<Vec<CatalogSource>> {
@@ -309,6 +324,7 @@ async fn list_sources() -> Json<Vec<CatalogSource>> {
                 kind: a.kind,
                 filter_label: a.filter_label,
                 has_filter: a.has_filter,
+                has_popular: a.has_popular,
             })
             .collect(),
     )
@@ -378,7 +394,7 @@ async fn search(
         "tmdb-movie" => tmdb_search(false, trimmed, page).await,
         "tmdb-tv" => tmdb_search(true, trimmed, page).await,
         "musicbrainz" => musicbrainz_search(trimmed, page, q.field.as_deref()).await,
-        "youtube-video" => youtube_search(trimmed, page).await,
+        "youtube-video" => youtube_search(trimmed, page, q.filter.as_deref()).await,
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(empty_page(page)),
         _ => Err(err(
             StatusCode::NOT_FOUND,
@@ -397,7 +413,7 @@ async fn genres(
         "tmdb-movie" => tmdb_genres(false).await,
         "tmdb-tv" => tmdb_genres(true).await,
         "musicbrainz" => Ok(static_music_genres()),
-        "youtube-video" => Ok(static_youtube_regions()),
+        "youtube-video" => Ok(static_youtube_search_kinds()),
         "lrclib" | "wyzie-subs-movie" | "wyzie-subs-tv" => Ok(Vec::new()),
         _ => Err(err(
             StatusCode::NOT_FOUND,
@@ -1577,24 +1593,14 @@ fn musicbrainz_to_item(rg: &serde_json::Value) -> CatalogItem {
 
 // ---------- YouTube ----------
 
-const YOUTUBE_REGIONS: &[(&str, &str)] = &[
-    ("US", "United States"),
-    ("GB", "United Kingdom"),
-    ("CA", "Canada"),
-    ("AU", "Australia"),
-    ("DE", "Germany"),
-    ("FR", "France"),
-    ("ES", "Spain"),
-    ("IT", "Italy"),
-    ("BR", "Brazil"),
-    ("MX", "Mexico"),
-    ("JP", "Japan"),
-    ("KR", "South Korea"),
-    ("IN", "India"),
-];
+/// Two options the YouTube addon's filter row offers — the catalog page's
+/// generic genre dropdown is reused as a Videos / Channels selector that
+/// drives the Piped `filter=` parameter on `/api/catalog/youtube-video/search`.
+/// Order matters: the first entry is the default selection.
+const YOUTUBE_SEARCH_KINDS: &[(&str, &str)] = &[("videos", "Videos"), ("channels", "Channels")];
 
-fn static_youtube_regions() -> Vec<CatalogGenre> {
-    YOUTUBE_REGIONS
+fn static_youtube_search_kinds() -> Vec<CatalogGenre> {
+    YOUTUBE_SEARCH_KINDS
         .iter()
         .map(|(id, name)| CatalogGenre {
             id: (*id).to_string(),
@@ -1604,18 +1610,10 @@ fn static_youtube_regions() -> Vec<CatalogGenre> {
 }
 
 async fn youtube_popular(
-    region: Option<&str>,
+    _filter: Option<&str>,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
-    let region = region
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_uppercase())
-        .unwrap_or_else(|| "US".to_string());
-    let url = format!(
-        "{}/trending?region={}",
-        PIPED_BASE,
-        urlencoding(&region)
-    );
+    let url = format!("{}/trending?region=US", PIPED_BASE);
     let payload: serde_json::Value = http_get_json(
         &url,
         &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
@@ -1629,7 +1627,7 @@ async fn youtube_popular(
         .iter()
         .skip(offset)
         .take(limit)
-        .map(youtube_to_item)
+        .map(|v| youtube_to_item(v, "videos"))
         .collect();
     Ok(CatalogPage {
         items,
@@ -1641,11 +1639,17 @@ async fn youtube_popular(
 async fn youtube_search(
     query: &str,
     page: i64,
+    filter: Option<&str>,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
+    let kind = match filter.map(|s| s.trim().to_ascii_lowercase()).as_deref() {
+        Some("channels") => "channels",
+        _ => "videos",
+    };
     let url = format!(
-        "{}/search?q={}&filter=videos",
+        "{}/search?q={}&filter={}",
         PIPED_BASE,
         urlencoding(query),
+        kind,
     );
     let payload: serde_json::Value = http_get_json(
         &url,
@@ -1664,7 +1668,7 @@ async fn youtube_search(
         .iter()
         .skip(offset)
         .take(limit)
-        .map(youtube_to_item)
+        .map(|v| youtube_to_item(v, kind))
         .collect();
     Ok(CatalogPage {
         items,
@@ -1673,22 +1677,46 @@ async fn youtube_search(
     })
 }
 
-fn youtube_to_item(item: &serde_json::Value) -> CatalogItem {
-    let id = item
-        .get("url")
-        .and_then(|v| v.as_str())
-        .map(|s| {
-            s.split_once("v=")
-                .map(|(_, rest)| rest.to_string())
-                .unwrap_or_else(|| s.trim_start_matches('/').to_string())
-        })
-        .unwrap_or_default();
+/// Map a Piped `/search` or `/trending` entry into our universal
+/// `CatalogItem`. Channels and videos use different field names upstream
+/// (channels carry `name` + `description` + `subscribers`, videos carry
+/// `title` + `uploaderName` + `views`), so the kind discriminates which
+/// fields to read. The result `id` is stripped of any leading slash so
+/// the frontend can reuse it as the upstream id query param when it
+/// navigates to `/catalog/virtual`.
+fn youtube_to_item(item: &serde_json::Value, kind: &str) -> CatalogItem {
+    let url_str = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
+    let id = if let Some((_, rest)) = url_str.split_once("v=") {
+        rest.to_string()
+    } else {
+        url_str.trim_start_matches('/').to_string()
+    };
     let title = item
         .get("title")
         .and_then(|v| v.as_str())
+        .or_else(|| item.get("name").and_then(|v| v.as_str()))
         .unwrap_or("")
         .to_string();
-    let description = {
+    let description = if kind == "channels" {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(d) = item
+            .get("description")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            parts.push(d.to_string());
+        }
+        if let Some(s) = item.get("subscribers").and_then(|v| v.as_i64()) {
+            if s >= 0 {
+                parts.push(format!("{} subscribers", s));
+            }
+        }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(" · "))
+        }
+    } else {
         let uploader = item
             .get("uploaderName")
             .and_then(|v| v.as_str())

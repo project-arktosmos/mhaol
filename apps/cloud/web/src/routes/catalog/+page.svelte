@@ -67,6 +67,7 @@
 	const filterLabel = $derived(currentSource?.filterLabel ?? 'Filter');
 	const hasFilter = $derived(currentSource?.hasFilter ?? false);
 	const showFilterRow = $derived(hasFilter);
+	const hasPopular = $derived(currentSource?.hasPopular ?? true);
 
 	// Each catalog (remote) addon has a matching local-* addon used by
 	// library scans for the same content kind. The catalog Library section
@@ -94,6 +95,7 @@
 			.map((url) => ({ url, mimeType: 'image/jpeg', fileSize: 0, width: 0, height: 0 }));
 		return {
 			id: `virtual:${addon}:${item.id}`,
+			cid: '',
 			title: item.title,
 			artists: [],
 			description: item.description ?? '',
@@ -196,8 +198,12 @@
 	}
 
 	async function refreshItems() {
-		if (!addon) {
+		if (!addon || !hasPopular) {
 			items = [];
+			totalPages = 1;
+			page = 1;
+			itemsLoading = false;
+			itemsError = null;
 			return;
 		}
 		itemsLoading = true;
@@ -255,8 +261,8 @@
 
 	async function applyMetadata(item: CatalogLookupItem) {
 		if (!metadataTarget) return;
-		const oldId = metadataTarget.firkin.id;
-		const updated = await firkinsService.enrich(oldId, {
+		const id = metadataTarget.firkin.id;
+		await firkinsService.enrich(id, {
 			title: item.title,
 			year: item.year,
 			description: item.description ?? '',
@@ -264,12 +270,8 @@
 			backdropUrl: item.backdropUrl
 		});
 		metadataTarget = null;
-		// Refresh so the rolled-forward firkin (new CID) replaces the old
-		// one in the Library section's list.
+		// Refresh so the in-place-updated firkin replaces the cached one.
 		await firkinsService.refresh();
-		if (updated.id !== oldId) {
-			void goto(`${base}/catalog/${encodeURIComponent(updated.id)}`);
-		}
 	}
 
 	async function goToPage(next: number) {
@@ -282,8 +284,7 @@
 		const stopFirkins = firkinsService.start();
 		void (async () => {
 			try {
-				const fetched = await listSources();
-				sources = fetched.filter((s) => s.id !== 'youtube-video');
+				sources = await listSources();
 			} catch (err) {
 				sourcesError = err instanceof Error ? err.message : 'Unknown error';
 			}
@@ -503,64 +504,66 @@
 		</section>
 	{/if}
 
-	<section class="flex flex-col gap-3">
-		<div class="flex items-center justify-between gap-4">
-			<h2 class="text-lg font-semibold">Popular</h2>
-			<div class="flex items-center gap-2">
-				<button
-					class="btn btn-outline btn-xs"
-					onclick={() => goToPage(page - 1)}
-					disabled={itemsLoading || page <= 1}
-				>
-					Prev
-				</button>
-				<span class="text-xs text-base-content/60">Page {page} / {totalPages}</span>
-				<button
-					class="btn btn-outline btn-xs"
-					onclick={() => goToPage(page + 1)}
-					disabled={itemsLoading || page >= totalPages}
-				>
-					Next
-				</button>
-				<button class="btn btn-outline btn-xs" onclick={refreshItems} disabled={itemsLoading}>
-					Refresh
-				</button>
-			</div>
-		</div>
-
-		{#if itemsError}
-			<div class="alert alert-error">
-				<span>{itemsError}</span>
-			</div>
-		{/if}
-
-		{#if itemsLoading && items.length === 0}
-			<p class="text-sm text-base-content/60">Loading…</p>
-		{:else if items.length === 0}
-			<p class="text-sm text-base-content/60">No items.</p>
-		{:else}
-			<div
-				class={classNames(
-					'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
-					{ 'opacity-60': itemsLoading }
-				)}
-			>
-				{#each items as item (item.id)}
-					<a
-						href={virtualHref(item)}
-						class="block no-underline"
-						onclick={(e) => {
-							if ((e.target as HTMLElement).closest('button, summary')) {
-								e.preventDefault();
-							}
-						}}
+	{#if hasPopular}
+		<section class="flex flex-col gap-3">
+			<div class="flex items-center justify-between gap-4">
+				<h2 class="text-lg font-semibold">Popular</h2>
+				<div class="flex items-center gap-2">
+					<button
+						class="btn btn-outline btn-xs"
+						onclick={() => goToPage(page - 1)}
+						disabled={itemsLoading || page <= 1}
 					>
-						<FirkinCard firkin={virtualFirkin(item)} />
-					</a>
-				{/each}
+						Prev
+					</button>
+					<span class="text-xs text-base-content/60">Page {page} / {totalPages}</span>
+					<button
+						class="btn btn-outline btn-xs"
+						onclick={() => goToPage(page + 1)}
+						disabled={itemsLoading || page >= totalPages}
+					>
+						Next
+					</button>
+					<button class="btn btn-outline btn-xs" onclick={refreshItems} disabled={itemsLoading}>
+						Refresh
+					</button>
+				</div>
 			</div>
-		{/if}
-	</section>
+
+			{#if itemsError}
+				<div class="alert alert-error">
+					<span>{itemsError}</span>
+				</div>
+			{/if}
+
+			{#if itemsLoading && items.length === 0}
+				<p class="text-sm text-base-content/60">Loading…</p>
+			{:else if items.length === 0}
+				<p class="text-sm text-base-content/60">No items.</p>
+			{:else}
+				<div
+					class={classNames(
+						'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+						{ 'opacity-60': itemsLoading }
+					)}
+				>
+					{#each items as item (item.id)}
+						<a
+							href={virtualHref(item)}
+							class="block no-underline"
+							onclick={(e) => {
+								if ((e.target as HTMLElement).closest('button, summary')) {
+									e.preventDefault();
+								}
+							}}
+						>
+							<FirkinCard firkin={virtualFirkin(item)} />
+						</a>
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/if}
 </div>
 
 {#if metadataTarget}
