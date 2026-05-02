@@ -158,11 +158,13 @@
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
 									{@const ev = rowEval(torrent.magnetLink)}
-									{@const hidden = defaultCollapsed
-										? !expanded
-										: probing
-											? rowIdx !== probeIdx
-											: streamableIdx >= 0 && rowIdx > streamableIdx && !expanded}
+									{@const hidden = expanded
+										? false
+										: defaultCollapsed
+											? true
+											: probing
+												? rowIdx !== probeIdx
+												: streamableIdx >= 0 && rowIdx > streamableIdx}
 									{@const showMoreToggle =
 										!probing &&
 										streamableIdx >= 0 &&
