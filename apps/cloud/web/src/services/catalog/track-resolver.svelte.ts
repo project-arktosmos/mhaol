@@ -1,8 +1,10 @@
 import { base } from '$app/paths';
 import { playYouTubeAudio } from '$lib/youtube-match.service';
 import type { FileEntry } from '$lib/firkins.service';
+import { playerService } from '$services/player.service';
 import type { ResolutionStatus, TrackEntry } from '$services/catalog/types';
 import type { SubsLyricsItem, SubsLyricsSyncedLine } from '$types/subs-lyrics.type';
+import type { PlaylistTrack } from '$types/player.type';
 
 interface LoadFromFirkinArgs {
 	releaseGroupId: string;
@@ -189,7 +191,10 @@ export class TrackResolver {
 		if (changed) this.tracks = next;
 	}
 
-	async play(index: number, opts: { thumb: string | null }): Promise<void> {
+	async play(
+		index: number,
+		opts: { thumb: string | null; albumTitle?: string }
+	): Promise<void> {
 		const t = this.tracks[index];
 		if (!t || !t.youtubeUrl || this.playingIndex !== null) return;
 		this.playingIndex = index;
@@ -200,6 +205,26 @@ export class TrackResolver {
 				t.lyrics?.syncedLyrics && t.lyrics.syncedLyrics.length > 0
 					? t.lyrics.syncedLyrics
 					: null;
+			// Surface the full tracklist to the floating player panel so the
+			// user can swap between songs from anywhere in the app — even
+			// after navigating away from this catalog page (the playlist
+			// lives on `playerService` and persists across track swaps).
+			const playlistTracks: PlaylistTrack[] = this.tracks.map((tr) => ({
+				title: tr.title,
+				youtubeUrl: tr.youtubeUrl ?? null,
+				thumbnailUrl: opts.thumb,
+				durationSeconds: tr.lengthMs ? Math.round(tr.lengthMs / 1000) : null,
+				syncedLyrics:
+					tr.lyrics?.syncedLyrics && tr.lyrics.syncedLyrics.length > 0
+						? tr.lyrics.syncedLyrics
+						: null,
+				position: tr.position
+			}));
+			playerService.setPlaylist({
+				tracks: playlistTracks,
+				currentIndex: index,
+				title: opts.albumTitle
+			});
 			await playYouTubeAudio(t.youtubeUrl, t.title, opts.thumb, durationSeconds, syncedLyrics);
 		} catch (err) {
 			this.playError = err instanceof Error ? err.message : 'Unknown error';

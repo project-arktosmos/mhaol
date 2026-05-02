@@ -69,6 +69,30 @@ export interface PlayerState {
 	syncedLyrics: SubsLyricsSyncedLine[] | null;
 }
 
+// ===== Player Playlist =====
+//
+// An optional queue of tracks the user can swap between from the floating
+// player panel. Lives alongside (not inside) PlayerState so that internal
+// `beginLoad`/`playUrl` cycles can swap the active track without wiping
+// the whole queue. Only an explicit `playerService.stop()` clears it.
+
+export interface PlaylistTrack {
+	title: string;
+	// `null` means the track exists in the listing but isn't playable
+	// (no resolved YouTube URL). The row renders disabled.
+	youtubeUrl: string | null;
+	thumbnailUrl: string | null;
+	durationSeconds: number | null;
+	syncedLyrics: SubsLyricsSyncedLine[] | null;
+	position?: number;
+}
+
+export interface PlayerPlaylist {
+	tracks: PlaylistTrack[];
+	currentIndex: number;
+	title?: string;
+}
+
 // ===== Player Settings (localStorage) =====
 
 export interface PlayerSettings {

@@ -5,7 +5,8 @@ import type {
 	PlayerSettings,
 	PlayerState,
 	PlayerDisplayMode,
-	PlayableFile
+	PlayableFile,
+	PlayerPlaylist
 } from '$types/player.type';
 import type { SubsLyricsSyncedLine } from '$types/subs-lyrics.type';
 
@@ -40,9 +41,35 @@ const initialState: PlayerState = {
 class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	public state: Writable<PlayerState> = writable(initialState);
 	public displayMode: Writable<PlayerDisplayMode> = writable('fullscreen');
+	public playlist: Writable<PlayerPlaylist | null> = writable(null);
 
 	setDisplayMode(mode: PlayerDisplayMode): void {
 		this.displayMode.set(mode);
+	}
+
+	// ===== Playlist =====
+	//
+	// Track queue surfaced by the floating player panel. Set by callers
+	// that want to expose a swap-list (e.g. the catalog tracks card),
+	// preserved through every `beginLoad` / `playUrl` cycle so swapping
+	// to another track doesn't wipe the queue, and only cleared on an
+	// explicit user-driven `stop()`.
+
+	setPlaylist(playlist: PlayerPlaylist | null): void {
+		this.playlist.set(playlist);
+	}
+
+	setPlaylistIndex(index: number): void {
+		this.playlist.update((p) => {
+			if (!p) return p;
+			if (index < 0 || index >= p.tracks.length) return p;
+			if (p.currentIndex === index) return p;
+			return { ...p, currentIndex: index };
+		});
+	}
+
+	clearPlaylist(): void {
+		this.playlist.set(null);
 	}
 
 	private _initialized = false;
@@ -74,7 +101,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 	): Promise<void> {
 		if (!browser) return;
 
-		await this.stop();
+		this._resetPlaybackState();
 		this.playGeneration++;
 		if (displayMode) this.displayMode.set(displayMode);
 
@@ -106,11 +133,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 		// When upgrading from a `beginLoad` of the same file (audio callers
 		// surface the panel immediately while the stream URL resolves), skip
-		// the stop() reset so the in-flight loading state isn't wiped.
+		// the reset so the in-flight loading state isn't wiped.
 		const cur = get(this.state);
 		const sameFile = cur.currentFile !== null && cur.currentFile.id === file.id;
 		if (!sameFile) {
-			await this.stop();
+			this._resetPlaybackState();
 		}
 		this.playGeneration++;
 		if (displayMode) this.displayMode.set(displayMode);
@@ -186,7 +213,7 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 
 	// ===== Stop playback =====
 
-	async stop(): Promise<void> {
+	private _resetPlaybackState(): void {
 		if (this.seekTimeout !== null) {
 			clearTimeout(this.seekTimeout);
 			this.seekTimeout = null;
@@ -211,6 +238,11 @@ class PlayerService extends ObjectServiceClass<PlayerSettings> {
 			syncedLyrics: null
 		}));
 		this.displayMode.set('fullscreen');
+	}
+
+	async stop(): Promise<void> {
+		this._resetPlaybackState();
+		this.playlist.set(null);
 	}
 
 	// ===== Settings =====

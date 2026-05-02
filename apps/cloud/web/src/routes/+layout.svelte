@@ -8,6 +8,7 @@
 	import FirkinFilesPanel from '$components/firkins/FirkinFilesPanel.svelte';
 	import NavbarAudioPlayer from '$components/player/NavbarAudioPlayer.svelte';
 	import NavbarLyricsPanel from '$components/player/NavbarLyricsPanel.svelte';
+	import NavbarPlaylistPanel from '$components/player/NavbarPlaylistPanel.svelte';
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import SubsLyricsFinder from '$components/player/SubsLyricsFinder.svelte';
 	import { firkinPlaybackService } from '$services/firkin-playback.service';
@@ -107,6 +108,7 @@
 		>
 			<NavbarAudioPlayer />
 			<NavbarLyricsPanel />
+			<NavbarPlaylistPanel />
 		</div>
 	{/if}
 

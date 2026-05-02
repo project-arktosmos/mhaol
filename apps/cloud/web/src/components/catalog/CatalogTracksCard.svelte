@@ -5,9 +5,10 @@
 	interface Props {
 		resolver: TrackResolver;
 		thumb: string | null;
+		albumTitle?: string;
 		onRefresh?: () => void;
 	}
-	let { resolver, thumb, onRefresh }: Props = $props();
+	let { resolver, thumb, albumTitle, onRefresh }: Props = $props();
 
 	let expandedLyricsIdx = $state<number | null>(null);
 
@@ -75,7 +76,7 @@
 								'cursor-default': !playable
 							})}
 							disabled={!playable || resolver.playingIndex !== null}
-							onclick={() => resolver.play(idx, { thumb })}
+							onclick={() => resolver.play(idx, { thumb, albumTitle })}
 							title={playable ? `Play "${track.title}"` : track.title}
 						>
 							<span class="w-6 shrink-0 text-right font-mono text-base-content/60"
