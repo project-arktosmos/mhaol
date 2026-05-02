@@ -170,7 +170,7 @@ There is one catalog detail route. Catalog grid clicks land on `/catalog/visit?.
 - `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`
 - `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval. Hidden entirely when `!firkin.bookmarked`
 - `CatalogSubsLyricsCard.svelte` — subs/lyrics search results driven by a `SubsLyricsResolver` (auto-fired on bookmarked-detail mount: lyrics for MusicBrainz albums, subtitles for TMDB movies/TV). Read-only — clicking a row previews lyrics inline or opens the subtitle URL. Hidden when `!firkin.bookmarked`
-- `CatalogFilesTable.svelte` — firkin `files` table (bookmarked only)
+- `CatalogFilesTable.svelte` — firkin `files` table (bookmarked only; suppressed for `musicbrainz` firkins since the tracks card already surfaces every per-track entry)
 
 **Shared resolver services** (`packages/frontend/src/services/catalog/`):
 - `trailer-resolver.svelte.ts` — `TrailerResolver` class. Holds `$state` for `trailers`, `status`, `playingKey`, `playError`. `resolveMovie(...)` / `resolveTv(...)` accept TMDB-sourced trailers via `stored`, prefer them when present, and only fall back to the YouTube fuzzy search when TMDB has nothing English. Optional `persist` callback writes back to the firkin via `PUT /api/firkins/:id`; the detail page short-circuits the persist when `!firkin.bookmarked` so browse-cache resolutions don't roll the CID forward.

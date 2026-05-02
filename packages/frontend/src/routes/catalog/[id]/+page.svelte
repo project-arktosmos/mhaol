@@ -1636,7 +1636,7 @@
 				/>
 			{/if}
 
-			{#if isBookmarked}
+			{#if isBookmarked && !isMusicBrainz}
 				<CatalogFilesTable files={firkin.files} />
 			{/if}
 		</section>
