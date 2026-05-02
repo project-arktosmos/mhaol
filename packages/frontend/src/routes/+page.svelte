@@ -220,7 +220,7 @@
 
 <section class="sticky top-0 z-50 border-b border-base-content/10 bg-base-200">
 	<div class="grid w-full grid-cols-2 items-stretch gap-3 p-3">
-		<NavbarAddonPicker classes="grid grid-cols-2 gap-1" />
+		<NavbarAddonPicker classes="grid grid-cols-4 gap-1" />
 		<NavbarSearch
 			classes="flex items-center gap-2 w-full"
 			inputClasses="input-bordered input input-sm flex-1 min-w-0"
