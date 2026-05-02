@@ -1627,12 +1627,7 @@
 </svelte:head>
 
 <div class="flex min-h-full flex-col gap-6 p-6">
-	<CatalogPageHeader
-		title={firkin.title}
-		addon={firkin.addon}
-		kindLabel={firkinKind}
-		year={firkin.year}
-	>
+	<CatalogPageHeader title={firkin.title}>
 		{#snippet actions()}
 			{#if !isBookmarked}
 				<button
@@ -1687,6 +1682,15 @@
 					Find metadata
 				</button>
 			{/if}
+			<span class="flex items-center gap-1">
+				<span class="badge badge-outline badge-sm">{firkin.addon}</span>
+				{#if firkinKind}
+					<span class="badge badge-outline badge-sm">{firkinKind}</span>
+				{/if}
+				{#if firkin.year !== null && firkin.year !== undefined && Number.isFinite(firkin.year)}
+					<span class="badge badge-outline badge-sm">{firkin.year}</span>
+				{/if}
+			</span>
 			<button
 				type="button"
 				class="btn btn-outline btn-sm btn-error"
