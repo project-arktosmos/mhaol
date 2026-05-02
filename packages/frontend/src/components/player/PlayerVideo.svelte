@@ -129,6 +129,19 @@
 	let isVideo = $derived(file?.mode !== 'audio');
 	let isStreaming = $derived(connectionState === 'streaming');
 	let isHlsStream = $derived(!!directStreamUrl && isHlsUrl(directStreamUrl, directStreamMimeType));
+	// HLS rolling playlists (IPFS-stream sessions) only expose the duration
+	// of segments currently in the manifest, so `durationSecs` (which
+	// tracks `element.duration`) ratchets up chunk-by-chunk. The backend
+	// probes the full source duration up-front and stamps it on
+	// `file.durationSeconds`; prefer that authoritative total at the
+	// display layer so the seek bar covers the whole film regardless of
+	// any element-driven writes elsewhere.
+	let displayDurationSecs = $derived.by(() => {
+		const fd = file?.durationSeconds ?? 0;
+		const ds = durationSecs ?? 0;
+		const m = fd > ds ? fd : ds;
+		return m > 0 ? m : null;
+	});
 	let activeMediaElement = $derived(videoElement as HTMLMediaElement | null);
 	// Combine subtitles already attached to the file with any downloaded for the search context.
 	let assignedSubs = $derived(subtitleSearchContext ? $subsState.assigned : []);
@@ -377,7 +390,12 @@
 		untrack(() => {
 			const cur = get(playerService.state);
 			if (Number.isFinite(element.duration) && element.duration > 0) {
-				const d = element.duration;
+				// Same rolling-playlist guard as `onLoadedMetadata`: never
+				// let a partial element duration shrink the authoritative
+				// `file.durationSeconds` that `playUrl` seeded.
+				const ed = element.duration;
+				const fd = file?.durationSeconds ?? 0;
+				const d = fd > ed ? fd : ed;
 				if (cur.durationSecs !== d) {
 					playerService.state.update((s) => ({ ...s, durationSecs: d }));
 				}
@@ -715,7 +733,7 @@
 			mediaElement={activeMediaElement}
 			{isVideo}
 			{positionSecs}
-			{durationSecs}
+			durationSecs={displayDurationSecs}
 			{bufferedRanges}
 			{connectionState}
 			isFullscreen={effectiveFullscreen}
