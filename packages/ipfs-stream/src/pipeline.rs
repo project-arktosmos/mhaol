@@ -5,8 +5,15 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// Default segment duration in seconds.
-pub const DEFAULT_SEGMENT_DURATION: u32 = 6;
+/// Default segment duration in seconds. The browser starts playing the
+/// moment the first segment lands, then has only this much head-room
+/// before it needs the next segment to be ready. With x264enc's
+/// realtime budget this used to be 6s, which left no margin: the player
+/// would catch up to the live edge and stall waiting for segment 2 on
+/// any non-trivial source. Holding each segment open for ~15s lets the
+/// pipeline produce roughly two more segments while the player chews
+/// through the first, so steady-state playback no longer rebuffers.
+pub const DEFAULT_SEGMENT_DURATION: u32 = 15;
 /// Default playlist max length (number of segments kept). 0 means keep all
 /// segments (VOD-style); the player can seek anywhere inside the file.
 pub const DEFAULT_PLAYLIST_LENGTH: u32 = 0;
