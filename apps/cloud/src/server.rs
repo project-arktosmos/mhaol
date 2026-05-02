@@ -14,6 +14,8 @@ mod libraries;
 #[cfg(not(target_os = "android"))]
 mod library_scan;
 mod media_trackers;
+#[cfg(not(target_os = "android"))]
+mod p2p;
 mod paths;
 mod player;
 mod recommendations;
@@ -241,6 +243,7 @@ async fn main() {
     #[cfg(not(target_os = "android"))]
     {
         app = app.nest("/api/ytdl", ytdl::router());
+        app = app.nest("/api/p2p", p2p::router());
     }
 
     let app = app
