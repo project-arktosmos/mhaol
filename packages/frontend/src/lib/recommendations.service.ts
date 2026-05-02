@@ -49,11 +49,37 @@ async function parseError(res: Response): Promise<string> {
 	return `HTTP ${res.status}`;
 }
 
-export async function listRecommendations(address: string): Promise<Recommendation[]> {
+export async function listRecommendations(
+	address: string,
+	options: { excludeActioned?: boolean } = {}
+): Promise<Recommendation[]> {
 	const params = new URLSearchParams({ address });
+	if (options.excludeActioned) params.set('excludeActioned', 'true');
 	const res = await fetch(`/api/recommendations?${params.toString()}`, { cache: 'no-store' });
 	if (!res.ok) throw new Error(await parseError(res));
 	return (await res.json()) as Recommendation[];
+}
+
+export type RecommendationAction = 'like' | 'discard' | 'bookmark';
+
+export interface ActionResponse {
+	action: RecommendationAction;
+	created_at: string;
+	updated_at: string;
+}
+
+export async function recordRecommendationAction(input: {
+	address: string;
+	firkinId: string;
+	action: RecommendationAction;
+}): Promise<ActionResponse> {
+	const res = await fetch('/api/recommendations/action', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	if (!res.ok) throw new Error(await parseError(res));
+	return (await res.json()) as ActionResponse;
 }
 
 export async function ingestRecommendations(req: IngestRequest): Promise<IngestResponse> {

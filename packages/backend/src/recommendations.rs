@@ -10,10 +10,17 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use surrealdb::sql::Thing;
 
 pub const TABLE: &str = "recommendation";
 pub const SOURCE_TABLE: &str = "recommendation_source";
+pub const ACTION_TABLE: &str = "recommendation_action";
+
+pub const ACTION_LIKE: &str = "like";
+pub const ACTION_DISCARD: &str = "discard";
+pub const ACTION_BOOKMARK: &str = "bookmark";
+const ALLOWED_ACTIONS: &[&str] = &[ACTION_LIKE, ACTION_DISCARD, ACTION_BOOKMARK];
 
 /// One row per `(user, recommended firkin)` pair. Tracks how many distinct
 /// source-firkin pages have recommended this item to this user.
@@ -122,6 +129,42 @@ impl From<Recommendation> for RecommendationDto {
 #[derive(Debug, Deserialize, Default)]
 pub struct ListQuery {
     pub address: Option<String>,
+    /// When `true`, drop any recommendation that the user has already
+    /// liked / discarded / bookmarked via the `/action` endpoint. Used by
+    /// the `/feed` page so the user never sees the same card twice.
+    #[serde(rename = "excludeActioned", default)]
+    pub exclude_actioned: bool,
+}
+
+/// One row per `(user, recommendation firkin)` pair recording the user's
+/// most recent action on that recommendation. Liking, discarding, or
+/// bookmarking a recommendation upserts the same row so the
+/// `/recommendations?excludeActioned=true` filter can hide it from the
+/// feed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationAction {
+    pub id: Option<Thing>,
+    pub address: String,
+    pub firkin_id: String,
+    /// One of [`ACTION_LIKE`], [`ACTION_DISCARD`], [`ACTION_BOOKMARK`].
+    pub action: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ActionRequest {
+    pub address: String,
+    #[serde(rename = "firkinId")]
+    pub firkin_id: String,
+    pub action: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ActionResponse {
+    pub action: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -171,6 +214,26 @@ pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/", get(list))
         .route("/ingest", post(ingest))
+        .route("/action", post(record_action))
+}
+
+/// Mean of `score / max_score` across all reviews. Returns `0.0` for an
+/// empty list so unrated items sink under rated ones in the feed sort.
+fn rating_score(reviews: &[CatalogReview]) -> f64 {
+    if reviews.is_empty() {
+        return 0.0;
+    }
+    let total: f64 = reviews
+        .iter()
+        .map(|r| {
+            if r.max_score > 0.0 {
+                (r.score / r.max_score).clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        })
+        .sum();
+    total / reviews.len() as f64
 }
 
 fn err_response(
@@ -287,20 +350,134 @@ async fn list(
             format!("db select failed: {e}"),
         )
     })?;
+    let actioned_ids: HashSet<String> = if q.exclude_actioned {
+        let actions: Vec<RecommendationAction> = state
+            .db
+            .select(ACTION_TABLE)
+            .await
+            .map_err(|e| {
+                err_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("db select failed: {e}"),
+                )
+            })?;
+        actions
+            .into_iter()
+            .filter(|a| match &address_filter {
+                Some(addr) => &a.address == addr,
+                None => true,
+            })
+            .map(|a| a.firkin_id)
+            .collect()
+    } else {
+        HashSet::new()
+    };
     let mut dtos: Vec<RecommendationDto> = rows
         .into_iter()
         .filter(|r| match &address_filter {
             Some(addr) => &r.address == addr,
             None => true,
         })
+        .filter(|r| !q.exclude_actioned || !actioned_ids.contains(&r.firkin_id))
         .map(Into::into)
         .collect();
     dtos.sort_by(|a, b| {
         b.count
             .cmp(&a.count)
+            .then_with(|| {
+                rating_score(&b.reviews)
+                    .partial_cmp(&rating_score(&a.reviews))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .then_with(|| b.updated_at.cmp(&a.updated_at))
     });
     Ok(Json(dtos))
+}
+
+async fn record_action(
+    State(state): State<CloudState>,
+    Json(req): Json<ActionRequest>,
+) -> Result<Json<ActionResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let address = normalize_address(&req.address)
+        .ok_or_else(|| err_response(StatusCode::BAD_REQUEST, "invalid address"))?;
+    let firkin_id = req.firkin_id.trim().to_string();
+    if firkin_id.is_empty() {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "firkinId is required",
+        ));
+    }
+    let action = req.action.trim().to_string();
+    if !ALLOWED_ACTIONS.contains(&action.as_str()) {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "action must be one of: like, discard, bookmark",
+        ));
+    }
+
+    let action_id = record_id("recommendation_action", &address, &firkin_id);
+    let now = Utc::now();
+    let existing: Option<RecommendationAction> = state
+        .db
+        .select((ACTION_TABLE, action_id.as_str()))
+        .await
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db select failed: {e}"),
+            )
+        })?;
+
+    let saved: Option<RecommendationAction> = match existing {
+        Some(mut current) => {
+            current.id = None;
+            current.action = action.clone();
+            current.updated_at = now;
+            state
+                .db
+                .update((ACTION_TABLE, action_id.as_str()))
+                .content(current)
+                .await
+                .map_err(|e| {
+                    err_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("db update failed: {e}"),
+                    )
+                })?
+        }
+        None => {
+            let row = RecommendationAction {
+                id: None,
+                address: address.clone(),
+                firkin_id,
+                action: action.clone(),
+                created_at: now,
+                updated_at: now,
+            };
+            state
+                .db
+                .create((ACTION_TABLE, action_id.as_str()))
+                .content(row)
+                .await
+                .map_err(|e| {
+                    err_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("db create failed: {e}"),
+                    )
+                })?
+        }
+    };
+    let row = saved.ok_or_else(|| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "action upsert returned no row",
+        )
+    })?;
+    Ok(Json(ActionResponse {
+        action: row.action,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    }))
 }
 
 async fn ingest(
