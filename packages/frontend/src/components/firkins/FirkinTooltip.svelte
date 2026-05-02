@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { fade } from 'svelte/transition';
+	import classNames from 'classnames';
 	import { firkinTooltipService } from '$services/firkins/firkin-tooltip.svelte';
 	import { getCachedImageUrl } from '$services/image-cache.service';
+	import type { FirkinTooltipContent } from '$services/firkins/firkin-tooltip.svelte';
 
 	const POINTER_OFFSET = 16;
 
@@ -33,6 +34,17 @@
 		if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
 		return `${count}`;
 	}
+
+	// Snapshot of the most recently shown content. Stays populated even after
+	// `firkinTooltipService.content` flips back to null so the panel can fade
+	// out using the previous content's data without re-evaluating against
+	// null. Updated whenever a new content arrives — so hovering across
+	// multiple firkin cards swaps content seamlessly.
+	let displayContent = $state<FirkinTooltipContent | null>(null);
+	$effect(() => {
+		const c = firkinTooltipService.content;
+		if (c) displayContent = c;
+	});
 
 	$effect(() => {
 		const url = firkinTooltipService.content?.imageUrl ?? null;
@@ -96,35 +108,34 @@
 
 		return { left, top };
 	});
+
+	const visible = $derived(firkinTooltipService.content !== null);
 </script>
 
-{#if firkinTooltipService.content}
+{#if displayContent}
 	<div
 		bind:this={panelEl}
-		class="pointer-events-none fixed z-[60] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-base-content/20 bg-base-100/95 shadow-xl backdrop-blur"
+		class={classNames(
+			'pointer-events-none fixed z-[60] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-base-content/20 bg-base-100/95 shadow-xl backdrop-blur transition-opacity duration-150',
+			visible ? 'opacity-100' : 'opacity-0'
+		)}
 		style="left: {position.left}px; top: {position.top}px;"
 		role="tooltip"
-		transition:fade={{ duration: 120 }}
 	>
 		{#if resolvedImageUrl}
-			<img
-				src={resolvedImageUrl}
-				alt=""
-				class="block h-auto w-full"
-				loading="lazy"
-			/>
+			<img src={resolvedImageUrl} alt="" class="block h-auto w-full" loading="lazy" />
 		{/if}
 		<div class="px-4 py-3">
 			<h3 class="text-base font-semibold [overflow-wrap:anywhere]">
-				{firkinTooltipService.content.title}
+				{displayContent.title}
 			</h3>
-			{#if firkinTooltipService.content.description}
+			{#if displayContent.description}
 				<p class="mt-2 text-xs [overflow-wrap:anywhere] whitespace-pre-wrap text-base-content/80">
-					{firkinTooltipService.content.description}
+					{displayContent.description}
 				</p>
 			{/if}
-			{#if firkinTooltipService.content.reviews && firkinTooltipService.content.reviews.length > 0}
-				{@const reviews = firkinTooltipService.content.reviews}
+			{#if displayContent.reviews && displayContent.reviews.length > 0}
+				{@const reviews = displayContent.reviews}
 				{@const avg = averagePercent(reviews)}
 				<table class="mt-3 w-full text-xs">
 					<tbody>
