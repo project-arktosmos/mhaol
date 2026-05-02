@@ -2121,6 +2121,9 @@
 					{streamingHash}
 					{assignError}
 					{existingHashes}
+					collapsible
+					open={torrentSearchOpen}
+					onToggle={toggleTorrentSearch}
 					onRefresh={() =>
 						torrentSearch.search({
 							addon: firkin.addon,
