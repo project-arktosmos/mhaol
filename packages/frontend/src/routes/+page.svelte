@@ -29,7 +29,6 @@
 	import { addonKind, type FirkinKind } from 'cloud-ui';
 
 	const firkinsStore = firkinsService.state;
-	const firkinsIncludeAll = firkinsService.includeAll;
 
 	let sources = $state<CatalogSource[]>([]);
 	let sourcesError = $state<string | null>(null);
@@ -322,29 +321,13 @@
 		<section class="flex flex-col gap-3">
 			<div class="flex items-center justify-between gap-4">
 				<h2 class="text-lg font-semibold">Library</h2>
-				<label class="flex items-center gap-2 text-xs text-base-content/70">
-					<input
-						type="checkbox"
-						class="toggle toggle-primary toggle-sm"
-						checked={$firkinsIncludeAll}
-						onchange={(e) =>
-							firkinsService.setIncludeAll((e.currentTarget as HTMLInputElement).checked)}
-					/>
-					<span
-						title="Off: only bookmarked firkins. On: every firkin in the local DB, including non-bookmarked browse-cache rows from the /catalog/visit resolver."
-					>
-						Show all locally-available
-					</span>
-				</label>
 			</div>
 			<FirkinLibraryGrid
 				firkins={libraryAllFirkins}
 				collapsed={true}
 				collapsedCount={6}
 				moreHref={galleryHref}
-				emptyMessage={$firkinsIncludeAll
-					? 'No firkins on this server yet.'
-					: 'No bookmarked items yet — toggle "Show all locally-available" to include browse-cache items.'}
+				emptyMessage="No bookmarked items yet."
 			>
 				{#snippet actions(doc)}
 					{#if firkinNeedsMetadata(doc) && metadataSearchAddon(doc.addon) !== null}
