@@ -126,14 +126,6 @@
 	// the Download cell promotes to `col-span-2` so the row stays balanced.
 	const downloadActionable = $derived(Boolean(download && download.ipfsCid && onDownloadPlay));
 
-	// When only two cells are visible (Trailer + the actionable Download),
-	// drop the col-span-2 on both so they sit side-by-side in a single row
-	// instead of stacking. The all-three case (Trailer + Stream + Download)
-	// keeps Trailer as a full-width header above Stream / Download.
-	const hasTrailer = $derived(Boolean(trailer && onTrailerPlay));
-	const trailerSpansFull = $derived(hasTrailer && !downloadActionable);
-	const downloadSpansFull = $derived(downloadActionable && !hasTrailer);
-
 	// Quality of the currently-attached stream, mapped to a bucket label
 	// from `streamPicksByQuality`. Tries the bucket label first (most
 	// indexer rows already use the bucket name), falls back to the raw
@@ -202,7 +194,7 @@
 {/snippet}
 
 {#snippet streamPicksTable(activeQuality: string | null)}
-	<table class="table table-xs w-full">
+	<table class="table w-full table-xs">
 		<thead>
 			<tr class="text-[10px] text-base-content/60 uppercase">
 				<th class="text-left">Quality</th>
@@ -249,152 +241,145 @@
 	</table>
 {/snippet}
 
-<div class="flex flex-col gap-2">
-	<div class="grid grid-cols-2 gap-3">
-		{#if trailer && onTrailerPlay}
-			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
-				class:col-span-2={trailerSpansFull}
+<div class="flex flex-col gap-3">
+	{#if trailer && onTrailerPlay}
+		<div
+			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
+		>
+			<Icon name="delapouite/film-strip" size={32} title="Trailer" />
+			<span class="text-xs font-medium">Trailer</span>
+			<span
+				class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
+				title={trailer.youtubeId}
 			>
-				<Icon name="delapouite/film-strip" size={32} title="Trailer" />
-				<span class="text-xs font-medium">Trailer</span>
-				<span
-					class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
-					title={trailer.youtubeId}
-				>
-					{trailer.youtubeId}
-				</span>
-				<button
-					type="button"
-					onclick={() => onTrailerPlay?.()}
-					disabled={trailerPlaying}
-					class="btn btn-sm btn-primary"
-				>
-					{trailerPlaying ? 'Starting…' : 'Play'}
-				</button>
-			</div>
-		{/if}
+				{trailer.youtubeId}
+			</span>
+			<button
+				type="button"
+				onclick={() => onTrailerPlay?.()}
+				disabled={trailerPlaying}
+				class="btn btn-sm btn-primary"
+			>
+				{trailerPlaying ? 'Starting…' : 'Play'}
+			</button>
+		</div>
+	{/if}
 
-		{#if !downloadActionable}
-			{#if stream && onStreamPlay}
-				<div
-					class="flex flex-col items-stretch gap-2 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-				>
-					<div class="flex flex-col items-center gap-1">
-						{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-					</div>
-					{#if streamPicksByQuality.length > 0 && onAttachStream}
-						{@render streamPicksTable(attachedStreamQuality)}
-					{:else}
-						{@render stats(stream)}
-						<button
-							type="button"
-							onclick={() => onStreamPlay?.()}
-							disabled={streamPlaying}
-							class="btn btn-sm btn-primary"
-						>
-							{streamPlaying ? 'Starting…' : 'Play'}
-						</button>
-					{/if}
-				</div>
-			{:else if stream}
-				<div
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-				>
-					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-					{@render stats(stream)}
-				</div>
-			{:else if streamPicksByQuality.length > 0 && onAttachStream}
-				<div
-					class="flex flex-col items-stretch gap-2 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
-				>
-					<div class="flex flex-col items-center gap-1">
-						{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-					</div>
-					{@render streamPicksTable(null)}
-				</div>
-			{:else}
-				<div
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-				>
-					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-					<span class="text-[10px] text-base-content/60">Not attached</span>
-					<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
-				</div>
-			{/if}
-		{/if}
-
-		{#if download && download.ipfsCid && onDownloadPlay}
+	{#if !downloadActionable}
+		{#if stream && onStreamPlay}
 			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-				class:col-span-2={downloadSpansFull}
+				class="flex flex-col items-stretch gap-2 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 			>
-				{@render downloadHeader()}
-				<span
-					class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
-					title={download.ipfsCid}
-				>
-					{shortCid(download.ipfsCid)}
-				</span>
-				<button
-					type="button"
-					onclick={() => onDownloadPlay?.()}
-					disabled={downloadPlaying}
-					class="btn btn-sm btn-primary"
-				>
-					{downloadPlaying ? 'Starting…' : 'Play'}
-				</button>
-			</div>
-		{:else if download}
-			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
-			>
-				{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
-				{#if download.finished}
-					<span class="text-[10px] text-success">Seeding · pinning to IPFS…</span>
-				{:else if download.progress != null}
-					<progress
-						class="progress h-1.5 w-full progress-primary"
-						value={download.progress}
-						max="1"
-					></progress>
-					<span class="text-[10px] text-base-content/70">
-						{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
-						download.downloadSpeed > 0
-							? ` · ${formatSpeed(download.downloadSpeed)}`
-							: ''}{download.etaSeconds != null && download.etaSeconds > 0
-							? ` · ETA ${formatEta(download.etaSeconds)}`
-							: ''}
-					</span>
+				<div class="flex flex-col items-center gap-1">
+					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
+				</div>
+				{#if streamPicksByQuality.length > 0 && onAttachStream}
+					{@render streamPicksTable(attachedStreamQuality)}
 				{:else}
-					<span class="text-[10px] text-base-content/50">Queued</span>
+					{@render stats(stream)}
+					<button
+						type="button"
+						onclick={() => onStreamPlay?.()}
+						disabled={streamPlaying}
+						class="btn btn-sm btn-primary"
+					>
+						{streamPlaying ? 'Starting…' : 'Play'}
+					</button>
 				{/if}
-				{@render stats(download)}
 			</div>
-		{:else if preferredDownload && onAttachDownload}
-			{@const info = torrentToInfo(preferredDownload)}
+		{:else if stream}
 			<div
-				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 			>
-				{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
-				{@render stats(info)}
-				<button
-					type="button"
-					onclick={() => onAttachDownload?.(preferredDownload)}
-					disabled={attachingDownload}
-					class="btn btn-sm btn-primary"
-				>
-					{attachingDownload ? 'Starting…' : 'Assign'}
-				</button>
+				{@render header('lorc/magnet', 'Stream', 'Stream mode')}
+				{@render stats(stream)}
+			</div>
+		{:else if streamPicksByQuality.length > 0 && onAttachStream}
+			<div
+				class="flex flex-col items-stretch gap-2 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
+			>
+				<div class="flex flex-col items-center gap-1">
+					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
+				</div>
+				{@render streamPicksTable(null)}
 			</div>
 		{:else}
 			<div
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
 			>
-				{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
+				{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 				<span class="text-[10px] text-base-content/60">Not attached</span>
 				<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
 			</div>
 		{/if}
-	</div>
+	{/if}
+
+	{#if download && download.ipfsCid && onDownloadPlay}
+		<div
+			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
+		>
+			{@render downloadHeader()}
+			<span
+				class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
+				title={download.ipfsCid}
+			>
+				{shortCid(download.ipfsCid)}
+			</span>
+			<button
+				type="button"
+				onclick={() => onDownloadPlay?.()}
+				disabled={downloadPlaying}
+				class="btn btn-sm btn-primary"
+			>
+				{downloadPlaying ? 'Starting…' : 'Play'}
+			</button>
+		</div>
+	{:else if download}
+		<div
+			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
+		>
+			{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
+			{#if download.finished}
+				<span class="text-[10px] text-success">Seeding · pinning to IPFS…</span>
+			{:else if download.progress != null}
+				<progress class="progress h-1.5 w-full progress-primary" value={download.progress} max="1"
+				></progress>
+				<span class="text-[10px] text-base-content/70">
+					{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
+					download.downloadSpeed > 0
+						? ` · ${formatSpeed(download.downloadSpeed)}`
+						: ''}{download.etaSeconds != null && download.etaSeconds > 0
+						? ` · ETA ${formatEta(download.etaSeconds)}`
+						: ''}
+				</span>
+			{:else}
+				<span class="text-[10px] text-base-content/50">Queued</span>
+			{/if}
+			{@render stats(download)}
+		</div>
+	{:else if preferredDownload && onAttachDownload}
+		{@const info = torrentToInfo(preferredDownload)}
+		<div
+			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center"
+		>
+			{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
+			{@render stats(info)}
+			<button
+				type="button"
+				onclick={() => onAttachDownload?.(preferredDownload)}
+				disabled={attachingDownload}
+				class="btn btn-sm btn-primary"
+			>
+				{attachingDownload ? 'Starting…' : 'Assign'}
+			</button>
+		</div>
+	{:else}
+		<div
+			class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
+		>
+			{@render header('delapouite/cloud-download', 'Download', 'Download mode')}
+			<span class="text-[10px] text-base-content/60">Not attached</span>
+			<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
+		</div>
+	{/if}
 </div>
