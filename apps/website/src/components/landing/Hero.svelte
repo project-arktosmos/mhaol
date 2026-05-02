@@ -16,7 +16,8 @@
 			<p class="mt-5 max-w-xl text-base text-base-content/80 md:text-lg">
 				A Netflix-grade experience, ad-free and subscription-free. Mhaol pulls movies and TV shows
 				through its built-in torrent client, downloads music and videos straight from YouTube with
-				yt-dlp (no embedded iframes), and streams the result to any device on your network.
+				yt-dlp (no embedded iframes), and streams the result to any device on your network. Stream
+				what you want. Keep what you watch. Owe no one a thing.
 			</p>
 			<div class="mt-7 flex flex-wrap items-center gap-3">
 				<a href="{base}/#install" class="btn gap-2 btn-lg btn-primary">
