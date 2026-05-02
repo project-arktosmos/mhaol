@@ -8,10 +8,6 @@
 >
 	<div class="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-20 md:flex-row md:items-center">
 		<div class="flex-1">
-			<div class="mb-4 badge gap-1 badge-soft badge-primary">
-				<Icon name="delapouite/cube" size={14} />
-				Content-addressed
-			</div>
 			<h1 class="text-4xl leading-tight font-bold tracking-tight md:text-6xl">
 				Your media library,<br />
 				<span class="text-primary">peer-to-peer</span> and<br />
