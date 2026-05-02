@@ -411,10 +411,12 @@ async fn list(
             None => true,
         })
         .filter(|r| !q.exclude_actioned || !actioned_ids.contains(&r.firkin_id))
-        // Discard semantics: a `userRating` of 0 means "I don't want to see
-        // this again". The feed page sets it to 0 from the Discard button;
-        // the recommendations table can opt out via `excludeActioned=false`.
-        .filter(|r| !q.exclude_actioned || r.user_rating != Some(0))
+        // Any user-given rating (including 0 from Discard) takes the item
+        // out of the feed on the next load — the user has expressed an
+        // opinion, so the card has done its job. Mid-session the card is
+        // kept visible so the user can still bookmark after rating; the
+        // filter only kicks in on the next fetch.
+        .filter(|r| !q.exclude_actioned || r.user_rating.is_none())
         .map(Into::into)
         .collect();
     dtos.sort_by(|a, b| {

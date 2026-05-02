@@ -177,6 +177,9 @@
 		queue = queue.map((r, i) => (i === cursor ? { ...r, userRating: res.userRating } : r));
 	}
 
+	// Rating intentionally does NOT drop the card — the user may still
+	// want to bookmark after rating. The server-side filter takes the item
+	// out on the next fetch.
 	async function rate(stars: number) {
 		if (busy) return;
 		const score = Math.max(1, Math.min(5, stars)) * 20;
