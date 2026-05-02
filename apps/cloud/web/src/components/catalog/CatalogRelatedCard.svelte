@@ -63,7 +63,6 @@
 		if (item.backdropUrl) params.set('backdropUrl', item.backdropUrl);
 		return `${base}/catalog/virtual?${params.toString()}`;
 	}
-
 </script>
 
 {#if upstreamId}
@@ -83,40 +82,30 @@
 			{:else if status === 'done' && items.length === 0}
 				<p class="text-xs text-base-content/60">No related items found upstream.</p>
 			{:else if items.length > 0}
-				<ul class="grid grid-cols-1 gap-2 lg:grid-cols-2 xl:grid-cols-3">
+				<ul class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4">
 					{#each items as item (item.id)}
 						<li>
 							<a
 								href={virtualHref(item)}
-								class="flex items-stretch gap-3 rounded border border-base-content/10 bg-base-100 p-2 text-inherit no-underline transition-all hover:border-base-content/30 hover:shadow-md"
+								title={item.title}
+								class="block aspect-[2/3] overflow-hidden rounded border border-base-content/10 bg-base-300 transition-all hover:border-base-content/30 hover:shadow-md"
 							>
-								<div class="aspect-[2/3] w-20 shrink-0 overflow-hidden rounded bg-base-300 sm:w-24">
-									{#if item.posterUrl}
-										<img
-											src={item.posterUrl}
-											alt={item.title}
-											class="h-full w-full object-cover"
-											loading="lazy"
-										/>
-									{:else}
-										<div
-											class="flex h-full w-full items-center justify-center text-base-content/20"
-										>
-											<svg class="h-8 w-8" fill="currentColor" viewBox="0 0 24 24">
-												<path
-													d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"
-												/>
-											</svg>
-										</div>
-									{/if}
-								</div>
-
-								<div class="flex min-w-0 flex-1 flex-col gap-1">
-									<h3 class="truncate text-sm font-medium" title={item.title}>{item.title}</h3>
-									{#if item.year}
-										<span class="text-xs text-base-content/60">{item.year}</span>
-									{/if}
-								</div>
+								{#if item.posterUrl}
+									<img
+										src={item.posterUrl}
+										alt={item.title}
+										class="h-full w-full object-cover"
+										loading="lazy"
+									/>
+								{:else}
+									<div class="flex h-full w-full items-center justify-center text-base-content/20">
+										<svg class="h-8 w-8" fill="currentColor" viewBox="0 0 24 24">
+											<path
+												d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"
+											/>
+										</svg>
+									</div>
+								{/if}
 							</a>
 						</li>
 					{/each}
