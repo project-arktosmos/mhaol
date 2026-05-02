@@ -4,6 +4,11 @@
 		seeders: number | null;
 		leechers: number | null;
 		sizeBytes: number | null;
+		/** Quality bucket label (`4K`, `1080p`, …) of the matching torrent
+		 * search row. Used by the Stream cell to default the quality
+		 * selector to the currently-attached stream's quality. `null` when
+		 * the attached magnet doesn't match any indexed search result. */
+		quality?: string | null;
 	}
 
 	export interface DownloadAttachmentInfo extends AttachmentInfo {
@@ -152,6 +157,31 @@
 		);
 	});
 
+	// Quality of the currently-attached stream, mapped to a bucket label
+	// from `streamPicksByQuality`. Tries the bucket label first (most
+	// indexer rows already use the bucket name), falls back to the raw
+	// `torrent.quality` field. Used to default the actionable Stream
+	// cell's quality selector so the attached row is the one shown
+	// selected.
+	const attachedStreamQuality = $derived.by<string | null>(() => {
+		if (!stream?.quality) return null;
+		const byLabel = streamPicksByQuality.find((p) => p.quality === stream.quality);
+		if (byLabel) return byLabel.quality;
+		const byRaw = streamPicksByQuality.find((p) => p.torrent.quality === stream.quality);
+		return byRaw?.quality ?? null;
+	});
+	const actionableSelectedQuality = $derived(
+		selectedStreamQuality ?? attachedStreamQuality ?? streamPicksByQuality[0]?.quality ?? null
+	);
+
+	function changeStreamQuality(quality: string, attach: boolean): void {
+		selectedStreamQuality = quality;
+		if (attach && onAttachStream) {
+			const pick = streamPicksByQuality.find((p) => p.quality === quality);
+			if (pick) void onAttachStream(pick.torrent);
+		}
+	}
+
 	function torrentToInfo(t: TorrentResultItem): AttachmentInfo {
 		return {
 			title: t.parsedTitle || t.title,
@@ -232,19 +262,41 @@
 
 		{#if !downloadActionable}
 			{#if stream && onStreamPlay}
-				<button
-					type="button"
-					onclick={() => onStreamPlay?.()}
-					disabled={streamPlaying}
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
-					aria-label="Play stream"
-				>
-					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-					{@render stats(stream)}
-					<span class="text-[10px] font-medium text-success">
-						{streamPlaying ? 'Starting…' : 'Click to play'}
-					</span>
-				</button>
+				<div class="group relative">
+					<button
+						type="button"
+						onclick={() => onStreamPlay?.()}
+						disabled={streamPlaying}
+						class="flex w-full flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors group-hover:border-success/50 group-hover:bg-base-200 disabled:cursor-progress disabled:opacity-60"
+						aria-label="Play stream"
+					>
+						<div class="pointer-events-none flex flex-col items-center gap-1">
+							{@render header('lorc/magnet', 'Stream', 'Stream mode')}
+							{#if streamPicksByQuality.length > 1 && onAttachStream}
+								<span class="invisible block h-6 text-[10px]">·</span>
+							{/if}
+							{@render stats(stream)}
+							<span class="text-[10px] font-medium text-success">
+								{streamPlaying ? 'Starting…' : 'Click to play'}
+							</span>
+						</div>
+					</button>
+					{#if streamPicksByQuality.length > 1 && onAttachStream}
+						<select
+							class="select-bordered absolute top-[3.5rem] left-1/2 z-10 -translate-x-1/2 select select-xs"
+							value={actionableSelectedQuality ?? ''}
+							onclick={(e) => e.stopPropagation()}
+							onchange={(e) =>
+								changeStreamQuality((e.currentTarget as HTMLSelectElement).value, true)}
+							aria-label="Pick stream quality"
+							title="Pick stream quality — switching re-attaches the stream"
+						>
+							{#each streamPicksByQuality as pick (pick.quality)}
+								<option value={pick.quality}>{pick.quality}</option>
+							{/each}
+						</select>
+					{/if}
+				</div>
 			{:else if stream}
 				<div
 					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center text-base-content"
@@ -283,9 +335,8 @@
 							class="select-bordered absolute top-[3.5rem] left-1/2 z-10 -translate-x-1/2 select select-xs"
 							value={currentStreamPick.quality}
 							onclick={(e) => e.stopPropagation()}
-							onchange={(e) => {
-								selectedStreamQuality = (e.currentTarget as HTMLSelectElement).value;
-							}}
+							onchange={(e) =>
+								changeStreamQuality((e.currentTarget as HTMLSelectElement).value, false)}
 							aria-label="Pick stream quality"
 							title="Pick stream quality"
 						>

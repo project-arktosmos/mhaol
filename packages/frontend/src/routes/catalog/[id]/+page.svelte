@@ -1172,7 +1172,8 @@
 			title: match?.parsedTitle || match?.title || entry.title || 'Magnet attached',
 			seeders: match?.seeders ?? null,
 			leechers: match?.leechers ?? null,
-			sizeBytes: match?.sizeBytes ?? null
+			sizeBytes: match?.sizeBytes ?? null,
+			quality: match?.quality ?? null
 		};
 	}
 
