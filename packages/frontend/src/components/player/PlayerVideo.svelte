@@ -67,6 +67,7 @@
 	let audioTrackTick = $state(0);
 	let activeSubUrl = $state<string | null>(null);
 	let mediaError = $state<string | null>(null);
+	let bufferedRanges = $state<{ start: number; end: number }[]>([]);
 	let hlsInstance: Hls | null = null;
 	let attachedDirectUrl: string | null = null;
 	function isHlsUrl(url: string, mime: string | null): boolean {
@@ -212,6 +213,7 @@
 		if (!directStreamUrl) {
 			destroyHls();
 			attachedDirectUrl = null;
+			bufferedRanges = [];
 			return;
 		}
 		const element = videoElement;
@@ -220,6 +222,7 @@
 		const mime = directStreamMimeType;
 		if (attachedDirectUrl === url) return;
 		mediaError = null;
+		bufferedRanges = [];
 		element.srcObject = null;
 		destroyHls();
 		attachedDirectUrl = url;
@@ -319,12 +322,32 @@
 		};
 		const onLoadedMetadata = () => {
 			if (Number.isFinite(element.duration) && element.duration > 0) {
-				const d = element.duration;
+				// HLS rolling playlists (the IPFS-stream session's hlssink2
+				// output) only expose the duration of segments currently in
+				// the manifest, which grows as transcoding catches up. The
+				// backend probes the source's full duration up-front and
+				// seeds `file.durationSeconds`; prefer that authoritative
+				// total so the seek bar doesn't shrink to the latest chunk.
+				const ed = element.duration;
+				const fd = file?.durationSeconds ?? 0;
+				const d = fd > ed ? fd : ed;
 				if (get(playerService.state).durationSecs === d) return;
 				playerService.state.update((s) => ({ ...s, durationSecs: d }));
 			}
 		};
 		const onDurationChange = onLoadedMetadata;
+		const onProgress = () => {
+			const tr = element.buffered;
+			const next: { start: number; end: number }[] = [];
+			for (let i = 0; i < tr.length; i++) {
+				const start = tr.start(i);
+				const end = tr.end(i);
+				if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+					next.push({ start, end });
+				}
+			}
+			bufferedRanges = next;
+		};
 		const onWaiting = () => {
 			if (isHlsStream) return;
 			playerService.setBuffering(true);
@@ -344,6 +367,7 @@
 		element.addEventListener('timeupdate', onTimeUpdate);
 		element.addEventListener('loadedmetadata', onLoadedMetadata);
 		element.addEventListener('durationchange', onDurationChange);
+		element.addEventListener('progress', onProgress);
 		element.addEventListener('waiting', onWaiting);
 		element.addEventListener('playing', onPlaying);
 		// Pump the current values once in case metadata already loaded
@@ -375,6 +399,7 @@
 			element.removeEventListener('timeupdate', onTimeUpdate);
 			element.removeEventListener('loadedmetadata', onLoadedMetadata);
 			element.removeEventListener('durationchange', onDurationChange);
+			element.removeEventListener('progress', onProgress);
 			element.removeEventListener('waiting', onWaiting);
 			element.removeEventListener('playing', onPlaying);
 		};
@@ -691,6 +716,7 @@
 			{isVideo}
 			{positionSecs}
 			{durationSecs}
+			{bufferedRanges}
 			{connectionState}
 			isFullscreen={effectiveFullscreen}
 			initialVolume={playerService.getVolume()}
