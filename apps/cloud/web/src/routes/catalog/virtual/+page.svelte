@@ -7,6 +7,7 @@
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
+	import CatalogAlbumsByArtistCard from '$components/catalog/CatalogAlbumsByArtistCard.svelte';
 	import {
 		firkinsService,
 		addonKind,
@@ -322,6 +323,10 @@
 				artistHref={(id) => `${base}/artist/${encodeURIComponent(id)}`}
 				singleColumn
 			/>
+
+			{#if isMusicBrainz && itemId}
+				<CatalogAlbumsByArtistCard releaseGroupId={itemId} />
+			{/if}
 		</aside>
 
 		<section class="flex flex-col gap-6">

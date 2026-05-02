@@ -16,6 +16,7 @@
 	import CatalogTorrentProgressCard from '$components/catalog/CatalogTorrentProgressCard.svelte';
 	import CatalogSubsLyricsCard from '$components/catalog/CatalogSubsLyricsCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
+	import CatalogAlbumsByArtistCard from '$components/catalog/CatalogAlbumsByArtistCard.svelte';
 	import CatalogFilesTable from '$components/catalog/CatalogFilesTable.svelte';
 	import { firkinPlaybackService } from '$services/firkin-playback.service';
 	import { firkinTorrentsService, infoHashFromMagnet } from '$services/firkin-torrents.service';
@@ -1043,6 +1044,10 @@
 				artistHref={(id) => `${base}/artist/${encodeURIComponent(id)}`}
 				singleColumn
 			/>
+
+			{#if isMusicBrainz}
+				<CatalogAlbumsByArtistCard releaseGroupId={musicBrainzReleaseGroupId} />
+			{/if}
 		</aside>
 
 		<section class="flex flex-col gap-6">

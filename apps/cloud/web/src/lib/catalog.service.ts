@@ -97,3 +97,12 @@ export async function loadRelated(addon: string, id: string): Promise<CatalogIte
 	if (!res.ok) throw new Error(await parseError(res));
 	return (await res.json()) as CatalogItem[];
 }
+
+export async function loadMusicbrainzAlbumsByArtist(
+	releaseGroupId: string
+): Promise<CatalogItem[]> {
+	const url = `/api/catalog/musicbrainz/release-groups/${encodeURIComponent(releaseGroupId)}/albums-by-artist`;
+	const res = await fetch(url, { cache: 'no-store' });
+	if (!res.ok) throw new Error(await parseError(res));
+	return (await res.json()) as CatalogItem[];
+}

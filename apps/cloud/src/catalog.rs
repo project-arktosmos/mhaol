@@ -155,6 +155,10 @@ pub fn router() -> Router<CloudState> {
             "/musicbrainz/release-groups/{id}/tracks",
             get(musicbrainz_tracks),
         )
+        .route(
+            "/musicbrainz/release-groups/{id}/albums-by-artist",
+            get(musicbrainz_albums_by_artist_handler),
+        )
         .route("/tmdb-tv/{id}/seasons", get(tmdb_tv_seasons))
 }
 
@@ -1377,7 +1381,52 @@ async fn musicbrainz_related(
         }
     }
 
-    // Fallback: same primary artist as the source release-group.
+    // Fallback: same primary artist as the source release-group. Reuses
+    // the artist-credits already on `payload` so this branch costs at most
+    // one extra HTTP call (the `release-group?artist=…` browse).
+    musicbrainz_albums_by_artist_from_payload(release_group_id, &payload).await
+}
+
+async fn musicbrainz_albums_by_artist_handler(
+    State(_state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<CatalogItem>>, (StatusCode, Json<serde_json::Value>)> {
+    musicbrainz_albums_by_artist(&id).await.map(Json)
+}
+
+/// Other release-groups (album / EP) by the source release-group's
+/// primary artist. Resolves the artist via `inc=artist-credits` on the
+/// release-group, then browses release-groups by that artist id; the
+/// source release-group is filtered out of the result. Used by both
+/// the same-artist fallback inside [`musicbrainz_related`] and the
+/// dedicated sidebar endpoint exposed at
+/// `GET /api/catalog/musicbrainz/release-groups/{id}/albums-by-artist`.
+async fn musicbrainz_albums_by_artist(
+    release_group_id: &str,
+) -> Result<Vec<CatalogItem>, (StatusCode, Json<serde_json::Value>)> {
+    let url = format!(
+        "{}/release-group/{}?inc=artist-credits&fmt=json",
+        MUSICBRAINZ_BASE,
+        urlencoding(release_group_id)
+    );
+    let payload: serde_json::Value = http_get_json(
+        &url,
+        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
+    )
+    .await?;
+    musicbrainz_albums_by_artist_from_payload(release_group_id, &payload).await
+}
+
+/// Inner helper for [`musicbrainz_albums_by_artist`] that takes an
+/// already-fetched release-group payload (which must include
+/// `artist-credit`) and browses by that artist id. Lets callers like
+/// [`musicbrainz_related`] reuse a payload they already pulled with
+/// `inc=artist-credits+tags+genres` instead of paying for a second
+/// release-group lookup.
+async fn musicbrainz_albums_by_artist_from_payload(
+    release_group_id: &str,
+    payload: &serde_json::Value,
+) -> Result<Vec<CatalogItem>, (StatusCode, Json<serde_json::Value>)> {
     let artist_id = payload
         .get("artist-credit")
         .and_then(|v| v.as_array())
