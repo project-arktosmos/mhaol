@@ -11,7 +11,6 @@ const TMDB_BASE: &str = "https://api.themoviedb.org/3";
 const TMDB_IMG_BASE: &str = "https://image.tmdb.org/t/p";
 const MUSICBRAINZ_BASE: &str = "https://musicbrainz.org/ws/2";
 const COVERART_BASE: &str = "https://coverartarchive.org";
-const PIPED_BASE: &str = "https://pipedapi.kavin.rocks";
 const USER_AGENT: &str = "Mhaol/0.0.1 (https://github.com/project-arktosmos/mhaol)";
 
 /// Every addon known to the cloud. Each addon represents a single content
@@ -1613,27 +1612,7 @@ async fn youtube_popular(
     _filter: Option<&str>,
     page: i64,
 ) -> Result<CatalogPage, (StatusCode, Json<serde_json::Value>)> {
-    let url = format!("{}/trending?region=US", PIPED_BASE);
-    let payload: serde_json::Value = http_get_json(
-        &url,
-        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
-    )
-    .await?;
-    let arr = payload.as_array().cloned().unwrap_or_default();
-    let limit: usize = 24;
-    let total_pages = ((arr.len() as f64) / (limit as f64)).ceil() as i64;
-    let offset = ((page - 1).max(0) as usize) * limit;
-    let items: Vec<CatalogItem> = arr
-        .iter()
-        .skip(offset)
-        .take(limit)
-        .map(|v| youtube_to_item(v, "videos"))
-        .collect();
-    Ok(CatalogPage {
-        items,
-        page,
-        total_pages: total_pages.max(1),
-    })
+    youtube_search("trending", page, Some("videos")).await
 }
 
 async fn youtube_search(
@@ -1645,31 +1624,25 @@ async fn youtube_search(
         Some("channels") => "channels",
         _ => "videos",
     };
-    let url = format!(
-        "{}/search?q={}&filter={}",
-        PIPED_BASE,
-        urlencoding(query),
-        kind,
-    );
-    let payload: serde_json::Value = http_get_json(
-        &url,
-        &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
-    )
-    .await?;
-    let arr = payload
-        .get("items")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let resp = mhaol_yt_dlp::search::search_query(query, None)
+        .await
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("youtube search failed: {e}")))?;
+    let mut all: Vec<CatalogItem> = if kind == "channels" {
+        resp.channels
+            .iter()
+            .map(channel_search_to_item)
+            .collect()
+    } else {
+        resp.items.iter().map(video_search_to_item).collect()
+    };
     let limit: usize = 24;
-    let total_pages = ((arr.len() as f64) / (limit as f64)).ceil() as i64;
+    let total_pages = ((all.len() as f64) / (limit as f64)).ceil() as i64;
     let offset = ((page - 1).max(0) as usize) * limit;
-    let items: Vec<CatalogItem> = arr
-        .iter()
-        .skip(offset)
-        .take(limit)
-        .map(|v| youtube_to_item(v, kind))
-        .collect();
+    let items: Vec<CatalogItem> = if offset >= all.len() {
+        Vec::new()
+    } else {
+        all.drain(offset..(offset + limit).min(all.len())).collect()
+    };
     Ok(CatalogPage {
         items,
         page,
@@ -1677,71 +1650,60 @@ async fn youtube_search(
     })
 }
 
-/// Map a Piped `/search` or `/trending` entry into our universal
-/// `CatalogItem`. Channels and videos use different field names upstream
-/// (channels carry `name` + `description` + `subscribers`, videos carry
-/// `title` + `uploaderName` + `views`), so the kind discriminates which
-/// fields to read. The result `id` is stripped of any leading slash so
-/// the frontend can reuse it as the upstream id query param when it
-/// navigates to `/catalog/virtual`.
-fn youtube_to_item(item: &serde_json::Value, kind: &str) -> CatalogItem {
-    let url_str = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
-    let id = if let Some((_, rest)) = url_str.split_once("v=") {
-        rest.to_string()
+fn video_search_to_item(item: &mhaol_yt_dlp::search::SearchItem) -> CatalogItem {
+    let mut parts: Vec<String> = Vec::new();
+    if !item.uploader_name.is_empty() {
+        parts.push(item.uploader_name.clone());
+    }
+    if !item.views_text.is_empty() {
+        parts.push(item.views_text.clone());
+    } else if item.views > 0 {
+        parts.push(format!("{} views", item.views));
+    }
+    let description = if parts.is_empty() {
+        None
     } else {
-        url_str.trim_start_matches('/').to_string()
+        Some(parts.join(" · "))
     };
-    let title = item
-        .get("title")
-        .and_then(|v| v.as_str())
-        .or_else(|| item.get("name").and_then(|v| v.as_str()))
-        .unwrap_or("")
-        .to_string();
-    let description = if kind == "channels" {
-        let mut parts: Vec<String> = Vec::new();
-        if let Some(d) = item
-            .get("description")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-        {
-            parts.push(d.to_string());
-        }
-        if let Some(s) = item.get("subscribers").and_then(|v| v.as_i64()) {
-            if s >= 0 {
-                parts.push(format!("{} subscribers", s));
-            }
-        }
-        if parts.is_empty() {
-            None
-        } else {
-            Some(parts.join(" · "))
-        }
+    let poster_url = if item.thumbnail.is_empty() {
+        None
     } else {
-        let uploader = item
-            .get("uploaderName")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let views = item.get("views").and_then(|v| v.as_i64());
-        let mut parts: Vec<String> = Vec::new();
-        if !uploader.is_empty() {
-            parts.push(uploader.to_string());
-        }
-        if let Some(v) = views {
-            parts.push(format!("{} views", v));
-        }
-        if parts.is_empty() {
-            None
-        } else {
-            Some(parts.join(" · "))
-        }
+        Some(item.thumbnail.clone())
     };
-    let poster_url = item
-        .get("thumbnail")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
     CatalogItem {
-        id,
-        title,
+        id: item.video_id.clone(),
+        title: item.title.clone(),
+        year: None,
+        description,
+        poster_url,
+        backdrop_url: None,
+        artists: Vec::new(),
+        reviews: Vec::new(),
+        artist_name: None,
+    }
+}
+
+fn channel_search_to_item(item: &mhaol_yt_dlp::search::SearchChannelItem) -> CatalogItem {
+    let mut parts: Vec<String> = Vec::new();
+    if !item.description.is_empty() {
+        parts.push(item.description.clone());
+    }
+    if !item.subscriber_text.is_empty() {
+        parts.push(item.subscriber_text.clone());
+    }
+    let description = if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" · "))
+    };
+    let poster_url = if item.thumbnail.is_empty() {
+        None
+    } else {
+        Some(item.thumbnail.clone())
+    };
+    CatalogItem {
+        id: item.channel_id.clone(),
+        title: item.name.clone(),
         year: None,
         description,
         poster_url,
@@ -1755,28 +1717,27 @@ fn youtube_to_item(item: &serde_json::Value, kind: &str) -> CatalogItem {
 async fn youtube_video_artists(
     video_id: &str,
 ) -> Result<Vec<CatalogArtist>, (StatusCode, Json<serde_json::Value>)> {
-    let url = format!("{}/streams/{}", PIPED_BASE, urlencoding(video_id));
+    let url = format!(
+        "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={}&format=json",
+        urlencoding(video_id),
+    );
     let payload: serde_json::Value = http_get_json(
         &url,
         &[("Accept", "application/json"), ("User-Agent", USER_AGENT)],
     )
     .await?;
     let name = payload
-        .get("uploader")
+        .get("author_name")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
     if name.is_empty() {
         return Ok(Vec::new());
     }
-    let image_url = payload
-        .get("uploaderAvatar")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
     Ok(vec![CatalogArtist {
         name,
         role: Some("Channel".to_string()),
-        image_url,
+        image_url: None,
     }])
 }
 
