@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "apps/cloud",
     "apps/cloud/src-tauri",
-    "apps/rendezvous",
     "packages/identity",
     "packages/yt-dlp",
     "packages/torrent",

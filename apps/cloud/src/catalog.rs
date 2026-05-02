@@ -164,6 +164,10 @@ pub fn router() -> Router<CloudState> {
             get(musicbrainz_albums_by_artist_handler),
         )
         .route("/tmdb-tv/{id}/seasons", get(tmdb_tv_seasons))
+        .route(
+            "/tmdb-tv/{id}/season/{season_number}/episodes",
+            get(tmdb_tv_season_episodes),
+        )
 }
 
 #[derive(Clone, Serialize)]
@@ -231,6 +235,31 @@ struct CatalogSeason {
     air_year: Option<i32>,
     #[serde(rename = "episodeCount", skip_serializing_if = "Option::is_none")]
     episode_count: Option<i64>,
+    #[serde(rename = "posterUrl", skip_serializing_if = "Option::is_none")]
+    poster_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    overview: Option<String>,
+}
+
+/// One episode of a TMDB TV-show season, returned by
+/// `GET /api/catalog/tmdb-tv/{id}/season/{season_number}/episodes`.
+#[derive(Serialize)]
+struct CatalogEpisode {
+    #[serde(rename = "episodeNumber")]
+    episode_number: i64,
+    #[serde(rename = "seasonNumber")]
+    season_number: i64,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    overview: Option<String>,
+    #[serde(rename = "airDate", skip_serializing_if = "Option::is_none")]
+    air_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime: Option<i64>,
+    #[serde(rename = "stillUrl", skip_serializing_if = "Option::is_none")]
+    still_url: Option<String>,
+    #[serde(rename = "voteAverage", skip_serializing_if = "Option::is_none")]
+    vote_average: Option<f64>,
 }
 
 /// Three-field "person/group attached to a media item" record matching the
@@ -943,15 +972,104 @@ async fn tmdb_tv_seasons(
                 .and_then(|d| d.get(0..4))
                 .and_then(|y| y.parse::<i32>().ok());
             let episode_count = s.get("episode_count").and_then(|v| v.as_i64());
+            let poster_url = s
+                .get("poster_path")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|p| format!("{}/w342{}", TMDB_IMG_BASE, p));
+            let overview = s
+                .get("overview")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
             out.push(CatalogSeason {
                 season_number,
                 name,
                 air_year,
                 episode_count,
+                poster_url,
+                overview,
             });
         }
     }
     out.sort_by_key(|s| s.season_number);
+    Ok(Json(out))
+}
+
+async fn tmdb_tv_season_episodes(
+    State(_state): State<CloudState>,
+    Path((id, season_number)): Path<(String, i64)>,
+) -> Result<Json<Vec<CatalogEpisode>>, (StatusCode, Json<serde_json::Value>)> {
+    if id.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "id is required"));
+    }
+    if season_number < 0 {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            "season_number must be non-negative",
+        ));
+    }
+    let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "TMDB_API_KEY env var is not set on the cloud server",
+        ));
+    }
+    let url = format!(
+        "{}/tv/{}/season/{}?api_key={}",
+        TMDB_BASE,
+        urlencoding(id.trim()),
+        season_number,
+        api_key
+    );
+    let payload: serde_json::Value = http_get_json(&url, &[("Accept", "application/json")]).await?;
+    let mut out: Vec<CatalogEpisode> = Vec::new();
+    if let Some(arr) = payload.get("episodes").and_then(|v| v.as_array()) {
+        for e in arr {
+            let episode_number = e
+                .get("episode_number")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let s_num = e
+                .get("season_number")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(season_number);
+            let name = e
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("Episode {episode_number}"));
+            let overview = e
+                .get("overview")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let air_date = e
+                .get("air_date")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let runtime = e.get("runtime").and_then(|v| v.as_i64());
+            let still_url = e
+                .get("still_path")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|p| format!("{}/w300{}", TMDB_IMG_BASE, p));
+            let vote_average = e.get("vote_average").and_then(|v| v.as_f64());
+            out.push(CatalogEpisode {
+                episode_number,
+                season_number: s_num,
+                name,
+                overview,
+                air_date,
+                runtime,
+                still_url,
+                vote_average,
+            });
+        }
+    }
+    out.sort_by_key(|e| e.episode_number);
     Ok(Json(out))
 }
 

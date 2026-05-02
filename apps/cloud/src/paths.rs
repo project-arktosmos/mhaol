@@ -1,14 +1,12 @@
 //! Centralized on-disk layout for the cloud app.
 //!
 //! Everything the cloud writes — SurrealDB store, identities, IPFS repo,
-//! torrent / yt-dlp downloads, swarm key, rendezvous bootstrap file —
-//! lives under a single root directory. By default this is
-//! `<home>/mhaol-cloud/` (resolved per-OS via `dirs::home_dir()`); set
-//! `DATA_DIR` to override.
+//! torrent / yt-dlp downloads, swarm key — lives under a single root
+//! directory. By default this is `<home>/mhaol-cloud/` (resolved per-OS via
+//! `dirs::home_dir()`); set `DATA_DIR` to override.
 //!
 //! Individual paths can still be overridden one-by-one with their dedicated
-//! env vars (`DB_PATH`, `IPFS_SWARM_KEY_FILE`, `RENDEZVOUS_BOOTSTRAP_FILE`,
-//! `YTDL_OUTPUT_DIR`).
+//! env vars (`DB_PATH`, `IPFS_SWARM_KEY_FILE`, `YTDL_OUTPUT_DIR`).
 
 use std::path::PathBuf;
 
@@ -80,13 +78,4 @@ pub fn swarm_key_path() -> PathBuf {
         return PathBuf::from(p);
     }
     data_root().join("swarm.key")
-}
-
-/// File written by the rendezvous app announcing its dialable multiaddr.
-/// Override with `RENDEZVOUS_BOOTSTRAP_FILE`.
-pub fn rendezvous_bootstrap_file() -> PathBuf {
-    if let Ok(p) = std::env::var("RENDEZVOUS_BOOTSTRAP_FILE") {
-        return PathBuf::from(p);
-    }
-    data_root().join("rendezvous").join("bootstrap.multiaddr")
 }

@@ -5,6 +5,7 @@
 	import CatalogTrailersCard from '$components/catalog/CatalogTrailersCard.svelte';
 	import CatalogTrailerPlayer from '$components/catalog/CatalogTrailerPlayer.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
+	import CatalogTvSeasonsCard from '$components/catalog/CatalogTvSeasonsCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
 	import CatalogAlbumsByArtistCard from '$components/catalog/CatalogAlbumsByArtistCard.svelte';
 	import {
@@ -313,6 +314,10 @@
 			{/if}
 
 			<CatalogDescriptionPanel {description} reviews={upstreamReviews} />
+
+			{#if isTmdbTv && itemId}
+				<CatalogTvSeasonsCard tmdbTvId={itemId} />
+			{/if}
 
 			<div class="card border border-base-content/10 bg-base-200 p-4">
 				<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>
