@@ -5,6 +5,11 @@
 	import { page } from '$app/state';
 	import { listSources, type CatalogSource } from '$lib/catalog.service';
 
+	let {
+		classes = 'flex items-center gap-2',
+		inputClasses = 'input-bordered input input-sm w-64'
+	}: { classes?: string; inputClasses?: string } = $props();
+
 	let sources = $state<CatalogSource[]>([]);
 
 	onMount(() => {
@@ -76,7 +81,7 @@
 	}
 </script>
 
-<div class="flex items-center gap-2">
+<div class={classes}>
 	{#if showSearchFieldSelect}
 		<select
 			class="select-bordered select w-32 select-sm"
@@ -90,7 +95,7 @@
 	{/if}
 	<input
 		type="search"
-		class="input-bordered input input-sm w-64"
+		class={inputClasses}
 		placeholder={activeAddon
 			? `Search ${currentSource?.label ?? activeAddon}…`
 			: 'Pick an addon to search'}

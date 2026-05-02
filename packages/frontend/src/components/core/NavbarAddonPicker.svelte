@@ -5,6 +5,8 @@
 	import { page } from '$app/state';
 	import { listSources, type CatalogSource } from '$lib/catalog.service';
 
+	let { classes = 'flex flex-wrap items-center gap-1' }: { classes?: string } = $props();
+
 	let sources = $state<CatalogSource[]>([]);
 
 	onMount(() => {
@@ -27,7 +29,7 @@
 </script>
 
 {#if sources.length > 0}
-	<div class="flex flex-wrap items-center gap-1">
+	<div class={classes}>
 		{#each sources as source (source.id)}
 			{@const active = activeAddon === source.id}
 			<a
