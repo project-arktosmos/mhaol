@@ -1065,12 +1065,23 @@
 																		{@const job = tvBuildJobs[lib.id]?.[sKey]}
 																		{@const inFlight =
 																			!!job && job.phase !== 'completed' && job.phase !== 'error'}
+																		{@const seasonCount = group.seasons.length}
+																		{@const episodeCount = group.seasons.reduce(
+																			(acc, s) => acc + s.entries.length,
+																			0
+																		)}
 																		<tr class="bg-base-200/60">
 																			<td colspan="9" class="text-sm font-semibold">
 																				<div class="flex items-center justify-between gap-2">
-																					<span>
-																						{group.show}{group.year ? ` (${group.year})` : ''}
-																					</span>
+																					<div class="flex flex-col">
+																						<span>
+																							{group.show}{group.year ? ` (${group.year})` : ''}
+																						</span>
+																						<span class="text-xs font-normal text-base-content/60">
+																							{seasonCount} season{seasonCount === 1 ? '' : 's'} ·
+																							{episodeCount} episode{episodeCount === 1 ? '' : 's'} found
+																						</span>
+																					</div>
 																					<div class="flex items-center gap-2">
 																						{#if job?.phase === 'completed' && job.completedFirkinId}
 																							<a
@@ -1118,16 +1129,6 @@
 																				{/if}
 																			</td>
 																		</tr>
-																		{#each group.seasons as season (season.season)}
-																			<tr class="bg-base-200/30">
-																				<td colspan="9" class="pl-4 text-xs font-medium opacity-80">
-																					Season {String(season.season).padStart(2, '0')}
-																				</td>
-																			</tr>
-																			{#each season.entries as entry (entry.path)}
-																				{@render entryRow(entry)}
-																			{/each}
-																		{/each}
 																	{:else}
 																		<tr class="bg-base-200/60">
 																			<td colspan="9" class="text-sm font-semibold"
