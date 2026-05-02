@@ -21,6 +21,7 @@
 	import { firkinsService, metadataSearchAddon, type Firkin } from '$lib/firkins.service';
 
 	const firkinsStore = firkinsService.state;
+	const firkinsIncludeAll = firkinsService.includeAll;
 
 	let sources = $state<CatalogSource[]>([]);
 	let sourcesError = $state<string | null>(null);
@@ -416,9 +417,27 @@
 	</section>
 
 	<section class="flex flex-col gap-3">
-		<h2 class="text-lg font-semibold">Library</h2>
+		<div class="flex items-center justify-between gap-4">
+			<h2 class="text-lg font-semibold">Library</h2>
+			<label class="flex items-center gap-2 text-xs text-base-content/70">
+				<input
+					type="checkbox"
+					class="toggle toggle-sm toggle-primary"
+					checked={$firkinsIncludeAll}
+					onchange={(e) =>
+						firkinsService.setIncludeAll((e.currentTarget as HTMLInputElement).checked)}
+				/>
+				<span title="Off: only bookmarked firkins. On: every firkin in the local DB, including non-bookmarked browse-cache rows from the /catalog/visit resolver.">
+					Show all locally-available
+				</span>
+			</label>
+		</div>
 		{#if libraryFirkins.length === 0}
-			<p class="text-sm text-base-content/60">No library items yet.</p>
+			<p class="text-sm text-base-content/60">
+				{$firkinsIncludeAll
+					? 'No firkins on this server yet.'
+					: 'No bookmarked items yet — toggle "Show all locally-available" to include browse-cache items.'}
+			</p>
 		{:else}
 			<div class="grid grid-cols-6 gap-4">
 				{#each libraryFirkins as doc (doc.id)}

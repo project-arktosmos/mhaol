@@ -65,9 +65,33 @@ async function parseError(res: Response): Promise<string> {
 }
 
 const POLL_INTERVAL_MS = 4000;
+const INCLUDE_ALL_STORAGE_KEY = 'mhaol-firkins-include-all';
+
+function readStoredIncludeAll(): boolean {
+	if (typeof localStorage === 'undefined') return false;
+	try {
+		return localStorage.getItem(INCLUDE_ALL_STORAGE_KEY) === '1';
+	} catch {
+		return false;
+	}
+}
+
+function writeStoredIncludeAll(value: boolean): void {
+	if (typeof localStorage === 'undefined') return;
+	try {
+		localStorage.setItem(INCLUDE_ALL_STORAGE_KEY, value ? '1' : '0');
+	} catch {
+		// ignore — localStorage might be disabled
+	}
+}
 
 class FirkinsService {
 	state: Writable<FirkinsState> = writable(initialState);
+	/// Public store so any consumer can react to mode flips. The catalog
+	/// page renders a toggle bound to this store; the library section
+	/// re-renders when the toggle flips because `state.firkins` is
+	/// re-fetched against the new mode.
+	includeAll: Writable<boolean> = writable(readStoredIncludeAll());
 
 	private subscribers = 0;
 	private timer: ReturnType<typeof setInterval> | null = null;
@@ -92,12 +116,26 @@ class FirkinsService {
 		}
 	}
 
+	/// Toggle between bookmarked-only (`false`, default) and every
+	/// firkin in the local DB (`true`, including non-bookmarked
+	/// browse-cache rows from the `/catalog/visit` resolver). Persists
+	/// to localStorage so the choice sticks across reloads, and triggers
+	/// an immediate refresh so the store reflects the new mode.
+	setIncludeAll(value: boolean): void {
+		const current = get(this.includeAll);
+		if (current === value) return;
+		this.includeAll.set(value);
+		writeStoredIncludeAll(value);
+		void this.refresh();
+	}
+
 	async refresh(): Promise<void> {
 		if (this.inFlight) return;
 		this.inFlight = true;
 		this.state.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const res = await fetch('/api/firkins', { cache: 'no-store' });
+			const url = get(this.includeAll) ? '/api/firkins?include=all' : '/api/firkins';
+			const res = await fetch(url, { cache: 'no-store' });
 			if (!res.ok) throw new Error(await parseError(res));
 			const firkins = (await res.json()) as Firkin[];
 			this.state.set({ loading: false, firkins, error: null });
