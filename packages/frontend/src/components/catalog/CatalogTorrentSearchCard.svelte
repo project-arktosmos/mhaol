@@ -60,7 +60,9 @@
 	let expandedGroups = $state<Record<string, boolean>>({});
 
 	function toggleGroup(label: string) {
-		expandedGroups = { ...expandedGroups, [label]: !expandedGroups[label] };
+		const wasExpanded = expandedGroups[label] ?? false;
+		expandedGroups = { ...expandedGroups, [label]: !wasExpanded };
+		if (!wasExpanded) void search.probeRemaining(label);
 	}
 
 	const heading = $derived(

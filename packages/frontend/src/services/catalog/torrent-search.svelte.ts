@@ -244,6 +244,28 @@ export class TorrentSearch {
 		await Promise.all(grouped.filter((g) => g.probe).map((g) => this.probeGroup(g, runToken)));
 	}
 
+	/// Probe rows in a group that were initially skipped because an earlier
+	/// row in the same quality bucket already proved streamable. Used when
+	/// the user expands the row via "More" — they want to compare options,
+	/// so re-evaluate the rest. Leaves 'no seeders' / 'unknown quality' /
+	/// already-evaluated rows alone.
+	async probeRemaining(groupLabel: string): Promise<void> {
+		const runToken = this.run;
+		const group = this.groupedMatches.find((g) => g.label === groupLabel);
+		if (!group || !group.probe) return;
+		for (const t of group.rows) {
+			if (runToken !== this.run) return;
+			if (!t.magnetLink) continue;
+			const current = this.rowEvals[t.magnetLink];
+			if (current?.kind !== 'skipped') continue;
+			if (current.reason !== 'Streamable candidate found earlier in this quality group') continue;
+			this.rowEvals = { ...this.rowEvals, [t.magnetLink]: { kind: 'evaluating' } };
+			const result = await this.probeOne(t.magnetLink);
+			if (runToken !== this.run) return;
+			this.rowEvals = { ...this.rowEvals, [t.magnetLink]: result };
+		}
+	}
+
 	private async probeGroup(group: TorrentQualityGroup, runToken: number): Promise<void> {
 		let foundStreamable = false;
 		for (const t of group.rows) {
