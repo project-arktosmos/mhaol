@@ -4,6 +4,7 @@ import {
 	searchTorrents,
 	type TorrentResultItem
 } from '$lib/search.service';
+import { addonKind } from '$lib/firkins.service';
 
 export type TorrentSearchStatus = 'idle' | 'searching' | 'done' | 'error';
 
@@ -102,6 +103,7 @@ export class TorrentSearch {
 		try {
 			const torrents = await searchTorrents(args.addon, args.title);
 			if (myRun !== this.run) return;
+			const isTv = addonKind(args.addon) === 'tv show';
 			const matches = matchTorrentsForResult(
 				{
 					title: args.title,
@@ -112,11 +114,17 @@ export class TorrentSearch {
 					year: args.year,
 					raw: null
 				},
-				torrents
+				torrents,
+				{ skipYearFilter: isTv }
 			);
 			this.matches = matches;
 			this.status = 'done';
-			if (this.evaluate) await this.evaluateGrouped(groupMatches(matches), myRun);
+			// Streamability probing runs one /api/torrent/evaluate per row.
+			// For TV shows the result set spans every season the show ever
+			// aired, so the per-row probe is way too expensive (and the
+			// streamability column lives in CatalogTorrentSearchCard, which
+			// TV firkins skip in favour of the seasons-card layout).
+			if (this.evaluate && !isTv) await this.evaluateGrouped(groupMatches(matches), myRun);
 		} catch (err) {
 			if (myRun !== this.run) return;
 			this.matches = [];

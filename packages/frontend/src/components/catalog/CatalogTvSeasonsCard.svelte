@@ -1,11 +1,30 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { base } from '$app/paths';
+	import {
+		formatSizeBytes,
+		parseTorrentSeasons,
+		type TorrentResultItem
+	} from '$lib/search.service';
 
 	interface Props {
 		tmdbTvId: string;
+		torrents?: TorrentResultItem[];
+		torrentsStatus?: 'idle' | 'searching' | 'done' | 'error';
+		torrentsError?: string | null;
+		existingHashes?: Set<string>;
+		addingHash?: string | null;
+		onAssign?: (torrent: TorrentResultItem) => void | Promise<void>;
 	}
-	let { tmdbTvId }: Props = $props();
+	let {
+		tmdbTvId,
+		torrents = [],
+		torrentsStatus = 'idle',
+		torrentsError = null,
+		existingHashes = new Set<string>(),
+		addingHash = null,
+		onAssign
+	}: Props = $props();
 
 	interface Season {
 		seasonNumber: number;
@@ -37,6 +56,7 @@
 	let episodes = $state<Record<number, Episode[]>>({});
 	let episodesStatus = $state<Record<number, LoadStatus>>({});
 	let episodesError = $state<Record<number, string | null>>({});
+	let wholeShowExpanded = $state<boolean>(false);
 
 	let loadedForId: string | null = null;
 
@@ -116,6 +136,41 @@
 		const m = min % 60;
 		return m === 0 ? `${h}h` : `${h}h ${m}m`;
 	}
+
+	function torrentName(t: TorrentResultItem): string {
+		return t.parsedTitle || t.title;
+	}
+
+	// Classify each torrent into the seasons it covers (or "whole show" when
+	// no season tag is found in the name). A range torrent (S01-S03) lands
+	// in every season it spans.
+	const classifiedTorrents = $derived.by(() => {
+		const wholeShow: TorrentResultItem[] = [];
+		const bySeason = new Map<number, TorrentResultItem[]>();
+		for (const t of torrents) {
+			const range = parseTorrentSeasons(torrentName(t));
+			if (!range) {
+				wholeShow.push(t);
+				continue;
+			}
+			for (let s = range.start; s <= range.end; s++) {
+				let bucket = bySeason.get(s);
+				if (!bucket) {
+					bucket = [];
+					bySeason.set(s, bucket);
+				}
+				bucket.push(t);
+			}
+		}
+		const sortFn = (a: TorrentResultItem, b: TorrentResultItem) => b.seeders - a.seeders;
+		wholeShow.sort(sortFn);
+		for (const list of bySeason.values()) list.sort(sortFn);
+		return { wholeShow, bySeason };
+	});
+
+	function torrentsForSeason(n: number): TorrentResultItem[] {
+		return classifiedTorrents.bySeason.get(n) ?? [];
+	}
 </script>
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
@@ -123,6 +178,13 @@
 		<h2 class="text-sm font-semibold text-base-content/70 uppercase">
 			Seasons{seasons.length > 0 ? ` (${seasons.length})` : ''}
 		</h2>
+		{#if torrentsStatus === 'searching' && torrents.length === 0}
+			<span class="text-xs text-base-content/60">Searching torrents…</span>
+		{:else if torrentsStatus === 'error'}
+			<span class="text-xs text-error" title={torrentsError ?? 'Failed'}>Torrent search failed</span>
+		{:else if torrents.length > 0}
+			<span class="text-xs text-base-content/60">{torrents.length} torrent{torrents.length === 1 ? '' : 's'}</span>
+		{/if}
 	</div>
 
 	{#if seasonsStatus === 'loading' && seasons.length === 0}
@@ -133,11 +195,51 @@
 		<p class="text-sm text-base-content/60">No seasons found.</p>
 	{:else}
 		<ul class="flex flex-col gap-2">
+			{#if classifiedTorrents.wholeShow.length > 0}
+				{@const wsRows = classifiedTorrents.wholeShow}
+				<li class="rounded border border-base-content/10 bg-base-100">
+					<button
+						type="button"
+						class="flex w-full items-center gap-3 p-2 text-left hover:bg-base-200"
+						onclick={() => (wholeShowExpanded = !wholeShowExpanded)}
+						aria-expanded={wholeShowExpanded}
+					>
+						<div
+							class="flex h-16 w-12 shrink-0 items-center justify-center rounded bg-base-300 text-center text-xs text-base-content/40"
+						>
+							All
+						</div>
+						<div class="min-w-0 flex-1">
+							<p class="font-medium">Whole show</p>
+							<p class="text-xs text-base-content/60">
+								{wsRows.length} torrent{wsRows.length === 1 ? '' : 's'} not tagged to a specific
+								season
+							</p>
+						</div>
+						<span
+							class={classNames('shrink-0 text-base-content/60 transition-transform', {
+								'rotate-90': wholeShowExpanded
+							})}
+							aria-hidden="true"
+						>
+							›
+						</span>
+					</button>
+
+					{#if wholeShowExpanded}
+						<div class="border-t border-base-content/10 p-2">
+							{@render torrentTable(wsRows)}
+						</div>
+					{/if}
+				</li>
+			{/if}
+
 			{#each seasons as season (season.seasonNumber)}
 				{@const isOpen = !!expanded[season.seasonNumber]}
 				{@const epList = episodes[season.seasonNumber] ?? []}
 				{@const epStatus = episodesStatus[season.seasonNumber] ?? 'idle'}
 				{@const epError = episodesError[season.seasonNumber] ?? null}
+				{@const seasonTorrents = torrentsForSeason(season.seasonNumber)}
 				<li class="rounded border border-base-content/10 bg-base-100">
 					<button
 						type="button"
@@ -168,6 +270,9 @@
 							</div>
 							<p class="text-xs text-base-content/60">
 								{season.episodeCount ?? 0} episode{season.episodeCount === 1 ? '' : 's'}
+								{#if seasonTorrents.length > 0}
+									· <span class="text-success">{seasonTorrents.length} torrent{seasonTorrents.length === 1 ? '' : 's'}</span>
+								{/if}
 							</p>
 							{#if season.overview}
 								<p class="mt-1 line-clamp-2 text-xs text-base-content/70">{season.overview}</p>
@@ -184,7 +289,10 @@
 					</button>
 
 					{#if isOpen}
-						<div class="border-t border-base-content/10 p-2">
+						<div class="flex flex-col gap-3 border-t border-base-content/10 p-2">
+							{#if seasonTorrents.length > 0}
+								{@render torrentTable(seasonTorrents)}
+							{/if}
 							{#if epStatus === 'loading' && epList.length === 0}
 								<p class="text-xs text-base-content/60">Loading episodes…</p>
 							{:else if epStatus === 'error'}
@@ -240,3 +348,52 @@
 		</ul>
 	{/if}
 </div>
+
+{#snippet torrentTable(rows: TorrentResultItem[])}
+	<div class="overflow-x-auto rounded border border-base-content/10">
+		<table class="table table-xs">
+			<thead>
+				<tr>
+					<th class="w-20">Quality</th>
+					<th class="w-20 text-success">Seeders</th>
+					<th class="w-20 text-warning">Leechers</th>
+					<th class="w-20">Size</th>
+					<th>Title</th>
+					<th class="w-24"></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each rows as torrent (torrent.infoHash)}
+					{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
+					{@const adding = addingHash === torrent.magnetLink}
+					<tr class={classNames('hover', { 'opacity-60': added || adding })}>
+						<td class="text-xs font-medium">{torrent.quality ?? '—'}</td>
+						<td class="text-xs text-success">{torrent.seeders}</td>
+						<td class="text-xs text-warning">{torrent.leechers}</td>
+						<td class="text-xs text-base-content/70">{formatSizeBytes(torrent.sizeBytes)}</td>
+						<td class="max-w-md truncate text-xs text-base-content/80" title={torrent.title}>
+							{torrent.parsedTitle || torrent.title}
+						</td>
+						<td class="text-right">
+							{#if !onAssign}
+								<span class="text-xs text-base-content/40">—</span>
+							{:else if added}
+								<span class="badge badge-sm badge-success">added</span>
+							{:else}
+								<button
+									type="button"
+									class="btn btn-xs btn-primary"
+									disabled={addingHash !== null}
+									onclick={() => onAssign?.(torrent)}
+									aria-label="Use this torrent"
+								>
+									{adding ? '…' : 'Use'}
+								</button>
+							{/if}
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/snippet}

@@ -42,9 +42,17 @@ function normalizeForMatch(s: string): string {
 		.trim();
 }
 
+export interface MatchTorrentsOptions {
+	/** Skip the year-equality filter — TV torrents are tagged with the season's
+	 * air year, not the show's first-aired year, so dropping them by year
+	 * mismatch loses every season after S1. */
+	skipYearFilter?: boolean;
+}
+
 export function matchTorrentsForResult(
 	result: SearchResultItem,
-	torrents: TorrentResultItem[]
+	torrents: TorrentResultItem[],
+	options: MatchTorrentsOptions = {}
 ): TorrentResultItem[] {
 	const targetWords = normalizeForMatch(result.title)
 		.split(' ')
@@ -56,11 +64,43 @@ export function matchTorrentsForResult(
 		if (!torrentTitle) continue;
 		const hits = targetWords.filter((w) => torrentTitle.includes(w)).length;
 		if (hits / targetWords.length < 0.7) continue;
-		if (result.year != null && t.year != null && t.year !== result.year) continue;
+		if (
+			!options.skipYearFilter &&
+			result.year != null &&
+			t.year != null &&
+			t.year !== result.year
+		) {
+			continue;
+		}
 		matches.push(t);
 	}
 	matches.sort((a, b) => b.seeders - a.seeders);
 	return matches;
+}
+
+/// Detect the season range a torrent's name covers. Returns `{ start, end }`
+/// for single-season torrents (`start === end`) or multi-season packs
+/// (`Show.S01-S03`, `Season 1-3`). Returns `null` for whole-show / complete
+/// packs that don't tag a specific season.
+///
+/// Episode-specific torrents like `S01E03` are still classified as season 1.
+export function parseTorrentSeasons(name: string): { start: number; end: number } | null {
+	const range = name.match(
+		/\b(?:s|season[\s._-]*)(\d{1,2})\s*(?:-|–|to)\s*(?:s|season[\s._-]*)?(\d{1,2})\b/i
+	);
+	if (range) {
+		const a = parseInt(range[1], 10);
+		const b = parseInt(range[2], 10);
+		if (Number.isFinite(a) && Number.isFinite(b)) {
+			return { start: Math.min(a, b), end: Math.max(a, b) };
+		}
+	}
+	const single = name.match(/\b(?:s|season[\s._-]*)(\d{1,2})\b/i);
+	if (single) {
+		const n = parseInt(single[1], 10);
+		if (Number.isFinite(n)) return { start: n, end: n };
+	}
+	return null;
 }
 
 export function formatSizeBytes(bytes: number): string {

@@ -853,6 +853,9 @@
 		};
 	});
 
+	// `evaluate: true` runs streamability probes on results; the search
+	// itself short-circuits the probes for TV shows (too many results) so
+	// it's safe to leave on here.
 	const torrentSearch = new TorrentSearch({ evaluate: true });
 	let addingHash = $state<string | null>(null);
 	let assignError = $state<string | null>(null);
@@ -879,10 +882,15 @@
 	// torrents. Non-bookmarked browse-cache firkins skip the search
 	// entirely — they show only the Bookmark action; the search auto-fires
 	// once the user bookmarks.
+	//
+	// TV shows ignore the `hasNoRealFiles` gate: the seasons card needs the
+	// search results to classify torrents per-season, and the user typically
+	// adds one torrent per season — so even when the firkin already has a
+	// magnet attached, fresh results are still useful.
 	$effect(() => {
 		if (!isBookmarked) return;
 		if (isMusicBrainz) return;
-		if (!hasNoRealFiles) return;
+		if (!isTmdbTv && !hasNoRealFiles) return;
 		if (torrentSearchInitForFirkinId === firkin.id) return;
 		torrentSearchInitForFirkinId = firkin.id;
 		void torrentSearch.search({ addon: firkin.addon, title: firkin.title, year: firkin.year });
@@ -1256,7 +1264,15 @@
 			/>
 
 			{#if isTmdbTv && tmdbTvId}
-				<CatalogTvSeasonsCard {tmdbTvId} />
+				<CatalogTvSeasonsCard
+					{tmdbTvId}
+					torrents={isBookmarked ? torrentSearch.matches : []}
+					torrentsStatus={torrentSearch.status}
+					torrentsError={torrentSearch.error}
+					{existingHashes}
+					{addingHash}
+					onAssign={isBookmarked ? assignTorrent : undefined}
+				/>
 			{/if}
 
 			{#if !isBookmarked}
@@ -1288,7 +1304,11 @@
 				/>
 			{/if}
 
-			{#if isBookmarked && hasMagnetFiles}
+			{#if isBookmarked && isTmdbTv}
+				{#if assignError}
+					<div class="alert alert-error"><span>{assignError}</span></div>
+				{/if}
+			{:else if isBookmarked && hasMagnetFiles}
 				<CatalogTorrentSearchCard
 					search={torrentSearch}
 					onAssign={assignTorrent}
