@@ -184,44 +184,66 @@
 	<video bind:this={mediaElement} class="hidden" playsinline></video>
 
 	{#if visible && $playerState.currentFile}
-		<div class="flex items-center justify-center gap-2 px-2 pt-2">
-			<button
-				type="button"
-				class="btn btn-circle btn-ghost btn-sm"
-				onclick={handlePrev}
-				disabled={prevIndex === null}
-				aria-label="Previous track"
-				title="Previous track"
-			>
-				<Icon name="delapouite/previous-button" size="1.25em" />
-			</button>
-			{#if isLoading}
-				<span class="btn btn-circle btn-disabled btn-md" aria-label="Loading" title="Loading…">
-					<span class="loading loading-sm loading-spinner"></span>
-				</span>
-			{:else}
+		<div class="flex items-center justify-between gap-2 px-2 pt-2">
+			<div class="flex items-center gap-1">
 				<button
 					type="button"
-					class="btn btn-circle btn-primary btn-md"
-					onclick={togglePlay}
-					aria-label={isPaused ? 'Play' : 'Pause'}
-					title={isPaused ? 'Play' : 'Pause'}
+					class="btn btn-circle btn-ghost btn-sm"
+					onclick={handlePrev}
+					disabled={prevIndex === null}
+					aria-label="Previous track"
+					title="Previous track"
 				>
-					<Icon
-						name={isPaused ? 'guard13007/play-button' : 'guard13007/pause-button'}
-						size="1.5em"
-					/>
+					<Icon name="delapouite/previous-button" size="1.25em" />
 				</button>
-			{/if}
+				{#if isLoading}
+					<span
+						class="btn btn-circle btn-disabled btn-md"
+						aria-label="Loading"
+						title="Loading…"
+					>
+						<span class="loading loading-sm loading-spinner"></span>
+					</span>
+				{:else if isPaused}
+					<button
+						type="button"
+						class="btn btn-circle btn-primary btn-md"
+						onclick={togglePlay}
+						aria-label="Play"
+						title="Play"
+					>
+						<Icon name="guard13007/play-button" size="1.5em" />
+					</button>
+				{:else}
+					<button
+						type="button"
+						class="btn btn-circle btn-primary btn-md"
+						onclick={togglePlay}
+						aria-label="Pause"
+						title="Pause"
+					>
+						<Icon name="guard13007/pause-button" size="1.5em" />
+					</button>
+				{/if}
+				<button
+					type="button"
+					class="btn btn-circle btn-ghost btn-sm"
+					onclick={handleNext}
+					disabled={nextIndex === null}
+					aria-label="Next track"
+					title="Next track"
+				>
+					<Icon name="delapouite/next-button" size="1.25em" />
+				</button>
+			</div>
 			<button
 				type="button"
 				class="btn btn-circle btn-ghost btn-sm"
-				onclick={handleNext}
-				disabled={nextIndex === null}
-				aria-label="Next track"
-				title="Next track"
+				onclick={handleStop}
+				aria-label="Close"
+				title="Close"
 			>
-				<Icon name="delapouite/next-button" size="1.25em" />
+				<Icon name="delapouite/plain-square" size="1em" />
 			</button>
 		</div>
 
@@ -261,15 +283,6 @@
 					<span>{formatTime(total > 0 ? total : null)}</span>
 				</div>
 			</div>
-			<button
-				type="button"
-				class="btn btn-ghost btn-sm"
-				onclick={handleStop}
-				aria-label="Stop"
-				title="Stop"
-			>
-				<Icon name="delapouite/plain-square" size="1em" />
-			</button>
 		</div>
 	{/if}
 </div>
