@@ -148,6 +148,7 @@
 								{#each group.rows as torrent, rowIdx (torrent.infoHash)}
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
+									{@const streaming = streamingHash === torrent.magnetLink}
 									{@const ev = rowEval(torrent.magnetLink)}
 									{@const hidden = expanded
 										? false
@@ -205,7 +206,6 @@
 											>{formatSizeBytes(torrent.sizeBytes)}</td
 										>
 										<td class="text-right">
-											{@const streaming = streamingHash === torrent.magnetLink}
 											<div class="flex items-center justify-end gap-1">
 												{#if ev.kind === 'streamable' && onStream}
 													<button
