@@ -60,7 +60,12 @@
 	}
 </script>
 
-<article class={classNames('group card overflow-hidden rounded-md bg-base-200 shadow-sm', classes)}>
+<article
+	class={classNames(
+		'group card flex aspect-[1/2] w-full flex-col justify-between overflow-hidden rounded-md bg-base-200 shadow-sm',
+		classes
+	)}
+>
 	<header
 		class="flex items-baseline justify-between gap-3 border-b border-base-content/10 px-4 py-3"
 	>
