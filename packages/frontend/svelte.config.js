@@ -25,7 +25,7 @@ const config = {
 			$transport: 'src/transport',
 			'app-shims': 'src/app-shims',
 			'torrent-search-thepiratebay':
-				'../../../packages/addons/torrent-search-thepiratebay/src/index.ts'
+				'../addons/torrent-search-thepiratebay/src/index.ts'
 		}
 	}
 };

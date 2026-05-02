@@ -9,7 +9,7 @@ export default defineConfig({
 		host: true,
 		port: parseInt(process.env.PORT || '9898'),
 		fs: {
-			allow: ['../../..']
+			allow: ['../..']
 		},
 		proxy: {
 			'/api': 'http://127.0.0.1:9899'
