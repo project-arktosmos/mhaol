@@ -39,6 +39,23 @@
 		if (!wasExpanded) void search.probeRemaining(label);
 	}
 
+	// Pick the row to surface as the collapsed group head: the first row
+	// (rows are already sorted by seeders desc by `groupMatches`) that has
+	// **both** options available — Stream (probe verdict is `streamable`) and
+	// Download (not already in `existingHashes`). When no row qualifies (still
+	// probing, every streamable row already added, etc.) we fall back to
+	// index 0 so the group still has a header to expand from.
+	function pickHeadIndex(rows: TorrentResultItem[]): number {
+		for (let i = 0; i < rows.length; i++) {
+			const magnet = rows[i].magnetLink;
+			if (!magnet) continue;
+			if (search.rowEvals[magnet]?.kind !== 'streamable') continue;
+			if (existingHashes.has(magnet)) continue;
+			return i;
+		}
+		return 0;
+	}
+
 	const heading = $derived(
 		`Torrent search${(!collapsible || open) && search.matches.length > 0 ? ` (${search.matches.length})` : ''}`
 	);
@@ -98,6 +115,7 @@
 						<tbody>
 							{#each search.groupedMatches as group (group.label)}
 								{@const expanded = expandedGroups[group.label] ?? false}
+								{@const headIndex = pickHeadIndex(group.rows)}
 								{#if expanded}
 									<tr class="bg-base-300/40">
 										<th colspan="5" class="p-0">
@@ -133,16 +151,16 @@
 													: !rowEval
 														? 'Not yet probed'
 														: null}
-									{@const hidden = rowIdx > 0 && !expanded}
+									{@const hidden = rowIdx !== headIndex && !expanded}
 									<tr
 										class={classNames('hover', {
 											'opacity-60': added || adding,
 											hidden,
-											'bg-base-300/40': rowIdx === 0 && !expanded
+											'bg-base-300/40': rowIdx === headIndex && !expanded
 										})}
 									>
 										<td>
-											{#if rowIdx === 0 && !expanded}
+											{#if rowIdx === headIndex && !expanded}
 												<button
 													type="button"
 													class="flex w-full items-center gap-2 text-left text-xs font-semibold tracking-wider text-base-content/70 uppercase"
