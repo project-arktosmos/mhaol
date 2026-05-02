@@ -1077,6 +1077,8 @@
 	let startedHashes = $state<Set<string>>(new Set());
 	let torrentSearchOpen = $state(false);
 	let torrentSearchInitForFirkinId: string | null = null;
+	let subsLyricsOpen = $state(false);
+	let filesOpen = $state(false);
 
 	const existingHashes = $derived(
 		new Set(firkin.files.filter((f) => f.type === 'torrent magnet' && f.value).map((f) => f.value))
@@ -1972,11 +1974,19 @@
 					kind={subsLyricsKind}
 					searchTerm={subsLyricsSearchTerm}
 					onRefresh={runSubsLyricsSearch}
+					collapsible
+					open={subsLyricsOpen}
+					onToggle={() => (subsLyricsOpen = !subsLyricsOpen)}
 				/>
 			{/if}
 
 			{#if !isMusicBrainz}
-				<CatalogFilesTable files={firkin.files} />
+				<CatalogFilesTable
+					files={firkin.files}
+					collapsible
+					open={filesOpen}
+					onToggle={() => (filesOpen = !filesOpen)}
+				/>
 			{/if}
 		</section>
 

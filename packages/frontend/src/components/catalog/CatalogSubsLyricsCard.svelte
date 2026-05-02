@@ -8,9 +8,20 @@
 		kind: 'subs' | 'lyrics';
 		searchTerm?: string | null;
 		onRefresh?: () => void;
+		collapsible?: boolean;
+		open?: boolean;
+		onToggle?: () => void;
 	}
 
-	let { resolver, kind, searchTerm, onRefresh }: Props = $props();
+	let {
+		resolver,
+		kind,
+		searchTerm,
+		onRefresh,
+		collapsible = false,
+		open = true,
+		onToggle
+	}: Props = $props();
 
 	let selected = $state<SubsLyricsItem | null>(null);
 
@@ -77,8 +88,20 @@
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
 	<div class="flex items-center justify-between gap-2">
-		<h2 class="text-sm font-semibold text-base-content/70 uppercase">{heading}</h2>
-		{#if onRefresh}
+		{#if collapsible}
+			<button
+				type="button"
+				class="flex flex-1 items-center gap-2 text-left"
+				onclick={() => onToggle?.()}
+				aria-expanded={open}
+			>
+				<span class="text-base-content/60" aria-hidden="true">{open ? '▼' : '▶'}</span>
+				<h2 class="text-sm font-semibold text-base-content/70 uppercase">{heading}</h2>
+			</button>
+		{:else}
+			<h2 class="text-sm font-semibold text-base-content/70 uppercase">{heading}</h2>
+		{/if}
+		{#if (!collapsible || open) && onRefresh}
 			<button
 				type="button"
 				class="btn btn-outline btn-xs"
@@ -90,7 +113,7 @@
 		{/if}
 	</div>
 
-	{#if searchTerm}
+	{#if (!collapsible || open) && searchTerm}
 		<div class="mt-1 flex flex-wrap items-baseline gap-1 text-xs text-base-content/60">
 			<span>Query:</span>
 			<code class="rounded bg-base-100 px-1 py-0.5 font-mono text-[11px] break-all">
@@ -99,7 +122,8 @@
 		</div>
 	{/if}
 
-	<div class="mt-2">
+	{#if !collapsible || open}
+		<div class="mt-2">
 		{#if resolver.status === 'searching' && resolver.results.length === 0}
 			<p class="text-sm text-base-content/60">Searching…</p>
 		{:else if resolver.status === 'error'}
@@ -208,5 +232,6 @@
 				{/if}
 			</div>
 		{/if}
-	</div>
+		</div>
+	{/if}
 </div>
