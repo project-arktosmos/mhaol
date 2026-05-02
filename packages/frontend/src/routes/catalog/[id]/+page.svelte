@@ -1230,16 +1230,25 @@
 		}
 		return null;
 	});
-	const preferredStreamTorrent = $derived.by<TorrentResultItem | null>(() => {
-		for (const group of torrentSearch.groupedMatches) {
-			for (const row of group.rows) {
-				if (!row.magnetLink) continue;
-				if (torrentSearch.rowEvals[row.magnetLink]?.kind !== 'streamable') continue;
-				return row;
+	// Best `streamable`-probed torrent per quality bucket, in quality
+	// priority order. The attachment card's stream-suggestion cell shows
+	// these in a quality selector so the user can swap which row gets
+	// attached without opening the torrent search table.
+	const streamPicksByQuality = $derived.by<Array<{ quality: string; torrent: TorrentResultItem }>>(
+		() => {
+			const out: Array<{ quality: string; torrent: TorrentResultItem }> = [];
+			for (const group of torrentSearch.groupedMatches) {
+				for (const row of group.rows) {
+					if (!row.magnetLink) continue;
+					if (torrentSearch.rowEvals[row.magnetLink]?.kind !== 'streamable') continue;
+					out.push({ quality: group.label, torrent: row });
+					break;
+				}
 			}
+			return out;
 		}
-		return null;
-	});
+	);
+	const preferredStreamTorrent = $derived(streamPicksByQuality[0]?.torrent ?? null);
 
 	function toggleTorrentSearch() {
 		torrentSearchOpen = !torrentSearchOpen;
@@ -2055,7 +2064,7 @@
 					onDownloadPlay={playFromAttachmentDownload}
 					downloadPlaying={ipfsStarting}
 					preferredDownload={preferredDownloadTorrent}
-					preferredStream={preferredStreamTorrent}
+					{streamPicksByQuality}
 					attachingDownload={addingHash !== null &&
 						preferredDownloadTorrent?.magnetLink === addingHash}
 					attachingStream={streamingHash !== null &&

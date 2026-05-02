@@ -64,11 +64,13 @@
 		 * user can attach the obvious pick in one click instead of opening
 		 * the search table. `null` when no eligible row exists. */
 		preferredDownload?: TorrentResultItem | null;
-		/** Best `streamable`-probed torrent (highest quality first, most
-		 * seeders within that quality). Surfaced as a faded preview in the
-		 * Stream cell when nothing's attached yet. `null` when no row has
+		/** One preferred `streamable`-probed torrent per quality bucket
+		 * (4K → 2160p → 1080p → … → Other), sorted by quality priority then
+		 * seeders within the bucket. Surfaced as a faded preview in the
+		 * Stream cell when nothing's attached yet, with a quality selector
+		 * that swaps the currently displayed pick. Empty when no row has
 		 * been probed `streamable` yet. */
-		preferredStream?: TorrentResultItem | null;
+		streamPicksByQuality?: Array<{ quality: string; torrent: TorrentResultItem }>;
 		/** Click handler for the faded Download preview — should run the
 		 * same flow as the Download button on the search table row (attach
 		 * the magnet to the firkin and start the torrent client). */
@@ -102,7 +104,7 @@
 		onDownloadPlay,
 		downloadPlaying = false,
 		preferredDownload = null,
-		preferredStream = null,
+		streamPicksByQuality = [],
 		onAttachDownload,
 		onAttachStream,
 		attachingDownload = false,
@@ -126,6 +128,29 @@
 	const hasTrailer = $derived(Boolean(trailer && onTrailerPlay));
 	const trailerSpansFull = $derived(hasTrailer && !downloadActionable);
 	const downloadSpansFull = $derived(downloadActionable && !hasTrailer);
+
+	// User's quality pick from the Stream cell's selector (suggestion mode).
+	// `null` falls back to `streamPicksByQuality[0]` — the best available
+	// quality. The pick is reset when the available qualities change so a
+	// stale selection (e.g. user picked 1080p, results refreshed and 1080p
+	// is no longer streamable) doesn't strand the cell.
+	let selectedStreamQuality = $state<string | null>(null);
+	$effect(() => {
+		if (
+			selectedStreamQuality !== null &&
+			!streamPicksByQuality.some((p) => p.quality === selectedStreamQuality)
+		) {
+			selectedStreamQuality = null;
+		}
+	});
+	const currentStreamPick = $derived.by(() => {
+		if (streamPicksByQuality.length === 0) return null;
+		if (selectedStreamQuality === null) return streamPicksByQuality[0];
+		return (
+			streamPicksByQuality.find((p) => p.quality === selectedStreamQuality) ??
+			streamPicksByQuality[0]
+		);
+	});
 
 	function torrentToInfo(t: TorrentResultItem): AttachmentInfo {
 		return {
@@ -227,22 +252,49 @@
 					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
 					{@render stats(stream)}
 				</div>
-			{:else if preferredStream && onAttachStream}
-				{@const info = torrentToInfo(preferredStream)}
-				<button
-					type="button"
-					onclick={() => onAttachStream?.(preferredStream)}
-					disabled={attachingStream}
-					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center opacity-60 transition-opacity hover:border-success/50 hover:bg-base-200 hover:opacity-90 disabled:cursor-progress disabled:opacity-40"
-					aria-label="Attach this torrent for streaming"
-					title="Suggested pick from the torrent search — click to start streaming"
-				>
-					{@render header('lorc/magnet', 'Stream', 'Stream mode')}
-					{@render stats(info)}
-					<span class="text-[10px] font-medium text-base-content/70">
-						{attachingStream ? 'Starting…' : 'Click to attach'}
-					</span>
-				</button>
+			{:else if currentStreamPick && onAttachStream}
+				{@const info = torrentToInfo(currentStreamPick.torrent)}
+				<div class="group relative">
+					<button
+						type="button"
+						onclick={() => onAttachStream?.(currentStreamPick.torrent)}
+						disabled={attachingStream}
+						class="flex w-full flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300 p-3 text-center transition-colors group-hover:border-success/50 group-hover:bg-base-200 disabled:cursor-progress disabled:opacity-40"
+						aria-label="Attach this torrent for streaming"
+						title="Suggested pick from the torrent search — click to start streaming"
+					>
+						<div class="pointer-events-none flex flex-col items-center gap-1 opacity-60 transition-opacity group-hover:opacity-90">
+							{@render header('lorc/magnet', 'Stream', 'Stream mode')}
+							{#if streamPicksByQuality.length > 1}
+								<span class="invisible block h-6 text-[10px]">·</span>
+							{:else}
+								<span class="text-[10px] font-medium text-base-content/70">
+									{currentStreamPick.quality}
+								</span>
+							{/if}
+							{@render stats(info)}
+							<span class="text-[10px] font-medium text-base-content/70">
+								{attachingStream ? 'Starting…' : 'Click to attach'}
+							</span>
+						</div>
+					</button>
+					{#if streamPicksByQuality.length > 1}
+						<select
+							class="select-bordered absolute top-[3.5rem] left-1/2 z-10 -translate-x-1/2 select select-xs"
+							value={currentStreamPick.quality}
+							onclick={(e) => e.stopPropagation()}
+							onchange={(e) => {
+								selectedStreamQuality = (e.currentTarget as HTMLSelectElement).value;
+							}}
+							aria-label="Pick stream quality"
+							title="Pick stream quality"
+						>
+							{#each streamPicksByQuality as pick (pick.quality)}
+								<option value={pick.quality}>{pick.quality}</option>
+							{/each}
+						</select>
+					{/if}
+				</div>
 			{:else}
 				<div
 					class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
