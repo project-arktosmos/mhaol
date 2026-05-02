@@ -232,8 +232,7 @@ pnpm build:headless   # Builds the cloud WebUI, then the mhaol-headless release 
 
 # Host bootstrap (one-time per machine; idempotent)
 pnpm setup:mac        # macOS — Xcode CLT, brew gstreamer, rustup, Node + pnpm, Tauri CLI
-pnpm setup:linux      # Ubuntu/Debian — apt deps for Tauri webkit2gtk + GStreamer, rustup, Node 20, pnpm, Tauri CLI
-pnpm setup:windows    # Windows 10/11 (elevated PowerShell) — winget VS Build Tools / WebView2 / Rustup / Node LTS / NSIS / GStreamer MSVC, Tauri CLI
+pnpm setup:linux      # Ubuntu/Debian (including WSL Ubuntu on Windows) — apt deps for Tauri webkit2gtk + GStreamer, rustup, Node 20, pnpm, Tauri CLI. Windows hosts use WSL Ubuntu and run this; the produced bundle is a Linux .deb/.AppImage, not a native Windows installer.
 pnpm install:deps     # Alias for setup:linux (kept for backwards compatibility)
 
 # Quality
