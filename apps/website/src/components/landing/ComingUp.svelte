@@ -41,6 +41,17 @@
 			]
 		},
 		{
+			icon: 'delapouite/three-friends',
+			title: 'Watch and listen together',
+			body: 'Open a room, drop in a mixed playlist of movies, episodes, albums, and YouTube clips, and everyone connected plays in lockstep. The host drives the timeline, friends co-edit the queue, and chat lives in the same space — tied to the moment on screen.',
+			points: [
+				'Mixed playlists across movies, TV, music, and YouTube',
+				'Synchronized playback — host’s seek bar drives every device',
+				'Collaborative queue editing and reactions',
+				'Built-in chat anchored to the playback timeline'
+			]
+		},
+		{
 			icon: 'lorc/tune-pitch',
 			title: 'Audio EQ and video tuning',
 			body: 'Sculpt the sound and the picture to your room and your screen — a per-device audio equalizer for music and films, plus video presets (gamma, contrast, denoise, sharpening) you can save and switch between.',
