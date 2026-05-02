@@ -24,7 +24,6 @@
 					<Icon name="delapouite/cloud-download" size={20} />
 					Get Mhaol
 				</a>
-				<a href="{base}/#why" class="btn btn-ghost btn-lg">Why Mhaol</a>
 			</div>
 		</div>
 
