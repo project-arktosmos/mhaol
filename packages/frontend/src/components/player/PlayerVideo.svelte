@@ -1,0 +1,713 @@
+<script lang="ts">
+	import { untrack } from 'svelte';
+	import { get } from 'svelte/store';
+	import classNames from 'classnames';
+	import Hls from 'hls.js';
+	import { playerService } from '$services/player.service';
+	import { subtitlesService } from '$services/subtitles.service';
+	import type {
+		PlayableFile,
+		PlayableFileSubtitle,
+		PlayerConnectionState
+	} from '$types/player.type';
+	import type { SubtitleSearchContext } from '$types/subtitles.type';
+	import PlayerControls from './PlayerControls.svelte';
+	import SubtitlesSearchModal from '$components/subtitles/SubtitlesSearchModal.svelte';
+
+	let {
+		file = null,
+		connectionState = 'idle',
+		positionSecs = 0,
+		durationSecs = null,
+		buffering = false,
+		fullscreen = false,
+		poster = null,
+		subtitleSearchContext = null,
+		hideSubtitleSelect = false,
+		subtitleUrl = null,
+		directStreamUrl = null,
+		directStreamMimeType = null,
+		onprev,
+		onnext
+	}: {
+		file?: PlayableFile | null;
+		connectionState?: PlayerConnectionState;
+		positionSecs?: number;
+		durationSecs?: number | null;
+		buffering?: boolean;
+		fullscreen?: boolean;
+		poster?: string | null;
+		subtitleSearchContext?: SubtitleSearchContext | null;
+		/// Hide the built-in subtitle `<select>` and "CC" search button
+		/// rendered in the corner of the player. Set when an external
+		/// picker (e.g. the catalog detail page's subtitle toolbar) is the
+		/// authoritative control point so the user only sees one chooser.
+		hideSubtitleSelect?: boolean;
+		/// Controlled subtitle URL — when non-null, overrides the
+		/// player's internal auto-pick and `<select>`-driven selection.
+		/// Pass through this prop when an external picker should be the
+		/// sole source of truth for which subtitle is rendered.
+		subtitleUrl?: string | null;
+		directStreamUrl?: string | null;
+		directStreamMimeType?: string | null;
+		onprev?: () => void;
+		onnext?: () => void;
+	} = $props();
+
+	// Single `<video>` element handles both video and audio modes. The HTML
+	// `<audio>` element is fussier with fragmented MP4 (the shape googlevideo
+	// hands us for audio-only adaptive streams) — modern `<video>` decodes
+	// the same files reliably, and falls back gracefully when the source has
+	// no video track. Switching between two elements also created a small
+	// race window where `bind:this={audioElement}` lagged the
+	// `directStreamUrl` effect, dropping the first play() on the floor.
+	let videoElement = $state<HTMLVideoElement | null>(null);
+	let isFullscreen = $state(false);
+	let subsModalOpen = $state(false);
+	let audioTrackTick = $state(0);
+	let activeSubUrl = $state<string | null>(null);
+	let mediaError = $state<string | null>(null);
+	let hlsInstance: Hls | null = null;
+	let attachedDirectUrl: string | null = null;
+	function isHlsUrl(url: string, mime: string | null): boolean {
+		if (mime && /mpegurl/i.test(mime)) return true;
+		const path = url.split('?')[0];
+		return /\.m3u8$/i.test(path);
+	}
+
+	function destroyHls(): void {
+		if (hlsInstance) {
+			hlsInstance.destroy();
+			hlsInstance = null;
+		}
+	}
+
+	interface SubCue {
+		start: number;
+		end: number;
+		text: string;
+	}
+	let subCues = $state<SubCue[]>([]);
+	// Direct-stream subtitle sync: poll `videoElement.currentTime` on
+	// every animation frame. The store-routed `positionSecs` prop is
+	// driven by the element's `timeupdate` event, which most browsers
+	// throttle to ~4 Hz — that leaves cues visibly lagging a couple
+	// hundred ms behind the picture. rAF gets us frame-accurate sync
+	// without changing the player's existing seek-bar semantics, which
+	// stay on the throttled path. WebRTC streams keep using the source
+	// timestamp because the element's `currentTime` there is wall-clock
+	// since stream attach, not source position.
+	let videoCurrentTime = $state(0);
+	$effect(() => {
+		if (!directStreamUrl) return;
+		const element = videoElement;
+		if (!element) return;
+		let cancelled = false;
+		let raf = 0;
+		const tick = () => {
+			if (cancelled) return;
+			const t = element.currentTime;
+			if (Number.isFinite(t)) videoCurrentTime = t;
+			raf = requestAnimationFrame(tick);
+		};
+		raf = requestAnimationFrame(tick);
+		return () => {
+			cancelled = true;
+			cancelAnimationFrame(raf);
+		};
+	});
+	let activeSubText = $derived.by(() => {
+		if (subCues.length === 0) return '';
+		const t = directStreamUrl ? videoCurrentTime : positionSecs;
+		const cue = subCues.find((c) => t >= c.start && t <= c.end);
+		return cue?.text ?? '';
+	});
+
+	const subsState = subtitlesService.state;
+
+	let isVideo = $derived(file?.mode !== 'audio');
+	let isStreaming = $derived(connectionState === 'streaming');
+	let isHlsStream = $derived(!!directStreamUrl && isHlsUrl(directStreamUrl, directStreamMimeType));
+	let activeMediaElement = $derived(videoElement as HTMLMediaElement | null);
+	// Combine subtitles already attached to the file with any downloaded for the search context.
+	let assignedSubs = $derived(subtitleSearchContext ? $subsState.assigned : []);
+	let combinedSubtitles = $derived<PlayableFileSubtitle[]>([
+		...(file?.subtitles ?? []),
+		...assignedSubs.map((a) => ({
+			languageCode: a.languageCode,
+			languageName: a.languageName,
+			url: a.url,
+			isAutoGenerated: false
+		}))
+	]);
+	let statusLabel = $derived(getStatusLabel(connectionState));
+	let effectiveFullscreen = $derived(fullscreen || isFullscreen);
+
+	type AudioTrackLike = { id?: string; label?: string; language?: string; enabled: boolean };
+	type VideoElementWithAudio = HTMLVideoElement & {
+		audioTracks?: AudioTrackLike[] & {
+			length: number;
+			addEventListener: (type: string, cb: () => void) => void;
+			removeEventListener: (type: string, cb: () => void) => void;
+			[index: number]: AudioTrackLike;
+		};
+	};
+
+	// Dropdown options come from `combinedSubtitles` directly (URL-keyed).
+	// Native `<track>` rendering is unreliable here: video uses srcObject from a WebRTC
+	// MediaStream, and assigned subs come from a different origin — browsers tend to
+	// silently drop the cues. We fetch + parse VTT manually and overlay the active text.
+	let subtitleOptions = $derived(
+		combinedSubtitles.map((s, i) => ({
+			url: s.url,
+			label: s.languageName || s.languageCode || `Track ${i + 1}`
+		}))
+	);
+
+	let audioTrackOptions = $derived.by(() => {
+		void audioTrackTick;
+		const v = videoElement as VideoElementWithAudio | null;
+		const tracks = v?.audioTracks;
+		if (!tracks || tracks.length <= 1)
+			return [] as { index: number; label: string; enabled: boolean }[];
+		const out: { index: number; label: string; enabled: boolean }[] = [];
+		for (let i = 0; i < tracks.length; i++) {
+			const t = tracks[i];
+			out.push({
+				index: i,
+				label: t.label || t.language || `Audio ${i + 1}`,
+				enabled: t.enabled
+			});
+		}
+		return out;
+	});
+	let activeAudioTrackIndex = $derived(audioTrackOptions.findIndex((t) => t.enabled));
+
+	function toggleFullscreen(): void {
+		isFullscreen = !isFullscreen;
+	}
+
+	function handleFullscreenKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Escape') isFullscreen = false;
+	}
+
+	$effect(() => {
+		if (!isFullscreen) return;
+		document.addEventListener('keydown', handleFullscreenKeydown);
+		return () => document.removeEventListener('keydown', handleFullscreenKeydown);
+	});
+
+	// Direct URL playback (yt-dlp): set src= on the video element. The same
+	// element handles audio-only sources too (the music-icon overlay covers
+	// the empty video frame).
+	//
+	// SPLIT INTO TWO EFFECTS on purpose. Combining them caused the seek bar
+	// to stay stuck at 0: on every re-run the previous run's cleanup tore
+	// down the timeupdate listeners, but the "src already set" early return
+	// at the top of the body meant the new run never re-attached them.
+	// Effect A only owns the imperative `element.src = …; play()` side
+	// effect (and short-circuits when nothing changed). Effect B owns the
+	// event listeners — its cleanup matches its setup on every run.
+	$effect(() => {
+		if (!directStreamUrl) {
+			destroyHls();
+			attachedDirectUrl = null;
+			return;
+		}
+		const element = videoElement;
+		if (!element) return;
+		const url = directStreamUrl;
+		const mime = directStreamMimeType;
+		if (attachedDirectUrl === url) return;
+		mediaError = null;
+		element.srcObject = null;
+		destroyHls();
+		attachedDirectUrl = url;
+
+		const playElement = () =>
+			element.play().catch((err: Error) => {
+				console.error('[PlayerVideo] play() rejected for', url, err);
+				if (err.name === 'NotAllowedError') {
+					mediaError = 'Playback blocked by browser. Click Play to start.';
+				} else {
+					mediaError = `Playback failed: ${err.message}`;
+				}
+				playerService.state.update((s) => ({ ...s, error: mediaError }));
+			});
+
+		if (isHlsUrl(url, mime)) {
+			if (Hls.isSupported()) {
+				element.removeAttribute('src');
+				// IPFS-stream sessions warm up their hlssink2 pipeline server-side;
+				// the playlist endpoint blocks until the first segment lands. Bump
+				// hls.js's manifest timeout / retry budget so the request survives
+				// long input warm-ups instead of bailing at the default ~10s.
+				const instance = new Hls({
+					enableWorker: true,
+					lowLatencyMode: true,
+					manifestLoadingTimeOut: 60000,
+					manifestLoadingMaxRetry: 4,
+					manifestLoadingRetryDelay: 1000
+				});
+				instance.loadSource(url);
+				instance.attachMedia(element);
+				instance.on(Hls.Events.MANIFEST_PARSED, () => playElement());
+				instance.on(Hls.Events.ERROR, (_event, data) => {
+					if (data.fatal) {
+						console.error('[PlayerVideo] hls fatal error', data);
+						mediaError = `HLS error: ${data.details ?? data.type}`;
+						playerService.state.update((s) => ({ ...s, error: mediaError }));
+						destroyHls();
+					}
+				});
+				hlsInstance = instance;
+			} else if (element.canPlayType('application/vnd.apple.mpegurl')) {
+				element.src = url;
+				element.load();
+				playElement();
+			} else {
+				mediaError = 'HLS playback is not supported in this browser';
+				playerService.state.update((s) => ({ ...s, error: mediaError }));
+			}
+		} else {
+			element.src = url;
+			element.load();
+			playElement();
+		}
+	});
+
+	// Element event listeners: error reporting + position/duration sync for
+	// the seek bar + buffering toggle. All attached imperatively so the
+	// attachment timing matches the lifecycle of `directStreamUrl` /
+	// `videoElement` exactly. The inline `onwaiting=` / `onplaying=` Svelte
+	// attributes used to live on the <video> element but were unreliable on
+	// torrent streams: when Effect A re-ran `element.load()` the runtime
+	// could miss the subsequent `playing` event, leaving the spinner stuck.
+	$effect(() => {
+		if (!directStreamUrl) return;
+		const element = videoElement;
+		if (!element) return;
+		const onError = () => {
+			const mediaErr = element.error;
+			const code = mediaErr?.code ?? 0;
+			// MediaError codes: 1=ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED.
+			const codeLabel =
+				code === 1
+					? 'aborted'
+					: code === 2
+						? 'network'
+						: code === 3
+							? 'decode'
+							: code === 4
+								? 'src not supported'
+								: `code ${code}`;
+			const reason = mediaErr?.message ? `${codeLabel}: ${mediaErr.message}` : codeLabel;
+			console.error('[PlayerVideo] media element error for', directStreamUrl, 'reason:', reason);
+			mediaError = `Stream error (${reason})`;
+			playerService.state.update((s) => ({ ...s, error: mediaError }));
+		};
+		const onTimeUpdate = () => {
+			const cur = get(playerService.state);
+			// Don't fight the user while they're dragging the seek bar.
+			if (cur.isSeeking) return;
+			// `timeupdate` firing means the element is actively decoding —
+			// clear buffering as a safety net in case `playing` was missed
+			// (torrent streams race element.load() with playback start).
+			const t = element.currentTime;
+			if (cur.positionSecs === t && !cur.buffering) return;
+			playerService.state.update((s) => ({ ...s, positionSecs: t, buffering: false }));
+		};
+		const onLoadedMetadata = () => {
+			if (Number.isFinite(element.duration) && element.duration > 0) {
+				const d = element.duration;
+				if (get(playerService.state).durationSecs === d) return;
+				playerService.state.update((s) => ({ ...s, durationSecs: d }));
+			}
+		};
+		const onDurationChange = onLoadedMetadata;
+		const onWaiting = () => {
+			if (isHlsStream) return;
+			playerService.setBuffering(true);
+		};
+		const onPlaying = () => {
+			// Coalesce buffering + paused clears into a single store update,
+			// and skip the update entirely when both flags are already false.
+			// Svelte stores' default `safe_not_equal` treats every object
+			// reference as changed — so returning the same `s` from `update`
+			// still notifies subscribers and cascades through the catalog
+			// page's reactive graph. We have to short-circuit at the caller.
+			const cur = get(playerService.state);
+			if (!cur.buffering && !cur.isPaused) return;
+			playerService.state.update((s) => ({ ...s, buffering: false, isPaused: false }));
+		};
+		element.addEventListener('error', onError);
+		element.addEventListener('timeupdate', onTimeUpdate);
+		element.addEventListener('loadedmetadata', onLoadedMetadata);
+		element.addEventListener('durationchange', onDurationChange);
+		element.addEventListener('waiting', onWaiting);
+		element.addEventListener('playing', onPlaying);
+		// Pump the current values once in case metadata already loaded
+		// before this effect ran (common on hot-reload). Wrapped in
+		// untrack so the sync state write doesn't feed back into this
+		// effect's reactive dependencies.
+		untrack(() => {
+			const cur = get(playerService.state);
+			if (Number.isFinite(element.duration) && element.duration > 0) {
+				const d = element.duration;
+				if (cur.durationSecs !== d) {
+					playerService.state.update((s) => ({ ...s, durationSecs: d }));
+				}
+			}
+			if (Number.isFinite(element.currentTime) && element.currentTime > 0) {
+				const t = element.currentTime;
+				if (cur.positionSecs !== t) {
+					playerService.state.update((s) => ({ ...s, positionSecs: t }));
+				}
+			}
+			// readyState 3 (HAVE_FUTURE_DATA) or 4 (HAVE_ENOUGH_DATA) means
+			// the element can play right now — clear any leftover buffering.
+			if (element.readyState >= 3 && !element.paused) {
+				playerService.setBuffering(false);
+			}
+		});
+		return () => {
+			element.removeEventListener('error', onError);
+			element.removeEventListener('timeupdate', onTimeUpdate);
+			element.removeEventListener('loadedmetadata', onLoadedMetadata);
+			element.removeEventListener('durationchange', onDurationChange);
+			element.removeEventListener('waiting', onWaiting);
+			element.removeEventListener('playing', onPlaying);
+		};
+	});
+
+	$effect(() => {
+		if (connectionState === 'idle') {
+			isFullscreen = false;
+			mediaError = null;
+			if (videoElement) {
+				videoElement.srcObject = null;
+				videoElement.removeAttribute('src');
+				videoElement.load();
+			}
+		}
+	});
+
+	// Sync the player's subtitle search context with the service.
+	$effect(() => {
+		subtitlesService.setContext(subtitleSearchContext);
+	});
+
+	// Watch for native audio track list changes so the dropdown stays in sync.
+	$effect(() => {
+		const v = videoElement as VideoElementWithAudio | null;
+		if (!v) return;
+		const onAudioTracks = () => {
+			audioTrackTick++;
+		};
+		const audioTracks = v.audioTracks;
+		audioTracks?.addEventListener('addtrack', onAudioTracks);
+		audioTracks?.addEventListener('removetrack', onAudioTracks);
+		audioTracks?.addEventListener('change', onAudioTracks);
+		return () => {
+			audioTracks?.removeEventListener('addtrack', onAudioTracks);
+			audioTracks?.removeEventListener('removetrack', onAudioTracks);
+			audioTracks?.removeEventListener('change', onAudioTracks);
+		};
+	});
+
+	// Drop selection if the chosen subtitle URL disappears from options.
+	$effect(() => {
+		if (activeSubUrl && !subtitleOptions.some((o) => o.url === activeSubUrl)) {
+			activeSubUrl = null;
+		}
+	});
+
+	// Controlled mode: when a parent passes `subtitleUrl`, it wins over
+	// the corner-select / auto-pick logic below. Whitespace-only values
+	// are treated as "off" so callers can pass an empty string to clear.
+	$effect(() => {
+		if (subtitleUrl === undefined) return;
+		const next = subtitleUrl ?? null;
+		if (activeSubUrl !== next) activeSubUrl = next;
+	});
+
+	// Auto-pick the user's UI locale subtitle the first time options arrive.
+	let autoSelected = $state(false);
+	$effect(() => {
+		if (autoSelected || activeSubUrl) return;
+		if (subtitleOptions.length === 0) return;
+		// Skip auto-pick when the parent is in controlled mode — the prop
+		// drives display, so guessing here would race the parent's effect.
+		if (subtitleUrl !== null && subtitleUrl !== undefined) return;
+		const ui = (typeof navigator !== 'undefined' ? navigator.language || '' : '')
+			.toLowerCase()
+			.slice(0, 2);
+		const match = combinedSubtitles.find((s) => s.languageCode?.toLowerCase().slice(0, 2) === ui);
+		if (match) {
+			activeSubUrl = match.url;
+			autoSelected = true;
+		}
+	});
+
+	// Fetch + parse VTT whenever the selected subtitle URL changes.
+	$effect(() => {
+		const url = activeSubUrl;
+		subCues = [];
+		if (!url) return;
+		let cancelled = false;
+		fetch(url)
+			.then((r) => (r.ok ? r.text() : ''))
+			.then((text) => {
+				if (!cancelled && text) subCues = parseVtt(text);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	function parseVtt(vtt: string): SubCue[] {
+		const cues: SubCue[] = [];
+		const blocks = vtt.split(/\n\n+/);
+		for (const block of blocks) {
+			const lines = block.trim().split('\n');
+			for (let i = 0; i < lines.length; i++) {
+				const m = lines[i].match(
+					/(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})/
+				);
+				if (!m) continue;
+				const start = +m[1] * 3600 + +m[2] * 60 + +m[3] + +m[4] / 1000;
+				const end = +m[5] * 3600 + +m[6] * 60 + +m[7] + +m[8] / 1000;
+				const text = lines
+					.slice(i + 1)
+					.join('\n')
+					.replace(/<[^>]+>/g, '')
+					.trim();
+				if (text) cues.push({ start, end, text });
+				break;
+			}
+		}
+		return cues;
+	}
+
+	function handleStop(): void {
+		playerService.stop();
+	}
+
+	function handleSeek(positionSecs: number): void {
+		// Direct URL playback drives the playhead through the element
+		// directly. Move the element's currentTime and clear the seeking
+		// flag so `timeupdate` can resume driving the position.
+		if (directStreamUrl && videoElement) {
+			videoElement.currentTime = positionSecs;
+			playerService.state.update((s) => ({
+				...s,
+				positionSecs,
+				isSeeking: false
+			}));
+			return;
+		}
+		playerService.seek(positionSecs);
+	}
+
+	function handleSeekStart(): void {
+		playerService.setSeeking(true);
+	}
+
+	function handleVideoClick(): void {
+		if (!activeMediaElement || !isStreaming) return;
+		if (activeMediaElement.paused) {
+			activeMediaElement.play().catch(console.error);
+		} else {
+			activeMediaElement.pause();
+		}
+	}
+
+	function handleSelectSubtitle(e: Event): void {
+		const value = (e.currentTarget as HTMLSelectElement).value;
+		activeSubUrl = value === '' ? null : value;
+		autoSelected = true;
+	}
+
+	function handleSelectAudioTrack(e: Event): void {
+		const v = videoElement as VideoElementWithAudio | null;
+		if (!v?.audioTracks) return;
+		const idx = parseInt((e.currentTarget as HTMLSelectElement).value, 10);
+		for (let i = 0; i < v.audioTracks.length; i++) {
+			v.audioTracks[i].enabled = i === idx;
+		}
+		audioTrackTick++;
+	}
+
+	function getStatusLabel(state: PlayerConnectionState): string {
+		switch (state) {
+			case 'idle':
+				return '';
+			case 'connecting':
+				return 'Connecting to stream server...';
+			case 'streaming':
+				return '';
+			case 'error':
+				return 'Connection failed';
+			case 'closed':
+				return 'Stream ended';
+		}
+	}
+</script>
+
+<div
+	class={classNames({
+		'fixed inset-0 z-50 flex flex-col bg-black': isFullscreen,
+		'flex h-full flex-col': !isFullscreen && fullscreen
+	})}
+>
+	<div class={effectiveFullscreen ? 'relative min-h-0 flex-1' : 'relative'}>
+		<video
+			bind:this={videoElement}
+			class={classNames(
+				effectiveFullscreen
+					? 'h-full w-full cursor-pointer bg-black object-contain'
+					: 'w-full cursor-pointer rounded-lg bg-black',
+				{ 'h-20': !isVideo && !effectiveFullscreen }
+			)}
+			playsinline
+			poster={poster ?? undefined}
+			onclick={handleVideoClick}
+		></video>
+
+		{#if !isVideo}
+			<div
+				class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-base-300"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-10 w-10 opacity-30"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+					/>
+				</svg>
+			</div>
+		{/if}
+
+		{#if isVideo && activeSubText}
+			<div
+				class={classNames(
+					'pointer-events-none absolute inset-x-0 z-10 flex justify-center px-4',
+					effectiveFullscreen ? 'bottom-20' : 'bottom-8'
+				)}
+			>
+				<span
+					class="inline-block max-w-full rounded bg-black/80 px-3 py-1 text-center text-base leading-snug text-white"
+				>
+					{activeSubText}
+				</span>
+			</div>
+		{/if}
+
+		{#if isVideo && isStreaming}
+			<div class="absolute top-2 right-2 z-10 flex items-center gap-1">
+				{#if subtitleOptions.length > 0 && !hideSubtitleSelect}
+					<select
+						class="select-bordered select bg-black/60 select-xs text-white"
+						value={activeSubUrl ?? ''}
+						onchange={handleSelectSubtitle}
+						aria-label="Subtitles"
+					>
+						<option value="">Subs off</option>
+						{#each subtitleOptions as opt}
+							<option value={opt.url}>{opt.label}</option>
+						{/each}
+					</select>
+				{/if}
+				{#if audioTrackOptions.length > 0}
+					<select
+						class="select-bordered select bg-black/60 select-xs text-white"
+						value={String(activeAudioTrackIndex)}
+						onchange={handleSelectAudioTrack}
+						aria-label="Audio track"
+					>
+						{#each audioTrackOptions as opt}
+							<option value={String(opt.index)}>{opt.label}</option>
+						{/each}
+					</select>
+				{/if}
+				{#if subtitleSearchContext && !hideSubtitleSelect}
+					<button
+						class="btn border-none bg-black/60 text-white btn-xs hover:bg-black/80"
+						aria-label="Search subtitles"
+						onclick={() => (subsModalOpen = true)}
+					>
+						CC
+					</button>
+				{/if}
+			</div>
+		{/if}
+
+		{#if buffering && !isHlsStream}
+			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
+				<span class="loading loading-lg loading-spinner text-primary"></span>
+			</div>
+		{/if}
+
+		{#if mediaError}
+			<div
+				class="absolute inset-x-2 bottom-2 z-20 rounded bg-error/90 px-2 py-1 text-xs text-error-content"
+			>
+				{mediaError}
+			</div>
+		{/if}
+
+		{#if !isStreaming && connectionState !== 'idle'}
+			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-base-300/80">
+				{#if connectionState === 'connecting'}
+					<div class="text-center">
+						<span class="loading loading-sm loading-spinner"></span>
+						<p class="mt-1 text-xs">{statusLabel}</p>
+					</div>
+				{:else if connectionState === 'error'}
+					<div class="text-center text-error">
+						<p class="text-xs font-medium">Connection failed</p>
+						<button class="btn mt-1 btn-xs btn-error" onclick={handleStop}> Close </button>
+					</div>
+				{:else if connectionState === 'closed'}
+					<div class="text-center">
+						<p class="text-xs opacity-70">Stream ended</p>
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
+
+	<div class={effectiveFullscreen ? 'bg-base-100 p-4' : 'mt-1'}>
+		<PlayerControls
+			mediaElement={activeMediaElement}
+			{isVideo}
+			{positionSecs}
+			{durationSecs}
+			{connectionState}
+			isFullscreen={effectiveFullscreen}
+			initialVolume={playerService.getVolume()}
+			onseek={handleSeek}
+			onseekstart={handleSeekStart}
+			onstop={handleStop}
+			onfullscreentoggle={toggleFullscreen}
+			onpaused={(paused) => playerService.setPaused(paused)}
+			onvolumechange={(v) => playerService.setVolume(v)}
+			{onprev}
+			{onnext}
+		/>
+	</div>
+</div>
+
+<SubtitlesSearchModal
+	open={subsModalOpen}
+	context={subtitleSearchContext}
+	onclose={() => (subsModalOpen = false)}
+/>

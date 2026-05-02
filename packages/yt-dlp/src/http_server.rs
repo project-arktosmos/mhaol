@@ -13,8 +13,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    manager::SseEvent, search, DownloadManager, QueueDownloadRequest, QueuePlaylistRequest,
-    YtDlpStatus,
+    manager::SseEvent, related, search, DownloadManager, QueueDownloadRequest,
+    QueuePlaylistRequest, YtDlpStatus,
 };
 
 type AppState = Arc<DownloadManager>;
@@ -47,6 +47,7 @@ pub fn build_router(manager: Arc<DownloadManager>) -> Router {
         .route("/info/stream-urls", get(get_stream_urls))
         .route("/info/stream-urls-browser", get(get_stream_urls_browser))
         .route("/search", get(search::search))
+        .route("/related", get(related::related))
         .route("/downloads", get(list_downloads))
         .route("/downloads", post(queue_download))
         .route("/downloads/playlist", post(queue_playlist))

@@ -1,0 +1,218 @@
+<script lang="ts">
+	import classNames from 'classnames';
+	import { resolveYouTubeStreamUrl } from '$lib/youtube-match.service';
+	import PlayerControls from '$components/player/PlayerControls.svelte';
+
+	interface Props {
+		posterUrl: string | null;
+		youtubeUrl: string | null;
+		title: string;
+		/// Cached Innertube client (`web`, `web_embedded`, `tv`, `android`,
+		/// `ios`) that resolved this video on a previous visit. Passed to the
+		/// backend as a hint so the failing-candidate iteration is skipped on
+		/// the happy path. A stale hint just falls through to the regular
+		/// browser priority list.
+		preferredClient?: string | null;
+		/// Fired once a stream URL has been resolved successfully, with the
+		/// Innertube client that produced it. The parent persists this back
+		/// to the firkin (only when it differs from the current cached
+		/// value) so the next visit lands on the right client first.
+		onResolved?: (clientName: string) => void;
+	}
+
+	let { posterUrl, youtubeUrl, title, preferredClient = null, onResolved }: Props = $props();
+
+	let containerElement = $state<HTMLDivElement | null>(null);
+	let videoElement = $state<HTMLVideoElement | null>(null);
+	let streamUrl = $state<string | null>(null);
+	let started = $state(false);
+	let starting = $state(false);
+	let error = $state<string | null>(null);
+	let resolvedYoutubeUrl: string | null = null;
+
+	let positionSecs = $state(0);
+	let durationSecs = $state<number | null>(null);
+	let isFullscreen = $state(false);
+
+	$effect(() => {
+		if (!youtubeUrl) return;
+		if (resolvedYoutubeUrl === youtubeUrl) return;
+		resolvedYoutubeUrl = youtubeUrl;
+		streamUrl = null;
+		started = false;
+		error = null;
+		positionSecs = 0;
+		durationSecs = null;
+		void resolveStream(youtubeUrl);
+	});
+
+	async function resolveStream(url: string): Promise<void> {
+		const resolved = await resolveYouTubeStreamUrl(url, preferredClient);
+		if (resolvedYoutubeUrl !== url) return;
+		if (!resolved) {
+			error = 'No playable trailer format';
+			return;
+		}
+		streamUrl = resolved.url;
+		if (resolved.clientName) onResolved?.(resolved.clientName);
+	}
+
+	$effect(() => {
+		const element = videoElement;
+		if (!element) return;
+		const onTime = () => {
+			positionSecs = element.currentTime;
+		};
+		const onMeta = () => {
+			if (Number.isFinite(element.duration) && element.duration > 0) {
+				durationSecs = element.duration;
+			}
+		};
+		element.addEventListener('timeupdate', onTime);
+		element.addEventListener('loadedmetadata', onMeta);
+		element.addEventListener('durationchange', onMeta);
+		return () => {
+			element.removeEventListener('timeupdate', onTime);
+			element.removeEventListener('loadedmetadata', onMeta);
+			element.removeEventListener('durationchange', onMeta);
+		};
+	});
+
+	function handleStart(): void {
+		if (!videoElement || !streamUrl || starting || started) return;
+		starting = true;
+		error = null;
+		videoElement
+			.play()
+			.then(() => {
+				started = true;
+				starting = false;
+			})
+			.catch((err: Error) => {
+				error = `Playback failed: ${err.message}`;
+				starting = false;
+			});
+	}
+
+	function handleSeek(pos: number): void {
+		if (!videoElement) return;
+		videoElement.currentTime = pos;
+		positionSecs = pos;
+	}
+
+	function handleStop(): void {
+		if (!videoElement) return;
+		videoElement.pause();
+		videoElement.currentTime = 0;
+		positionSecs = 0;
+		started = false;
+	}
+
+	function toggleFullscreen(): void {
+		const container = containerElement;
+		if (!container) return;
+		if (document.fullscreenElement === container) {
+			void document.exitFullscreen();
+		} else {
+			void container.requestFullscreen();
+		}
+	}
+
+	$effect(() => {
+		const onChange = () => {
+			isFullscreen = document.fullscreenElement === containerElement;
+		};
+		document.addEventListener('fullscreenchange', onChange);
+		return () => document.removeEventListener('fullscreenchange', onChange);
+	});
+
+	// PlayerControls disables itself when `connectionState !== 'streaming'`.
+	// We use 'streaming' once the YouTube stream URL is resolved and the
+	// `<video>` element has it attached; before that we report 'idle' so the
+	// seek bar / buttons stay greyed out.
+	const synthConnectionState = $derived<'idle' | 'streaming'>(streamUrl ? 'streaming' : 'idle');
+</script>
+
+<div class="flex flex-col gap-1">
+	<div
+		bind:this={containerElement}
+		class={classNames(
+			'relative aspect-video w-full overflow-hidden rounded-md bg-black',
+			isFullscreen && 'aspect-auto'
+		)}
+	>
+		{#if streamUrl}
+			<!-- svelte-ignore a11y_media_has_caption -->
+			<video
+				bind:this={videoElement}
+				src={streamUrl}
+				class="absolute inset-0 h-full w-full bg-black"
+				playsinline
+				preload="auto"
+				aria-label={title}
+			></video>
+		{/if}
+
+		{#if posterUrl}
+			<div
+				class={classNames(
+					'pointer-events-none absolute inset-0 bg-cover bg-center transition-opacity duration-500',
+					started ? 'opacity-0' : 'opacity-100'
+				)}
+				style:background-image={`url(${posterUrl})`}
+				aria-hidden="true"
+			></div>
+		{/if}
+
+		{#if !started && (streamUrl || posterUrl)}
+			<button
+				type="button"
+				class="absolute inset-0 z-20 flex items-center justify-center bg-black/30 transition-colors hover:bg-black/40 disabled:cursor-wait"
+				aria-label="Play trailer"
+				onclick={handleStart}
+				disabled={!streamUrl || starting}
+			>
+				<span
+					class={classNames(
+						'flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform',
+						streamUrl && !starting ? 'hover:scale-110' : 'opacity-70'
+					)}
+				>
+					{#if starting || !streamUrl}
+						<span class="loading loading-md loading-spinner"></span>
+					{:else}
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 24 24"
+							fill="currentColor"
+							class="h-10 w-10 translate-x-0.5"
+							aria-hidden="true"
+						>
+							<polygon points="6 4 20 12 6 20 6 4" />
+						</svg>
+					{/if}
+				</span>
+			</button>
+		{/if}
+
+		{#if error}
+			<div
+				class="absolute inset-x-2 bottom-2 z-30 rounded bg-error/90 px-2 py-1 text-xs text-error-content"
+			>
+				{error}
+			</div>
+		{/if}
+	</div>
+
+	<PlayerControls
+		mediaElement={videoElement}
+		isVideo={true}
+		{positionSecs}
+		{durationSecs}
+		connectionState={synthConnectionState}
+		{isFullscreen}
+		onseek={handleSeek}
+		onstop={handleStop}
+		onfullscreentoggle={toggleFullscreen}
+	/>
+</div>

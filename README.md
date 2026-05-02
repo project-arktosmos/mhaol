@@ -5,48 +5,52 @@ A family of self-hosted media apps built on shared core components. Each app shi
 **Apps in this repo:**
 
 - **Cloud** — Rust Axum server (port 9898) with a nested Svelte WebUI; ships a tray-only desktop Tauri shell ("Mhaol Cloud")
-- **Shepperd** — Browser extension that detects media as you browse and imports it into Mhaol
 - **Signaling** — Self-hosted WebSocket signaling server for WebRTC peer connections
 
 ---
 
 ## Prerequisites
 
-| Tool | Version | Install |
-|------|---------|---------|
-| Node.js | >= 18 | [nodejs.org](https://nodejs.org) or `nvm install 18` |
-| pnpm | >= 9 | `corepack enable && corepack prepare pnpm@latest --activate` |
-| Rust | stable | [rustup.rs](https://rustup.rs) |
+The full toolchain (Rust, Node, pnpm, Tauri CLI, GStreamer, platform build tools) is installed by a single per-OS bootstrap script. Pick the one for the host you cloned onto:
 
-### System dependencies (Linux only)
+| Host | Setup |
+|------|-------|
+| macOS | `pnpm setup:mac` (needs [Homebrew](https://brew.sh)) |
+| Ubuntu / Debian | `pnpm setup:linux` (uses `apt`, prompts for `sudo`) |
+| Windows 10 / 11 — native | open an **elevated** PowerShell, then `pnpm setup:windows` (uses `winget`) — produces native `.msi` / NSIS `.exe` |
+| Windows 10 / 11 — WSL | install [WSL](https://learn.microsoft.com/windows/wsl/install) with Ubuntu, clone inside the WSL filesystem, then `pnpm setup:linux` — produces a Linux `.deb` / `.AppImage` (not a Windows-native installer) |
 
-The Rust cloud binary requires GStreamer and native build tools on Linux:
+The scripts are idempotent — re-running them only installs what's missing. They install everything required to build both the `mhaol-cloud` backend bin and the `Mhaol Cloud` Tauri shell on that host.
 
-```bash
-pnpm install:deps
-```
+If you don't have `pnpm` yet, run the script directly first (`bash scripts/setup-mac.sh`, etc.) — it will install Node + pnpm for you.
 
-This runs:
+### What each script installs
 
-```bash
-sudo apt-get install -y \
-  build-essential pkg-config libssl-dev libonig-dev \
-  libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-  libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base \
-  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
-  gstreamer1.0-plugins-ugly gstreamer1.0-libav
-```
+- **macOS**: Xcode Command Line Tools, GStreamer (Homebrew), Rust (rustup), Node + pnpm (Homebrew + Corepack), Tauri CLI.
+- **Linux (Ubuntu/Debian, including WSL)**: `build-essential`, `libwebkit2gtk-4.1-dev`, `libxdo-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libsoup-3.0-dev`, the GStreamer 1.0 dev + plugin packages, Rust (rustup), Node 20 (NodeSource) + pnpm, Tauri CLI.
+- **Windows (native)**: Visual Studio 2022 Build Tools (Desktop C++ workload), WebView2, Rust (rustup, MSVC toolchain), Node LTS + pnpm, NSIS, GStreamer MSVC (runtime + development), Tauri CLI. If `winget` can't find a working GStreamer MSVC package, grab the two MSVC MSIs from <https://gstreamer.freedesktop.org/download/#windows> and re-run.
 
-On **macOS**, the required native libraries (GStreamer, Metal for LLM) are handled automatically by Cargo.
+### Windows native vs WSL
+
+- **Native** (`pnpm setup:windows`) is the only path that yields a Windows-installable artifact (`.msi` + NSIS `.exe`). Use this when you want to ship to Windows users.
+- **WSL Ubuntu** (`pnpm setup:linux` inside WSL) is faster to set up, builds a Linux bundle that runs under WSLg, and is fine for development on a Windows host. It cannot produce a Windows `.exe`/`.msi`.
+- Clone the repo **inside the WSL filesystem** when going the WSL route (e.g. `~/mhaol`), not under `/mnt/c/...` — cargo and pnpm I/O are an order of magnitude slower across the 9P bridge.
 
 ---
 
 ## Initial Setup
 
+Run on each host you want to build on:
+
 ```bash
 # Clone the repo
 git clone <repo-url> mhaol
 cd mhaol
+
+# Install host toolchain — pick the line for your OS
+pnpm setup:mac       # macOS
+pnpm setup:linux     # Ubuntu / Debian (or WSL Ubuntu — produces a Linux bundle only)
+pnpm setup:windows   # Windows native (elevated PowerShell — produces .msi / NSIS .exe)
 
 # Install JavaScript dependencies
 pnpm install
@@ -102,18 +106,6 @@ The cloud WebUI is browser-accessible at [http://localhost:9898](http://localhos
 | `DATA_DIR` | `~/Documents/mhaol` | Media storage directory |
 | `SIGNALING_URL` | PartyKit hosted | Signaling server URL |
 
-### Shepperd (browser extension)
-
-```bash
-# Development (watch mode)
-pnpm app:shepperd
-
-# Production build
-pnpm app:shepperd:build
-```
-
-Load the built extension from `apps/shepperd/dist/` in your browser's extension manager (enable developer mode).
-
 ### Rendezvous (private-swarm IPFS bootstrap + WebRTC signaling + TURN)
 
 Rendezvous bundles the private-swarm IPFS bootstrap node, the WebSocket WebRTC signaling relay, and the TURN credential server into a single binary. It replaces the previous PartyKit/`mhaol-signaling` stack.
@@ -130,13 +122,27 @@ pnpm app:rendezvous:setup
 
 ## Building for Production
 
-### Cloud
+### Cloud — full distributable for the current host
+
+```bash
+pnpm build:dist
+```
+
+Runs everywhere (macOS, Linux, Windows) and produces, in order:
+
+1. The Svelte SPA at `packages/frontend/dist-static/`
+2. The release backend bin at `target/release/mhaol-cloud` (`.exe` on Windows) — the SPA is embedded into it
+3. The Tauri tray shell + platform installer at `target/release/bundle/...` — `.app` / `.dmg` on macOS, `.deb` / `.AppImage` on Linux, `.exe` (NSIS) / `.msi` on Windows
+
+Tauri's `apps/cloud/tauri.conf.json` carries `beforeBuildCommand: pnpm --filter frontend build`, so step 1 is also re-run by step 3 — this is harmless (Vite caches) and is what guarantees the bundle ships the latest SPA.
+
+### Cloud — backend bin only
 
 ```bash
 pnpm build:cloud
 ```
 
-Builds the cloud WebUI and the release binary at `target/release/mhaol-cloud` (the WebUI is embedded into the binary).
+Builds the SPA and the release backend binary at `target/release/mhaol-cloud`. Useful when you don't need the Tauri shell.
 
 ### Rendezvous
 
@@ -196,18 +202,13 @@ pnpm clean      # Remove build artifacts + cargo clean
 mhaol.git/
 ├── apps/
 │   ├── cloud/             # Rust Axum server (port 9898) + nested Svelte WebUI + tray-only Tauri shell
-│   ├── shepperd/          # Browser extension (Manifest V3)
 │   └── signaling/         # Rust signaling server
 ├── packages/
-│   ├── ui-lib/            # Shared components, services, types, CSS
 │   ├── addons/            # TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subs
-│   ├── webrtc/            # WebRTC contact handshake layer
 │   ├── signaling/         # PartyKit signaling (cloud)
 │   ├── identity/          # Rust Ethereum identity (secp256k1)
 │   ├── torrent/           # Rust torrent client
-│   ├── p2p-stream/        # Rust P2P streaming (GStreamer + WebRTC)
 │   ├── yt-dlp/            # Rust yt-dlp wrapper
-│   ├── ed2k/              # Rust eDonkey/ed2k client
 │   └── ipfs/              # Rust embedded IPFS node (libp2p, private swarm)
 ├── .env                   # API keys and secrets (not committed)
 ├── package.json           # Workspace scripts
@@ -217,6 +218,6 @@ mhaol.git/
 
 ### Architecture
 
-The cloud WebUI is a thin wrapper. All shared frontend code (components, services, types, adapters) lives in `packages/ui-lib`. The WebUI only contains route files and configuration — it imports and assembles, never implements.
+The cloud WebUI owns its full stack. All frontend code — components, services, adapters, types, transport, CSS — lives under `apps/cloud/web/src/`, addressed via the `$components`, `$services`, `$types`, `$adapters`, `$utils`, `$transport`, `$lib` aliases configured in its `svelte.config.js`. There is no separate shared UI package.
 
-The frontend communicates with the cloud server via a transport layer (`packages/ui-lib/src/transport/`) that abstracts over HTTP and WebRTC, making the same API calls work whether connecting locally or peer-to-peer.
+The frontend communicates with the cloud server via a transport layer (`apps/cloud/web/src/transport/`) that abstracts over HTTP and WebRTC, making the same API calls work whether connecting locally or peer-to-peer.

@@ -195,6 +195,10 @@ pub struct VideoInfo {
     pub thumbnail_url: Option<String>,
     pub uploader: Option<String>,
     pub video_id: String,
+    /// YouTube channel id (`UC…`) the video belongs to, when surfaced by the
+    /// player response. Used by the catalog detail pages to fetch the
+    /// channel's "latest videos" feed without a second video lookup.
+    pub channel_id: Option<String>,
     pub subtitle_tracks: Vec<SubtitleTrack>,
 }
 

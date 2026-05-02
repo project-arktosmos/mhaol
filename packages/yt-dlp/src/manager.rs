@@ -4,6 +4,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tokio::sync::{broadcast, watch};
 
+use crate::channel_feed::{self, ChannelFeed};
 use crate::config::YtDownloadConfig;
 use crate::download::muxer::FfmpegMuxer;
 use crate::download::pipeline::{DownloadPipeline, DownloadTaskConfig, PipelineState, StreamUrlResult};
@@ -354,6 +355,40 @@ impl DownloadManager {
                 &video_id,
                 po_token.as_deref(),
                 visitor_data.as_deref(),
+            )
+            .await
+    }
+
+    /// Fetch the public Atom RSS feed for a YouTube channel and return its
+    /// most recent video entries. The feed endpoint is unauthenticated and
+    /// rate-limited by YouTube, so callers are expected to cache the
+    /// response — this manager method is a thin wrapper that does *not*
+    /// cache on its own.
+    pub async fn fetch_channel_feed(&self, channel_id: &str) -> anyhow::Result<ChannelFeed> {
+        channel_feed::fetch_channel_feed(channel_id).await
+    }
+
+    /// Same as `extract_stream_urls_for_browser`, but tries `prefer_client`
+    /// first if it matches a known client (`web`, `web_embedded`, `tv`,
+    /// `android`, `ios`). Lets callers cache the client name returned in a
+    /// previous result and skip the failing-candidate iteration the next
+    /// time the same video is resolved.
+    pub async fn extract_stream_urls_for_browser_with_preference(
+        &self,
+        url: &str,
+        prefer_client: Option<&str>,
+    ) -> anyhow::Result<StreamUrlResult> {
+        let video_id = extract_video_id(url)?;
+        let (po_token, visitor_data) = {
+            let config = self.config.read();
+            (config.po_token.clone(), config.visitor_data.clone())
+        };
+        self.pipeline
+            .extract_stream_urls_for_browser_with_preference(
+                &video_id,
+                po_token.as_deref(),
+                visitor_data.as_deref(),
+                prefer_client,
             )
             .await
     }

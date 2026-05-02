@@ -1,29 +1,16 @@
-use crate::state::CloudState;
-use axum::{
-    body::Body,
-    extract::Query,
-    http::{header, HeaderValue, Response, StatusCode},
-    routing::get,
-    Router,
-};
-use serde::Deserialize;
-use sha3::{Digest, Sha3_256};
 use std::path::PathBuf;
 
-pub fn router() -> Router<CloudState> {
-    Router::new().route("/", get(serve))
-}
+use sha3::{Digest, Sha3_256};
+use tauri::{ipc::Response, AppHandle, Manager};
 
-#[derive(Deserialize)]
-struct Q {
-    url: String,
-}
-
-fn cache_dir() -> Option<PathBuf> {
-    let docs = dirs::document_dir()?;
+fn cache_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let docs = app
+        .path()
+        .document_dir()
+        .map_err(|e| format!("document_dir: {}", e))?;
     let dir = docs.join("mhaol-cloud").join("image-cache");
-    std::fs::create_dir_all(&dir).ok()?;
-    Some(dir)
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
 }
 
 fn filename_for(url_str: &str) -> String {
@@ -42,52 +29,23 @@ fn filename_for(url_str: &str) -> String {
     format!("{}.{}", hex, ext)
 }
 
-fn build_response(bytes: Vec<u8>, content_type: HeaderValue) -> Result<Response<Body>, StatusCode> {
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, content_type)
-        .header(
-            header::CACHE_CONTROL,
-            HeaderValue::from_static("public, max-age=31536000, immutable"),
-        )
-        .body(Body::from(bytes))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-}
-
-async fn serve(Query(q): Query<Q>) -> Result<Response<Body>, StatusCode> {
-    let url = q.url;
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-    let dir = cache_dir().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+#[tauri::command]
+pub async fn image_cache_resolve(app: AppHandle, url: String) -> Result<Response, String> {
+    let dir = cache_dir(&app)?;
     let path = dir.join(filename_for(&url));
 
-    let mime = mime_guess::from_path(&path).first_or_octet_stream();
-    let content_type = HeaderValue::from_str(mime.as_ref())
-        .unwrap_or(HeaderValue::from_static("application/octet-stream"));
-
     if let Ok(bytes) = tokio::fs::read(&path).await {
-        return build_response(bytes, content_type);
+        return Ok(Response::new(bytes));
     }
 
-    let resp = reqwest::get(&url)
-        .await
-        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    let resp = reqwest::get(&url).await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
-        return Err(StatusCode::BAD_GATEWAY);
+        return Err(format!("HTTP {}", resp.status()));
     }
-    let upstream_ct = resp
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| HeaderValue::from_str(s).ok());
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|_| StatusCode::BAD_GATEWAY)?
-        .to_vec();
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
+
     if let Err(e) = tokio::fs::write(&path, &bytes).await {
-        tracing::warn!("image cache write failed for {}: {}", path.display(), e);
+        log::warn!("image cache write failed for {}: {}", path.display(), e);
     }
-    build_response(bytes, upstream_ct.unwrap_or(content_type))
+    Ok(Response::new(bytes))
 }
