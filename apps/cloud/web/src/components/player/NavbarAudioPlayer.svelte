@@ -137,8 +137,7 @@
 </script>
 
 <div
-	data-navbar-audio-player
-	class={classNames('flex items-center gap-2', { hidden: !visible })}
+	class={classNames('flex items-center gap-2 p-2', { hidden: !visible })}
 	aria-label="Audio player"
 >
 	<!-- Hidden media element kept mounted so attach/detach effects can run. -->
@@ -153,7 +152,7 @@
 				class="h-8 w-8 shrink-0 rounded object-cover"
 			/>
 		{/if}
-		<div class="flex max-w-40 min-w-0 flex-col leading-tight">
+		<div class="flex min-w-0 flex-1 flex-col leading-tight">
 			<span class="truncate text-xs font-medium" title={$playerState.currentFile.name}>
 				{$playerState.currentFile.name}
 			</span>
@@ -162,35 +161,35 @@
 			{:else if $playerState.buffering}
 				<span class="truncate text-[10px] opacity-60">Buffering…</span>
 			{/if}
+			<input
+				type="range"
+				class="range w-full range-xs"
+				min="0"
+				max={total > 0 ? total : 0}
+				step="0.1"
+				value={progress}
+				disabled={total <= 0}
+				oninput={() => playerService.setSeeking(true)}
+				onchange={handleSeek}
+				aria-label="Seek"
+			/>
+			<div class="flex items-center justify-between font-mono text-[10px] tabular-nums opacity-70">
+				<span>{formatTime(progress)}</span>
+				<span>{formatTime(total > 0 ? total : null)}</span>
+			</div>
 		</div>
 		<button
 			type="button"
-			class="btn btn-ghost btn-xs"
+			class="btn btn-ghost btn-sm"
 			onclick={togglePlay}
 			aria-label={isPaused ? 'Play' : 'Pause'}
 			title={isPaused ? 'Play' : 'Pause'}
 		>
 			{isPaused ? '▶' : '⏸'}
 		</button>
-		<span class="font-mono text-[10px] tabular-nums opacity-70">{formatTime(progress)}</span>
-		<input
-			type="range"
-			class="range w-32 range-xs"
-			min="0"
-			max={total > 0 ? total : 0}
-			step="0.1"
-			value={progress}
-			disabled={total <= 0}
-			oninput={() => playerService.setSeeking(true)}
-			onchange={handleSeek}
-			aria-label="Seek"
-		/>
-		<span class="font-mono text-[10px] tabular-nums opacity-70"
-			>{formatTime(total > 0 ? total : null)}</span
-		>
 		<button
 			type="button"
-			class="btn btn-ghost btn-xs"
+			class="btn btn-ghost btn-sm"
 			onclick={handleStop}
 			aria-label="Stop"
 			title="Stop"

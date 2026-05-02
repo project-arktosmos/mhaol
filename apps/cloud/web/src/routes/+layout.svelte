@@ -80,7 +80,6 @@
 		{/snippet}
 		{#snippet end()}
 			<div class="flex items-center gap-2">
-				<NavbarAudioPlayer />
 				{#if $identityState.identity}
 					<a
 						href="{base}/profile"
@@ -102,7 +101,14 @@
 		{/snippet}
 	</Navbar>
 
-	<NavbarLyricsPanel />
+	{#if $playerDisplayMode === 'navbar' && $playerState.currentFile && $playerState.directStreamUrl}
+		<div
+			class="fixed right-2 bottom-2 z-40 flex w-96 max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-lg"
+		>
+			<NavbarLyricsPanel />
+			<NavbarAudioPlayer />
+		</div>
+	{/if}
 
 	<main class="flex min-w-0 flex-1 overflow-hidden">
 		<div class="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
