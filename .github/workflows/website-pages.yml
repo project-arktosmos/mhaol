@@ -71,6 +71,12 @@ jobs:
         # client router.
         run: cp apps/website/dist-static/index.html apps/website/dist-static/404.html
 
+      - name: Disable Jekyll
+        # svelte.config.js sets appDir: 'app' (not '_app') so Jekyll
+        # underscore-stripping is already avoided, but .nojekyll is the
+        # canonical kill-switch and makes the intent explicit.
+        run: touch apps/website/dist-static/.nojekyll
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
