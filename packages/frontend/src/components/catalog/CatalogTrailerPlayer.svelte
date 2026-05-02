@@ -30,12 +30,13 @@
 		/// fullscreen buttons.
 		extraControls?: Snippet;
 		/// Optional snippet rendered absolutely inside the player container,
-		/// in place of the circular play button. The snippet content owns
-		/// its own positioning inside the absolute wrapper. The trailer can
-		/// still be started via the play/pause button in `<PlayerControls>`
-		/// below the player. When omitted, the legacy circular play overlay
-		/// is shown.
-		playOverlay?: Snippet;
+		/// in place of the circular play button. The snippet receives the
+		/// trailer's `handleStart` so its content can offer a "play" action
+		/// (e.g. a Trailer cell rendered alongside Stream / Download in the
+		/// torrent attachment grid). The trailer can also be started via the
+		/// play/pause button in `<PlayerControls>` below the player. When
+		/// omitted, the legacy circular play overlay is shown.
+		playOverlay?: Snippet<[() => void]>;
 	}
 
 	let {
@@ -224,7 +225,7 @@
 					class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
 				>
 					<div class="w-full max-w-md">
-						{@render playOverlay()}
+						{@render playOverlay(handleStart)}
 					</div>
 				</div>
 			{:else}

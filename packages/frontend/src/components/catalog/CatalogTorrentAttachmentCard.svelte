@@ -81,6 +81,15 @@
 		attachingDownload?: boolean;
 		/** True while `preferredStream` is being attached. */
 		attachingStream?: boolean;
+		/** Trailer cell payload. When set with `onTrailerPlay`, a "Trailer"
+		 * button is rendered as a `col-span-2` row above Stream / Download
+		 * and click runs the callback (typically the trailer player's
+		 * `handleStart`). `null` hides the cell. */
+		trailer?: { title: string } | null;
+		/** Click handler for the Trailer cell. */
+		onTrailerPlay?: () => void | Promise<void>;
+		/** True while a trailer-start round-trip is in flight. */
+		trailerPlaying?: boolean;
 	}
 
 	let {
@@ -95,7 +104,10 @@
 		onAttachDownload,
 		onAttachStream,
 		attachingDownload = false,
-		attachingStream = false
+		attachingStream = false,
+		trailer = null,
+		onTrailerPlay,
+		trailerPlaying = false
 	}: Props = $props();
 
 	function torrentToInfo(t: TorrentResultItem): AttachmentInfo {
@@ -146,6 +158,28 @@
 <div class="flex flex-col gap-2">
 	<h2 class="text-sm font-semibold text-base-content/70 uppercase">Torrent attachment</h2>
 	<div class="grid grid-cols-2 gap-3">
+		{#if trailer && onTrailerPlay}
+			<button
+				type="button"
+				onclick={() => onTrailerPlay?.()}
+				disabled={trailerPlaying}
+				class="col-span-2 flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-300/70 disabled:cursor-progress disabled:opacity-60"
+				aria-label="Play trailer"
+			>
+				<Icon name="delapouite/film-strip" size={32} title="Trailer" />
+				<span class="text-xs font-medium">Trailer</span>
+				<span
+					class="block max-w-full truncate text-[10px] text-base-content/70"
+					title={trailer.title}
+				>
+					{trailer.title}
+				</span>
+				<span class="text-[10px] font-medium text-success">
+					{trailerPlaying ? 'Starting…' : 'Click to play'}
+				</span>
+			</button>
+		{/if}
+
 		{#if stream && onStreamPlay}
 			<button
 				type="button"

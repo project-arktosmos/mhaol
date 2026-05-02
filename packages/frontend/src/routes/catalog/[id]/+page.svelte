@@ -2041,8 +2041,10 @@
 
 			<CatalogDescriptionPanel description={firkin.description} />
 
-			{#snippet torrentAttachmentOverlay()}
+			{#snippet torrentAttachmentOverlay(startTrailer: () => void)}
 				<CatalogTorrentAttachmentCard
+					trailer={trailerTabEnabled ? { title: firkin.title } : null}
+					onTrailerPlay={startTrailer}
 					download={downloadInfo}
 					stream={streamInfo}
 					onStreamPlay={replayStreamMagnet}
