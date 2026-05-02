@@ -90,10 +90,7 @@
 					<div
 						class="pointer-events-none absolute right-0 bottom-0 left-0 h-1 overflow-hidden bg-base-100/40"
 					>
-						<div
-							class="h-full bg-primary"
-							style="width: {Math.min(1, progress) * 100}%;"
-						></div>
+						<div class="h-full bg-primary" style="width: {Math.min(1, progress) * 100}%;"></div>
 					</div>
 				{/if}
 				{#if actions}

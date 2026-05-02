@@ -301,6 +301,23 @@
 		</div>
 	{/if}
 
+	{#if continueFirkins.length > 0}
+		<LazyRow>
+			<section class="flex flex-col gap-3">
+				<div class="flex flex-wrap items-center justify-between gap-4">
+					<h2 class="text-lg font-semibold">Continue</h2>
+				</div>
+				<FirkinLibraryGrid
+					firkins={continueFirkins}
+					collapsed={true}
+					collapsedCount={6}
+					progressFor={(f) => continueProgressById[f.id] ?? null}
+					emptyMessage="Nothing in progress yet."
+				/>
+			</section>
+		</LazyRow>
+	{/if}
+
 	<LazyRow>
 		<section class="flex flex-col gap-3">
 			<div class="flex items-center justify-between gap-4">
