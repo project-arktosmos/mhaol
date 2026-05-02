@@ -1267,9 +1267,7 @@
 	// no-op.
 	const subsForCurrentEpisode = $derived<AttachedSubtitle[]>(
 		isTmdbTv
-			? attachedSubtitles.filter(
-					(s) => s.season === currentSeason && s.episode === currentEpisode
-				)
+			? attachedSubtitles.filter((s) => s.season === currentSeason && s.episode === currentEpisode)
 			: attachedSubtitles.filter((s) => s.season === null && s.episode === null)
 	);
 
@@ -1425,9 +1423,7 @@
 	// downloads yet hides any prior selection.
 	const currentSubtitleUrl = $derived.by<string | null>(() => {
 		const lang = selectedSubLanguage.toLowerCase();
-		const candidates = subsForCurrentEpisode.filter(
-			(s) => s.language.toLowerCase() === lang
-		);
+		const candidates = subsForCurrentEpisode.filter((s) => s.language.toLowerCase() === lang);
 		if (candidates.length === 0) return null;
 		const preferred = selectedSubExternalId
 			? candidates.find((s) => s.externalId === selectedSubExternalId)
