@@ -170,7 +170,7 @@
 	>
 		<polygon points="6 4 20 12 6 20 6 4" />
 	</svg>
-	<span class="text-xs font-medium">Download</span>
+	<span class="text-xs font-medium">Play</span>
 	{#if info}
 		<span class="block max-w-full truncate text-[10px] text-base-content/70" title={info.title}>
 			{info.title}
