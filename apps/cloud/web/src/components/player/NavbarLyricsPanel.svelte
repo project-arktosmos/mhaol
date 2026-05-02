@@ -63,7 +63,7 @@
 </script>
 
 {#if visible}
-	<div class="flex flex-col border-b border-base-300" aria-label="Synced lyrics">
+	<div class="flex flex-col border-t border-base-300" aria-label="Synced lyrics">
 		<div class="flex items-center justify-between bg-base-200/60 px-3 py-1">
 			<div class="flex min-w-0 items-center gap-2">
 				<span class="text-xs font-semibold text-base-content/70">Lyrics</span>
