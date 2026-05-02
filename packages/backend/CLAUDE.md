@@ -236,6 +236,8 @@ Whenever the firkin is updated programmatically, the prior CID is pushed onto `v
 
 Failures are logged and retried on the next tick.
 
+The matcher intentionally filters on `torrent magnet` only — `torrent stream magnet` entries (which the catalog detail page persists when the user clicks the per-row Stream button) point at payloads in the ephemeral `<data_root>/downloads/torrent-streams/` directory that get wiped on every fresh stream, so pinning their files to IPFS or rolling the firkin forward off them would be wrong. Stream magnets exist purely to remember the user's most-recent streaming pick across reloads (the catalog attachment card reads them); `rom_extract.rs` filters the same way for the same reason.
+
 ## Logs
 
 Dev runs tee full stdout+stderr to `<repo-root>/logs/`:
