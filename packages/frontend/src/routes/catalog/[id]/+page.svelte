@@ -1655,28 +1655,6 @@
 <div class="flex min-h-full flex-col gap-6 p-6">
 	<CatalogPageHeader title={firkin.title}>
 		{#snippet actions()}
-			{#if !isBookmarked}
-				<button
-					type="button"
-					class="btn gap-2 btn-sm btn-primary"
-					onclick={bookmark}
-					disabled={bookmarking}
-					aria-label="Bookmark"
-					title="Add this catalog item to your library"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="currentColor"
-						stroke="none"
-						class="h-4 w-4 shrink-0"
-						aria-hidden="true"
-					>
-						<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
-					</svg>
-					<span>{bookmarking ? 'Bookmarking…' : 'Bookmark'}</span>
-				</button>
-			{/if}
 			{#if canPlay}
 				<button
 					type="button"
@@ -1716,6 +1694,34 @@
 					<span class="badge badge-outline badge-sm">{firkin.year}</span>
 				{/if}
 			</span>
+			<button
+				type="button"
+				class="btn gap-2 btn-sm btn-primary"
+				onclick={bookmark}
+				disabled={bookmarking || isBookmarked}
+				aria-label="Bookmark"
+				title={isBookmarked ? 'Already bookmarked' : 'Add this catalog item to your library'}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+					stroke="none"
+					class="h-4 w-4 shrink-0"
+					aria-hidden="true"
+				>
+					<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
+				</svg>
+				<span>
+					{#if bookmarking}
+						Bookmarking…
+					{:else if isBookmarked}
+						Bookmarked
+					{:else}
+						Bookmark
+					{/if}
+				</span>
+			</button>
 		{/snippet}
 	</CatalogPageHeader>
 
