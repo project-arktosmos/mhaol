@@ -548,6 +548,12 @@
 	const firstMagnet = $derived(
 		firkin.files.find((f) => f.type === 'torrent magnet')?.value ?? null
 	);
+	// Persisted stream pick from the attachment card. Present when the user
+	// has previously kicked off a torrent-stream — without a download
+	// magnet attached — via the search row's Stream button.
+	const firstStreamMagnet = $derived(
+		firkin.files.find((f) => f.type === 'torrent stream magnet')?.value ?? null
+	);
 
 	let torrentStreamStarting = $state(false);
 	let torrentStreamError = $state<string | null>(null);
@@ -559,7 +565,9 @@
 	// Once the file is pinned locally to IPFS, the torrent stream is
 	// strictly worse — same bytes, slower path, extra peers — so we
 	// hide that option entirely.
-	const torrentTabEnabled = $derived(Boolean(firstMagnet) && !ipfsTabEnabled);
+	const torrentTabEnabled = $derived(
+		(Boolean(firstMagnet) || Boolean(firstStreamMagnet)) && !ipfsTabEnabled
+	);
 	const anyTabEnabled = $derived(trailerTabEnabled || ipfsTabEnabled || torrentTabEnabled);
 
 	const trailerTabTitle = $derived(trailerTabEnabled ? 'Show trailer' : 'No trailer for this item');
@@ -570,7 +578,7 @@
 	);
 	const torrentTabTitle = $derived.by(() => {
 		if (ipfsTabEnabled) return 'File is pinned locally — use IPFS Stream instead';
-		if (!firstMagnet) return 'Available once a torrent magnet is attached';
+		if (!firstMagnet && !firstStreamMagnet) return 'Available once a torrent magnet is attached';
 		return 'Stream the attached torrent as it downloads';
 	});
 	const torrentTabSuffix = $derived(torrentStreamStarting ? ' — starting…' : '');
@@ -634,7 +642,10 @@
 	let streamingHash = $state<string | null>(null);
 
 	async function startTorrentStream(magnetOverride?: string): Promise<boolean> {
-		const magnet = magnetOverride ?? firstMagnet;
+		// Prefer the explicit stream pick (set by the attachment card / search
+		// row) over the download magnet, then fall back to the download magnet
+		// when no stream pick has been made yet.
+		const magnet = magnetOverride ?? firstStreamMagnet ?? firstMagnet;
 		if (!magnet || torrentStreamStarting) return false;
 		torrentStreamStarting = true;
 		streamingHash = magnet;
