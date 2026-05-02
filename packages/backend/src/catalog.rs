@@ -11,6 +11,7 @@ const TMDB_BASE: &str = "https://api.themoviedb.org/3";
 const TMDB_IMG_BASE: &str = "https://image.tmdb.org/t/p";
 const MUSICBRAINZ_BASE: &str = "https://musicbrainz.org/ws/2";
 const COVERART_BASE: &str = "https://coverartarchive.org";
+const OMDB_BASE: &str = "https://www.omdbapi.com";
 const USER_AGENT: &str = "Mhaol/0.0.1 (https://github.com/project-arktosmos/mhaol)";
 
 /// Every addon known to the cloud. Each addon represents a single content
@@ -708,6 +709,14 @@ const TMDB_CREW_JOBS: &[&str] = &[
 /// `/metadata` endpoint is hit. The same response also carries the
 /// item's `vote_average` (0–10) and `vote_count`, so we extract a
 /// `CatalogReview` from it here without an extra request.
+///
+/// When the upstream item resolves to an IMDb id (movies have it on the
+/// detail response directly; TV shows need `external_ids` appended) and
+/// `OMDB_API_KEY` is set, this also makes a best-effort call to OMDb
+/// and merges Rotten Tomatoes / Metacritic / IMDb reviews into the
+/// returned `CatalogReview` list. OMDb failures are swallowed so a
+/// missing key, transient outage, or unmatched id never breaks the TMDB
+/// path.
 pub(crate) async fn tmdb_metadata(
     is_tv: bool,
     id: &str,
@@ -723,12 +732,20 @@ pub(crate) async fn tmdb_metadata(
         ));
     }
     let kind = if is_tv { "tv" } else { "movie" };
+    // TV shows don't carry `imdb_id` at the root — append `external_ids`
+    // so OMDb enrichment works for them too.
+    let appends = if is_tv {
+        "credits,videos,external_ids"
+    } else {
+        "credits,videos"
+    };
     let url = format!(
-        "{}/{}/{}?api_key={}&append_to_response=credits,videos",
+        "{}/{}/{}?api_key={}&append_to_response={}",
         TMDB_BASE,
         kind,
         urlencoding(id),
-        api_key
+        api_key,
+        appends
     );
     let payload: serde_json::Value = http_get_json(&url, &[("Accept", "application/json")]).await?;
 
@@ -736,8 +753,156 @@ pub(crate) async fn tmdb_metadata(
     let artists = parse_tmdb_credits(&credits);
     let videos = payload.get("videos").cloned().unwrap_or(serde_json::Value::Null);
     let trailers = parse_tmdb_videos(&videos);
-    let reviews = parse_tmdb_reviews(&payload);
+    let mut reviews = parse_tmdb_reviews(&payload);
+
+    if let Some(imdb_id) = extract_imdb_id(&payload) {
+        let mut omdb_reviews = fetch_omdb_reviews(&imdb_id).await;
+        merge_reviews(&mut reviews, &mut omdb_reviews);
+    }
+
     Ok((artists, trailers, reviews))
+}
+
+/// Pull the IMDb id off a TMDB detail response. Movies expose it as
+/// `imdb_id` at the root; TV shows expose it under
+/// `external_ids.imdb_id` (only present when the response was fetched
+/// with `append_to_response=external_ids`). Returns `None` when the
+/// field is missing or empty.
+fn extract_imdb_id(payload: &serde_json::Value) -> Option<String> {
+    let candidate = payload
+        .get("imdb_id")
+        .and_then(|v| v.as_str())
+        .or_else(|| {
+            payload
+                .get("external_ids")
+                .and_then(|v| v.get("imdb_id"))
+                .and_then(|v| v.as_str())
+        })?;
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+/// Best-effort OMDb lookup keyed by IMDb id. Returns the parsed reviews
+/// (Rotten Tomatoes, Metacritic, IMDb) on success, or an empty vec on
+/// any failure mode — missing `OMDB_API_KEY`, network error, OMDb
+/// `Response: "False"`, etc. — so the TMDB metadata flow stays robust
+/// to a degraded enricher.
+async fn fetch_omdb_reviews(imdb_id: &str) -> Vec<CatalogReview> {
+    let api_key = std::env::var("OMDB_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        return Vec::new();
+    }
+    let url = format!(
+        "{}/?i={}&apikey={}",
+        OMDB_BASE,
+        urlencoding(imdb_id),
+        urlencoding(&api_key)
+    );
+    let payload: serde_json::Value = match http_get_json(&url, &[("Accept", "application/json")]).await {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+    if payload
+        .get("Response")
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case("True"))
+        != Some(true)
+    {
+        return Vec::new();
+    }
+    parse_omdb_reviews(&payload)
+}
+
+/// Project an OMDb response's `Ratings` array (plus the root-level
+/// `imdbVotes` count) into our universal `CatalogReview` shape. Source
+/// labels are canonicalised (`"Internet Movie Database"` → `"IMDb"`,
+/// etc.) and unparseable values (`"N/A"`, malformed strings) are
+/// dropped so the firkin body never carries a bogus score.
+fn parse_omdb_reviews(payload: &serde_json::Value) -> Vec<CatalogReview> {
+    let mut out: Vec<CatalogReview> = Vec::new();
+    let Some(ratings) = payload.get("Ratings").and_then(|v| v.as_array()) else {
+        return out;
+    };
+    for r in ratings {
+        let source = r.get("Source").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let value = r.get("Value").and_then(|v| v.as_str()).unwrap_or("").trim();
+        if source.is_empty() || value.is_empty() {
+            continue;
+        }
+        let Some((score, max_score)) = parse_omdb_rating_value(value) else {
+            continue;
+        };
+        out.push(CatalogReview {
+            label: canonicalise_omdb_source(source),
+            score,
+            max_score,
+            vote_count: None,
+        });
+    }
+    if let Some(votes) = payload
+        .get("imdbVotes")
+        .and_then(|v| v.as_str())
+        .and_then(parse_imdb_votes)
+    {
+        if let Some(imdb) = out.iter_mut().find(|r| r.label == "IMDb") {
+            imdb.vote_count = Some(votes);
+        }
+    }
+    out
+}
+
+/// Parse an OMDb rating string. Accepts `"92%"`, `"7.8/10"`,
+/// `"78/100"`, etc. Returns `None` for unparseable or `"N/A"` values.
+fn parse_omdb_rating_value(value: &str) -> Option<(f64, f64)> {
+    let v = value.trim();
+    if let Some(stripped) = v.strip_suffix('%') {
+        let n: f64 = stripped.trim().parse().ok()?;
+        if n.is_finite() {
+            return Some((n, 100.0));
+        }
+    }
+    if let Some((num, den)) = v.split_once('/') {
+        let score: f64 = num.trim().parse().ok()?;
+        let max: f64 = den.trim().parse().ok()?;
+        if score.is_finite() && max.is_finite() && max > 0.0 {
+            return Some((score, max));
+        }
+    }
+    None
+}
+
+fn canonicalise_omdb_source(source: &str) -> String {
+    let lower = source.to_ascii_lowercase();
+    match lower.as_str() {
+        "internet movie database" | "imdb" => "IMDb".to_string(),
+        "rotten tomatoes" => "Rotten Tomatoes".to_string(),
+        "metacritic" => "Metacritic".to_string(),
+        _ => source.to_string(),
+    }
+}
+
+/// `"2,945,123"` → `Some(2945123)`. Returns `None` for empty / `"N/A"` /
+/// otherwise non-numeric inputs.
+fn parse_imdb_votes(raw: &str) -> Option<u32> {
+    let cleaned: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
+    if cleaned.is_empty() {
+        return None;
+    }
+    cleaned.parse::<u64>().ok().map(|n| u32::try_from(n).unwrap_or(u32::MAX))
+}
+
+/// Append OMDb-sourced reviews to the TMDB-sourced list, but skip any
+/// entry whose label already exists in `existing` so a future TMDB
+/// upstream change (e.g. TMDB starts surfacing IMDb directly) can't
+/// double up. The TMDB review wins on conflict because it's the
+/// upstream the rest of the catalog flow is keyed on.
+fn merge_reviews(existing: &mut Vec<CatalogReview>, incoming: &mut Vec<CatalogReview>) {
+    incoming.retain(|i| !existing.iter().any(|e| e.label == i.label));
+    existing.append(incoming);
 }
 
 /// Pull TMDB's `vote_average` and `vote_count` off the item detail
@@ -1929,4 +2094,109 @@ fn urlencoding(s: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn omdb_payload() -> serde_json::Value {
+        serde_json::json!({
+            "Title": "The Shawshank Redemption",
+            "imdbID": "tt0111161",
+            "imdbRating": "9.3",
+            "imdbVotes": "2,945,123",
+            "Ratings": [
+                { "Source": "Internet Movie Database", "Value": "9.3/10" },
+                { "Source": "Rotten Tomatoes", "Value": "91%" },
+                { "Source": "Metacritic", "Value": "82/100" }
+            ],
+            "Response": "True"
+        })
+    }
+
+    #[test]
+    fn parse_omdb_rating_value_handles_known_shapes() {
+        assert_eq!(parse_omdb_rating_value("92%"), Some((92.0, 100.0)));
+        assert_eq!(parse_omdb_rating_value("7.8/10"), Some((7.8, 10.0)));
+        assert_eq!(parse_omdb_rating_value("78/100"), Some((78.0, 100.0)));
+        assert_eq!(parse_omdb_rating_value("N/A"), None);
+        assert_eq!(parse_omdb_rating_value(""), None);
+    }
+
+    #[test]
+    fn parse_omdb_reviews_canonicalises_labels_and_attaches_imdb_votes() {
+        let reviews = parse_omdb_reviews(&omdb_payload());
+        let labels: Vec<&str> = reviews.iter().map(|r| r.label.as_str()).collect();
+        assert_eq!(labels, vec!["IMDb", "Rotten Tomatoes", "Metacritic"]);
+        let imdb = reviews.iter().find(|r| r.label == "IMDb").unwrap();
+        assert_eq!(imdb.score, 9.3);
+        assert_eq!(imdb.max_score, 10.0);
+        assert_eq!(imdb.vote_count, Some(2_945_123));
+        let rt = reviews.iter().find(|r| r.label == "Rotten Tomatoes").unwrap();
+        assert_eq!(rt.score, 91.0);
+        assert_eq!(rt.max_score, 100.0);
+        assert_eq!(rt.vote_count, None);
+    }
+
+    #[test]
+    fn parse_omdb_reviews_drops_unparseable_entries() {
+        let payload = serde_json::json!({
+            "Ratings": [
+                { "Source": "Rotten Tomatoes", "Value": "N/A" },
+                { "Source": "Metacritic", "Value": "78/100" }
+            ],
+            "Response": "True"
+        });
+        let reviews = parse_omdb_reviews(&payload);
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].label, "Metacritic");
+    }
+
+    #[test]
+    fn parse_omdb_reviews_returns_empty_when_ratings_missing() {
+        let payload = serde_json::json!({ "Response": "True" });
+        assert!(parse_omdb_reviews(&payload).is_empty());
+    }
+
+    #[test]
+    fn extract_imdb_id_supports_movies_and_tv_shapes() {
+        let movie = serde_json::json!({ "imdb_id": "tt0111161" });
+        assert_eq!(extract_imdb_id(&movie).as_deref(), Some("tt0111161"));
+
+        let tv = serde_json::json!({ "external_ids": { "imdb_id": "tt0903747" } });
+        assert_eq!(extract_imdb_id(&tv).as_deref(), Some("tt0903747"));
+
+        let neither = serde_json::json!({ "imdb_id": "" });
+        assert_eq!(extract_imdb_id(&neither), None);
+    }
+
+    #[test]
+    fn merge_reviews_skips_duplicates_by_label() {
+        let mut existing = vec![CatalogReview {
+            label: "TMDB".into(),
+            score: 7.5,
+            max_score: 10.0,
+            vote_count: Some(100),
+        }];
+        let mut incoming = vec![
+            CatalogReview {
+                label: "TMDB".into(), // collide — should be dropped
+                score: 9.0,
+                max_score: 10.0,
+                vote_count: None,
+            },
+            CatalogReview {
+                label: "Rotten Tomatoes".into(),
+                score: 91.0,
+                max_score: 100.0,
+                vote_count: None,
+            },
+        ];
+        merge_reviews(&mut existing, &mut incoming);
+        assert_eq!(existing.len(), 2);
+        assert_eq!(existing[0].label, "TMDB");
+        assert_eq!(existing[0].score, 7.5);
+        assert_eq!(existing[1].label, "Rotten Tomatoes");
+    }
 }

@@ -24,7 +24,7 @@ mhaol.git/
 ├── packages/
 │   ├── backend/                      # Rust Axum server crate (mhaol-backend lib + mhaol-cloud bin) — port 9898, libp2p TCP 9900, libp2p /ws 9901, embedded SurrealDB.
 │   ├── frontend/                     # Svelte SPA (pnpm package "frontend"). Builds to packages/frontend/dist-static which mhaol-backend embeds.
-│   ├── addons/                       # Addon modules (TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subtitles, torrent search)
+│   ├── addons/                       # Addon modules (TMDB, OMDb, MusicBrainz, YouTube, LRCLIB, Wyzie subtitles, torrent search)
 │   ├── cloud-ui/                     # Shared Svelte 5 display components + firkin types + game-icons.net <Icon /> set
 │   ├── identity/                     # Rust Ethereum identity management (secp256k1, EIP-191)
 │   ├── ipfs-stream/                  # Rust HLS-over-IPFS streaming (GStreamer hlssink2)
