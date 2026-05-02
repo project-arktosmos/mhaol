@@ -715,6 +715,7 @@
 	/// Search-row Stream button — pick a brand-new torrent for streaming.
 	async function streamTorrentFromRow(torrent: TorrentResultItem): Promise<void> {
 		if (!torrent.magnetLink) return;
+		await ensureBookmarked();
 		await playStreamFor(torrent.magnetLink, torrent.title);
 	}
 
@@ -1651,6 +1652,22 @@
 		}
 	});
 
+	/// Best-effort: promote a browse-cache firkin into a bookmarked one
+	/// before persisting any torrent pick. Picking a torrent from the
+	/// search table means the user is committing to this item, so the
+	/// firkin should land in their library even if they never clicked the
+	/// Bookmark button explicitly. Errors are logged and swallowed — the
+	/// torrent action proceeds either way.
+	async function ensureBookmarked(): Promise<void> {
+		if (isBookmarked) return;
+		try {
+			const updated = await firkinsService.bookmark(firkin.id);
+			firkinOverride = updated;
+		} catch (err) {
+			console.warn('[catalog detail] failed to auto-bookmark on torrent action:', err);
+		}
+	}
+
 	async function assignTorrent(torrent: TorrentResultItem) {
 		if (!torrent.magnetLink || addingHash || existingHashes.has(torrent.magnetLink)) {
 			return;
@@ -1658,6 +1675,7 @@
 		assignError = null;
 		addingHash = torrent.magnetLink;
 		try {
+			await ensureBookmarked();
 			const additions: FileEntry[] = [
 				{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
 			];
