@@ -2019,6 +2019,7 @@
 							{selectedTrailerKey}
 							onTrailerSelect={(k) => (selectedTrailerKey = k)}
 							extraControls={sourceButtons}
+							playOverlay={isTmdbMovie ? torrentAttachmentOverlay : undefined}
 						/>
 					{:else if firkin.images[1]}
 						<img
@@ -2040,7 +2041,7 @@
 
 			<CatalogDescriptionPanel description={firkin.description} />
 
-			{#if isTmdbMovie}
+			{#snippet torrentAttachmentOverlay()}
 				<CatalogTorrentAttachmentCard
 					download={downloadInfo}
 					stream={streamInfo}
@@ -2057,7 +2058,7 @@
 					onAttachDownload={assignTorrent}
 					onAttachStream={streamTorrentFromRow}
 				/>
-			{/if}
+			{/snippet}
 
 			{#if isTmdbTv && tmdbTvId}
 				<CatalogTvSeasonsCard

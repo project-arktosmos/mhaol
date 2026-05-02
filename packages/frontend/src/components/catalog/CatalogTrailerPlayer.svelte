@@ -29,6 +29,13 @@
 		/// Forwarded to <PlayerControls> — rendered between the mute and
 		/// fullscreen buttons.
 		extraControls?: Snippet;
+		/// Optional snippet rendered absolutely inside the player container,
+		/// in place of the circular play button. The snippet content owns
+		/// its own positioning inside the absolute wrapper. The trailer can
+		/// still be started via the play/pause button in `<PlayerControls>`
+		/// below the player. When omitted, the legacy circular play overlay
+		/// is shown.
+		playOverlay?: Snippet;
 	}
 
 	let {
@@ -40,7 +47,8 @@
 		trailerOptions = [],
 		selectedTrailerKey = null,
 		onTrailerSelect,
-		extraControls
+		extraControls,
+		playOverlay
 	}: Props = $props();
 
 	let containerElement = $state<HTMLDivElement | null>(null);
@@ -211,34 +219,44 @@
 		{/if}
 
 		{#if !started && (streamUrl || posterUrl)}
-			<button
-				type="button"
-				class="absolute inset-0 z-20 flex items-center justify-center bg-black/30 transition-colors hover:bg-black/40 disabled:cursor-wait"
-				aria-label="Play trailer"
-				onclick={handleStart}
-				disabled={!streamUrl || starting}
-			>
-				<span
-					class={classNames(
-						'flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform',
-						streamUrl && !starting ? 'hover:scale-110' : 'opacity-70'
-					)}
+			{#if playOverlay}
+				<div
+					class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
 				>
-					{#if starting || !streamUrl}
-						<span class="loading loading-md loading-spinner"></span>
-					{:else}
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 24 24"
-							fill="currentColor"
-							class="h-10 w-10 translate-x-0.5"
-							aria-hidden="true"
-						>
-							<polygon points="6 4 20 12 6 20 6 4" />
-						</svg>
-					{/if}
-				</span>
-			</button>
+					<div class="w-full max-w-md">
+						{@render playOverlay()}
+					</div>
+				</div>
+			{:else}
+				<button
+					type="button"
+					class="absolute inset-0 z-20 flex items-center justify-center bg-black/30 transition-colors hover:bg-black/40 disabled:cursor-wait"
+					aria-label="Play trailer"
+					onclick={handleStart}
+					disabled={!streamUrl || starting}
+				>
+					<span
+						class={classNames(
+							'flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform',
+							streamUrl && !starting ? 'hover:scale-110' : 'opacity-70'
+						)}
+					>
+						{#if starting || !streamUrl}
+							<span class="loading loading-md loading-spinner"></span>
+						{:else}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 24 24"
+								fill="currentColor"
+								class="h-10 w-10 translate-x-0.5"
+								aria-hidden="true"
+							>
+								<polygon points="6 4 20 12 6 20 6 4" />
+							</svg>
+						{/if}
+					</span>
+				</button>
+			{/if}
 		{/if}
 
 		{#if error}
