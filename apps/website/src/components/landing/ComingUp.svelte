@@ -28,6 +28,16 @@
 				'Cover art + metadata for every system',
 				'Launch hand-off to your installed emulator'
 			]
+		},
+		{
+			icon: 'delapouite/compact-disc',
+			title: 'Optical discs',
+			body: 'CDs, DVDs, and Blu-rays as first-class citizens of your library — play them in place, rip them into firkins so the discs can go on the shelf, or burn a curated playlist back out for the car or a friend.',
+			points: [
+				'Play CD / DVD / Blu-ray straight from the drive',
+				'Rip to a firkin with cover art and tracklist',
+				'Burn audio CDs and data discs from your library'
+			]
 		}
 	];
 </script>
@@ -48,7 +58,7 @@
 			</p>
 		</div>
 
-		<div class="grid gap-5 md:grid-cols-2">
+		<div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
 			{#each upcoming as item (item.title)}
 				<div
 					class="relative flex flex-col rounded-box border border-dashed border-base-300 bg-base-100/60 p-6"
