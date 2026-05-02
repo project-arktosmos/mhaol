@@ -69,13 +69,19 @@
 		 * user can attach the obvious pick in one click instead of opening
 		 * the search table. `null` when no eligible row exists. */
 		preferredDownload?: TorrentResultItem | null;
-		/** One preferred `streamable`-probed torrent per quality bucket
-		 * (4K → 2160p → 1080p → … → Other), sorted by quality priority then
-		 * seeders within the bucket. Surfaced as a faded preview in the
-		 * Stream cell when nothing's attached yet, with a quality selector
-		 * that swaps the currently displayed pick. Empty when no row has
-		 * been probed `streamable` yet. */
-		streamPicksByQuality?: Array<{ quality: string; torrent: TorrentResultItem }>;
+		/** One preferred row per quality bucket discovered by the torrent
+		 * search, in quality priority order. `status: 'streamable'` means
+		 * the eval probe came back positive — the row's Assign / Play
+		 * button is enabled. `status: 'probing'` means a row in this
+		 * quality is still being probed (`pending` / `evaluating`); the
+		 * row appears in the table with a spinner action button so the
+		 * user sees the quality discovered ASAP. Empty until the search
+		 * has at least one row in any group. */
+		streamPicksByQuality?: Array<{
+			quality: string;
+			torrent: TorrentResultItem;
+			status: 'streamable' | 'probing';
+		}>;
 		/** Click handler for the faded Download preview — should run the
 		 * same flow as the Download button on the search table row (attach
 		 * the magnet to the firkin and start the torrent client). */
@@ -207,6 +213,7 @@
 		<tbody>
 			{#each streamPicksByQuality as pick (pick.quality)}
 				{@const isActive = activeQuality === pick.quality}
+				{@const isProbing = pick.status === 'probing'}
 				<tr class={isActive ? 'bg-base-200' : ''}>
 					<td class="text-left text-xs font-medium">{pick.quality}</td>
 					<td class="text-success">{pick.torrent.seeders ?? '—'}</td>
@@ -223,6 +230,16 @@
 								class="btn w-full btn-xs btn-primary"
 							>
 								{streamPlaying ? '…' : 'Play'}
+							</button>
+						{:else if isProbing}
+							<button
+								type="button"
+								disabled
+								class="btn w-full btn-xs btn-primary"
+								aria-label="Probing streamability"
+								title="Checking whether this row is streamable…"
+							>
+								<span class="loading loading-spinner loading-xs"></span>
 							</button>
 						{:else}
 							<button

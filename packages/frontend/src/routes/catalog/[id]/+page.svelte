@@ -1231,25 +1231,48 @@
 		}
 		return null;
 	});
-	// Best `streamable`-probed torrent per quality bucket, in quality
-	// priority order. The attachment card's stream-suggestion cell shows
-	// these in a quality selector so the user can swap which row gets
-	// attached without opening the torrent search table.
-	const streamPicksByQuality = $derived.by<Array<{ quality: string; torrent: TorrentResultItem }>>(
-		() => {
-			const out: Array<{ quality: string; torrent: TorrentResultItem }> = [];
-			for (const group of torrentSearch.groupedMatches) {
-				for (const row of group.rows) {
-					if (!row.magnetLink) continue;
-					if (torrentSearch.rowEvals[row.magnetLink]?.kind !== 'streamable') continue;
-					out.push({ quality: group.label, torrent: row });
+	// One representative row per quality bucket discovered by the torrent
+	// search, in quality priority order. We surface qualities the moment
+	// the indexer returns them so the attachment card can render a row
+	// for each — even before the streamability probe has finished — with
+	// the row tagged `status: 'probing'` until the eval comes back. Once
+	// a row in the bucket is confirmed `streamable` we promote that
+	// specific row (with its file size / mime info) to `status:
+	// 'streamable'`. Buckets where every row has been ruled out
+	// (`not-streamable` / `skipped`) drop off the list.
+	const streamPicksByQuality = $derived.by<
+		Array<{ quality: string; torrent: TorrentResultItem; status: 'streamable' | 'probing' }>
+	>(() => {
+		const out: Array<{
+			quality: string;
+			torrent: TorrentResultItem;
+			status: 'streamable' | 'probing';
+		}> = [];
+		for (const group of torrentSearch.groupedMatches) {
+			let pick: { torrent: TorrentResultItem; status: 'streamable' | 'probing' } | null = null;
+			for (const row of group.rows) {
+				if (!row.magnetLink) continue;
+				const evaluation = torrentSearch.rowEvals[row.magnetLink];
+				if (evaluation?.kind === 'streamable') {
+					pick = { torrent: row, status: 'streamable' };
 					break;
 				}
+				if (
+					!pick &&
+					(evaluation === undefined ||
+						evaluation.kind === 'pending' ||
+						evaluation.kind === 'evaluating')
+				) {
+					pick = { torrent: row, status: 'probing' };
+				}
 			}
-			return out;
+			if (pick) out.push({ quality: group.label, ...pick });
 		}
+		return out;
+	});
+	const preferredStreamTorrent = $derived(
+		streamPicksByQuality.find((p) => p.status === 'streamable')?.torrent ?? null
 	);
-	const preferredStreamTorrent = $derived(streamPicksByQuality[0]?.torrent ?? null);
 
 	function toggleTorrentSearch() {
 		torrentSearchOpen = !torrentSearchOpen;
