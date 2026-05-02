@@ -705,6 +705,17 @@
 		await playStreamFor(entry.value, entry.title ?? null);
 	}
 
+	/// Attachment-card Download cell click — only fires once
+	/// `torrent_completion.rs` has pinned the finished torrent to IPFS, at
+	/// which point the cell switches into IPFS-play mode. Flips the player
+	/// tab to `ipfs` and runs the existing IPFS HLS pipeline on the first
+	/// playable CID (same path as the IPFS Stream tab).
+	async function playFromAttachmentDownload(): Promise<void> {
+		if (!firstIpfsCid || ipfsStarting) return;
+		activeSource = 'ipfs';
+		await startIpfsPlay();
+	}
+
 	const completedTorrents = $derived.by(() => {
 		const out: { hash: string; title: string }[] = [];
 		for (const f of firkin.files) {
@@ -1149,13 +1160,20 @@
 		const entry = firkin.files.find((f) => f.type === 'torrent magnet' && f.value);
 		const hash = entry?.value ? infoHashFromMagnet(entry.value) : null;
 		const live = hash ? $torrentsState.byHash[hash] : null;
+		// Once `torrent_completion.rs` pins the finished torrent's files to
+		// IPFS, an `ipfs`-typed FileEntry shows up on the firkin and the
+		// cell flips into a click-to-stream state. We use `firstIpfsCid`
+		// (filtered to playable types) so the click is guaranteed to land
+		// on something the player can render.
+		const ipfsCid = firstIpfsCid;
 		if (!live) {
 			return {
 				...base,
 				progress: null,
 				downloadSpeed: null,
 				etaSeconds: null,
-				finished: false
+				finished: false,
+				ipfsCid
 			};
 		}
 		return {
@@ -1164,7 +1182,8 @@
 			progress: live.progress,
 			downloadSpeed: live.downloadSpeed,
 			etaSeconds: live.eta,
-			finished: live.state === 'seeding' || live.progress >= 1
+			finished: live.state === 'seeding' || live.progress >= 1,
+			ipfsCid
 		};
 	});
 	const streamInfo = $derived(attachmentInfoFor('torrent stream magnet'));
@@ -1962,6 +1981,8 @@
 					stream={streamInfo}
 					onStreamPlay={replayStreamMagnet}
 					streamPlaying={torrentStreamStarting}
+					onDownloadPlay={playFromAttachmentDownload}
+					downloadPlaying={ipfsStarting}
 				/>
 			{/if}
 

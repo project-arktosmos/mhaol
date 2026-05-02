@@ -22,6 +22,12 @@
 		 * progress. Mutually exclusive with `progress < 1` semantically — the
 		 * card flips from progress-bar to "Seeding" on this. */
 		finished: boolean;
+		/** CID of the IPFS pin the torrent-completion task wrote once the
+		 * download finished. Set ⇒ the on-disk file is now in the local
+		 * IPFS blockstore and the cell flips into a click-to-stream state
+		 * that runs the IPFS HLS pipeline on it. `null` until the pin
+		 * lands. */
+		ipfsCid: string | null;
 	}
 </script>
 
@@ -47,9 +53,27 @@
 		/** True while a stream-start round-trip is in flight. Renders the
 		 * cell as `…` and disables clicks so the user can't double-fire. */
 		streamPlaying?: boolean;
+		/** Click handler for the Download cell once the torrent has been
+		 * pinned to IPFS (`download.ipfsCid` set). Should kick the IPFS
+		 * HLS stream on the picked CID. */
+		onDownloadPlay?: () => void | Promise<void>;
+		/** True while an IPFS-stream-start round-trip is in flight. */
+		downloadPlaying?: boolean;
 	}
 
-	let { download, stream, onStreamPlay, streamPlaying = false }: Props = $props();
+	let {
+		download,
+		stream,
+		onStreamPlay,
+		streamPlaying = false,
+		onDownloadPlay,
+		downloadPlaying = false
+	}: Props = $props();
+
+	function shortCid(cid: string): string {
+		if (cid.length <= 16) return cid;
+		return `${cid.slice(0, 8)}…${cid.slice(-6)}`;
+	}
 
 	function formatSpeed(bytesPerSec: number): string {
 		if (bytesPerSec <= 0) return '—';
@@ -85,35 +109,59 @@
 <div class="card border border-base-content/10 bg-base-200 p-4">
 	<h2 class="mb-3 text-sm font-semibold text-base-content/70 uppercase">Torrent attachment</h2>
 	<div class="grid grid-cols-2 gap-3">
-		<div
-			class={classNames(
-				'flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center',
-				download ? 'bg-base-300/40 text-base-content' : 'text-base-content/40'
-			)}
-		>
-			{@render header(download, 'delapouite/cloud-download', 'Download', 'Download mode')}
-			{#if download}
-				{#if download.finished}
-					<span class="text-[10px] text-success">Seeding</span>
-				{:else if download.progress != null}
-					<progress class="progress h-1.5 w-full progress-primary" value={download.progress} max="1"
-					></progress>
-					<span class="text-[10px] text-base-content/70">
-						{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
-						download.downloadSpeed > 0
-							? ` · ${formatSpeed(download.downloadSpeed)}`
-							: ''}{download.etaSeconds != null && download.etaSeconds > 0
-							? ` · ETA ${formatEta(download.etaSeconds)}`
-							: ''}
-					</span>
+		{#if download && download.ipfsCid && onDownloadPlay}
+			<button
+				type="button"
+				onclick={() => onDownloadPlay?.()}
+				disabled={downloadPlaying}
+				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center transition-colors hover:border-success/50 hover:bg-base-300/70 disabled:cursor-progress disabled:opacity-60"
+				aria-label="Play via IPFS"
+			>
+				{@render header(download, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				<span
+					class="block max-w-full truncate font-mono text-[10px] text-base-content/60"
+					title={download.ipfsCid}
+				>
+					{shortCid(download.ipfsCid)}
+				</span>
+				<span class="text-[10px] font-medium text-success">
+					{downloadPlaying ? 'Starting…' : 'Click to play'}
+				</span>
+			</button>
+		{:else}
+			<div
+				class={classNames(
+					'flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center',
+					download ? 'bg-base-300/40 text-base-content' : 'text-base-content/40'
+				)}
+			>
+				{@render header(download, 'delapouite/cloud-download', 'Download', 'Download mode')}
+				{#if download}
+					{#if download.finished}
+						<span class="text-[10px] text-success">Seeding · pinning to IPFS…</span>
+					{:else if download.progress != null}
+						<progress
+							class="progress h-1.5 w-full progress-primary"
+							value={download.progress}
+							max="1"
+						></progress>
+						<span class="text-[10px] text-base-content/70">
+							{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
+							download.downloadSpeed > 0
+								? ` · ${formatSpeed(download.downloadSpeed)}`
+								: ''}{download.etaSeconds != null && download.etaSeconds > 0
+								? ` · ETA ${formatEta(download.etaSeconds)}`
+								: ''}
+						</span>
+					{:else}
+						<span class="text-[10px] text-base-content/50">Queued</span>
+					{/if}
+					{@render stats(download)}
 				{:else}
-					<span class="text-[10px] text-base-content/50">Queued</span>
+					<span class="text-[10px] text-base-content/60">Not attached</span>
 				{/if}
-				{@render stats(download)}
-			{:else}
-				<span class="text-[10px] text-base-content/60">Not attached</span>
-			{/if}
-		</div>
+			</div>
+		{/if}
 
 		{#if stream && onStreamPlay}
 			<button
