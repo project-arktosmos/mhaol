@@ -1,8 +1,11 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import classNames from 'classnames';
+	import { addonKind } from 'cloud-ui';
 	import { base } from '$app/paths';
 	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import { getCachedImageUrl } from '$services/image-cache.service';
+	import { movieTvViewModeService } from '$services/movie-tv-view-mode.service';
 	import type { CloudFirkin } from '$types/firkin.type';
 
 	interface Props {
@@ -29,17 +32,45 @@
 
 	const PREVIEW_COUNT = 4;
 
-	const visibleFirkins = $derived<CloudFirkin[]>(
-		collapsed ? firkins.slice(0, collapsedCount) : firkins
+	// Mirror FirkinCard's per-kind shape on the "More" cell so it adopts the
+	// same height as the surrounding cards regardless of view mode. The grid
+	// is single-kind (one addon per page), so the first firkin's kind drives
+	// the whole row.
+	const viewModeStore = movieTvViewModeService.store;
+	const referenceKind = $derived(firkins.length > 0 ? addonKind(firkins[0].addon) : null);
+	const useLandscape = $derived(
+		(referenceKind === 'movie' || referenceKind === 'tv show') &&
+			$viewModeStore.mode === 'landscapes'
 	);
-	const hiddenCount = $derived(Math.max(0, firkins.length - collapsedCount));
+	const moreFigureAspect = $derived(
+		referenceKind === 'album'
+			? 'aspect-square'
+			: referenceKind === 'youtube video' || useLandscape
+				? 'aspect-video'
+				: 'aspect-[2/3]'
+	);
+	const moreHasStrip = $derived(
+		referenceKind === 'album' || referenceKind === 'youtube video' || useLandscape
+	);
+
+	// Landscape cards are wider, so we drop from 7 cols (6 firkins + More) to
+	// 5 cols (4 firkins + More) to keep tile widths in a similar range.
+	const effectiveCollapsedCount = $derived(useLandscape ? 4 : collapsedCount);
+	const gridColsClass = $derived(useLandscape ? 'grid-cols-5' : 'grid-cols-7');
+
+	const visibleFirkins = $derived<CloudFirkin[]>(
+		collapsed ? firkins.slice(0, effectiveCollapsedCount) : firkins
+	);
+	const hiddenCount = $derived(Math.max(0, firkins.length - effectiveCollapsedCount));
 	const showMoreCell = $derived(collapsed && hiddenCount > 0 && !!moreHref);
 
 	// The next four firkins after the visible slice — rendered as a 2x2 thumb
 	// preview inside the "More" cell so the link visually represents what the
 	// user is about to navigate into.
 	const previewFirkins = $derived<CloudFirkin[]>(
-		showMoreCell ? firkins.slice(collapsedCount, collapsedCount + PREVIEW_COUNT) : []
+		showMoreCell
+			? firkins.slice(effectiveCollapsedCount, effectiveCollapsedCount + PREVIEW_COUNT)
+			: []
 	);
 	let previewUrls = $state<(string | null)[]>([]);
 
@@ -71,7 +102,7 @@
 {#if firkins.length === 0}
 	<p class="text-sm text-base-content/60">{emptyMessage}</p>
 {:else}
-	<div class="grid grid-cols-7 gap-4">
+	<div class={classNames('grid gap-4', gridColsClass)}>
 		{#each visibleFirkins as doc (doc.id)}
 			{@const progress = progressFor ? progressFor(doc) : null}
 			<div class="relative">
@@ -99,31 +130,39 @@
 			</div>
 		{/each}
 		{#if showMoreCell && moreHref}
-			<div class="relative h-full min-h-32 w-full overflow-hidden rounded-md bg-base-300">
-				<div class="grid h-full grid-cols-2 grid-rows-2 gap-px">
-					{#each Array.from({ length: PREVIEW_COUNT }, (_, i) => i) as i (i)}
-						<div class="overflow-hidden bg-base-200">
-							{#if previewUrls[i]}
-								<img
-									src={previewUrls[i]}
-									alt=""
-									class="h-full w-full object-cover"
-									loading="lazy"
-								/>
-							{/if}
-						</div>
-					{/each}
-				</div>
-				<div class="absolute inset-0 flex items-center justify-center bg-base-300/60">
-					<a
-						href={moreHref}
-						class="btn btn-primary"
-						aria-label={`More — ${hiddenCount} additional`}
-					>
-						More
-					</a>
-				</div>
-			</div>
+			<article class="card w-full overflow-hidden rounded-md bg-base-200 shadow-sm">
+				<figure class={classNames('relative w-full overflow-hidden bg-base-300', moreFigureAspect)}>
+					<div class="grid h-full grid-cols-2 grid-rows-2 gap-px">
+						{#each Array.from({ length: PREVIEW_COUNT }, (_, i) => i) as i (i)}
+							<div class="overflow-hidden bg-base-200">
+								{#if previewUrls[i]}
+									<img
+										src={previewUrls[i]}
+										alt=""
+										class="h-full w-full object-cover"
+										loading="lazy"
+									/>
+								{/if}
+							</div>
+						{/each}
+					</div>
+					<div class="absolute inset-0 flex items-center justify-center bg-base-300/60">
+						<a
+							href={moreHref}
+							class="btn btn-primary"
+							aria-label={`More — ${hiddenCount} additional`}
+						>
+							More
+						</a>
+					</div>
+				</figure>
+				{#if moreHasStrip}
+					<div class="px-3 py-2" aria-hidden="true">
+						<div class="text-sm font-semibold">&nbsp;</div>
+						<div class="text-xs">&nbsp;</div>
+					</div>
+				{/if}
+			</article>
 		{/if}
 	</div>
 {/if}
