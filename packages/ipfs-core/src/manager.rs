@@ -348,6 +348,34 @@ impl IpfsManager {
         Ok(info)
     }
 
+    /// Compute a file's UnixFS CID without writing any blocks to the
+    /// blockstore or pinning the result. The byte stream goes through the
+    /// same `rust-unixfs::FileAdder` we use in `add()` and produces an
+    /// identical CID — only the `repo.put_block` step is skipped, which is
+    /// what makes a library scan no longer write the file's bytes a second
+    /// time into the data root.
+    ///
+    /// The IPFS node does NOT need to be initialised for this call. The
+    /// returned CID is a "lite" reference: it identifies the bytes
+    /// uniquely, the libraries page and firkin layer can use it as a
+    /// pointer, and `serve_pin_file` streams the on-disk file directly.
+    /// Bitswap peers can NOT fetch the blocks until `add()` is called for
+    /// the same path (materialisation).
+    pub async fn compute_file_cid(&self, path: &std::path::Path) -> Result<(String, u64)> {
+        if !path.exists() {
+            return Err(anyhow!("Source path does not exist: {}", path.display()));
+        }
+        if !path.is_file() {
+            return Err(anyhow!(
+                "compute_file_cid only supports files: {}",
+                path.display()
+            ));
+        }
+        let size = path_size_bytes(path);
+        let cid = compute_file_cid_inner(path).await?;
+        Ok((cid, size))
+    }
+
     /// Add raw bytes to the blockstore as a UnixFS file with the given
     /// `name`, pinning the result. Returns the CID assigned by `add_unixfs`
     /// (this is a UnixFS CID, not a raw-codec sha256 of `bytes`).
@@ -524,6 +552,56 @@ impl Default for IpfsManager {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Run `rust-unixfs::FileAdder` against `path` without writing any
+/// blocks to the blockstore. Produces the exact same CID `add_file_via_repo`
+/// would — the difference is purely the `repo.put_block` writes, which are
+/// the dominant cost for a library scan since they duplicate every byte
+/// of the file into `<data_root>/downloads/ipfs/`. Used by the library
+/// scan path so we get a CID per file without paying the duplication cost
+/// up front; materialisation happens later via `add()` when peers actually
+/// need the blocks.
+async fn compute_file_cid_inner(path: &std::path::Path) -> Result<String> {
+    use rust_unixfs::file::adder::FileAdder;
+    use tokio::io::AsyncReadExt;
+
+    const READ_BUF: usize = 256 * 1024;
+
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(|e| anyhow!("open {}: {e}", path.display()))?;
+    let mut buf = vec![0u8; READ_BUF];
+
+    let mut adder = FileAdder::default();
+    let mut last_cid: Option<cid::Cid> = None;
+
+    loop {
+        let n = file
+            .read(&mut buf)
+            .await
+            .map_err(|e| anyhow!("read {}: {e}", path.display()))?;
+        if n == 0 {
+            break;
+        }
+        let mut consumed_total = 0;
+        while consumed_total < n {
+            let (blocks, consumed) = adder.push(&buf[consumed_total..n]);
+            for (cid, _block_bytes) in blocks {
+                last_cid = Some(cid);
+            }
+            if consumed == 0 {
+                break;
+            }
+            consumed_total += consumed;
+        }
+    }
+    for (cid, _block_bytes) in adder.finish() {
+        last_cid = Some(cid);
+    }
+    last_cid
+        .ok_or_else(|| anyhow!("FileAdder produced no blocks for {}", path.display()))
+        .map(|c| c.to_string())
 }
 
 /// Drive `rust-unixfs::FileAdder` directly, write each emitted block

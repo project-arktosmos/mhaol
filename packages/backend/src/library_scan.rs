@@ -1,26 +1,38 @@
-//! Library scan side-effects: pin every scanned file whose type matches
-//! the library's declared `local-*` addons to the embedded IPFS node, so
-//! the WebUI's libraries table can show a CID per file. **No firkin
-//! records are created from a library scan** — the firkin store is for
-//! explicit bookmarks and catalog flows, not auto-detection of local
-//! files.
+//! Library scan side-effects: compute a UnixFS CID for every scanned
+//! file whose type matches the library's declared `local-*` addons and
+//! record a **lite** `ipfs_pin` row for it (no blocks written into the
+//! blockstore yet). The WebUI's libraries table can then show a CID per
+//! file and firkins can reference these CIDs as `ipfs`-typed file
+//! entries, without paying the per-byte duplication cost of materialising
+//! every file into `<data_root>/downloads/ipfs/`.
 //!
-//! A library only ever pins files whose type is relevant to its declared
-//! addons (video for `local-movie`/`local-tv`, audio for `local-album`,
-//! book exts for `local-book`, ROM exts for `local-game`). Libraries with
-//! no addons declared are skipped entirely — the directory walk still
-//! runs (so the WebUI's scan-results table populates), but no pins are
-//! produced until the user picks at least one addon.
+//! Materialisation — the actual `repo.put_block` writes that make the
+//! file's blocks reachable via bitswap to other peers — happens lazily
+//! via `POST /api/ipfs/pins/:cid/materialise` when a peer or the user
+//! explicitly asks for it. Until then `serve_pin_file` still streams the
+//! on-disk bytes directly (we hold the original path on the pin row), so
+//! local playback works without materialisation.
+//!
+//! **No firkin records are created from a library scan** — the firkin
+//! store is for explicit bookmarks and catalog flows, not auto-detection
+//! of local files.
+//!
+//! A library only ever processes files whose type is relevant to its
+//! declared addons (video for `local-movie`/`local-tv`, audio for
+//! `local-album`, book exts for `local-book`, ROM exts for `local-game`).
+//! Libraries with no addons declared are skipped entirely — the directory
+//! walk still runs (so the WebUI's scan-results table populates), but no
+//! pins are produced until the user picks at least one addon.
 //!
 //! Re-running the scan is idempotent because pin records are deduplicated
-//! by `(cid, path)` in `ipfs_pins::record_pin`.
+//! by `(cid, path)` in `ipfs_pins::record_lite_pin`.
 
 #![cfg(not(target_os = "android"))]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::ipfs_pins;
-use crate::libraries::{wait_for_ipfs_ready, ScanEntry};
+use crate::libraries::ScanEntry;
 use crate::state::CloudState;
 
 const ADDON_LOCAL_MOVIE: &str = "local-movie";
@@ -101,12 +113,19 @@ pub(crate) fn entry_matches_addons(entry: &ScanEntry, addons: &[String]) -> bool
     })
 }
 
-/// Spawn a fire-and-forget task that pins every entry matching the
-/// library's declared addons to IPFS. Pin rows are deduplicated by
-/// `(cid, path)` in `ipfs_pins::record_pin`, so re-running the scan is
-/// idempotent. An empty `addons` list falls back to "pin anything that
-/// matches any local-* addon" so a freshly-created library still gets its
-/// files pinned on the first scan.
+/// Spawn a fire-and-forget task that computes a UnixFS CID for every
+/// entry matching the library's declared addons and records a **lite**
+/// `ipfs_pin` row (no blockstore writes). Pin rows are deduplicated by
+/// `(cid, path)` in `ipfs_pins::record_lite_pin`, so re-running the scan
+/// is idempotent. An empty `addons` list falls back to "process anything
+/// that matches any local-* addon" so a freshly-created library still
+/// gets CIDs on the first scan.
+///
+/// The IPFS node does NOT need to be running for this path — `compute_file_cid`
+/// is a pure FileAdder hash and writes nothing through the libp2p stack.
+/// Materialisation (the per-block `put_block` writes that make CIDs
+/// reachable via bitswap) is deferred until a peer asks via
+/// `POST /api/ipfs/pins/:cid/materialise`.
 pub fn schedule_pins(
     state: &CloudState,
     entries: &[ScanEntry],
@@ -119,47 +138,62 @@ pub fn schedule_pins(
         addons
     };
 
-    let to_pin: Vec<(String, String, u64)> = entries
+    let to_process: Vec<(String, String, u64)> = entries
         .iter()
         .filter(|e| entry_matches_addons(e, &effective_addons))
         .map(|e| (e.path.clone(), e.mime.clone(), e.size))
         .collect();
 
-    if to_pin.is_empty() {
-        tracing::info!("[library-scan] {lib_root}: nothing to pin");
+    if to_process.is_empty() {
+        tracing::info!("[library-scan] {lib_root}: nothing to hash");
         return;
     }
 
     let ipfs = state.ipfs_manager.clone();
     let state = state.clone();
-    let total = to_pin.len();
+    let total = to_process.len();
     tokio::spawn(async move {
-        if !wait_for_ipfs_ready(&ipfs).await {
-            tracing::warn!(
-                "[library-scan] {lib_root}: ipfs node never reached running state — skipping {} file(s)",
-                total
-            );
-            return;
-        }
-
-        tracing::info!("[library-scan] {lib_root}: pinning {} file(s)", total);
-        for (path, mime, size) in to_pin {
-            let req = mhaol_ipfs_core::AddIpfsRequest {
-                source: path.clone(),
-                pin: Some(true),
-            };
-            match ipfs.add(req).await {
-                Ok(info) => {
+        tracing::info!(
+            "[library-scan] {lib_root}: hashing {} file(s) (lite mode — bytes are NOT copied to the blockstore)",
+            total
+        );
+        for (path_str, mime, size) in to_process {
+            let path = Path::new(&path_str);
+            // Skip lite-pinning when a row already exists for this path
+            // — `compute_file_cid` would otherwise re-hash the file just
+            // to discover the row is a duplicate.
+            if pin_exists_for_path(&state, &path_str).await {
+                continue;
+            }
+            match ipfs.compute_file_cid(path).await {
+                Ok((cid, _)) => {
                     if let Err(e) =
-                        ipfs_pins::record_pin(&state, info.cid, path.clone(), mime, size).await
+                        ipfs_pins::record_lite_pin(&state, cid, path_str.clone(), mime, size)
+                            .await
                     {
-                        tracing::warn!("[library-scan] failed to record pin for {path}: {e}");
+                        tracing::warn!(
+                            "[library-scan] failed to record lite pin for {path_str}: {e}"
+                        );
                     }
                 }
-                Err(e) => tracing::warn!("[library-scan] failed to pin {path}: {e}"),
+                Err(e) => {
+                    tracing::warn!("[library-scan] failed to hash {path_str}: {e}");
+                }
             }
         }
     });
+}
+
+/// Cheap pre-flight check: does any `ipfs_pin` row already exist whose
+/// `path` matches `path_str`? Used to short-circuit re-scans so we don't
+/// re-hash a 3 GB file we've already CID'd.
+async fn pin_exists_for_path(state: &CloudState, path_str: &str) -> bool {
+    let pins: Vec<crate::ipfs_pins::IpfsPin> = match state.db.select(crate::ipfs_pins::TABLE).await
+    {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    pins.iter().any(|p| p.path == path_str)
 }
 
 #[cfg(test)]
