@@ -892,6 +892,16 @@
 	const subsLyricsKind = $derived<'subs' | null>(isTmdbMovie || isTmdbTv ? 'subs' : null);
 	let subsLyricsInitForFirkinId: string | null = null;
 
+	const subsLyricsSearchTerm = $derived.by<string | null>(() => {
+		if (!subsLyricsKind) return null;
+		const externalId = isTmdbMovie ? tmdbMovieId : tmdbTvId;
+		if (!externalId) {
+			return `no TMDB id on this firkin (title: ${firkin.title})`;
+		}
+		const kindLabel = isTmdbMovie ? 'movie' : 'tv';
+		return `wyzie ${kindLabel} id=${externalId} (title: ${firkin.title})`;
+	});
+
 	function runSubsLyricsSearch() {
 		if (!subsLyricsKind) return;
 		const externalId = isTmdbMovie ? tmdbMovieId : tmdbTvId;
@@ -1315,6 +1325,7 @@
 				<CatalogSubsLyricsCard
 					resolver={subsLyricsResolver}
 					kind={subsLyricsKind}
+					searchTerm={subsLyricsSearchTerm}
 					onRefresh={runSubsLyricsSearch}
 				/>
 			{/if}

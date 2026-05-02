@@ -6,10 +6,11 @@
 	interface Props {
 		resolver: SubsLyricsResolver;
 		kind: 'subs' | 'lyrics';
+		searchTerm?: string | null;
 		onRefresh?: () => void;
 	}
 
-	let { resolver, kind, onRefresh }: Props = $props();
+	let { resolver, kind, searchTerm, onRefresh }: Props = $props();
 
 	let selected = $state<SubsLyricsItem | null>(null);
 
@@ -62,6 +63,15 @@
 			</button>
 		{/if}
 	</div>
+
+	{#if searchTerm}
+		<div class="mt-1 flex flex-wrap items-baseline gap-1 text-xs text-base-content/60">
+			<span>Query:</span>
+			<code class="rounded bg-base-100 px-1 py-0.5 font-mono text-[11px] break-all">
+				{searchTerm}
+			</code>
+		</div>
+	{/if}
 
 	<div class="mt-2">
 		{#if resolver.status === 'searching' && resolver.results.length === 0}
