@@ -150,7 +150,7 @@ function groupMatches(matches: TorrentResultItem[]): TorrentQualityGroup[] {
 		bucket.push(t);
 	}
 	for (const list of buckets.values()) {
-		list.sort((a, b) => b.seeders + b.leechers - (a.seeders + a.leechers));
+		list.sort((a, b) => b.seeders - a.seeders || b.leechers - a.leechers);
 	}
 	const out: TorrentQualityGroup[] = [];
 	for (let i = 0; i < QUALITY_GROUPS.length; i++) {
