@@ -5,13 +5,9 @@
 	import Navbar from '$components/core/Navbar.svelte';
 	import ThemeToggle from '$components/core/ThemeToggle.svelte';
 	import ToastOutlet from '$components/core/ToastOutlet.svelte';
-	import FirkinFilesPanel from '$components/firkins/FirkinFilesPanel.svelte';
 	import NavbarAudioPlayer from '$components/player/NavbarAudioPlayer.svelte';
 	import NavbarLyricsPanel from '$components/player/NavbarLyricsPanel.svelte';
 	import NavbarPlaylistPanel from '$components/player/NavbarPlaylistPanel.svelte';
-	import PlayerVideo from '$components/player/PlayerVideo.svelte';
-	import SubsLyricsFinder from '$components/player/SubsLyricsFinder.svelte';
-	import { firkinPlaybackService } from '$services/firkin-playback.service';
 	import { playerService } from '$services/player.service';
 	import { themeService } from '$services/theme.service';
 	import { setBrowserImageCacheResolver } from '$services/image-cache.service';
@@ -26,7 +22,6 @@
 
 	let { children } = $props();
 
-	const playbackState = firkinPlaybackService.state;
 	const playerState = playerService.state;
 	const playerDisplayMode = playerService.displayMode;
 	const identityState = userIdentityService.state;
@@ -116,26 +111,6 @@
 		<div class="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
 			{@render children?.()}
 		</div>
-		<aside
-			class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-base-300 bg-base-200 p-2"
-		>
-			{#if $playbackState.firkin}
-				<FirkinFilesPanel />
-			{/if}
-			{#if $playerDisplayMode === 'sidebar' || $playerDisplayMode === 'fullscreen'}
-				<PlayerVideo
-					file={$playerState.currentFile}
-					connectionState={$playerState.connectionState}
-					positionSecs={$playerState.positionSecs}
-					durationSecs={$playerState.durationSecs}
-					buffering={$playerState.buffering}
-					poster={$playerState.currentFile?.thumbnailUrl}
-					directStreamUrl={$playerState.directStreamUrl}
-					directStreamMimeType={$playerState.directStreamMimeType}
-				/>
-			{/if}
-			<SubsLyricsFinder />
-		</aside>
 	</main>
 </div>
 
