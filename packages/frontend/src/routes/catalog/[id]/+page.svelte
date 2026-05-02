@@ -962,33 +962,33 @@
 	});
 
 	const subsLyricsResolver = new SubsLyricsResolver();
-	const subsLyricsKind = $derived<'subs' | null>(isTmdbMovie || isTmdbTv ? 'subs' : null);
+	// Subtitle search is movie-only for now: TV requires a season/episode
+	// picker, which the catalog detail page doesn't have yet, and the
+	// `tmdb-tv` season-1-episode-1 default produced misleading results.
+	const subsLyricsKind = $derived<'subs' | null>(isTmdbMovie ? 'subs' : null);
 	let subsLyricsInitForFirkinId: string | null = null;
 
 	const subsLyricsSearchTerm = $derived.by<string | null>(() => {
 		if (!subsLyricsKind) return null;
-		const externalId = isTmdbMovie ? tmdbMovieId : tmdbTvId;
-		if (!externalId) {
+		if (!tmdbMovieId) {
 			return `no TMDB id on this firkin (title: ${firkin.title})`;
 		}
-		const kindLabel = isTmdbMovie ? 'movie' : 'tv s1e1 (default)';
-		return `OpenSubtitles v3 ${kindLabel} via TMDB id=${externalId} (title: ${firkin.title})`;
+		return `OpenSubtitles v3 movie via TMDB id=${tmdbMovieId} (title: ${firkin.title})`;
 	});
 
 	function runSubsLyricsSearch() {
 		if (!subsLyricsKind) return;
-		const externalId = isTmdbMovie ? tmdbMovieId : tmdbTvId;
-		if (!externalId) return;
+		if (!tmdbMovieId) return;
 		void subsLyricsResolver.search({
 			addon: firkin.addon,
 			query: firkin.title,
-			externalIds: [externalId]
+			externalIds: [tmdbMovieId]
 		});
 	}
 
 	$effect(() => {
 		if (!subsLyricsKind) return;
-		if (!(isTmdbMovie ? tmdbMovieId : tmdbTvId)) return;
+		if (!tmdbMovieId) return;
 		const fid = firkin.id;
 		if (subsLyricsInitForFirkinId === fid) return;
 		subsLyricsInitForFirkinId = fid;
