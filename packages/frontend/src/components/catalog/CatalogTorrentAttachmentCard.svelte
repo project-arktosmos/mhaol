@@ -276,7 +276,7 @@
 			<div
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 bg-base-300/40 p-3 text-center text-base-content"
 			>
-				{@render downloadHeader(download)}
+				{@render header(download, 'delapouite/cloud-download', 'Download', 'Download mode')}
 				{#if download.finished}
 					<span class="text-[10px] text-success">Seeding · pinning to IPFS…</span>
 				{:else if download.progress != null}
@@ -308,7 +308,7 @@
 				aria-label="Attach this torrent for download"
 				title="Suggested pick from the torrent search — click to attach and start downloading"
 			>
-				{@render downloadHeader(info)}
+				{@render header(info, 'delapouite/cloud-download', 'Download', 'Download mode')}
 				{@render stats(info)}
 				<span class="text-[10px] font-medium text-base-content/70">
 					{attachingDownload ? 'Starting…' : 'Click to attach'}
@@ -318,7 +318,7 @@
 			<div
 				class="flex flex-col items-center gap-1 rounded-md border border-base-content/10 p-3 text-center text-base-content/40"
 			>
-				{@render downloadHeader(null)}
+				{@render header(null, 'delapouite/cloud-download', 'Download', 'Download mode')}
 				<span class="text-[10px] text-base-content/60">Not attached</span>
 			</div>
 		{/if}
