@@ -357,7 +357,7 @@
 			{/if}
 
 			{#if isMusicBrainz}
-				<CatalogTracksCard resolver={trackResolver} {thumb} albumTitle={title} />
+				<CatalogTracksCard resolver={trackResolver} {thumb} albumTitle={title} preview />
 			{:else}
 				<CatalogTorrentSearchCard
 					search={torrentSearch}

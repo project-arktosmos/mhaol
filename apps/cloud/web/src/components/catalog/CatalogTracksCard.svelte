@@ -7,8 +7,13 @@
 		thumb: string | null;
 		albumTitle?: string;
 		onRefresh?: () => void;
+		// Preview mode hides per-track YouTube/lyrics state and disables
+		// playback. Used by `/catalog/virtual` where nothing has been
+		// resolved yet — bookmarking is what kicks off the server-side
+		// per-track YouTube + LRCLIB resolution.
+		preview?: boolean;
 	}
-	let { resolver, thumb, albumTitle, onRefresh }: Props = $props();
+	let { resolver, thumb, albumTitle, onRefresh, preview = false }: Props = $props();
 
 	let expandedLyricsIdx = $state<number | null>(null);
 
@@ -52,9 +57,12 @@
 		<ol class="flex flex-col gap-1">
 			{#each resolver.tracks as track, idx (track.id || `${track.position}-${track.title}`)}
 				{@const playable =
-					(track.youtubeStatus === 'found' || track.youtubeStatus === 'idle') && !!track.youtubeUrl}
+					!preview &&
+					(track.youtubeStatus === 'found' || track.youtubeStatus === 'idle') &&
+					!!track.youtubeUrl}
 				{@const isPlaying = resolver.playingIndex === idx}
-				{@const lyricsExpanded = expandedLyricsIdx === idx && Boolean(track.lyrics)}
+				{@const lyricsExpanded =
+					!preview && expandedLyricsIdx === idx && Boolean(track.lyrics)}
 				{@const lyricsKindLabel = track.lyrics
 					? (track.lyrics.syncedLyrics?.length ?? 0) > 0
 						? 'synced'
@@ -85,42 +93,44 @@
 							<span class="flex-1 truncate">{track.title}</span>
 							<span class="text-base-content/60">{formatDuration(track.lengthMs)}</span>
 						</button>
-						{#if track.youtubeStatus === 'pending'}
-							<span class="badge badge-ghost badge-xs">YT queued</span>
-						{:else if track.youtubeStatus === 'searching'}
-							<span class="badge badge-ghost badge-xs">YT…</span>
-						{:else if playable}
-							{#if isPlaying}
-								<span class="badge badge-xs badge-primary">starting…</span>
-							{:else}
-								<span class="badge badge-xs badge-primary">▶ Play</span>
+						{#if !preview}
+							{#if track.youtubeStatus === 'pending'}
+								<span class="badge badge-ghost badge-xs">YT queued</span>
+							{:else if track.youtubeStatus === 'searching'}
+								<span class="badge badge-ghost badge-xs">YT…</span>
+							{:else if playable}
+								{#if isPlaying}
+									<span class="badge badge-xs badge-primary">starting…</span>
+								{:else}
+									<span class="badge badge-xs badge-primary">▶ Play</span>
+								{/if}
+							{:else if track.youtubeStatus === 'missing'}
+								<span class="badge badge-xs badge-warning">no YT</span>
+							{:else if track.youtubeStatus === 'error'}
+								<span class="badge badge-xs badge-error">YT err</span>
 							{/if}
-						{:else if track.youtubeStatus === 'missing'}
-							<span class="badge badge-xs badge-warning">no YT</span>
-						{:else if track.youtubeStatus === 'error'}
-							<span class="badge badge-xs badge-error">YT err</span>
-						{/if}
 
-						{#if track.lyricsStatus === 'pending'}
-							<span class="badge badge-ghost badge-xs">Lyrics queued</span>
-						{:else if track.lyricsStatus === 'searching'}
-							<span class="badge badge-ghost badge-xs">Lyrics…</span>
-						{:else if track.lyrics}
-							<button
-								type="button"
-								class={classNames('badge badge-xs', {
-									'badge-info': !lyricsExpanded,
-									'badge-primary': lyricsExpanded
-								})}
-								onclick={() => (expandedLyricsIdx = lyricsExpanded ? null : idx)}
-								title={lyricsExpanded ? 'Hide lyrics' : `Show ${lyricsKindLabel} lyrics`}
-							>
-								{lyricsExpanded ? 'hide' : lyricsKindLabel}
-							</button>
-						{:else if track.lyricsStatus === 'missing'}
-							<span class="badge badge-xs badge-warning">no lyrics</span>
-						{:else if track.lyricsStatus === 'error'}
-							<span class="badge badge-xs badge-error">lyrics err</span>
+							{#if track.lyricsStatus === 'pending'}
+								<span class="badge badge-ghost badge-xs">Lyrics queued</span>
+							{:else if track.lyricsStatus === 'searching'}
+								<span class="badge badge-ghost badge-xs">Lyrics…</span>
+							{:else if track.lyrics}
+								<button
+									type="button"
+									class={classNames('badge badge-xs', {
+										'badge-info': !lyricsExpanded,
+										'badge-primary': lyricsExpanded
+									})}
+									onclick={() => (expandedLyricsIdx = lyricsExpanded ? null : idx)}
+									title={lyricsExpanded ? 'Hide lyrics' : `Show ${lyricsKindLabel} lyrics`}
+								>
+									{lyricsExpanded ? 'hide' : lyricsKindLabel}
+								</button>
+							{:else if track.lyricsStatus === 'missing'}
+								<span class="badge badge-xs badge-warning">no lyrics</span>
+							{:else if track.lyricsStatus === 'error'}
+								<span class="badge badge-xs badge-error">lyrics err</span>
+							{/if}
 						{/if}
 					</div>
 

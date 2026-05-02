@@ -88,7 +88,7 @@ Plus the SvelteKit-reserved `$lib` (→ `src/lib/`) and `$app/*` (SvelteKit modu
 - `CatalogDescriptionPanel.svelte` — tabbed panel showing the description (default tab), identity (CID / created / updated / version, detail only), and version history (`version_hashes` chain, detail only). Tabs are only rendered when the corresponding props are supplied — virtual pages get a description-only single-tab layout with no tab strip. When `reviews` is non-empty (TMDB / MusicBrainz user-rating snapshots), the panel also renders a row of compact `label score / maxScore · votes` badges above the tabs — visible on every tab.
 - `CatalogImagesCard.svelte` — images grid with metadata
 - `CatalogTrailersCard.svelte` — trailers list driven by a `TrailerResolver`
-- `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`
+- `CatalogTracksCard.svelte` — MusicBrainz tracks list driven by a `TrackResolver`. `preview={true}` (used by `/catalog/virtual`) hides per-track YouTube/lyrics status badges and disables play, since nothing has been resolved yet — bookmarking is what kicks off the server-side per-track YouTube + LRCLIB resolution
 - `CatalogTorrentSearchCard.svelte` — torrent search results, optional collapsible + per-row streamability eval
 - `CatalogSubsLyricsCard.svelte` — subs/lyrics search results driven by a `SubsLyricsResolver` (auto-fired on detail mount based on the firkin's addon: lyrics for MusicBrainz albums, subtitles for TMDB movies/TV). Read-only — subs/lyrics are not persisted on firkins; clicking a row previews lyrics inline or opens the subtitle URL
 - `CatalogFilesTable.svelte` — firkin `files` table (detail only)
