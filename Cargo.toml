@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "apps/cloud",
     "apps/headless",
+    "apps/android-tv",
+    "apps/android-mobile",
     "packages/backend",
     "packages/identity",
     "packages/yt-dlp",
