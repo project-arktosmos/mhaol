@@ -255,7 +255,7 @@
 				<div
 					class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
 				>
-					<div class="w-full max-w-md">
+					<div class="max-w-full">
 						{@render playOverlay(playByKey)}
 					</div>
 				</div>
