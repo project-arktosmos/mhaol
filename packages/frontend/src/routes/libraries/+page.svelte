@@ -8,6 +8,7 @@
 		LIBRARY_ADDON_LABELS,
 		type LibraryAddon,
 		type ScanResponse,
+		type ScanEntry,
 		type Library
 	} from '$lib/libraries.service';
 	import type { IpfsPin } from '$lib/ipfs.service';
@@ -387,6 +388,78 @@
 			return value;
 		}
 	}
+
+	type ScanGroup =
+		| {
+				kind: 'show';
+				show: string;
+				year?: number;
+				seasons: Array<{ season: number; entries: ScanEntry[] }>;
+		  }
+		| { kind: 'flat'; label: string; entries: ScanEntry[] };
+
+	function groupEntries(entries: ScanEntry[]): ScanGroup[] {
+		const showGroups = new Map<
+			string,
+			{ show: string; year?: number; seasons: Map<number, ScanEntry[]> }
+		>();
+		const movieEntries: ScanEntry[] = [];
+		const otherEntries: ScanEntry[] = [];
+
+		for (const entry of entries) {
+			if (entry.extractedTvQuery) {
+				const key = entry.extractedTvQuery.show.toLowerCase();
+				let group = showGroups.get(key);
+				if (!group) {
+					group = {
+						show: entry.extractedTvQuery.show,
+						year: entry.extractedTvQuery.year,
+						seasons: new Map()
+					};
+					showGroups.set(key, group);
+				}
+				const season = entry.extractedTvQuery.season;
+				let bucket = group.seasons.get(season);
+				if (!bucket) {
+					bucket = [];
+					group.seasons.set(season, bucket);
+				}
+				bucket.push(entry);
+			} else if (entry.extractedQuery) {
+				movieEntries.push(entry);
+			} else {
+				otherEntries.push(entry);
+			}
+		}
+
+		const result: ScanGroup[] = [];
+
+		const sortedShows = [...showGroups.values()].sort((a, b) => a.show.localeCompare(b.show));
+		for (const group of sortedShows) {
+			const seasons = [...group.seasons.entries()]
+				.sort(([a], [b]) => a - b)
+				.map(([season, list]) => ({
+					season,
+					entries: [...list].sort(
+						(a, b) => (a.extractedTvQuery?.episode ?? 0) - (b.extractedTvQuery?.episode ?? 0)
+					)
+				}));
+			result.push({ kind: 'show', show: group.show, year: group.year, seasons });
+		}
+
+		if (movieEntries.length > 0) {
+			movieEntries.sort((a, b) =>
+				(a.extractedQuery?.title ?? '').localeCompare(b.extractedQuery?.title ?? '')
+			);
+			result.push({ kind: 'flat', label: 'Movies', entries: movieEntries });
+		}
+		if (otherEntries.length > 0) {
+			otherEntries.sort((a, b) => a.relative_path.localeCompare(b.relative_path));
+			result.push({ kind: 'flat', label: 'Other', entries: otherEntries });
+		}
+
+		return result;
+	}
 </script>
 
 <svelte:head>
@@ -631,7 +704,7 @@
 															</tr>
 														</thead>
 														<tbody>
-															{#each scanResults[lib.id].entries as entry (entry.path)}
+															{#snippet entryRow(entry: ScanEntry)}
 																{@const cid = cidByPath.get(entry.path)}
 																<tr>
 																	<td class="font-mono text-xs break-all">
@@ -729,6 +802,32 @@
 																			</div>
 																		</td>
 																	</tr>
+																{/if}
+															{/snippet}
+															{#each groupEntries(scanResults[lib.id].entries) as group, gi (gi)}
+																{#if group.kind === 'show'}
+																	<tr class="bg-base-200/60">
+																		<td colspan="9" class="text-sm font-semibold">
+																			{group.show}{group.year ? ` (${group.year})` : ''}
+																		</td>
+																	</tr>
+																	{#each group.seasons as season (season.season)}
+																		<tr class="bg-base-200/30">
+																			<td colspan="9" class="pl-4 text-xs font-medium opacity-80">
+																				Season {String(season.season).padStart(2, '0')}
+																			</td>
+																		</tr>
+																		{#each season.entries as entry (entry.path)}
+																			{@render entryRow(entry)}
+																		{/each}
+																	{/each}
+																{:else}
+																	<tr class="bg-base-200/60">
+																		<td colspan="9" class="text-sm font-semibold">{group.label}</td>
+																	</tr>
+																	{#each group.entries as entry (entry.path)}
+																		{@render entryRow(entry)}
+																	{/each}
 																{/if}
 															{/each}
 														</tbody>
