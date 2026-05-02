@@ -131,12 +131,18 @@ export function matchSubsToTorrent(
 		out.push({ sub, score, overlap, groupMatched });
 	}
 
+	const LANGUAGE_PRIORITY: Record<string, number> = {
+		English: 0,
+		Catalan: 1,
+		Spanish: 2
+	};
 	out.sort((a, b) => {
 		if (b.score !== a.score) return b.score - a.score;
 		const al = a.sub.display ?? a.sub.language ?? '';
 		const bl = b.sub.display ?? b.sub.language ?? '';
-		if (al === 'English' && bl !== 'English') return -1;
-		if (bl === 'English' && al !== 'English') return 1;
+		const ar = LANGUAGE_PRIORITY[al] ?? 99;
+		const br = LANGUAGE_PRIORITY[bl] ?? 99;
+		if (ar !== br) return ar - br;
 		return al.localeCompare(bl);
 	});
 	return out;

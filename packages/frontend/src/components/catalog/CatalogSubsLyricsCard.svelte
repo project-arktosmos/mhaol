@@ -44,27 +44,23 @@
 	}
 
 	// Sort subtitle results so all rows for the same language are
-	// adjacent. English first when present, then by group size desc, then
-	// alphabetical. Within a language the original order is preserved.
+	// adjacent. The backend filters down to English / Catalan / Spanish;
+	// here we just enforce the user's preference order. Within a language
+	// the original order is preserved.
+	const LANGUAGE_PRIORITY: Record<string, number> = {
+		English: 0,
+		Catalan: 1,
+		Spanish: 2
+	};
 	const sortedSubs = $derived.by<SubsLyricsItem[]>(() => {
 		if (kind !== 'subs') return [];
-		const counts = new Map<string, number>();
-		for (const item of resolver.results) {
-			const key = languageLabel(item);
-			counts.set(key, (counts.get(key) ?? 0) + 1);
-		}
-		const rank = (label: string): [number, number, string] => {
-			if (label === 'English') return [0, 0, label];
-			return [1, -(counts.get(label) ?? 0), label];
-		};
 		return resolver.results
 			.map((item, idx) => ({ item, idx, key: languageLabel(item) }))
 			.sort((a, b) => {
-				const ra = rank(a.key);
-				const rb = rank(b.key);
-				if (ra[0] !== rb[0]) return ra[0] - rb[0];
-				if (ra[1] !== rb[1]) return ra[1] - rb[1];
-				if (ra[2] !== rb[2]) return ra[2].localeCompare(rb[2]);
+				const ra = LANGUAGE_PRIORITY[a.key] ?? 99;
+				const rb = LANGUAGE_PRIORITY[b.key] ?? 99;
+				if (ra !== rb) return ra - rb;
+				if (a.key !== b.key) return a.key.localeCompare(b.key);
 				return a.idx - b.idx;
 			})
 			.map((entry) => entry.item);

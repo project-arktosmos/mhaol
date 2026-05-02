@@ -916,6 +916,7 @@ fn language_display(lang: &str) -> Option<&'static str> {
     Some(match lang {
         "eng" => "English",
         "spa" => "Spanish",
+        "cat" => "Catalan",
         "por" => "Portuguese",
         "pob" => "Portuguese (Brazil)",
         "fre" | "fra" => "French",
@@ -1013,6 +1014,12 @@ async fn search_stremio_opensubs(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            // Restrict to the three languages the user actually consumes.
+            // Filtering server-side avoids spending HEAD requests (and
+            // payload size) on subs that the UI would never render.
+            if !matches!(lang.as_str(), "eng" | "cat" | "spa") {
+                continue;
+            }
             let url_str = item
                 .get("url")
                 .and_then(|v| v.as_str())
