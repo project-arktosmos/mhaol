@@ -10,16 +10,12 @@
 
 #![cfg(not(target_os = "android"))]
 
-use crate::firkins::{
-    rollforward_firkin, FileEntry, Firkin, TABLE as FIRKIN_TABLE,
-};
+use crate::firkins::{rollforward_firkin, FileEntry, Firkin, TABLE as FIRKIN_TABLE};
 use crate::ipfs_pins;
 use crate::state::CloudState;
 use crate::track_resolve;
 use chrono::{DateTime, Utc};
-use mhaol_yt_dlp::{
-    AudioFormat, AudioQuality, DownloadMode, DownloadState, QueueDownloadRequest,
-};
+use mhaol_yt_dlp::{AudioFormat, AudioQuality, DownloadMode, DownloadState, QueueDownloadRequest};
 use parking_lot::RwLock;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -136,7 +132,9 @@ async fn download_album(state: &CloudState, id: &str) -> Result<(), String> {
         .iter()
         .filter(|f| f.kind == "url")
         .find_map(|f| extract_mb_release_group_id(&f.value))
-        .ok_or_else(|| "firkin is missing a MusicBrainz release-group url in `files`".to_string())?;
+        .ok_or_else(|| {
+            "firkin is missing a MusicBrainz release-group url in `files`".to_string()
+        })?;
 
     let tracks = track_resolve::fetch_release_group_tracks(&release_group_id)
         .await
@@ -378,6 +376,11 @@ async fn append_ipfs_entry(
     track_title: &str,
     cid: &str,
 ) -> Result<(), String> {
+    // Hold the per-firkin lock across read-modify-write so a concurrent
+    // mutation (subtitle attach, magnet pick, manual `PUT /api/firkins/:id`)
+    // can't slip in between the load and the rollforward and have its
+    // change silently overwritten.
+    let _firkin_guard = state.firkin_lock(id).lock_owned().await;
     let mut current = load_firkin(state, id).await?;
 
     let already = current.files.iter().any(|f| {
@@ -399,13 +402,15 @@ async fn append_ipfs_entry(
     current.updated_at = Utc::now();
     current.id = None;
 
-    rollforward_firkin(state, id, current).await.map_err(|(s, j)| {
-        let msg = j
-            .get("error")
-            .and_then(|v| v.as_str())
-            .unwrap_or("rollforward failed");
-        format!("{}: {}", s, msg)
-    })?;
+    rollforward_firkin(state, id, current)
+        .await
+        .map_err(|(s, j)| {
+            let msg = j
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("rollforward failed");
+            format!("{}: {}", s, msg)
+        })?;
     Ok(())
 }
 
@@ -421,13 +426,11 @@ async fn wait_for_download(
         let Some(progress) = progress else {
             return (None, Some("download record disappeared".to_string()));
         };
-        state
-            .album_download_progress
-            .update(firkin_id, |p| {
-                if let Some(t) = p.tracks.get_mut(track_idx) {
-                    t.progress = progress.progress;
-                }
-            });
+        state.album_download_progress.update(firkin_id, |p| {
+            if let Some(t) = p.tracks.get_mut(track_idx) {
+                t.progress = progress.progress;
+            }
+        });
         match progress.state {
             DownloadState::Completed => {
                 let path = progress
@@ -437,7 +440,14 @@ async fn wait_for_download(
                 return (path, None);
             }
             DownloadState::Failed => {
-                return (None, Some(progress.error.unwrap_or_else(|| "download failed".to_string())));
+                return (
+                    None,
+                    Some(
+                        progress
+                            .error
+                            .unwrap_or_else(|| "download failed".to_string()),
+                    ),
+                );
             }
             DownloadState::Cancelled => {
                 return (None, Some("download cancelled".to_string()));
@@ -478,11 +488,7 @@ fn is_youtube_url(value: &str) -> bool {
     };
     matches!(
         host.as_str(),
-        "www.youtube.com"
-            | "youtube.com"
-            | "m.youtube.com"
-            | "music.youtube.com"
-            | "youtu.be"
+        "www.youtube.com" | "youtube.com" | "m.youtube.com" | "music.youtube.com" | "youtu.be"
     )
 }
 

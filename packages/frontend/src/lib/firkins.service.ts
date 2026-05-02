@@ -321,6 +321,43 @@ class FirkinsService {
 			firkins: s.firkins.filter((d) => d.id !== id)
 		}));
 	}
+
+	/// Granular files mutation. Always prefer this over a `PUT` with a
+	/// full `files` array — the server reads the current state under the
+	/// per-firkin async lock, removes matching entries, appends the new
+	/// ones, and rolls forward, so two concurrent callers never lose
+	/// each other's writes. The legacy `PUT /api/firkins/:id` with a
+	/// `files` field replaces wholesale from a *client* snapshot, which
+	/// is racy: the catalog detail page used to drop a freshly-attached
+	/// `torrent magnet` whenever the trailer resolver's
+	/// `youtube preferred client` write landed in the same window.
+	async mutateFiles(
+		id: string,
+		patch: {
+			add?: FileEntry[];
+			removeTypes?: FileType[];
+			removeEntries?: { type: FileType; value: string }[];
+		}
+	): Promise<Firkin> {
+		const body = {
+			add: patch.add ?? [],
+			removeTypes: patch.removeTypes ?? [],
+			removeEntries: patch.removeEntries ?? []
+		};
+		const res = await fetch(`/api/firkins/${encodeURIComponent(id)}/files`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(body)
+		});
+		if (!res.ok) throw new Error(await parseError(res));
+		const updated = (await res.json()) as Firkin;
+		this.state.update((s) => {
+			const next = s.firkins.filter((d) => d.id !== id && d.id !== updated.id);
+			next.push(updated);
+			return { ...s, firkins: next };
+		});
+		return updated;
+	}
 }
 
 export const firkinsService = new FirkinsService();

@@ -335,8 +335,8 @@ pub fn compute_firkin_cid(
         reviews,
     );
     let digest = Sha256::digest(json.as_bytes());
-    let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
-        .expect("sha2-256 digest fits in multihash");
+    let mh =
+        Multihash::<64>::wrap(SHA2_256_CODE, &digest).expect("sha2-256 digest fits in multihash");
     Cid::new_v1(RAW_CODEC, mh).to_string()
 }
 
@@ -446,11 +446,7 @@ pub struct FirkinDto {
 
 impl FirkinDto {
     fn from_doc_with_artists(doc: Firkin, artists: Vec<ArtistDto>) -> Self {
-        let id = doc
-            .id
-            .as_ref()
-            .map(|t| t.id.to_raw())
-            .unwrap_or_default();
+        let id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
         // Records created before the schema split carry the CID *as* the
         // record id and have an empty `cid` field. Fall back to the id so
         // callers always see the content-address.
@@ -542,6 +538,43 @@ pub struct UpdateFirkinRequest {
     pub bookmarked: Option<bool>,
 }
 
+/// Body for `POST /api/firkins/:id/files`. Granular files mutation that
+/// removes matching entries before appending new ones, with the entire
+/// read-modify-write happening under the per-firkin async lock so
+/// concurrent callers never lose each other's writes. **Always prefer
+/// this endpoint over `PUT /api/firkins/:id` with a `files` field** —
+/// the PUT path replaces `files` wholesale from a client snapshot, so
+/// two concurrent PUTs (or a PUT racing a different write) reliably
+/// drop one of the writes. The granular endpoint reads the current
+/// state from the DB under the lock, applies the patch, and writes
+/// back, so concurrent callers serialise correctly.
+#[derive(Debug, Deserialize)]
+pub struct MutateFilesRequest {
+    /// File `kind` values to drop entirely from `files` before
+    /// appending. Use this for "replace the singular X" patterns —
+    /// e.g. when persisting the cached `youtube preferred client`,
+    /// pass `removeTypes: ["youtube preferred client"]` plus a single
+    /// `add` entry, and the prior cached client (if any) is dropped
+    /// before the new one lands.
+    #[serde(default, rename = "removeTypes")]
+    pub remove_types: Vec<String>,
+    /// Specific `(kind, value)` entries to drop from `files` before
+    /// appending. Matches by exact (trimmed) `kind` + `value` pair.
+    #[serde(default, rename = "removeEntries")]
+    pub remove_entries: Vec<RemoveFileEntry>,
+    /// Entries to append after the removals. Validated against
+    /// `ALLOWED_FILE_TYPES` like the `PUT` and `POST` paths.
+    #[serde(default)]
+    pub add: Vec<FileEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RemoveFileEntry {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub value: String,
+}
+
 /// Request body for `POST /api/firkins/:id/enrich`. Carries the metadata
 /// fields we typically pull from a catalog API match (title, year,
 /// description, poster + backdrop URLs). Only present fields are applied;
@@ -561,6 +594,7 @@ pub fn router() -> Router<CloudState> {
     let r = Router::new()
         .route("/", get(list).post(create))
         .route("/{id}", put(update).delete(delete).get(get_one))
+        .route("/{id}/files", post(mutate_files))
         .route("/{id}/finalize", post(finalize))
         .route("/{id}/enrich", post(enrich))
         .route("/{id}/roms", post(roms));
@@ -578,10 +612,7 @@ fn err_response(
     status: StatusCode,
     message: impl Into<String>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    (
-        status,
-        Json(serde_json::json!({ "error": message.into() })),
-    )
+    (status, Json(serde_json::json!({ "error": message.into() })))
 }
 
 /// Materialise inline artist requests into stable artist CIDs. Each
@@ -618,7 +649,12 @@ async fn assemble_firkin_dto(
 ) -> Result<FirkinDto, (StatusCode, Json<serde_json::Value>)> {
     let artists = artists::fetch_many(state, &doc.artists)
         .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("artist fetch failed: {e}")))?;
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("artist fetch failed: {e}"),
+            )
+        })?;
     Ok(FirkinDto::from_doc_with_artists(doc, artists))
 }
 
@@ -637,13 +673,14 @@ pub(crate) async fn assemble_firkin_dtos(
             }
         }
     }
-    let resolved = artists::fetch_many(state, &unique_ids)
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("artist fetch failed: {e}")))?;
-    let by_id: std::collections::HashMap<String, ArtistDto> = resolved
-        .into_iter()
-        .map(|d| (d.id.clone(), d))
-        .collect();
+    let resolved = artists::fetch_many(state, &unique_ids).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("artist fetch failed: {e}"),
+        )
+    })?;
+    let by_id: std::collections::HashMap<String, ArtistDto> =
+        resolved.into_iter().map(|d| (d.id.clone(), d)).collect();
     let mut out: Vec<FirkinDto> = Vec::with_capacity(docs.len());
     for doc in docs {
         let artists: Vec<ArtistDto> = doc
@@ -655,7 +692,6 @@ pub(crate) async fn assemble_firkin_dtos(
     }
     Ok(out)
 }
-
 
 #[derive(Debug, serde::Deserialize, Default)]
 struct ListFirkinsQuery {
@@ -672,11 +708,12 @@ async fn list(
     State(state): State<CloudState>,
     axum::extract::Query(query): axum::extract::Query<ListFirkinsQuery>,
 ) -> Result<Json<Vec<FirkinDto>>, (StatusCode, Json<serde_json::Value>)> {
-    let docs: Vec<Firkin> = state
-        .db
-        .select(TABLE)
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let docs: Vec<Firkin> = state.db.select(TABLE).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
 
     let include_all = query.include.as_deref() == Some("all");
     let docs: Vec<Firkin> = if include_all {
@@ -721,11 +758,12 @@ async fn get_one(
     State(state): State<CloudState>,
     Path(id): Path<String>,
 ) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
-    let doc: Option<Firkin> = state
-        .db
-        .select((TABLE, id.as_str()))
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let doc: Option<Firkin> = state.db.select((TABLE, id.as_str())).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
     match doc {
         Some(d) => Ok(Json(assemble_firkin_dto(&state, d).await?)),
         None => Err(err_response(StatusCode::NOT_FOUND, "firkin not found")),
@@ -753,12 +791,7 @@ pub(crate) async fn create_firkin_record(
     if title.is_empty() {
         return Err(err_response(StatusCode::BAD_REQUEST, "title is required"));
     }
-    let description = req
-        .description
-        .as_deref()
-        .unwrap_or("")
-        .trim()
-        .to_string();
+    let description = req.description.as_deref().unwrap_or("").trim().to_string();
     let addon = req.addon.trim();
     if addon.is_empty() {
         return Err(err_response(StatusCode::BAD_REQUEST, "addon is required"));
@@ -879,12 +912,38 @@ pub(crate) async fn create_firkin_record(
     // `bookmarked` flag in place (no version roll — the flag is not part
     // of the body) and kick off album resolution if it wasn't bookmarked
     // before.
-    if let Some(mut existing) = find_by_cid(&state, &body_cid).await? {
-        let existing_id = existing
+    if let Some(existing_pre) = find_by_cid(&state, &body_cid).await? {
+        let existing_id = existing_pre
             .id
             .as_ref()
             .map(|t| t.id.to_raw())
             .unwrap_or_default();
+        // Take the per-firkin lock before the read-modify-write so a
+        // concurrent mutation on the same record (e.g. user clicks
+        // Bookmark in another tab while a `/catalog/visit` POST is in
+        // flight) can't interleave with our update and lose data.
+        let _firkin_guard = if existing_id.is_empty() {
+            None
+        } else {
+            Some(state.firkin_lock(&existing_id).lock_owned().await)
+        };
+        // Re-read under the lock so we observe any mutation that
+        // landed between the dedup lookup and acquiring the lock.
+        let mut existing: Firkin = if existing_id.is_empty() {
+            existing_pre
+        } else {
+            state
+                .db
+                .select((TABLE, existing_id.as_str()))
+                .await
+                .map_err(|e| {
+                    err_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("db select failed: {e}"),
+                    )
+                })?
+                .unwrap_or(existing_pre)
+        };
         let upgraded = bookmarked && !existing.bookmarked;
         if upgraded {
             existing.bookmarked = true;
@@ -902,9 +961,13 @@ pub(crate) async fn create_firkin_record(
                     )
                 })?;
             existing = updated_doc.ok_or_else(|| {
-                err_response(StatusCode::INTERNAL_SERVER_ERROR, "firkin update returned no row")
+                err_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "firkin update returned no row",
+                )
             })?;
         }
+        drop(_firkin_guard);
         #[cfg(not(target_os = "android"))]
         if existing.addon == "musicbrainz"
             && !existing_id.is_empty()
@@ -947,10 +1010,19 @@ pub(crate) async fn create_firkin_record(
         .create((TABLE, new_id.as_str()))
         .content(record)
         .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db create failed: {e}")))?;
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db create failed: {e}"),
+            )
+        })?;
 
-    let created_doc = created
-        .ok_or_else(|| err_response(StatusCode::INTERNAL_SERVER_ERROR, "firkin was not persisted"))?;
+    let created_doc = created.ok_or_else(|| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "firkin was not persisted",
+        )
+    })?;
     let dto = FirkinDto::from_doc_with_artists(created_doc, artist_dtos);
 
     pin_firkin_body(state, &new_id, body_json).await;
@@ -973,8 +1045,8 @@ pub(crate) async fn create_firkin_record(
 
 pub(crate) fn compute_body_cid(body_json: &str) -> String {
     let digest = Sha256::digest(body_json.as_bytes());
-    let mh = Multihash::<64>::wrap(SHA2_256_CODE, &digest)
-        .expect("sha2-256 digest fits in multihash");
+    let mh =
+        Multihash::<64>::wrap(SHA2_256_CODE, &digest).expect("sha2-256 digest fits in multihash");
     Cid::new_v1(RAW_CODEC, mh).to_string()
 }
 
@@ -1053,17 +1125,21 @@ async fn update(
     // `files`, and the later writer would silently clobber the earlier
     // one. See `state::FirkinLockMap` for the canonical write-up.
     let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
-    let existing: Option<Firkin> = state
-        .db
-        .select((TABLE, id.as_str()))
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
-    let mut current = existing
-        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+    let existing: Option<Firkin> = state.db.select((TABLE, id.as_str())).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
+    let mut current =
+        existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
 
     if let Some(title) = req.title.as_ref().map(|t| t.trim()) {
         if title.is_empty() {
-            return Err(err_response(StatusCode::BAD_REQUEST, "title cannot be empty"));
+            return Err(err_response(
+                StatusCode::BAD_REQUEST,
+                "title cannot be empty",
+            ));
         }
         current.title = title.to_string();
     }
@@ -1128,7 +1204,10 @@ async fn update(
 
     if let Some(addon) = req.addon.as_ref().map(|a| a.trim()) {
         if addon.is_empty() {
-            return Err(err_response(StatusCode::BAD_REQUEST, "addon cannot be empty"));
+            return Err(err_response(
+                StatusCode::BAD_REQUEST,
+                "addon cannot be empty",
+            ));
         }
         if !is_known_addon(addon) {
             return Err(err_response(
@@ -1196,6 +1275,90 @@ async fn update(
     Ok(Json(assemble_firkin_dto(&state, updated_doc).await?))
 }
 
+/// `POST /api/firkins/:id/files` — granular files mutation. The handler
+/// holds the per-firkin async lock for the entire read-modify-write so
+/// concurrent callers (e.g. the catalog detail page persisting a
+/// freshly-resolved trailer's preferred client cache while the user
+/// picks a torrent in another card) **cannot** lose each other's
+/// writes. This is the canonical fix for the "torrent magnet vanished
+/// from the firkin" class of bugs — the legacy `PUT /api/firkins/:id`
+/// path replaces `files` wholesale from a client snapshot, so two
+/// concurrent PUTs always drop one of the writes.
+async fn mutate_files(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+    Json(req): Json<MutateFilesRequest>,
+) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
+    let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
+
+    let existing: Option<Firkin> = state.db.select((TABLE, id.as_str())).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
+    let mut current =
+        existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+
+    // Validate adds before mutating anything so a bad request can't
+    // half-apply.
+    let mut adds: Vec<FileEntry> = Vec::with_capacity(req.add.len());
+    for f in req.add.into_iter() {
+        let value = f.value.trim().to_string();
+        let title = f
+            .title
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
+        if value.is_empty() && title.is_none() {
+            continue;
+        }
+        let kind = f.kind.trim();
+        if !ALLOWED_FILE_TYPES.contains(&kind) {
+            return Err(err_response(
+                StatusCode::BAD_REQUEST,
+                format!("invalid file type: {kind}"),
+            ));
+        }
+        adds.push(FileEntry {
+            kind: kind.to_string(),
+            value,
+            title,
+        });
+    }
+
+    let remove_types: Vec<&str> = req
+        .remove_types
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let remove_entries: Vec<(String, String)> = req
+        .remove_entries
+        .into_iter()
+        .map(|e| (e.kind.trim().to_string(), e.value.trim().to_string()))
+        .filter(|(k, _)| !k.is_empty())
+        .collect();
+
+    let mut next: Vec<FileEntry> = Vec::with_capacity(current.files.len() + adds.len());
+    for f in current.files.into_iter() {
+        let drop_by_type = remove_types.iter().any(|t| *t == f.kind);
+        let drop_by_entry = remove_entries
+            .iter()
+            .any(|(k, v)| k == &f.kind && v == &f.value);
+        if drop_by_type || drop_by_entry {
+            continue;
+        }
+        next.push(f);
+    }
+    next.extend(adds);
+    current.files = next;
+    current.updated_at = Utc::now();
+    current.id = None;
+
+    let updated = rollforward_firkin(&state, &id, current).await?;
+    Ok(Json(assemble_firkin_dto(&state, updated).await?))
+}
+
 /// Apply a mutated firkin to the store, in place. Recomputes the body
 /// CID; when the mutation changes a body-affecting field, increments
 /// `version`, appends the prior CID to `version_hashes`, updates the
@@ -1214,16 +1377,12 @@ pub(crate) async fn rollforward_firkin(
     // Look up the prior record so we can read its cid field for the
     // version_hashes append. Falls back to the id itself for legacy
     // records where the record id was the CID and the cid field is empty.
-    let prior: Option<Firkin> = state
-        .db
-        .select((TABLE, id))
-        .await
-        .map_err(|e| {
-            err_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("db select failed: {e}"),
-            )
-        })?;
+    let prior: Option<Firkin> = state.db.select((TABLE, id)).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
     let prior = prior.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
     let prior_cid = if prior.cid.is_empty() {
         id.to_string()
@@ -1314,11 +1473,12 @@ async fn delete(
     State(state): State<CloudState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    let removed: Option<Firkin> = state
-        .db
-        .delete((TABLE, id.as_str()))
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db delete failed: {e}")))?;
+    let removed: Option<Firkin> = state.db.delete((TABLE, id.as_str())).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db delete failed: {e}"),
+        )
+    })?;
     match removed {
         Some(_) => Ok(StatusCode::NO_CONTENT),
         None => Err(err_response(StatusCode::NOT_FOUND, "firkin not found")),
@@ -1345,12 +1505,18 @@ async fn finalize(
                 format!("finalize failed: {e}"),
             )
         })?;
-    let latest_id = latest_id.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+    let latest_id =
+        latest_id.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
     let doc: Option<Firkin> = state
         .db
         .select((TABLE, latest_id.as_str()))
         .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+        .map_err(|e| {
+            err_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("db select failed: {e}"),
+            )
+        })?;
     match doc {
         Some(d) => Ok(Json(assemble_firkin_dto(&state, d).await?)),
         None => Err(err_response(StatusCode::NOT_FOUND, "firkin not found")),
@@ -1381,13 +1547,14 @@ async fn enrich(
     Json(req): Json<EnrichFirkinRequest>,
 ) -> Result<Json<FirkinDto>, (StatusCode, Json<serde_json::Value>)> {
     let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
-    let existing: Option<Firkin> = state
-        .db
-        .select((TABLE, id.as_str()))
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
-    let mut current = existing
-        .ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+    let existing: Option<Firkin> = state.db.select((TABLE, id.as_str())).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
+    let mut current =
+        existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
 
     if let Some(title) = req.title.as_ref().map(|t| t.trim()) {
         if !title.is_empty() {
@@ -1559,25 +1726,28 @@ async fn attach_subtitle(
     }
     let language = req.language.trim().to_string();
     if language.is_empty() {
-        return Err(err_response(StatusCode::BAD_REQUEST, "language is required"));
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "language is required",
+        ));
     }
     let external_id = req.external_id.trim().to_string();
     if external_id.is_empty() {
-        return Err(err_response(StatusCode::BAD_REQUEST, "externalId is required"));
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "externalId is required",
+        ));
     }
 
     let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
-    let existing: Option<Firkin> = state
-        .db
-        .select((TABLE, id.as_str()))
-        .await
-        .map_err(|e| {
-            err_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("db select failed: {e}"),
-            )
-        })?;
-    let mut current = existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+    let existing: Option<Firkin> = state.db.select((TABLE, id.as_str())).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
+    let mut current =
+        existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
 
     // Pull the SRT (or VTT) bytes from the upstream subtitle host.
     // OpenSubtitles serves through Cloudflare and typically redirects, so
@@ -1599,17 +1769,24 @@ async fn attach_subtitle(
         .timeout(std::time::Duration::from_secs(20))
         .send()
         .await
-        .map_err(|e| err_response(StatusCode::BAD_GATEWAY, format!("subtitle fetch failed: {e}")))?;
+        .map_err(|e| {
+            err_response(
+                StatusCode::BAD_GATEWAY,
+                format!("subtitle fetch failed: {e}"),
+            )
+        })?;
     if !res.status().is_success() {
         return Err(err_response(
             StatusCode::BAD_GATEWAY,
             format!("subtitle fetch returned {}", res.status()),
         ));
     }
-    let bytes = res
-        .bytes()
-        .await
-        .map_err(|e| err_response(StatusCode::BAD_GATEWAY, format!("subtitle read failed: {e}")))?;
+    let bytes = res.bytes().await.map_err(|e| {
+        err_response(
+            StatusCode::BAD_GATEWAY,
+            format!("subtitle read failed: {e}"),
+        )
+    })?;
     if bytes.len() > 1_048_576 {
         return Err(err_response(
             StatusCode::PAYLOAD_TOO_LARGE,
@@ -1617,7 +1794,10 @@ async fn attach_subtitle(
         ));
     }
     let raw_text = String::from_utf8_lossy(&bytes).into_owned();
-    let vtt = if raw_text.trim_start_matches('\u{FEFF}').starts_with("WEBVTT") {
+    let vtt = if raw_text
+        .trim_start_matches('\u{FEFF}')
+        .starts_with("WEBVTT")
+    {
         raw_text
     } else {
         srt_to_vtt(&raw_text)
@@ -1657,14 +1837,9 @@ async fn attach_subtitle(
         ));
     }
     let pin_path = on_disk.to_string_lossy().into_owned();
-    if let Err(e) = crate::ipfs_pins::record_pin(
-        &state,
-        cid.clone(),
-        pin_path,
-        "text/vtt".to_string(),
-        size,
-    )
-    .await
+    if let Err(e) =
+        crate::ipfs_pins::record_pin(&state, cid.clone(), pin_path, "text/vtt".to_string(), size)
+            .await
     {
         tracing::warn!("[firkins] failed to record subtitle pin row for {id}: {e}");
     }
@@ -1706,10 +1881,7 @@ async fn attach_subtitle(
     let key_marker = format!("\"externalId\":\"{external_id}\"");
     let mut next_files: Vec<FileEntry> = Vec::with_capacity(current.files.len() + 1);
     for f in current.files.into_iter() {
-        if f.kind == "subtitle"
-            && f.value.contains(&lang_marker)
-            && f.value.contains(&key_marker)
-        {
+        if f.kind == "subtitle" && f.value.contains(&lang_marker) && f.value.contains(&key_marker) {
             continue;
         }
         next_files.push(f);
@@ -1727,7 +1899,6 @@ async fn attach_subtitle(
     let updated_doc = rollforward_firkin(&state, &id, current).await?;
     Ok(Json(assemble_firkin_dto(&state, updated_doc).await?))
 }
-
 
 #[cfg(not(target_os = "android"))]
 async fn resolve_tracks(
@@ -1758,18 +1929,16 @@ pub(crate) async fn resolve_album_tracks(
     state: &CloudState,
     id: &str,
 ) -> Result<Firkin, (StatusCode, String)> {
-    use crate::track_progress::{
-        AlbumProgress, LyricsProgress, TrackProgressEntry, TrackStatus,
-    };
+    use crate::track_progress::{AlbumProgress, LyricsProgress, TrackProgressEntry, TrackStatus};
     use crate::track_resolve;
 
-    let existing: Option<Firkin> = state
-        .db
-        .select((TABLE, id))
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
-    let mut current = existing
-        .ok_or((StatusCode::NOT_FOUND, "firkin not found".to_string()))?;
+    let existing: Option<Firkin> = state.db.select((TABLE, id)).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
+    let current = existing.ok_or((StatusCode::NOT_FOUND, "firkin not found".to_string()))?;
 
     if current.addon != "musicbrainz" {
         return Err((
@@ -1834,7 +2003,9 @@ pub(crate) async fn resolve_album_tracks(
                             .unwrap_or(false)
                 })
                 .map(|f| f.value.clone());
-            let lyrics = existing_lyrics_value.as_deref().and_then(decode_lyrics_value);
+            let lyrics = existing_lyrics_value
+                .as_deref()
+                .and_then(decode_lyrics_value);
             TrackProgressEntry {
                 position: t.position,
                 title: t.title.clone(),
@@ -1924,13 +2095,9 @@ pub(crate) async fn resolve_album_tracks(
             }
         });
 
-        let (yt_url, lyrics_hit) = track_resolve::resolve_track(
-            track_title,
-            &artist_query,
-            &album_title,
-            track.length_ms,
-        )
-        .await;
+        let (yt_url, lyrics_hit) =
+            track_resolve::resolve_track(track_title, &artist_query, &album_title, track.length_ms)
+                .await;
 
         // Snapshot the resolved bits for the progress map *before* we
         // move them into the firkin's `files` (those moves consume the
@@ -2021,24 +2188,22 @@ pub(crate) async fn resolve_album_tracks(
     let snapshot_files = current.files.clone();
     let mut additions: Vec<FileEntry> = Vec::new();
     for entry in new_files.into_iter() {
-        let already = snapshot_files.iter().any(|f| {
-            f.kind == entry.kind
-                && f.title == entry.title
-                && f.value == entry.value
-        });
+        let already = snapshot_files
+            .iter()
+            .any(|f| f.kind == entry.kind && f.title == entry.title && f.value == entry.value);
         if !already {
             additions.push(entry);
         }
     }
 
     let _firkin_guard = state.firkin_lock(id).lock_owned().await;
-    let fresh: Option<Firkin> = state
-        .db
-        .select((TABLE, id))
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
-    let mut fresh = fresh
-        .ok_or((StatusCode::NOT_FOUND, "firkin not found".to_string()))?;
+    let fresh: Option<Firkin> = state.db.select((TABLE, id)).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
+    let mut fresh = fresh.ok_or((StatusCode::NOT_FOUND, "firkin not found".to_string()))?;
     let mut merged_files = fresh.files.clone();
     for addition in additions {
         merged_files = track_resolve::upsert_track_file(merged_files, addition);
@@ -2113,7 +2278,10 @@ async fn resolution_progress(
 ) -> Result<Json<crate::track_progress::AlbumProgress>, (StatusCode, Json<serde_json::Value>)> {
     match state.track_progress.get(&id) {
         Some(p) => Ok(Json(p)),
-        None => Err(err_response(StatusCode::NOT_FOUND, "no resolution in progress")),
+        None => Err(err_response(
+            StatusCode::NOT_FOUND,
+            "no resolution in progress",
+        )),
     }
 }
 
@@ -2122,14 +2290,18 @@ async fn download_album(
     State(state): State<CloudState>,
     Path(id): Path<String>,
 ) -> Result<
-    (StatusCode, Json<crate::album_download::AlbumDownloadProgress>),
+    (
+        StatusCode,
+        Json<crate::album_download::AlbumDownloadProgress>,
+    ),
     (StatusCode, Json<serde_json::Value>),
 > {
-    let existing: Option<Firkin> = state
-        .db
-        .select((TABLE, id.as_str()))
-        .await
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let existing: Option<Firkin> = state.db.select((TABLE, id.as_str())).await.map_err(|e| {
+        err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db select failed: {e}"),
+        )
+    })?;
     let firkin = existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
     if firkin.addon != "musicbrainz" {
         return Err(err_response(
@@ -2138,17 +2310,16 @@ async fn download_album(
         ));
     }
     crate::album_download::spawn_download_album(state.clone(), id.clone());
-    let progress = state
-        .album_download_progress
-        .get(&id)
-        .unwrap_or_else(|| crate::album_download::AlbumDownloadProgress {
+    let progress = state.album_download_progress.get(&id).unwrap_or_else(|| {
+        crate::album_download::AlbumDownloadProgress {
             firkin_id: id.clone(),
             started_at: Utc::now(),
             updated_at: Utc::now(),
             completed: false,
             error: None,
             tracks: Vec::new(),
-        });
+        }
+    });
     Ok((StatusCode::ACCEPTED, Json(progress)))
 }
 
@@ -2156,10 +2327,14 @@ async fn download_album(
 async fn download_progress(
     State(state): State<CloudState>,
     Path(id): Path<String>,
-) -> Result<Json<crate::album_download::AlbumDownloadProgress>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<crate::album_download::AlbumDownloadProgress>, (StatusCode, Json<serde_json::Value>)>
+{
     match state.album_download_progress.get(&id) {
         Some(p) => Ok(Json(p)),
-        None => Err(err_response(StatusCode::NOT_FOUND, "no download in progress")),
+        None => Err(err_response(
+            StatusCode::NOT_FOUND,
+            "no download in progress",
+        )),
     }
 }
 
@@ -2220,17 +2395,16 @@ fn extract_mb_release_group_id(value: &str) -> Option<String> {
 }
 
 fn is_youtube_url(value: &str) -> bool {
-    let host = match url::Url::parse(value).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase)) {
+    let host = match url::Url::parse(value)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_ascii_lowercase))
+    {
         Some(h) => h,
         None => return false,
     };
     matches!(
         host.as_str(),
-        "www.youtube.com"
-            | "youtube.com"
-            | "m.youtube.com"
-            | "music.youtube.com"
-            | "youtu.be"
+        "www.youtube.com" | "youtube.com" | "m.youtube.com" | "music.youtube.com" | "youtu.be"
     )
 }
 
@@ -2270,11 +2444,9 @@ mod tests {
         let bookmark = doc("bookmark-cid", "X-Men", "tmdb-movie", 0, &[]);
         let scan_v0 = doc("scan-v0", "X-Men", "tmdb-movie", 0, &[]);
         let scan_v1 = doc("scan-v1", "X-Men", "tmdb-movie", 1, &["scan-v0"]);
-        let scan_head =
-            doc("scan-v2", "X-Men", "tmdb-movie", 2, &["scan-v0", "scan-v1"]);
+        let scan_head = doc("scan-v2", "X-Men", "tmdb-movie", 2, &["scan-v0", "scan-v1"]);
 
-        let kept =
-            collapse_to_chain_heads(vec![bookmark, scan_v0, scan_v1, scan_head]);
+        let kept = collapse_to_chain_heads(vec![bookmark, scan_v0, scan_v1, scan_head]);
 
         assert_eq!(kept.len(), 1);
         assert_eq!(

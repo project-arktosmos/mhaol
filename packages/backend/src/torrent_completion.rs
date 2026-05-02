@@ -19,9 +19,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 
 #[cfg(not(target_os = "android"))]
-use crate::firkins::{
-    pin_firkin_body, serialize_firkin_payload, FileEntry, Firkin, TABLE as FIRKIN_TABLE,
-};
+use crate::firkins::{rollforward_firkin, FileEntry, Firkin, TABLE as FIRKIN_TABLE};
 #[cfg(not(target_os = "android"))]
 use crate::ipfs_pins;
 #[cfg(not(target_os = "android"))]
@@ -82,10 +80,7 @@ pub async fn run(state: CloudState) {
                     // should pick it up on a subsequent tick.
                 }
                 Err(e) => {
-                    tracing::warn!(
-                        "[torrent-completion] failed for {}: {e}",
-                        t.info_hash
-                    );
+                    tracing::warn!("[torrent-completion] failed for {}: {e}", t.info_hash);
                     // Leave it unmarked so we retry on the next tick.
                 }
             }
@@ -117,13 +112,21 @@ async fn handle_completion(
     let mut any_rolled = false;
     let mut last_err: Option<anyhow::Error> = None;
     for doc in &matches {
+        let id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
+        if id.is_empty() {
+            continue;
+        }
+        // Hold the per-firkin lock across the (heavy) IPFS pin loop and
+        // the rollforward write so a concurrent `PUT /api/firkins/:id`
+        // (or any other mutation) can't slip in between our re-read and
+        // write and have its change silently overwritten.
+        let _firkin_guard = state.firkin_lock(&id).lock_owned().await;
         match rollforward(state, doc, torrent).await {
             Ok(true) => any_rolled = true,
             Ok(false) => {}
             Err(e) => {
                 tracing::warn!(
-                    "[torrent-completion] rollforward failed for firkin {} ({}): {e}",
-                    doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default(),
+                    "[torrent-completion] rollforward failed for firkin {id} ({}): {e}",
                     torrent.info_hash
                 );
                 last_err = Some(e);
@@ -143,9 +146,19 @@ async fn handle_completion(
 }
 
 /// Pin every downloaded file from `torrent` into IPFS, append them to
-/// `doc`'s files, recompute the firkin's body CID in place, bump the
-/// version, and re-pin the new body. Returns `Ok(true)` when the firkin
-/// was updated, `Ok(false)` when nothing changed.
+/// the firkin's files, and roll the firkin's body forward via the
+/// canonical [`firkins::rollforward_firkin`]. Returns `Ok(true)` when
+/// the firkin was updated, `Ok(false)` when nothing changed.
+///
+/// **Caller must hold `state.firkin_lock(<doc id>)`** for the entire
+/// duration. The function intentionally re-reads the firkin from
+/// SurrealDB *after* IPFS pinning so the merge is against the latest
+/// committed state, not the stale `doc` snapshot the polling loop saw.
+/// Without that re-read, a concurrent `PUT /api/firkins/:id` (e.g. the
+/// catalog detail page persisting a freshly-resolved trailer) would be
+/// silently clobbered when this rollforward writes its stale snapshot
+/// back. The caller-held lock is what guarantees the re-read sees a
+/// consistent view through the rollforward write.
 #[cfg(not(target_os = "android"))]
 async fn rollforward(
     state: &CloudState,
@@ -168,7 +181,16 @@ async fn rollforward(
         anyhow::bail!("no files yet under {}", output_path.display());
     }
 
-    let existing_titles: HashSet<String> = doc
+    let id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
+    if id.is_empty() {
+        return Ok(false);
+    }
+
+    // Cheap pre-pin dedup against the snapshot we already have. The
+    // authoritative re-check happens against the freshly-loaded record
+    // below — this just avoids redundant IPFS work for files we already
+    // pinned in a prior run.
+    let snapshot_titles: HashSet<String> = doc
         .files
         .iter()
         .filter(|f| f.kind == "ipfs")
@@ -178,7 +200,7 @@ async fn rollforward(
     let mut new_entries: Vec<FileEntry> = Vec::new();
     for file in &walked {
         let title = format_file_title(&doc.addon, &file.relative_path);
-        if existing_titles.contains(&title) || existing_titles.contains(&file.relative_path) {
+        if snapshot_titles.contains(&title) || snapshot_titles.contains(&file.relative_path) {
             continue;
         }
         let req = mhaol_ipfs_core::AddIpfsRequest {
@@ -224,77 +246,51 @@ async fn rollforward(
         return Ok(false);
     }
 
-    let id = doc.id.as_ref().map(|t| t.id.to_raw()).unwrap_or_default();
-    if id.is_empty() {
+    // Re-read under the caller-held lock so the merge sees any concurrent
+    // mutations (subtitle attach, trailer/youtube-preferred-client persist,
+    // manual PUT, …) that landed while we were pinning.
+    let fresh: Option<Firkin> = state.db.select((FIRKIN_TABLE, id.as_str())).await?;
+    let mut fresh =
+        fresh.ok_or_else(|| anyhow::anyhow!("firkin {id} disappeared before rollforward"))?;
+
+    let fresh_titles: HashSet<String> = fresh
+        .files
+        .iter()
+        .filter(|f| f.kind == "ipfs")
+        .filter_map(|f| f.title.clone())
+        .collect();
+    let mut to_append: Vec<FileEntry> = Vec::new();
+    for entry in new_entries {
+        let title = entry.title.clone().unwrap_or_default();
+        if !title.is_empty() && fresh_titles.contains(&title) {
+            continue;
+        }
+        to_append.push(entry);
+    }
+    if to_append.is_empty() {
         return Ok(false);
     }
 
-    let prior_cid = if doc.cid.is_empty() {
-        id.clone()
-    } else {
-        doc.cid.clone()
-    };
+    let added = to_append.len();
+    fresh.files.extend(to_append);
+    fresh.id = None;
+    fresh.updated_at = chrono::Utc::now();
 
-    let mut updated_files = doc.files.clone();
-    updated_files.extend(new_entries);
-
-    let new_version = doc.version.saturating_add(1);
-    let mut new_hashes = doc.version_hashes.clone();
-    new_hashes.push(prior_cid);
-
-    let new_body_json = serialize_firkin_payload(
-        &doc.title,
-        &doc.description,
-        &doc.artists,
-        &doc.images,
-        &updated_files,
-        doc.year,
-        &doc.addon,
-        &doc.creator,
-        new_version,
-        &new_hashes,
-        &doc.trailers,
-        &doc.reviews,
-    );
-    let new_cid = crate::firkins::compute_body_cid(&new_body_json);
-
-    let new_record = Firkin {
-        id: None,
-        title: doc.title.clone(),
-        artists: doc.artists.clone(),
-        description: doc.description.clone(),
-        images: doc.images.clone(),
-        files: updated_files,
-        year: doc.year,
-        addon: doc.addon.clone(),
-        creator: doc.creator.clone(),
-        cid: new_cid.clone(),
-        created_at: doc.created_at,
-        updated_at: chrono::Utc::now(),
-        version: new_version,
-        version_hashes: new_hashes,
-        trailers: doc.trailers.clone(),
-        reviews: doc.reviews.clone(),
-        bookmarked: doc.bookmarked,
-    };
-
-    let updated: Option<Firkin> = state
-        .db
-        .update((FIRKIN_TABLE, id.as_str()))
-        .content(new_record)
-        .await?;
-    if updated.is_none() {
-        anyhow::bail!("firkin {} disappeared during update", id);
-    }
-
-    pin_firkin_body(state, &id, new_body_json).await;
+    let updated = rollforward_firkin(state, &id, fresh)
+        .await
+        .map_err(|(s, j)| {
+            let msg = j
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("rollforward failed")
+                .to_string();
+            anyhow::anyhow!("{s}: {msg}")
+        })?;
 
     tracing::info!(
-        "[torrent-completion] {} → cid {} (v{}, +{} file(s))",
-        id,
-        new_cid,
-        new_version,
-        walked.len()
+        "[torrent-completion] {id} → cid {} (v{}, +{added} file(s))",
+        updated.cid,
+        updated.version,
     );
 
     Ok(true)
@@ -311,11 +307,13 @@ fn matches_magnet(files: &[FileEntry], needle: &str) -> bool {
 /// and update the firkin in place. Returns the firkin id (unchanged
 /// across updates since the record id is a stable UUID), or `Ok(None)`
 /// if the firkin does not exist.
+///
+/// **Caller must already hold `state.firkin_lock(doc_id)`** — this
+/// function and the [`rollforward`] helper it calls expect that lock to
+/// be held for the entire read-modify-write sequence. The handler at
+/// [`crate::firkins::finalize`] takes the lock before delegating here.
 #[cfg(not(target_os = "android"))]
-pub async fn finalize_firkin(
-    state: &CloudState,
-    doc_id: &str,
-) -> anyhow::Result<Option<String>> {
+pub async fn finalize_firkin(state: &CloudState, doc_id: &str) -> anyhow::Result<Option<String>> {
     let mut current: Firkin = match state.db.select((FIRKIN_TABLE, doc_id)).await? {
         Some(d) => d,
         None => return Ok(None),

@@ -65,19 +65,20 @@ There is only one catalog detail route, `/catalog/[id]`, and it presents both bo
 
 The detail page reads `firkin.bookmarked` and switches between two presentations of the same surface:
 
-| Concern | `firkin.bookmarked === false` (browse cache) | `firkin.bookmarked === true` (full library item) |
-|---|---|---|
-| Source of firkin data | `+page.ts` loader → real persisted firkin (created by `/catalog/visit`) | `+page.ts` loader → real persisted firkin |
-| Header actions | `Bookmark` only (plus a `browse` warning badge in the header) | `Play` / `IPFS Play` / `Torrent Stream` / `Find metadata` / `Delete firkin` |
-| Identity / version history / files table | omitted | rendered |
-| Tracks card mode | `preview` (no per-track YT/lyrics badges, no playback) | full (server-side album resolver populates YT URLs + lyrics) |
-| Resolver `persist` callbacks | trailers no-op (return `Promise.resolve()`); YT preferred-client persist short-circuits | `PUT /api/firkins/:id` (rolls the CID forward) |
-| Torrent search card | hidden | shown (auto-fires when no real files yet) |
-| IPFS / Torrent stream tabs | hidden | shown when applicable |
-| Recommendation ingest on related items | skipped | runs once per source firkin |
-| Album resolver auto-spawn (server-side) | skipped — see `firkins.rs::create` | spawned for fresh musicbrainz creates and on the false→true bookmark flip |
+| Concern                                  | `firkin.bookmarked === false` (browse cache)                                            | `firkin.bookmarked === true` (full library item)                            |
+| ---------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Source of firkin data                    | `+page.ts` loader → real persisted firkin (created by `/catalog/visit`)                 | `+page.ts` loader → real persisted firkin                                   |
+| Header actions                           | `Bookmark` only (plus a `browse` warning badge in the header)                           | `Play` / `IPFS Play` / `Torrent Stream` / `Find metadata` / `Delete firkin` |
+| Identity / version history / files table | omitted                                                                                 | rendered                                                                    |
+| Tracks card mode                         | `preview` (no per-track YT/lyrics badges, no playback)                                  | full (server-side album resolver populates YT URLs + lyrics)                |
+| Resolver `persist` callbacks             | trailers no-op (return `Promise.resolve()`); YT preferred-client persist short-circuits | `PUT /api/firkins/:id` (rolls the CID forward)                              |
+| Torrent search card                      | hidden                                                                                  | shown (auto-fires when no real files yet)                                   |
+| IPFS / Torrent stream tabs               | hidden                                                                                  | shown when applicable                                                       |
+| Recommendation ingest on related items   | skipped                                                                                 | runs once per source firkin                                                 |
+| Album resolver auto-spawn (server-side)  | skipped — see `firkins.rs::create`                                                      | spawned for fresh musicbrainz creates and on the false→true bookmark flip   |
 
 **Shared components** (`src/components/catalog/`):
+
 - `CatalogPageHeader.svelte` — back link, title, addon/kind/year badges, optional `extraBadge`, action snippet slot
 - `CatalogDescriptionPanel.svelte` — tabbed panel showing the description (default tab), identity (CID / created / updated / version, detail only), and version history (`version_hashes` chain, detail only). Tabs are only rendered when the corresponding props are supplied — virtual pages get a description-only single-tab layout with no tab strip. When `reviews` is non-empty (TMDB / MusicBrainz user-rating snapshots), the panel also renders a row of compact `label score / maxScore · votes` badges above the tabs — visible on every tab.
 - `CatalogImagesCard.svelte` — images grid with metadata
@@ -91,12 +92,34 @@ The detail page reads `firkin.bookmarked` and switches between two presentations
 - `FirkinLibraryGrid.svelte` — pure presentational grid that renders firkins by id (looked up from `firkinsService.state`). Always 7 cols. `collapsed={true}` (default) slices to `collapsedCount` (default 6) and renders the 7th cell as a "More (+N)" link to `moreHref`; `collapsed={false}` is the gallery mode (multi-row, full set). Optional `actions` snippet renders a per-firkin overlay (used on `/catalog` for the "Find metadata" button). Used by `/catalog` (collapsed) and `/catalog/gallery?addon=…` (full).
 
 **Shared resolver services** (`src/services/catalog/`, all `.svelte.ts` so `$state` runes work):
+
 - `trailer-resolver.svelte.ts` — `TrailerResolver` class. `resolveMovie(...)` / `resolveTv(...)` accept TMDB-sourced trailers via `stored`, prefer them when present, and only fall back to the YouTube fuzzy search when TMDB has nothing English. Optional `persist` callback writes back via `PUT /api/firkins/:id`.
-- `track-resolver.svelte.ts` — `TrackResolver` class. Pure projection — *no in-browser searches anywhere*. Single entry point `loadFromFirkin({ releaseGroupId, files })` fetches the MusicBrainz tracklist and pairs each track with its persisted YouTube URL + lyrics from the firkin's `files`, returning `{ missingAny }`. The detail page uses `missingAny` to decide whether to poll for the rolled-forward firkin while the server's background album resolver runs. Lyrics persisted on the firkin live as `'lyrics'`-typed `FileEntry` rows whose `value` is the JSON `{ source, externalId, syncedLyrics, plainLyrics, instrumental }`; the resolver decodes this on read and parses the LRC text into the existing `SubsLyricsItem` shape. The resolver also maps `'ipfs'`-typed `FileEntry` rows by track title, exposing each track's `localCid` and a `playLocal(index, opts)` method that builds a `PlayableFile` and calls `playerService.playUrl` against `/api/ipfs/pins/<cid>/file` — the catalog tracks card uses this to render the per-row **Play** button alongside the YouTube **Stream** button. `applyDownloadProgress(payload)` overlays `/api/firkins/:id/download-progress` onto the projected tracks so per-row download status badges update live without a firkin refetch.
+- `track-resolver.svelte.ts` — `TrackResolver` class. Pure projection — _no in-browser searches anywhere_. Single entry point `loadFromFirkin({ releaseGroupId, files })` fetches the MusicBrainz tracklist and pairs each track with its persisted YouTube URL + lyrics from the firkin's `files`, returning `{ missingAny }`. The detail page uses `missingAny` to decide whether to poll for the rolled-forward firkin while the server's background album resolver runs. Lyrics persisted on the firkin live as `'lyrics'`-typed `FileEntry` rows whose `value` is the JSON `{ source, externalId, syncedLyrics, plainLyrics, instrumental }`; the resolver decodes this on read and parses the LRC text into the existing `SubsLyricsItem` shape. The resolver also maps `'ipfs'`-typed `FileEntry` rows by track title, exposing each track's `localCid` and a `playLocal(index, opts)` method that builds a `PlayableFile` and calls `playerService.playUrl` against `/api/ipfs/pins/<cid>/file` — the catalog tracks card uses this to render the per-row **Play** button alongside the YouTube **Stream** button. `applyDownloadProgress(payload)` overlays `/api/firkins/:id/download-progress` onto the projected tracks so per-row download status badges update live without a firkin refetch.
 - `torrent-search.svelte.ts` — `TorrentSearch` class. Optional `evaluate: true` runs `/api/torrent/evaluate` per result with a sliding-window concurrency cap (default 4). Also exports `startTorrentDownload(magnet)`.
 - `subs-lyrics-resolver.svelte.ts` — `SubsLyricsResolver` class. `search({ addon, query, externalIds? })` posts `/api/search/subs-lyrics` and exposes `results`, `status`, `error` as runes.
 
 **Pattern.** When two routes need the same UI: put the markup in `$components/<feature>/`, put the behaviour in a runes-driven service class at `$services/<feature>/<thing>.svelte.ts`, and let each route compose them with route-specific inputs and (optional) persistence callbacks. The presentational components stay free of business logic; the service classes own the state machines and side-effects.
+
+## Mutating `firkin.files` — always use `firkinsService.mutateFiles`
+
+Any code that adds, replaces, or removes entries on a firkin's `files` array **must** go through `firkinsService.mutateFiles(id, { add?, removeTypes?, removeEntries? })` (`src/lib/firkins.service.ts`). Never PUT a full `files` array constructed from a client-side snapshot of `firkin.files` — that pattern is racy by construction: two concurrent flows (e.g. the user picking a torrent in `CatalogTorrentSearchCard` while the trailer resolver caches its preferred YouTube client) each take a snapshot, append their entry, and PUT — the later PUT wins, so one of the writes is silently lost. This is exactly how a freshly-attached `torrent magnet` got dropped, leaving the torrent permanently unmatched by `torrent_completion::run`.
+
+`firkinsService.mutateFiles` posts to `POST /api/firkins/:id/files`; the server reads the current `files` under the per-firkin async lock, drops every entry whose `kind` is in `removeTypes` or whose `(kind, value)` matches `removeEntries`, then appends `add`, and rolls forward. Concurrent calls serialise so neither writer can lose the other's change. Examples:
+
+```ts
+// Append a torrent magnet (assignTorrent in /catalog/[id])
+await firkinsService.mutateFiles(firkin.id, {
+	add: [{ type: 'torrent magnet', value: magnet, title: torrent.title }]
+});
+
+// Replace the singular `youtube preferred client` cache entry
+await firkinsService.mutateFiles(firkin.id, {
+	removeTypes: ['youtube preferred client'],
+	add: [{ type: 'youtube preferred client', value: clientName }]
+});
+```
+
+`PUT /api/firkins/:id` is still the right call for whole-record edits where the user really does mean "replace all files" (e.g. the firkin editor on `/firkins`), and for non-`files` patches like `{ trailers }`, `{ reviews }`, `{ bookmarked }`, etc. — those are field-scoped on the server and don't have the read-modify-write hazard.
 
 ## Transport layer
 
@@ -161,6 +184,7 @@ Media routes use slug-based routing with a data-driven registry:
 ```
 
 **Key files**:
+
 - `src/data/media-registry.ts` — `MEDIA_REGISTRY` and `MUSIC_REGISTRY` mapping slugs to config (kind, label, services, features)
 - `src/components/catalog/CatalogBrowsePage.svelte` — Unified browse with search, tabs, filters, pinned/favorites, grid
 - `src/components/catalog/filters/CatalogFilterBar.svelte` — Switch component rendering the right filter UI per kind

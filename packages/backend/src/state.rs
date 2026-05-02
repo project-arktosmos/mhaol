@@ -1,6 +1,10 @@
 use mhaol_identity::IdentityManager;
+use parking_lot::Mutex as ParkingLotMutex;
+use std::collections::HashMap;
+use std::sync::Arc;
 use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
+use tokio::sync::Mutex as TokioMutex;
 
 #[cfg(not(target_os = "android"))]
 use crate::album_download::AlbumDownloadProgressMap;
@@ -18,8 +22,21 @@ use mhaol_ipfs_stream::manager::IpfsStreamManager;
 use mhaol_torrent::TorrentManager;
 #[cfg(not(target_os = "android"))]
 use mhaol_yt_dlp::DownloadManager;
-#[cfg(not(target_os = "android"))]
-use std::sync::Arc;
+
+/// Per-firkin async serialisers. Every code path that does a
+/// read-modify-write on a firkin (`PUT /api/firkins/:id`,
+/// `POST /api/firkins/:id/{files,subtitle,enrich,resolve-tracks,roms,finalize}`,
+/// the torrent-completion watcher, the album-download task, the TV-build
+/// task) **must** acquire the entry for the firkin's id before reading the
+/// current record.
+///
+/// Without this serialisation, two concurrent mutations would each load
+/// the same starting `files` array, mutate their local copy, and write
+/// back — the later writer silently clobbers the earlier one. This is
+/// exactly how a freshly-attached `torrent magnet` entry got dropped by
+/// the trailer resolver's `youtube preferred client` write, leaving the
+/// torrent permanently unmatched by `torrent_completion::run`.
+pub type FirkinLockMap = Arc<ParkingLotMutex<HashMap<String, Arc<TokioMutex<()>>>>>;
 
 /// Shared application state for the cloud server.
 ///
@@ -62,6 +79,8 @@ pub struct CloudState {
     /// hammered). See [`crate::ytdl_channel_cache`] for details.
     #[cfg(not(target_os = "android"))]
     pub ytdl_channel_cache: YoutubeChannelCache,
+    /// Per-firkin async serialiser map. See [`FirkinLockMap`].
+    pub firkin_locks: FirkinLockMap,
 }
 
 impl CloudState {
@@ -93,6 +112,18 @@ impl CloudState {
             tv_build_progress: TvBuildProgressMap::new(),
             #[cfg(not(target_os = "android"))]
             ytdl_channel_cache: YoutubeChannelCache::new(),
+            firkin_locks: Arc::new(ParkingLotMutex::new(HashMap::new())),
         }
+    }
+
+    /// Acquire (or create) the per-firkin async lock for `id`. Callers
+    /// hold the returned guard across the entire read-modify-write so
+    /// concurrent mutations on the same firkin serialise. The outer
+    /// parking-lot lock is held only for the map lookup.
+    pub fn firkin_lock(&self, id: &str) -> Arc<TokioMutex<()>> {
+        let mut map = self.firkin_locks.lock();
+        map.entry(id.to_string())
+            .or_insert_with(|| Arc::new(TokioMutex::new(())))
+            .clone()
     }
 }

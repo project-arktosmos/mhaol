@@ -88,14 +88,8 @@ pub fn router() -> Router<CloudState> {
         .route("/{id}/tv-builds", get(list).delete(clear_terminal))
 }
 
-fn err(
-    status: StatusCode,
-    message: impl Into<String>,
-) -> (StatusCode, Json<serde_json::Value>) {
-    (
-        status,
-        Json(serde_json::json!({ "error": message.into() })),
-    )
+fn err(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
+    (status, Json(serde_json::json!({ "error": message.into() })))
 }
 
 /// Stable per-show key, matching the shape the WebUI uses on its side.
@@ -159,12 +153,7 @@ async fn start(
     let task_lib = library_id.clone();
     tokio::spawn(async move {
         run_job(
-            task_state,
-            task_lib,
-            task_key,
-            task_show,
-            task_year,
-            task_files,
+            task_state, task_lib, task_key, task_show, task_year, task_files,
         )
         .await;
     });
@@ -176,9 +165,7 @@ async fn list(
     State(state): State<CloudState>,
     Path(library_id): Path<String>,
 ) -> Json<Vec<TvBuildProgress>> {
-    state
-        .tv_build_progress
-        .gc(chrono::Duration::hours(1));
+    state.tv_build_progress.gc(chrono::Duration::hours(1));
     Json(state.tv_build_progress.list_for_library(&library_id))
 }
 
@@ -294,10 +281,7 @@ async fn run_job(
         p.message = Some(format!(
             "Matched {}{} — fetching seasons…",
             tmdb_title,
-            matched
-                .year
-                .map(|y| format!(" ({y})"))
-                .unwrap_or_default()
+            matched.year.map(|y| format!(" ({y})")).unwrap_or_default()
         ));
     });
 
@@ -305,11 +289,7 @@ async fn run_job(
     let seasons = match fetch_tmdb_tv_seasons(&tmdb_id).await {
         Ok(s) => s,
         Err((status, _)) => {
-            fail(
-                &state,
-                &key,
-                format!("TMDB seasons fetch failed: {status}"),
-            );
+            fail(&state, &key, format!("TMDB seasons fetch failed: {status}"));
             return;
         }
     };
@@ -535,6 +515,11 @@ async fn apply_pin_to_firkin(
     file: &TvBuildFile,
     cid: &str,
 ) -> Result<(), String> {
+    // Hold the per-firkin lock across read-modify-write so a concurrent
+    // mutation (subtitle attach, magnet pick, manual `PUT /api/firkins/:id`)
+    // can't slip in between the load and the rollforward and have its
+    // change silently overwritten.
+    let _firkin_guard = state.firkin_lock(firkin_id).lock_owned().await;
     let current: Option<Firkin> = state
         .db
         .select((FIRKIN_TABLE, firkin_id))
