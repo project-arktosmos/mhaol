@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
 	import FirkinCard from '$components/firkins/FirkinCard.svelte';
+	import FirkinLibraryGrid from '$components/catalog/FirkinLibraryGrid.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
 	} from '$components/firkins/FirkinMetadataLookupModal.svelte';
@@ -80,9 +81,6 @@
 		musicbrainz: 'local-album'
 	};
 
-	const LIBRARY_COLLAPSED_LIMIT = 6;
-	let libraryExpanded = $state(false);
-
 	const libraryAllFirkins = $derived<Firkin[]>(
 		addon
 			? $firkinsStore.firkins
@@ -91,19 +89,10 @@
 					.sort((a, b) => b.created_at.localeCompare(a.created_at))
 			: []
 	);
-	const libraryFirkins = $derived<Firkin[]>(
-		libraryExpanded ? libraryAllFirkins : libraryAllFirkins.slice(0, LIBRARY_COLLAPSED_LIMIT)
+	const libraryFirkinIds = $derived(libraryAllFirkins.map((d) => d.id));
+	const galleryHref = $derived(
+		addon ? `${base}/catalog/gallery?addon=${encodeURIComponent(addon)}` : ''
 	);
-	const libraryHasMore = $derived(libraryAllFirkins.length > LIBRARY_COLLAPSED_LIMIT);
-
-	// Collapse the library back to one row whenever the user switches
-	// addons — otherwise an "expanded" toggle from a prior addon's grid
-	// silently sticks across the addon change.
-	$effect(() => {
-		// Re-trigger on addon change.
-		void addon;
-		libraryExpanded = false;
-	});
 
 	function virtualFirkin(item: CatalogItem): CloudFirkin {
 		const images = [item.posterUrl, item.backdropUrl]
@@ -340,282 +329,255 @@
 	<title>Mhaol Cloud — Catalog</title>
 </svelte:head>
 
-<div class="flex min-h-full flex-col gap-6 p-6">
-	{#if sourcesError}
-		<div class="alert alert-error">
-			<span>Could not load catalog sources: {sourcesError}</span>
-		</div>
-	{/if}
-
-	<section class="card border border-base-content/10 bg-base-200 p-4">
-		<div class="overflow-x-auto rounded-box border border-base-content/10">
-			<table class="table table-sm">
-				<tbody>
+<section class="sticky top-0 z-30 overflow-x-auto border-b border-base-content/10 bg-base-200">
+		<table class="table table-sm">
+			<tbody>
+				<tr>
+					<th class="w-32 align-middle">Addon</th>
+					<td>
+						<div class="flex flex-wrap gap-2">
+							{#each sources as source (source.id)}
+								{@const active = addon === source.id}
+								<button
+									type="button"
+									class={classNames('btn btn-sm', {
+										'btn-primary': active,
+										'btn-outline': !active
+									})}
+									onclick={() => selectAddon(source)}
+									title={source.kind}
+								>
+									{source.label}
+								</button>
+							{/each}
+						</div>
+					</td>
+				</tr>
+				<tr>
+					<th class="w-32 align-middle">Search</th>
+					<td>
+						<div class="flex flex-wrap items-center gap-2">
+							{#if showSearchFieldSelect}
+								<select
+									class="select-bordered select w-40 select-sm"
+									bind:value={searchField}
+									onchange={onSearchFieldChange}
+									title="Which release-group field to search on"
+								>
+									<option value="artist">Artist name</option>
+									<option value="release">Album title</option>
+								</select>
+							{/if}
+							<input
+								type="search"
+								class="input-bordered input input-sm flex-1"
+								placeholder={addon
+									? `Search ${currentSource?.label ?? addon}…`
+									: 'Pick an addon to search'}
+								disabled={!addon}
+								bind:value={query}
+								oninput={scheduleSearch}
+							/>
+						</div>
+					</td>
+				</tr>
+				{#if showFilterRow}
 					<tr>
-						<th class="w-32 align-middle">Addon</th>
+						<th class="w-32 align-middle">{filterLabel}</th>
 						<td>
-							<div class="flex flex-wrap gap-2">
-								{#each sources as source (source.id)}
-									{@const active = addon === source.id}
-									<button
-										type="button"
-										class={classNames('btn btn-sm', {
-											'btn-primary': active,
-											'btn-outline': !active
-										})}
-										onclick={() => selectAddon(source)}
-										title={source.kind}
-									>
-										{source.label}
-									</button>
-								{/each}
-							</div>
+							{#if genresLoading}
+								<span class="text-xs text-base-content/60"
+									>Loading {filterLabel.toLowerCase()}…</span
+								>
+							{:else if genresError}
+								<span class="text-xs text-error">{genresError}</span>
+							{:else if genres.length === 0}
+								<span class="text-xs text-base-content/60">No options available</span>
+							{:else}
+								<select
+									class="select-bordered select w-full select-sm"
+									bind:value={filter}
+									onchange={onFilterChange}
+								>
+									{#each genres as option (option.id)}
+										<option value={option.id}>{option.name}</option>
+									{/each}
+								</select>
+							{/if}
 						</td>
 					</tr>
-					<tr>
-						<th class="w-32 align-middle">Search</th>
-						<td>
-							<div class="flex flex-wrap items-center gap-2">
-								{#if showSearchFieldSelect}
-									<select
-										class="select-bordered select w-40 select-sm"
-										bind:value={searchField}
-										onchange={onSearchFieldChange}
-										title="Which release-group field to search on"
-									>
-										<option value="artist">Artist name</option>
-										<option value="release">Album title</option>
-									</select>
-								{/if}
-								<input
-									type="search"
-									class="input-bordered input input-sm flex-1"
-									placeholder={addon
-										? `Search ${currentSource?.label ?? addon}…`
-										: 'Pick an addon to search'}
-									disabled={!addon}
-									bind:value={query}
-									oninput={scheduleSearch}
-								/>
-							</div>
-						</td>
-					</tr>
-					{#if showFilterRow}
-						<tr>
-							<th class="w-32 align-middle">{filterLabel}</th>
-							<td>
-								{#if genresLoading}
-									<span class="text-xs text-base-content/60"
-										>Loading {filterLabel.toLowerCase()}…</span
-									>
-								{:else if genresError}
-									<span class="text-xs text-error">{genresError}</span>
-								{:else if genres.length === 0}
-									<span class="text-xs text-base-content/60">No options available</span>
-								{:else}
-									<select
-										class="select-bordered select w-full select-sm"
-										bind:value={filter}
-										onchange={onFilterChange}
-									>
-										{#each genres as option (option.id)}
-											<option value={option.id}>{option.name}</option>
-										{/each}
-									</select>
-								{/if}
-							</td>
-						</tr>
-					{/if}
-				</tbody>
-			</table>
-		</div>
+				{/if}
+			</tbody>
+		</table>
 	</section>
 
-	<section class="flex flex-col gap-3">
-		<div class="flex items-center justify-between gap-4">
-			<h2 class="text-lg font-semibold">Library</h2>
-			<label class="flex items-center gap-2 text-xs text-base-content/70">
-				<input
-					type="checkbox"
-					class="toggle toggle-sm toggle-primary"
-					checked={$firkinsIncludeAll}
-					onchange={(e) =>
-						firkinsService.setIncludeAll((e.currentTarget as HTMLInputElement).checked)}
-				/>
-				<span title="Off: only bookmarked firkins. On: every firkin in the local DB, including non-bookmarked browse-cache rows from the /catalog/visit resolver.">
-					Show all locally-available
-				</span>
-			</label>
-		</div>
-		{#if libraryFirkins.length === 0}
-			<p class="text-sm text-base-content/60">
-				{$firkinsIncludeAll
+	<div class="flex flex-col gap-6 p-6">
+		{#if sourcesError}
+			<div class="alert alert-error">
+				<span>Could not load catalog sources: {sourcesError}</span>
+			</div>
+		{/if}
+
+		<section class="flex flex-col gap-3">
+			<div class="flex items-center justify-between gap-4">
+				<h2 class="text-lg font-semibold">Library</h2>
+				<label class="flex items-center gap-2 text-xs text-base-content/70">
+					<input
+						type="checkbox"
+						class="toggle toggle-primary toggle-sm"
+						checked={$firkinsIncludeAll}
+						onchange={(e) =>
+							firkinsService.setIncludeAll((e.currentTarget as HTMLInputElement).checked)}
+					/>
+					<span
+						title="Off: only bookmarked firkins. On: every firkin in the local DB, including non-bookmarked browse-cache rows from the /catalog/visit resolver."
+					>
+						Show all locally-available
+					</span>
+				</label>
+			</div>
+			<FirkinLibraryGrid
+				firkinIds={libraryFirkinIds}
+				collapsed={true}
+				collapsedCount={6}
+				moreHref={galleryHref}
+				emptyMessage={$firkinsIncludeAll
 					? 'No firkins on this server yet.'
 					: 'No bookmarked items yet — toggle "Show all locally-available" to include browse-cache items.'}
-			</p>
-		{:else}
-			<div class="grid grid-cols-6 gap-4">
-				{#each libraryFirkins as doc (doc.id)}
-					{@const canEnrich = firkinNeedsMetadata(doc) && metadataSearchAddon(doc.addon) !== null}
-					<div class="relative">
-						<a
-							href={`${base}/catalog/${encodeURIComponent(doc.id)}`}
-							class="block no-underline"
-							onclick={(e) => {
-								if ((e.target as HTMLElement).closest('button, summary')) {
-									e.preventDefault();
-								}
-							}}
+			>
+				{#snippet actions(doc)}
+					{#if firkinNeedsMetadata(doc) && metadataSearchAddon(doc.addon) !== null}
+						<button
+							type="button"
+							class="btn absolute top-2 right-2 btn-xs btn-primary"
+							onclick={() => openMetadataLookup(doc)}
+							title="Search the relevant addon and bake matching metadata into this firkin"
 						>
-							<FirkinCard firkin={doc as CloudFirkin} />
-						</a>
-						{#if canEnrich}
-							<button
-								type="button"
-								class="btn absolute top-2 right-2 btn-xs btn-primary"
-								onclick={() => openMetadataLookup(doc)}
-								title="Search the relevant addon and bake matching metadata into this firkin"
-							>
-								Find metadata
-							</button>
-						{/if}
+							Find metadata
+						</button>
+					{/if}
+				{/snippet}
+			</FirkinLibraryGrid>
+		</section>
+
+		{#if hasSearch}
+			<section class="flex flex-col gap-3">
+				<div class="flex items-center justify-between gap-4">
+					<h2 class="text-lg font-semibold">Search results</h2>
+					<div class="flex items-center gap-2">
+						<button
+							class="btn btn-outline btn-xs"
+							onclick={() => goToSearchPage(searchPage - 1)}
+							disabled={searchLoading || searchPage <= 1}
+						>
+							Prev
+						</button>
+						<span class="text-xs text-base-content/60">Page {searchPage} / {searchTotalPages}</span>
+						<button
+							class="btn btn-outline btn-xs"
+							onclick={() => goToSearchPage(searchPage + 1)}
+							disabled={searchLoading || searchPage >= searchTotalPages}
+						>
+							Next
+						</button>
 					</div>
-				{/each}
-			</div>
-			{#if libraryHasMore}
-				<div class="flex justify-center">
-					<button
-						type="button"
-						class="btn btn-outline btn-sm"
-						onclick={() => (libraryExpanded = !libraryExpanded)}
-					>
-						{libraryExpanded
-							? 'Show less'
-							: `More (${libraryAllFirkins.length - LIBRARY_COLLAPSED_LIMIT})`}
-					</button>
 				</div>
-			{/if}
+
+				{#if searchError}
+					<div class="alert alert-error">
+						<span>{searchError}</span>
+					</div>
+				{/if}
+
+				{#if searchLoading && searchItems.length === 0}
+					<p class="text-sm text-base-content/60">Searching…</p>
+				{:else if searchItems.length === 0}
+					<p class="text-sm text-base-content/60">No matches.</p>
+				{:else}
+					<div
+						class={classNames(
+							'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+							{ 'opacity-60': searchLoading }
+						)}
+					>
+						{#each searchItems as item (item.id)}
+							<a
+								href={visitHref(item)}
+								class="block no-underline"
+								onclick={(e) => {
+									if ((e.target as HTMLElement).closest('button, summary')) {
+										e.preventDefault();
+									}
+								}}
+							>
+								<FirkinCard firkin={virtualFirkin(item)} />
+							</a>
+						{/each}
+					</div>
+				{/if}
+			</section>
 		{/if}
-	</section>
 
-	{#if hasSearch}
-		<section class="flex flex-col gap-3">
-			<div class="flex items-center justify-between gap-4">
-				<h2 class="text-lg font-semibold">Search results</h2>
-				<div class="flex items-center gap-2">
-					<button
-						class="btn btn-outline btn-xs"
-						onclick={() => goToSearchPage(searchPage - 1)}
-						disabled={searchLoading || searchPage <= 1}
-					>
-						Prev
-					</button>
-					<span class="text-xs text-base-content/60">Page {searchPage} / {searchTotalPages}</span>
-					<button
-						class="btn btn-outline btn-xs"
-						onclick={() => goToSearchPage(searchPage + 1)}
-						disabled={searchLoading || searchPage >= searchTotalPages}
-					>
-						Next
-					</button>
-				</div>
-			</div>
-
-			{#if searchError}
-				<div class="alert alert-error">
-					<span>{searchError}</span>
-				</div>
-			{/if}
-
-			{#if searchLoading && searchItems.length === 0}
-				<p class="text-sm text-base-content/60">Searching…</p>
-			{:else if searchItems.length === 0}
-				<p class="text-sm text-base-content/60">No matches.</p>
-			{:else}
-				<div
-					class={classNames(
-						'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
-						{ 'opacity-60': searchLoading }
-					)}
-				>
-					{#each searchItems as item (item.id)}
-						<a
-							href={visitHref(item)}
-							class="block no-underline"
-							onclick={(e) => {
-								if ((e.target as HTMLElement).closest('button, summary')) {
-									e.preventDefault();
-								}
-							}}
+		{#if hasPopular}
+			<section class="flex flex-col gap-3">
+				<div class="flex items-center justify-between gap-4">
+					<h2 class="text-lg font-semibold">Popular</h2>
+					<div class="flex items-center gap-2">
+						<button
+							class="btn btn-outline btn-xs"
+							onclick={() => goToPage(page - 1)}
+							disabled={itemsLoading || page <= 1}
 						>
-							<FirkinCard firkin={virtualFirkin(item)} />
-						</a>
-					{/each}
-				</div>
-			{/if}
-		</section>
-	{/if}
-
-	{#if hasPopular}
-		<section class="flex flex-col gap-3">
-			<div class="flex items-center justify-between gap-4">
-				<h2 class="text-lg font-semibold">Popular</h2>
-				<div class="flex items-center gap-2">
-					<button
-						class="btn btn-outline btn-xs"
-						onclick={() => goToPage(page - 1)}
-						disabled={itemsLoading || page <= 1}
-					>
-						Prev
-					</button>
-					<span class="text-xs text-base-content/60">Page {page} / {totalPages}</span>
-					<button
-						class="btn btn-outline btn-xs"
-						onclick={() => goToPage(page + 1)}
-						disabled={itemsLoading || page >= totalPages}
-					>
-						Next
-					</button>
-					<button class="btn btn-outline btn-xs" onclick={refreshItems} disabled={itemsLoading}>
-						Refresh
-					</button>
-				</div>
-			</div>
-
-			{#if itemsError}
-				<div class="alert alert-error">
-					<span>{itemsError}</span>
-				</div>
-			{/if}
-
-			{#if itemsLoading && items.length === 0}
-				<p class="text-sm text-base-content/60">Loading…</p>
-			{:else if items.length === 0}
-				<p class="text-sm text-base-content/60">No items.</p>
-			{:else}
-				<div
-					class={classNames(
-						'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
-						{ 'opacity-60': itemsLoading }
-					)}
-				>
-					{#each items as item (item.id)}
-						<a
-							href={visitHref(item)}
-							class="block no-underline"
-							onclick={(e) => {
-								if ((e.target as HTMLElement).closest('button, summary')) {
-									e.preventDefault();
-								}
-							}}
+							Prev
+						</button>
+						<span class="text-xs text-base-content/60">Page {page} / {totalPages}</span>
+						<button
+							class="btn btn-outline btn-xs"
+							onclick={() => goToPage(page + 1)}
+							disabled={itemsLoading || page >= totalPages}
 						>
-							<FirkinCard firkin={virtualFirkin(item)} />
-						</a>
-					{/each}
+							Next
+						</button>
+						<button class="btn btn-outline btn-xs" onclick={refreshItems} disabled={itemsLoading}>
+							Refresh
+						</button>
+					</div>
 				</div>
-			{/if}
-		</section>
-	{/if}
+
+				{#if itemsError}
+					<div class="alert alert-error">
+						<span>{itemsError}</span>
+					</div>
+				{/if}
+
+				{#if itemsLoading && items.length === 0}
+					<p class="text-sm text-base-content/60">Loading…</p>
+				{:else if items.length === 0}
+					<p class="text-sm text-base-content/60">No items.</p>
+				{:else}
+					<div
+						class={classNames(
+							'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+							{ 'opacity-60': itemsLoading }
+						)}
+					>
+						{#each items as item (item.id)}
+							<a
+								href={visitHref(item)}
+								class="block no-underline"
+								onclick={(e) => {
+									if ((e.target as HTMLElement).closest('button, summary')) {
+										e.preventDefault();
+									}
+								}}
+							>
+								<FirkinCard firkin={virtualFirkin(item)} />
+							</a>
+						{/each}
+					</div>
+				{/if}
+			</section>
+		{/if}
 </div>
 
 {#if metadataTarget}
