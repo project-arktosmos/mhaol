@@ -1,19 +1,25 @@
 //! Background TV-show firkin builder for `local-tv` libraries. Given a
 //! parsed scan group from the WebUI — show name, optional year, and a
 //! flat list of `{ path, season, episode }` files — match the show to
-//! TMDB, fetch every season + episode, wait for IPFS pins to settle for
-//! the local files, and assemble a single `tmdb-tv` firkin.
+//! TMDB, fetch every season + episode, mint a `tmdb-tv` firkin with
+//! every episode as a `url` placeholder, then roll the firkin forward
+//! once per local-file IPFS pin so each `(season, episode)` entry
+//! becomes an `ipfs` CID as soon as that file's hash lands.
 //!
 //! The firkin's `files` array carries one entry per TMDB episode:
 //!   - `ipfs` with the local CID when the library has a file for that
-//!     episode,
+//!     episode and the pin has landed,
 //!   - `url` pointing at the per-episode TMDB URL otherwise.
 //!
 //! That way the resulting firkin records both what's available locally
 //! and what's missing, while the TV-show detail page can re-fetch the
 //! full season / episode metadata from `/api/catalog/tmdb-tv/...` since
 //! the firkin's canonical `https://www.themoviedb.org/tv/<id>` URL
-//! identifies the show.
+//! identifies the show. The firkin is created up-front (right after the
+//! metadata phase) so the WebUI can navigate to it before pins arrive;
+//! every subsequent pin promotion rolls the version forward via
+//! `firkins::rollforward_firkin`, pushing the prior CID onto
+//! `version_hashes` and re-pinning the new body to IPFS.
 //!
 //! All side-effects run inside a `tokio::spawn`ed task so the HTTP
 //! response returns immediately. Live state lives in
@@ -28,7 +34,8 @@ use crate::catalog::{
     CatalogEpisode, CatalogItem, CatalogSeason,
 };
 use crate::firkins::{
-    create_firkin_record, CreateFirkinRequest, FileEntry, ImageMeta, Review, Trailer,
+    create_firkin_record, rollforward_firkin, CreateFirkinRequest, FileEntry, Firkin, ImageMeta,
+    Review, Trailer, TABLE as FIRKIN_TABLE,
 };
 use crate::ipfs_pins::IpfsPin;
 use crate::state::CloudState;
@@ -348,38 +355,12 @@ async fn run_job(
         }
     };
 
-    // Phase 5 — wait for IPFS pins to settle for every local file.
-    let total_files = files.len() as u32;
-    state.tv_build_progress.update(&key, |p| {
-        p.phase = TvBuildPhase::WaitingPins;
-        p.current = Some(0);
-        p.total = Some(total_files);
-        p.message = Some(format!("Waiting for IPFS pins (0/{total_files})…"));
-    });
-    let mut cid_by_path: std::collections::HashMap<String, String> =
-        std::collections::HashMap::with_capacity(files.len());
-    for (i, file) in files.iter().enumerate() {
-        if let Some(cid) = wait_for_pin(&state, &file.path).await {
-            cid_by_path.insert(file.path.clone(), cid);
-        } else {
-            tracing::warn!(
-                "[tv-build] pin never landed for {}: skipping ipfs entry",
-                file.path
-            );
-        }
-        let done = (i + 1) as u32;
-        state.tv_build_progress.update(&key, |p| {
-            p.current = Some(done);
-            p.message = Some(format!("Waiting for IPFS pins ({done}/{total_files})…"));
-        });
-    }
-
-    // Phase 6 — build the file entries (ipfs for local matches, url for missing).
-    let mut file_by_se: std::collections::HashMap<(u32, u32), &TvBuildFile> =
-        std::collections::HashMap::new();
-    for f in &files {
-        file_by_se.entry((f.season, f.episode)).or_insert(f);
-    }
+    // Phase 5 — build the initial firkin body with every episode as a
+    // `url` placeholder pointing at the per-episode TMDB page. Local files
+    // get promoted to `ipfs` entries one-by-one in the next phase as their
+    // pins land. Building the body up-front lets us mint the firkin record
+    // now (so the WebUI can navigate to it immediately) and roll the
+    // version forward incrementally as hashes arrive.
     let mut firkin_files: Vec<FileEntry> = Vec::new();
     firkin_files.push(FileEntry {
         kind: "url".to_string(),
@@ -394,20 +375,7 @@ async fn run_job(
         for ep in eps {
             let s = season.season_number.max(0) as u32;
             let e = ep.episode_number.max(0) as u32;
-            let label = format!(
-                "S{:02}E{:02} — {}",
-                s, e, ep.name
-            );
-            if let Some(file) = file_by_se.get(&(s, e)) {
-                if let Some(cid) = cid_by_path.get(&file.path) {
-                    firkin_files.push(FileEntry {
-                        kind: "ipfs".to_string(),
-                        value: cid.clone(),
-                        title: Some(label),
-                    });
-                    continue;
-                }
-            }
+            let label = format!("S{:02}E{:02} — {}", s, e, ep.name);
             firkin_files.push(FileEntry {
                 kind: "url".to_string(),
                 value: format!(
@@ -419,8 +387,9 @@ async fn run_job(
         }
     }
 
-    // Phase 7 — create the firkin via the shared inner handler. Same dedup,
-    // same artist materialisation, same body pin, same auto-resolver hooks.
+    // Phase 6 — create the firkin now. The body carries every episode as a
+    // url placeholder; pin promotions in the next phase roll the version
+    // forward per local file.
     state.tv_build_progress.update(&key, |p| {
         p.phase = TvBuildPhase::CreatingFirkin;
         p.current = None;
@@ -477,20 +446,8 @@ async fn run_job(
         bookmarked: Some(true),
     };
 
-    match create_firkin_record(&state, req).await {
-        Ok((_, dto)) => {
-            let firkin_id = dto.id.clone();
-            tracing::info!(
-                tmdb_id = %tmdb_id,
-                firkin_id = %firkin_id,
-                "[tv-build] completed",
-            );
-            state.tv_build_progress.update(&key, |p| {
-                p.phase = TvBuildPhase::Completed;
-                p.completed_firkin_id = Some(firkin_id.clone());
-                p.message = Some(format!("Firkin built: {firkin_id}"));
-            });
-        }
+    let firkin_id = match create_firkin_record(&state, req).await {
+        Ok((_, dto)) => dto.id,
         Err((status, body)) => {
             let msg = body
                 .0
@@ -500,8 +457,127 @@ async fn run_job(
                 .unwrap_or_else(|| format!("HTTP {status}"));
             tracing::warn!("[tv-build] firkin create failed: {msg}");
             fail(&state, &key, format!("Firkin create failed: {msg}"));
+            return;
+        }
+    };
+    tracing::info!(
+        tmdb_id = %tmdb_id,
+        firkin_id = %firkin_id,
+        "[tv-build] firkin created — rolling forward as pins arrive",
+    );
+
+    // Surface the firkin id immediately so the WebUI can render a "View
+    // firkin →" link during the pin window. The phase stays non-terminal
+    // (`WaitingPins`) so the existing auto-nav-on-completion semantics
+    // continue to wait until every pin has been processed.
+    state.tv_build_progress.update(&key, |p| {
+        p.completed_firkin_id = Some(firkin_id.clone());
+    });
+
+    // Phase 7 — wait for IPFS pins to settle, rolling the firkin forward
+    // once per file so each (season, episode) entry flips from a `url`
+    // placeholder to an `ipfs` CID as soon as the local hash lands. Pins
+    // are awaited sequentially so the rollforwards never race; each one
+    // pushes the prior CID onto `version_hashes` and re-pins the new body.
+    let total_files = files.len() as u32;
+    state.tv_build_progress.update(&key, |p| {
+        p.phase = TvBuildPhase::WaitingPins;
+        p.current = Some(0);
+        p.total = Some(total_files);
+        p.message = Some(format!("Waiting for IPFS pins (0/{total_files})…"));
+    });
+    for (i, file) in files.iter().enumerate() {
+        if let Some(cid) = wait_for_pin(&state, &file.path).await {
+            if let Err(e) = apply_pin_to_firkin(&state, &firkin_id, file, &cid).await {
+                tracing::warn!(
+                    "[tv-build] failed to roll firkin {} forward for {}: {}",
+                    firkin_id,
+                    file.path,
+                    e,
+                );
+            }
+        } else {
+            tracing::warn!(
+                "[tv-build] pin never landed for {}: leaving url placeholder",
+                file.path
+            );
+        }
+        let done = (i + 1) as u32;
+        state.tv_build_progress.update(&key, |p| {
+            p.current = Some(done);
+            p.message = Some(format!("Waiting for IPFS pins ({done}/{total_files})…"));
+        });
+    }
+
+    tracing::info!(
+        tmdb_id = %tmdb_id,
+        firkin_id = %firkin_id,
+        "[tv-build] completed",
+    );
+    state.tv_build_progress.update(&key, |p| {
+        p.phase = TvBuildPhase::Completed;
+        p.message = Some(format!("Firkin built: {firkin_id}"));
+    });
+}
+
+/// Roll a TV-show firkin forward to reflect a single local-file pin
+/// landing. Loads the current firkin doc (so concurrent updates would be
+/// preserved — though the caller awaits pins sequentially so there are
+/// none in practice), rewrites the matching `(season, episode)` `url`
+/// placeholder to an `ipfs` entry, then hands off to
+/// `firkins::rollforward_firkin` which recomputes the CID, appends the
+/// prior CID to `version_hashes`, persists the doc, and re-pins the new
+/// body JSON. The `url` placeholder is matched by the title prefix
+/// `S{season:02}E{episode:02} —` set when the initial firkin was built.
+async fn apply_pin_to_firkin(
+    state: &CloudState,
+    firkin_id: &str,
+    file: &TvBuildFile,
+    cid: &str,
+) -> Result<(), String> {
+    let current: Option<Firkin> = state
+        .db
+        .select((FIRKIN_TABLE, firkin_id))
+        .await
+        .map_err(|e| format!("db select failed: {e}"))?;
+    let mut current =
+        current.ok_or_else(|| format!("firkin {firkin_id} disappeared before pin update"))?;
+
+    let prefix = format!("S{:02}E{:02} —", file.season, file.episode);
+    let mut promoted = false;
+    for entry in current.files.iter_mut() {
+        let matches = entry.kind == "url"
+            && entry
+                .title
+                .as_deref()
+                .map(|t| t.starts_with(&prefix))
+                .unwrap_or(false);
+        if matches {
+            entry.kind = "ipfs".to_string();
+            entry.value = cid.to_string();
+            promoted = true;
+            break;
         }
     }
+    if !promoted {
+        // Either the episode entry was already an ipfs entry (re-run after
+        // a previous build), or the (season, episode) numbers don't line
+        // up with anything TMDB returned. Either way, no rollforward.
+        return Ok(());
+    }
+
+    current.id = None;
+    current.updated_at = Utc::now();
+    rollforward_firkin(state, firkin_id, current)
+        .await
+        .map_err(|(status, body)| {
+            body.0
+                .get("error")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("HTTP {status}"))
+        })?;
+    Ok(())
 }
 
 /// Run the per-season episode fetches in a sliding-window loop bounded by
