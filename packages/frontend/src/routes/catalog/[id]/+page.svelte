@@ -1332,6 +1332,7 @@
 					torrents={isBookmarked ? torrentSearch.matches : []}
 					torrentsStatus={torrentSearch.status}
 					torrentsError={torrentSearch.error}
+					searchStack={isBookmarked ? torrentSearch.searchStack : []}
 					{existingHashes}
 					{addingHash}
 					onAssign={isBookmarked ? assignTorrent : undefined}

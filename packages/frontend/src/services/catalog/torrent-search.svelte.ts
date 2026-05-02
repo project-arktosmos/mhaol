@@ -8,6 +8,17 @@ import { addonKind } from '$lib/firkins.service';
 
 export type TorrentSearchStatus = 'idle' | 'searching' | 'done' | 'error';
 
+export interface SearchStackEntry {
+	id: number;
+	query: string;
+	status: 'searching' | 'done' | 'error';
+	/** Result count: total matches for the initial `search()`, or new
+	 * additions for an `searchAppend()` call. Set once `status` flips to
+	 * `done`. */
+	count?: number;
+	error?: string;
+}
+
 export type TorrentRowEval =
 	| { kind: 'pending' }
 	| { kind: 'evaluating' }
@@ -82,8 +93,14 @@ export class TorrentSearch {
 	error = $state<string | null>(null);
 	rowEvals = $state<Record<string, TorrentRowEval>>({});
 	groupedMatches = $derived<TorrentQualityGroup[]>(groupMatches(this.matches));
+	/// Per-query progress log. Each `search()` resets the log; each
+	/// `searchAppend()` pushes one entry. The UI surfaces this so the user
+	/// can see when the initial show-name search and each per-season fan-out
+	/// search are running, completed, or failed.
+	searchStack = $state<SearchStackEntry[]>([]);
 
 	private run = 0;
+	private nextEntryId = 0;
 	private readonly evaluate: boolean;
 
 	constructor(options: TorrentSearchOptions = {}) {
@@ -92,6 +109,16 @@ export class TorrentSearch {
 
 	cancel(): void {
 		this.run++;
+	}
+
+	private pushStackEntry(query: string): number {
+		const id = ++this.nextEntryId;
+		this.searchStack = [...this.searchStack, { id, query, status: 'searching' }];
+		return id;
+	}
+
+	private updateStackEntry(id: number, patch: Partial<SearchStackEntry>): void {
+		this.searchStack = this.searchStack.map((e) => (e.id === id ? { ...e, ...patch } : e));
 	}
 
 	/// Run a focused query (e.g. `"Show Name S02"`) against the torrent
@@ -107,9 +134,13 @@ export class TorrentSearch {
 		year: number | null
 	): Promise<void> {
 		const tokenAtStart = this.run;
+		const entryId = this.pushStackEntry(query);
 		try {
 			const torrents = await searchTorrents(addon, query);
-			if (tokenAtStart !== this.run) return;
+			if (tokenAtStart !== this.run) {
+				this.updateStackEntry(entryId, { status: 'error', error: 'cancelled' });
+				return;
+			}
 			const isTv = addonKind(addon) === 'tv show';
 			const fresh = matchTorrentsForResult(
 				{
@@ -124,12 +155,18 @@ export class TorrentSearch {
 				torrents,
 				{ skipYearFilter: isTv }
 			);
-			if (tokenAtStart !== this.run) return;
+			if (tokenAtStart !== this.run) {
+				this.updateStackEntry(entryId, { status: 'error', error: 'cancelled' });
+				return;
+			}
 			const existing = new Set(this.matches.map((m) => m.infoHash));
 			const additions = fresh.filter((t) => !existing.has(t.infoHash));
 			if (additions.length > 0) this.matches = [...this.matches, ...additions];
+			this.updateStackEntry(entryId, { status: 'done', count: additions.length });
 		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Unknown error';
 			console.warn('[torrent-search] append failed:', err);
+			this.updateStackEntry(entryId, { status: 'error', error: message });
 		}
 	}
 
@@ -139,6 +176,8 @@ export class TorrentSearch {
 		this.error = null;
 		this.matches = [];
 		this.rowEvals = {};
+		this.searchStack = [];
+		const entryId = this.pushStackEntry(args.title);
 		try {
 			const torrents = await searchTorrents(args.addon, args.title);
 			if (myRun !== this.run) return;
@@ -158,6 +197,7 @@ export class TorrentSearch {
 			);
 			this.matches = matches;
 			this.status = 'done';
+			this.updateStackEntry(entryId, { status: 'done', count: matches.length });
 			// Streamability probing runs one /api/torrent/evaluate per row.
 			// For TV shows the result set spans every season the show ever
 			// aired, so the per-row probe is way too expensive (and the
@@ -167,8 +207,10 @@ export class TorrentSearch {
 		} catch (err) {
 			if (myRun !== this.run) return;
 			this.matches = [];
-			this.error = err instanceof Error ? err.message : 'Unknown error';
+			const message = err instanceof Error ? err.message : 'Unknown error';
+			this.error = message;
 			this.status = 'error';
+			this.updateStackEntry(entryId, { status: 'error', error: message });
 		}
 	}
 

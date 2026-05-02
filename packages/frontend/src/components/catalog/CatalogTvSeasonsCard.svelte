@@ -6,12 +6,14 @@
 		parseTorrentSeasons,
 		type TorrentResultItem
 	} from '$lib/search.service';
+	import type { SearchStackEntry } from '$services/catalog/torrent-search.svelte';
 
 	interface Props {
 		tmdbTvId: string;
 		torrents?: TorrentResultItem[];
 		torrentsStatus?: 'idle' | 'searching' | 'done' | 'error';
 		torrentsError?: string | null;
+		searchStack?: SearchStackEntry[];
 		existingHashes?: Set<string>;
 		addingHash?: string | null;
 		onAssign?: (torrent: TorrentResultItem) => void | Promise<void>;
@@ -22,6 +24,7 @@
 		torrents = [],
 		torrentsStatus = 'idle',
 		torrentsError = null,
+		searchStack = [],
 		existingHashes = new Set<string>(),
 		addingHash = null,
 		onAssign,
@@ -174,6 +177,12 @@
 	function torrentsForSeason(n: number): TorrentResultItem[] {
 		return classifiedTorrents.bySeason.get(n) ?? [];
 	}
+
+	const stackInflight = $derived(searchStack.some((e) => e.status === 'searching'));
+	let stackExpanded = $state(false);
+	$effect(() => {
+		if (stackInflight) stackExpanded = true;
+	});
 </script>
 
 <div class="card border border-base-content/10 bg-base-200 p-4">
@@ -189,6 +198,72 @@
 			<span class="text-xs text-base-content/60">{torrents.length} torrent{torrents.length === 1 ? '' : 's'}</span>
 		{/if}
 	</div>
+
+	{#if searchStack.length > 0}
+		<div class="mb-3 rounded border border-base-content/10 bg-base-100">
+			<button
+				type="button"
+				class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-base-200"
+				onclick={() => (stackExpanded = !stackExpanded)}
+				aria-expanded={stackExpanded}
+			>
+				{#if stackInflight}
+					<span
+						class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
+						aria-hidden="true"
+					></span>
+				{:else}
+					<span
+						class={classNames('shrink-0 text-base-content/60 transition-transform', {
+							'rotate-90': stackExpanded
+						})}
+						aria-hidden="true">›</span
+					>
+				{/if}
+				<span class="font-semibold tracking-wider text-base-content/70 uppercase">
+					Search progress
+				</span>
+				<span class="text-base-content/50">
+					({searchStack.filter((e) => e.status === 'done').length}/{searchStack.length})
+				</span>
+			</button>
+			{#if stackExpanded}
+				<ul class="flex flex-col divide-y divide-base-content/5 border-t border-base-content/10">
+					{#each searchStack as entry (entry.id)}
+						<li class="flex items-center gap-2 px-3 py-1.5 text-xs">
+							{#if entry.status === 'searching'}
+								<span
+									class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
+									aria-hidden="true"
+								></span>
+							{:else if entry.status === 'done'}
+								<span class="shrink-0 text-success" aria-hidden="true">✓</span>
+							{:else}
+								<span class="shrink-0 text-error" aria-hidden="true">✕</span>
+							{/if}
+							<span class="flex-1 truncate font-mono text-base-content/80" title={entry.query}>
+								{entry.query}
+							</span>
+							<span
+								class={classNames('shrink-0', {
+									'text-base-content/60': entry.status !== 'error',
+									'text-error': entry.status === 'error'
+								})}
+							>
+								{#if entry.status === 'searching'}
+									searching…
+								{:else if entry.status === 'done'}
+									{entry.count ?? 0} result{entry.count === 1 ? '' : 's'}
+								{:else}
+									{entry.error ?? 'failed'}
+								{/if}
+							</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</div>
+	{/if}
 
 	{#if seasonsStatus === 'loading' && seasons.length === 0}
 		<p class="text-sm text-base-content/60">Loading…</p>
