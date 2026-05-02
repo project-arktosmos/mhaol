@@ -91,6 +91,7 @@ export interface YouTubeStreamFormat {
 export interface YouTubeStreamUrlResult {
 	formats: YouTubeStreamFormat[];
 	expiresAt: number;
+	clientName: string;
 }
 
 // ===== Playlist Types =====

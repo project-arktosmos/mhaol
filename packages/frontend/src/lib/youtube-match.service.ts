@@ -304,19 +304,31 @@ export async function playPlaylistTrack(playlist: PlayerPlaylist, index: number)
  * Fetch the browser-safe stream URLs for a YouTube video and pick the best
  * playable format (same picker the play helpers use). Returns `null` if the
  * call fails or no playable format is exposed.
+ *
+ * `preferredClient` is the Innertube client name (`web`, `web_embedded`,
+ * `tv`, `android`, `ios`) the caller cached from a previous resolution.
+ * The backend tries it first when set, falling back to the regular browser
+ * priority list — so a stale hint just costs the same iteration as a cold
+ * call. The successful client is reported back as `clientName` so callers
+ * can persist the new value when it differs.
  */
 export async function resolveYouTubeStreamUrl(
-	youtubeUrl: string
-): Promise<{ url: string; mimeType: string | null } | null> {
+	youtubeUrl: string,
+	preferredClient: string | null = null
+): Promise<{ url: string; mimeType: string | null; clientName: string } | null> {
 	try {
-		const res = await fetch(
-			`/api/ytdl/info/stream-urls-browser?url=${encodeURIComponent(youtubeUrl)}`
-		);
+		const params = new URLSearchParams({ url: youtubeUrl });
+		if (preferredClient) params.set('prefer', preferredClient);
+		const res = await fetch(`/api/ytdl/info/stream-urls-browser?${params.toString()}`);
 		if (!res.ok) return null;
 		const result = (await res.json()) as YouTubeStreamUrlResult;
 		const format = pickAudioFormat(result);
 		if (!format) return null;
-		return { url: format.url, mimeType: format.mimeType ?? null };
+		return {
+			url: format.url,
+			mimeType: format.mimeType ?? null,
+			clientName: result.clientName ?? ''
+		};
 	} catch {
 		return null;
 	}

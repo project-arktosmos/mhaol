@@ -20,7 +20,13 @@ pub const TABLE: &str = "firkin";
 const SHA2_256_CODE: u64 = 0x12;
 const RAW_CODEC: u64 = 0x55;
 
-const ALLOWED_FILE_TYPES: &[&str] = &["ipfs", "torrent magnet", "url", "lyrics"];
+const ALLOWED_FILE_TYPES: &[&str] = &[
+    "ipfs",
+    "torrent magnet",
+    "url",
+    "lyrics",
+    "youtube preferred client",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ImageMeta {

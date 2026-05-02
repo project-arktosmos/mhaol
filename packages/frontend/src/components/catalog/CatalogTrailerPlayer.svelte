@@ -7,9 +7,20 @@
 		posterUrl: string | null;
 		youtubeUrl: string | null;
 		title: string;
+		/// Cached Innertube client (`web`, `web_embedded`, `tv`, `android`,
+		/// `ios`) that resolved this video on a previous visit. Passed to the
+		/// backend as a hint so the failing-candidate iteration is skipped on
+		/// the happy path. A stale hint just falls through to the regular
+		/// browser priority list.
+		preferredClient?: string | null;
+		/// Fired once a stream URL has been resolved successfully, with the
+		/// Innertube client that produced it. The parent persists this back
+		/// to the firkin (only when it differs from the current cached
+		/// value) so the next visit lands on the right client first.
+		onResolved?: (clientName: string) => void;
 	}
 
-	let { posterUrl, youtubeUrl, title }: Props = $props();
+	let { posterUrl, youtubeUrl, title, preferredClient = null, onResolved }: Props = $props();
 
 	let containerElement = $state<HTMLDivElement | null>(null);
 	let videoElement = $state<HTMLVideoElement | null>(null);
@@ -36,13 +47,14 @@
 	});
 
 	async function resolveStream(url: string): Promise<void> {
-		const resolved = await resolveYouTubeStreamUrl(url);
+		const resolved = await resolveYouTubeStreamUrl(url, preferredClient);
 		if (resolvedYoutubeUrl !== url) return;
 		if (!resolved) {
 			error = 'No playable trailer format';
 			return;
 		}
 		streamUrl = resolved.url;
+		if (resolved.clientName) onResolved?.(resolved.clientName);
 	}
 
 	$effect(() => {

@@ -69,7 +69,13 @@ export interface FirkinImage {
 	height: number;
 }
 
-export const FIRKIN_FILE_TYPES = ['ipfs', 'torrent magnet', 'url', 'lyrics'] as const;
+export const FIRKIN_FILE_TYPES = [
+	'ipfs',
+	'torrent magnet',
+	'url',
+	'lyrics',
+	'youtube preferred client'
+] as const;
 export type FirkinFileType = (typeof FIRKIN_FILE_TYPES)[number];
 
 export interface FirkinFile {

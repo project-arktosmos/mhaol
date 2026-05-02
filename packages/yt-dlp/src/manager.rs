@@ -358,6 +358,31 @@ impl DownloadManager {
             .await
     }
 
+    /// Same as `extract_stream_urls_for_browser`, but tries `prefer_client`
+    /// first if it matches a known client (`web`, `web_embedded`, `tv`,
+    /// `android`, `ios`). Lets callers cache the client name returned in a
+    /// previous result and skip the failing-candidate iteration the next
+    /// time the same video is resolved.
+    pub async fn extract_stream_urls_for_browser_with_preference(
+        &self,
+        url: &str,
+        prefer_client: Option<&str>,
+    ) -> anyhow::Result<StreamUrlResult> {
+        let video_id = extract_video_id(url)?;
+        let (po_token, visitor_data) = {
+            let config = self.config.read();
+            (config.po_token.clone(), config.visitor_data.clone())
+        };
+        self.pipeline
+            .extract_stream_urls_for_browser_with_preference(
+                &video_id,
+                po_token.as_deref(),
+                visitor_data.as_deref(),
+                prefer_client,
+            )
+            .await
+    }
+
     /// Fetch and download subtitles on-demand for a video.
     pub async fn fetch_subtitles(
         &self,

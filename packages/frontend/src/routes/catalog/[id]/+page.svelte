@@ -162,6 +162,13 @@
 			.map((f) => (f.type === 'url' ? parseYouTubeWatchUrl(f.value) : null))
 			.find((u): u is string => Boolean(u)) ?? null
 	);
+	// Innertube client cached on a previous resolution (`web`, `web_embedded`,
+	// `tv`, `android`, `ios`). Passed to `<CatalogTrailerPlayer>` so the
+	// backend can skip the failing-candidate iteration on the happy path. A
+	// stale value just falls back to the regular browser priority list.
+	const youtubePreferredClient = $derived(
+		firkin.files.find((f) => f.type === 'youtube preferred client')?.value ?? null
+	);
 	const thumb = $derived(firkin.images[0]?.url ?? null);
 	// Trailers prefer the last image (typically the backdrop / wide art) so
 	// the right-side player surfaces a 16:9 still rather than the poster.
@@ -654,6 +661,23 @@
 		data.firkin = updated;
 	}
 
+	// Cache the Innertube client that produced a successful trailer / video
+	// resolution on this firkin. Stored as a single `youtube preferred
+	// client` file row; rolls the firkin version forward only when the
+	// value is new or has changed (skipping the rollforward when the cache
+	// is already accurate).
+	async function persistYoutubePreferredClient(clientName: string): Promise<void> {
+		if (!clientName) return;
+		if (youtubePreferredClient === clientName) return;
+		const nextFiles = firkin.files.filter((f) => f.type !== 'youtube preferred client');
+		nextFiles.push({ type: 'youtube preferred client', value: clientName });
+		try {
+			await persistFirkinPatch({ files: nextFiles });
+		} catch (err) {
+			console.warn('[catalog detail] persist youtube preferred client failed:', err);
+		}
+	}
+
 	const trailerResolver = new TrailerResolver({
 		persist: (resolved) => persistFirkinPatch({ trailers: resolved })
 	});
@@ -1095,6 +1119,8 @@
 							posterUrl={trailerThumb}
 							youtubeUrl={isYoutubeVideo ? youtubeVideoUrl : firstTrailerUrl}
 							title={firkin.title}
+							preferredClient={isYoutubeVideo ? youtubePreferredClient : null}
+							onResolved={isYoutubeVideo ? persistYoutubePreferredClient : undefined}
 						/>
 					{:else if firkin.images[1]}
 						<img

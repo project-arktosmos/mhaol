@@ -63,6 +63,17 @@ struct UrlQuery {
     url: String,
 }
 
+#[derive(Deserialize)]
+struct BrowserStreamQuery {
+    url: String,
+    /// Optional preferred Innertube client (`web`, `web_embedded`, `tv`,
+    /// `android`, `ios`) — used by callers that cached a previous result's
+    /// `clientName` to skip the failing-candidate iteration on the next call.
+    /// Unknown values are ignored and the regular browser priority list is
+    /// walked instead.
+    prefer: Option<String>,
+}
+
 async fn get_status(State(state): State<CloudState>) -> impl IntoResponse {
     Json(state.ytdl_manager.get_stats())
 }
@@ -115,11 +126,12 @@ async fn get_stream_urls(
 
 async fn get_stream_urls_browser(
     State(state): State<CloudState>,
-    Query(query): Query<UrlQuery>,
+    Query(query): Query<BrowserStreamQuery>,
 ) -> impl IntoResponse {
+    let prefer = query.prefer.as_deref().map(str::trim).filter(|s| !s.is_empty());
     match state
         .ytdl_manager
-        .extract_stream_urls_for_browser(&query.url)
+        .extract_stream_urls_for_browser_with_preference(&query.url, prefer)
         .await
     {
         Ok(result) => {

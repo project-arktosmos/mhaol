@@ -66,6 +66,11 @@ pub enum PipelineState {
 pub struct StreamUrlResult {
     pub formats: Vec<ResolvedFormat>,
     pub expires_at: u64,
+    /// Innertube client whose response produced these formats (e.g. `"web"`,
+    /// `"android"`, `"ios"`). Callers can persist this and pass it back as a
+    /// preference on the next call so the iteration starts at the client
+    /// that actually worked rather than re-discovering it.
+    pub client_name: String,
 }
 
 /// Orchestrates the full download pipeline.
@@ -132,7 +137,7 @@ impl DownloadPipeline {
         po_token: Option<&str>,
         visitor_data: Option<&str>,
     ) -> Result<StreamUrlResult> {
-        self.extract_stream_urls_inner(video_id, po_token, visitor_data, false).await
+        self.extract_stream_urls_inner(video_id, po_token, visitor_data, false, None).await
     }
 
     /// Extract resolved stream URLs preferring browser-client (WEB) signing so that
@@ -146,7 +151,21 @@ impl DownloadPipeline {
         po_token: Option<&str>,
         visitor_data: Option<&str>,
     ) -> Result<StreamUrlResult> {
-        self.extract_stream_urls_inner(video_id, po_token, visitor_data, true).await
+        self.extract_stream_urls_inner(video_id, po_token, visitor_data, true, None).await
+    }
+
+    /// Same as `extract_stream_urls_for_browser`, but tries `prefer_client` first
+    /// (when given and recognised) before falling through to the regular browser
+    /// priority list. Lets callers cache the client that actually worked on a
+    /// previous call and skip the failing-candidate iteration on the next one.
+    pub async fn extract_stream_urls_for_browser_with_preference(
+        &self,
+        video_id: &str,
+        po_token: Option<&str>,
+        visitor_data: Option<&str>,
+        prefer_client: Option<&str>,
+    ) -> Result<StreamUrlResult> {
+        self.extract_stream_urls_inner(video_id, po_token, visitor_data, true, prefer_client).await
     }
 
     async fn extract_stream_urls_inner(
@@ -155,22 +174,49 @@ impl DownloadPipeline {
         po_token: Option<&str>,
         visitor_data: Option<&str>,
         prefer_browser: bool,
+        prefer_client: Option<&str>,
     ) -> Result<StreamUrlResult> {
         use crate::extractor::clients::{ANDROID, IOS, TV, WEB, WEB_EMBEDDED};
 
         // Browser-priority client list. We use the same order whether or not
         // a po_token is present — the post-fetch retry loop below decides
         // which client wins, not the token.
-        let web_priority: &[&InnertubeClient] =
+        let web_priority: &[&'static InnertubeClient] =
             &[&*WEB, &*WEB_EMBEDDED, &*TV, &*ANDROID, &*IOS];
-        let clients: &[&InnertubeClient] = if prefer_browser || po_token.is_some() {
+        let base_clients: &[&'static InnertubeClient] = if prefer_browser || po_token.is_some() {
             web_priority
         } else {
             &*CLIENT_PRIORITY
         };
 
-        let (player_response, mut resolved_formats, _client, po_token_was_used) = self
-            .fetch_and_resolve_with_clients(video_id, po_token, visitor_data, clients)
+        // Apply the caller's preferred client by moving (or inserting) it to
+        // the front of the priority list. Unknown names are ignored — the
+        // base list is still walked, so a stale cached client just falls
+        // back to the regular iteration.
+        let preferred: Option<&'static InnertubeClient> =
+            prefer_client.and_then(|name| match name {
+                "web" => Some(&*WEB),
+                "web_embedded" => Some(&*WEB_EMBEDDED),
+                "tv" => Some(&*TV),
+                "android" => Some(&*ANDROID),
+                "ios" => Some(&*IOS),
+                _ => None,
+            });
+        let clients_slice: Vec<&'static InnertubeClient> = if let Some(pref) = preferred {
+            let mut out: Vec<&'static InnertubeClient> = Vec::with_capacity(base_clients.len());
+            out.push(pref);
+            for c in base_clients {
+                if !std::ptr::eq(*c, pref) {
+                    out.push(*c);
+                }
+            }
+            out
+        } else {
+            base_clients.to_vec()
+        };
+
+        let (player_response, mut resolved_formats, client, po_token_was_used) = self
+            .fetch_and_resolve_with_clients(video_id, po_token, visitor_data, &clients_slice)
             .await?;
 
         // Append pot=TOKEN when applicable
@@ -201,6 +247,7 @@ impl DownloadPipeline {
         Ok(StreamUrlResult {
             formats: resolved_formats,
             expires_at: now + expires_in,
+            client_name: client.name.to_string(),
         })
     }
 
