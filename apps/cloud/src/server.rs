@@ -152,22 +152,27 @@ async fn main() {
                     return;
                 }
             };
-            // Discover bootstrap multiaddrs for the rendezvous node:
-            // `RENDEZVOUS_BOOTSTRAP` (newline- or comma-separated) takes
-            // precedence, then the bootstrap file written by the rendezvous
-            // app, then a localhost fallback so single-machine setups work
-            // out of the box. Non-PSK peers cannot complete the libp2p
-            // handshake, so this list is the only path the cloud uses to
-            // discover other private-swarm peers.
-            let extra_bootstrap = resolve_rendezvous_bootstrap();
+            // Cloud nodes find each other via mDNS on the LAN and gate every
+            // connection on the swarm-key pnet handshake. Browsers reach the
+            // node by dialing the `/ws` listener directly (the cloud's HTTP
+            // server hands them the multiaddr via /api/p2p/bootstrap). No
+            // standalone bootstrap peer is required.
+            let listen_port: u16 = std::env::var("MHAOL_IPFS_TCP_PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(9900);
+            let ws_listen_port: u16 = std::env::var("MHAOL_IPFS_WS_PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(9901);
             let config = IpfsConfig {
                 repo_path,
                 swarm_key: Some(swarm_key),
-                // mDNS would still be filtered by the pnet handshake but
-                // adds no value when we have a known rendezvous bootstrap.
-                enable_mdns: false,
-                bootstrap_on_start: true,
-                extra_bootstrap,
+                listen_port,
+                ws_listen_port,
+                enable_mdns: true,
+                bootstrap_on_start: false,
+                extra_bootstrap: vec![],
                 ..IpfsConfig::default()
             };
             if let Err(e) = manager_clone.initialize(config).await {
@@ -251,49 +256,6 @@ async fn main() {
     tracing::info!("Cloud server (SurrealDB + web UI) listening on {}", addr);
 
     axum::serve(listener, app).await.expect("Server error");
-}
-
-/// Build the bootstrap multiaddr list for the rendezvous IPFS node.
-///
-/// Sources, in order of precedence:
-/// 1. `RENDEZVOUS_BOOTSTRAP` env var (newline- or comma-separated multiaddrs).
-/// 2. The bootstrap file written by the rendezvous binary, default
-///    `<data_root>/rendezvous/bootstrap.multiaddr`. Override with
-///    `RENDEZVOUS_BOOTSTRAP_FILE`.
-/// 3. A localhost default (`/ip4/127.0.0.1/tcp/14001`) so a single-machine
-///    setup works without configuration. The peer-id portion is stripped, so
-///    libp2p will dial-and-discover the actual peer id at runtime.
-#[cfg(not(target_os = "android"))]
-fn resolve_rendezvous_bootstrap() -> Vec<String> {
-    if let Ok(raw) = std::env::var("RENDEZVOUS_BOOTSTRAP") {
-        let entries: Vec<String> = raw
-            .split(|c: char| c == '\n' || c == ',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        if !entries.is_empty() {
-            return entries;
-        }
-    }
-
-    let bootstrap_file = paths::rendezvous_bootstrap_file();
-
-    if let Ok(contents) = std::fs::read_to_string(&bootstrap_file) {
-        let entries: Vec<String> = contents
-            .lines()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        if !entries.is_empty() {
-            return entries;
-        }
-    }
-
-    // Localhost fallback. libp2p will dial this address and learn the peer
-    // id from the noise handshake. The pnet layer rejects any peer that
-    // doesn't carry the same swarm key, so even a wrong host on this port
-    // cannot enter the swarm.
-    vec!["/ip4/127.0.0.1/tcp/14001".to_string()]
 }
 
 /// Load .env from the workspace root into process environment variables.
