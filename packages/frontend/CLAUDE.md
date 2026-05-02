@@ -147,11 +147,7 @@ Services should never call `fetch` directly when they need transport-aware behav
 
 `src/routes/+layout.svelte` is navbar + main only; there is no right-side aside. The only persistent overlay is the fixed bottom-right `NavbarAudioPlayer` (with `NavbarLyricsPanel` and `NavbarPlaylistPanel`), shown when `playerService.displayMode === 'navbar'` and a file is loaded. The layout calls `playerService.initialize()` on mount so the player's stores wake up; the backend's `/api/player/stream-status` and `/api/player/playable` stubs let initialize settle without errors.
 
-Audio playback uses the dedicated `displayMode === 'navbar'` mode. `NavbarAudioPlayer.svelte` is a compact horizontal strip (thumbnail, title, play/pause, position, seek bar, duration, stop) that owns its own hidden `<video>` element wired to `playerService.state.directStreamUrl`. Audio callers (the catalog tracks card via `playYouTubeAudio` in `src/lib/youtube-match.service.ts`, and the `/youtube` page when `mode === 'audio'`) call `playerService.playUrl(file, url, mime, 'navbar')` to surface playback here. Firkin in-page playback (`/catalog/[ipfsHash]`) uses `'inline'`.
-
-## `/youtube` route
-
-`src/routes/youtube/+page.svelte` is a self-contained yt-dlp UI. It talks **directly** to `/api/ytdl/*` via plain `fetch()` (no transport layer) — search, paste-URL info, queue audio/video/both, live progress via SSE on `/api/ytdl/downloads/events`, and "Stream" buttons that call `playerService.playUrl()` so the result plays in the navbar audio player.
+Audio playback uses the dedicated `displayMode === 'navbar'` mode. `NavbarAudioPlayer.svelte` is a compact horizontal strip (thumbnail, title, play/pause, position, seek bar, duration, stop) that owns its own hidden `<video>` element wired to `playerService.state.directStreamUrl`. Audio callers (the catalog tracks card via `playYouTubeAudio` in `src/lib/youtube-match.service.ts`) call `playerService.playUrl(file, url, mime, 'navbar')` to surface playback here. Firkin in-page playback (`/catalog/[ipfsHash]`) uses `'inline'`.
 
 ## YouTube extraction (music + trailers)
 

@@ -1,24 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { base } from '$app/paths';
-	import { ipfsService, type IpfsPin } from '$lib/ipfs.service';
-	import { firkinsService } from '$lib/firkins.service';
-	import { parseTorrentName } from '$lib/search.service';
+	import { ipfsService } from '$lib/ipfs.service';
 
 	const pinsStore = ipfsService.state;
-	const firkinsStore = firkinsService.state;
-
-	const usedCids = $derived(
-		new Set(
-			$firkinsStore.firkins.flatMap((d) =>
-				(d.files ?? []).filter((f) => f.type === 'ipfs' && f.value).map((f) => f.value)
-			)
-		)
-	);
 
 	onMount(() => {
 		ipfsService.refresh();
-		firkinsService.refresh();
 	});
 
 	function formatBytes(bytes: number): string {
@@ -40,39 +27,6 @@
 			return value;
 		}
 	}
-
-	function basename(path: string): string {
-		const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-		return idx >= 0 ? path.slice(idx + 1) : path;
-	}
-
-	function stripExt(name: string): string {
-		const idx = name.lastIndexOf('.');
-		return idx > 0 ? name.slice(0, idx) : name;
-	}
-
-	function presetForMime(mime: string): { source: string; type: string } {
-		if (mime.startsWith('video/')) return { source: 'tmdb', type: 'movie' };
-		if (mime.startsWith('audio/')) return { source: 'musicbrainz', type: 'album' };
-		if (mime.startsWith('image/')) return { source: 'tmdb', type: 'image' };
-		return { source: 'tmdb', type: 'movie' };
-	}
-
-	function addAsFirkinHref(pin: IpfsPin): string {
-		const filename = basename(pin.path);
-		const stripped = stripExt(filename);
-		const parsed = parseTorrentName(stripped);
-		const preset = presetForMime(pin.mime);
-		const params = new URLSearchParams({
-			cid: pin.cid,
-			title: parsed.parsedTitle,
-			source: preset.source,
-			type: preset.type,
-			filename
-		});
-		if (parsed.year) params.set('year', String(parsed.year));
-		return `${base}/firkins?${params.toString()}`;
-	}
 </script>
 
 <svelte:head>
@@ -90,10 +44,7 @@
 		</div>
 		<button
 			class="btn btn-outline btn-sm"
-			onclick={() => {
-				ipfsService.refresh();
-				firkinsService.refresh();
-			}}
+			onclick={() => ipfsService.refresh()}
 			disabled={$pinsStore.loading}
 		>
 			Refresh
@@ -122,7 +73,6 @@
 						<th class="w-32">MIME</th>
 						<th class="w-24 text-right">Size</th>
 						<th class="w-40">Pinned</th>
-						<th class="w-40"></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -133,15 +83,6 @@
 							<td class="font-mono text-xs">{pin.mime}</td>
 							<td class="text-right text-xs">{formatBytes(pin.size)}</td>
 							<td class="text-xs text-base-content/60">{formatDate(pin.created_at)}</td>
-							<td class="text-right">
-								{#if usedCids.has(pin.cid)}
-									<span class="text-xs text-base-content/40">In firkin</span>
-								{:else}
-									<a href={addAsFirkinHref(pin)} class="btn btn-outline btn-xs btn-primary">
-										Add as firkin
-									</a>
-								{/if}
-							</td>
 						</tr>
 					{/each}
 				</tbody>
