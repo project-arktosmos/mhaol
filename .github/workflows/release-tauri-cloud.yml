@@ -1,8 +1,8 @@
 name: Release Mhaol Cloud + Headless (multi-platform)
 
 # Builds:
-#   - apps/cloud Tauri shell ("Mhaol Cloud") for macOS (aarch64) and
-#     Linux (x86_64). Windows is omitted from CI — see note below.
+#   - apps/cloud Tauri shell ("Mhaol Cloud") for macOS (aarch64), Linux
+#     (x86_64), and Windows (x86_64, MinGW / GNU ABI).
 #   - apps/headless bin ("mhaol-headless") for Linux (x86_64).
 # Attaches every produced installer / archive to the published release.
 # Does not build the standalone mhaol-cloud bin or the Android shells.
@@ -15,16 +15,14 @@ name: Release Mhaol Cloud + Headless (multi-platform)
 # users on first launch; this is intentional — code signing requires paid
 # certs we don't intend to obtain.
 #
-# Why no Windows job:
-# `gstreamer-sys` requires GStreamer present on the build host. The official
-# Windows MSIs are hosted on https://gstreamer.freedesktop.org/data/pkg/windows/,
-# which is fronted by the `go-away` JS-based anti-bot challenge. Every
-# CI HTTP client (curl.exe, Invoke-WebRequest, choco's downloader, winget)
-# is rejected with HTTP 418 because none can solve the JS proof-of-work.
-# To re-enable Windows: download the two MSIs manually from a real browser,
-# upload them as assets on a `vendor/gstreamer-<ver>` release in this repo,
-# then re-add the windows-latest matrix entry pointing curl at those release
-# asset URLs (release-asset downloads from github.com aren't gated by go-away).
+# Windows toolchain note:
+# `gstreamer-sys` requires GStreamer present on the build host. The
+# official Windows MSVC MSIs at https://gstreamer.freedesktop.org/data/pkg/windows/
+# are fronted by the `go-away` JS proof-of-work and reject every CI HTTP
+# client (curl, Invoke-WebRequest, choco, winget). We sidestep that by
+# pulling pre-built MinGW GStreamer packages from MSYS2's pacman mirrors
+# and building Rust against the `x86_64-pc-windows-gnu` target — same
+# library, different ABI, no anti-bot wall in the path.
 
 on:
   release:
@@ -59,6 +57,11 @@ jobs:
             arch_label: linux-x86_64
             tauri_target: ''
             rust_targets: ''
+          - app: cloud
+            platform: windows-latest
+            arch_label: windows-x86_64
+            tauri_target: x86_64-pc-windows-gnu
+            rust_targets: x86_64-pc-windows-gnu
           - app: headless
             platform: ubuntu-22.04
             arch_label: linux-x86_64
@@ -104,6 +107,31 @@ jobs:
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev
+
+      - name: Install MSYS2 + GStreamer (Windows, cloud)
+        if: matrix.app == 'cloud' && startsWith(matrix.platform, 'windows')
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          path-type: inherit
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-gstreamer
+            mingw-w64-x86_64-gst-plugins-base
+            mingw-w64-x86_64-gst-plugins-good
+            mingw-w64-x86_64-gst-plugins-bad
+
+      - name: Expose MSYS2 toolchain to subsequent steps (Windows, cloud)
+        if: matrix.app == 'cloud' && startsWith(matrix.platform, 'windows')
+        shell: msys2 {0}
+        run: |
+          # Export MSYS2's mingw64 prefix so cargo / pkg-config can find
+          # gstreamer-1.0 and friends from the non-MSYS2 build steps below.
+          MSYS2_PREFIX="$(cygpath -w /mingw64)"
+          echo "PKG_CONFIG_PATH=${MSYS2_PREFIX}\\lib\\pkgconfig" >> "$GITHUB_ENV"
+          echo "${MSYS2_PREFIX}\\bin" >> "$GITHUB_PATH"
 
       - uses: actions/setup-node@v4
         with:
@@ -151,9 +179,13 @@ jobs:
         run: |
           mkdir -p dist-release
           NAME="mhaol-cloud-${{ matrix.arch_label }}"
+          if [[ -n "${{ matrix.tauri_target }}" ]]; then
+            BUNDLE="target/${{ matrix.tauri_target }}/release/bundle"
+          else
+            BUNDLE="target/release/bundle"
+          fi
           case "${{ runner.os }}" in
             macOS)
-              BUNDLE="target/${{ matrix.tauri_target }}/release/bundle"
               for f in "$BUNDLE"/dmg/*.dmg; do
                 [[ -e "$f" ]] || continue
                 cp "$f" "dist-release/${NAME}.dmg"
@@ -165,7 +197,6 @@ jobs:
               fi
               ;;
             Linux)
-              BUNDLE="target/release/bundle"
               for f in "$BUNDLE"/deb/*.deb; do
                 [[ -e "$f" ]] || continue
                 cp "$f" "dist-release/${NAME}.deb"
@@ -180,7 +211,6 @@ jobs:
               done
               ;;
             Windows)
-              BUNDLE="target/release/bundle"
               for f in "$BUNDLE"/msi/*.msi; do
                 [[ -e "$f" ]] || continue
                 cp "$f" "dist-release/${NAME}.msi"
