@@ -176,6 +176,21 @@ impl IpfsStreamManager {
     /// so callers that want to start serving as soon as playback is feasible
     /// should poll on this before redirecting the player at the playlist.
     pub fn wait_for_playlist(&self, session_id: &str, timeout: Duration) -> bool {
+        self.wait_for_segments(session_id, 1, timeout)
+    }
+
+    /// Same as `wait_for_playlist` but blocks until the playlist references
+    /// at least `min_segments` segments, giving the player a pre-rolled
+    /// buffer. Returns early if the pipeline reaches EOS or finishes
+    /// (short sources where the full playlist has fewer than `min_segments`
+    /// segments). Returns `false` if neither condition is met before
+    /// `timeout`.
+    pub fn wait_for_segments(
+        &self,
+        session_id: &str,
+        min_segments: usize,
+        timeout: Duration,
+    ) -> bool {
         let path = match self
             .inner
             .lock()
@@ -188,7 +203,14 @@ impl IpfsStreamManager {
         };
         let deadline = std::time::Instant::now() + timeout;
         while std::time::Instant::now() < deadline {
-            if playlist_has_segment(&path) {
+            let count = playlist_segment_count(&path);
+            if count >= min_segments {
+                return true;
+            }
+            // For short clips the playlist may already carry `#EXT-X-ENDLIST`
+            // with fewer than `min_segments` segments — there will never be
+            // more, so don't make the caller wait out the full timeout.
+            if count > 0 && playlist_has_endlist(&path) {
                 return true;
             }
             thread::sleep(Duration::from_millis(100));
@@ -197,9 +219,19 @@ impl IpfsStreamManager {
     }
 }
 
-fn playlist_has_segment(path: &Path) -> bool {
+fn playlist_segment_count(path: &Path) -> usize {
     match std::fs::read_to_string(path) {
-        Ok(s) => s.lines().any(|l| !l.trim().is_empty() && !l.starts_with('#')),
+        Ok(s) => s
+            .lines()
+            .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+            .count(),
+        Err(_) => 0,
+    }
+}
+
+fn playlist_has_endlist(path: &Path) -> bool {
+    match std::fs::read_to_string(path) {
+        Ok(s) => s.lines().any(|l| l.trim() == "#EXT-X-ENDLIST"),
         Err(_) => false,
     }
 }

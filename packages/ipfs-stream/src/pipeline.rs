@@ -230,7 +230,13 @@ fn link_video_branch(
     let h264parse = make_element("h264parse", Some("video_parser"))?;
 
     encoder.set_property_from_str("tune", "zerolatency");
-    encoder.set_property_from_str("speed-preset", "veryfast");
+    // `ultrafast` lets x264enc keep up with playback on commodity CPUs.
+    // `veryfast` was producing segments slower than realtime on 1080p
+    // sources, so the player would burn through the first segment and
+    // stall waiting for the next one. The stream is ephemeral (no one
+    // is keeping these MPEG-TS bytes), so the quality drop vs. veryfast
+    // is an acceptable trade for not rebuffering mid-playback.
+    encoder.set_property_from_str("speed-preset", "ultrafast");
     encoder.set_property("bitrate", 2500u32);
     // Force keyframes on segment boundaries so hlssink2 can cut cleanly.
     encoder.set_property("key-int-max", 60u32);

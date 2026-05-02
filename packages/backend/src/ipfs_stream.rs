@@ -111,16 +111,17 @@ async fn start_session(
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("start_session: {e}")))?;
     let session_id = started.session_id.clone();
 
-    // Block until the first segment lands so the player doesn't 404 on
-    // the playlist URL and bail. hlssink2 only flushes the m3u8 once a
-    // segment is closed, which on slow inputs can take well over the
-    // 20s budget the original code allowed for; 60s covers the common
-    // long-tail without being so high that a stuck pipeline hangs the
-    // user. `serve_playlist` also has its own short retry loop as a
-    // safety net for edge cases (e.g. session created mid-shutdown).
+    // Pre-roll several segments before exposing the playlist so the player
+    // starts with a real buffer instead of catching the live edge after
+    // ~15s and stalling. hlssink2 only flushes the m3u8 once each segment
+    // closes; with `DEFAULT_SEGMENT_DURATION` at 15s and `ultrafast`
+    // x264enc keeping rough realtime, three closed segments arrive in
+    // ~45s of wall clock and give the player ~45s of pre-buffered media.
+    // Short clips that finish before 3 segments are written are handled
+    // by `wait_for_segments` returning early when it sees `#EXT-X-ENDLIST`.
     let session_for_wait = session_id.clone();
     let ready = tokio::task::spawn_blocking(move || {
-        manager_for_wait.wait_for_playlist(&session_for_wait, Duration::from_secs(60))
+        manager_for_wait.wait_for_segments(&session_for_wait, 3, Duration::from_secs(120))
     })
     .await
     .unwrap_or(false);
@@ -153,7 +154,7 @@ async fn start_session(
         return Err(err(
             StatusCode::SERVICE_UNAVAILABLE,
             format!(
-                "ipfs-stream pipeline did not produce a playlist within 60s for cid {cid} \
+                "ipfs-stream pipeline did not produce enough segments within 120s for cid {cid} \
                  (source may be incomplete or contain unsupported codecs — check cloud logs \
                  for GStreamer errors)"
             ),
