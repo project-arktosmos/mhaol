@@ -950,6 +950,7 @@ mod tests {
             relative_path: rel.to_string(),
             size: 100,
             mime: mime.to_string(),
+            tmdb_match: None,
         }
     }
 

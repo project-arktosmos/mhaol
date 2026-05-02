@@ -524,6 +524,7 @@
 																<th>Path</th>
 																<th class="w-32">MIME</th>
 																<th class="w-24 text-right">Size</th>
+																<th class="w-56">TMDB match</th>
 															</tr>
 														</thead>
 														<tbody>
@@ -535,6 +536,25 @@
 																	<td class="font-mono text-xs">{entry.mime}</td>
 																	<td class="text-right text-xs">
 																		{formatBytes(entry.size)}
+																	</td>
+																	<td class="text-xs">
+																		{#if entry.tmdbMatch}
+																			<a
+																				class="link link-hover"
+																				href={`https://www.themoviedb.org/movie/${entry.tmdbMatch.tmdbId}`}
+																				target="_blank"
+																				rel="noreferrer"
+																				title={entry.tmdbMatch.overview ?? ''}
+																			>
+																				{entry.tmdbMatch.title}{entry.tmdbMatch.year
+																					? ` (${entry.tmdbMatch.year})`
+																					: ''}
+																			</a>
+																		{:else if entry.mime.startsWith('video/')}
+																			<span class="text-base-content/40">no match</span>
+																		{:else}
+																			<span class="text-base-content/30">—</span>
+																		{/if}
 																	</td>
 																</tr>
 															{/each}

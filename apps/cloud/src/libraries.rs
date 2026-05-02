@@ -312,6 +312,12 @@ pub struct ScanEntry {
     pub relative_path: String,
     pub size: u64,
     pub mime: String,
+    /// TMDB match attached at scan time for video files in `local-movie`
+    /// libraries. Populated by `tmdb_match::match_movies_parallel`. Absent
+    /// from the JSON when no match was found / attempted.
+    #[cfg(not(target_os = "android"))]
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "tmdbMatch")]
+    pub tmdb_match: Option<crate::tmdb_match::TmdbMatch>,
 }
 
 #[derive(Debug, Serialize)]
@@ -383,6 +389,8 @@ fn scan_directory(root: PathBuf) -> ScanResponse {
             relative_path: relative,
             size,
             mime,
+            #[cfg(not(target_os = "android"))]
+            tmdb_match: None,
         });
     }
 
@@ -439,6 +447,16 @@ async fn scan(
         response.total_size = response.entries.iter().map(|e| e.size).sum();
     }
 
+    // For `local-movie` libraries, run a TMDB search per video file so the
+    // scan response and the persisted `library_scan_result` row can show
+    // which TMDB movie each file matched. This is best-effort: if
+    // TMDB_API_KEY is not set or the upstream is unreachable, matches just
+    // come back empty and the rest of the scan flow is unaffected.
+    #[cfg(not(target_os = "android"))]
+    if lib.addons.iter().any(|a| a == "local-movie") {
+        attach_tmdb_movie_matches(&mut response).await;
+    }
+
     let now = Utc::now();
     let mut updated = lib.clone();
     updated.id = None;
@@ -467,6 +485,54 @@ async fn scan(
     }
 
     Ok(Json(response))
+}
+
+/// True when the entry looks like a video file (mime `video/*` or a known
+/// video extension). Mirrors the test in `library_scan::entry_matches_addons`
+/// but lives here so this module doesn't pull in the full library_scan
+/// surface just for one predicate.
+#[cfg(not(target_os = "android"))]
+fn entry_is_video(entry: &ScanEntry) -> bool {
+    if entry.mime.starts_with("video/") {
+        return true;
+    }
+    const VIDEO_EXTS: &[&str] = &[
+        "mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v", "ts", "mpg", "mpeg",
+    ];
+    PathBuf::from(&entry.relative_path)
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .map(|ext| VIDEO_EXTS.contains(&ext.as_str()))
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "android"))]
+async fn attach_tmdb_movie_matches(response: &mut ScanResponse) {
+    let queries: Vec<(usize, crate::tmdb_match::MovieQuery)> = response
+        .entries
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| entry_is_video(e))
+        .filter_map(|(idx, e)| {
+            crate::tmdb_match::extract_movie_query(&e.relative_path).map(|q| (idx, q))
+        })
+        .collect();
+    if queries.is_empty() {
+        return;
+    }
+    let total = queries.len();
+    let matches = crate::tmdb_match::match_movies_parallel(queries).await;
+    tracing::info!(
+        "[libraries] tmdb match: {}/{} video files matched",
+        matches.len(),
+        total
+    );
+    for (idx, m) in matches {
+        if let Some(entry) = response.entries.get_mut(idx) {
+            entry.tmdb_match = Some(m);
+        }
+    }
 }
 
 async fn persist_scan_result(

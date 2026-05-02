@@ -23,6 +23,8 @@ mod recommendations;
 mod rom_extract;
 mod search;
 mod state;
+#[cfg(not(target_os = "android"))]
+mod tmdb_match;
 mod torrent;
 mod torrent_completion;
 #[cfg(not(target_os = "android"))]

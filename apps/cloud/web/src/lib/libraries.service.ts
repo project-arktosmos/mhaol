@@ -32,11 +32,23 @@ export interface Library {
 	last_scanned_at: string | null;
 }
 
+export interface TmdbMatch {
+	tmdbId: number;
+	title: string;
+	originalTitle?: string;
+	year?: number;
+	overview?: string;
+	posterUrl?: string;
+	voteAverage?: number;
+	score: number;
+}
+
 export interface ScanEntry {
 	path: string;
 	relative_path: string;
 	size: number;
 	mime: string;
+	tmdbMatch?: TmdbMatch;
 }
 
 export interface ScanResponse {
