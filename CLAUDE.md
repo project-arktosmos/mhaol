@@ -5,6 +5,8 @@ This document guides Claude (and developers) on implementing features in this mo
 For package-specific conventions, see the `CLAUDE.md` in each package directory:
 - `apps/cloud/CLAUDE.md` — Tray-only desktop Tauri shell (`mhaol-cloud-shell`, "Mhaol Cloud"). Thin wrapper that presents the system to users; actual logic lives in `packages/backend` and `packages/frontend`.
 - `apps/headless/CLAUDE.md` — Terminal-only counterpart of `apps/cloud` (`mhaol-headless`). Same backend + embedded SPA, no Tauri shell, no tray; designed for servers and CI hosts.
+- `apps/android-tv/CLAUDE.md` — Android TV Tauri shell (`mhaol-android-tv`, "Mhaol Android TV"). Renders the SPA in a full-screen WebView; **no backend embedded** — points at a remote `mhaol-cloud` / `mhaol-headless` via the in-app Settings page.
+- `apps/android-mobile/CLAUDE.md` — Android phone / tablet Tauri shell (`mhaol-android-mobile`, "Mhaol Mobile"). Renders the SPA in its own WebView and **embeds the backend** via `mhaol_backend::run()` spawned in the Tauri setup hook.
 - `packages/backend/CLAUDE.md` — Rust Axum server crate (`mhaol-backend`, binary `mhaol-cloud`). API routes, SurrealDB store, IPFS / torrent / yt-dlp managers, on-disk layout.
 - `packages/frontend/CLAUDE.md` — Svelte SPA (`frontend`). Components, services, adapters, types, utils, CSS/themes, transport layer.
 - `packages/cloud-ui/` — Shared Svelte 5 display components + firkin types used by the frontend SPA.
@@ -16,7 +18,9 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 mhaol.git/
 ├── apps/
 │   ├── cloud/                        # Tray-only Tauri shell (mhaol-cloud-shell, "Mhaol Cloud"). Embeds packages/frontend, runs alongside the mhaol-cloud server bin.
-│   └── headless/                     # Thin Rust crate (mhaol-headless bin) that runs mhaol_backend::run() with no Tauri/tray. For servers and terminal-only hosts.
+│   ├── headless/                     # Thin Rust crate (mhaol-headless bin) that runs mhaol_backend::run() with no Tauri/tray. For servers and terminal-only hosts.
+│   ├── android-tv/                   # Android TV Tauri shell (mhaol-android-tv). Full-screen WebView, NO embedded backend; points at a remote mhaol-cloud via in-app Settings.
+│   └── android-mobile/               # Android phone/tablet Tauri shell (mhaol-android-mobile). WebView + embedded mhaol_backend::run() in the Tauri setup hook.
 ├── packages/
 │   ├── backend/                      # Rust Axum server crate (mhaol-backend lib + mhaol-cloud bin) — port 9898, libp2p TCP 9900, libp2p /ws 9901, embedded SurrealDB.
 │   ├── frontend/                     # Svelte SPA (pnpm package "frontend"). Builds to packages/frontend/dist-static which mhaol-backend embeds.
@@ -42,6 +46,8 @@ The system splits into a backend, a frontend, and one or more thin app shells th
 - **`packages/frontend/`** — SvelteKit static SPA (pnpm package `frontend`). Builds to `packages/frontend/dist-static/`, which the backend crate embeds at compile time via `rust-embed`. Owns its full stack: components, services, adapters, types, utils, CSS / themes, transport layer. See `packages/frontend/CLAUDE.md` for layout, aliases, and the catalog-detail / transport conventions.
 - **`apps/cloud/`** — Tauri shell (`mhaol-cloud-shell`, productName "Mhaol Cloud"). Tray-only wrapper that **presents** the system to users — it does not host the SPA itself; the bin serves the SPA on 9898 and the tray's "Open" item launches that URL in the system browser. `tauri.conf.json`'s `frontendDist: ../../packages/frontend/dist-static` keeps Tauri's build tooling happy.
 - **`apps/headless/`** — Terminal-only equivalent of `apps/cloud`. Crate `mhaol-headless` (binary `mhaol-headless`) is a thin `#[tokio::main]` wrapper over `mhaol_backend::run()` — no Tauri, no tray, no window. Same SPA embedded via `rust-embed`, same `/api/*` surface, same env vars. Use it on servers, CI hosts, and any machine where opening a window is impossible or unwanted.
+- **`apps/android-tv/`** — Android TV Tauri shell (`mhaol-android-tv`, productName "Mhaol Android TV"). Loads the SPA in a full-screen Tauri WebView. **No backend embedded** — the user must point the SPA at a reachable Mhaol cloud via the in-app **Settings** page (override stored in localStorage as `mhaol-api-base`).
+- **`apps/android-mobile/`** — Android phone / tablet Tauri shell (`mhaol-android-mobile`, productName "Mhaol Mobile"). Loads the SPA in its own Tauri WebView and **embeds the backend** by spawning `mhaol_backend::run()` from the Tauri `setup` hook. The SPA defaults to `http://127.0.0.1:9898` (the embedded backend's bind), overridable via the in-app Settings page.
 
 ### Backend (`packages/backend/`)
 
@@ -237,6 +243,12 @@ pnpm app:tauri:cloud:build   # Mhaol Cloud release build
 pnpm app:headless            # Run via cargo (rebuilds on source change)
 pnpm app:headless:bin        # Run the precompiled debug bin from ./target/debug/mhaol-headless
 
+# Android shells
+pnpm dev:android:tv             # Boots Google_TV_1080p_API_36 emulator + cloud bin + Vite + apps/android-tv shell
+pnpm dev:android:mobile         # Boots Medium_Phone_API_36.1 emulator + Vite + apps/android-mobile shell (backend embedded)
+pnpm app:tauri:android:tv:build       # apps/android-tv release APK / AAB
+pnpm app:tauri:android:mobile:build   # apps/android-mobile release APK / AAB
+
 # Cleanup
 pnpm clean            # Clean build artifacts, cargo clean, remove SQLite DBs
 ```
@@ -257,6 +269,8 @@ The dev scripts tee full stdout+stderr (cargo build noise, panics, `tracing` eve
 | `pnpm dev:headless` (headless strand) | `logs/headless.log` |
 | `pnpm dev:headless` (web strand) | `logs/web.log` |
 | `pnpm app:headless` / `pnpm app:headless:bin` | `logs/headless.log` |
+| `pnpm dev:android:tv` (android strand) | `logs/android-tv.log` |
+| `pnpm dev:android:mobile` (android strand) | `logs/android-mobile.log` |
 
 Each file is overwritten on the next run, so it always reflects the latest run. The `logs/` directory is gitignored.
 
