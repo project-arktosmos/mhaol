@@ -5,6 +5,7 @@
 	let {
 		positionSecs = 0,
 		durationSecs = null,
+		bufferedRanges = [],
 		disabled = false,
 		onseek,
 		onseekstart,
@@ -12,6 +13,12 @@
 	}: {
 		positionSecs?: number;
 		durationSecs?: number | null;
+		/// Buffered time ranges in seconds. Rendered as translucent fills
+		/// scaled against `durationSecs`, so an HLS rolling playlist can
+		/// show how much of the *full* source has been fetched even when
+		/// the underlying media element's `duration` only reflects the
+		/// currently-available segments.
+		bufferedRanges?: { start: number; end: number }[];
 		disabled?: boolean;
 		onseek?: (positionSecs: number) => void;
 		onseekstart?: () => void;
@@ -81,6 +88,21 @@
 		tabindex="0"
 		onmousedown={handleMouseDown}
 	>
+		{#if durationSecs && durationSecs > 0}
+			{#each bufferedRanges as range (range.start)}
+				{@const left = (Math.max(0, range.start) / durationSecs) * 100}
+				{@const width =
+					(Math.min(durationSecs, Math.max(range.start, range.end)) / durationSecs) * 100 - left}
+				{#if width > 0}
+					<div
+						class="pointer-events-none absolute inset-y-0 rounded-full bg-base-content/30"
+						style:left="{left}%"
+						style:width="{width}%"
+					></div>
+				{/if}
+			{/each}
+		{/if}
+
 		<div class="absolute inset-y-0 left-0 rounded-full bg-primary" style:width="{progress}%"></div>
 
 		<div

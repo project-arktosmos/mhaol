@@ -4,8 +4,11 @@
 
 	interface Props {
 		files: FileEntry[];
+		collapsible?: boolean;
+		open?: boolean;
+		onToggle?: () => void;
 	}
-	let { files }: Props = $props();
+	let { files, collapsible = false, open = true, onToggle }: Props = $props();
 </script>
 
-<Shared {files} />
+<Shared {files} {collapsible} {open} {onToggle} />

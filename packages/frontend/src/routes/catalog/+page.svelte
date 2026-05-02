@@ -28,6 +28,7 @@
 	} from '$lib/firkins.service';
 	import { listRecommendations, type Recommendation } from '$lib/recommendations.service';
 	import { userIdentityService } from '$lib/user-identity.service';
+	import { consumptionModalService } from '$services/consumption-modal.service';
 
 	const firkinsStore = firkinsService.state;
 	const firkinsIncludeAll = firkinsService.includeAll;
@@ -116,9 +117,7 @@
 
 	const addonRecommendationFirkins = $derived<CloudFirkin[]>(
 		addon
-			? recommendations
-					.filter((r) => r.addon === addon)
-					.map((r) => recommendationToFirkin(r))
+			? recommendations.filter((r) => r.addon === addon).map((r) => recommendationToFirkin(r))
 			: []
 	);
 
@@ -194,9 +193,7 @@
 
 	function visitHrefForFirkin(firkin: CloudFirkin): string {
 		const prefix = `virtual:${firkin.addon}:`;
-		const upstreamId = firkin.id.startsWith(prefix)
-			? firkin.id.slice(prefix.length)
-			: firkin.id;
+		const upstreamId = firkin.id.startsWith(prefix) ? firkin.id.slice(prefix.length) : firkin.id;
 		const [poster, backdrop] = firkin.images;
 		const params = new URLSearchParams();
 		params.set('addon', firkin.addon);
@@ -392,25 +389,33 @@
 			<input
 				type="search"
 				class="input-bordered input input-sm flex-1"
-				placeholder={addon
-					? `Search ${currentSource?.label ?? addon}…`
-					: 'Pick an addon to search'}
+				placeholder={addon ? `Search ${currentSource?.label ?? addon}…` : 'Pick an addon to search'}
 				disabled={!addon}
 				bind:value={query}
 				oninput={scheduleSearch}
 			/>
 		</div>
 	</div>
+	<div class="flex flex-wrap items-center gap-2 px-3 pb-3">
+		<button
+			type="button"
+			class="btn btn-outline btn-sm"
+			onclick={() => consumptionModalService.open()}
+			title="Show playback time per firkin"
+		>
+			Consumption
+		</button>
+	</div>
 </section>
 
-	<div class="flex flex-col gap-6 p-6">
-		{#if sourcesError}
-			<div class="alert alert-error">
-				<span>Could not load catalog sources: {sourcesError}</span>
-			</div>
-		{/if}
+<div class="flex flex-col gap-6 p-6">
+	{#if sourcesError}
+		<div class="alert alert-error">
+			<span>Could not load catalog sources: {sourcesError}</span>
+		</div>
+	{/if}
 
-		<LazyRow>
+	<LazyRow>
 		<section class="flex flex-col gap-3">
 			<div class="flex items-center justify-between gap-4">
 				<h2 class="text-lg font-semibold">Library</h2>
@@ -452,10 +457,10 @@
 				{/snippet}
 			</FirkinLibraryGrid>
 		</section>
-		</LazyRow>
+	</LazyRow>
 
-		{#if addonRecommendationFirkins.length > 0}
-			<LazyRow>
+	{#if addonRecommendationFirkins.length > 0}
+		<LazyRow>
 			<section class="flex flex-col gap-3">
 				<div class="flex flex-wrap items-center justify-between gap-4">
 					<h2 class="text-lg font-semibold">For you</h2>
@@ -469,11 +474,11 @@
 					emptyMessage="No recommendations for this addon yet."
 				/>
 			</section>
-			</LazyRow>
-		{/if}
+		</LazyRow>
+	{/if}
 
-		{#if hasSearch}
-			<LazyRow>
+	{#if hasSearch}
+		<LazyRow>
 			<section class="flex flex-col gap-3">
 				<div class="flex items-center justify-between gap-4">
 					<h2 class="text-lg font-semibold">Search results</h2>
@@ -529,32 +534,27 @@
 					</div>
 				{/if}
 			</section>
-			</LazyRow>
-		{/if}
+		</LazyRow>
+	{/if}
 
-		{#if hasPopular}
-			{#if hasFilter && genres.length > 0}
-				{#each genres as genre (genre.id)}
-					<LazyRow>
-						<PopularGenreRow
-							addon={addon}
-							genreId={genre.id}
-							title={genre.name}
-							hrefBuilder={visitHrefForFirkin}
-						/>
-					</LazyRow>
-				{/each}
-			{:else}
+	{#if hasPopular}
+		{#if hasFilter && genres.length > 0}
+			{#each genres as genre (genre.id)}
 				<LazyRow>
 					<PopularGenreRow
-						addon={addon}
-						title="Popular"
+						{addon}
+						genreId={genre.id}
+						title={genre.name}
 						hrefBuilder={visitHrefForFirkin}
 					/>
 				</LazyRow>
-			{/if}
+			{/each}
+		{:else}
+			<LazyRow>
+				<PopularGenreRow {addon} title="Popular" hrefBuilder={visitHrefForFirkin} />
+			</LazyRow>
 		{/if}
-
+	{/if}
 </div>
 
 {#if metadataTarget}

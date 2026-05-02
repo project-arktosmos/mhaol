@@ -32,12 +32,7 @@ export type PlayerDisplayMode = 'fullscreen' | 'sidebar' | 'inline' | 'navbar';
 
 // ===== Player State =====
 
-export type PlayerConnectionState =
-	| 'idle'
-	| 'connecting'
-	| 'streaming'
-	| 'error'
-	| 'closed';
+export type PlayerConnectionState = 'idle' | 'connecting' | 'streaming' | 'error' | 'closed';
 
 export interface PlayerState {
 	initialized: boolean;
@@ -55,6 +50,12 @@ export interface PlayerState {
 	// the WebRTC MediaStream path (used by yt-dlp direct streams).
 	directStreamUrl: string | null;
 	directStreamMimeType: string | null;
+	// Source-time offset (seconds) corresponding to `videoElement.currentTime
+	// === 0`. Defaults to 0; set to non-zero by IPFS-stream "seek-anywhere"
+	// session restarts so the player's seek bar / buffered ranges /
+	// current-time display all stay in *source* time even though the
+	// underlying HLS playlist starts at a non-zero source timestamp.
+	streamOffsetSecs: number;
 	// CID of the firkin currently being played, when known. Drives the
 	// consumption tracker — heartbeats only accumulate while this is set
 	// (set by playUrl callers that have a firkin context).

@@ -9,6 +9,7 @@
 		isVideo = false,
 		positionSecs = 0,
 		durationSecs = null,
+		bufferedRanges = [],
 		connectionState = 'idle',
 		isFullscreen = false,
 		initialVolume = 0.5,
@@ -26,6 +27,7 @@
 		isVideo?: boolean;
 		positionSecs?: number;
 		durationSecs?: number | null;
+		bufferedRanges?: { start: number; end: number }[];
 		connectionState?: PlayerConnectionState;
 		isFullscreen?: boolean;
 		/**
@@ -142,6 +144,7 @@
 	<PlayerSeekBar
 		{positionSecs}
 		{durationSecs}
+		{bufferedRanges}
 		{disabled}
 		onseek={(pos) => onseek?.(pos)}
 		onseekstart={() => onseekstart?.()}

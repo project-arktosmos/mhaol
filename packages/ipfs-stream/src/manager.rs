@@ -61,6 +61,22 @@ impl IpfsStreamManager {
     /// bytes come from the local filesystem path (which the caller has
     /// pinned via `mhaol-ipfs-core`).
     pub fn start_session(&self, cid: String, source_path: PathBuf) -> Result<StartedSession> {
+        self.start_session_at(cid, source_path, None)
+    }
+
+    /// Same as `start_session` but seeks the pipeline to
+    /// `start_position_seconds` (in source time) before emitting any
+    /// segments. Used by the frontend to "click anywhere on the seek bar":
+    /// when the user clicks past the buffered region the catalog page
+    /// stops the running session and creates a new one with the target
+    /// timestamp here, then offsets the player's position math by the
+    /// same amount so the seek bar still reads in source time.
+    pub fn start_session_at(
+        &self,
+        cid: String,
+        source_path: PathBuf,
+        start_position_seconds: Option<f64>,
+    ) -> Result<StartedSession> {
         if !source_path.exists() {
             return Err(Error::SourceNotFound(source_path.display().to_string()));
         }
@@ -69,11 +85,13 @@ impl IpfsStreamManager {
         let output_dir = self.base_dir.join(&session_id);
         std::fs::create_dir_all(&output_dir)?;
 
-        let config = HlsPipelineConfig::new(source_path.clone(), output_dir.clone());
+        let mut config = HlsPipelineConfig::new(source_path.clone(), output_dir.clone());
+        config.start_position_seconds = start_position_seconds;
         let playlist_name = config.playlist_name.clone();
 
         let pipeline = build_hls_pipeline(config)?;
         let playlist_path = pipeline.playlist_path();
+        let start_pos = pipeline.start_position_seconds();
         pipeline.play()?;
 
         let record = SessionRecord {
@@ -89,6 +107,7 @@ impl IpfsStreamManager {
             pipeline.pipeline().clone(),
             session_id.clone(),
             Arc::clone(&self.inner),
+            start_pos,
         );
 
         self.inner.lock().sessions.insert(
@@ -176,6 +195,21 @@ impl IpfsStreamManager {
     /// so callers that want to start serving as soon as playback is feasible
     /// should poll on this before redirecting the player at the playlist.
     pub fn wait_for_playlist(&self, session_id: &str, timeout: Duration) -> bool {
+        self.wait_for_segments(session_id, 1, timeout)
+    }
+
+    /// Same as `wait_for_playlist` but blocks until the playlist references
+    /// at least `min_segments` segments, giving the player a pre-rolled
+    /// buffer. Returns early if the pipeline reaches EOS or finishes
+    /// (short sources where the full playlist has fewer than `min_segments`
+    /// segments). Returns `false` if neither condition is met before
+    /// `timeout`.
+    pub fn wait_for_segments(
+        &self,
+        session_id: &str,
+        min_segments: usize,
+        timeout: Duration,
+    ) -> bool {
         let path = match self
             .inner
             .lock()
@@ -188,7 +222,14 @@ impl IpfsStreamManager {
         };
         let deadline = std::time::Instant::now() + timeout;
         while std::time::Instant::now() < deadline {
-            if playlist_has_segment(&path) {
+            let count = playlist_segment_count(&path);
+            if count >= min_segments {
+                return true;
+            }
+            // For short clips the playlist may already carry `#EXT-X-ENDLIST`
+            // with fewer than `min_segments` segments — there will never be
+            // more, so don't make the caller wait out the full timeout.
+            if count > 0 && playlist_has_endlist(&path) {
                 return true;
             }
             thread::sleep(Duration::from_millis(100));
@@ -197,19 +238,35 @@ impl IpfsStreamManager {
     }
 }
 
-fn playlist_has_segment(path: &Path) -> bool {
+fn playlist_segment_count(path: &Path) -> usize {
     match std::fs::read_to_string(path) {
-        Ok(s) => s.lines().any(|l| !l.trim().is_empty() && !l.starts_with('#')),
+        Ok(s) => s
+            .lines()
+            .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+            .count(),
+        Err(_) => 0,
+    }
+}
+
+fn playlist_has_endlist(path: &Path) -> bool {
+    match std::fs::read_to_string(path) {
+        Ok(s) => s.lines().any(|l| l.trim() == "#EXT-X-ENDLIST"),
         Err(_) => false,
     }
 }
 
-fn spawn_bus_watcher(pipeline: gst::Pipeline, session_id: String, inner: Arc<Mutex<Inner>>) {
+fn spawn_bus_watcher(
+    pipeline: gst::Pipeline,
+    session_id: String,
+    inner: Arc<Mutex<Inner>>,
+    start_position_seconds: Option<f64>,
+) {
     thread::spawn(move || {
         let bus = match pipeline.bus() {
             Some(b) => b,
             None => return,
         };
+        let mut seek_done = start_position_seconds.is_none();
         for msg in bus.iter_timed(gst::ClockTime::NONE) {
             use gst::MessageView;
             match msg.view() {
@@ -256,6 +313,33 @@ fn spawn_bus_watcher(pipeline: gst::Pipeline, session_id: String, inner: Arc<Mut
                 }
                 MessageView::AsyncDone(_) => {
                     tracing::info!("[ipfs-stream] session {session_id} async-done");
+                    // Issue the seek-to-start-position once preroll is
+                    // done — `seek_simple` only takes effect from PAUSED
+                    // onwards, and async-done is the cleanest signal that
+                    // every dynamic decodebin pad has linked and the
+                    // pipeline is ready to honour a flush keyframe seek.
+                    if !seek_done {
+                        if let Some(secs) = start_position_seconds {
+                            let pos_ns = (secs.max(0.0) * 1_000_000_000.0) as u64;
+                            let target = gst::ClockTime::from_nseconds(pos_ns);
+                            match pipeline.seek_simple(
+                                gst::SeekFlags::FLUSH | gst::SeekFlags::KEY_UNIT,
+                                target,
+                            ) {
+                                Ok(()) => {
+                                    tracing::info!(
+                                        "[ipfs-stream] session {session_id} seeked to {secs:.3}s"
+                                    );
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "[ipfs-stream] session {session_id} seek to {secs:.3}s failed: {e}"
+                                    );
+                                }
+                            }
+                        }
+                        seek_done = true;
+                    }
                 }
                 _ => {}
             }

@@ -57,13 +57,14 @@ All env vars from [packages/backend/CLAUDE.md](../../packages/backend/CLAUDE.md)
 
 ## Releases (CI)
 
-A published GitHub Release triggers `.github/workflows/release-headless-linux.yml`, which builds `mhaol-headless` natively on `ubuntu-latest` (x86_64) with the SPA embedded and uploads three assets to the release:
+A published GitHub Release triggers `.github/workflows/release-tauri-cloud.yml`, which builds **both** the cloud Tauri shell (macOS / Linux / Windows) **and** the headless bin (Linux x86_64) and attaches every artifact to the release. Filenames always identify the app + target so they don't collide:
 
-- `mhaol-headless-<tag>-linux-x86_64` — the bare binary
-- `mhaol-headless-<tag>-linux-x86_64.tar.gz` — tarball of the bare binary
-- `mhaol-headless-<tag>-linux-x86_64.sha256` — sha256 sums for both of the above
+- `mhaol-headless-linux-x86_64.tar.gz` — gzipped tarball containing the `mhaol-headless` bin (frontend embedded). Extract anywhere; binary is `mhaol-headless/mhaol-headless`.
+- `SHA256SUMS-headless-linux-x86_64.txt` — sha256 sums for that tarball.
 
-The same workflow can be triggered manually via the **Actions → Release Headless (Linux) → Run workflow** button (`workflow_dispatch`); manual runs only upload as a workflow artifact and do not touch any release.
+The cloud shell artifacts (`mhaol-cloud-macos-universal.dmg`, `mhaol-cloud-linux-x86_64.deb`, `mhaol-cloud-windows-x86_64.msi`, etc.) ride alongside in the same release.
+
+The same workflow can be triggered manually via **Actions → Release Mhaol Cloud + Headless → Run workflow** (`workflow_dispatch`); manual runs only upload as a workflow artifact and do not touch any release.
 
 To cut a release locally:
 ```bash

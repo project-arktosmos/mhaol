@@ -1,29 +1,11 @@
 <script lang="ts">
-	import { base } from '$app/paths';
-	import { CatalogDescriptionPanel as Shared, type FirkinReview } from 'cloud-ui';
-
-	interface Identity {
-		cid: string;
-		createdAt: string;
-		updatedAt: string;
-		version: number;
-	}
+	import { CatalogDescriptionPanel as Shared } from 'cloud-ui';
 
 	interface Props {
 		description: string;
-		identity?: Identity | null;
-		versionHashes?: string[];
-		reviews?: FirkinReview[];
 	}
 
-	let {
-		description,
-		identity = null,
-		versionHashes = [],
-		reviews = []
-	}: Props = $props();
-
-	const hrefFor = (cid: string) => `${base}/catalog/${encodeURIComponent(cid)}`;
+	let { description }: Props = $props();
 </script>
 
-<Shared {description} {identity} {versionHashes} {reviews} {hrefFor} />
+<Shared {description} />

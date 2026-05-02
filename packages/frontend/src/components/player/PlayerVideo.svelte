@@ -27,6 +27,8 @@
 		subtitleUrl = null,
 		directStreamUrl = null,
 		directStreamMimeType = null,
+		streamOffsetSecs = 0,
+		onseekrequest,
 		onprev,
 		onnext
 	}: {
@@ -50,6 +52,21 @@
 		subtitleUrl?: string | null;
 		directStreamUrl?: string | null;
 		directStreamMimeType?: string | null;
+		/// Source-time offset (seconds) for the active direct stream.
+		/// When non-zero, `videoElement.currentTime === 0` corresponds to
+		/// `streamOffsetSecs` in source time. The seek-bar / buffered
+		/// ranges / displayed time all run in source time, so they get
+		/// shifted by this amount; seeks subtract it before mutating
+		/// `videoElement.currentTime`.
+		streamOffsetSecs?: number;
+		/// Optional out-of-buffer seek handler. When the user clicks the
+		/// seek bar at a source-time target that the element can't reach
+		/// (target before the current `streamOffsetSecs`, or past the
+		/// element's buffered end), the player delegates to this callback
+		/// instead of mutating `videoElement.currentTime` blindly. The
+		/// catalog detail page uses this to stop the running IPFS-stream
+		/// session and start a new one whose offset matches the click.
+		onseekrequest?: (targetSourceSecs: number) => void;
 		onprev?: () => void;
 		onnext?: () => void;
 	} = $props();
@@ -67,6 +84,7 @@
 	let audioTrackTick = $state(0);
 	let activeSubUrl = $state<string | null>(null);
 	let mediaError = $state<string | null>(null);
+	let bufferedRanges = $state<{ start: number; end: number }[]>([]);
 	let hlsInstance: Hls | null = null;
 	let attachedDirectUrl: string | null = null;
 	function isHlsUrl(url: string, mime: string | null): boolean {
@@ -107,7 +125,7 @@
 		const tick = () => {
 			if (cancelled) return;
 			const t = element.currentTime;
-			if (Number.isFinite(t)) videoCurrentTime = t;
+			if (Number.isFinite(t)) videoCurrentTime = t + (streamOffsetSecs ?? 0);
 			raf = requestAnimationFrame(tick);
 		};
 		raf = requestAnimationFrame(tick);
@@ -128,6 +146,19 @@
 	let isVideo = $derived(file?.mode !== 'audio');
 	let isStreaming = $derived(connectionState === 'streaming');
 	let isHlsStream = $derived(!!directStreamUrl && isHlsUrl(directStreamUrl, directStreamMimeType));
+	// HLS rolling playlists (IPFS-stream sessions) only expose the duration
+	// of segments currently in the manifest, so `durationSecs` (which
+	// tracks `element.duration`) ratchets up chunk-by-chunk. The backend
+	// probes the full source duration up-front and stamps it on
+	// `file.durationSeconds`; prefer that authoritative total at the
+	// display layer so the seek bar covers the whole film regardless of
+	// any element-driven writes elsewhere.
+	let displayDurationSecs = $derived.by(() => {
+		const fd = file?.durationSeconds ?? 0;
+		const ds = durationSecs ?? 0;
+		const m = fd > ds ? fd : ds;
+		return m > 0 ? m : null;
+	});
 	let activeMediaElement = $derived(videoElement as HTMLMediaElement | null);
 	// Combine subtitles already attached to the file with any downloaded for the search context.
 	let assignedSubs = $derived(subtitleSearchContext ? $subsState.assigned : []);
@@ -212,6 +243,7 @@
 		if (!directStreamUrl) {
 			destroyHls();
 			attachedDirectUrl = null;
+			bufferedRanges = [];
 			return;
 		}
 		const element = videoElement;
@@ -220,6 +252,7 @@
 		const mime = directStreamMimeType;
 		if (attachedDirectUrl === url) return;
 		mediaError = null;
+		bufferedRanges = [];
 		element.srcObject = null;
 		destroyHls();
 		attachedDirectUrl = url;
@@ -313,18 +346,43 @@
 			// `timeupdate` firing means the element is actively decoding —
 			// clear buffering as a safety net in case `playing` was missed
 			// (torrent streams race element.load() with playback start).
-			const t = element.currentTime;
+			// Shift element time into source time using the active offset
+			// so seek-anywhere session restarts (which start the stream
+			// at a non-zero source timestamp) still drive the bar in
+			// source time.
+			const t = element.currentTime + (cur.streamOffsetSecs ?? 0);
 			if (cur.positionSecs === t && !cur.buffering) return;
 			playerService.state.update((s) => ({ ...s, positionSecs: t, buffering: false }));
 		};
 		const onLoadedMetadata = () => {
 			if (Number.isFinite(element.duration) && element.duration > 0) {
-				const d = element.duration;
+				// HLS rolling playlists (the IPFS-stream session's hlssink2
+				// output) only expose the duration of segments currently in
+				// the manifest, which grows as transcoding catches up. The
+				// backend probes the source's full duration up-front and
+				// seeds `file.durationSeconds`; prefer that authoritative
+				// total so the seek bar doesn't shrink to the latest chunk.
+				const ed = element.duration;
+				const fd = file?.durationSeconds ?? 0;
+				const d = fd > ed ? fd : ed;
 				if (get(playerService.state).durationSecs === d) return;
 				playerService.state.update((s) => ({ ...s, durationSecs: d }));
 			}
 		};
 		const onDurationChange = onLoadedMetadata;
+		const onProgress = () => {
+			const tr = element.buffered;
+			const offset = get(playerService.state).streamOffsetSecs ?? 0;
+			const next: { start: number; end: number }[] = [];
+			for (let i = 0; i < tr.length; i++) {
+				const start = tr.start(i) + offset;
+				const end = tr.end(i) + offset;
+				if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+					next.push({ start, end });
+				}
+			}
+			bufferedRanges = next;
+		};
 		const onWaiting = () => {
 			if (isHlsStream) return;
 			playerService.setBuffering(true);
@@ -344,6 +402,7 @@
 		element.addEventListener('timeupdate', onTimeUpdate);
 		element.addEventListener('loadedmetadata', onLoadedMetadata);
 		element.addEventListener('durationchange', onDurationChange);
+		element.addEventListener('progress', onProgress);
 		element.addEventListener('waiting', onWaiting);
 		element.addEventListener('playing', onPlaying);
 		// Pump the current values once in case metadata already loaded
@@ -352,14 +411,20 @@
 		// effect's reactive dependencies.
 		untrack(() => {
 			const cur = get(playerService.state);
+			const offset = cur.streamOffsetSecs ?? 0;
 			if (Number.isFinite(element.duration) && element.duration > 0) {
-				const d = element.duration;
+				// Same rolling-playlist guard as `onLoadedMetadata`: never
+				// let a partial element duration shrink the authoritative
+				// `file.durationSeconds` that `playUrl` seeded.
+				const ed = element.duration;
+				const fd = file?.durationSeconds ?? 0;
+				const d = fd > ed ? fd : ed;
 				if (cur.durationSecs !== d) {
 					playerService.state.update((s) => ({ ...s, durationSecs: d }));
 				}
 			}
 			if (Number.isFinite(element.currentTime) && element.currentTime > 0) {
-				const t = element.currentTime;
+				const t = element.currentTime + offset;
 				if (cur.positionSecs !== t) {
 					playerService.state.update((s) => ({ ...s, positionSecs: t }));
 				}
@@ -375,6 +440,7 @@
 			element.removeEventListener('timeupdate', onTimeUpdate);
 			element.removeEventListener('loadedmetadata', onLoadedMetadata);
 			element.removeEventListener('durationchange', onDurationChange);
+			element.removeEventListener('progress', onProgress);
 			element.removeEventListener('waiting', onWaiting);
 			element.removeEventListener('playing', onPlaying);
 		};
@@ -494,20 +560,65 @@
 		playerService.stop();
 	}
 
-	function handleSeek(positionSecs: number): void {
+	function handleSeek(targetSourceSecs: number): void {
 		// Direct URL playback drives the playhead through the element
 		// directly. Move the element's currentTime and clear the seeking
 		// flag so `timeupdate` can resume driving the position.
+		//
+		// `targetSourceSecs` arrives in source time. For zero-offset
+		// streams that's identical to element time; for "seek-anywhere"
+		// IPFS-stream sessions whose pipeline started mid-source, the
+		// element only carries time `[0, bufferedEnd]` representing
+		// source time `[offset, offset + bufferedEnd]`, so we subtract
+		// the offset before mutating `currentTime`. Targets that fall
+		// outside the element's buffered range get delegated to the
+		// `onseekrequest` callback, which the catalog page wires to a
+		// fresh-session restart at the requested timestamp.
 		if (directStreamUrl && videoElement) {
-			videoElement.currentTime = positionSecs;
+			const offset = streamOffsetSecs ?? 0;
+			const elementTarget = targetSourceSecs - offset;
+			if (elementTarget >= 0 && rangeIsBuffered(videoElement.buffered, elementTarget)) {
+				videoElement.currentTime = elementTarget;
+				playerService.state.update((s) => ({
+					...s,
+					positionSecs: targetSourceSecs,
+					isSeeking: false
+				}));
+				return;
+			}
+			if (onseekrequest) {
+				// Snap the position store to the requested target so the
+				// playhead doesn't visually jump back to the live edge
+				// while the new session prerolls.
+				playerService.state.update((s) => ({
+					...s,
+					positionSecs: targetSourceSecs,
+					isSeeking: false
+				}));
+				onseekrequest(targetSourceSecs);
+				return;
+			}
+			// No restart hook wired: best-effort element seek so non-IPFS
+			// direct streams (yt-dlp, plain MP4) keep working.
+			videoElement.currentTime = Math.max(0, elementTarget);
 			playerService.state.update((s) => ({
 				...s,
-				positionSecs,
+				positionSecs: targetSourceSecs,
 				isSeeking: false
 			}));
 			return;
 		}
-		playerService.seek(positionSecs);
+		playerService.seek(targetSourceSecs);
+	}
+
+	function rangeIsBuffered(ranges: TimeRanges, t: number): boolean {
+		// Tiny epsilon so a click at exactly `bufferedEnd` still counts
+		// as in-buffer instead of falling through to the restart path.
+		const eps = 0.25;
+		for (let i = 0; i < ranges.length; i++) {
+			if (t >= ranges.start(i) - eps && t <= ranges.end(i) + eps) return true;
+		}
+		return false;
 	}
 
 	function handleSeekStart(): void {
@@ -690,7 +801,8 @@
 			mediaElement={activeMediaElement}
 			{isVideo}
 			{positionSecs}
-			{durationSecs}
+			durationSecs={displayDurationSecs}
+			{bufferedRanges}
 			{connectionState}
 			isFullscreen={effectiveFullscreen}
 			initialVolume={playerService.getVolume()}

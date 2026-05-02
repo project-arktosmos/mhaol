@@ -1,8 +1,15 @@
-name: Release Tauri Cloud (multi-platform)
+name: Release Mhaol Cloud + Headless (multi-platform)
 
-# Builds ONLY the apps/cloud Tauri shell ("Mhaol Cloud") for macOS, Linux,
-# and Windows, and attaches the resulting installers to the published release.
-# Does not build the mhaol-cloud bin, mhaol-headless bin, or the Android shells.
+# Builds:
+#   - apps/cloud Tauri shell ("Mhaol Cloud") for macOS (universal),
+#     Linux (x86_64), and Windows (x86_64).
+#   - apps/headless bin ("mhaol-headless") for Linux (x86_64).
+# Attaches every produced installer / archive to the published release.
+# Does not build the standalone mhaol-cloud bin or the Android shells.
+#
+# All artifacts are renamed on stage so the filename always identifies
+# both the app (cloud vs headless) and the target OS / arch — e.g.
+# `mhaol-cloud-macos-universal.dmg`, `mhaol-headless-linux-x86_64.tar.gz`.
 #
 # Bundles are UNSIGNED. macOS Gatekeeper and Windows SmartScreen will warn
 # users on first launch; this is intentional — code signing requires paid
@@ -18,28 +25,37 @@ permissions:
 
 jobs:
   build:
+    name: Build ${{ matrix.app }} for ${{ matrix.arch_label }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - app: cloud
+            platform: macos-latest
             arch_label: macos-universal
             tauri_target: universal-apple-darwin
             rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
-          - platform: ubuntu-22.04
+          - app: cloud
+            platform: ubuntu-22.04
             arch_label: linux-x86_64
             tauri_target: ''
             rust_targets: ''
-          - platform: windows-latest
+          - app: cloud
+            platform: windows-latest
             arch_label: windows-x86_64
+            tauri_target: ''
+            rust_targets: ''
+          - app: headless
+            platform: ubuntu-22.04
+            arch_label: linux-x86_64
             tauri_target: ''
             rust_targets: ''
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux deps
-        if: startsWith(matrix.platform, 'ubuntu')
+      - name: Install Linux deps (cloud Tauri shell)
+        if: matrix.app == 'cloud' && startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -48,7 +64,20 @@ jobs:
             librsvg2-dev \
             libsoup-3.0-dev \
             libayatana-appindicator3-dev \
-            patchelf
+            patchelf \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev
+
+      - name: Install Linux deps (headless bin)
+        if: matrix.app == 'headless' && startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config libssl-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev
 
       - uses: actions/setup-node@v4
         with:
@@ -68,12 +97,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: '. -> target'
-          key: tauri-cloud-${{ matrix.arch_label }}
+          key: ${{ matrix.app }}-${{ matrix.arch_label }}
 
       - name: Install Tauri CLI
+        if: matrix.app == 'cloud'
         run: cargo install --locked tauri-cli --version "^2"
 
-      - name: Build Tauri cloud bundle
+      - name: Build cloud Tauri bundle
+        if: matrix.app == 'cloud'
         working-directory: apps/cloud
         shell: bash
         run: |
@@ -83,30 +114,55 @@ jobs:
             cargo tauri build
           fi
 
-      - name: Stage artifacts
+      - name: Build headless bin
+        if: matrix.app == 'headless'
+        shell: bash
+        run: pnpm build:headless
+
+      - name: Stage cloud artifacts
+        if: matrix.app == 'cloud'
         shell: bash
         run: |
           mkdir -p dist-release
+          NAME="mhaol-cloud-${{ matrix.arch_label }}"
           case "${{ runner.os }}" in
             macOS)
               BUNDLE="target/${{ matrix.tauri_target }}/release/bundle"
-              cp "$BUNDLE"/dmg/*.dmg dist-release/ 2>/dev/null || true
+              for f in "$BUNDLE"/dmg/*.dmg; do
+                [[ -e "$f" ]] || continue
+                cp "$f" "dist-release/${NAME}.dmg"
+              done
               if compgen -G "$BUNDLE/macos/*.app" > /dev/null; then
                 ( cd "$BUNDLE/macos" && for app in *.app; do
-                    zip -ry "$GITHUB_WORKSPACE/dist-release/${app%.app}-${{ matrix.arch_label }}.app.zip" "$app"
+                    zip -ry "$GITHUB_WORKSPACE/dist-release/${NAME}.app.zip" "$app"
                   done )
               fi
               ;;
             Linux)
               BUNDLE="target/release/bundle"
-              cp "$BUNDLE"/deb/*.deb dist-release/ 2>/dev/null || true
-              cp "$BUNDLE"/appimage/*.AppImage dist-release/ 2>/dev/null || true
-              cp "$BUNDLE"/rpm/*.rpm dist-release/ 2>/dev/null || true
+              for f in "$BUNDLE"/deb/*.deb; do
+                [[ -e "$f" ]] || continue
+                cp "$f" "dist-release/${NAME}.deb"
+              done
+              for f in "$BUNDLE"/appimage/*.AppImage; do
+                [[ -e "$f" ]] || continue
+                cp "$f" "dist-release/${NAME}.AppImage"
+              done
+              for f in "$BUNDLE"/rpm/*.rpm; do
+                [[ -e "$f" ]] || continue
+                cp "$f" "dist-release/${NAME}.rpm"
+              done
               ;;
             Windows)
               BUNDLE="target/release/bundle"
-              cp "$BUNDLE"/msi/*.msi dist-release/ 2>/dev/null || true
-              cp "$BUNDLE"/nsis/*.exe dist-release/ 2>/dev/null || true
+              for f in "$BUNDLE"/msi/*.msi; do
+                [[ -e "$f" ]] || continue
+                cp "$f" "dist-release/${NAME}.msi"
+              done
+              for f in "$BUNDLE"/nsis/*.exe; do
+                [[ -e "$f" ]] || continue
+                cp "$f" "dist-release/${NAME}-setup.exe"
+              done
               ;;
           esac
           if [[ -z "$(ls -A dist-release 2>/dev/null)" ]]; then
@@ -115,21 +171,31 @@ jobs:
           fi
           ls -la dist-release/
 
+      - name: Stage headless artifact
+        if: matrix.app == 'headless'
+        shell: bash
+        run: |
+          mkdir -p dist-release stage/mhaol-headless
+          cp target/release/mhaol-headless stage/mhaol-headless/
+          chmod +x stage/mhaol-headless/mhaol-headless
+          tar -czvf "dist-release/mhaol-headless-${{ matrix.arch_label }}.tar.gz" -C stage mhaol-headless
+          ls -la dist-release/
+
       - name: Generate checksums
         shell: bash
         working-directory: dist-release
         run: |
           if command -v shasum >/dev/null; then
-            shasum -a 256 * > SHA256SUMS-${{ matrix.arch_label }}.txt
+            shasum -a 256 * > SHA256SUMS-${{ matrix.app }}-${{ matrix.arch_label }}.txt
           else
-            sha256sum * > SHA256SUMS-${{ matrix.arch_label }}.txt
+            sha256sum * > SHA256SUMS-${{ matrix.app }}-${{ matrix.arch_label }}.txt
           fi
-          cat SHA256SUMS-${{ matrix.arch_label }}.txt
+          cat SHA256SUMS-${{ matrix.app }}-${{ matrix.arch_label }}.txt
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tauri-cloud-${{ matrix.arch_label }}
+          name: mhaol-${{ matrix.app }}-${{ matrix.arch_label }}
           path: dist-release/*
           if-no-files-found: error
 

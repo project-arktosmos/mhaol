@@ -18,6 +18,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![image_cache::image_cache_resolve])
         .setup(|app| {
+            tauri::async_runtime::spawn(async move {
+                mhaol_backend::run().await;
+            });
             #[cfg(desktop)]
             {
                 #[cfg(target_os = "macos")]

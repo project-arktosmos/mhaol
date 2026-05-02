@@ -26,12 +26,6 @@ export const NAV_ITEMS: NavItem[] = [
 		]
 	},
 	{
-		"label": "Consumption",
-		"href": "/consumption",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
 		"label": "Database",
 		"href": "/database",
 		"hasOwnPage": true,

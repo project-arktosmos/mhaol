@@ -5,8 +5,15 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// Default segment duration in seconds.
-pub const DEFAULT_SEGMENT_DURATION: u32 = 6;
+/// Default segment duration in seconds. The browser starts playing the
+/// moment the first segment lands, then has only this much head-room
+/// before it needs the next segment to be ready. With x264enc's
+/// realtime budget this used to be 6s, which left no margin: the player
+/// would catch up to the live edge and stall waiting for segment 2 on
+/// any non-trivial source. Holding each segment open for ~15s lets the
+/// pipeline produce roughly two more segments while the player chews
+/// through the first, so steady-state playback no longer rebuffers.
+pub const DEFAULT_SEGMENT_DURATION: u32 = 15;
 /// Default playlist max length (number of segments kept). 0 means keep all
 /// segments (VOD-style); the player can seek anywhere inside the file.
 pub const DEFAULT_PLAYLIST_LENGTH: u32 = 0;
@@ -37,6 +44,15 @@ pub struct HlsPipelineConfig {
     pub segment_duration: u32,
     /// How many segments the playlist keeps. `0` keeps all segments (VOD).
     pub playlist_length: u32,
+    /// Optional source-time seek position (seconds) to start the stream
+    /// from. The pipeline issues a flush keyframe-aligned seek to this
+    /// position once it reaches PAUSED, so the first segment in the
+    /// emitted playlist starts at the requested timestamp instead of
+    /// the source's beginning. Used for "seek past the buffer" — the
+    /// frontend stops the current session and starts a new one at the
+    /// target source time, then offsets the player's position math by
+    /// the same amount.
+    pub start_position_seconds: Option<f64>,
 }
 
 impl HlsPipelineConfig {
@@ -48,6 +64,7 @@ impl HlsPipelineConfig {
             segment_pattern: "segment%05d.ts".into(),
             segment_duration: DEFAULT_SEGMENT_DURATION,
             playlist_length: DEFAULT_PLAYLIST_LENGTH,
+            start_position_seconds: None,
         }
     }
 }
@@ -57,6 +74,7 @@ pub struct HlsPipeline {
     pipeline: gst::Pipeline,
     output_dir: PathBuf,
     playlist_name: String,
+    start_position_seconds: Option<f64>,
 }
 
 impl HlsPipeline {
@@ -74,6 +92,14 @@ impl HlsPipeline {
 
     pub fn playlist_path(&self) -> PathBuf {
         self.output_dir.join(&self.playlist_name)
+    }
+
+    /// Source-time start offset (seconds) the pipeline was built with,
+    /// or `None` for a from-the-beginning stream. Callers use this so
+    /// the seek-to-start-position can be re-issued from the bus watcher
+    /// once the pipeline reaches PAUSED.
+    pub fn start_position_seconds(&self) -> Option<f64> {
+        self.start_position_seconds
     }
 
     pub fn play(&self) -> Result<()> {
@@ -209,6 +235,7 @@ pub fn build_hls_pipeline(config: HlsPipelineConfig) -> Result<HlsPipeline> {
         pipeline,
         output_dir: config.output_dir,
         playlist_name: config.playlist_name,
+        start_position_seconds: config.start_position_seconds,
     })
 }
 
@@ -223,7 +250,13 @@ fn link_video_branch(
     let h264parse = make_element("h264parse", Some("video_parser"))?;
 
     encoder.set_property_from_str("tune", "zerolatency");
-    encoder.set_property_from_str("speed-preset", "veryfast");
+    // `ultrafast` lets x264enc keep up with playback on commodity CPUs.
+    // `veryfast` was producing segments slower than realtime on 1080p
+    // sources, so the player would burn through the first segment and
+    // stall waiting for the next one. The stream is ephemeral (no one
+    // is keeping these MPEG-TS bytes), so the quality drop vs. veryfast
+    // is an acceptable trade for not rebuffering mid-playback.
+    encoder.set_property_from_str("speed-preset", "ultrafast");
     encoder.set_property("bitrate", 2500u32);
     // Force keyframes on segment boundaries so hlssink2 can cut cleanly.
     encoder.set_property("key-int-max", 60u32);

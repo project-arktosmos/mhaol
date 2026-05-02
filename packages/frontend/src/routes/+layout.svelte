@@ -9,6 +9,7 @@
 	import NavbarLyricsPanel from '$components/player/NavbarLyricsPanel.svelte';
 	import NavbarPlaylistPanel from '$components/player/NavbarPlaylistPanel.svelte';
 	import FirkinTooltip from '$components/firkins/FirkinTooltip.svelte';
+	import ConsumptionModal from '$components/consumption/ConsumptionModal.svelte';
 	import { playerService } from '$services/player.service';
 	import { themeService } from '$services/theme.service';
 	import { setBrowserImageCacheResolver } from '$services/image-cache.service';
@@ -120,3 +121,4 @@
 
 <ToastOutlet />
 <FirkinTooltip />
+<ConsumptionModal />

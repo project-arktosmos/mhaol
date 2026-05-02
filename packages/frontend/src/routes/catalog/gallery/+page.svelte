@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/state';
 	import FirkinLibraryGrid from '$components/catalog/FirkinLibraryGrid.svelte';
 	import FirkinMetadataLookupModal, {
@@ -127,11 +128,30 @@
 
 	// --- Popular mode --------------------------------------------------------
 
-	let popularItems = $state<CatalogItem[]>([]);
-	let popularPage = $state(1);
-	let popularTotalPages = $state(1);
+	// FirkinLibraryGrid renders 7 columns. A frontend page bundles 5 such rows
+	// (35 items) so every full page visibly fills to the brim. Backend pages
+	// from TMDB are 20 items each (often less after the firkin-dedup filter),
+	// so each frontend page typically consumes ~2 backend pages.
+	const COLUMN_COUNT = 7;
+	const ROWS_PER_PAGE = 5;
+	const FRONTEND_PAGE_SIZE = COLUMN_COUNT * ROWS_PER_PAGE;
+
+	// Cumulative item buffer — `popularPage` slices into this. Backend pages
+	// are fetched lazily as the user navigates; new pages append to the
+	// buffer (deduped by upstream id) so navigating Prev never re-fetches.
+	let popularBuffer = $state<CatalogItem[]>([]);
+	let backendPagesFetched = $state(0);
+	let backendTotalPages = $state(1);
 	let popularLoading = $state(false);
 	let popularError = $state<string | null>(null);
+
+	const popularPage = $derived(parsePageParam(pageStore.url.searchParams.get('page')));
+
+	function parsePageParam(raw: string | null): number {
+		const n = Number(raw ?? '1');
+		if (!Number.isFinite(n) || n < 1) return 1;
+		return Math.floor(n);
+	}
 
 	function virtualFirkin(item: CatalogItem): CloudFirkin {
 		const images = [item.posterUrl, item.backdropUrl]
@@ -162,38 +182,72 @@
 		};
 	}
 
-	const popularFirkins = $derived<CloudFirkin[]>(
-		mode === 'popular' ? popularItems.map((it) => virtualFirkin(it)) : []
+	const popularPageItems = $derived<CatalogItem[]>(
+		popularBuffer.slice((popularPage - 1) * FRONTEND_PAGE_SIZE, popularPage * FRONTEND_PAGE_SIZE)
 	);
 
-	async function refreshPopular() {
-		if (mode !== 'popular' || !addon) {
-			popularItems = [];
-			popularTotalPages = 1;
-			return;
+	const popularFirkins = $derived<CloudFirkin[]>(
+		mode === 'popular' ? popularPageItems.map((it) => virtualFirkin(it)) : []
+	);
+
+	const hasMoreBackend = $derived(backendPagesFetched < backendTotalPages);
+	const hasNextPopularPage = $derived(
+		hasMoreBackend || popularBuffer.length > popularPage * FRONTEND_PAGE_SIZE
+	);
+	const hasPrevPopularPage = $derived(popularPage > 1);
+	// Total only finalises once we've drained every backend page; while still
+	// streaming we keep displaying a `≥` estimate so the user knows there's
+	// more to come without us guessing the upstream total.
+	const popularTotalPagesKnown = $derived(
+		!hasMoreBackend && popularBuffer.length > 0
+			? Math.max(1, Math.ceil(popularBuffer.length / FRONTEND_PAGE_SIZE))
+			: null
+	);
+
+	async function ensurePopularItemsForPage(targetPage: number): Promise<void> {
+		if (!addon) return;
+		const needed = targetPage * FRONTEND_PAGE_SIZE;
+		while (popularBuffer.length < needed && backendPagesFetched < backendTotalPages) {
+			const next = backendPagesFetched + 1;
+			const result = await loadPopular(addon, {
+				page: next,
+				filter: filterParam || undefined
+			});
+			backendTotalPages = result.totalPages;
+			const seen = new Set(popularBuffer.map((it) => it.id));
+			const additions: CatalogItem[] = [];
+			for (const it of result.items) {
+				if (seen.has(it.id)) continue;
+				seen.add(it.id);
+				additions.push(it);
+			}
+			if (additions.length > 0) popularBuffer = [...popularBuffer, ...additions];
+			backendPagesFetched = next;
+			// Empty backend page (every item already shown) — bail to avoid
+			// looping forever on a stalled upstream.
+			if (result.items.length === 0) break;
 		}
+	}
+
+	async function refreshPopular(): Promise<void> {
+		if (mode !== 'popular' || !addon) return;
 		popularLoading = true;
 		popularError = null;
 		try {
-			const result = await loadPopular(addon, {
-				page: popularPage,
-				filter: filterParam || undefined
-			});
-			popularItems = result.items;
-			popularTotalPages = result.totalPages;
-			popularPage = result.page;
+			await ensurePopularItemsForPage(popularPage);
 		} catch (err) {
-			popularItems = [];
 			popularError = err instanceof Error ? err.message : 'Unknown error';
 		} finally {
 			popularLoading = false;
 		}
 	}
 
-	async function goToPopularPage(next: number) {
-		if (next < 1 || next > popularTotalPages || next === popularPage) return;
-		popularPage = next;
-		await refreshPopular();
+	async function goToPopularPage(next: number): Promise<void> {
+		if (next < 1 || next === popularPage) return;
+		const url = new URL(pageStore.url);
+		if (next === 1) url.searchParams.delete('page');
+		else url.searchParams.set('page', String(next));
+		await goto(`${url.pathname}${url.search}`, { keepFocus: true, noScroll: true });
 	}
 
 	// --- For-you mode --------------------------------------------------------
@@ -226,9 +280,7 @@
 
 	const forYouFirkins = $derived<CloudFirkin[]>(
 		mode === 'for-you' && addon
-			? recommendations
-					.filter((r) => r.addon === addon)
-					.map((r) => recommendationToFirkin(r))
+			? recommendations.filter((r) => r.addon === addon).map((r) => recommendationToFirkin(r))
 			: []
 	);
 
@@ -255,9 +307,7 @@
 
 	function visitHrefForFirkin(firkin: CloudFirkin): string {
 		const prefix = `virtual:${firkin.addon}:`;
-		const upstreamId = firkin.id.startsWith(prefix)
-			? firkin.id.slice(prefix.length)
-			: firkin.id;
+		const upstreamId = firkin.id.startsWith(prefix) ? firkin.id.slice(prefix.length) : firkin.id;
 		const [poster, backdrop] = firkin.images;
 		const params = new URLSearchParams();
 		params.set('addon', firkin.addon);
@@ -294,11 +344,27 @@
 		};
 	});
 
+	// `popularKey` is `(addon, filter)`; if it changes we drop the buffer so
+	// the user starts fresh on the new addon/genre. Page itself is read from
+	// the URL via `popularPage` and triggers `refreshPopular` to top up the
+	// buffer when the user clicks Prev/Next or lands here from a deep link.
+	const popularKey = $derived(`${mode}::${addon}::${filterParam}`);
+	let lastPopularKey = $state('');
+
 	$effect(() => {
-		if (mode !== 'popular') return;
-		void addon;
-		void filterParam;
-		popularPage = 1;
+		if (mode !== 'popular') {
+			lastPopularKey = '';
+			return;
+		}
+		const key = popularKey;
+		// Read popularPage so the effect re-runs when it changes.
+		void popularPage;
+		if (key !== lastPopularKey) {
+			lastPopularKey = key;
+			popularBuffer = [];
+			backendPagesFetched = 0;
+			backendTotalPages = 1;
+		}
 		void refreshPopular();
 	});
 </script>
@@ -343,17 +409,21 @@
 				<button
 					class="btn btn-outline btn-xs"
 					onclick={() => goToPopularPage(popularPage - 1)}
-					disabled={popularLoading || popularPage <= 1}
+					disabled={popularLoading || !hasPrevPopularPage}
 				>
 					Prev
 				</button>
 				<span class="text-xs text-base-content/60">
-					Page {popularPage} / {popularTotalPages}
+					{#if popularTotalPagesKnown !== null}
+						Page {popularPage} / {popularTotalPagesKnown}
+					{:else}
+						Page {popularPage}
+					{/if}
 				</span>
 				<button
 					class="btn btn-outline btn-xs"
 					onclick={() => goToPopularPage(popularPage + 1)}
-					disabled={popularLoading || popularPage >= popularTotalPages}
+					disabled={popularLoading || !hasNextPopularPage}
 				>
 					Next
 				</button>
@@ -397,7 +467,7 @@
 		{#if popularError}
 			<div class="alert alert-error"><span>{popularError}</span></div>
 		{/if}
-		{#if popularLoading && popularItems.length === 0}
+		{#if popularLoading && popularBuffer.length === 0}
 			<p class="text-sm text-base-content/60">Loading…</p>
 		{:else}
 			<div class={popularLoading ? 'opacity-60' : ''}>

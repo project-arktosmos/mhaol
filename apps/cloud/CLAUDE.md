@@ -4,12 +4,12 @@
 **Crate:** `mhaol-cloud-shell` (binary `mhaol-cloud-shell`)
 **Product:** "Mhaol Cloud" (`com.arktosmos.mhaol.cloud`)
 
-This is the desktop wrapper that **presents** the system to users. It does not host the SPA or the API itself; both of those live in their own packages and are referenced by build / runtime configuration:
+This is the desktop wrapper that **presents** the system to users. It depends on `mhaol-backend` directly and **embeds the backend** — `mhaol_backend::run()` is spawned inside the Tauri `setup` hook so the release `.app` / `.msi` / `.deb` is fully self-contained:
 
 - `packages/backend/` — Rust Axum server crate (`mhaol-backend` lib + `mhaol-cloud` bin). Runs the API, hosts the embedded frontend, owns SurrealDB / IPFS / torrent / yt-dlp / ipfs-stream subsystems.
-- `packages/frontend/` — Svelte SPA (pnpm package `frontend`). Builds to `packages/frontend/dist-static/` and is embedded into the backend bin at compile time.
+- `packages/frontend/` — Svelte SPA (pnpm package `frontend`). Builds to `packages/frontend/dist-static/` and is embedded into the backend bin at compile time via `rust-embed`.
 
-The shell is **tray-only** — `app.windows: []`, no window is ever created. macOS sets `ActivationPolicy::Accessory` (no dock icon), `RunEvent::ExitRequested` calls `prevent_exit()` so the process stays alive without windows. The system tray icon (id `mhaol-cloud-tray`, tooltip "Mhaol Cloud") has two items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`. The frontend stays browser-accessible at `http://localhost:9898`.
+The shell is **tray-only** — `app.windows: []`, no window is ever created. macOS sets `ActivationPolicy::Accessory` (no dock icon), `RunEvent::ExitRequested` calls `prevent_exit()` so the process stays alive without windows. The system tray icon (id `mhaol-cloud-tray`, tooltip "Mhaol Cloud") has two items: **Open** opens `http://localhost:9898` in the system default browser via `tauri-plugin-opener`, **Quit** calls `app.exit(0)`. The frontend stays browser-accessible at `http://localhost:9898` because the spawned `mhaol_backend::run()` binds it (`0.0.0.0:9898` by default, or `PORT` if set).
 
 ## Layout
 
@@ -21,7 +21,7 @@ apps/cloud/
 ├── capabilities/default.json
 ├── icons/
 └── src/
-    ├── lib.rs              # tauri::Builder, tray menu, RunEvent handling
+    ├── lib.rs              # tauri::Builder, tray menu, RunEvent handling — setup hook spawns mhaol_backend::run()
     ├── main.rs             # mhaol_cloud_shell::run()
     └── image_cache.rs      # `image_cache_resolve` Tauri command — disk-cached fetches under <documents>/mhaol-cloud/image-cache
 ```
@@ -39,7 +39,9 @@ pnpm app:tauri:cloud
 pnpm app:tauri:cloud:build
 ```
 
-`pnpm dev` builds the `mhaol-cloud` debug bin first (so the tray's Open URL is reachable on launch), then runs three concurrent processes via `concurrently`: the backend bin on `127.0.0.1:9899`, the Vite dev server on `0.0.0.0:9898`, and the Tauri shell.
+`pnpm dev` builds the `mhaol-cloud` debug bin first (so the tray's Open URL is reachable on launch), then runs three concurrent processes via `concurrently`: the backend bin on `127.0.0.1:9899`, the Vite dev server on `0.0.0.0:9898`, and the Tauri shell. The shell's own embedded `mhaol_backend::run()` is **not** spawned in dev — when `PORT=9899` (set by `pnpm dev`), the shell's spawned backend would collide with the standalone bin; in practice the dev script keeps the env unset for the shell so the embedded copy binds 9898, but the recommended dev path keeps the standalone bin authoritative on 9899 and Vite on 9898 for HMR.
+
+In a **release** bundle (`.app` / `.msi` / `.deb` / `.AppImage`) there is no Vite and no separate `mhaol-cloud` bin — the shell's setup hook spawns `mhaol_backend::run()` inside the Tauri tokio runtime, which binds `0.0.0.0:9898` and serves the SPA from the backend's compile-time-embedded `dist-static` (via `rust-embed`). The tray's **Open** menu opens `http://localhost:9898` in the user's default browser.
 
 ## tauri.conf.json paths
 
