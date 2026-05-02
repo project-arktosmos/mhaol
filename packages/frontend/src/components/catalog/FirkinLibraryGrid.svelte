@@ -32,29 +32,14 @@
 
 	const PREVIEW_COUNT = 4;
 
-	// Mirror FirkinCard's per-kind shape on the "More" cell so it adopts the
-	// same height as the surrounding cards regardless of view mode. The grid
-	// is single-kind (one addon per page), so the first firkin's kind drives
-	// the whole row.
+	// Landscape cards are wider, so we drop from 7 cols (6 firkins + More) to
+	// 5 cols (4 firkins + More) to keep tile widths in a similar range.
 	const viewModeStore = movieTvViewModeService.store;
 	const referenceKind = $derived(firkins.length > 0 ? addonKind(firkins[0].addon) : null);
 	const useLandscape = $derived(
 		(referenceKind === 'movie' || referenceKind === 'tv show') &&
 			$viewModeStore.mode === 'landscapes'
 	);
-	const moreFigureAspect = $derived(
-		referenceKind === 'album'
-			? 'aspect-square'
-			: referenceKind === 'youtube video' || useLandscape
-				? 'aspect-video'
-				: 'aspect-[2/3]'
-	);
-	const moreHasStrip = $derived(
-		referenceKind === 'album' || referenceKind === 'youtube video' || useLandscape
-	);
-
-	// Landscape cards are wider, so we drop from 7 cols (6 firkins + More) to
-	// 5 cols (4 firkins + More) to keep tile widths in a similar range.
 	const effectiveCollapsedCount = $derived(useLandscape ? 4 : collapsedCount);
 	const gridColsClass = $derived(useLandscape ? 'grid-cols-5' : 'grid-cols-7');
 
@@ -130,8 +115,8 @@
 			</div>
 		{/each}
 		{#if showMoreCell && moreHref}
-			<article class="card w-full overflow-hidden rounded-md bg-base-200 shadow-sm">
-				<figure class={classNames('relative w-full overflow-hidden bg-base-300', moreFigureAspect)}>
+			<article class="card h-full w-full overflow-hidden rounded-md bg-base-200 shadow-sm">
+				<figure class="relative h-full w-full overflow-hidden bg-base-300">
 					<div class="grid h-full grid-cols-2 grid-rows-2 gap-px">
 						{#each Array.from({ length: PREVIEW_COUNT }, (_, i) => i) as i (i)}
 							<div class="overflow-hidden bg-base-200">
@@ -156,12 +141,6 @@
 						</a>
 					</div>
 				</figure>
-				{#if moreHasStrip}
-					<div class="px-3 py-2" aria-hidden="true">
-						<div class="text-sm font-semibold">&nbsp;</div>
-						<div class="text-xs">&nbsp;</div>
-					</div>
-				{/if}
 			</article>
 		{/if}
 	</div>
