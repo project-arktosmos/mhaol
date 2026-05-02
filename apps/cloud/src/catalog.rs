@@ -258,13 +258,18 @@ struct CatalogTrailer {
 /// `score` is the raw upstream value, `max_score` is the scale (TMDB
 /// reports out of 10, MusicBrainz out of 5), `vote_count` is the number
 /// of ratings the average is computed over when known.
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CatalogReview {
     pub label: String,
     pub score: f64,
-    #[serde(rename = "maxScore")]
+    #[serde(rename = "maxScore", alias = "max_score")]
     pub max_score: f64,
-    #[serde(rename = "voteCount", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "voteCount",
+        alias = "vote_count",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub vote_count: Option<u32>,
 }
 

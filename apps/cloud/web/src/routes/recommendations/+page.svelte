@@ -51,6 +51,17 @@
 		return `${cid.slice(0, 10)}…${cid.slice(-6)}`;
 	}
 
+	function formatScore(value: number): string {
+		const rounded = Math.round(value * 10) / 10;
+		return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+	}
+
+	function formatVotes(count: number): string {
+		if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M votes`;
+		if (count >= 1000) return `${(count / 1000).toFixed(1)}k votes`;
+		return `${count} vote${count === 1 ? '' : 's'}`;
+	}
+
 	function copyHash(cid: string) {
 		void navigator.clipboard?.writeText(cid).catch(() => {
 			// silent — clipboard may be unavailable
@@ -192,17 +203,18 @@
 								<th>Title</th>
 								<th class="w-40">IPFS hash</th>
 								<th class="w-20 text-right">Count</th>
+								<th class="w-48">Rating</th>
 								<th class="w-32"></th>
 							</tr>
 						</thead>
 						<tbody>
 							{#if loading && rows.length === 0}
 								<tr>
-									<td colspan="5" class="text-center text-base-content/60">Loading…</td>
+									<td colspan="6" class="text-center text-base-content/60">Loading…</td>
 								</tr>
 							{:else if rows.length === 0}
 								<tr>
-									<td colspan="5" class="text-center text-base-content/60">
+									<td colspan="6" class="text-center text-base-content/60">
 										No recommendations yet — visit a movie, TV show, or album detail page to start
 										collecting.
 									</td>
@@ -252,6 +264,25 @@
 											</button>
 										</td>
 										<td class="text-right font-mono text-sm">{row.count}</td>
+										<td>
+											{#if row.reviews && row.reviews.length > 0}
+												<div class="flex flex-wrap items-center gap-1">
+													{#each row.reviews as review (review.label)}
+														<span
+															class="badge badge-outline badge-sm gap-1 font-mono"
+															title={review.voteCount !== undefined
+																? `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)} (${formatVotes(review.voteCount)})`
+																: `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)}`}
+														>
+															<span class="font-semibold">{review.label}</span>
+															<span>{formatScore(review.score)} / {formatScore(review.maxScore)}</span>
+														</span>
+													{/each}
+												</div>
+											{:else}
+												<span class="text-xs text-base-content/40">—</span>
+											{/if}
+										</td>
 										<td class="text-right">
 											<button
 												type="button"

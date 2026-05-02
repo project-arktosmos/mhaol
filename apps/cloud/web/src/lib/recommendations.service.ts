@@ -1,3 +1,5 @@
+import type { CatalogReview } from '$lib/catalog.service';
+
 export interface Recommendation {
 	id: string;
 	address: string;
@@ -10,6 +12,7 @@ export interface Recommendation {
 	posterUrl: string | null;
 	backdropUrl: string | null;
 	count: number;
+	reviews?: CatalogReview[];
 	created_at: string;
 	updated_at: string;
 }
@@ -22,6 +25,7 @@ export interface RecommendationIngestItem {
 	description?: string | null;
 	posterUrl?: string | null;
 	backdropUrl?: string | null;
+	reviews?: CatalogReview[];
 }
 
 export interface IngestRequest {

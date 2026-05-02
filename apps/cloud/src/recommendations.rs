@@ -1,4 +1,4 @@
-use crate::catalog::is_known_addon;
+use crate::catalog::{is_known_addon, CatalogReview};
 use crate::firkins::{compute_firkin_cid, FileEntry, ImageMeta};
 use crate::state::CloudState;
 use axum::{
@@ -48,6 +48,13 @@ pub struct Recommendation {
     /// item to the user. Each (user, source) pair contributes at most once
     /// — see the marker rows in [`SOURCE_TABLE`].
     pub count: u32,
+    /// Upstream rating snapshots captured at ingest time so the
+    /// `/recommendations` table can render a Rating column without
+    /// re-querying the catalog API. Not included in
+    /// [`compute_recommendation_cid`] so the firkin id stays stable as
+    /// review counts change upstream.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reviews: Vec<CatalogReview>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -80,6 +87,8 @@ pub struct RecommendationDto {
     #[serde(rename = "backdropUrl")]
     pub backdrop_url: Option<String>,
     pub count: u32,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub reviews: Vec<CatalogReview>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -103,6 +112,7 @@ impl From<Recommendation> for RecommendationDto {
             poster_url: r.poster_url,
             backdrop_url: r.backdrop_url,
             count: r.count,
+            reviews: r.reviews,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -128,6 +138,12 @@ pub struct IngestItem {
     pub poster_url: Option<String>,
     #[serde(rename = "backdropUrl", default)]
     pub backdrop_url: Option<String>,
+    /// Upstream rating snapshots forwarded verbatim from the catalog
+    /// listing response. Persisted on the recommendation row but ignored
+    /// by [`compute_recommendation_cid`] (so review-count drift upstream
+    /// doesn't churn ids).
+    #[serde(default)]
+    pub reviews: Vec<CatalogReview>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -363,6 +379,9 @@ async fn ingest(
                 if current.upstream_id.is_empty() {
                     current.upstream_id = item.id.trim().to_string();
                 }
+                if current.reviews.is_empty() && !item.reviews.is_empty() {
+                    current.reviews = item.reviews.clone();
+                }
                 state
                     .db
                     .update((TABLE, rec_id.as_str()))
@@ -388,6 +407,7 @@ async fn ingest(
                     poster_url: item.poster_url.clone(),
                     backdrop_url: item.backdrop_url.clone(),
                     count: 1,
+                    reviews: item.reviews.clone(),
                     created_at: now,
                     updated_at: now,
                 };
@@ -460,6 +480,7 @@ mod tests {
             description: Some("A long time ago…".to_string()),
             poster_url: Some("https://example.test/p.jpg".to_string()),
             backdrop_url: None,
+            reviews: Vec::new(),
         };
         let a = compute_recommendation_cid(&item);
         let b = compute_recommendation_cid(&item);
@@ -476,6 +497,7 @@ mod tests {
             description: None,
             poster_url: None,
             backdrop_url: None,
+            reviews: Vec::new(),
         };
         let a = compute_recommendation_cid(&item);
         item.id = "456".to_string();

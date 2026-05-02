@@ -237,6 +237,7 @@ mod tests {
             poster_url: None,
             backdrop_url: None,
             artists: Vec::new(),
+            reviews: Vec::new(),
         }
     }
 

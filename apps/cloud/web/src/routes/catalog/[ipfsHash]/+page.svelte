@@ -41,6 +41,7 @@
 		ingestRecommendations,
 		type RecommendationIngestItem
 	} from '$lib/recommendations.service';
+	import type { CatalogItem } from '$lib/catalog.service';
 	import { userIdentityService } from '$lib/user-identity.service';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
@@ -147,16 +148,7 @@
 	const userIdentityState = userIdentityService.state;
 	let recommendationsIngestedFor: string | null = null;
 
-	function handleRelatedItemsLoaded(
-		items: {
-			id: string;
-			title: string;
-			year: number | null;
-			description: string | null;
-			posterUrl: string | null;
-			backdropUrl: string | null;
-		}[]
-	) {
+	function handleRelatedItemsLoaded(items: CatalogItem[]) {
 		const sourceFirkinId = firkin.id;
 		if (!sourceFirkinId) return;
 		if (recommendationsIngestedFor === sourceFirkinId) return;
@@ -173,7 +165,8 @@
 				year: it.year,
 				description: it.description,
 				posterUrl: it.posterUrl,
-				backdropUrl: it.backdropUrl
+				backdropUrl: it.backdropUrl,
+				reviews: it.reviews ?? []
 			}));
 		void ingestRecommendations({ address, sourceFirkinId, items: ingestItems }).catch((err) => {
 			console.warn('[recommendations] ingest failed:', err);
