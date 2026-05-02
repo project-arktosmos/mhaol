@@ -8,6 +8,8 @@
 
 	let container: HTMLDivElement | null = $state(null);
 	let dismissedFileId: string | null = $state(null);
+	let anchorRight: number = $state(8);
+	let anchorWidth: number = $state(360);
 
 	let visible = $derived(
 		$playerDisplayMode === 'navbar' &&
@@ -29,6 +31,31 @@
 			else break;
 		}
 		return idx;
+	});
+
+	function measureAnchor(): void {
+		if (typeof document === 'undefined') return;
+		const el = document.querySelector<HTMLElement>('[data-navbar-audio-player]');
+		if (!el) return;
+		const rect = el.getBoundingClientRect();
+		const viewportWidth = window.innerWidth;
+		anchorRight = Math.max(viewportWidth - rect.right, 0);
+		anchorWidth = Math.max(rect.width, 320);
+	}
+
+	$effect(() => {
+		if (!visible) return;
+		void tick().then(measureAnchor);
+		const onResize = () => measureAnchor();
+		window.addEventListener('resize', onResize);
+		const audioEl = document.querySelector<HTMLElement>('[data-navbar-audio-player]');
+		const ro =
+			audioEl && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measureAnchor) : null;
+		if (audioEl && ro) ro.observe(audioEl);
+		return () => {
+			window.removeEventListener('resize', onResize);
+			ro?.disconnect();
+		};
 	});
 
 	$effect(() => {
@@ -64,21 +91,20 @@
 
 {#if visible}
 	<div
-		class="pointer-events-none fixed inset-x-0 top-16 z-40 flex justify-center px-2"
+		class="pointer-events-none fixed top-16 z-40"
+		style:right="{anchorRight}px"
+		style:width="{anchorWidth}px"
 		aria-label="Synced lyrics"
 	>
 		<div
-			class="pointer-events-auto flex w-full max-w-md flex-col overflow-hidden rounded-b-lg border border-t-0 border-base-300 bg-base-100 shadow-lg"
+			class="pointer-events-auto flex flex-col overflow-hidden rounded-b-lg border border-t-0 border-base-300 bg-base-100 shadow-lg"
 		>
-			<div class="flex items-center justify-between border-b border-base-300 bg-base-200/60 px-3 py-1">
+			<div
+				class="flex items-center justify-between border-b border-base-300 bg-base-200/60 px-3 py-1"
+			>
 				<div class="flex min-w-0 items-center gap-2">
 					<span class="text-xs font-semibold text-base-content/70">Lyrics</span>
 					<span class="badge badge-xs badge-primary">Synced</span>
-					{#if $playerState.currentFile}
-						<span class="truncate text-xs text-base-content/60" title={$playerState.currentFile.name}>
-							{$playerState.currentFile.name}
-						</span>
-					{/if}
 				</div>
 				<button
 					type="button"

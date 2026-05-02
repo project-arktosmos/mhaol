@@ -136,7 +136,11 @@
 	let isPaused = $derived($playerState.isPaused);
 </script>
 
-<div class={classNames('flex items-center gap-2', { hidden: !visible })} aria-label="Audio player">
+<div
+	data-navbar-audio-player
+	class={classNames('flex items-center gap-2', { hidden: !visible })}
+	aria-label="Audio player"
+>
 	<!-- Hidden media element kept mounted so attach/detach effects can run. -->
 	<!-- svelte-ignore a11y_media_has_caption -->
 	<video bind:this={mediaElement} class="hidden" playsinline></video>
