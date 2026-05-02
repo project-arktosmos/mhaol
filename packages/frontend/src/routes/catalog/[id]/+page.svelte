@@ -1240,6 +1240,7 @@
 	>(() => {
 		const out: Array<{ quality: string; torrent: TorrentResultItem }> = [];
 		for (const group of torrentSearch.groupedMatches) {
+			if (group.label === 'Other') continue;
 			for (const row of group.rows) {
 				if (!row.magnetLink) continue;
 				out.push({ quality: group.label, torrent: row });
@@ -1266,6 +1267,7 @@
 			status: 'streamable' | 'probing';
 		}> = [];
 		for (const group of torrentSearch.groupedMatches) {
+			if (group.label === 'Other') continue;
 			let pick: { torrent: TorrentResultItem; status: 'streamable' | 'probing' } | null = null;
 			for (const row of group.rows) {
 				if (!row.magnetLink) continue;
