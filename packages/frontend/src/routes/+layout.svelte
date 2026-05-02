@@ -40,7 +40,9 @@
 
 	// `/profile` lives on the right side of the navbar (as the identity menu),
 	// so hide it from the auto-generated central menu.
-	const centralNavItems = NAV_ITEMS.filter((item) => item.href !== '/profile');
+	const centralNavItems = NAV_ITEMS.filter(
+		(item) => item.href !== '/profile' && item.href !== '/catalog'
+	);
 
 	const triggerClass = (item: NavItem) =>
 		classNames('btn btn-outline btn-sm', { 'btn-disabled': !item.hasOwnPage });

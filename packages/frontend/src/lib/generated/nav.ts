@@ -20,12 +20,6 @@ export const NAV_ITEMS: NavItem[] = [
 		]
 	},
 	{
-		"label": "Database",
-		"href": "/database",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
 		"label": "Profile",
 		"href": "/profile",
 		"hasOwnPage": true,
