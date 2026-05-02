@@ -260,6 +260,14 @@ async fn download_album(state: &CloudState, id: &str) -> Result<(), String> {
             }
         });
 
+        // Max-quality audio. The source picker in
+        // `mhaol_yt_dlp::download::format::select_audio_format` always
+        // takes the highest-bitrate audio-only stream YouTube exposes
+        // (the `quality` arg is unused there). `AudioFormat::Mp3 +
+        // AudioQuality::Best` then transcodes at 320 kbps — the top of
+        // the mp3 ladder; the alternative targets (`Aac`, `Opus`) are
+        // pinned to 128 kbps in `muxer::convert_audio` regardless of
+        // `AudioQuality`, so mp3@320 is the genuine max in this stack.
         let request = QueueDownloadRequest {
             url: yt_url.clone(),
             video_id: video_id.clone(),
