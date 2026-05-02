@@ -31,6 +31,19 @@
 
 	let creatorAddress = $derived(firkin.creator ?? '');
 	let creatorIdenticon = $derived(creatorAddress ? blo(creatorAddress as `0x${string}`) : null);
+
+	let reviews = $derived(firkin.reviews ?? []);
+
+	function formatScore(value: number): string {
+		const rounded = Math.round(value * 10) / 10;
+		return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+	}
+
+	function formatVotes(count: number): string {
+		if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M votes`;
+		if (count >= 1000) return `${(count / 1000).toFixed(1)}k votes`;
+		return `${count} vote${count === 1 ? '' : 's'}`;
+	}
 </script>
 
 <article class={classNames('group card overflow-hidden rounded-md bg-base-200 shadow-sm', classes)}>
@@ -85,5 +98,23 @@
 		>
 			{firkin.description}
 		</p>
+	{/if}
+	{#if reviews.length > 0}
+		<div class="flex flex-wrap items-center gap-1.5 border-t border-base-content/10 px-4 py-2">
+			{#each reviews as review (review.label)}
+				<span
+					class="badge badge-outline badge-sm gap-1 font-mono"
+					title={review.voteCount !== undefined
+						? `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)} (${formatVotes(review.voteCount)})`
+						: `${review.label}: ${formatScore(review.score)} / ${formatScore(review.maxScore)}`}
+				>
+					<span class="font-semibold">{review.label}</span>
+					<span>{formatScore(review.score)} / {formatScore(review.maxScore)}</span>
+					{#if review.voteCount !== undefined}
+						<span class="text-base-content/60">· {formatVotes(review.voteCount)}</span>
+					{/if}
+				</span>
+			{/each}
+		</div>
 	{/if}
 </article>
