@@ -2,6 +2,8 @@
 	import classNames from 'classnames';
 	import { formatSizeBytes, type TorrentResultItem } from '$lib/search.service';
 	import type { TorrentSearch, TorrentRowEval } from '$services/catalog/torrent-search.svelte';
+	import type { SubsLyricsItem } from '$types/subs-lyrics.type';
+	import { matchSubsToTorrent, type MatchedSub } from '$utils/match-subs-to-torrent';
 
 	interface Props {
 		search: TorrentSearch;
@@ -13,6 +15,7 @@
 		open?: boolean;
 		onToggle?: () => void;
 		onRefresh?: () => void;
+		subs?: SubsLyricsItem[];
 	}
 
 	let {
@@ -24,8 +27,23 @@
 		collapsible = false,
 		open = true,
 		onToggle,
-		onRefresh
+		onRefresh,
+		subs = []
 	}: Props = $props();
+
+	function subOptionLabel(m: MatchedSub): string {
+		const lang = m.sub.display ?? m.sub.language ?? '—';
+		const release = m.sub.release ?? `#${m.sub.externalId}`;
+		const flag = m.groupMatched ? '★' : '';
+		return `${flag}${lang}: ${release}`.trim();
+	}
+
+	function openSub(event: Event) {
+		const select = event.currentTarget as HTMLSelectElement;
+		const url = select.value;
+		if (url) window.open(url, '_blank', 'noopener');
+		select.selectedIndex = 0;
+	}
 
 	function rowEval(magnet: string | undefined | null): TorrentRowEval {
 		if (!magnet) return { kind: 'not-streamable', reason: 'no magnet' };
@@ -118,6 +136,7 @@
 								<th class="w-20 text-warning">Leechers</th>
 								<th class="w-20">Size</th>
 								<th>Title</th>
+								<th class="w-44">Subtitles</th>
 								<th class="w-32"></th>
 							</tr>
 						</thead>
@@ -129,7 +148,7 @@
 								{@const defaultCollapsed = !group.probe}
 								{@const expanded = expandedGroups[group.label] ?? false}
 								<tr class="bg-base-300/40">
-									<th colspan="7" class="p-0">
+									<th colspan="8" class="p-0">
 										{#if defaultCollapsed}
 											<button
 												type="button"
@@ -158,6 +177,7 @@
 									{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
 									{@const adding = addingHash === torrent.magnetLink}
 									{@const ev = rowEval(torrent.magnetLink)}
+									{@const subMatches = matchSubsToTorrent(torrent.title, subs)}
 									{@const hidden = defaultCollapsed
 										? !expanded
 										: probing
@@ -246,6 +266,30 @@
 											title={torrent.title}
 										>
 											{torrent.parsedTitle || torrent.title}
+										</td>
+										<td>
+											{#if subMatches.length === 0}
+												<span class="text-xs text-base-content/40">—</span>
+											{:else}
+												<select
+													class="select select-bordered w-full max-w-[10rem] select-xs"
+													onchange={openSub}
+													title="{subMatches.length} matching subtitle{subMatches.length === 1
+														? ''
+														: 's'} (★ = release-group match)"
+												>
+													<option value=""
+														>{subMatches.length} sub{subMatches.length === 1
+															? ''
+															: 's'}…</option
+													>
+													{#each subMatches as m (m.sub.externalId)}
+														<option value={m.sub.url ?? ''} disabled={!m.sub.url}>
+															{subOptionLabel(m)}
+														</option>
+													{/each}
+												</select>
+											{/if}
 										</td>
 										<td class="text-right">
 											<div class="flex items-center justify-end gap-1">

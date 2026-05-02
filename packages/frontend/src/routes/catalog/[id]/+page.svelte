@@ -1382,6 +1382,7 @@
 					{addingHash}
 					{assignError}
 					{existingHashes}
+					subs={subsLyricsResolver.results}
 					collapsible
 					open={torrentSearchOpen}
 					onToggle={toggleTorrentSearch}
@@ -1399,6 +1400,7 @@
 					{addingHash}
 					{assignError}
 					{existingHashes}
+					subs={subsLyricsResolver.results}
 					onRefresh={() =>
 						torrentSearch.search({
 							addon: firkin.addon,
