@@ -24,13 +24,12 @@ pub struct Profile {
 pub struct IdentityManager {
     dir_path: PathBuf,
     instance_type: String,
-    signaling_url: String,
 }
 
 impl IdentityManager {
-    pub fn new(dir_path: PathBuf, instance_type: String, signaling_url: String) -> Self {
+    pub fn new(dir_path: PathBuf, instance_type: String) -> Self {
         let _ = fs::create_dir_all(&dir_path);
-        Self { dir_path, instance_type, signaling_url }
+        Self { dir_path, instance_type }
     }
 
     /// Validate that a name is safe for use as a filename.
@@ -200,7 +199,6 @@ impl IdentityManager {
             name,
             &address,
             &self.instance_type,
-            &self.signaling_url,
             &private_key_hex,
             profile.as_ref().map(|p| p.username.as_str()),
             profile.as_ref().and_then(|p| p.profile_picture_url.as_deref()),
@@ -269,7 +267,7 @@ mod tests {
     #[test]
     fn test_identity_lifecycle() {
         let tmp_dir = std::env::temp_dir().join(format!("test_identities_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
 
         // Start empty
         assert!(mgr.get_all().is_empty());
@@ -332,7 +330,7 @@ mod tests {
 
         // Roundtrip from generated address
         let tmp_dir = std::env::temp_dir().join(format!("test_eip55_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
         let addr = mgr.regenerate("EIP55_TEST");
         let checksummed = to_eip55_checksum(&addr);
         assert!(checksummed.starts_with("0x"));
@@ -345,7 +343,7 @@ mod tests {
     #[test]
     fn test_name_validation() {
         let tmp_dir = std::env::temp_dir().join(format!("test_validate_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
 
         // Valid names work
         let addr = mgr.regenerate("GOOD_NAME");
@@ -362,7 +360,7 @@ mod tests {
     #[test]
     fn test_profile_lifecycle() {
         let tmp_dir = std::env::temp_dir().join(format!("test_profile_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
 
         mgr.regenerate("PROFILE_TEST");
 
@@ -403,7 +401,7 @@ mod tests {
     #[test]
     fn test_passport_without_profile() {
         let tmp_dir = std::env::temp_dir().join(format!("test_no_profile_{}", uuid::Uuid::new_v4()));
-        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string(), "https://test.example.com".to_string());
+        let mgr = IdentityManager::new(tmp_dir.clone(), "server".to_string());
 
         mgr.regenerate("NO_PROFILE");
 

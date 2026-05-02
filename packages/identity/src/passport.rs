@@ -17,7 +17,6 @@ struct PassportPayloadData<'a> {
     name: &'a str,
     address: &'a str,
     instance_type: &'a str,
-    signaling_url: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     username: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -85,7 +84,6 @@ pub fn sign_passport(
     name: &str,
     address: &str,
     instance_type: &str,
-    signaling_url: &str,
     private_key_hex: &str,
     username: Option<&str>,
     profile_picture_url: Option<&str>,
@@ -94,7 +92,6 @@ pub fn sign_passport(
         name,
         address,
         instance_type,
-        signaling_url,
         username,
         profile_picture_url,
     };

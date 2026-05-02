@@ -80,23 +80,9 @@ async fn main() {
         .expect("Failed to initialize SurrealDB");
 
     let identities_dir = paths::identities_dir();
-    let signaling_url = std::env::var("SIGNALING_URL")
-        .unwrap_or_else(|_| "http://localhost:14080".to_string());
-    let identity_manager =
-        IdentityManager::new(identities_dir, "cloud".to_string(), signaling_url);
+    let identity_manager = IdentityManager::new(identities_dir, "cloud".to_string());
 
-    identity_manager.ensure_identity("SIGNALING_WALLET");
     identity_manager.ensure_identity("CLIENT_WALLET");
-
-    if identity_manager.get_profile("SIGNALING_WALLET").is_none() {
-        identity_manager.set_profile(
-            "SIGNALING_WALLET",
-            &mhaol_identity::Profile {
-                username: "Cloud".to_string(),
-                profile_picture_url: None,
-            },
-        );
-    }
 
     #[cfg(not(target_os = "android"))]
     let ytdl_manager = {

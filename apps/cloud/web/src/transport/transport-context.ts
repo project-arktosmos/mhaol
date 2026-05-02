@@ -6,11 +6,9 @@ import type {
 	TransportResponse
 } from './transport.type';
 
-// Default fallback used until a real transport (WsTransport) is wired up by
-// nodeConnectionService.connectWs. It speaks plain HTTP via globalThis.fetch so
-// services can be exercised against mocked fetch in tests and against the
-// embedded API server in dev. Not user-selectable: production runtime always
-// upgrades to WsTransport at connection time.
+// Plain HTTP transport over globalThis.fetch. The cloud WebUI talks to the
+// same-origin Axum server, so this is the only transport in use; the hook is
+// kept for tests that want to inject a mocked Transport.
 class DefaultFetchTransport implements Transport {
 	async fetch(path: string, init?: TransportRequestInit): Promise<TransportResponse> {
 		const response = await globalThis.fetch(apiUrl(path), {

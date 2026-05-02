@@ -28,7 +28,6 @@ struct CloudStatus {
     port: u16,
     local_ip: Option<String>,
     public_ip: Option<String>,
-    signaling_address: Option<String>,
     client_address: Option<String>,
     db: DbStatus,
     packages: PackagesHealth,
@@ -86,10 +85,6 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
     let local_ip = get_local_ip();
     let public_ip = get_public_ip().await;
 
-    let signaling_address = state
-        .identity_manager
-        .get_address("SIGNALING_WALLET")
-        .map(|a| mhaol_identity::to_eip55_checksum(&a));
     let client_address = state
         .identity_manager
         .get_address("CLIENT_WALLET")
@@ -120,7 +115,6 @@ async fn status(State(state): State<CloudState>) -> Json<CloudStatus> {
         port,
         local_ip,
         public_ip,
-        signaling_address,
         client_address,
         db,
         packages,
