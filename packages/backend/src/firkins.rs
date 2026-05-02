@@ -566,7 +566,9 @@ pub fn router() -> Router<CloudState> {
     #[cfg(not(target_os = "android"))]
     let r = r
         .route("/{id}/resolve-tracks", post(resolve_tracks))
-        .route("/{id}/resolution-progress", get(resolution_progress));
+        .route("/{id}/resolution-progress", get(resolution_progress))
+        .route("/{id}/download-album", post(download_album))
+        .route("/{id}/download-progress", get(download_progress));
     r
 }
 
@@ -1810,6 +1812,52 @@ async fn resolution_progress(
     match state.track_progress.get(&id) {
         Some(p) => Ok(Json(p)),
         None => Err(err_response(StatusCode::NOT_FOUND, "no resolution in progress")),
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+async fn download_album(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<
+    (StatusCode, Json<crate::album_download::AlbumDownloadProgress>),
+    (StatusCode, Json<serde_json::Value>),
+> {
+    let existing: Option<Firkin> = state
+        .db
+        .select((TABLE, id.as_str()))
+        .await
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("db select failed: {e}")))?;
+    let firkin = existing.ok_or_else(|| err_response(StatusCode::NOT_FOUND, "firkin not found"))?;
+    if firkin.addon != "musicbrainz" {
+        return Err(err_response(
+            StatusCode::BAD_REQUEST,
+            "download-album only supports musicbrainz firkins",
+        ));
+    }
+    crate::album_download::spawn_download_album(state.clone(), id.clone());
+    let progress = state
+        .album_download_progress
+        .get(&id)
+        .unwrap_or_else(|| crate::album_download::AlbumDownloadProgress {
+            firkin_id: id.clone(),
+            started_at: Utc::now(),
+            updated_at: Utc::now(),
+            completed: false,
+            error: None,
+            tracks: Vec::new(),
+        });
+    Ok((StatusCode::ACCEPTED, Json(progress)))
+}
+
+#[cfg(not(target_os = "android"))]
+async fn download_progress(
+    State(state): State<CloudState>,
+    Path(id): Path<String>,
+) -> Result<Json<crate::album_download::AlbumDownloadProgress>, (StatusCode, Json<serde_json::Value>)> {
+    match state.album_download_progress.get(&id) {
+        Some(p) => Ok(Json(p)),
+        None => Err(err_response(StatusCode::NOT_FOUND, "no download in progress")),
     }
 }
 

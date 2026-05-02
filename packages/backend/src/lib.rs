@@ -1,3 +1,5 @@
+#[cfg(not(target_os = "android"))]
+mod album_download;
 mod artists;
 mod catalog;
 mod catalog_cache;

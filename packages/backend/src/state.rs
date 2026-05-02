@@ -3,6 +3,8 @@ use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 
 #[cfg(not(target_os = "android"))]
+use crate::album_download::AlbumDownloadProgressMap;
+#[cfg(not(target_os = "android"))]
 use crate::track_progress::AlbumProgressMap;
 #[cfg(not(target_os = "android"))]
 use crate::tv_build_progress::TvBuildProgressMap;
@@ -41,6 +43,11 @@ pub struct CloudState {
     /// background task resolves them.
     #[cfg(not(target_os = "android"))]
     pub track_progress: AlbumProgressMap,
+    /// Live progress map for the per-firkin album download task. Keyed by
+    /// firkin id (stable UUID, not CID). Drives the catalog detail page's
+    /// "Download album" button + per-track download status badges.
+    #[cfg(not(target_os = "android"))]
+    pub album_download_progress: AlbumDownloadProgressMap,
     /// Live progress map for the background TV-show firkin builder. Keyed
     /// by `<library_id>::<lowercase_show>::<year>`. The libraries page
     /// polls this so each show group's "Match TMDB & build firkin"
@@ -80,6 +87,8 @@ impl CloudState {
             ipfs_stream_manager,
             #[cfg(not(target_os = "android"))]
             track_progress: AlbumProgressMap::new(),
+            #[cfg(not(target_os = "android"))]
+            album_download_progress: AlbumDownloadProgressMap::new(),
             #[cfg(not(target_os = "android"))]
             tv_build_progress: TvBuildProgressMap::new(),
             #[cfg(not(target_os = "android"))]

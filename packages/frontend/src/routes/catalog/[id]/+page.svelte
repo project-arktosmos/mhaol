@@ -536,7 +536,9 @@
 		})();
 	});
 
-	const trailerTabEnabled = $derived(isTmdbMovie || isTmdbTv || (isYoutubeVideo && Boolean(youtubeVideoUrl)));
+	const trailerTabEnabled = $derived(
+		isTmdbMovie || isTmdbTv || (isYoutubeVideo && Boolean(youtubeVideoUrl))
+	);
 	const ipfsTabEnabled = $derived(hasIpfsFiles);
 	const torrentTabEnabled = $derived(streamEval.kind === 'streamable');
 	const anyTabEnabled = $derived(trailerTabEnabled || ipfsTabEnabled || torrentTabEnabled);
@@ -951,10 +953,9 @@
 		let cancelled = false;
 		void (async () => {
 			try {
-				const res = await fetch(
-					`${base}/api/firkins/${encodeURIComponent(id)}/download-progress`,
-					{ cache: 'no-store' }
-				);
+				const res = await fetch(`${base}/api/firkins/${encodeURIComponent(id)}/download-progress`, {
+					cache: 'no-store'
+				});
 				if (cancelled || !res.ok) return;
 				const payload = (await res.json()) as AlbumDownloadProgressPayload;
 				trackResolver.applyDownloadProgress(payload);
@@ -983,10 +984,9 @@
 		const tick = async () => {
 			if (cancelled) return;
 			try {
-				const res = await fetch(
-					`${base}/api/firkins/${encodeURIComponent(id)}/download-progress`,
-					{ cache: 'no-store' }
-				);
+				const res = await fetch(`${base}/api/firkins/${encodeURIComponent(id)}/download-progress`, {
+					cache: 'no-store'
+				});
 				if (cancelled) return;
 				if (!res.ok) return;
 				const payload = (await res.json()) as AlbumDownloadProgressPayload;
@@ -1535,9 +1535,9 @@
 				<div class="card border border-base-content/10 bg-base-200 p-4">
 					<h2 class="mb-2 text-sm font-semibold text-base-content/70 uppercase">Status</h2>
 					<p class="text-xs text-base-content/70">
-						This item isn't bookmarked yet — no torrent search, IPFS pinning, or version
-						history runs against it. Bookmark it to add it to your library and unlock the
-						download / streaming flow.
+						This item isn't bookmarked yet — no torrent search, IPFS pinning, or version history
+						runs against it. Bookmark it to add it to your library and unlock the download /
+						streaming flow.
 					</p>
 				</div>
 			{/if}
