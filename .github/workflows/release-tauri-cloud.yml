@@ -59,8 +59,9 @@ jobs:
         run: |
           PKG_VER=1.24.10
           BASE="https://gstreamer.freedesktop.org/data/pkg/osx/${PKG_VER}"
-          curl -fsSL -o /tmp/gst-runtime.pkg "${BASE}/gstreamer-1.0-${PKG_VER}-universal.pkg"
-          curl -fsSL -o /tmp/gst-devel.pkg   "${BASE}/gstreamer-1.0-devel-${PKG_VER}-universal.pkg"
+          UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+          curl -fL -A "$UA" -o /tmp/gst-runtime.pkg "${BASE}/gstreamer-1.0-${PKG_VER}-universal.pkg"
+          curl -fL -A "$UA" -o /tmp/gst-devel.pkg   "${BASE}/gstreamer-1.0-devel-${PKG_VER}-universal.pkg"
           sudo installer -pkg /tmp/gst-runtime.pkg -target /
           sudo installer -pkg /tmp/gst-devel.pkg   -target /
           echo "PKG_CONFIG_PATH=/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig" >> "$GITHUB_ENV"
@@ -91,8 +92,9 @@ jobs:
           $base = "https://gstreamer.freedesktop.org/data/pkg/windows/$ver/msvc"
           $runtime = "$env:RUNNER_TEMP\gst-runtime.msi"
           $devel   = "$env:RUNNER_TEMP\gst-devel.msi"
-          Invoke-WebRequest -Uri "$base/gstreamer-1.0-msvc-x86_64-$ver.msi"       -OutFile $runtime
-          Invoke-WebRequest -Uri "$base/gstreamer-1.0-devel-msvc-x86_64-$ver.msi" -OutFile $devel
+          $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          Invoke-WebRequest -UserAgent $ua -Uri "$base/gstreamer-1.0-msvc-x86_64-$ver.msi"       -OutFile $runtime
+          Invoke-WebRequest -UserAgent $ua -Uri "$base/gstreamer-1.0-devel-msvc-x86_64-$ver.msi" -OutFile $devel
           Start-Process msiexec -ArgumentList "/i `"$runtime`" /qn /norestart ADDLOCAL=ALL" -Wait
           Start-Process msiexec -ArgumentList "/i `"$devel`" /qn /norestart ADDLOCAL=ALL" -Wait
           $root = "C:\gstreamer\1.0\msvc_x86_64"
