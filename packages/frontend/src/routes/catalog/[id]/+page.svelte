@@ -15,6 +15,7 @@
 	import PlayerVideo from '$components/player/PlayerVideo.svelte';
 	import CatalogTracksCard from '$components/catalog/CatalogTracksCard.svelte';
 	import CatalogTorrentSearchCard from '$components/catalog/CatalogTorrentSearchCard.svelte';
+	import CatalogTorrentAttachmentCard from '$components/catalog/CatalogTorrentAttachmentCard.svelte';
 	import CatalogTorrentProgressCard from '$components/catalog/CatalogTorrentProgressCard.svelte';
 	import CatalogSubsLyricsCard from '$components/catalog/CatalogSubsLyricsCard.svelte';
 	import CatalogRelatedCard from '$components/catalog/CatalogRelatedCard.svelte';
@@ -1872,6 +1873,14 @@
 			{/if}
 
 			<CatalogDescriptionPanel description={firkin.description} />
+
+			{#if isTmdbMovie}
+				<CatalogTorrentAttachmentCard
+					downloadAttached={hasMagnetFiles}
+					streamActive={activeSource === 'torrent' &&
+						(torrentStreamStarting || isInlinePlayingThisFirkin)}
+				/>
+			{/if}
 
 			{#if isTmdbTv && tmdbTvId}
 				<CatalogTvSeasonsCard
