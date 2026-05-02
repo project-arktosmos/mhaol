@@ -11,7 +11,14 @@ use serde_json::json;
 #[cfg(target_os = "android")]
 use axum::response::IntoResponse;
 #[cfg(not(target_os = "android"))]
+use chrono::{DateTime, Utc};
+#[cfg(not(target_os = "android"))]
 use serde::Serialize;
+#[cfg(not(target_os = "android"))]
+use surrealdb::sql::Thing;
+
+#[cfg(not(target_os = "android"))]
+const TORRENT_EVAL_TABLE: &str = "torrent_eval";
 
 #[cfg(not(target_os = "android"))]
 use axum::{
@@ -67,6 +74,119 @@ struct EvaluateOk {
 struct EvaluateNotStreamable {
     streamable: bool,
     reason: String,
+}
+
+/// Cache row for an `/api/torrent/evaluate` result. Keyed by `info_hash`
+/// (the SHA1 of the torrent's info dict — content-addressed, so the file
+/// structure for a given hash is immutable). Caching covers both streamable
+/// and not-streamable outcomes so the WebUI's torrent search table doesn't
+/// have to re-probe the same magnets every time the user revisits a firkin.
+#[cfg(not(target_os = "android"))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredTorrentEval {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<Thing>,
+    info_hash: String,
+    streamable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_index: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_size: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mime_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+    evaluated_at: DateTime<Utc>,
+}
+
+#[cfg(not(target_os = "android"))]
+fn btih_from_magnet(value: &str) -> Option<String> {
+    let lower = value.to_lowercase();
+    let idx = lower.find("btih:")?;
+    let tail = &lower[idx + "btih:".len()..];
+    let end = tail.find('&').unwrap_or(tail.len());
+    let hash = tail[..end].trim().to_string();
+    if hash.is_empty() {
+        None
+    } else {
+        Some(hash)
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn cached_to_response(row: &StoredTorrentEval) -> serde_json::Value {
+    if row.streamable {
+        serde_json::to_value(EvaluateOk {
+            streamable: true,
+            info_hash: row.info_hash.clone(),
+            name: row.name.clone().unwrap_or_default(),
+            file_index: row.file_index.unwrap_or(0),
+            file_name: row.file_name.clone().unwrap_or_default(),
+            file_size: row.file_size.unwrap_or(0),
+            mime_type: row.mime_type.clone(),
+        })
+        .unwrap_or_default()
+    } else {
+        serde_json::to_value(EvaluateNotStreamable {
+            streamable: false,
+            reason: row
+                .reason
+                .clone()
+                .unwrap_or_else(|| "not streamable".into()),
+        })
+        .unwrap_or_default()
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+async fn load_cached_eval(state: &CloudState, info_hash: &str) -> Option<StoredTorrentEval> {
+    match state
+        .db
+        .select::<Option<StoredTorrentEval>>((TORRENT_EVAL_TABLE, info_hash))
+        .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            tracing::warn!("torrent_eval cache load failed for {info_hash}: {e}");
+            None
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+async fn store_cached_eval(state: &CloudState, row: StoredTorrentEval) {
+    let info_hash = row.info_hash.clone();
+    let existing: Result<Option<StoredTorrentEval>, _> = state
+        .db
+        .select((TORRENT_EVAL_TABLE, info_hash.as_str()))
+        .await;
+    let result: Result<Option<StoredTorrentEval>, _> = match existing {
+        Ok(Some(_)) => {
+            state
+                .db
+                .update((TORRENT_EVAL_TABLE, info_hash.as_str()))
+                .content(row)
+                .await
+        }
+        Ok(None) => {
+            state
+                .db
+                .create((TORRENT_EVAL_TABLE, info_hash.as_str()))
+                .content(row)
+                .await
+        }
+        Err(e) => {
+            tracing::warn!("torrent_eval cache existing-check failed for {info_hash}: {e}");
+            return;
+        }
+    };
+    if let Err(e) = result {
+        tracing::warn!("torrent_eval cache store failed for {info_hash}: {e}");
+    }
 }
 
 pub fn router() -> Router<CloudState> {
@@ -217,6 +337,17 @@ async fn evaluate(
             .unwrap_or_default(),
         );
     }
+
+    // Hit the cache up-front: the streamability of an info_hash is
+    // intrinsic to the torrent metadata (the hash IS the SHA1 of the
+    // info dict), so a previous evaluation is still valid no matter how
+    // long ago it ran.
+    if let Some(info_hash) = btih_from_magnet(magnet) {
+        if let Some(row) = load_cached_eval(&state, &info_hash).await {
+            return Json(cached_to_response(&row));
+        }
+    }
+
     if !state.torrent_manager.is_initialized() {
         return Json(
             serde_json::to_value(EvaluateNotStreamable {
@@ -227,30 +358,64 @@ async fn evaluate(
         );
     }
 
+    let now = Utc::now();
     match state.torrent_manager.evaluate_magnet(magnet).await {
         Ok(TorrentStreamInfo {
             info_hash,
             name,
             file,
-        }) => Json(
-            serde_json::to_value(EvaluateOk {
+        }) => {
+            let cache_row = StoredTorrentEval {
+                id: None,
+                info_hash: info_hash.clone(),
                 streamable: true,
-                info_hash,
-                name,
-                file_index: file.index,
-                file_name: file.name,
-                file_size: file.size,
-                mime_type: file.mime_type,
-            })
-            .unwrap_or_default(),
-        ),
-        Err(e) => Json(
-            serde_json::to_value(EvaluateNotStreamable {
-                streamable: false,
-                reason: e.to_string(),
-            })
-            .unwrap_or_default(),
-        ),
+                name: Some(name.clone()),
+                file_index: Some(file.index),
+                file_name: Some(file.name.clone()),
+                file_size: Some(file.size),
+                mime_type: file.mime_type.clone(),
+                reason: None,
+                evaluated_at: now,
+            };
+            store_cached_eval(&state, cache_row).await;
+            Json(
+                serde_json::to_value(EvaluateOk {
+                    streamable: true,
+                    info_hash,
+                    name,
+                    file_index: file.index,
+                    file_name: file.name,
+                    file_size: file.size,
+                    mime_type: file.mime_type,
+                })
+                .unwrap_or_default(),
+            )
+        }
+        Err(e) => {
+            let reason = e.to_string();
+            if let Some(info_hash) = btih_from_magnet(magnet) {
+                let cache_row = StoredTorrentEval {
+                    id: None,
+                    info_hash,
+                    streamable: false,
+                    name: None,
+                    file_index: None,
+                    file_name: None,
+                    file_size: None,
+                    mime_type: None,
+                    reason: Some(reason.clone()),
+                    evaluated_at: now,
+                };
+                store_cached_eval(&state, cache_row).await;
+            }
+            Json(
+                serde_json::to_value(EvaluateNotStreamable {
+                    streamable: false,
+                    reason,
+                })
+                .unwrap_or_default(),
+            )
+        }
     }
 }
 
@@ -377,4 +542,3 @@ async fn stream_serve(
         "torrent streaming unavailable on this platform",
     ))
 }
-
