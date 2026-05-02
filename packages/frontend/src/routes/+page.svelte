@@ -33,15 +33,17 @@
 	let sources = $state<CatalogSource[]>([]);
 	let sourcesError = $state<string | null>(null);
 
-	// Selected addon flows from the URL `?addon=<id>` query param. When sources
-	// have loaded but the URL has no addon (or names an unknown one), fall back
-	// to the first available source so the page is never in a no-selection state.
+	// Selected addon flows from the URL `?addon=<id>` query param. Missing /
+	// `all` / unknown values land on the "All" pseudo-addon, which renders a
+	// library grid per browsable addon instead of the per-addon detail surface.
 	const addon = $derived.by(() => {
 		const fromUrl = pageStore.url.searchParams.get('addon') ?? '';
+		if (fromUrl === '' || fromUrl === 'all') return 'all';
 		if (sources.length === 0) return fromUrl;
-		if (fromUrl && sources.some((s) => s.id === fromUrl)) return fromUrl;
-		return sources[0]?.id ?? '';
+		if (sources.some((s) => s.id === fromUrl)) return fromUrl;
+		return 'all';
 	});
+	const isAllMode = $derived(addon === 'all');
 
 	let genres = $state<CatalogGenre[]>([]);
 
@@ -59,17 +61,17 @@
 		musicbrainz: 'local-album'
 	};
 
-	const libraryAllFirkins = $derived<Firkin[]>(
-		addon
-			? $firkinsStore.firkins
-					.filter((d) => d.addon === addon || d.addon === LOCAL_ADDON_FOR[addon])
-					.slice()
-					.sort((a, b) => b.created_at.localeCompare(a.created_at))
-			: []
-	);
-	const galleryHref = $derived(
-		addon ? `${base}/catalog/gallery?addon=${encodeURIComponent(addon)}` : ''
-	);
+	function libraryFirkinsFor(addonId: string): Firkin[] {
+		return $firkinsStore.firkins
+			.filter((d) => d.addon === addonId || d.addon === LOCAL_ADDON_FOR[addonId])
+			.slice()
+			.sort((a, b) => b.created_at.localeCompare(a.created_at));
+	}
+	function galleryHrefFor(addonId: string): string {
+		return `${base}/catalog/gallery?addon=${encodeURIComponent(addonId)}`;
+	}
+	const libraryAllFirkins = $derived<Firkin[]>(addon && !isAllMode ? libraryFirkinsFor(addon) : []);
+	const galleryHref = $derived(addon && !isAllMode ? galleryHrefFor(addon) : '');
 	const recommendationsHref = $derived(
 		addon ? `${base}/catalog/gallery?addon=${encodeURIComponent(addon)}&mode=for-you` : ''
 	);
@@ -285,7 +287,7 @@
 
 <section class="sticky top-0 z-50 border-b border-base-content/10 bg-base-200">
 	<div class="grid w-full grid-cols-2 items-stretch gap-3 p-3">
-		<NavbarAddonPicker classes="grid grid-cols-4 gap-1" />
+		<NavbarAddonPicker classes="grid grid-cols-5 gap-1" />
 		<NavbarSearch
 			classes="flex items-stretch gap-2 w-full"
 			inputClasses="input-bordered input input-sm flex-1 min-w-0 h-full"
@@ -300,85 +302,120 @@
 		</div>
 	{/if}
 
-	{#if continueFirkins.length > 0}
-		<LazyRow>
-			<section class="flex flex-col gap-3">
-				<div class="flex flex-wrap items-center justify-between gap-4">
-					<h2 class="text-lg font-semibold">Continue</h2>
-				</div>
-				<FirkinLibraryGrid
-					firkins={continueFirkins}
-					collapsed={true}
-					collapsedCount={6}
-					progressFor={(f) => continueProgressById[f.id] ?? null}
-					emptyMessage="Nothing in progress yet."
-				/>
-			</section>
-		</LazyRow>
-	{/if}
-
-	<LazyRow>
-		<section class="flex flex-col gap-3">
-			<div class="flex items-center justify-between gap-4">
-				<h2 class="text-lg font-semibold">Library</h2>
-			</div>
-			<FirkinLibraryGrid
-				firkins={libraryAllFirkins}
-				collapsed={true}
-				collapsedCount={6}
-				moreHref={galleryHref}
-				emptyMessage="No bookmarked items yet."
-			>
-				{#snippet actions(doc)}
-					{#if firkinNeedsMetadata(doc) && metadataSearchAddon(doc.addon) !== null}
-						<button
-							type="button"
-							class="btn absolute top-2 right-2 btn-xs btn-primary"
-							onclick={() => openMetadataLookup(doc)}
-							title="Search the relevant addon and bake matching metadata into this firkin"
-						>
-							Find metadata
-						</button>
-					{/if}
-				{/snippet}
-			</FirkinLibraryGrid>
-		</section>
-	</LazyRow>
-
-	{#if addonRecommendationFirkins.length > 0}
-		<LazyRow>
-			<section class="flex flex-col gap-3">
-				<div class="flex flex-wrap items-center justify-between gap-4">
-					<h2 class="text-lg font-semibold">For you</h2>
-				</div>
-				<FirkinLibraryGrid
-					firkins={addonRecommendationFirkins}
-					collapsed={true}
-					collapsedCount={6}
-					moreHref={recommendationsHref}
-					hrefBuilder={visitHrefForFirkin}
-					emptyMessage="No recommendations for this addon yet."
-				/>
-			</section>
-		</LazyRow>
-	{/if}
-
-	{#if hasPopular}
-		{#if hasFilter && genres.length > 0}
-			{#each genres as genre (genre.id)}
+	{#if isAllMode}
+		{#each sources as source (source.id)}
+			{@const sourceFirkins = libraryFirkinsFor(source.id)}
+			{#if sourceFirkins.length > 0}
 				<LazyRow>
-					<PopularGenreRow
-						{addon}
-						genreId={genre.id}
-						title={genre.name}
-						hrefBuilder={visitHrefForFirkin}
-					/>
+					<section class="flex flex-col gap-3">
+						<div class="flex items-center justify-between gap-4">
+							<h2 class="text-lg font-semibold">{source.label}</h2>
+						</div>
+						<FirkinLibraryGrid
+							firkins={sourceFirkins}
+							collapsed={true}
+							collapsedCount={6}
+							moreHref={galleryHrefFor(source.id)}
+						>
+							{#snippet actions(doc)}
+								{#if firkinNeedsMetadata(doc) && metadataSearchAddon(doc.addon) !== null}
+									<button
+										type="button"
+										class="btn absolute top-2 right-2 btn-xs btn-primary"
+										onclick={() => openMetadataLookup(doc)}
+										title="Search the relevant addon and bake matching metadata into this firkin"
+									>
+										Find metadata
+									</button>
+								{/if}
+							{/snippet}
+						</FirkinLibraryGrid>
+					</section>
 				</LazyRow>
-			{/each}
-		{:else}
+			{/if}
+		{/each}
+	{:else}
+		{#if continueFirkins.length > 0}
 			<LazyRow>
-				<PopularGenreRow {addon} title="Popular" hrefBuilder={visitHrefForFirkin} />
+				<section class="flex flex-col gap-3">
+					<div class="flex flex-wrap items-center justify-between gap-4">
+						<h2 class="text-lg font-semibold">Continue</h2>
+					</div>
+					<FirkinLibraryGrid
+						firkins={continueFirkins}
+						collapsed={true}
+						collapsedCount={6}
+						progressFor={(f) => continueProgressById[f.id] ?? null}
+						emptyMessage="Nothing in progress yet."
+					/>
+				</section>
 			</LazyRow>
+		{/if}
+
+		{#if libraryAllFirkins.length > 0}
+			<LazyRow>
+				<section class="flex flex-col gap-3">
+					<div class="flex items-center justify-between gap-4">
+						<h2 class="text-lg font-semibold">Library</h2>
+					</div>
+					<FirkinLibraryGrid
+						firkins={libraryAllFirkins}
+						collapsed={true}
+						collapsedCount={6}
+						moreHref={galleryHref}
+					>
+						{#snippet actions(doc)}
+							{#if firkinNeedsMetadata(doc) && metadataSearchAddon(doc.addon) !== null}
+								<button
+									type="button"
+									class="btn absolute top-2 right-2 btn-xs btn-primary"
+									onclick={() => openMetadataLookup(doc)}
+									title="Search the relevant addon and bake matching metadata into this firkin"
+								>
+									Find metadata
+								</button>
+							{/if}
+						{/snippet}
+					</FirkinLibraryGrid>
+				</section>
+			</LazyRow>
+		{/if}
+
+		{#if addonRecommendationFirkins.length > 0}
+			<LazyRow>
+				<section class="flex flex-col gap-3">
+					<div class="flex flex-wrap items-center justify-between gap-4">
+						<h2 class="text-lg font-semibold">For you</h2>
+					</div>
+					<FirkinLibraryGrid
+						firkins={addonRecommendationFirkins}
+						collapsed={true}
+						collapsedCount={6}
+						moreHref={recommendationsHref}
+						hrefBuilder={visitHrefForFirkin}
+						emptyMessage="No recommendations for this addon yet."
+					/>
+				</section>
+			</LazyRow>
+		{/if}
+
+		{#if hasPopular}
+			{#if hasFilter && genres.length > 0}
+				{#each genres as genre (genre.id)}
+					<LazyRow>
+						<PopularGenreRow
+							{addon}
+							genreId={genre.id}
+							title={genre.name}
+							hrefBuilder={visitHrefForFirkin}
+						/>
+					</LazyRow>
+				{/each}
+			{:else}
+				<LazyRow>
+					<PopularGenreRow {addon} title="Popular" hrefBuilder={visitHrefForFirkin} />
+				</LazyRow>
+			{/if}
 		{/if}
 	{/if}
 </div>

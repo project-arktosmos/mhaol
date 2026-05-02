@@ -4,6 +4,7 @@
 	import type { CloudFirkin } from '$types/firkin.type';
 	import { getCachedImageUrl } from '$services/image-cache.service';
 	import { firkinTooltipService } from '$services/firkins/firkin-tooltip.svelte';
+	import { movieTvViewModeService } from '$services/movie-tv-view-mode.service';
 	import { hashColor } from '$utils/string/hash-color';
 
 	interface Props {
@@ -29,6 +30,9 @@
 	let kind = $derived(addonKind(firkin.addon));
 	let isAlbum = $derived(kind === 'album');
 	let isYoutube = $derived(kind === 'youtube video');
+	let isMovieOrTv = $derived(kind === 'movie' || kind === 'tv show');
+	const viewModeStore = movieTvViewModeService.store;
+	let useLandscape = $derived(isMovieOrTv && $viewModeStore.mode === 'landscapes');
 	let artistNames = $derived(
 		(firkin.artists ?? [])
 			.map((a) => a.name)
@@ -57,7 +61,11 @@
 		return desc;
 	});
 
-	let coverImage = $derived(firkin.images?.[0] ?? null);
+	let coverImage = $derived(
+		useLandscape
+			? (firkin.images?.[firkin.images.length - 1] ?? null)
+			: (firkin.images?.[0] ?? null)
+	);
 	let resolvedCoverUrl = $state<string | null>(null);
 
 	$effect(() => {
@@ -153,7 +161,7 @@
 	<figure
 		class={classNames('relative overflow-hidden', {
 			'aspect-square w-full': isAlbum,
-			'aspect-video w-full': isYoutube,
+			'aspect-video w-full': isYoutube || useLandscape,
 			'bg-base-300': !isAlbum
 		})}
 		style={albumBgColor ? `background-color: ${albumBgColor};` : undefined}
@@ -164,14 +172,17 @@
 				alt={isAlbum ? '' : firkin.title}
 				width={coverImage.width || undefined}
 				height={coverImage.height || undefined}
-				class={classNames('block w-full', isAlbum || isYoutube ? 'h-full object-cover' : 'h-auto')}
+				class={classNames(
+					'block w-full',
+					isAlbum || isYoutube || useLandscape ? 'h-full object-cover' : 'h-auto'
+				)}
 				loading="lazy"
 			/>
 		{:else}
 			<div
 				class={classNames(
 					'flex w-full items-center justify-center text-base-content/30',
-					isAlbum || isYoutube ? 'h-full' : 'aspect-[2/3]'
+					isAlbum || isYoutube || useLandscape ? 'h-full' : 'aspect-[2/3]'
 				)}
 				aria-hidden="true"
 			>
@@ -208,6 +219,13 @@
 				<div class="truncate text-xs text-base-content/70" title={channelName}>
 					{channelName}
 				</div>
+			{/if}
+		</div>
+	{:else if useLandscape}
+		<div class="px-3 py-2">
+			<div class="truncate text-sm font-semibold" title={firkin.title}>{firkin.title}</div>
+			{#if firkin.year}
+				<div class="truncate text-xs text-base-content/70">{firkin.year}</div>
 			{/if}
 		</div>
 	{/if}

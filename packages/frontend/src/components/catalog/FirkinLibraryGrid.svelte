@@ -1,8 +1,11 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import classNames from 'classnames';
+	import { addonKind } from 'cloud-ui';
 	import { base } from '$app/paths';
 	import FirkinCard from '$components/firkins/FirkinCard.svelte';
 	import { getCachedImageUrl } from '$services/image-cache.service';
+	import { movieTvViewModeService } from '$services/movie-tv-view-mode.service';
 	import type { CloudFirkin } from '$types/firkin.type';
 
 	interface Props {
@@ -29,22 +32,43 @@
 
 	const PREVIEW_COUNT = 4;
 
-	const visibleFirkins = $derived<CloudFirkin[]>(
-		collapsed ? firkins.slice(0, collapsedCount) : firkins
+	// Per-kind row sizing — wider tiles get fewer columns.
+	//   - Movie/TV-landscape and YouTube (aspect-video): 4 firkins + More = 5 cols
+	//   - Albums (square): 5 firkins + More = 6 cols
+	//   - Portrait-poster default (covers movies/TV, books, games): 6 + More = 7 cols
+	const viewModeStore = movieTvViewModeService.store;
+	const referenceKind = $derived(firkins.length > 0 ? addonKind(firkins[0].addon) : null);
+	const useLandscape = $derived(
+		(referenceKind === 'movie' || referenceKind === 'tv show') &&
+			$viewModeStore.mode === 'landscapes'
 	);
-	const hiddenCount = $derived(Math.max(0, firkins.length - collapsedCount));
+	const isWideRow = $derived(useLandscape || referenceKind === 'youtube video');
+	const isAlbumRow = $derived(referenceKind === 'album');
+	const effectiveCollapsedCount = $derived(isWideRow ? 4 : isAlbumRow ? 5 : collapsedCount);
+	const gridColsClass = $derived(
+		isWideRow ? 'grid-cols-5' : isAlbumRow ? 'grid-cols-6' : 'grid-cols-7'
+	);
+
+	const visibleFirkins = $derived<CloudFirkin[]>(
+		collapsed ? firkins.slice(0, effectiveCollapsedCount) : firkins
+	);
+	const hiddenCount = $derived(Math.max(0, firkins.length - effectiveCollapsedCount));
 	const showMoreCell = $derived(collapsed && hiddenCount > 0 && !!moreHref);
 
 	// The next four firkins after the visible slice — rendered as a 2x2 thumb
 	// preview inside the "More" cell so the link visually represents what the
 	// user is about to navigate into.
 	const previewFirkins = $derived<CloudFirkin[]>(
-		showMoreCell ? firkins.slice(collapsedCount, collapsedCount + PREVIEW_COUNT) : []
+		showMoreCell
+			? firkins.slice(effectiveCollapsedCount, effectiveCollapsedCount + PREVIEW_COUNT)
+			: []
 	);
 	let previewUrls = $state<(string | null)[]>([]);
 
 	$effect(() => {
-		const sources = previewFirkins.map((f) => f.images?.[0]?.url ?? null);
+		const sources = previewFirkins.map((f) =>
+			useLandscape ? (f.images?.[f.images.length - 1]?.url ?? null) : (f.images?.[0]?.url ?? null)
+		);
 		let cancelled = false;
 		void Promise.all(
 			sources.map(async (url) => {
@@ -71,7 +95,7 @@
 {#if firkins.length === 0}
 	<p class="text-sm text-base-content/60">{emptyMessage}</p>
 {:else}
-	<div class="grid grid-cols-7 gap-4">
+	<div class={classNames('grid gap-4', gridColsClass)}>
 		{#each visibleFirkins as doc (doc.id)}
 			{@const progress = progressFor ? progressFor(doc) : null}
 			<div class="relative">
@@ -99,8 +123,8 @@
 			</div>
 		{/each}
 		{#if showMoreCell && moreHref}
-			<div class="relative h-full min-h-32 w-full overflow-hidden rounded-md bg-base-300">
-				<div class="grid h-full grid-cols-2 grid-rows-2 gap-px">
+			<div class="relative h-full w-full overflow-hidden rounded-md bg-base-300 shadow-sm">
+				<div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-px">
 					{#each Array.from({ length: PREVIEW_COUNT }, (_, i) => i) as i (i)}
 						<div class="overflow-hidden bg-base-200">
 							{#if previewUrls[i]}

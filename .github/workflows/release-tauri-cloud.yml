@@ -129,8 +129,18 @@ jobs:
         run: |
           # Export MSYS2's mingw64 prefix so cargo / pkg-config can find
           # gstreamer-1.0 and friends from the non-MSYS2 build steps below.
+          # The Rust host toolchain installed by dtolnay/rust-toolchain is
+          # x86_64-pc-windows-msvc, but we build for x86_64-pc-windows-gnu —
+          # pkg-config treats that as a cross build and refuses the host's
+          # PKG_CONFIG_PATH unless PKG_CONFIG_ALLOW_CROSS=1 is set. We also
+          # set the target-suffixed PKG_CONFIG_PATH_x86_64_pc_windows_gnu so
+          # build scripts that read the target-specific var still resolve.
           MSYS2_PREFIX="$(cygpath -w /mingw64)"
-          echo "PKG_CONFIG_PATH=${MSYS2_PREFIX}\\lib\\pkgconfig" >> "$GITHUB_ENV"
+          PKGCFG="${MSYS2_PREFIX}\\lib\\pkgconfig"
+          echo "PKG_CONFIG_PATH=${PKGCFG}" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH_x86_64_pc_windows_gnu=${PKGCFG}" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_ALLOW_CROSS_x86_64_pc_windows_gnu=1" >> "$GITHUB_ENV"
           echo "${MSYS2_PREFIX}\\bin" >> "$GITHUB_PATH"
 
       - uses: actions/setup-node@v4

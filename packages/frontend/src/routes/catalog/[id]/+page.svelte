@@ -2,6 +2,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import classNames from 'classnames';
+	import { extractVideoId } from 'addons/youtube/types';
 	import FirkinArtistsSection from '$components/firkins/FirkinArtistsSection.svelte';
 	import FirkinMetadataLookupModal, {
 		type CatalogLookupItem
@@ -1171,7 +1172,8 @@
 			title: match?.parsedTitle || match?.title || entry.title || 'Magnet attached',
 			seeders: match?.seeders ?? null,
 			leechers: match?.leechers ?? null,
-			sizeBytes: match?.sizeBytes ?? null
+			sizeBytes: match?.sizeBytes ?? null,
+			quality: match?.quality ?? null
 		};
 	}
 
@@ -1229,16 +1231,67 @@
 		}
 		return null;
 	});
-	const preferredStreamTorrent = $derived.by<TorrentResultItem | null>(() => {
+	// One representative row per quality bucket from the torrent search
+	// (best-seeded inside the group). Powers the Download tab's per-quality
+	// picks table — like the Stream tab, every discovered quality lands as
+	// a row immediately, with its own Assign button.
+	const downloadPicksByQuality = $derived.by<
+		Array<{ quality: string; torrent: TorrentResultItem }>
+	>(() => {
+		const out: Array<{ quality: string; torrent: TorrentResultItem }> = [];
 		for (const group of torrentSearch.groupedMatches) {
+			if (group.label === 'Other') continue;
 			for (const row of group.rows) {
 				if (!row.magnetLink) continue;
-				if (torrentSearch.rowEvals[row.magnetLink]?.kind !== 'streamable') continue;
-				return row;
+				out.push({ quality: group.label, torrent: row });
+				break;
 			}
 		}
-		return null;
+		return out;
 	});
+	// One representative row per quality bucket discovered by the torrent
+	// search, in quality priority order. We surface qualities the moment
+	// the indexer returns them so the attachment card can render a row
+	// for each — even before the streamability probe has finished — with
+	// the row tagged `status: 'probing'` until the eval comes back. Once
+	// a row in the bucket is confirmed `streamable` we promote that
+	// specific row (with its file size / mime info) to `status:
+	// 'streamable'`. Buckets where every row has been ruled out
+	// (`not-streamable` / `skipped`) drop off the list.
+	const streamPicksByQuality = $derived.by<
+		Array<{ quality: string; torrent: TorrentResultItem; status: 'streamable' | 'probing' }>
+	>(() => {
+		const out: Array<{
+			quality: string;
+			torrent: TorrentResultItem;
+			status: 'streamable' | 'probing';
+		}> = [];
+		for (const group of torrentSearch.groupedMatches) {
+			if (group.label === 'Other') continue;
+			let pick: { torrent: TorrentResultItem; status: 'streamable' | 'probing' } | null = null;
+			for (const row of group.rows) {
+				if (!row.magnetLink) continue;
+				const evaluation = torrentSearch.rowEvals[row.magnetLink];
+				if (evaluation?.kind === 'streamable') {
+					pick = { torrent: row, status: 'streamable' };
+					break;
+				}
+				if (
+					!pick &&
+					(evaluation === undefined ||
+						evaluation.kind === 'pending' ||
+						evaluation.kind === 'evaluating')
+				) {
+					pick = { torrent: row, status: 'probing' };
+				}
+			}
+			if (pick) out.push({ quality: group.label, ...pick });
+		}
+		return out;
+	});
+	const preferredStreamTorrent = $derived(
+		streamPicksByQuality.find((p) => p.status === 'streamable')?.torrent ?? null
+	);
 
 	function toggleTorrentSearch() {
 		torrentSearchOpen = !torrentSearchOpen;
@@ -2019,6 +2072,7 @@
 							{selectedTrailerKey}
 							onTrailerSelect={(k) => (selectedTrailerKey = k)}
 							extraControls={sourceButtons}
+							playOverlay={isTmdbMovie ? torrentAttachmentOverlay : undefined}
 						/>
 					{:else if firkin.images[1]}
 						<img
@@ -2040,8 +2094,16 @@
 
 			<CatalogDescriptionPanel description={firkin.description} />
 
-			{#if isTmdbMovie}
+			{#snippet torrentAttachmentOverlay(playTrailerByKey: (key: string) => void)}
 				<CatalogTorrentAttachmentCard
+					trailers={trailerTabEnabled
+						? playableTrailers.map((t) => ({
+								key: t.key,
+								label: t.label,
+								youtubeId: extractVideoId(t.youtubeUrl) ?? t.youtubeUrl
+							}))
+						: []}
+					onTrailerPlay={playTrailerByKey}
 					download={downloadInfo}
 					stream={streamInfo}
 					onStreamPlay={replayStreamMagnet}
@@ -2049,7 +2111,8 @@
 					onDownloadPlay={playFromAttachmentDownload}
 					downloadPlaying={ipfsStarting}
 					preferredDownload={preferredDownloadTorrent}
-					preferredStream={preferredStreamTorrent}
+					{streamPicksByQuality}
+					{downloadPicksByQuality}
 					attachingDownload={addingHash !== null &&
 						preferredDownloadTorrent?.magnetLink === addingHash}
 					attachingStream={streamingHash !== null &&
@@ -2057,7 +2120,7 @@
 					onAttachDownload={assignTorrent}
 					onAttachStream={streamTorrentFromRow}
 				/>
-			{/if}
+			{/snippet}
 
 			{#if isTmdbTv && tmdbTvId}
 				<CatalogTvSeasonsCard

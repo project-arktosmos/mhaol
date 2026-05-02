@@ -20,16 +20,28 @@
 	});
 
 	const rootPath = `${base}/`;
+	const isOnRoot = $derived(page.url.pathname === rootPath);
+	const addonParam = $derived(page.url.searchParams.get('addon') ?? '');
+	const allActive = $derived(isOnRoot && (addonParam === '' || addonParam === 'all'));
 	const activeAddon = $derived.by(() => {
-		if (page.url.pathname !== rootPath) return null;
-		const fromUrl = page.url.searchParams.get('addon') ?? '';
-		if (fromUrl && sources.some((s) => s.id === fromUrl)) return fromUrl;
-		return sources[0]?.id ?? null;
+		if (!isOnRoot || allActive) return null;
+		return sources.some((s) => s.id === addonParam) ? addonParam : null;
 	});
 </script>
 
 {#if sources.length > 0}
 	<div class={classes}>
+		<a
+			href={rootPath}
+			data-sveltekit-noscroll
+			class={classNames('btn btn-sm', {
+				'btn-primary': allActive,
+				'btn-outline': !allActive
+			})}
+			title="All addons"
+		>
+			All
+		</a>
 		{#each sources as source (source.id)}
 			{@const active = activeAddon === source.id}
 			<a

@@ -29,6 +29,15 @@
 		/// Forwarded to <PlayerControls> — rendered between the mute and
 		/// fullscreen buttons.
 		extraControls?: Snippet;
+		/// Optional snippet rendered absolutely inside the player container,
+		/// in place of the circular play button. The snippet receives a
+		/// `playByKey(key)` callback so its content can offer per-trailer
+		/// play actions (e.g. a Trailer tab in the torrent attachment
+		/// panel that lists every season/version with its own Play
+		/// button). Calling `playByKey` switches `selectedTrailerKey` to
+		/// that key and starts playback once the stream URL has resolved.
+		/// When omitted, the legacy circular play overlay is shown.
+		playOverlay?: Snippet<[(key: string) => void]>;
 	}
 
 	let {
@@ -40,7 +49,8 @@
 		trailerOptions = [],
 		selectedTrailerKey = null,
 		onTrailerSelect,
-		extraControls
+		extraControls,
+		playOverlay
 	}: Props = $props();
 
 	let containerElement = $state<HTMLDivElement | null>(null);
@@ -124,6 +134,36 @@
 		if (videoElement.paused) videoElement.play().catch(console.error);
 		else videoElement.pause();
 	}
+
+	// Switch to a different trailer key and start playback once the
+	// stream URL for it has resolved. The picks table in the attachment
+	// card calls this with each row's key. If the requested key is
+	// already the active one and the URL is ready, plays immediately.
+	let pendingPlayKey = $state<string | null>(null);
+
+	function playByKey(key: string): void {
+		const target = trailerOptions.find((t) => t.key === key);
+		if (!target) return;
+		if (target.youtubeUrl === youtubeUrl && streamUrl) {
+			handleStart();
+			return;
+		}
+		pendingPlayKey = key;
+		onTrailerSelect?.(key);
+	}
+
+	$effect(() => {
+		if (!pendingPlayKey) return;
+		const target = trailerOptions.find((t) => t.key === pendingPlayKey);
+		if (!target) {
+			pendingPlayKey = null;
+			return;
+		}
+		if (target.youtubeUrl === youtubeUrl && streamUrl) {
+			pendingPlayKey = null;
+			handleStart();
+		}
+	});
 
 	function handleSeek(pos: number): void {
 		if (!videoElement) return;
@@ -211,34 +251,44 @@
 		{/if}
 
 		{#if !started && (streamUrl || posterUrl)}
-			<button
-				type="button"
-				class="absolute inset-0 z-20 flex items-center justify-center bg-black/30 transition-colors hover:bg-black/40 disabled:cursor-wait"
-				aria-label="Play trailer"
-				onclick={handleStart}
-				disabled={!streamUrl || starting}
-			>
-				<span
-					class={classNames(
-						'flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform',
-						streamUrl && !starting ? 'hover:scale-110' : 'opacity-70'
-					)}
+			{#if playOverlay}
+				<div
+					class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
 				>
-					{#if starting || !streamUrl}
-						<span class="loading loading-md loading-spinner"></span>
-					{:else}
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 24 24"
-							fill="currentColor"
-							class="h-10 w-10 translate-x-0.5"
-							aria-hidden="true"
-						>
-							<polygon points="6 4 20 12 6 20 6 4" />
-						</svg>
-					{/if}
-				</span>
-			</button>
+					<div class="max-w-full">
+						{@render playOverlay(playByKey)}
+					</div>
+				</div>
+			{:else}
+				<button
+					type="button"
+					class="absolute inset-0 z-20 flex items-center justify-center bg-black/30 transition-colors hover:bg-black/40 disabled:cursor-wait"
+					aria-label="Play trailer"
+					onclick={handleStart}
+					disabled={!streamUrl || starting}
+				>
+					<span
+						class={classNames(
+							'flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform',
+							streamUrl && !starting ? 'hover:scale-110' : 'opacity-70'
+						)}
+					>
+						{#if starting || !streamUrl}
+							<span class="loading loading-md loading-spinner"></span>
+						{:else}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 24 24"
+								fill="currentColor"
+								class="h-10 w-10 translate-x-0.5"
+								aria-hidden="true"
+							>
+								<polygon points="6 4 20 12 6 20 6 4" />
+							</svg>
+						{/if}
+					</span>
+				</button>
+			{/if}
 		{/if}
 
 		{#if error}

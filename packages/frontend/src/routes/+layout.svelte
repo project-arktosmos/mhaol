@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../css/app.css';
 	import Identicon from '$components/core/Identicon.svelte';
+	import MovieTvViewToggle from '$components/core/MovieTvViewToggle.svelte';
 	import Navbar from '$components/core/Navbar.svelte';
 	import ThemeToggle from '$components/core/ThemeToggle.svelte';
 	import ToastOutlet from '$components/core/ToastOutlet.svelte';
@@ -125,6 +126,7 @@
 		{/snippet}
 		{#snippet end()}
 			<div class="flex items-center gap-2">
+				<MovieTvViewToggle />
 				{#if $identityState.identity}
 					<a
 						href="{base}/profile"
