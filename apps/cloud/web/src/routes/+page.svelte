@@ -195,12 +195,6 @@
 				: null}
 			mono
 		/>
-		<HealthCard
-			label="Signaling wallet"
-			value={truncate($state.status?.signaling_address ?? null)}
-			hint={$state.status?.signaling_address ?? null}
-			mono
-		/>
 	</section>
 
 	{#if $state.status?.packages}

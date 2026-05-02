@@ -23,10 +23,3 @@ export function setApiBase(url: string): void {
 export function apiUrl(path: string): string {
 	return `${apiBase}${path}`;
 }
-
-export const DEFAULT_SIGNALING_URL = 'http://localhost:14080';
-
-export function getSignalingUrl(): string {
-	if (!browser) return DEFAULT_SIGNALING_URL;
-	return localStorage.getItem('signaling-url') || DEFAULT_SIGNALING_URL;
-}
