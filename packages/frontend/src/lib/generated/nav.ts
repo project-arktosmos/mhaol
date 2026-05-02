@@ -38,18 +38,6 @@ export const NAV_ITEMS: NavItem[] = [
 		"children": []
 	},
 	{
-		"label": "Ipfs",
-		"href": "/ipfs",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Libraries",
-		"href": "/libraries",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
 		"label": "Profile",
 		"href": "/profile",
 		"hasOwnPage": true,
@@ -58,12 +46,6 @@ export const NAV_ITEMS: NavItem[] = [
 	{
 		"label": "Settings",
 		"href": "/settings",
-		"hasOwnPage": true,
-		"children": []
-	},
-	{
-		"label": "Torrent",
-		"href": "/torrent",
 		"hasOwnPage": true,
 		"children": []
 	}

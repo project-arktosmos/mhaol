@@ -30,6 +30,9 @@
 	import { userIdentityService } from '$lib/user-identity.service';
 	import { consumptionModalService } from '$services/consumption-modal.service';
 	import { diskModalService } from '$services/disk-modal.service';
+	import { ipfsModalService } from '$services/ipfs-modal.service';
+	import { librariesModalService } from '$services/libraries-modal.service';
+	import { torrentModalService } from '$services/torrent-modal.service';
 
 	const firkinsStore = firkinsService.state;
 	const firkinsIncludeAll = firkinsService.includeAll;
@@ -413,6 +416,30 @@
 			title="Show host volumes and the data-root breakdown"
 		>
 			Disk
+		</button>
+		<button
+			type="button"
+			class="btn btn-outline btn-sm"
+			onclick={() => librariesModalService.open()}
+			title="Manage libraries on this machine"
+		>
+			Libraries
+		</button>
+		<button
+			type="button"
+			class="btn btn-outline btn-sm"
+			onclick={() => ipfsModalService.open()}
+			title="Show IPFS pins recorded by the cloud"
+		>
+			IPFS
+		</button>
+		<button
+			type="button"
+			class="btn btn-outline btn-sm"
+			onclick={() => torrentModalService.open()}
+			title="Show the embedded torrent client status"
+		>
+			Torrent
 		</button>
 	</div>
 </section>

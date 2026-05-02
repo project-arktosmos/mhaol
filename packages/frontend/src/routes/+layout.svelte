@@ -11,6 +11,9 @@
 	import FirkinTooltip from '$components/firkins/FirkinTooltip.svelte';
 	import ConsumptionModal from '$components/consumption/ConsumptionModal.svelte';
 	import DiskModal from '$components/disk/DiskModal.svelte';
+	import IpfsModal from '$components/ipfs/IpfsModal.svelte';
+	import LibrariesModal from '$components/libraries/LibrariesModal.svelte';
+	import TorrentModal from '$components/torrent/TorrentModal.svelte';
 	import { playerService } from '$services/player.service';
 	import { restorePlayerFromSnapshot } from '$lib/youtube-match.service';
 	import { themeService } from '$services/theme.service';
@@ -130,3 +133,6 @@
 <FirkinTooltip />
 <ConsumptionModal />
 <DiskModal />
+<IpfsModal />
+<LibrariesModal />
+<TorrentModal />
