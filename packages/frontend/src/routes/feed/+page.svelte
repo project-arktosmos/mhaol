@@ -28,6 +28,19 @@
 
 	let current = $derived<Recommendation | null>(queue[0] ?? null);
 	let cardFirkin = $derived<CloudFirkin | null>(current ? toCardFirkin(current) : null);
+	let upcoming = $derived<Recommendation[]>(queue.slice(1, 21));
+
+	function ratingLabel(row: Recommendation): string {
+		const reviews = row.reviews ?? [];
+		if (reviews.length === 0) return '—';
+		const total = reviews.reduce(
+			(sum, r) => (r.maxScore > 0 ? sum + r.score / r.maxScore : sum),
+			0
+		);
+		const avg = (total / reviews.length) * 10;
+		const rounded = Math.round(avg * 10) / 10;
+		return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)} / 10`;
+	}
 
 	$effect(() => {
 		const address = $userIdentityState.identity?.address;
@@ -182,8 +195,8 @@
 	<title>Mhaol Cloud — Feed</title>
 </svelte:head>
 
-<div class="flex min-h-full flex-col items-center gap-6 p-6">
-	<header class="flex w-full max-w-md flex-col gap-1">
+<div class="flex min-h-full flex-col gap-6 p-6">
+	<header class="flex flex-col gap-1">
 		<h1 class="text-2xl font-semibold">Feed</h1>
 		<p class="text-sm text-base-content/60">
 			One recommendation at a time, sorted by how often it's been suggested and (as a tiebreaker)
@@ -209,45 +222,117 @@
 				</span>
 			</div>
 		{:else}
-			<div class="flex w-full max-w-md flex-col gap-3">
-				<FirkinCard firkin={cardFirkin} />
+			<div class="flex flex-col items-start gap-6 lg:flex-row">
+				<div class="flex w-full max-w-md flex-col gap-3">
+					<FirkinCard firkin={cardFirkin} />
 
-				<div class="text-xs text-base-content/60">
-					Suggested {current?.count}× · {queue.length} item{queue.length === 1 ? '' : 's'} left
+					<div class="text-xs text-base-content/60">
+						Suggested {current?.count}× · {queue.length} item{queue.length === 1 ? '' : 's'} left
+					</div>
+
+					<div class="grid grid-cols-3 gap-2">
+						<button
+							type="button"
+							class="btn gap-2 btn-outline btn-error"
+							onclick={() => act('discard')}
+							disabled={actioning !== null}
+							title="Never show this recommendation again"
+						>
+							<Icon name="delapouite/trash-can" size={18} />
+							<span>{actioning === 'discard' ? 'Discarding…' : 'Discard'}</span>
+						</button>
+						<button
+							type="button"
+							class="btn gap-2 btn-outline btn-secondary"
+							onclick={() => act('like')}
+							disabled={actioning !== null}
+							title="Record a positive signal and move on"
+						>
+							<Icon name="zeromancer/heart-plus" size={18} />
+							<span>{actioning === 'like' ? 'Liking…' : 'Like'}</span>
+						</button>
+						<button
+							type="button"
+							class="btn gap-2 btn-primary"
+							onclick={() => act('bookmark')}
+							disabled={actioning !== null || !current?.upstreamId}
+							title="Persist this recommendation as a firkin"
+						>
+							<Icon name="lorc/bookmark" size={18} />
+							<span>{actioning === 'bookmark' ? 'Bookmarking…' : 'Bookmark'}</span>
+						</button>
+					</div>
 				</div>
 
-				<div class="grid grid-cols-3 gap-2">
-					<button
-						type="button"
-						class="btn gap-2 btn-outline btn-error"
-						onclick={() => act('discard')}
-						disabled={actioning !== null}
-						title="Never show this recommendation again"
-					>
-						<Icon name="delapouite/trash-can" size={18} />
-						<span>{actioning === 'discard' ? 'Discarding…' : 'Discard'}</span>
-					</button>
-					<button
-						type="button"
-						class="btn gap-2 btn-outline btn-secondary"
-						onclick={() => act('like')}
-						disabled={actioning !== null}
-						title="Record a positive signal and move on"
-					>
-						<Icon name="zeromancer/heart-plus" size={18} />
-						<span>{actioning === 'like' ? 'Liking…' : 'Like'}</span>
-					</button>
-					<button
-						type="button"
-						class="btn gap-2 btn-primary"
-						onclick={() => act('bookmark')}
-						disabled={actioning !== null || !current?.upstreamId}
-						title="Persist this recommendation as a firkin"
-					>
-						<Icon name="lorc/bookmark" size={18} />
-						<span>{actioning === 'bookmark' ? 'Bookmarking…' : 'Bookmark'}</span>
-					</button>
-				</div>
+				<section class="card min-w-0 flex-1 border border-base-content/10 bg-base-200">
+					<div class="card-body gap-2 p-0">
+						<header class="px-4 pt-4">
+							<h2 class="text-sm font-semibold tracking-wide text-base-content/70 uppercase">
+								Up next
+							</h2>
+						</header>
+						<div class="overflow-x-auto">
+							<table class="table table-sm">
+								<thead>
+									<tr>
+										<th class="w-10 text-right">#</th>
+										<th class="w-12"></th>
+										<th>Title</th>
+										<th class="w-16 text-right">Count</th>
+										<th class="w-24">Rating</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#if upcoming.length === 0}
+										<tr>
+											<td colspan="5" class="text-center text-xs text-base-content/50">
+												Nothing else queued.
+											</td>
+										</tr>
+									{:else}
+										{#each upcoming as row, idx (row.firkinId)}
+											<tr>
+												<td class="text-right font-mono text-xs text-base-content/60">
+													{idx + 2}
+												</td>
+												<td>
+													{#if row.posterUrl}
+														<img
+															src={row.posterUrl}
+															alt={row.title}
+															class="h-12 w-8 shrink-0 rounded object-cover"
+															loading="lazy"
+														/>
+													{:else}
+														<div
+															class="h-12 w-8 shrink-0 rounded bg-base-300"
+															aria-hidden="true"
+														></div>
+													{/if}
+												</td>
+												<td class="min-w-0">
+													<div class="flex flex-col gap-0.5">
+														<span class="truncate text-sm font-medium">{row.title}</span>
+														<div
+															class="flex flex-wrap items-center gap-1 text-xs text-base-content/60"
+														>
+															<span class="badge badge-ghost badge-xs">{row.addon}</span>
+															{#if row.year}
+																<span>{row.year}</span>
+															{/if}
+														</div>
+													</div>
+												</td>
+												<td class="text-right font-mono text-xs">{row.count}</td>
+												<td class="font-mono text-xs">{ratingLabel(row)}</td>
+											</tr>
+										{/each}
+									{/if}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</section>
 			</div>
 		{/if}
 	{/if}
