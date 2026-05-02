@@ -86,12 +86,6 @@
 		}
 	};
 
-	const truncate = (value: string | null, lead: number = 6, tail: number = 4): string => {
-		if (!value) return '—';
-		if (value.length <= lead + tail + 1) return value;
-		return `${value.slice(0, lead)}…${value.slice(-tail)}`;
-	};
-
 	const statusTone = $derived.by((): 'success' | 'error' | 'warning' => {
 		const s = $state;
 		if (s.loading && !s.status) return 'warning';
@@ -217,10 +211,6 @@
 		<section class="card bg-base-200 p-4">
 			<h2 class="mb-2 text-lg font-semibold">Identities</h2>
 			<dl class="grid grid-cols-1 gap-2 sm:grid-cols-[max-content_1fr] sm:gap-x-4">
-				<dt class="text-sm text-base-content/60">Signaling address</dt>
-				<dd class="font-mono text-sm break-all">
-					{$state.status.signaling_address ?? '—'}
-				</dd>
 				<dt class="text-sm text-base-content/60">Client address</dt>
 				<dd class="font-mono text-sm break-all">
 					{$state.status.client_address ?? '—'}

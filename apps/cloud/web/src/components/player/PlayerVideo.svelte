@@ -496,8 +496,6 @@
 				return '';
 			case 'connecting':
 				return 'Connecting to stream server...';
-			case 'signaling':
-				return 'Negotiating WebRTC connection...';
 			case 'streaming':
 				return '';
 			case 'error':
@@ -619,7 +617,7 @@
 
 		{#if !isStreaming && connectionState !== 'idle'}
 			<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-base-300/80">
-				{#if connectionState === 'connecting' || connectionState === 'signaling'}
+				{#if connectionState === 'connecting'}
 					<div class="text-center">
 						<span class="loading loading-sm loading-spinner"></span>
 						<p class="mt-1 text-xs">{statusLabel}</p>
