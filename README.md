@@ -5,7 +5,6 @@ A family of self-hosted media apps built on shared core components. Each app shi
 **Apps in this repo:**
 
 - **Cloud** — Rust Axum server (port 9898) with a nested Svelte WebUI; ships a tray-only desktop Tauri shell ("Mhaol Cloud")
-- **Shepperd** — Browser extension that detects media as you browse and imports it into Mhaol
 - **Signaling** — Self-hosted WebSocket signaling server for WebRTC peer connections
 
 ---
@@ -102,18 +101,6 @@ The cloud WebUI is browser-accessible at [http://localhost:9898](http://localhos
 | `DATA_DIR` | `~/Documents/mhaol` | Media storage directory |
 | `SIGNALING_URL` | PartyKit hosted | Signaling server URL |
 
-### Shepperd (browser extension)
-
-```bash
-# Development (watch mode)
-pnpm app:shepperd
-
-# Production build
-pnpm app:shepperd:build
-```
-
-Load the built extension from `apps/shepperd/dist/` in your browser's extension manager (enable developer mode).
-
 ### Rendezvous (private-swarm IPFS bootstrap + WebRTC signaling + TURN)
 
 Rendezvous bundles the private-swarm IPFS bootstrap node, the WebSocket WebRTC signaling relay, and the TURN credential server into a single binary. It replaces the previous PartyKit/`mhaol-signaling` stack.
@@ -196,7 +183,6 @@ pnpm clean      # Remove build artifacts + cargo clean
 mhaol.git/
 ├── apps/
 │   ├── cloud/             # Rust Axum server (port 9898) + nested Svelte WebUI + tray-only Tauri shell
-│   ├── shepperd/          # Browser extension (Manifest V3)
 │   └── signaling/         # Rust signaling server
 ├── packages/
 │   ├── addons/            # TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subs

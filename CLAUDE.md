@@ -12,8 +12,7 @@ For package-specific conventions, see the `CLAUDE.md` in each package directory:
 ```
 mhaol.git/
 ├── apps/
-│   ├── cloud/                        # Rust Axum server + nested Svelte WebUI (port 9898) + libp2p TCP 9900 + libp2p /ws 9901 + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud").
-│   └── shepperd/                     # Browser extension (Vite + Svelte, Manifest V3)
+│   └── cloud/                        # Rust Axum server (port 9898) + libp2p TCP 9900 + libp2p /ws 9901 + tray-only Tauri shell at cloud/src-tauri (mhaol-cloud-shell, "Mhaol Cloud").
 ├── packages/
 │   ├── addons/                       # Addon modules (TMDB, MusicBrainz, YouTube, LRCLIB, Wyzie subtitles, torrent search)
 │   ├── cloud-ui/                     # Shared Svelte 5 display components + firkin types + game-icons.net <Icon /> set (used by the cloud WebUI)
@@ -214,10 +213,6 @@ pnpm lint             # Lint all packages
 pnpm check            # svelte-check + cargo check
 pnpm test             # vitest
 pnpm format           # Prettier write
-
-# Browser extension
-pnpm app:shepperd         # Shepperd dev (watch mode)
-pnpm app:shepperd:build   # Shepperd production build
 
 # Tauri shell
 pnpm app:tauri:cloud         # Mhaol Cloud desktop shell (apps/cloud/src-tauri)
