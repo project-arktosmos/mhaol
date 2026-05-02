@@ -249,7 +249,7 @@
 								disabled={attachingStream}
 								class="btn w-full btn-xs btn-primary"
 							>
-								{attachingStream ? '…' : 'Assign'}
+								{attachingStream ? '…' : 'Play'}
 							</button>
 						{/if}
 					</td>
@@ -287,7 +287,7 @@
 	{:else}
 		<div class="flex flex-col items-center gap-1">
 			<span class="text-[10px] text-base-content/60">Not attached</span>
-			<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
+			<button type="button" disabled class="btn btn-sm btn-primary">Play</button>
 		</div>
 	{/if}
 {/snippet}
@@ -350,7 +350,7 @@
 								disabled={attachingDownload}
 								class="btn w-full btn-xs btn-primary"
 							>
-								{attachingDownload ? '…' : 'Assign'}
+								{attachingDownload ? '…' : 'Download'}
 							</button>
 						{/if}
 					</td>
@@ -412,13 +412,13 @@
 				disabled={attachingDownload}
 				class="btn btn-sm btn-primary"
 			>
-				{attachingDownload ? 'Starting…' : 'Assign'}
+				{attachingDownload ? 'Starting…' : 'Download'}
 			</button>
 		</div>
 	{:else}
 		<div class="flex flex-col items-center gap-1">
 			<span class="text-[10px] text-base-content/60">Not attached</span>
-			<button type="button" disabled class="btn btn-sm btn-primary">Assign</button>
+			<button type="button" disabled class="btn btn-sm btn-primary">Download</button>
 		</div>
 	{/if}
 {/snippet}
