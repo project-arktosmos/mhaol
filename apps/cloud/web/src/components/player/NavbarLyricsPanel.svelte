@@ -1,20 +1,20 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { tick } from 'svelte';
+	import { Icon } from 'cloud-ui';
 	import { playerService } from '$services/player.service';
 
 	const playerState = playerService.state;
 	const playerDisplayMode = playerService.displayMode;
 
 	let container: HTMLDivElement | null = $state(null);
-	let dismissedFileId: string | null = $state(null);
+	let collapsed = $state(false);
 
 	let visible = $derived(
 		$playerDisplayMode === 'navbar' &&
 			$playerState.currentFile !== null &&
 			Array.isArray($playerState.syncedLyrics) &&
-			$playerState.syncedLyrics.length > 0 &&
-			$playerState.currentFile.id !== dismissedFileId
+			$playerState.syncedLyrics.length > 0
 	);
 
 	let lines = $derived($playerState.syncedLyrics ?? []);
@@ -56,30 +56,31 @@
 		playerService.seek(time);
 	}
 
-	function handleDismiss(): void {
-		const id = $playerState.currentFile?.id ?? null;
-		dismissedFileId = id;
+	function toggleCollapsed(): void {
+		collapsed = !collapsed;
 	}
 </script>
 
 {#if visible}
 	<div class="flex flex-col border-t border-base-300" aria-label="Synced lyrics">
-		<div class="flex items-center justify-between bg-base-200/60 px-3 py-1">
-			<div class="flex min-w-0 items-center gap-2">
+		<button
+			type="button"
+			class="flex items-center justify-between bg-base-200/60 px-3 py-1 text-left transition-colors hover:bg-base-200"
+			onclick={toggleCollapsed}
+			aria-expanded={!collapsed}
+			aria-label={collapsed ? 'Expand lyrics' : 'Collapse lyrics'}
+			title={collapsed ? 'Expand lyrics' : 'Collapse lyrics'}
+		>
+			<span class="flex min-w-0 items-center gap-2">
 				<span class="text-xs font-semibold text-base-content/70">Lyrics</span>
 				<span class="badge badge-xs badge-primary">Synced</span>
-			</div>
-			<button
-				type="button"
-				class="btn btn-ghost btn-xs"
-				onclick={handleDismiss}
-				aria-label="Hide lyrics"
-				title="Hide lyrics"
-			>
-				✕
-			</button>
-		</div>
-		<div bind:this={container} class="max-h-64 overflow-y-auto scroll-smooth px-3 py-2">
+			</span>
+			<span class={classNames('transition-transform', { 'rotate-180': collapsed })}>
+				<Icon name="delapouite/plain-arrow" size="0.75em" />
+			</span>
+		</button>
+		{#if !collapsed}
+			<div bind:this={container} class="max-h-64 overflow-y-auto scroll-smooth px-3 py-2">
 			<div class="space-y-1 py-2">
 				{#each lines as line, index (index)}
 					<button
@@ -103,5 +104,6 @@
 				{/each}
 			</div>
 		</div>
+		{/if}
 	</div>
 {/if}

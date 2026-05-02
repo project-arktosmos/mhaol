@@ -1,6 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { tick } from 'svelte';
+	import { Icon } from 'cloud-ui';
 	import { playerService } from '$services/player.service';
 	import { playPlaylistTrack } from '$lib/youtube-match.service';
 
@@ -11,6 +12,7 @@
 	let listContainer: HTMLDivElement | null = $state(null);
 	let switchingIndex: number | null = $state(null);
 	let switchError: string | null = $state(null);
+	let collapsed = $state(false);
 
 	let visible = $derived(
 		$playerDisplayMode === 'navbar' &&
@@ -22,9 +24,13 @@
 	let activeIndex = $derived($playlist?.currentIndex ?? -1);
 
 	$effect(() => {
-		if (!visible || activeIndex < 0 || !listContainer) return;
+		if (!visible || collapsed || activeIndex < 0 || !listContainer) return;
 		void scrollActiveIntoView(activeIndex);
 	});
+
+	function toggleCollapsed(): void {
+		collapsed = !collapsed;
+	}
 
 	async function scrollActiveIntoView(index: number): Promise<void> {
 		await tick();
@@ -63,8 +69,15 @@
 
 {#if visible && $playlist}
 	<div class="flex flex-col border-t border-base-300" aria-label="Playlist">
-		<div class="flex items-center justify-between bg-base-200/60 px-3 py-1">
-			<div class="flex min-w-0 items-center gap-2">
+		<button
+			type="button"
+			class="flex items-center justify-between bg-base-200/60 px-3 py-1 text-left transition-colors hover:bg-base-200"
+			onclick={toggleCollapsed}
+			aria-expanded={!collapsed}
+			aria-label={collapsed ? 'Expand playlist' : 'Collapse playlist'}
+			title={collapsed ? 'Expand playlist' : 'Collapse playlist'}
+		>
+			<span class="flex min-w-0 items-center gap-2">
 				<span class="text-xs font-semibold text-base-content/70">Playlist</span>
 				<span class="badge badge-ghost badge-xs">{$playlist.tracks.length}</span>
 				{#if $playlist.title}
@@ -72,13 +85,17 @@
 						{$playlist.title}
 					</span>
 				{/if}
-			</div>
-		</div>
+			</span>
+			<span class={classNames('transition-transform', { 'rotate-180': collapsed })}>
+				<Icon name="delapouite/plain-arrow" size="0.75em" />
+			</span>
+		</button>
 		{#if switchError}
 			<div class="border-b border-base-300 bg-error/10 px-3 py-1 text-xs text-error">
 				{switchError}
 			</div>
 		{/if}
+		{#if !collapsed}
 		<div bind:this={listContainer} class="max-h-64 overflow-y-auto scroll-smooth">
 			<ol class="flex flex-col">
 				{#each $playlist.tracks as track, index (index)}
@@ -108,7 +125,9 @@
 							{#if isSwitching}
 								<span class="loading loading-xs loading-spinner"></span>
 							{:else if isActive}
-								<span class="badge badge-xs badge-primary">▶</span>
+								<span class="text-primary">
+									<Icon name="guard13007/play-button" size="0.85em" title="Now playing" />
+								</span>
 							{/if}
 							<span class="font-mono text-[10px] tabular-nums text-base-content/60">
 								{formatDuration(track.durationSeconds)}
@@ -118,5 +137,6 @@
 				{/each}
 			</ol>
 		</div>
+		{/if}
 	</div>
 {/if}
