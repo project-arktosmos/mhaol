@@ -33,7 +33,8 @@
 		addonKind,
 		metadataSearchAddon,
 		type Firkin,
-		type FirkinAddon
+		type FirkinAddon,
+		type FileEntry
 	} from '$lib/firkins.service';
 	import { TrailerResolver } from '$services/catalog/trailer-resolver.svelte';
 	import {
@@ -66,6 +67,17 @@
 	// is dropped on navigation (a new loader payload arrives via
 	// `data.firkin`) so the page always stays in sync with SvelteKit.
 	let firkinOverride = $state<Firkin | null>(null);
+	// Drop any in-page mutation override the moment SvelteKit hands us a
+	// loader payload for a different firkin id — without this, navigating
+	// from /catalog/A to /catalog/B (e.g. clicking a related card) would
+	// keep rendering A because the `firkin` derivation prefers the
+	// override over the freshly-loaded `data.firkin`.
+	$effect.pre(() => {
+		const incomingId = data.firkin.id;
+		if (firkinOverride && firkinOverride.id !== incomingId) {
+			firkinOverride = null;
+		}
+	});
 	const firkin = $derived<Firkin>(firkinOverride ?? data.firkin);
 	// `bookmarked` flips between two presentations of the same detail page:
 	// non-bookmarked firkins (created by the catalog `/catalog/visit`
@@ -761,10 +773,18 @@
 		// roll the CID forward on a record the user hasn't committed to.
 		if (!isBookmarked) return;
 		if (youtubePreferredClient === clientName) return;
-		const nextFiles = firkin.files.filter((f) => f.type !== 'youtube preferred client');
-		nextFiles.push({ type: 'youtube preferred client', value: clientName });
+		// Atomic: server reads current `files` under the per-firkin lock,
+		// drops any prior `youtube preferred client` entry, appends the
+		// new one, and rolls forward. This is the canonical fix for the
+		// "torrent magnet vanished from the firkin" race — the legacy
+		// PUT path used to clobber a freshly-attached magnet whenever
+		// this client-cache write landed in the same window.
 		try {
-			await persistFirkinPatch({ files: nextFiles });
+			const updated = await firkinsService.mutateFiles(firkin.id, {
+				removeTypes: ['youtube preferred client'],
+				add: [{ type: 'youtube preferred client', value: clientName }]
+			});
+			firkinOverride = updated;
 		} catch (err) {
 			console.warn('[catalog detail] persist youtube preferred client failed:', err);
 		}
@@ -1322,7 +1342,9 @@
 			)
 	);
 	const subPickerEnabled = $derived(
-		isBookmarked && (activeSource === 'ipfs' || activeSource === 'torrent') && Boolean(subsLyricsKind)
+		isBookmarked &&
+			(activeSource === 'ipfs' || activeSource === 'torrent') &&
+			Boolean(subsLyricsKind)
 	);
 
 	// Controlled active-subtitle URL fed to `<PlayerVideo subtitleUrl=…>`.
@@ -1428,15 +1450,15 @@
 		assignError = null;
 		addingHash = torrent.magnetLink;
 		try {
-			const nextFiles = [
-				...firkin.files,
-				{ type: 'torrent magnet' as const, value: torrent.magnetLink, title: torrent.title }
+			// Build the new file entries this click produces. Subtitles are
+			// stored as a reference, not a download — we keep the upstream
+			// URL plus enough metadata to render a label and re-fetch on
+			// demand. The ETL stays server-side / on-demand; this row just
+			// declares "this firkin has been paired with release X of sub
+			// Y" so playback can pick it up later.
+			const additions: FileEntry[] = [
+				{ type: 'torrent magnet', value: torrent.magnetLink, title: torrent.title }
 			];
-			// Subtitles are stored as a reference, not a download — we keep
-			// the upstream URL plus enough metadata to render a label and
-			// re-fetch on demand. The ETL stays server-side / on-demand;
-			// this row just declares "this firkin has been paired with
-			// release X of sub Y" so playback can pick it up later.
 			if (sub) {
 				const subPayload = {
 					source: sub.source,
@@ -1450,19 +1472,30 @@
 				};
 				const lang = sub.display ?? sub.language ?? 'sub';
 				const release = sub.release ?? `#${sub.externalId}`;
-				nextFiles.push({
-					type: 'subtitle' as const,
+				additions.push({
+					type: 'subtitle',
 					value: JSON.stringify(subPayload),
 					title: `${lang}: ${release}`
 				});
 			}
 			if (isTmdbTv) {
 				// TV shows accumulate one magnet per season on the same firkin.
-				// PUT keeps the record id stable and lets the auto-start effect
-				// run them sequentially; POST would mint a new firkin per click
-				// (different CID body) and bounce the user to a fresh page.
-				await persistFirkinPatch({ files: nextFiles });
+				// Use the granular files endpoint so the server reads the
+				// current `files` under the per-firkin lock and atomically
+				// appends — without this, a concurrent persist (e.g. the
+				// trailer resolver caching its preferred YouTube client)
+				// could overwrite the magnet entry with a stale snapshot
+				// and the torrent-completion watcher would never link the
+				// downloaded episodes to this firkin.
+				const updated = await firkinsService.mutateFiles(firkin.id, { add: additions });
+				firkinOverride = updated;
 			} else {
+				// One-shot: build the full files array from the current
+				// snapshot. This goes through `create` which dedupes by
+				// CID, so the snapshot is intentional — if a different
+				// snapshot also dedupes to the same CID, we get the
+				// canonical record back and the user is redirected to it.
+				const nextFiles = [...firkin.files, ...additions];
 				const created = await firkinsService.create({
 					title: firkin.title,
 					artists: firkin.artists,
@@ -1730,9 +1763,7 @@
 								{/if}
 							</button>
 							{#if subsLyricsResolver.status === 'error'}
-								<span class="text-error" title={subsLyricsResolver.error ?? ''}
-									>Search failed</span
-								>
+								<span class="text-error" title={subsLyricsResolver.error ?? ''}>Search failed</span>
 							{/if}
 							{#if attachSubtitleError}
 								<span class="text-error" title={attachSubtitleError}>Attach failed</span>
