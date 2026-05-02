@@ -64,7 +64,7 @@
 		{/if}
 	</div>
 	{#if !collapsible || open}
-		<div class={collapsible ? 'mt-2' : 'mt-2'}>
+		<div class="mt-2">
 			{#if assignError}
 				<div class="mb-2 alert alert-error">
 					<span>{assignError}</span>
@@ -77,81 +77,110 @@
 			{:else if search.matches.length === 0}
 				<p class="text-sm text-base-content/60">No matching torrents.</p>
 			{:else}
-				<div class="flex flex-col gap-1">
-					{#each search.matches as torrent (torrent.infoHash)}
-						{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
-						{@const adding = addingHash === torrent.magnetLink}
-						{@const ev = rowEval(torrent.magnetLink)}
-						<button
-							type="button"
-							class={classNames(
-								'flex flex-wrap items-center gap-2 rounded border border-base-content/10 px-2 py-1 text-left text-xs hover:bg-base-100',
-								{ 'opacity-60': added || adding }
-							)}
-							onclick={() => onAssign(torrent)}
-							disabled={addingHash !== null || added}
-							title={ev.kind === 'streamable'
-								? `Streamable — ${ev.fileName} · ${torrent.title}`
-								: ev.kind === 'not-streamable'
-									? `Not streamable: ${ev.reason} · ${torrent.title}`
-									: torrent.title}
-						>
-							{#if ev.kind === 'pending' || ev.kind === 'evaluating'}
-								<span
-									class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
-									aria-label="Probing torrent metadata"
-								></span>
-							{:else if ev.kind === 'streamable'}
-								<span
-									class="shrink-0 text-success"
-									aria-label="Streamable"
-									title={`Streamable — ${ev.fileName}`}
-								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										viewBox="0 0 24 24"
-										fill="currentColor"
-										class="h-3.5 w-3.5"
-										aria-hidden="true"
-									>
-										<polygon points="6 4 20 12 6 20 6 4" />
-									</svg>
-								</span>
-							{:else}
-								<span
-									class="shrink-0 text-base-content/30"
-									aria-label="Not streamable"
-									title={`Not streamable: ${ev.reason}`}
-								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.5"
-										stroke-linecap="round"
-										class="h-3.5 w-3.5"
-										aria-hidden="true"
-									>
-										<line x1="5" y1="5" x2="19" y2="19" />
-										<line x1="19" y1="5" x2="5" y2="19" />
-									</svg>
-								</span>
-							{/if}
-							<span class="font-medium">{torrent.quality ?? '—'}</span>
-							<span class="text-success">↑{torrent.seeders}</span>
-							<span class="text-warning">↓{torrent.leechers}</span>
-							<span class="text-base-content/60">{formatSizeBytes(torrent.sizeBytes)}</span>
-							<span class="truncate text-base-content/70"
-								>{torrent.parsedTitle || torrent.title}</span
-							>
-							{#if added}
-								<span class="ml-auto">✓</span>
-							{:else if adding}
-								<span class="ml-auto">…</span>
-							{/if}
-						</button>
-					{/each}
+				<div class="overflow-x-auto rounded-box border border-base-content/10">
+					<table class="table table-xs">
+						<thead>
+							<tr>
+								<th class="w-56">Streamability</th>
+								<th class="w-20">Quality</th>
+								<th class="w-14 text-success">↑</th>
+								<th class="w-14 text-warning">↓</th>
+								<th class="w-20">Size</th>
+								<th>Title</th>
+								<th class="w-16"></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each search.matches as torrent (torrent.infoHash)}
+								{@const added = !!torrent.magnetLink && existingHashes.has(torrent.magnetLink)}
+								{@const adding = addingHash === torrent.magnetLink}
+								{@const ev = rowEval(torrent.magnetLink)}
+								<tr class={classNames('hover', { 'opacity-60': added || adding })}>
+									<td>
+										{#if ev.kind === 'pending'}
+											<span class="text-xs text-base-content/50">Queued…</span>
+										{:else if ev.kind === 'evaluating'}
+											<div class="flex items-center gap-2">
+												<span
+													class="loading loading-xs shrink-0 loading-spinner text-base-content/50"
+													aria-hidden="true"
+												></span>
+												<span class="text-xs text-base-content/60">Probing…</span>
+											</div>
+										{:else if ev.kind === 'streamable'}
+											<div class="flex flex-col gap-0.5">
+												<span class="badge gap-1 badge-sm badge-success">
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														viewBox="0 0 24 24"
+														fill="currentColor"
+														class="h-3 w-3"
+														aria-hidden="true"
+													>
+														<polygon points="6 4 20 12 6 20 6 4" />
+													</svg>
+													Streamable
+												</span>
+												<span
+													class="max-w-[14rem] truncate text-[10px] text-base-content/60"
+													title={ev.fileName}
+												>
+													{ev.fileName}
+												</span>
+											</div>
+										{:else}
+											<div class="flex flex-col gap-0.5">
+												<span class="badge gap-1 badge-ghost badge-sm">
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2.5"
+														stroke-linecap="round"
+														class="h-3 w-3 text-base-content/40"
+														aria-hidden="true"
+													>
+														<line x1="5" y1="5" x2="19" y2="19" />
+														<line x1="19" y1="5" x2="5" y2="19" />
+													</svg>
+													Not streamable
+												</span>
+												<span
+													class="max-w-[14rem] truncate text-[10px] text-base-content/60"
+													title={ev.reason}
+												>
+													{ev.reason}
+												</span>
+											</div>
+										{/if}
+									</td>
+									<td class="text-xs font-medium">{torrent.quality ?? '—'}</td>
+									<td class="text-xs text-success">{torrent.seeders}</td>
+									<td class="text-xs text-warning">{torrent.leechers}</td>
+									<td class="text-xs text-base-content/70">{formatSizeBytes(torrent.sizeBytes)}</td>
+									<td class="max-w-md truncate text-xs text-base-content/80" title={torrent.title}>
+										{torrent.parsedTitle || torrent.title}
+									</td>
+									<td class="text-right">
+										{#if added}
+											<span class="badge badge-sm badge-success">added</span>
+										{:else}
+											<button
+												type="button"
+												class="btn btn-xs btn-primary"
+												disabled={addingHash !== null}
+												onclick={() => onAssign(torrent)}
+												aria-label="Use this torrent"
+											>
+												{adding ? '…' : 'Use'}
+											</button>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
 			{/if}
 		</div>
