@@ -1984,13 +1984,13 @@
 			{#if anyTabEnabled}
 				<div class="flex flex-col gap-2">
 					{#snippet subtitlePicker()}
-						<div class="flex w-full flex-col items-stretch gap-1">
-							<span class="text-center text-[10px] font-semibold text-base-content/70 uppercase">
+						<div class="flex flex-col items-end gap-0.5">
+							<span class="text-[10px] font-semibold text-base-content/70 uppercase">
 								Subtitles
 							</span>
-							<div class="flex flex-wrap items-center gap-2">
+							<div class="flex items-center gap-2">
 								<select
-									class="select-bordered select min-w-0 flex-1 select-xs"
+									class="select-bordered select select-xs"
 									value={selectedSubExternalId
 										? `${selectedSubLanguage}:${selectedSubExternalId}`
 										: ''}

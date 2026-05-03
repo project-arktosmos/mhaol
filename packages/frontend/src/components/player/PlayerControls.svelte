@@ -197,13 +197,11 @@
 			{/if}
 		</div>
 
-		{#if extraControls}
-			<div class="flex flex-1 flex-wrap items-center justify-center gap-1">
+		<div class="flex flex-1 flex-wrap items-center justify-end gap-1">
+			{#if extraControls}
 				{@render extraControls()}
-			</div>
-		{:else}
-			<div class="flex-1"></div>
-		{/if}
+			{/if}
+		</div>
 
 		<div class="flex items-center gap-1">
 			{#if isVideo}
