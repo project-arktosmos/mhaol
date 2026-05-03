@@ -36,36 +36,60 @@ if [[ ! -f "$EXE" ]]; then
 fi
 
 if ! command -v ntldd >/dev/null 2>&1; then
-  pacman -S --needed --noconfirm mingw-w64-x86_64-ntldd-git
+  pacman -S --needed --noconfirm mingw-w64-x86_64-ntldd
+fi
+if ! command -v ntldd >/dev/null 2>&1; then
+  echo "::error::stage-windows-runtime: ntldd is required and could not be installed" >&2
+  exit 1
 fi
 if ! command -v node >/dev/null 2>&1; then
   echo "::error::stage-windows-runtime: node is required to emit tauri.windows.conf.json" >&2
   exit 1
 fi
 
+# Resolve the build host's mingw64 prefix in unix form so we can match it
+# against ntldd's output regardless of whether ntldd emits backslash-style
+# Windows paths or forward-slash MSYS paths.
+MINGW_PREFIX_UNIX=$(cygpath -u "${MINGW_PREFIX:-/mingw64}" 2>/dev/null || echo "/mingw64")
+MINGW_BIN_UNIX="${MINGW_PREFIX_UNIX%/}/bin"
+
 mkdir -p "$RUNTIME_DIR"
 rm -f "$RUNTIME_DIR"/*.dll
 
 declare -A SEEN
 queue=("$EXE")
+NTLDD_LINES=0
 while [[ ${#queue[@]} -gt 0 ]]; do
   cur="${queue[0]}"
   queue=("${queue[@]:1}")
   while IFS= read -r line; do
-    path=$(echo "$line" | awk '/=>/ { print $3 }')
-    [[ -z "$path" || "$path" == "not" ]] && continue
-    case "$path" in
-      */mingw64/bin/*)
-        name=$(basename "$path")
+    NTLDD_LINES=$((NTLDD_LINES + 1))
+    raw=$(echo "$line" | awk '/=>/ { print $3 }')
+    [[ -z "$raw" || "$raw" == "not" ]] && continue
+    # Normalize: backslashes → forward slashes, then convert to MSYS path
+    # so both `D:\a\_temp\msys64\mingw64\bin\foo.dll` and
+    # `/mingw64/bin/foo.dll` collapse to the same comparable form.
+    norm="${raw//\\//}"
+    unix_path=$(cygpath -u "$norm" 2>/dev/null || echo "$norm")
+    case "$unix_path" in
+      "$MINGW_BIN_UNIX"/*|*/mingw64/bin/*)
+        name=$(basename "$unix_path")
         if [[ -z "${SEEN[$name]:-}" ]]; then
           SEEN[$name]=1
-          cp "$path" "$RUNTIME_DIR/"
-          queue+=("$path")
+          cp "$unix_path" "$RUNTIME_DIR/"
+          queue+=("$unix_path")
         fi
         ;;
     esac
   done < <(ntldd -R "$cur" 2>/dev/null || true)
 done
+
+if [[ -z "$(ls -A "$RUNTIME_DIR" 2>/dev/null)" ]]; then
+  echo "::error::stage-windows-runtime: ntldd produced $NTLDD_LINES lines but no DLLs matched $MINGW_BIN_UNIX" >&2
+  echo "::error::sample ntldd output for $EXE:" >&2
+  ntldd -R "$EXE" 2>&1 | head -20 >&2 || true
+  exit 1
+fi
 
 CONF_PATH="$APP_DIR/tauri.windows.conf.json"
 RUNTIME_DIR_ABS="$RUNTIME_DIR" CONF_PATH_ABS="$CONF_PATH" node <<'JS'
