@@ -933,12 +933,91 @@ fn extract_imdb_id(payload: &serde_json::Value) -> Option<String> {
     }
 }
 
+/// Send a GET to OMDb and return the parsed JSON body regardless of HTTP
+/// status. OMDb signals invalid-key / quota-exceeded / unknown-id with a
+/// `401` (or `200` with `{"Response":"False"}`) and *always* puts the
+/// real reason in the JSON `"Error"` field, so the only way to surface
+/// "Invalid API key!" vs. "Request limit reached!" in our logs is to
+/// read the body even when the status is non-success. The shared
+/// [`http_get_json`] helper short-circuits on non-success and discards
+/// the body, which is why every prior OMDb 401 logged as an opaque
+/// `"upstream returned 401 Unauthorized"`. Returns `None` only on
+/// transport / decode errors — the caller treats that and a missing
+/// `"Response":"True"` field identically (no reviews).
+async fn omdb_get_raw(url: &str) -> Option<(reqwest::StatusCode, serde_json::Value)> {
+    let res = match http_client()
+        .get(url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(
+                "[catalog] OMDb transport error: {}",
+                error_chain(&e)
+            );
+            return None;
+        }
+    };
+    let status = res.status();
+    let body = match res.json::<serde_json::Value>().await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(
+                "[catalog] OMDb body decode failed for status={status}: {}",
+                error_chain(&e)
+            );
+            return None;
+        }
+    };
+    Some((status, body))
+}
+
+/// Project a raw OMDb response into reviews. Logs the OMDb-side `"Error"`
+/// field at `warn` when the response signals failure, so the next
+/// `logs/cloud.log` line tells you whether the key is bad
+/// (`"Invalid API key!"`), quota is exhausted (`"Request limit reached!"`),
+/// or the lookup just missed (`"Movie not found!"`).
+fn omdb_extract_reviews(
+    label: &str,
+    status: reqwest::StatusCode,
+    payload: &serde_json::Value,
+) -> Vec<CatalogReview> {
+    let response_ok = payload
+        .get("Response")
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case("True"))
+        .unwrap_or(false);
+    if !response_ok {
+        let omdb_err = payload
+            .get("Error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(no Error field)");
+        tracing::warn!("[catalog] OMDb {label} failed: status={status} error={omdb_err:?}");
+        return Vec::new();
+    }
+    let reviews = parse_omdb_reviews(payload);
+    if reviews.is_empty() {
+        tracing::warn!(
+            "[catalog] OMDb {label} Response=True but parsed 0 reviews (no Ratings array)"
+        );
+    } else {
+        tracing::info!(
+            "[catalog] OMDb {label} returned {} review(s): {:?}",
+            reviews.len(),
+            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
+        );
+    }
+    reviews
+}
+
 /// Best-effort OMDb lookup keyed by IMDb id. Returns the parsed reviews
 /// (Rotten Tomatoes, Metacritic, IMDb) on success, or an empty vec on
 /// any failure mode — missing `OMDB_API_KEY`, network error, OMDb
 /// `Response: "False"`, etc. — so the TMDB metadata flow stays robust
-/// to a degraded enricher. Logs every failure mode at `warn` so a silent
-/// no-op is diagnosable from `logs/cloud.log` without redeploying.
+/// to a degraded enricher. Every failure mode is logged at `warn` so a
+/// silent no-op is diagnosable from `logs/cloud.log` without redeploying.
 async fn fetch_omdb_reviews_by_imdb_id(imdb_id: &str) -> Vec<CatalogReview> {
     let api_key = std::env::var("OMDB_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
@@ -951,43 +1030,10 @@ async fn fetch_omdb_reviews_by_imdb_id(imdb_id: &str) -> Vec<CatalogReview> {
         urlencoding(imdb_id),
         urlencoding(&api_key)
     );
-    let payload: serde_json::Value =
-        match http_get_json(&url, &[("Accept", "application/json")]).await {
-            Ok(p) => p,
-            Err((status, body)) => {
-                tracing::warn!(
-                    "[catalog] OMDb HTTP failed for imdb={imdb_id}: {status} {body:?}",
-                    body = body.0
-                );
-                return Vec::new();
-            }
-        };
-    if payload
-        .get("Response")
-        .and_then(|v| v.as_str())
-        .map(|s| s.eq_ignore_ascii_case("True"))
-        != Some(true)
-    {
-        let err = payload
-            .get("Error")
-            .and_then(|v| v.as_str())
-            .unwrap_or("(no Error field)");
-        tracing::warn!("[catalog] OMDb returned no data for imdb={imdb_id}: {err}");
+    let Some((status, payload)) = omdb_get_raw(&url).await else {
         return Vec::new();
-    }
-    let reviews = parse_omdb_reviews(&payload);
-    if reviews.is_empty() {
-        tracing::warn!(
-            "[catalog] OMDb returned Response=True but parsed 0 reviews for imdb={imdb_id}"
-        );
-    } else {
-        tracing::info!(
-            "[catalog] OMDb returned {} review(s) for imdb={imdb_id}: {:?}",
-            reviews.len(),
-            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
-        );
-    }
-    reviews
+    };
+    omdb_extract_reviews(&format!("imdb={imdb_id}"), status, &payload)
 }
 
 /// Title+year fallback for OMDb when TMDB didn't return an IMDb id (or
@@ -1017,45 +1063,14 @@ async fn fetch_omdb_reviews_by_title(
     if let Some(y) = year {
         url.push_str(&format!("&y={y}"));
     }
-    let payload: serde_json::Value =
-        match http_get_json(&url, &[("Accept", "application/json")]).await {
-            Ok(p) => p,
-            Err((status, body)) => {
-                tracing::warn!(
-                    "[catalog] OMDb title-fallback HTTP failed for title={title:?} year={year:?}: {status} {body:?}",
-                    body = body.0
-                );
-                return Vec::new();
-            }
-        };
-    if payload
-        .get("Response")
-        .and_then(|v| v.as_str())
-        .map(|s| s.eq_ignore_ascii_case("True"))
-        != Some(true)
-    {
-        let err = payload
-            .get("Error")
-            .and_then(|v| v.as_str())
-            .unwrap_or("(no Error field)");
-        tracing::warn!(
-            "[catalog] OMDb title-fallback returned no data for title={title:?} year={year:?}: {err}"
-        );
+    let Some((status, payload)) = omdb_get_raw(&url).await else {
         return Vec::new();
-    }
-    let reviews = parse_omdb_reviews(&payload);
-    if reviews.is_empty() {
-        tracing::warn!(
-            "[catalog] OMDb title-fallback Response=True but parsed 0 reviews for title={title:?} year={year:?}"
-        );
-    } else {
-        tracing::info!(
-            "[catalog] OMDb title-fallback returned {} review(s) for title={title:?} year={year:?}: {:?}",
-            reviews.len(),
-            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
-        );
-    }
-    reviews
+    };
+    omdb_extract_reviews(
+        &format!("title={title:?} year={year:?}"),
+        status,
+        &payload,
+    )
 }
 
 /// Project an OMDb response's `Ratings` array (plus the root-level
