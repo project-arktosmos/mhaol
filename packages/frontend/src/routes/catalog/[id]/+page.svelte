@@ -2004,36 +2004,6 @@
 						</div>
 					{/if}
 
-					{#snippet sourceButtons()}
-						<button
-							type="button"
-							class="btn"
-							disabled={!trailerTabEnabled}
-							onclick={() => handleSourceClick('trailer')}
-							title={trailerTabTitle}
-						>
-							{isYoutubeVideo ? 'Video' : 'Trailer'}
-						</button>
-						<button
-							type="button"
-							class="btn"
-							disabled={!ipfsTabEnabled || ipfsStarting}
-							onclick={() => handleSourceClick('ipfs')}
-							title={ipfsTabTitle}
-						>
-							IPFS Stream{ipfsStarting ? ' — starting…' : ''}
-						</button>
-						<button
-							type="button"
-							class="btn"
-							disabled={!torrentTabEnabled || torrentStreamStarting}
-							onclick={() => handleSourceClick('torrent')}
-							title={torrentTabTitle}
-						>
-							Torrent Stream{torrentTabSuffix}
-						</button>
-					{/snippet}
-
 					{#if (activeSource === 'ipfs' || activeSource === 'torrent') && isInlinePlayingThisFirkin}
 						<PlayerVideo
 							file={$playerState.currentFile}
@@ -2048,7 +2018,6 @@
 							directStreamMimeType={$playerState.directStreamMimeType}
 							streamOffsetSecs={$playerState.streamOffsetSecs}
 							onseekrequest={activeSource === 'ipfs' ? handleIpfsSeek : undefined}
-							extraControls={sourceButtons}
 						/>
 					{:else if (activeSource === 'ipfs' && ipfsStarting) || (activeSource === 'torrent' && torrentStreamStarting)}
 						<div
@@ -2071,7 +2040,6 @@
 							trailerOptions={isYoutubeVideo ? [] : playableTrailers}
 							{selectedTrailerKey}
 							onTrailerSelect={(k) => (selectedTrailerKey = k)}
-							extraControls={sourceButtons}
 							playOverlay={isTmdbMovie ? torrentAttachmentOverlay : undefined}
 						/>
 					{:else if firkin.images[1]}
