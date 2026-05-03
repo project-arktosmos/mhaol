@@ -1944,55 +1944,66 @@
 			{#if anyTabEnabled}
 				<div class="flex flex-col gap-2">
 					{#snippet subtitlePicker()}
-						<span class="text-xs font-semibold text-base-content/70 uppercase">Subtitles</span>
-						<select
-							class="select-bordered select select-xs"
-							value={selectedSubLanguage}
-							onchange={(e) => {
-								selectedSubLanguage = (e.currentTarget as HTMLSelectElement).value;
-							}}
-							aria-label="Subtitle language"
-						>
-							{#each SUBTITLE_LANGUAGES as opt (opt.code)}
-								<option value={opt.code}>{opt.label}</option>
-							{/each}
-						</select>
-						<select
-							class="select-bordered select min-w-0 flex-1 select-xs"
-							value={selectedSubExternalId ?? ''}
-							disabled={subsLyricsResolver.status === 'searching' ||
-								subsForLanguage.length === 0 ||
-								attachingSubtitle}
-							onchange={(e) => {
-								const v = (e.currentTarget as HTMLSelectElement).value;
-								selectedSubExternalId = v === '' ? null : v;
-								if (v && !isSubtitleAttached) {
-									void attachSelectedSubtitle();
-								}
-							}}
-							aria-label="Subtitle pick"
-						>
-							<option value=""
-								>{subsLyricsResolver.status === 'searching'
-									? 'Searching…'
-									: subsForLanguage.length === 0
-										? 'No matches'
-										: attachingSubtitle
-											? 'Downloading…'
-											: 'Pick a subtitle…'}</option
+						<div class="flex w-full flex-col items-stretch gap-1">
+							<span
+								class="text-center text-[10px] font-semibold text-base-content/70 uppercase"
 							>
-							{#each subsForLanguage as item (item.externalId)}
-								<option value={item.externalId}>{item.release ?? `#${item.externalId}`}</option>
-							{/each}
-						</select>
-						{#if subsLyricsResolver.status === 'error'}
-							<span class="text-xs text-error" title={subsLyricsResolver.error ?? ''}>
-								Search failed
+								Subtitles
 							</span>
-						{/if}
-						{#if attachSubtitleError}
-							<span class="text-xs text-error" title={attachSubtitleError}>Attach failed</span>
-						{/if}
+							<div class="flex flex-wrap items-center gap-2">
+								<select
+									class="select-bordered select select-xs"
+									value={selectedSubLanguage}
+									onchange={(e) => {
+										selectedSubLanguage = (e.currentTarget as HTMLSelectElement).value;
+									}}
+									aria-label="Subtitle language"
+								>
+									{#each SUBTITLE_LANGUAGES as opt (opt.code)}
+										<option value={opt.code}>{opt.label}</option>
+									{/each}
+								</select>
+								<select
+									class="select-bordered select min-w-0 flex-1 select-xs"
+									value={selectedSubExternalId ?? ''}
+									disabled={subsLyricsResolver.status === 'searching' ||
+										subsForLanguage.length === 0 ||
+										attachingSubtitle}
+									onchange={(e) => {
+										const v = (e.currentTarget as HTMLSelectElement).value;
+										selectedSubExternalId = v === '' ? null : v;
+										if (v && !isSubtitleAttached) {
+											void attachSelectedSubtitle();
+										}
+									}}
+									aria-label="Subtitle pick"
+								>
+									<option value=""
+										>{subsLyricsResolver.status === 'searching'
+											? 'Searching…'
+											: subsForLanguage.length === 0
+												? 'No matches'
+												: attachingSubtitle
+													? 'Downloading…'
+													: 'Pick a subtitle…'}</option
+									>
+									{#each subsForLanguage as item (item.externalId)}
+										<option value={item.externalId}>{item.release ?? `#${item.externalId}`}</option
+										>
+									{/each}
+								</select>
+								{#if subsLyricsResolver.status === 'error'}
+									<span class="text-xs text-error" title={subsLyricsResolver.error ?? ''}>
+										Search failed
+									</span>
+								{/if}
+								{#if attachSubtitleError}
+									<span class="text-xs text-error" title={attachSubtitleError}>
+										Attach failed
+									</span>
+								{/if}
+							</div>
+						</div>
 					{/snippet}
 
 					{#if (activeSource === 'ipfs' || activeSource === 'torrent') && isInlinePlayingThisFirkin}
