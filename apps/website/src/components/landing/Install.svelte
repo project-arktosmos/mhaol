@@ -70,7 +70,11 @@
 		</div>
 
 		<div class="mb-8 flex flex-wrap items-center gap-3">
-			<a href="https://github.com/" rel="noopener" class="btn gap-2 btn-primary">
+			<a
+				href="https://github.com/project-arktosmos/mhaol/releases"
+				rel="noopener"
+				class="btn gap-2 btn-primary"
+			>
 				<Icon name="delapouite/cloud-download" size={18} />
 				Latest release on GitHub
 			</a>

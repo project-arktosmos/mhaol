@@ -50,7 +50,11 @@
 			<div>Mhaol — self-hosted, content-addressed media cloud.</div>
 			<div class="flex items-center gap-4">
 				<a href="{base}/#install" class="hover:text-primary">Install</a>
-				<a href="https://github.com/" class="hover:text-primary" rel="noopener">Source</a>
+				<a
+					href="https://github.com/project-arktosmos/mhaol"
+					class="hover:text-primary"
+					rel="noopener">Source</a
+				>
 			</div>
 		</div>
 	</footer>
