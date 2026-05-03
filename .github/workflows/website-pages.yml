@@ -1,27 +1,15 @@
-name: Website (deploy each PR to GitHub Pages)
+name: Website (deploy on release to GitHub Pages)
 
-# Builds apps/website (mhaol-website) and deploys it to GitHub Pages on
-# every pull request that touches the website or its dependencies.
-#
-# Notes:
-# - GitHub Pages only hosts one site per repo, so the deploy from the most
-#   recent PR is what's live. PRs deploying concurrently will queue through
-#   the `github-pages` environment.
-# - The `id-token: write` permission is not granted to PRs from forks; the
-#   deploy step will fail in that case. Same-repo branch PRs work fine.
+# Builds apps/website (mhaol-website) and deploys it to GitHub Pages whenever
+# a release is published — same trigger as `release-tauri-cloud.yml`, so the
+# public website always reflects the most recent shipped version.
 #
 # One-time repo setup: Settings → Pages → Build and deployment →
 # Source = "GitHub Actions". The workflow handles everything else.
 
 on:
-  pull_request:
-    paths:
-      - 'apps/website/**'
-      - 'packages/cloud-ui/**'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'package.json'
-      - '.github/workflows/website-pages.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
