@@ -13,6 +13,17 @@
 		type ScanEntry,
 		type Library
 	} from '$lib/libraries.service';
+
+	type PreflightState =
+		| { status: 'typing' | 'searching' | 'no_match' }
+		| {
+				status: 'found';
+				tmdbId: string;
+				tmdbTitle: string;
+				tmdbYear?: number;
+				seasonCount?: number;
+		  }
+		| { status: 'error'; error: string };
 	import type { IpfsPin } from '$lib/ipfs.service';
 	import { firkinsService, type Artist, type Trailer, type Review } from '$lib/firkins.service';
 	import { goto } from '$app/navigation';
@@ -45,6 +56,16 @@
 	let addonsError = $state<string | null>(null);
 	let creatingFirkinFor = $state<Record<string, boolean>>({});
 	let createFirkinErrors = $state<Record<string, string>>({});
+
+	/// User-edited TV show name per group, keyed by the group's *original*
+	/// extracted show key (`showKey(libId, originalGroup)`). Defaulted to the
+	/// extracted show name on first sight of each scan group, then mutated
+	/// in-place by the per-group input. The effective name fed to the
+	/// preflight + the build is `editedShowNames[origKey] ?? group.show`.
+	let editedShowNames = $state<Record<string, string>>({});
+	let preflightStates = $state<Record<string, PreflightState>>({});
+	const preflightTimers = new Map<string, number>();
+	const preflightAborters = new Map<string, AbortController>();
 
 	function toggleNewAddon(addon: LibraryAddon) {
 		newAddons = newAddons.includes(addon)
@@ -104,7 +125,95 @@
 			window.clearInterval(handle);
 		}
 		tvBuildPollers.clear();
+		for (const handle of preflightTimers.values()) {
+			window.clearTimeout(handle);
+		}
+		preflightTimers.clear();
+		for (const ac of preflightAborters.values()) {
+			ac.abort();
+		}
+		preflightAborters.clear();
 	});
+
+	async function runPreflight(
+		libId: string,
+		origKey: string,
+		show: string,
+		year: number | undefined
+	) {
+		const trimmed = show.trim();
+		if (!trimmed) {
+			preflightStates = { ...preflightStates, [origKey]: { status: 'no_match' } };
+			return;
+		}
+		const prev = preflightAborters.get(origKey);
+		if (prev) prev.abort();
+		const ac = new AbortController();
+		preflightAborters.set(origKey, ac);
+		preflightStates = { ...preflightStates, [origKey]: { status: 'searching' } };
+		try {
+			const res = await librariesService.tvPreflight(libId, trimmed, year, ac.signal);
+			if (ac.signal.aborted) return;
+			if (!res.tmdbId) {
+				preflightStates = {
+					...preflightStates,
+					[origKey]: { status: 'no_match' }
+				};
+			} else {
+				preflightStates = {
+					...preflightStates,
+					[origKey]: {
+						status: 'found',
+						tmdbId: res.tmdbId,
+						tmdbTitle: res.tmdbTitle ?? '',
+						tmdbYear: res.tmdbYear ?? undefined,
+						seasonCount: res.seasonCount ?? undefined
+					}
+				};
+			}
+		} catch (err) {
+			if (err instanceof DOMException && err.name === 'AbortError') return;
+			const message = err instanceof Error ? err.message : 'Unknown error';
+			preflightStates = {
+				...preflightStates,
+				[origKey]: { status: 'error', error: message }
+			};
+		} finally {
+			if (preflightAborters.get(origKey) === ac) {
+				preflightAborters.delete(origKey);
+			}
+		}
+	}
+
+	function onShowNameInput(
+		libId: string,
+		origKey: string,
+		value: string,
+		year: number | undefined
+	) {
+		editedShowNames = { ...editedShowNames, [origKey]: value };
+		preflightStates = { ...preflightStates, [origKey]: { status: 'typing' } };
+		const existing = preflightTimers.get(origKey);
+		if (existing !== undefined) window.clearTimeout(existing);
+		const handle = window.setTimeout(() => {
+			preflightTimers.delete(origKey);
+			void runPreflight(libId, origKey, value, year);
+		}, 400);
+		preflightTimers.set(origKey, handle);
+	}
+
+	function firePreflightForLibrary(libId: string, scan: ScanResponse) {
+		const groups = groupEntries(scan.entries);
+		for (const group of groups) {
+			if (group.kind !== 'show') continue;
+			const origKey = showKey(libId, group);
+			if (editedShowNames[origKey] === undefined) {
+				editedShowNames = { ...editedShowNames, [origKey]: group.show };
+			}
+			const effShow = editedShowNames[origKey] ?? group.show;
+			void runPreflight(libId, origKey, effShow, group.year);
+		}
+	}
 
 	async function hydrateTvBuildsForLibrary(lib: Library) {
 		try {
@@ -138,6 +247,7 @@
 			const result = await librariesService.lastScanResult(id);
 			if (result) {
 				scanResults = { ...scanResults, [id]: result };
+				firePreflightForLibrary(id, result);
 			}
 		} catch {
 			// no persisted scan result yet — leave scanResults untouched
@@ -238,6 +348,7 @@
 		try {
 			const result = await librariesService.scan(id);
 			scanResults = { ...scanResults, [id]: result };
+			firePreflightForLibrary(id, result);
 			await Promise.all([librariesService.refresh(), loadPins(id)]);
 			pollPinsUntilStable(id);
 		} catch (err) {
@@ -1061,7 +1172,10 @@
 																{/snippet}
 																{#each groupEntries(scanResults[lib.id].entries) as group, gi (gi)}
 																	{#if group.kind === 'show'}
-																		{@const sKey = showKey(lib.id, group)}
+																		{@const origKey = showKey(lib.id, group)}
+																		{@const effShow = editedShowNames[origKey] ?? group.show}
+																		{@const effGroup = { ...group, show: effShow }}
+																		{@const sKey = showKey(lib.id, effGroup)}
 																		{@const job = tvBuildJobs[lib.id]?.[sKey]}
 																		{@const inFlight =
 																			!!job && job.phase !== 'completed' && job.phase !== 'error'}
@@ -1070,17 +1184,73 @@
 																			(acc, s) => acc + s.entries.length,
 																			0
 																		)}
+																		{@const preflight = preflightStates[origKey]}
 																		<tr class="bg-base-200/60">
 																			<td colspan="9" class="text-sm font-semibold">
 																				<div class="flex items-center justify-between gap-2">
-																					<div class="flex flex-col">
-																						<span>
-																							{group.show}{group.year ? ` (${group.year})` : ''}
-																						</span>
+																					<div class="flex flex-col gap-1">
+																						<div class="flex items-baseline gap-2">
+																							<input
+																								type="text"
+																								class="input-bordered input input-xs w-72"
+																								value={effShow}
+																								oninput={(e) =>
+																									onShowNameInput(
+																										lib.id,
+																										origKey,
+																										(e.target as HTMLInputElement).value,
+																										group.year
+																									)}
+																								title="Edit the term that will be searched against TMDB"
+																							/>
+																							{#if group.year}
+																								<span
+																									class="text-xs font-normal text-base-content/60"
+																									>({group.year})</span
+																								>
+																							{/if}
+																						</div>
 																						<span class="text-xs font-normal text-base-content/60">
 																							{seasonCount} season{seasonCount === 1 ? '' : 's'} ·
 																							{episodeCount} episode{episodeCount === 1 ? '' : 's'} found
 																						</span>
+																						{#if preflight}
+																							{#if preflight.status === 'searching'}
+																								<span
+																									class="text-xs font-normal text-base-content/40"
+																								>
+																									Checking TMDB…
+																								</span>
+																							{:else if preflight.status === 'typing'}
+																								<span
+																									class="text-xs font-normal text-base-content/40"
+																								>
+																									Editing — preflight will rerun
+																								</span>
+																							{:else if preflight.status === 'found'}
+																								<a
+																									class="link text-xs font-normal text-success link-hover"
+																									href={`https://www.themoviedb.org/tv/${preflight.tmdbId}`}
+																									target="_blank"
+																									rel="noreferrer"
+																								>
+																									→ TMDB #{preflight.tmdbId}
+																									{preflight.tmdbTitle}{preflight.tmdbYear
+																										? ` (${preflight.tmdbYear})`
+																										: ''}{preflight.seasonCount !== undefined
+																										? ` · ${preflight.seasonCount} season${preflight.seasonCount === 1 ? '' : 's'}`
+																										: ''}
+																								</a>
+																							{:else if preflight.status === 'no_match'}
+																								<span class="text-xs font-normal text-error">
+																									No TMDB match — build will error
+																								</span>
+																							{:else if preflight.status === 'error'}
+																								<span class="text-xs font-normal text-error">
+																									Preflight: {preflight.error}
+																								</span>
+																							{/if}
+																						{/if}
 																					</div>
 																					<div class="flex items-center gap-2">
 																						{#if job?.phase === 'completed' && job.completedFirkinId}
@@ -1094,7 +1264,7 @@
 																						<button
 																							class="btn btn-xs btn-primary"
 																							disabled={inFlight}
-																							onclick={() => startTvFirkinBuild(lib.id, group)}
+																							onclick={() => startTvFirkinBuild(lib.id, effGroup)}
 																						>
 																							{inFlight
 																								? progressLabel(job!)
