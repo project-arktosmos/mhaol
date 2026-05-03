@@ -1,6 +1,27 @@
 <script lang="ts">
+	import { onDestroy, onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { Icon } from 'cloud-ui';
+
+	const slides = [
+		{ src: 'mhaol-catalog.png', label: 'Catalog' },
+		{ src: 'mhaol-movies.png', label: 'Movies' },
+		{ src: 'mhaol-movie-detail.png', label: 'The Super Mario Bros. Movie' },
+		{ src: 'mhaol-album-detail.png', label: 'She Wolf' }
+	];
+
+	let active = $state(0);
+	let timer: ReturnType<typeof setInterval> | null = null;
+
+	onMount(() => {
+		timer = setInterval(() => {
+			active = (active + 1) % slides.length;
+		}, 3000);
+	});
+
+	onDestroy(() => {
+		if (timer !== null) clearInterval(timer);
+	});
 </script>
 
 <section
@@ -35,15 +56,38 @@
 					<span class="h-3 w-3 rounded-full bg-error/70"></span>
 					<span class="h-3 w-3 rounded-full bg-warning/70"></span>
 					<span class="h-3 w-3 rounded-full bg-success/70"></span>
-					<span class="ml-3 font-mono text-xs text-base-content/60">Mhaol Cloud — Catalog</span>
+					<span class="ml-3 font-mono text-xs text-base-content/60">
+						Mhaol Cloud — {slides[active].label}
+					</span>
 				</div>
-				<img
-					src="{base}/mhaol-catalog.png"
-					alt="Mhaol Cloud catalog showing rows of Movies, TV Shows, Music, and YouTube libraries"
-					class="block h-auto w-full"
-					loading="eager"
-					decoding="async"
-				/>
+				<div class="relative aspect-[5/3] w-full bg-base-200">
+					{#each slides as slide, i (slide.src)}
+						<img
+							src="{base}/{slide.src}"
+							alt={`Mhaol Cloud screenshot — ${slide.label}`}
+							class={[
+								'absolute inset-0 h-full w-full object-contain transition-opacity duration-700 ease-in-out',
+								i === active ? 'opacity-100' : 'opacity-0'
+							]}
+							loading={i === 0 ? 'eager' : 'lazy'}
+							decoding="async"
+							aria-hidden={i === active ? undefined : 'true'}
+						/>
+					{/each}
+				</div>
+				<div
+					class="flex items-center justify-center gap-1.5 border-t border-base-300 bg-base-200 py-2"
+				>
+					{#each slides as _, i (i)}
+						<span
+							class={[
+								'h-1.5 w-1.5 rounded-full transition-colors',
+								i === active ? 'bg-primary' : 'bg-base-content/20'
+							]}
+							aria-hidden="true"
+						></span>
+					{/each}
+				</div>
 			</div>
 		</div>
 	</div>
