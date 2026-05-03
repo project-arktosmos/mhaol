@@ -85,25 +85,8 @@ async fn search_tmdb(
         urlencoding(query)
     );
 
-    let client = reqwest::Client::new();
-    let res = client
-        .get(&url)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("tmdb request failed: {e}")))?;
-
-    if !res.status().is_success() {
-        return Err(err(
-            StatusCode::BAD_GATEWAY,
-            format!("tmdb returned {}", res.status()),
-        ));
-    }
-
-    let payload: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("tmdb parse failed: {e}")))?;
+    let payload =
+        crate::catalog::http_get_json(&url, &[("Accept", "application/json")]).await?;
 
     let raw_results: Vec<serde_json::Value> = payload
         .get("results")
@@ -114,11 +97,10 @@ async fn search_tmdb(
     let mut tasks = Vec::with_capacity(raw_results.len());
     for r in &raw_results {
         let tmdb_id = r.get("id").and_then(|v| v.as_i64());
-        let client = client.clone();
         let api_key = api_key.clone();
         tasks.push(tokio::spawn(async move {
             match tmdb_id {
-                Some(id) => fetch_tmdb_credits(&client, is_tv, id, &api_key).await,
+                Some(id) => fetch_tmdb_credits(is_tv, id, &api_key).await,
                 None => Vec::new(),
             }
         }));
@@ -139,23 +121,14 @@ async fn search_tmdb(
 }
 
 async fn fetch_tmdb_credits(
-    client: &reqwest::Client,
     is_tv: bool,
     tmdb_id: i64,
     api_key: &str,
 ) -> Vec<UpsertArtistRequest> {
     let kind = if is_tv { "tv" } else { "movie" };
     let url = format!("{}/{}/{}/credits?api_key={}", TMDB_BASE, kind, tmdb_id, api_key);
-    let res = match client
-        .get(&url)
-        .header("Accept", "application/json")
-        .send()
-        .await
+    let payload = match crate::catalog::http_get_json(&url, &[("Accept", "application/json")]).await
     {
-        Ok(r) if r.status().is_success() => r,
-        _ => return Vec::new(),
-    };
-    let payload: serde_json::Value = match res.json().await {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
@@ -325,20 +298,9 @@ async fn tmdb_episodes(
         ));
     }
 
-    let client = reqwest::Client::new();
-
     let detail_url = format!("{}/tv/{}?api_key={}", TMDB_BASE, urlencoding(id), api_key);
-    let detail: serde_json::Value = client
-        .get(&detail_url)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("tmdb request failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("tmdb returned {e}")))?
-        .json()
-        .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, format!("tmdb parse failed: {e}")))?;
+    let detail =
+        crate::catalog::http_get_json(&detail_url, &[("Accept", "application/json")]).await?;
 
     let seasons = detail
         .get("seasons")
@@ -359,18 +321,11 @@ async fn tmdb_episodes(
             n,
             api_key
         );
-        let payload: serde_json::Value = match client
-            .get(&url)
-            .header("Accept", "application/json")
-            .send()
-            .await
-        {
-            Ok(r) if r.status().is_success() => match r.json().await {
+        let payload =
+            match crate::catalog::http_get_json(&url, &[("Accept", "application/json")]).await {
                 Ok(v) => v,
                 Err(_) => continue,
-            },
-            _ => continue,
-        };
+            };
         if let Some(eps) = payload.get("episodes").and_then(|e| e.as_array()) {
             for ep in eps {
                 let name = ep
@@ -447,22 +402,15 @@ pub async fn run_torrent_query(query: &str, category: &str) -> Result<Vec<Torren
         urlencoding(category)
     );
 
-    let res = reqwest::Client::new()
-        .get(&url)
-        .header("User-Agent", "Mozilla/5.0 (compatible; Mhaol/1.0)")
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("piratebay request failed: {e}"))?;
-
-    if !res.status().is_success() {
-        return Err(format!("piratebay returned {}", res.status()));
-    }
-
-    let raw: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|e| format!("piratebay parse failed: {e}"))?;
+    let raw = crate::catalog::http_get_json(
+        &url,
+        &[
+            ("User-Agent", "Mozilla/5.0 (compatible; Mhaol/1.0)"),
+            ("Accept", "application/json"),
+        ],
+    )
+    .await
+    .map_err(|(s, b)| format!("piratebay request failed: {s} {:?}", b.0))?;
 
     let arr = match raw.as_array() {
         Some(a) => a,
@@ -669,25 +617,18 @@ async fn search_lrclib(
 /// modules (notably the firkin track resolver) call it directly.
 pub async fn lrclib_search(query: &str) -> Result<Vec<SubsLyrics>, String> {
     let url = format!("{}/search?q={}", LRCLIB_BASE, urlencoding(query));
-    let res = reqwest::Client::new()
-        .get(&url)
-        .header("Accept", "application/json")
-        .header(
-            "User-Agent",
-            "Mhaol/1.0 (https://github.com/project-arktosmos/mhaol)",
-        )
-        .send()
-        .await
-        .map_err(|e| format!("lrclib request failed: {e}"))?;
-
-    if !res.status().is_success() {
-        return Err(format!("lrclib returned {}", res.status()));
-    }
-
-    let payload: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|e| format!("lrclib parse failed: {e}"))?;
+    let payload = crate::catalog::http_get_json(
+        &url,
+        &[
+            ("Accept", "application/json"),
+            (
+                "User-Agent",
+                "Mhaol/1.0 (https://github.com/project-arktosmos/mhaol)",
+            ),
+        ],
+    )
+    .await
+    .map_err(|(s, b)| format!("lrclib request failed: {s} {:?}", b.0))?;
 
     let arr = match payload.as_array() {
         Some(a) => a,
@@ -778,27 +719,18 @@ pub struct LrclibHit {
 
 pub async fn lrclib_search_raw(query: &str) -> Result<Vec<LrclibHit>, String> {
     let url = format!("{}/search?q={}", LRCLIB_BASE, urlencoding(query));
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("http client failed: {e}"))?;
-    let res = client
-        .get(&url)
-        .header("Accept", "application/json")
-        .header(
-            "User-Agent",
-            "Mhaol/1.0 (https://github.com/project-arktosmos/mhaol)",
-        )
-        .send()
-        .await
-        .map_err(|e| format!("lrclib request failed: {e}"))?;
-    if !res.status().is_success() {
-        return Err(format!("lrclib returned {}", res.status()));
-    }
-    let payload: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|e| format!("lrclib parse failed: {e}"))?;
+    let payload = crate::catalog::http_get_json(
+        &url,
+        &[
+            ("Accept", "application/json"),
+            (
+                "User-Agent",
+                "Mhaol/1.0 (https://github.com/project-arktosmos/mhaol)",
+            ),
+        ],
+    )
+    .await
+    .map_err(|(s, b)| format!("lrclib request failed: {s} {:?}", b.0))?;
     let arr = match payload.as_array() {
         Some(a) => a,
         None => return Ok(Vec::new()),
@@ -882,11 +814,7 @@ fn parse_lrc_timestamp(s: &str) -> Option<f64> {
 /// Movies expose `imdb_id` at the root of the detail response too, but
 /// TV shows only carry it under `external_ids` — going through this
 /// dedicated endpoint works for both kinds with one URL shape.
-async fn tmdb_to_imdb_id(
-    client: &reqwest::Client,
-    kind: &str,
-    tmdb_id: &str,
-) -> Option<String> {
+async fn tmdb_to_imdb_id(kind: &str, tmdb_id: &str) -> Option<String> {
     let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
         return None;
@@ -899,11 +827,9 @@ async fn tmdb_to_imdb_id(
         urlencoding(tmdb_id),
         urlencoding(&api_key)
     );
-    let res = client.get(&url).send().await.ok()?;
-    if !res.status().is_success() {
-        return None;
-    }
-    let payload: serde_json::Value = res.json().await.ok()?;
+    let payload = crate::catalog::http_get_json(&url, &[("Accept", "application/json")])
+        .await
+        .ok()?;
     payload
         .get("imdb_id")
         .and_then(|v| v.as_str())
@@ -962,18 +888,13 @@ async fn search_stremio_opensubs(
     season: u32,
     episode: u32,
 ) -> Result<Vec<SubsLyrics>, (StatusCode, Json<serde_json::Value>)> {
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, format!("http client failed: {e}")))?;
-
     let mut out: Vec<SubsLyrics> = Vec::new();
     for tmdb_id in external_ids {
         let trimmed = tmdb_id.trim();
         if trimmed.is_empty() {
             continue;
         }
-        let imdb_id = match tmdb_to_imdb_id(&client, kind, trimmed).await {
+        let imdb_id = match tmdb_to_imdb_id(kind, trimmed).await {
             Some(id) => id,
             None => continue,
         };
@@ -985,20 +906,12 @@ async fn search_stremio_opensubs(
         } else {
             format!("{}/subtitles/movie/{}.json", STREMIO_OPENSUBS_BASE, imdb_id)
         };
-        let res = match client
-            .get(&url)
-            .header("Accept", "application/json")
-            .header("User-Agent", "Mhaol/1.0")
-            .send()
-            .await
+        let payload = match crate::catalog::http_get_json(
+            &url,
+            &[("Accept", "application/json"), ("User-Agent", "Mhaol/1.0")],
+        )
+        .await
         {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-        if !res.status().is_success() {
-            continue;
-        }
-        let payload: serde_json::Value = match res.json().await {
             Ok(p) => p,
             Err(_) => continue,
         };
@@ -1052,7 +965,7 @@ async fn search_stremio_opensubs(
         }
     }
 
-    resolve_release_filenames(&client, &mut out).await;
+    resolve_release_filenames(&mut out).await;
     Ok(out)
 }
 
@@ -1062,7 +975,7 @@ async fn search_stremio_opensubs(
 /// the same Cloudflare-fronted host produced scattered failures mid-batch),
 /// and each request gets a short timeout + one retry. Per-URL failures
 /// fall through silently — the row still renders, just without a filename.
-async fn resolve_release_filenames(client: &reqwest::Client, items: &mut [SubsLyrics]) {
+async fn resolve_release_filenames(items: &mut [SubsLyrics]) {
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::sync::Semaphore;
@@ -1071,6 +984,13 @@ async fn resolve_release_filenames(client: &reqwest::Client, items: &mut [SubsLy
     const CONCURRENCY: usize = 12;
     const PER_REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
     let semaphore = Arc::new(Semaphore::new(CONCURRENCY));
+    let client = match reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return,
+    };
 
     let mut set: JoinSet<Option<(usize, String)>> = JoinSet::new();
     for (idx, item) in items.iter().enumerate() {

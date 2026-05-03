@@ -945,6 +945,22 @@ fn extract_imdb_id(payload: &serde_json::Value) -> Option<String> {
 /// transport / decode errors — the caller treats that and a missing
 /// `"Response":"True"` field identically (no reviews).
 async fn omdb_get_raw(url: &str) -> Option<(reqwest::StatusCode, serde_json::Value)> {
+    // Cache hit fast-path: only ever store successful `Response: "True"`
+    // responses (see below) so a transient 401 / "Request limit reached!"
+    // / "Invalid API key!" never poisons the cache.
+    let cache_key = http_cache_key(url, &[("Accept", "application/json")]);
+    if let Some(cached) = http_cache().read().ok().and_then(|c| {
+        c.get(&cache_key).and_then(|(at, v)| {
+            if at.elapsed() < HTTP_CACHE_TTL {
+                Some(v.clone())
+            } else {
+                None
+            }
+        })
+    }) {
+        return Some((reqwest::StatusCode::OK, cached));
+    }
+
     let res = match http_client()
         .get(url)
         .header("Accept", "application/json")
@@ -953,10 +969,7 @@ async fn omdb_get_raw(url: &str) -> Option<(reqwest::StatusCode, serde_json::Val
     {
         Ok(r) => r,
         Err(e) => {
-            tracing::warn!(
-                "[catalog] OMDb transport error: {}",
-                error_chain(&e)
-            );
+            tracing::warn!("[catalog] OMDb transport error: {}", error_chain(&e));
             return None;
         }
     };
@@ -971,6 +984,16 @@ async fn omdb_get_raw(url: &str) -> Option<(reqwest::StatusCode, serde_json::Val
             return None;
         }
     };
+    let response_true = body
+        .get("Response")
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case("True"))
+        .unwrap_or(false);
+    if status.is_success() && response_true {
+        if let Ok(mut c) = http_cache().write() {
+            c.insert(cache_key, (std::time::Instant::now(), body.clone()));
+        }
+    }
     Some((status, body))
 }
 
@@ -2343,10 +2366,74 @@ fn error_chain(err: &(dyn std::error::Error + 'static)) -> String {
     out
 }
 
-async fn http_get_json(
+/// Process-wide cache of `(stripped_url, headers) -> parsed JSON body`,
+/// shared by every upstream addon call (TMDB, OMDb, MusicBrainz, LRCLIB,
+/// Wyzie, ThePirateBay, oEmbed). Without this, the same `tmdb_metadata`
+/// + OMDb round-trip fired on every firkin write / rollforward / popular
+/// page load, which exhausted OMDb's 1000-req/day free tier within a
+/// session and showed up as opaque 401s in `logs/cloud.log`. The cache
+/// key strips `api_key` / `apikey` query params so the entry survives key
+/// rotation; otherwise the URL is the key verbatim.
+const HTTP_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+fn http_cache() -> &'static RwLock<HashMap<String, (std::time::Instant, serde_json::Value)>> {
+    static CACHE: OnceLock<RwLock<HashMap<String, (std::time::Instant, serde_json::Value)>>> =
+        OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+/// Drop `api_key=...` and `apikey=...` query params from a URL so the
+/// resulting string is safe to use as a cache key (and identical across
+/// key rotations / multiple deployments). Other query params are
+/// preserved in their original order.
+fn http_cache_key(url: &str, headers: &[(&str, &str)]) -> String {
+    let stripped = match url::Url::parse(url) {
+        Ok(mut u) => {
+            let kept: Vec<(String, String)> = u
+                .query_pairs()
+                .filter(|(k, _)| {
+                    let lk = k.to_ascii_lowercase();
+                    lk != "api_key" && lk != "apikey"
+                })
+                .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                .collect();
+            u.set_query(None);
+            if !kept.is_empty() {
+                let mut q = u.query_pairs_mut();
+                for (k, v) in &kept {
+                    q.append_pair(k, v);
+                }
+                drop(q);
+            }
+            u.to_string()
+        }
+        Err(_) => url.to_string(),
+    };
+    let mut hdrs: Vec<String> = headers
+        .iter()
+        .map(|(k, v)| format!("{}:{}", k.to_ascii_lowercase(), v))
+        .collect();
+    hdrs.sort();
+    format!("{}|{}", stripped, hdrs.join(";"))
+}
+
+pub(crate) async fn http_get_json(
     url: &str,
     headers: &[(&str, &str)],
 ) -> Result<serde_json::Value, (StatusCode, Json<serde_json::Value>)> {
+    let cache_key = http_cache_key(url, headers);
+    if let Some(cached) = http_cache().read().ok().and_then(|c| {
+        c.get(&cache_key).and_then(|(at, v)| {
+            if at.elapsed() < HTTP_CACHE_TTL {
+                Some(v.clone())
+            } else {
+                None
+            }
+        })
+    }) {
+        return Ok(cached);
+    }
+
     let mut req = http_client().get(url);
     for (k, v) in headers {
         req = req.header(*k, *v);
@@ -2363,12 +2450,16 @@ async fn http_get_json(
             format!("upstream returned {}", res.status()),
         ));
     }
-    res.json::<serde_json::Value>().await.map_err(|e| {
+    let parsed = res.json::<serde_json::Value>().await.map_err(|e| {
         err(
             StatusCode::BAD_GATEWAY,
             format!("upstream parse failed: {}", error_chain(&e)),
         )
-    })
+    })?;
+    if let Ok(mut c) = http_cache().write() {
+        c.insert(cache_key, (std::time::Instant::now(), parsed.clone()));
+    }
+    Ok(parsed)
 }
 
 fn capitalize_words(s: &str) -> String {
