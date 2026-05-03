@@ -86,6 +86,68 @@ pub fn router() -> Router<CloudState> {
     Router::new()
         .route("/{id}/tv-build", post(start))
         .route("/{id}/tv-builds", get(list).delete(clear_terminal))
+        .route("/{id}/tv-preflight", post(preflight))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TvPreflightRequest {
+    pub show: String,
+    #[serde(default)]
+    pub year: Option<i32>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TvPreflightResponse {
+    pub tmdb_id: Option<String>,
+    pub tmdb_title: Option<String>,
+    pub tmdb_year: Option<i32>,
+    pub season_count: Option<u32>,
+    pub poster_url: Option<String>,
+}
+
+/// Lightweight "what would `Match TMDB & build firkin` resolve to?" probe
+/// used by the WebUI's libraries-modal table. Mirrors the build's match
+/// path exactly — `tmdb_search` → `pick_best_tv_match(year)` →
+/// `fetch_tmdb_tv_seasons` — so the preview cannot diverge from what the
+/// build actually picks. Returns 200 with all fields `None` when the
+/// query has no TMDB match (the WebUI renders this as "no match").
+async fn preflight(
+    State(_state): State<CloudState>,
+    Path(_library_id): Path<String>,
+    Json(req): Json<TvPreflightRequest>,
+) -> Result<Json<TvPreflightResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let show = req.show.trim();
+    if show.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "show is required"));
+    }
+    let page = tmdb_search(true, show, 1).await?;
+    let Some(matched) = pick_best_tv_match(&page.items, req.year).cloned() else {
+        return Ok(Json(TvPreflightResponse {
+            tmdb_id: None,
+            tmdb_title: None,
+            tmdb_year: None,
+            season_count: None,
+            poster_url: None,
+        }));
+    };
+    let season_count = match fetch_tmdb_tv_seasons(&matched.id).await {
+        Ok(seasons) => Some(seasons.len() as u32),
+        Err((status, _)) => {
+            tracing::warn!(
+                "[tv-preflight] seasons fetch failed for {}: {status}",
+                matched.id
+            );
+            None
+        }
+    };
+    Ok(Json(TvPreflightResponse {
+        tmdb_id: Some(matched.id),
+        tmdb_title: Some(matched.title),
+        tmdb_year: matched.year,
+        season_count,
+        poster_url: matched.poster_url,
+    }))
 }
 
 fn err(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {

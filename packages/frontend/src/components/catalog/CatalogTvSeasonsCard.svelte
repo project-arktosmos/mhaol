@@ -17,7 +17,9 @@
 		existingHashes?: Set<string>;
 		addingHash?: string | null;
 		onAssign?: (torrent: TorrentResultItem) => void | Promise<void>;
-		onSeasonsLoaded?: (seasonNumbers: number[]) => void;
+		onSeasonsLoaded?: (
+			seasons: Array<{ seasonNumber: number; episodeCount: number | null }>
+		) => void;
 		/** Set of `S{:02}E{:02}` keys for episodes that have a local IPFS file
 		 * attached to the firkin. When set, the matching episode rows render
 		 * a Play button that calls `onPlayEpisode`. */
@@ -107,7 +109,12 @@
 			if (!res.ok) throw new Error(await readError(res));
 			seasons = (await res.json()) as Season[];
 			seasonsStatus = 'done';
-			onSeasonsLoaded?.(seasons.map((s) => s.seasonNumber));
+			onSeasonsLoaded?.(
+				seasons.map((s) => ({
+					seasonNumber: s.seasonNumber,
+					episodeCount: s.episodeCount ?? null
+				}))
+			);
 		} catch (err) {
 			seasonsError = err instanceof Error ? err.message : 'Unknown error';
 			seasonsStatus = 'error';

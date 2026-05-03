@@ -1,5 +1,5 @@
 use crate::artists::{self, ArtistDto, UpsertArtistRequest};
-use crate::catalog::{self, is_known_addon, CatalogReview};
+use crate::catalog::is_known_addon;
 use crate::state::CloudState;
 use axum::{
     extract::{Path, State},
@@ -207,102 +207,6 @@ pub(crate) async fn upstream_ids_for_addon(
         }
     }
     Ok(out)
-}
-
-fn catalog_review_to_review(r: CatalogReview) -> Review {
-    Review {
-        label: r.label,
-        score: r.score,
-        max_score: r.max_score,
-        vote_count: r.vote_count,
-    }
-}
-
-/// Canonical OMDb-sourced review labels surfaced by `catalog::tmdb_metadata`.
-/// The presence of *any* of these on a firkin is the signal the server uses
-/// to decide whether OMDb enrichment has already run — see
-/// [`maybe_backfill_omdb_reviews`].
-const OMDB_REVIEW_LABELS: [&str; 3] = ["Rotten Tomatoes", "Metacritic", "IMDb"];
-
-/// For TMDB firkins, fetch the upstream metadata and merge any review
-/// labels not already in the supplied list. The catalog `tmdb_metadata`
-/// helper returns a TMDB-then-OMDb merged review list (Rotten Tomatoes /
-/// Metacritic / IMDb when `OMDB_API_KEY` is set and the upstream item
-/// resolves to an IMDb id). Best-effort: any failure mode (TMDB key
-/// missing, network error, no IMDb id) leaves `reviews` untouched.
-async fn enrich_reviews_from_tmdb(addon: &str, files: &[FileEntry], reviews: &mut Vec<Review>) {
-    let Some((is_tv, id)) = extract_tmdb_id(addon, files) else {
-        tracing::debug!(
-            "[firkins] skipping OMDb enrichment for addon={addon}: no TMDB url in files"
-        );
-        return;
-    };
-    let upstream = match catalog::tmdb_metadata(is_tv, &id).await {
-        Ok((_, _, r)) => r,
-        Err(e) => {
-            tracing::warn!(
-                "[firkins] tmdb_metadata({addon}, {id}) failed; reviews left untouched: {:?}",
-                e.0
-            );
-            return;
-        }
-    };
-    let before = reviews.len();
-    for cr in upstream {
-        let label = cr.label.trim();
-        if label.is_empty() {
-            continue;
-        }
-        if reviews.iter().any(|r| r.label == label) {
-            continue;
-        }
-        if let Some(sanitized) = sanitize_review(catalog_review_to_review(cr)) {
-            reviews.push(sanitized);
-        }
-    }
-    let added = reviews.len().saturating_sub(before);
-    let omdb_labels_present: Vec<&str> = reviews
-        .iter()
-        .map(|r| r.label.as_str())
-        .filter(|l| OMDB_REVIEW_LABELS.iter().any(|o| *o == *l))
-        .collect();
-    if added == 0 {
-        tracing::warn!(
-            "[firkins] tmdb_metadata({addon}, {id}) added 0 reviews; current labels {:?}; OMDb labels present: {:?}",
-            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(),
-            omdb_labels_present
-        );
-    } else if omdb_labels_present.is_empty() {
-        tracing::warn!(
-            "[firkins] tmdb_metadata({addon}, {id}) added {added} review label(s) but no OMDb-sourced labels landed; current labels {:?}",
-            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
-        );
-    } else {
-        tracing::info!(
-            "[firkins] OMDb-enriched {addon} {id}: appended {added} review label(s) (now {:?})",
-            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
-        );
-    }
-}
-
-/// Idempotent OMDb backfill for a TMDB firkin. No-op for non-TMDB addons
-/// and for TMDB firkins that already carry any OMDb-sourced review label
-/// (Rotten Tomatoes / Metacritic / IMDb). Intended to be called on every
-/// firkin write path so a firkin minted before `OMDB_API_KEY` was set —
-/// or one whose initial enrichment transiently failed — picks up the
-/// merged TMDB+OMDb review list at the next mutation, without the catalog
-/// detail page having to backfill it from the browser.
-async fn maybe_backfill_omdb_reviews(addon: &str, files: &[FileEntry], reviews: &mut Vec<Review>) {
-    if addon != "tmdb-movie" && addon != "tmdb-tv" {
-        return;
-    }
-    let already_enriched = reviews
-        .iter()
-        .any(|r| OMDB_REVIEW_LABELS.iter().any(|l| *l == r.label.as_str()));
-    if already_enriched {
-        return;
-    }
-    enrich_reviews_from_tmdb(addon, files, reviews).await;
 }
 
 #[derive(Serialize)]
@@ -932,21 +836,11 @@ pub(crate) async fn create_firkin_record(
             })
         })
         .collect();
-    let mut reviews: Vec<Review> = req
+    let reviews: Vec<Review> = req
         .reviews
         .into_iter()
         .filter_map(sanitize_review)
         .collect();
-    // Server-side OMDb enrichment for TMDB firkins. The frontend's
-    // `/catalog/visit` resolver only forwards the TMDB review snapshot
-    // from the popular endpoint; the upstream id and IMDb lookup live on
-    // the cloud, so the cloud is the right place to merge in Rotten
-    // Tomatoes / Metacritic / IMDb. Gated so callers that already passed
-    // a merged review set (e.g. tv_build via `tmdb_metadata`) don't pay
-    // a second round-trip. Failures (no OMDB_API_KEY, network error, no
-    // IMDb id) are swallowed — the firkin still gets created with
-    // whatever reviews the caller supplied.
-    maybe_backfill_omdb_reviews(addon, &files, &mut reviews).await;
     // Defaults to `true` when omitted so legacy callers keep their
     // bookmark-on-create contract; the new `/catalog/visit` resolver flow
     // sends an explicit `false` to mark the firkin as a browse cache.
@@ -1456,16 +1350,6 @@ pub(crate) async fn rollforward_firkin(
     } else {
         prior.cid.clone()
     };
-
-    // Server-side OMDb backfill for TMDB firkins minted before
-    // `OMDB_API_KEY` was set, or whose first enrichment transiently
-    // failed. Idempotent: skipped when any OMDb-sourced label is already
-    // present so subsequent rollforwards (torrent_completion file pins,
-    // tv_build episode pins, album_download tracks, files mutations,
-    // /enrich, /subtitle) don't re-hit TMDB+OMDb on every roll. Mutates
-    // `updated.reviews` before the trial CID compute so any newly added
-    // OMDb labels participate in the new content-address.
-    maybe_backfill_omdb_reviews(&updated.addon, &updated.files, &mut updated.reviews).await;
 
     // Trial-compute the new body's CID against the prior version /
     // version_hashes so a no-op mutation is detected before we touch the

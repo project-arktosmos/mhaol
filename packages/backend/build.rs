@@ -25,14 +25,10 @@ fn main() {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR not set"));
     let embedded = out_dir.join("embedded_keys.rs");
     let tmdb = env::var("TMDB_API_KEY").unwrap_or_default();
-    let omdb = env::var("OMDB_API_KEY").unwrap_or_default();
-    let generated = format!(
-        "pub const TMDB_API_KEY: &str = {tmdb:?};\npub const OMDB_API_KEY: &str = {omdb:?};\n"
-    );
+    let generated = format!("pub const TMDB_API_KEY: &str = {tmdb:?};\n");
     fs::write(&embedded, generated).expect("failed to write embedded_keys.rs");
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../frontend/dist-static");
     println!("cargo:rerun-if-env-changed=TMDB_API_KEY");
-    println!("cargo:rerun-if-env-changed=OMDB_API_KEY");
 }

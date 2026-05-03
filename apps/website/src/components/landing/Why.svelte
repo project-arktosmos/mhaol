@@ -28,7 +28,7 @@
 			body: 'There is no signup. There is no SaaS. A cryptographic identity you generate in your own browser signs you into your own cloud — export it, import it, regenerate it whenever you like. Catalog lookups, subtitles, lyrics, and torrent searches all run through your hardware, not a third party that logs them.',
 			points: [
 				'Self-owned identity (secp256k1, EIP-191) — no email, no password',
-				'TMDB / OMDb / MusicBrainz / YouTube proxied through your machine',
+				'TMDB / MusicBrainz / YouTube proxied through your machine',
 				'Subtitles and lyrics fetched on demand, then pinned locally'
 			]
 		},

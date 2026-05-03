@@ -315,22 +315,12 @@
 		return null;
 	}
 
-	const OMDB_REVIEW_LABELS = new Set(['Rotten Tomatoes', 'Metacritic', 'IMDb']);
-
 	$effect(() => {
 		const fid = firkin.id;
 		if (metadataBackfillForFirkinId === fid) return;
 		const upstreamId = metadataUpstreamId();
 		const existingReviews = firkin.reviews ?? [];
-		const reviewsMissing = existingReviews.length === 0;
-		// TMDB firkins created before OMDB_API_KEY was set (or before the key
-		// was activated) only carry the TMDB review. Re-fetch metadata so the
-		// server merges in Rotten Tomatoes / Metacritic / IMDb.
-		const omdbApplies = isTmdbMovie || isTmdbTv;
-		const omdbMissing =
-			omdbApplies &&
-			!existingReviews.some((r: { label: string }) => OMDB_REVIEW_LABELS.has(r.label));
-		const fetchReviews = reviewsMissing || omdbMissing;
+		const fetchReviews = existingReviews.length === 0;
 		const artistsMissing =
 			firkin.artists.length === 0 && (isMusicBrainz || isTmdbMovie || isTmdbTv);
 		if (!upstreamId || (!fetchReviews && !artistsMissing)) {
@@ -1130,7 +1120,8 @@
 	// sloppy naming, not complete-series torrents, so they don't suppress
 	// the per-season fan-out. searchAppend dedups by infoHash, so re-finding
 	// a torrent already in the show-wide pool is harmless.
-	let tvSeasonNumbers = $state<number[]>([]);
+	let tvSeasons = $state<Array<{ seasonNumber: number; episodeCount: number | null }>>([]);
+	const tvSeasonNumbers = $derived(tvSeasons.map((s) => s.seasonNumber));
 	let perSeasonSearched: { firkinId: string; seasons: Set<number> } | null = null;
 	const tvResultCoverage = $derived.by<{ covered: Set<number> }>(() => {
 		const covered = new Set<number>();
@@ -1141,6 +1132,26 @@
 		}
 		return { covered };
 	});
+	// Seasons whose every TMDB-listed episode is already pinned locally
+	// (an `ipfs`-typed FileEntry on the firkin tagged `S{:02}E{:02}` from a
+	// library scan or a completed torrent download). Those seasons don't
+	// need any torrent search work at all.
+	const localFullyCoveredSeasons = $derived.by(() => {
+		const out = new Set<number>();
+		for (const s of tvSeasons) {
+			if (s.episodeCount === null || s.episodeCount <= 0) continue;
+			const prefix = `S${String(s.seasonNumber).padStart(2, '0')}E`;
+			let n = 0;
+			for (const k of availableEpisodeKeys) {
+				if (k.startsWith(prefix)) n++;
+			}
+			if (n >= s.episodeCount) out.add(s.seasonNumber);
+		}
+		return out;
+	});
+	const allSeasonsLocallyCovered = $derived(
+		tvSeasons.length > 0 && tvSeasons.every((s) => localFullyCoveredSeasons.has(s.seasonNumber))
+	);
 	let addingHash = $state<string | null>(null);
 	let assignError = $state<string | null>(null);
 	let startedHashes = $state<Set<string>>(new Set());
@@ -1323,10 +1334,20 @@
 	// filled.
 	$effect(() => {
 		if (isMusicBrainz) return;
-		const movieAttachmentEmpty =
-			isTmdbMovie && (downloadInfo === null || streamInfo === null);
+		const movieAttachmentEmpty = isTmdbMovie && (downloadInfo === null || streamInfo === null);
 		if (!isTmdbTv && !hasNoRealFiles && !movieAttachmentEmpty) return;
 		if (torrentSearchInitForFirkinId === firkin.id) return;
+		// For TV, defer the auto-fire until the seasons card has reported
+		// its season list — so we can check the firkin's locally-pinned
+		// episodes against the real TMDB episode counts and skip the
+		// torrent search entirely for a fully-scanned library.
+		if (isTmdbTv) {
+			if (tvSeasons.length === 0) return;
+			if (allSeasonsLocallyCovered) {
+				torrentSearchInitForFirkinId = firkin.id;
+				return;
+			}
+		}
 		torrentSearchInitForFirkinId = firkin.id;
 		void torrentSearch.search({
 			addon: firkin.addon,
@@ -1355,6 +1376,12 @@
 			if (n <= 0) continue;
 			if (covered.has(n)) continue;
 			if (searched.has(n)) continue;
+			// Every episode in this season is already pinned locally — no
+			// point appending another search for it.
+			if (localFullyCoveredSeasons.has(n)) {
+				searched.add(n);
+				continue;
+			}
 			searched.add(n);
 			const tag = `S${String(n).padStart(2, '0')}`;
 			void torrentSearch.searchAppend(
@@ -2145,7 +2172,7 @@
 					{existingHashes}
 					{addingHash}
 					onAssign={assignTorrent}
-					onSeasonsLoaded={(nums) => (tvSeasonNumbers = nums)}
+					onSeasonsLoaded={(loaded) => (tvSeasons = loaded)}
 					{availableEpisodeKeys}
 					onPlayEpisode={playEpisode}
 				/>

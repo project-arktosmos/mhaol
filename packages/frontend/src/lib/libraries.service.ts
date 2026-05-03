@@ -77,6 +77,14 @@ export interface LastScanResult extends ScanResponse {
 	scanned_at: string;
 }
 
+export interface TvPreflightResponse {
+	tmdbId: string | null;
+	tmdbTitle: string | null;
+	tmdbYear: number | null;
+	seasonCount: number | null;
+	posterUrl: string | null;
+}
+
 export interface LibrariesState {
 	loading: boolean;
 	libraries: Library[];
@@ -170,6 +178,22 @@ class LibrariesService {
 		if (res.status === 404) return null;
 		if (!res.ok) throw new Error(await parseError(res));
 		return (await res.json()) as LastScanResult;
+	}
+
+	async tvPreflight(
+		libraryId: string,
+		show: string,
+		year: number | undefined,
+		signal?: AbortSignal
+	): Promise<TvPreflightResponse> {
+		const res = await fetch(`/api/libraries/${encodeURIComponent(libraryId)}/tv-preflight`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ show, year }),
+			signal
+		});
+		if (!res.ok) throw new Error(await parseError(res));
+		return (await res.json()) as TvPreflightResponse;
 	}
 
 	async pins(id: string): Promise<IpfsPin[]> {

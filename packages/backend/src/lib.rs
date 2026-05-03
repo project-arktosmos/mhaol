@@ -340,5 +340,4 @@ fn load_embedded_defaults() {
     }
 
     set_if_missing("TMDB_API_KEY", embedded::TMDB_API_KEY);
-    set_if_missing("OMDB_API_KEY", embedded::OMDB_API_KEY);
 }
