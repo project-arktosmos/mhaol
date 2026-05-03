@@ -1,3 +1,4 @@
+use crate::paths::data_root;
 use crate::state::CloudState;
 use axum::{
     body::Body,
@@ -19,11 +20,10 @@ struct Q {
     url: String,
 }
 
-fn cache_dir() -> Option<PathBuf> {
-    let docs = dirs::document_dir()?;
-    let dir = docs.join("mhaol-cloud").join("image-cache");
-    std::fs::create_dir_all(&dir).ok()?;
-    Some(dir)
+fn cache_dir() -> std::io::Result<PathBuf> {
+    let dir = data_root().join("image-cache");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
 }
 
 fn filename_for(url_str: &str) -> String {
@@ -59,7 +59,10 @@ async fn serve(Query(q): Query<Q>) -> Result<Response<Body>, StatusCode> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let dir = cache_dir().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let dir = cache_dir().map_err(|e| {
+        tracing::warn!("image cache dir unavailable: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     let path = dir.join(filename_for(&url));
 
     let mime = mime_guess::from_path(&path).first_or_octet_stream();
