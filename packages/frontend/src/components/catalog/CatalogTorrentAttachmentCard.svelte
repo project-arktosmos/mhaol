@@ -433,7 +433,29 @@
 {/snippet}
 
 {#snippet downloadContent()}
-	{#if downloadPicksByQuality.length > 0 && onAttachDownload}
+	{#if download && !download.ipfsCid}
+		<div class="flex flex-col items-stretch gap-1">
+			{#if download.finished}
+				<span class="text-center text-[10px] text-success">Seeding · pinning to IPFS…</span>
+			{:else if download.progress != null}
+				<progress class="progress h-1.5 w-full progress-primary" value={download.progress} max="1"
+				></progress>
+				<span class="text-center text-[10px] text-base-content/70">
+					{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
+					download.downloadSpeed > 0
+						? ` · ${formatSpeed(download.downloadSpeed)}`
+						: ''}{download.etaSeconds != null && download.etaSeconds > 0
+						? ` · ETA ${formatEta(download.etaSeconds)}`
+						: ''}
+				</span>
+			{:else}
+				<span class="text-center text-[10px] text-base-content/50">Queued</span>
+			{/if}
+			<div class="flex justify-center">
+				{@render stats(download)}
+			</div>
+		</div>
+	{:else if downloadPicksByQuality.length > 0 && onAttachDownload}
 		{@render downloadPicksTable(attachedDownloadQuality)}
 	{:else if download && download.ipfsCid && onDownloadPlay}
 		<div class="flex flex-col items-center gap-1">
@@ -456,28 +478,6 @@
 					{@render playIcon('h-4 w-4 translate-x-0.5')}
 				{/if}
 			</button>
-		</div>
-	{:else if download}
-		<div class="flex flex-col items-stretch gap-1">
-			{#if download.finished}
-				<span class="text-center text-[10px] text-success">Seeding · pinning to IPFS…</span>
-			{:else if download.progress != null}
-				<progress class="progress h-1.5 w-full progress-primary" value={download.progress} max="1"
-				></progress>
-				<span class="text-center text-[10px] text-base-content/70">
-					{Math.round(download.progress * 100)}%{download.downloadSpeed != null &&
-					download.downloadSpeed > 0
-						? ` · ${formatSpeed(download.downloadSpeed)}`
-						: ''}{download.etaSeconds != null && download.etaSeconds > 0
-						? ` · ETA ${formatEta(download.etaSeconds)}`
-						: ''}
-				</span>
-			{:else}
-				<span class="text-center text-[10px] text-base-content/50">Queued</span>
-			{/if}
-			<div class="flex justify-center">
-				{@render stats(download)}
-			</div>
 		</div>
 	{:else if preferredDownload && onAttachDownload}
 		{@const info = torrentToInfo(preferredDownload)}
