@@ -1,5 +1,4 @@
 <script lang="ts">
-	import classNames from 'classnames';
 	import { untrack, type Snippet } from 'svelte';
 	import { Icon } from 'cloud-ui';
 	import type { PlayerConnectionState } from '$types/player.type';
@@ -146,31 +145,26 @@
 </script>
 
 <div class="flex flex-col gap-1">
-	<div class={classNames({ 'pointer-events-none opacity-50': disabled })}>
-		<PlayerSeekBar
-			{positionSecs}
-			{durationSecs}
-			{bufferedRanges}
-			{disabled}
-			onseek={(pos) => onseek?.(pos)}
-			onseekstart={() => onseekstart?.()}
-			onseekend={() => onseekend?.()}
-		/>
-	</div>
+	<PlayerSeekBar
+		{positionSecs}
+		{durationSecs}
+		{bufferedRanges}
+		{disabled}
+		onseek={(pos) => onseek?.(pos)}
+		onseekstart={() => onseekstart?.()}
+		onseekend={() => onseekend?.()}
+	/>
 
 	<div class="flex items-center gap-1">
-		<div
-			class={classNames('flex items-center gap-1', {
-				'pointer-events-none opacity-50': disabled
-			})}
-		>
+		<div class="flex items-center gap-1">
 			{#if onprev}
-				<button class="btn" onclick={() => onprev?.()}>Previous</button>
+				<button class="btn" onclick={() => onprev?.()} {disabled}>Previous</button>
 			{/if}
 
 			<button
 				class="btn"
 				onclick={togglePlayPause}
+				{disabled}
 				aria-label={isPaused ? 'Play' : 'Pause'}
 				title={isPaused ? 'Play' : 'Pause'}
 			>
@@ -199,7 +193,7 @@
 			</button>
 
 			{#if onnext}
-				<button class="btn" onclick={() => onnext?.()}>Next</button>
+				<button class="btn" onclick={() => onnext?.()} {disabled}>Next</button>
 			{/if}
 		</div>
 
@@ -211,13 +205,9 @@
 			<div class="flex-1"></div>
 		{/if}
 
-		<div
-			class={classNames('flex items-center gap-1', {
-				'pointer-events-none opacity-50': disabled
-			})}
-		>
+		<div class="flex items-center gap-1">
 			{#if isVideo}
-				<button class="btn gap-2" onclick={() => onfullscreentoggle?.()}>
+				<button class="btn gap-2" onclick={() => onfullscreentoggle?.()} {disabled}>
 					<Icon name="delapouite/expand" size="1em" />
 					<span>Expand</span>
 				</button>
