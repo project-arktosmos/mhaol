@@ -4,7 +4,6 @@
 	type Platform = {
 		icon: IconName;
 		title: string;
-		artifact: string;
 		intro: string;
 		steps: string[];
 		callout?: string;
@@ -14,7 +13,6 @@
 		{
 			icon: 'delapouite/apple-core',
 			title: 'macOS',
-			artifact: 'Mhaol-Cloud.dmg',
 			intro:
 				'Gatekeeper blocks the first launch with “Apple could not verify Mhaol Cloud is free of malware”. Two ways past it:',
 			steps: [
@@ -29,7 +27,6 @@
 		{
 			icon: 'delapouite/computer-fan',
 			title: 'Windows',
-			artifact: 'Mhaol-Cloud-Setup.msi · Mhaol-Cloud-Setup.exe',
 			intro:
 				'SmartScreen pops up “Windows protected your PC” because the installer isn’t Authenticode-signed. To allow it through:',
 			steps: [
@@ -44,7 +41,6 @@
 		{
 			icon: 'lorc/android-mask',
 			title: 'Android (mobile + TV)',
-			artifact: 'mhaol-android-mobile.apk · mhaol-android-tv.apk',
 			intro:
 				'Sideloading an unsigned APK requires two grants: per-source “install unknown apps” permission, and a Play Protect bypass.',
 			steps: [
@@ -95,7 +91,6 @@
 						</div>
 						<div class="min-w-0 flex-1">
 							<div class="font-semibold">{platform.title}</div>
-							<div class="font-mono text-xs text-base-content/60">{platform.artifact}</div>
 						</div>
 					</div>
 
