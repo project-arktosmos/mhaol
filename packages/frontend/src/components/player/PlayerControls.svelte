@@ -1,6 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { untrack, type Snippet } from 'svelte';
+	import { Icon } from 'cloud-ui';
 	import type { PlayerConnectionState } from '$types/player.type';
 	import PlayerSeekBar from './PlayerSeekBar.svelte';
 
@@ -200,10 +201,6 @@
 			{#if onnext}
 				<button class="btn" onclick={() => onnext?.()}>Next</button>
 			{/if}
-
-			<button class="btn" onclick={toggleMute}>
-				{volumeDisplay === 'muted' ? 'Unmute' : 'Mute'}
-			</button>
 		</div>
 
 		{#if extraControls}
@@ -220,12 +217,11 @@
 			})}
 		>
 			{#if isVideo}
-				<button class="btn" onclick={() => onfullscreentoggle?.()}>
-					{isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+				<button class="btn gap-2" onclick={() => onfullscreentoggle?.()}>
+					<Icon name="delapouite/expand" size="1em" />
+					<span>Expand</span>
 				</button>
 			{/if}
-
-			<button class="btn" onclick={() => onstop?.()}>Stop</button>
 		</div>
 	</div>
 </div>
