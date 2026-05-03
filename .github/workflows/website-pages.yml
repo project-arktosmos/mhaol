@@ -1,0 +1,83 @@
+name: Website (deploy on release to GitHub Pages)
+
+# Builds apps/website (mhaol-website) and deploys it to GitHub Pages whenever
+# a release is published — same trigger as `release-tauri-cloud.yml`, so the
+# public website always reflects the most recent shipped version.
+#
+# One-time repo setup: Settings → Pages → Build and deployment →
+# Source = "GitHub Actions". The workflow handles everything else.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: website-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build website
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter mhaol-website lint
+
+      - name: Type-check
+        run: pnpm --filter mhaol-website check
+
+      - name: Build
+        env:
+          # GitHub Pages serves project sites at https://<owner>.github.io/<repo>/
+          # so the SPA needs to know its base path at build time. svelte.config.js
+          # already reads BASE_PATH; we feed it the repo name here.
+          BASE_PATH: /${{ github.event.repository.name }}
+        run: pnpm --filter mhaol-website build
+
+      - name: Add SPA fallback (404.html)
+        # GitHub Pages serves 404.html for any path it doesn't recognise — by
+        # copying the SPA shell there, deep links keep working through the
+        # client router.
+        run: cp apps/website/dist-static/index.html apps/website/dist-static/404.html
+
+      - name: Disable Jekyll
+        # svelte.config.js sets appDir: 'app' (not '_app') so Jekyll
+        # underscore-stripping is already avoided, but .nojekyll is the
+        # canonical kill-switch and makes the intent explicit.
+        run: touch apps/website/dist-static/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/website/dist-static
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

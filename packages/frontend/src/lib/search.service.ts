@@ -47,6 +47,35 @@ export interface MatchTorrentsOptions {
 	 * air year, not the show's first-aired year, so dropping them by year
 	 * mismatch loses every season after S1. */
 	skipYearFilter?: boolean;
+	/** Drop torrents whose title looks like a TV release (`SxxExx`, `Season N`,
+	 * `Complete Series`). Set when the source firkin is a movie so a query
+	 * for "Superman" doesn't pull "My Adventures with Superman S02E09" back. */
+	excludeTvSeries?: boolean;
+}
+
+const TV_RELEASE_RE = /\b(?:s\d{1,2}e\d{1,3}|s\d{1,2}(?!\d)|season\s*\d+|complete\s+series)\b/i;
+const LEADING_ARTICLES = new Set(['the', 'a', 'an']);
+
+function stripLeadingArticle(words: string[]): string[] {
+	return words.length > 1 && LEADING_ARTICLES.has(words[0]) ? words.slice(1) : words;
+}
+
+/// True when the torrent's parsed title begins with the target title's words.
+/// "Superman" matches "Superman 2025 1080p" but not "My Adventures with
+/// Superman S02E09" — the latter's first word is `my`, not `superman`. A
+/// leading article (`the`/`a`/`an`) on either side is ignored so "The Matrix"
+/// and "Matrix" align.
+function torrentTitleStartsWithTarget(torrentTitle: string, target: string[]): boolean {
+	if (target.length === 0) return false;
+	const torrentWords = stripLeadingArticle(
+		torrentTitle.split(' ').filter((w) => w.length > 0)
+	);
+	const targetWords = stripLeadingArticle(target);
+	if (torrentWords.length < targetWords.length) return false;
+	for (let i = 0; i < targetWords.length; i++) {
+		if (torrentWords[i] !== targetWords[i]) return false;
+	}
+	return true;
 }
 
 export function matchTorrentsForResult(
@@ -56,14 +85,14 @@ export function matchTorrentsForResult(
 ): TorrentResultItem[] {
 	const targetWords = normalizeForMatch(result.title)
 		.split(' ')
-		.filter((w) => w.length > 1);
+		.filter((w) => w.length > 0);
 	if (targetWords.length === 0) return [];
 	const matches: TorrentResultItem[] = [];
 	for (const t of torrents) {
+		if (options.excludeTvSeries && TV_RELEASE_RE.test(t.title)) continue;
 		const torrentTitle = normalizeForMatch(t.parsedTitle || t.title);
 		if (!torrentTitle) continue;
-		const hits = targetWords.filter((w) => torrentTitle.includes(w)).length;
-		if (hits / targetWords.length < 0.7) continue;
+		if (!torrentTitleStartsWithTarget(torrentTitle, targetWords)) continue;
 		if (
 			!options.skipYearFilter &&
 			result.year != null &&
