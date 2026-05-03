@@ -9,7 +9,7 @@
 	};
 
 	const kinds: Kind[] = [
-		{ icon: 'delapouite/popcorn', label: 'Movies', source: 'TMDB · OMDb' },
+		{ icon: 'delapouite/popcorn', label: 'Movies', source: 'TMDB' },
 		{ icon: 'delapouite/film-strip', label: 'TV shows', source: 'TMDB' },
 		{ icon: 'delapouite/musical-notes', label: 'Music', source: 'MusicBrainz · LRCLIB' },
 		{ icon: 'delapouite/tv', label: 'YouTube', source: 'yt-dlp · InnerTube' },

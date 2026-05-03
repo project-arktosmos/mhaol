@@ -14,16 +14,6 @@
 				}
 			]
 		},
-		"omdb": {
-			"source": "addon",
-			"settings": [
-				{
-					"key": "omdb.apiKey",
-					"default": "",
-					"envKey": "OMDB_API_KEY"
-				}
-			]
-		},
 		"torrent-search-thepiratebay": {
 			"source": "addon"
 		},
@@ -48,10 +38,6 @@
 		"./tmdb/types": "./tmdb/src/types.ts",
 		"./tmdb/transform": "./tmdb/src/transform.ts",
 		"./tmdb/cache-repository": "./tmdb/src/cache-repository.ts",
-		"./omdb": "./omdb/src/index.ts",
-		"./omdb/types": "./omdb/src/types.ts",
-		"./omdb/transform": "./omdb/src/transform.ts",
-		"./omdb/client": "./omdb/src/client.ts",
 		"./torrent-search-thepiratebay": "./torrent-search-thepiratebay/src/index.ts",
 		"./torrent-search-thepiratebay/types": "./torrent-search-thepiratebay/src/types.ts",
 		"./torrent-search-thepiratebay/format": "./torrent-search-thepiratebay/src/format.ts",
