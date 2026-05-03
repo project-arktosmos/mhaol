@@ -46,11 +46,11 @@ jobs:
         run: pnpm --filter mhaol-website check
 
       - name: Build
-        env:
-          # GitHub Pages serves project sites at https://<owner>.github.io/<repo>/
-          # so the SPA needs to know its base path at build time. svelte.config.js
-          # already reads BASE_PATH; we feed it the repo name here.
-          BASE_PATH: /${{ github.event.repository.name }}
+        # The site is served from the root of the custom domain
+        # (mhaol.bearni.io) so BASE_PATH stays empty — svelte.config.js
+        # falls back to '' when unset, which produces root-relative asset
+        # URLs. If you ever drop the custom domain and host at
+        # https://<owner>.github.io/<repo>/, set BASE_PATH=/<repo> here.
         run: pnpm --filter mhaol-website build
 
       - name: Add SPA fallback (404.html)
