@@ -2083,7 +2083,7 @@
 							trailerOptions={isYoutubeVideo ? [] : playableTrailers}
 							{selectedTrailerKey}
 							onTrailerSelect={(k) => (selectedTrailerKey = k)}
-							playOverlay={isTmdbMovie ? torrentAttachmentOverlay : undefined}
+							playOverlay={isTmdbMovie || isTmdbTv ? torrentAttachmentOverlay : undefined}
 						/>
 					{:else if firkin.images[1]}
 						<img
