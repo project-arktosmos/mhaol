@@ -2115,6 +2115,8 @@
 							}))
 						: []}
 					onTrailerPlay={playTrailerByKey}
+					streamEnabled={!isTmdbTv}
+					downloadEnabled={!isTmdbTv}
 					download={downloadInfo}
 					stream={streamInfo}
 					onStreamPlay={replayStreamMagnet}
