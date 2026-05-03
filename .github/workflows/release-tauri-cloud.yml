@@ -154,7 +154,24 @@ jobs:
       - name: Install JS deps
         run: pnpm install --frozen-lockfile
 
-      - uses: dtolnay/rust-toolchain@stable
+      # On Windows the cloud shell builds for the GNU ABI (x86_64-pc-windows-gnu)
+      # so it can link against MSYS2's MinGW GStreamer. The `winres` /
+      # `embed-resource` crates pick MSVC vs GNU resource tooling from the
+      # **host** triple (HOST env var), not the target — so installing the
+      # default stable-x86_64-pc-windows-msvc host produces an MSVC-format
+      # `resource.lib` the mingw linker can't consume ("file not recognized").
+      # Pin the host toolchain to GNU so winres invokes `windres` and emits
+      # a COFF object instead.
+      - name: Install Rust (Windows GNU host)
+        if: matrix.app == 'cloud' && startsWith(matrix.platform, 'windows')
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable-x86_64-pc-windows-gnu
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Install Rust (default host)
+        if: '!(matrix.app == ''cloud'' && startsWith(matrix.platform, ''windows''))'
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_targets }}
 
