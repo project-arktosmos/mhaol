@@ -7,6 +7,8 @@
 		{ src: 'mhaol-catalog.png', label: 'Catalog' },
 		{ src: 'mhaol-catalog-posters.png', label: 'Catalog · Poster view' },
 		{ src: 'mhaol-movies.png', label: 'Movies' },
+		{ src: 'mhaol-movie-detail.png', label: 'Fight Club · Stream' },
+		{ src: 'mhaol-movie-playing.png', label: 'Fight Club · Playing' },
 		{ src: 'mhaol-album-detail.png', label: 'She Wolf' }
 	];
 
