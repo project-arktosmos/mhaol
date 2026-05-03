@@ -144,12 +144,10 @@
 	function playByKey(key: string): void {
 		const target = trailerOptions.find((t) => t.key === key);
 		if (!target) return;
-		if (target.youtubeUrl === youtubeUrl && streamUrl) {
-			handleStart();
-			return;
-		}
 		pendingPlayKey = key;
-		onTrailerSelect?.(key);
+		if (target.youtubeUrl !== youtubeUrl) {
+			onTrailerSelect?.(key);
+		}
 	}
 
 	$effect(() => {
@@ -249,7 +247,7 @@
 			></div>
 		{/if}
 
-		{#if !started && (streamUrl || posterUrl)}
+		{#if !started && !starting && !pendingPlayKey && (streamUrl || posterUrl)}
 			{#if playOverlay}
 				<div
 					class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
