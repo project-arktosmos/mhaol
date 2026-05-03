@@ -22,7 +22,8 @@
 		onnext,
 		onpaused,
 		onvolumechange,
-		extraControls
+		extraControls,
+		onWrapperFullscreenToggle
 	}: {
 		mediaElement?: HTMLMediaElement | null;
 		isVideo?: boolean;
@@ -54,6 +55,13 @@
 		 * buttons inline in the player controls.
 		 */
 		extraControls?: Snippet;
+		/**
+		 * Browser-native fullscreen toggle for the player **including** its
+		 * custom controls (seek bar + button row). Wires to a wrapper element
+		 * the parent passes to `document.requestFullscreen()`. Renders a
+		 * second fullscreen button (cinema icon) next to Expand when set.
+		 */
+		onWrapperFullscreenToggle?: () => void;
 	} = $props();
 
 	let isPaused = $state(true);
@@ -209,6 +217,17 @@
 					<Icon name="delapouite/expand" size="1em" />
 					<span>Expand</span>
 				</button>
+				{#if onWrapperFullscreenToggle}
+					<button
+						class="btn gap-2"
+						onclick={() => onWrapperFullscreenToggle?.()}
+						{disabled}
+						aria-label="Fullscreen"
+					>
+						<Icon name="delapouite/theater-curtains" size="1em" />
+						<span>Fullscreen</span>
+					</button>
+				{/if}
 			{/if}
 		</div>
 	</div>

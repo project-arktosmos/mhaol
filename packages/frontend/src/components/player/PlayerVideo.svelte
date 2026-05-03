@@ -232,6 +232,17 @@
 		return () => document.removeEventListener('keydown', handleFullscreenKeydown);
 	});
 
+	let wrapperElement = $state<HTMLDivElement | null>(null);
+	function toggleWrapperFullscreen(): void {
+		const wrapper = wrapperElement;
+		if (!wrapper) return;
+		if (document.fullscreenElement === wrapper) {
+			void document.exitFullscreen();
+		} else {
+			void wrapper.requestFullscreen();
+		}
+	}
+
 	// Direct URL playback (yt-dlp): set src= on the video element. The same
 	// element handles audio-only sources too (the music-icon overlay covers
 	// the empty video frame).
@@ -671,6 +682,7 @@
 </script>
 
 <div
+	bind:this={wrapperElement}
 	class={classNames({
 		'fixed inset-0 z-50 flex flex-col bg-black': isFullscreen,
 		'flex h-full flex-col': !isFullscreen && fullscreen
@@ -814,6 +826,7 @@
 			onseekstart={handleSeekStart}
 			onstop={handleStop}
 			onfullscreentoggle={toggleFullscreen}
+			onWrapperFullscreenToggle={toggleWrapperFullscreen}
 			onpaused={(paused) => playerService.setPaused(paused)}
 			onvolumechange={(v) => playerService.setVolume(v)}
 			{onprev}

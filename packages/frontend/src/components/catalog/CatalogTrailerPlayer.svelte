@@ -189,9 +189,22 @@
 		}
 	}
 
+	let wrapperElement = $state<HTMLDivElement | null>(null);
+	function toggleWrapperFullscreen(): void {
+		const wrapper = wrapperElement;
+		if (!wrapper) return;
+		if (document.fullscreenElement === wrapper) {
+			void document.exitFullscreen();
+		} else {
+			void wrapper.requestFullscreen();
+		}
+	}
+
 	$effect(() => {
 		const onChange = () => {
-			isFullscreen = document.fullscreenElement === containerElement;
+			isFullscreen =
+				document.fullscreenElement === containerElement ||
+				document.fullscreenElement === wrapperElement;
 		};
 		document.addEventListener('fullscreenchange', onChange);
 		return () => document.removeEventListener('fullscreenchange', onChange);
@@ -204,7 +217,7 @@
 	const synthConnectionState = $derived<'idle' | 'streaming'>(streamUrl ? 'streaming' : 'idle');
 </script>
 
-<div class="flex flex-col gap-1">
+<div class="flex flex-col gap-1" bind:this={wrapperElement}>
 	<div
 		bind:this={containerElement}
 		class={classNames(
@@ -310,6 +323,7 @@
 		onseek={handleSeek}
 		onstop={handleStop}
 		onfullscreentoggle={toggleFullscreen}
+		onWrapperFullscreenToggle={toggleWrapperFullscreen}
 		{extraControls}
 	/>
 </div>
