@@ -49,6 +49,16 @@ In a **release** bundle (`.app` / `.msi` / `.deb` / `.AppImage`) there is no Vit
 - `devUrl`: `http://localhost:9898` — points at the Vite dev server (which proxies `/api` → `127.0.0.1:9899`).
 - `beforeBuildCommand`: `pnpm --filter frontend build` — runs the SPA build before `cargo tauri build` packages the bundle.
 
+## Windows runtime DLL bundling
+
+The Windows release in `.github/workflows/release-tauri-cloud.yml` builds the cloud bin against MSYS2's MinGW GStreamer (target `x86_64-pc-windows-gnu`), so the .exe links against `libglib-2.0-0.dll`, `libgstreamer-1.0-0.dll`, `libwinpthread-1.dll` and friends from `/mingw64/bin/`. None of those DLLs exist on a clean Windows machine. To ship a self-contained installer the workflow splits the Windows build into three steps:
+
+1. `cargo tauri build --target x86_64-pc-windows-gnu --no-bundle` — compile the .exe only.
+2. `bash apps/cloud/scripts/stage-windows-runtime.sh` (run in `msys2 {0}`) — uses `ntldd -R` to walk the .exe's transitive DLL graph, copies every dependency from `/mingw64/bin/` into `apps/cloud/runtime-windows/`, then writes `apps/cloud/tauri.windows.conf.json` with a `bundle.resources` map that pins each DLL to the install root (`$INSTDIR\<dllname>`) so Windows' default DLL search resolves them.
+3. `cargo tauri bundle --target x86_64-pc-windows-gnu --config tauri.windows.conf.json` — produce the NSIS .exe and MSI installer with the staged DLLs included.
+
+Both `apps/cloud/runtime-windows/` and `apps/cloud/tauri.windows.conf.json` are generated artifacts and are gitignored at the repo root. Non-Windows builds are unaffected — the script no-ops on macOS / Linux hosts.
+
 ## image_cache Tauri command
 
 `apps/cloud/src/image_cache.rs` registers `image_cache_resolve(url)` as a Tauri IPC command. The frontend's `<TauriImage>` component (when running inside the Tauri shell — though currently the shell never opens a window so this code path is dormant) can call it to fetch + cache remote images on disk under `<documents>/mhaol-cloud/image-cache/`. SHA3-256 of the URL becomes the on-disk filename, with the URL's path extension preserved when reasonable. Cache hits return the bytes directly; misses fetch via `reqwest` and write to disk before returning.

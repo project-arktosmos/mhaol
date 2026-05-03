@@ -184,8 +184,8 @@ jobs:
         if: matrix.app == 'cloud'
         run: cargo install --locked tauri-cli --version "^2"
 
-      - name: Build cloud Tauri bundle
-        if: matrix.app == 'cloud'
+      - name: Build cloud Tauri bundle (non-Windows)
+        if: matrix.app == 'cloud' && !startsWith(matrix.platform, 'windows')
         working-directory: apps/cloud
         shell: bash
         run: |
@@ -194,6 +194,32 @@ jobs:
           else
             cargo tauri build
           fi
+
+      # On Windows the .exe links against MSYS2's MinGW GStreamer / GLib
+      # (libglib-2.0-0.dll, libgstreamer-1.0-0.dll, libwinpthread-1.dll, …).
+      # Those DLLs live in /mingw64/bin on the build host and are NOT on a
+      # clean end-user Windows machine. Without bundling them the installed
+      # app fails to launch with "the code execution cannot proceed because
+      # libglib-2.0-0.dll was not found". Split the build so we can stage
+      # the MinGW runtime alongside the .exe before NSIS / WiX bundles it.
+      - name: Compile cloud binary (Windows, no bundle)
+        if: matrix.app == 'cloud' && startsWith(matrix.platform, 'windows')
+        working-directory: apps/cloud
+        shell: bash
+        run: cargo tauri build --target ${{ matrix.tauri_target }} --no-bundle
+
+      - name: Stage MinGW runtime DLLs (Windows)
+        if: matrix.app == 'cloud' && startsWith(matrix.platform, 'windows')
+        shell: msys2 {0}
+        env:
+          TAURI_TARGET: ${{ matrix.tauri_target }}
+        run: bash apps/cloud/scripts/stage-windows-runtime.sh
+
+      - name: Bundle cloud installers (Windows)
+        if: matrix.app == 'cloud' && startsWith(matrix.platform, 'windows')
+        working-directory: apps/cloud
+        shell: bash
+        run: cargo tauri bundle --target ${{ matrix.tauri_target }} --config tauri.windows.conf.json
 
       - name: Build headless bin
         if: matrix.app == 'headless'

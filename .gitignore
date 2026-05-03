@@ -58,6 +58,10 @@ downloads/
 # Prebuilt binaries
 apps/video/bin/
 
+# Windows runtime DLLs staged by apps/cloud/scripts/stage-windows-runtime.sh
+apps/cloud/runtime-windows/
+apps/cloud/tauri.windows.conf.json
+
 # Android signing
 keystore.properties
 *.jks
