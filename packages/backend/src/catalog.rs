@@ -876,10 +876,36 @@ pub(crate) async fn tmdb_metadata(
     let trailers = parse_tmdb_videos(&videos);
     let mut reviews = parse_tmdb_reviews(&payload);
 
-    if let Some(imdb_id) = extract_imdb_id(&payload) {
-        let mut omdb_reviews = fetch_omdb_reviews(&imdb_id).await;
-        merge_reviews(&mut reviews, &mut omdb_reviews);
+    let mut omdb_reviews = if let Some(imdb_id) = extract_imdb_id(&payload) {
+        fetch_omdb_reviews_by_imdb_id(&imdb_id).await
+    } else {
+        Vec::new()
+    };
+    // Fallback: if TMDB didn't return an IMDb id (newer / obscure titles)
+    // or the IMDb-keyed lookup came back empty, try OMDb's title+year
+    // search so movie / TV firkins still get Rotten Tomatoes / Metacritic
+    // / IMDb labels.
+    if omdb_reviews.is_empty() {
+        let title = payload
+            .get(if is_tv { "name" } else { "title" })
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let year = payload
+            .get(if is_tv { "first_air_date" } else { "release_date" })
+            .and_then(|v| v.as_str())
+            .and_then(|d| d.get(0..4))
+            .and_then(|y| y.parse::<i32>().ok());
+        if let Some(t) = title {
+            omdb_reviews = fetch_omdb_reviews_by_title(&t, year, is_tv).await;
+        } else {
+            tracing::warn!(
+                "[catalog] OMDb skipped for {kind} {id}: no title in TMDB payload",
+                kind = if is_tv { "tv" } else { "movie" }
+            );
+        }
     }
+    merge_reviews(&mut reviews, &mut omdb_reviews);
 
     Ok((artists, trailers, reviews))
 }
@@ -911,10 +937,12 @@ fn extract_imdb_id(payload: &serde_json::Value) -> Option<String> {
 /// (Rotten Tomatoes, Metacritic, IMDb) on success, or an empty vec on
 /// any failure mode — missing `OMDB_API_KEY`, network error, OMDb
 /// `Response: "False"`, etc. — so the TMDB metadata flow stays robust
-/// to a degraded enricher.
-async fn fetch_omdb_reviews(imdb_id: &str) -> Vec<CatalogReview> {
+/// to a degraded enricher. Logs every failure mode at `warn` so a silent
+/// no-op is diagnosable from `logs/cloud.log` without redeploying.
+async fn fetch_omdb_reviews_by_imdb_id(imdb_id: &str) -> Vec<CatalogReview> {
     let api_key = std::env::var("OMDB_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
+        tracing::warn!("[catalog] OMDb lookup skipped for imdb={imdb_id}: OMDB_API_KEY is empty");
         return Vec::new();
     }
     let url = format!(
@@ -923,19 +951,111 @@ async fn fetch_omdb_reviews(imdb_id: &str) -> Vec<CatalogReview> {
         urlencoding(imdb_id),
         urlencoding(&api_key)
     );
-    let payload: serde_json::Value = match http_get_json(&url, &[("Accept", "application/json")]).await {
-        Ok(p) => p,
-        Err(_) => return Vec::new(),
-    };
+    let payload: serde_json::Value =
+        match http_get_json(&url, &[("Accept", "application/json")]).await {
+            Ok(p) => p,
+            Err((status, body)) => {
+                tracing::warn!(
+                    "[catalog] OMDb HTTP failed for imdb={imdb_id}: {status} {body:?}",
+                    body = body.0
+                );
+                return Vec::new();
+            }
+        };
     if payload
         .get("Response")
         .and_then(|v| v.as_str())
         .map(|s| s.eq_ignore_ascii_case("True"))
         != Some(true)
     {
+        let err = payload
+            .get("Error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(no Error field)");
+        tracing::warn!("[catalog] OMDb returned no data for imdb={imdb_id}: {err}");
         return Vec::new();
     }
-    parse_omdb_reviews(&payload)
+    let reviews = parse_omdb_reviews(&payload);
+    if reviews.is_empty() {
+        tracing::warn!(
+            "[catalog] OMDb returned Response=True but parsed 0 reviews for imdb={imdb_id}"
+        );
+    } else {
+        tracing::info!(
+            "[catalog] OMDb returned {} review(s) for imdb={imdb_id}: {:?}",
+            reviews.len(),
+            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
+        );
+    }
+    reviews
+}
+
+/// Title+year fallback for OMDb when TMDB didn't return an IMDb id (or
+/// the IMDb-keyed lookup came back empty). Uses OMDb's `t=` search with
+/// `type=movie|series` and an optional `y=` to disambiguate. Same robust
+/// failure-handling shape as [`fetch_omdb_reviews_by_imdb_id`].
+async fn fetch_omdb_reviews_by_title(
+    title: &str,
+    year: Option<i32>,
+    is_tv: bool,
+) -> Vec<CatalogReview> {
+    let api_key = std::env::var("OMDB_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        tracing::warn!(
+            "[catalog] OMDb title-fallback skipped for title={title:?}: OMDB_API_KEY is empty"
+        );
+        return Vec::new();
+    }
+    let kind = if is_tv { "series" } else { "movie" };
+    let mut url = format!(
+        "{}/?t={}&type={}&apikey={}",
+        OMDB_BASE,
+        urlencoding(title),
+        kind,
+        urlencoding(&api_key)
+    );
+    if let Some(y) = year {
+        url.push_str(&format!("&y={y}"));
+    }
+    let payload: serde_json::Value =
+        match http_get_json(&url, &[("Accept", "application/json")]).await {
+            Ok(p) => p,
+            Err((status, body)) => {
+                tracing::warn!(
+                    "[catalog] OMDb title-fallback HTTP failed for title={title:?} year={year:?}: {status} {body:?}",
+                    body = body.0
+                );
+                return Vec::new();
+            }
+        };
+    if payload
+        .get("Response")
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case("True"))
+        != Some(true)
+    {
+        let err = payload
+            .get("Error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(no Error field)");
+        tracing::warn!(
+            "[catalog] OMDb title-fallback returned no data for title={title:?} year={year:?}: {err}"
+        );
+        return Vec::new();
+    }
+    let reviews = parse_omdb_reviews(&payload);
+    if reviews.is_empty() {
+        tracing::warn!(
+            "[catalog] OMDb title-fallback Response=True but parsed 0 reviews for title={title:?} year={year:?}"
+        );
+    } else {
+        tracing::info!(
+            "[catalog] OMDb title-fallback returned {} review(s) for title={title:?} year={year:?}: {:?}",
+            reviews.len(),
+            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
+        );
+    }
+    reviews
 }
 
 /// Project an OMDb response's `Ratings` array (plus the root-level

@@ -261,8 +261,22 @@ async fn enrich_reviews_from_tmdb(addon: &str, files: &[FileEntry], reviews: &mu
         }
     }
     let added = reviews.len().saturating_sub(before);
+    let omdb_labels_present: Vec<&str> = reviews
+        .iter()
+        .map(|r| r.label.as_str())
+        .filter(|l| OMDB_REVIEW_LABELS.iter().any(|o| *o == *l))
+        .collect();
     if added == 0 {
-        tracing::debug!("[firkins] tmdb_metadata({addon}, {id}) returned no new review labels");
+        tracing::warn!(
+            "[firkins] tmdb_metadata({addon}, {id}) added 0 reviews; current labels {:?}; OMDb labels present: {:?}",
+            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(),
+            omdb_labels_present
+        );
+    } else if omdb_labels_present.is_empty() {
+        tracing::warn!(
+            "[firkins] tmdb_metadata({addon}, {id}) added {added} review label(s) but no OMDb-sourced labels landed; current labels {:?}",
+            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
+        );
     } else {
         tracing::info!(
             "[firkins] OMDb-enriched {addon} {id}: appended {added} review label(s) (now {:?})",
