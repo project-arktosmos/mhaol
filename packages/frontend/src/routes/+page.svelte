@@ -45,6 +45,19 @@
 	});
 	const isAllMode = $derived(addon === 'all');
 
+	// In all-mode, the navbar search input acts as a free-text filter over
+	// the firkins shown in each row (matches title + description). Empty
+	// query means "no filter".
+	const allModeFilter = $derived(
+		isAllMode ? (pageStore.url.searchParams.get('q') ?? '').trim().toLowerCase() : ''
+	);
+
+	function matchesAllModeFilter(firkin: Firkin): boolean {
+		if (allModeFilter === '') return true;
+		const haystack = `${firkin.title}\n${firkin.description}`.toLowerCase();
+		return haystack.includes(allModeFilter);
+	}
+
 	let genres = $state<CatalogGenre[]>([]);
 
 	const currentSource = $derived(sources.find((s) => s.id === addon));
@@ -304,7 +317,7 @@
 
 	{#if isAllMode}
 		{#each sources as source (source.id)}
-			{@const sourceFirkins = libraryFirkinsFor(source.id)}
+			{@const sourceFirkins = libraryFirkinsFor(source.id).filter(matchesAllModeFilter)}
 			{#if sourceFirkins.length > 0}
 				<LazyRow>
 					<section class="flex flex-col gap-3">

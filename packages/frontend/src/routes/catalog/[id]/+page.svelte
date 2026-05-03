@@ -1547,6 +1547,46 @@
 	let attachingSubtitle = $state<boolean>(false);
 	let attachSubtitleError = $state<string | null>(null);
 
+	// All subtitle hits, grouped by language in `SUBTITLE_LANGUAGES` order so
+	// the consolidated `<select>` can render one `<optgroup>` per language.
+	// Within each group, rows are re-ordered so the best release-match for
+	// the attached torrent's title bubbles to the top (mirrors the old
+	// per-language list behaviour).
+	const subsByLanguage = $derived.by<
+		Array<{ code: string; label: string; subs: SubsLyricsItem[] }>
+	>(() => {
+		const torrentTitle = firstMagnet
+			? (firkin.files.find((f) => f.type === 'torrent magnet' && f.value === firstMagnet)?.title ??
+				firkin.title)
+			: null;
+		const groups: Array<{ code: string; label: string; subs: SubsLyricsItem[] }> = [];
+		for (const lang of SUBTITLE_LANGUAGES) {
+			let subs = subsLyricsResolver.results.filter(
+				(r) => (r.language ?? '').toLowerCase() === lang.code.toLowerCase()
+			);
+			if (torrentTitle && subs.length > 0) {
+				const matched = matchSubsToTorrent(torrentTitle, subs);
+				if (matched.length > 0) {
+					const seen = new Set<SubsLyricsItem>();
+					const ordered: SubsLyricsItem[] = [];
+					for (const m of matched) {
+						if (!seen.has(m.sub)) {
+							seen.add(m.sub);
+							ordered.push(m.sub);
+						}
+					}
+					for (const s of subs) {
+						if (!seen.has(s)) ordered.push(s);
+					}
+					subs = ordered;
+				}
+			}
+			if (subs.length > 0) groups.push({ code: lang.code, label: lang.label, subs });
+		}
+		return groups;
+	});
+	const totalSubsCount = $derived(subsByLanguage.reduce((sum, g) => sum + g.subs.length, 0));
+
 	const subsForLanguage = $derived.by<SubsLyricsItem[]>(() => {
 		const lang = selectedSubLanguage;
 		const all = subsLyricsResolver.results.filter(
@@ -1943,95 +1983,67 @@
 		<section class="flex w-full flex-col gap-6 lg:col-span-2">
 			{#if anyTabEnabled}
 				<div class="flex flex-col gap-2">
-					{#if subPickerEnabled}
-						<div
-							class="flex flex-wrap items-center gap-2 rounded border border-base-content/10 bg-base-200 px-2 py-1.5 text-xs"
-						>
-							<span class="font-semibold text-base-content/70 uppercase">Subtitles</span>
-							<select
-								class="select-bordered select select-xs"
-								value={selectedSubLanguage}
-								onchange={(e) => {
-									selectedSubLanguage = (e.currentTarget as HTMLSelectElement).value;
-								}}
-								aria-label="Subtitle language"
-							>
-								{#each SUBTITLE_LANGUAGES as opt (opt.code)}
-									<option value={opt.code}>{opt.label}</option>
-								{/each}
-							</select>
-							<select
-								class="select-bordered select min-w-0 flex-1 select-xs"
-								value={selectedSubExternalId ?? ''}
-								disabled={subsLyricsResolver.status === 'searching' || subsForLanguage.length === 0}
-								onchange={(e) => {
-									const v = (e.currentTarget as HTMLSelectElement).value;
-									selectedSubExternalId = v === '' ? null : v;
-								}}
-								aria-label="Subtitle pick"
-							>
-								<option value=""
-									>{subsLyricsResolver.status === 'searching'
-										? 'Searching…'
-										: subsForLanguage.length === 0
-											? 'No matches'
-											: 'Pick a subtitle…'}</option
+					{#snippet subtitlePicker()}
+						<div class="flex flex-col items-end gap-0.5">
+							<span class="text-[10px] font-semibold text-base-content/70 uppercase">
+								Subtitles
+							</span>
+							<div class="flex items-center gap-2">
+								<select
+									class="select-bordered select select-xs"
+									value={selectedSubExternalId
+										? `${selectedSubLanguage}:${selectedSubExternalId}`
+										: ''}
+									disabled={subsLyricsResolver.status === 'searching' ||
+										totalSubsCount === 0 ||
+										attachingSubtitle}
+									onchange={(e) => {
+										const v = (e.currentTarget as HTMLSelectElement).value;
+										if (!v) {
+											selectedSubExternalId = null;
+											return;
+										}
+										const colon = v.indexOf(':');
+										if (colon < 0) return;
+										selectedSubLanguage = v.slice(0, colon);
+										selectedSubExternalId = v.slice(colon + 1);
+										if (!isSubtitleAttached) {
+											void attachSelectedSubtitle();
+										}
+									}}
+									aria-label="Subtitle pick"
 								>
-								{#each subsForLanguage as item (item.externalId)}
-									<option value={item.externalId}>{item.release ?? `#${item.externalId}`}</option>
-								{/each}
-							</select>
-							<button
-								type="button"
-								class="btn btn-xs btn-primary"
-								disabled={!selectedSubExternalId || attachingSubtitle || isSubtitleAttached}
-								onclick={attachSelectedSubtitle}
-							>
-								{#if attachingSubtitle}
-									Downloading…
-								{:else if isSubtitleAttached}
-									Attached
-								{:else}
-									Use subtitle
+									<option value=""
+										>{subsLyricsResolver.status === 'searching'
+											? 'Searching…'
+											: totalSubsCount === 0
+												? 'No matches'
+												: attachingSubtitle
+													? 'Downloading…'
+													: 'Pick a subtitle…'}</option
+									>
+									{#each subsByLanguage as group (group.code)}
+										<optgroup label={group.label}>
+											{#each group.subs as item (item.externalId)}
+												<option value={`${group.code}:${item.externalId}`}>
+													{item.release ?? `#${item.externalId}`}
+												</option>
+											{/each}
+										</optgroup>
+									{/each}
+								</select>
+								{#if subsLyricsResolver.status === 'error'}
+									<span class="text-xs text-error" title={subsLyricsResolver.error ?? ''}>
+										Search failed
+									</span>
 								{/if}
-							</button>
-							{#if subsLyricsResolver.status === 'error'}
-								<span class="text-error" title={subsLyricsResolver.error ?? ''}>Search failed</span>
-							{/if}
-							{#if attachSubtitleError}
-								<span class="text-error" title={attachSubtitleError}>Attach failed</span>
-							{/if}
+								{#if attachSubtitleError}
+									<span class="text-xs text-error" title={attachSubtitleError}>
+										Attach failed
+									</span>
+								{/if}
+							</div>
 						</div>
-					{/if}
-
-					{#snippet sourceButtons()}
-						<button
-							type="button"
-							class="btn"
-							disabled={!trailerTabEnabled}
-							onclick={() => handleSourceClick('trailer')}
-							title={trailerTabTitle}
-						>
-							{isYoutubeVideo ? 'Video' : 'Trailer'}
-						</button>
-						<button
-							type="button"
-							class="btn"
-							disabled={!ipfsTabEnabled || ipfsStarting}
-							onclick={() => handleSourceClick('ipfs')}
-							title={ipfsTabTitle}
-						>
-							IPFS Stream{ipfsStarting ? ' — starting…' : ''}
-						</button>
-						<button
-							type="button"
-							class="btn"
-							disabled={!torrentTabEnabled || torrentStreamStarting}
-							onclick={() => handleSourceClick('torrent')}
-							title={torrentTabTitle}
-						>
-							Torrent Stream{torrentTabSuffix}
-						</button>
 					{/snippet}
 
 					{#if (activeSource === 'ipfs' || activeSource === 'torrent') && isInlinePlayingThisFirkin}
@@ -2048,7 +2060,7 @@
 							directStreamMimeType={$playerState.directStreamMimeType}
 							streamOffsetSecs={$playerState.streamOffsetSecs}
 							onseekrequest={activeSource === 'ipfs' ? handleIpfsSeek : undefined}
-							extraControls={sourceButtons}
+							extraControls={subPickerEnabled ? subtitlePicker : undefined}
 						/>
 					{:else if (activeSource === 'ipfs' && ipfsStarting) || (activeSource === 'torrent' && torrentStreamStarting)}
 						<div
@@ -2071,8 +2083,7 @@
 							trailerOptions={isYoutubeVideo ? [] : playableTrailers}
 							{selectedTrailerKey}
 							onTrailerSelect={(k) => (selectedTrailerKey = k)}
-							extraControls={sourceButtons}
-							playOverlay={isTmdbMovie ? torrentAttachmentOverlay : undefined}
+							playOverlay={isTmdbMovie || isTmdbTv ? torrentAttachmentOverlay : undefined}
 						/>
 					{:else if firkin.images[1]}
 						<img
@@ -2104,6 +2115,8 @@
 							}))
 						: []}
 					onTrailerPlay={playTrailerByKey}
+					streamEnabled={!isTmdbTv}
+					downloadEnabled={!isTmdbTv}
 					download={downloadInfo}
 					stream={streamInfo}
 					onStreamPlay={replayStreamMagnet}

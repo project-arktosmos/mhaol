@@ -876,10 +876,36 @@ pub(crate) async fn tmdb_metadata(
     let trailers = parse_tmdb_videos(&videos);
     let mut reviews = parse_tmdb_reviews(&payload);
 
-    if let Some(imdb_id) = extract_imdb_id(&payload) {
-        let mut omdb_reviews = fetch_omdb_reviews(&imdb_id).await;
-        merge_reviews(&mut reviews, &mut omdb_reviews);
+    let mut omdb_reviews = if let Some(imdb_id) = extract_imdb_id(&payload) {
+        fetch_omdb_reviews_by_imdb_id(&imdb_id).await
+    } else {
+        Vec::new()
+    };
+    // Fallback: if TMDB didn't return an IMDb id (newer / obscure titles)
+    // or the IMDb-keyed lookup came back empty, try OMDb's title+year
+    // search so movie / TV firkins still get Rotten Tomatoes / Metacritic
+    // / IMDb labels.
+    if omdb_reviews.is_empty() {
+        let title = payload
+            .get(if is_tv { "name" } else { "title" })
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let year = payload
+            .get(if is_tv { "first_air_date" } else { "release_date" })
+            .and_then(|v| v.as_str())
+            .and_then(|d| d.get(0..4))
+            .and_then(|y| y.parse::<i32>().ok());
+        if let Some(t) = title {
+            omdb_reviews = fetch_omdb_reviews_by_title(&t, year, is_tv).await;
+        } else {
+            tracing::warn!(
+                "[catalog] OMDb skipped for {kind} {id}: no title in TMDB payload",
+                kind = if is_tv { "tv" } else { "movie" }
+            );
+        }
     }
+    merge_reviews(&mut reviews, &mut omdb_reviews);
 
     Ok((artists, trailers, reviews))
 }
@@ -907,14 +933,118 @@ fn extract_imdb_id(payload: &serde_json::Value) -> Option<String> {
     }
 }
 
+/// Send a GET to OMDb and return the parsed JSON body regardless of HTTP
+/// status. OMDb signals invalid-key / quota-exceeded / unknown-id with a
+/// `401` (or `200` with `{"Response":"False"}`) and *always* puts the
+/// real reason in the JSON `"Error"` field, so the only way to surface
+/// "Invalid API key!" vs. "Request limit reached!" in our logs is to
+/// read the body even when the status is non-success. The shared
+/// [`http_get_json`] helper short-circuits on non-success and discards
+/// the body, which is why every prior OMDb 401 logged as an opaque
+/// `"upstream returned 401 Unauthorized"`. Returns `None` only on
+/// transport / decode errors — the caller treats that and a missing
+/// `"Response":"True"` field identically (no reviews).
+async fn omdb_get_raw(url: &str) -> Option<(reqwest::StatusCode, serde_json::Value)> {
+    // Cache hit fast-path: only ever store successful `Response: "True"`
+    // responses (see below) so a transient 401 / "Request limit reached!"
+    // / "Invalid API key!" never poisons the cache.
+    let cache_key = http_cache_key(url, &[("Accept", "application/json")]);
+    if let Some(cached) = http_cache().read().ok().and_then(|c| {
+        c.get(&cache_key).and_then(|(at, v)| {
+            if at.elapsed() < HTTP_CACHE_TTL {
+                Some(v.clone())
+            } else {
+                None
+            }
+        })
+    }) {
+        return Some((reqwest::StatusCode::OK, cached));
+    }
+
+    let res = match http_client()
+        .get(url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("[catalog] OMDb transport error: {}", error_chain(&e));
+            return None;
+        }
+    };
+    let status = res.status();
+    let body = match res.json::<serde_json::Value>().await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(
+                "[catalog] OMDb body decode failed for status={status}: {}",
+                error_chain(&e)
+            );
+            return None;
+        }
+    };
+    let response_true = body
+        .get("Response")
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case("True"))
+        .unwrap_or(false);
+    if status.is_success() && response_true {
+        if let Ok(mut c) = http_cache().write() {
+            c.insert(cache_key, (std::time::Instant::now(), body.clone()));
+        }
+    }
+    Some((status, body))
+}
+
+/// Project a raw OMDb response into reviews. Logs the OMDb-side `"Error"`
+/// field at `warn` when the response signals failure, so the next
+/// `logs/cloud.log` line tells you whether the key is bad
+/// (`"Invalid API key!"`), quota is exhausted (`"Request limit reached!"`),
+/// or the lookup just missed (`"Movie not found!"`).
+fn omdb_extract_reviews(
+    label: &str,
+    status: reqwest::StatusCode,
+    payload: &serde_json::Value,
+) -> Vec<CatalogReview> {
+    let response_ok = payload
+        .get("Response")
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case("True"))
+        .unwrap_or(false);
+    if !response_ok {
+        let omdb_err = payload
+            .get("Error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(no Error field)");
+        tracing::warn!("[catalog] OMDb {label} failed: status={status} error={omdb_err:?}");
+        return Vec::new();
+    }
+    let reviews = parse_omdb_reviews(payload);
+    if reviews.is_empty() {
+        tracing::warn!(
+            "[catalog] OMDb {label} Response=True but parsed 0 reviews (no Ratings array)"
+        );
+    } else {
+        tracing::info!(
+            "[catalog] OMDb {label} returned {} review(s): {:?}",
+            reviews.len(),
+            reviews.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
+        );
+    }
+    reviews
+}
+
 /// Best-effort OMDb lookup keyed by IMDb id. Returns the parsed reviews
 /// (Rotten Tomatoes, Metacritic, IMDb) on success, or an empty vec on
 /// any failure mode — missing `OMDB_API_KEY`, network error, OMDb
 /// `Response: "False"`, etc. — so the TMDB metadata flow stays robust
-/// to a degraded enricher.
-async fn fetch_omdb_reviews(imdb_id: &str) -> Vec<CatalogReview> {
+/// to a degraded enricher. Every failure mode is logged at `warn` so a
+/// silent no-op is diagnosable from `logs/cloud.log` without redeploying.
+async fn fetch_omdb_reviews_by_imdb_id(imdb_id: &str) -> Vec<CatalogReview> {
     let api_key = std::env::var("OMDB_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
+        tracing::warn!("[catalog] OMDb lookup skipped for imdb={imdb_id}: OMDB_API_KEY is empty");
         return Vec::new();
     }
     let url = format!(
@@ -923,19 +1053,47 @@ async fn fetch_omdb_reviews(imdb_id: &str) -> Vec<CatalogReview> {
         urlencoding(imdb_id),
         urlencoding(&api_key)
     );
-    let payload: serde_json::Value = match http_get_json(&url, &[("Accept", "application/json")]).await {
-        Ok(p) => p,
-        Err(_) => return Vec::new(),
+    let Some((status, payload)) = omdb_get_raw(&url).await else {
+        return Vec::new();
     };
-    if payload
-        .get("Response")
-        .and_then(|v| v.as_str())
-        .map(|s| s.eq_ignore_ascii_case("True"))
-        != Some(true)
-    {
+    omdb_extract_reviews(&format!("imdb={imdb_id}"), status, &payload)
+}
+
+/// Title+year fallback for OMDb when TMDB didn't return an IMDb id (or
+/// the IMDb-keyed lookup came back empty). Uses OMDb's `t=` search with
+/// `type=movie|series` and an optional `y=` to disambiguate. Same robust
+/// failure-handling shape as [`fetch_omdb_reviews_by_imdb_id`].
+async fn fetch_omdb_reviews_by_title(
+    title: &str,
+    year: Option<i32>,
+    is_tv: bool,
+) -> Vec<CatalogReview> {
+    let api_key = std::env::var("OMDB_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        tracing::warn!(
+            "[catalog] OMDb title-fallback skipped for title={title:?}: OMDB_API_KEY is empty"
+        );
         return Vec::new();
     }
-    parse_omdb_reviews(&payload)
+    let kind = if is_tv { "series" } else { "movie" };
+    let mut url = format!(
+        "{}/?t={}&type={}&apikey={}",
+        OMDB_BASE,
+        urlencoding(title),
+        kind,
+        urlencoding(&api_key)
+    );
+    if let Some(y) = year {
+        url.push_str(&format!("&y={y}"));
+    }
+    let Some((status, payload)) = omdb_get_raw(&url).await else {
+        return Vec::new();
+    };
+    omdb_extract_reviews(
+        &format!("title={title:?} year={year:?}"),
+        status,
+        &payload,
+    )
 }
 
 /// Project an OMDb response's `Ratings` array (plus the root-level
@@ -2208,10 +2366,74 @@ fn error_chain(err: &(dyn std::error::Error + 'static)) -> String {
     out
 }
 
-async fn http_get_json(
+/// Process-wide cache of `(stripped_url, headers) -> parsed JSON body`,
+/// shared by every upstream addon call (TMDB, OMDb, MusicBrainz, LRCLIB,
+/// Wyzie, ThePirateBay, oEmbed). Without this, the same `tmdb_metadata`
+/// + OMDb round-trip fired on every firkin write / rollforward / popular
+/// page load, which exhausted OMDb's 1000-req/day free tier within a
+/// session and showed up as opaque 401s in `logs/cloud.log`. The cache
+/// key strips `api_key` / `apikey` query params so the entry survives key
+/// rotation; otherwise the URL is the key verbatim.
+const HTTP_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+fn http_cache() -> &'static RwLock<HashMap<String, (std::time::Instant, serde_json::Value)>> {
+    static CACHE: OnceLock<RwLock<HashMap<String, (std::time::Instant, serde_json::Value)>>> =
+        OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+/// Drop `api_key=...` and `apikey=...` query params from a URL so the
+/// resulting string is safe to use as a cache key (and identical across
+/// key rotations / multiple deployments). Other query params are
+/// preserved in their original order.
+fn http_cache_key(url: &str, headers: &[(&str, &str)]) -> String {
+    let stripped = match url::Url::parse(url) {
+        Ok(mut u) => {
+            let kept: Vec<(String, String)> = u
+                .query_pairs()
+                .filter(|(k, _)| {
+                    let lk = k.to_ascii_lowercase();
+                    lk != "api_key" && lk != "apikey"
+                })
+                .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                .collect();
+            u.set_query(None);
+            if !kept.is_empty() {
+                let mut q = u.query_pairs_mut();
+                for (k, v) in &kept {
+                    q.append_pair(k, v);
+                }
+                drop(q);
+            }
+            u.to_string()
+        }
+        Err(_) => url.to_string(),
+    };
+    let mut hdrs: Vec<String> = headers
+        .iter()
+        .map(|(k, v)| format!("{}:{}", k.to_ascii_lowercase(), v))
+        .collect();
+    hdrs.sort();
+    format!("{}|{}", stripped, hdrs.join(";"))
+}
+
+pub(crate) async fn http_get_json(
     url: &str,
     headers: &[(&str, &str)],
 ) -> Result<serde_json::Value, (StatusCode, Json<serde_json::Value>)> {
+    let cache_key = http_cache_key(url, headers);
+    if let Some(cached) = http_cache().read().ok().and_then(|c| {
+        c.get(&cache_key).and_then(|(at, v)| {
+            if at.elapsed() < HTTP_CACHE_TTL {
+                Some(v.clone())
+            } else {
+                None
+            }
+        })
+    }) {
+        return Ok(cached);
+    }
+
     let mut req = http_client().get(url);
     for (k, v) in headers {
         req = req.header(*k, *v);
@@ -2228,12 +2450,16 @@ async fn http_get_json(
             format!("upstream returned {}", res.status()),
         ));
     }
-    res.json::<serde_json::Value>().await.map_err(|e| {
+    let parsed = res.json::<serde_json::Value>().await.map_err(|e| {
         err(
             StatusCode::BAD_GATEWAY,
             format!("upstream parse failed: {}", error_chain(&e)),
         )
-    })
+    })?;
+    if let Ok(mut c) = http_cache().write() {
+        c.insert(cache_key, (std::time::Instant::now(), parsed.clone()));
+    }
+    Ok(parsed)
 }
 
 fn capitalize_words(s: &str) -> String {

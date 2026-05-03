@@ -40,7 +40,12 @@
 		(pageStore.url.searchParams.get('field') as 'artist' | 'release') ?? 'artist'
 	);
 	const primaryType = $derived((pageStore.url.searchParams.get('primaryType') ?? '').trim());
-	const isOpen = $derived(trimmedQuery.length > 0);
+	// In "all" mode (catalog root with no addon picked / `addon=all`) the
+	// navbar search input acts as a local library filter rather than an
+	// upstream catalog search, so the results panel should stay closed.
+	const rawAddonParam = $derived(pageStore.url.searchParams.get('addon') ?? '');
+	const isAllMode = $derived(rawAddonParam === '' || rawAddonParam === 'all');
+	const isOpen = $derived(trimmedQuery.length > 0 && !isAllMode);
 	const currentSource = $derived(sources.find((s) => s.id === addon));
 
 	/// MusicBrainz release-group `primary-type` values, in the order they

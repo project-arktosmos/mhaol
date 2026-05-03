@@ -144,12 +144,10 @@
 	function playByKey(key: string): void {
 		const target = trailerOptions.find((t) => t.key === key);
 		if (!target) return;
-		if (target.youtubeUrl === youtubeUrl && streamUrl) {
-			handleStart();
-			return;
-		}
 		pendingPlayKey = key;
-		onTrailerSelect?.(key);
+		if (target.youtubeUrl !== youtubeUrl) {
+			onTrailerSelect?.(key);
+		}
 	}
 
 	$effect(() => {
@@ -189,9 +187,22 @@
 		}
 	}
 
+	let wrapperElement = $state<HTMLDivElement | null>(null);
+	function toggleWrapperFullscreen(): void {
+		const wrapper = wrapperElement;
+		if (!wrapper) return;
+		if (document.fullscreenElement === wrapper) {
+			void document.exitFullscreen();
+		} else {
+			void wrapper.requestFullscreen();
+		}
+	}
+
 	$effect(() => {
 		const onChange = () => {
-			isFullscreen = document.fullscreenElement === containerElement;
+			isFullscreen =
+				document.fullscreenElement === containerElement ||
+				document.fullscreenElement === wrapperElement;
 		};
 		document.addEventListener('fullscreenchange', onChange);
 		return () => document.removeEventListener('fullscreenchange', onChange);
@@ -204,7 +215,7 @@
 	const synthConnectionState = $derived<'idle' | 'streaming'>(streamUrl ? 'streaming' : 'idle');
 </script>
 
-<div class="flex flex-col gap-1">
+<div class="flex flex-col gap-1" bind:this={wrapperElement}>
 	<div
 		bind:this={containerElement}
 		class={classNames(
@@ -236,21 +247,7 @@
 			></div>
 		{/if}
 
-		{#if trailerOptions.length > 1 && onTrailerSelect}
-			<select
-				class="select-bordered select absolute top-2 right-2 z-30 max-w-[60%] select-sm"
-				value={selectedTrailerKey ?? trailerOptions[0]?.key ?? ''}
-				onchange={(e) => onTrailerSelect((e.currentTarget as HTMLSelectElement).value)}
-				aria-label="Pick trailer"
-				title="Pick trailer"
-			>
-				{#each trailerOptions as opt (opt.key)}
-					<option value={opt.key}>{opt.label ?? 'Trailer'}</option>
-				{/each}
-			</select>
-		{/if}
-
-		{#if !started && (streamUrl || posterUrl)}
+		{#if !started && !starting && !pendingPlayKey && (streamUrl || posterUrl)}
 			{#if playOverlay}
 				<div
 					class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
@@ -310,6 +307,7 @@
 		onseek={handleSeek}
 		onstop={handleStop}
 		onfullscreentoggle={toggleFullscreen}
+		onWrapperFullscreenToggle={toggleWrapperFullscreen}
 		{extraControls}
 	/>
 </div>

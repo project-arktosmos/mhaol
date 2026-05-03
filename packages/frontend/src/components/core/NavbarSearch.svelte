@@ -31,8 +31,13 @@
 		return sources[0]?.id ?? '';
 	});
 
+	// On the catalog root with no addon picked / `addon=all`, the input is
+	// a local library filter (matches firkin title + description across the
+	// rendered rows) rather than an upstream catalog search.
+	const rawAddonParam = $derived(page.url.searchParams.get('addon') ?? '');
+	const isAllMode = $derived(rawAddonParam === '' || rawAddonParam === 'all');
 	const currentSource = $derived(sources.find((s) => s.id === activeAddon));
-	const showSearchFieldSelect = $derived(activeAddon === 'musicbrainz');
+	const showSearchFieldSelect = $derived(!isAllMode && activeAddon === 'musicbrainz');
 
 	let query = $state(page.url.searchParams.get('q') ?? '');
 	let searchField = $state<'artist' | 'release'>(
@@ -96,10 +101,12 @@
 	<input
 		type="search"
 		class={inputClasses}
-		placeholder={activeAddon
-			? `Search ${currentSource?.label ?? activeAddon}…`
-			: 'Pick an addon to search'}
-		disabled={!activeAddon}
+		placeholder={isAllMode
+			? 'Filter library by title or description…'
+			: activeAddon
+				? `Search ${currentSource?.label ?? activeAddon}…`
+				: 'Pick an addon to search'}
+		disabled={!isAllMode && !activeAddon}
 		bind:value={query}
 		oninput={scheduleSync}
 	/>

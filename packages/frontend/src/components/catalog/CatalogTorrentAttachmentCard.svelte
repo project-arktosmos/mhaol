@@ -111,6 +111,12 @@
 		onTrailerPlay?: (key: string) => void | Promise<void>;
 		/** True while a trailer-start round-trip is in flight. */
 		trailerPlaying?: boolean;
+		/** Render the Stream panel. Default `true`. Set `false` for content
+		 * kinds where streaming the firkin makes no sense — e.g. TV shows
+		 * where streams are picked per-season elsewhere. */
+		streamEnabled?: boolean;
+		/** Render the Download panel. Same semantics as `streamEnabled`. */
+		downloadEnabled?: boolean;
 	}
 
 	let {
@@ -129,7 +135,9 @@
 		attachingStream = false,
 		trailers = [],
 		onTrailerPlay,
-		trailerPlaying = false
+		trailerPlaying = false,
+		streamEnabled = true,
+		downloadEnabled = true
 	}: Props = $props();
 
 	// Once the download has been pinned to IPFS the Download tab is the
@@ -139,6 +147,9 @@
 	const downloadActionable = $derived(Boolean(download && download.ipfsCid && onDownloadPlay));
 
 	const hasTrailers = $derived(trailers.length > 0 && Boolean(onTrailerPlay));
+	const visiblePanelCount = $derived(
+		(hasTrailers ? 1 : 0) + (streamEnabled ? 1 : 0) + (downloadEnabled ? 1 : 0)
+	);
 
 	// Quality of the currently-attached stream, mapped to a bucket label
 	// from `streamPicksByQuality`. Tries the bucket label first (most
@@ -507,7 +518,13 @@
 	{/if}
 {/snippet}
 
-<div class="grid w-full grid-cols-3 gap-3">
+<div
+	class="mx-auto grid w-full gap-3"
+	class:max-w-md={visiblePanelCount === 1}
+	class:grid-cols-1={visiblePanelCount === 1}
+	class:grid-cols-2={visiblePanelCount === 2}
+	class:grid-cols-3={visiblePanelCount === 3}
+>
 	{#if hasTrailers}
 		<div class="flex flex-col rounded-md border border-base-content/10 bg-base-300">
 			<div
@@ -521,22 +538,30 @@
 			</div>
 		</div>
 	{/if}
-	<div class="flex flex-col rounded-md border border-base-content/10 bg-base-300">
-		<div class="flex items-center justify-center gap-2 border-b border-base-content/10 px-3 py-2">
-			<Icon name="lorc/magnet" size={20} title="Stream mode" />
-			<span class="text-xs font-medium">Stream</span>
+	{#if streamEnabled}
+		<div class="flex flex-col rounded-md border border-base-content/10 bg-base-300">
+			<div
+				class="flex items-center justify-center gap-2 border-b border-base-content/10 px-3 py-2"
+			>
+				<Icon name="lorc/magnet" size={20} title="Stream mode" />
+				<span class="text-xs font-medium">Stream</span>
+			</div>
+			<div class="p-3">
+				{@render streamContent()}
+			</div>
 		</div>
-		<div class="p-3">
-			{@render streamContent()}
+	{/if}
+	{#if downloadEnabled}
+		<div class="flex flex-col rounded-md border border-base-content/10 bg-base-300">
+			<div
+				class="flex items-center justify-center gap-2 border-b border-base-content/10 px-3 py-2"
+			>
+				<Icon name="delapouite/cloud-download" size={20} title="Download mode" />
+				<span class="text-xs font-medium">Download</span>
+			</div>
+			<div class="p-3">
+				{@render downloadContent()}
+			</div>
 		</div>
-	</div>
-	<div class="flex flex-col rounded-md border border-base-content/10 bg-base-300">
-		<div class="flex items-center justify-center gap-2 border-b border-base-content/10 px-3 py-2">
-			<Icon name="delapouite/cloud-download" size={20} title="Download mode" />
-			<span class="text-xs font-medium">Download</span>
-		</div>
-		<div class="p-3">
-			{@render downloadContent()}
-		</div>
-	</div>
+	{/if}
 </div>

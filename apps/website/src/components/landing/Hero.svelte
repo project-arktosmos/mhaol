@@ -1,6 +1,29 @@
 <script lang="ts">
+	import { onDestroy, onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { Icon } from 'cloud-ui';
+
+	const slides = [
+		{ src: 'mhaol-catalog.png', label: 'Catalog' },
+		{ src: 'mhaol-catalog-posters.png', label: 'Catalog · Poster view' },
+		{ src: 'mhaol-movies.png', label: 'Movies' },
+		{ src: 'mhaol-movie-detail.png', label: 'Fight Club · Stream' },
+		{ src: 'mhaol-movie-playing.png', label: 'Fight Club · Playing' },
+		{ src: 'mhaol-album-detail.png', label: 'She Wolf' }
+	];
+
+	let active = $state(0);
+	let timer: ReturnType<typeof setInterval> | null = null;
+
+	onMount(() => {
+		timer = setInterval(() => {
+			active = (active + 1) % slides.length;
+		}, 3000);
+	});
+
+	onDestroy(() => {
+		if (timer !== null) clearInterval(timer);
+	});
 </script>
 
 <section
@@ -28,58 +51,43 @@
 		</div>
 
 		<div class="flex-1">
-			<div class="card border border-base-300 bg-base-100 shadow-xl">
-				<div class="card-body p-5">
-					<div class="flex items-center gap-2 border-b border-base-300 pb-3">
-						<span class="h-3 w-3 rounded-full bg-error/70"></span>
-						<span class="h-3 w-3 rounded-full bg-warning/70"></span>
-						<span class="h-3 w-3 rounded-full bg-success/70"></span>
-						<span class="ml-3 font-mono text-xs text-base-content/60">My library</span>
-					</div>
-
-					<div class="mt-3 grid grid-cols-4 gap-3 text-center">
-						<div class="rounded-md bg-base-200 p-3">
-							<div class="text-lg font-bold">142</div>
-							<div class="text-[0.65rem] tracking-wide text-base-content/60 uppercase">Movies</div>
-						</div>
-						<div class="rounded-md bg-base-200 p-3">
-							<div class="text-lg font-bold">38</div>
-							<div class="text-[0.65rem] tracking-wide text-base-content/60 uppercase">Shows</div>
-						</div>
-						<div class="rounded-md bg-base-200 p-3">
-							<div class="text-lg font-bold">412</div>
-							<div class="text-[0.65rem] tracking-wide text-base-content/60 uppercase">Albums</div>
-						</div>
-						<div class="rounded-md bg-base-200 p-3">
-							<div class="text-lg font-bold">86</div>
-							<div class="text-[0.65rem] tracking-wide text-base-content/60 uppercase">Videos</div>
-						</div>
-					</div>
-
-					<div class="mt-3 rounded-md border border-base-300 p-3">
-						<div class="flex items-center gap-2 text-xs text-base-content/60">
-							<Icon name="delapouite/film-strip" size={14} class="text-primary" />
-							Now playing
-						</div>
-						<div class="mt-1 flex items-center justify-between text-sm">
-							<span class="font-medium">Dune: Part Two</span>
-							<span class="font-mono text-xs text-base-content/60">1:24:03 / 2:46:00</span>
-						</div>
-						<div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-base-200">
-							<div class="h-full w-[51%] bg-primary"></div>
-						</div>
-					</div>
-
-					<div class="mt-3 flex items-center justify-between text-xs text-base-content/60">
-						<span class="inline-flex items-center gap-1.5">
-							<Icon name="delapouite/wifi-router" size={14} />
-							3 devices on your network
-						</span>
-						<span class="inline-flex items-center gap-1.5">
-							<Icon name="delapouite/cube" size={14} />
-							Library pinned
-						</span>
-					</div>
+			<div
+				class="overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-xl ring-1 ring-base-content/5"
+			>
+				<div class="flex items-center gap-2 border-b border-base-300 bg-base-200 px-3 py-2">
+					<span class="h-3 w-3 rounded-full bg-error/70"></span>
+					<span class="h-3 w-3 rounded-full bg-warning/70"></span>
+					<span class="h-3 w-3 rounded-full bg-success/70"></span>
+					<span class="ml-3 font-mono text-xs text-base-content/60">Mhaol Cloud</span>
+				</div>
+				<div class="relative w-full bg-base-200">
+					{#each slides as slide, i (slide.src)}
+						<img
+							src="{base}/{slide.src}"
+							alt={`Mhaol Cloud screenshot — ${slide.label}`}
+							class={[
+								'block h-auto w-full transition-opacity duration-700 ease-in-out',
+								i === 0 ? '' : 'absolute inset-0',
+								i === active ? 'opacity-100' : 'opacity-0'
+							]}
+							loading={i === 0 ? 'eager' : 'lazy'}
+							decoding="async"
+							aria-hidden={i === active ? undefined : 'true'}
+						/>
+					{/each}
+				</div>
+				<div
+					class="flex items-center justify-center gap-1.5 border-t border-base-300 bg-base-200 py-2"
+				>
+					{#each slides as _, i (i)}
+						<span
+							class={[
+								'h-1.5 w-1.5 rounded-full transition-colors',
+								i === active ? 'bg-primary' : 'bg-base-content/20'
+							]}
+							aria-hidden="true"
+						></span>
+					{/each}
 				</div>
 			</div>
 		</div>
