@@ -519,7 +519,8 @@
 {/snippet}
 
 <div
-	class="grid w-full gap-3"
+	class="mx-auto grid w-full gap-3"
+	class:max-w-md={visiblePanelCount === 1}
 	class:grid-cols-1={visiblePanelCount === 1}
 	class:grid-cols-2={visiblePanelCount === 2}
 	class:grid-cols-3={visiblePanelCount === 3}

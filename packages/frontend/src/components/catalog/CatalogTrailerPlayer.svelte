@@ -249,20 +249,6 @@
 			></div>
 		{/if}
 
-		{#if trailerOptions.length > 1 && onTrailerSelect}
-			<select
-				class="select-bordered select absolute top-2 right-2 z-30 max-w-[60%] select-sm"
-				value={selectedTrailerKey ?? trailerOptions[0]?.key ?? ''}
-				onchange={(e) => onTrailerSelect((e.currentTarget as HTMLSelectElement).value)}
-				aria-label="Pick trailer"
-				title="Pick trailer"
-			>
-				{#each trailerOptions as opt (opt.key)}
-					<option value={opt.key}>{opt.label ?? 'Trailer'}</option>
-				{/each}
-			</select>
-		{/if}
-
 		{#if !started && (streamUrl || posterUrl)}
 			{#if playOverlay}
 				<div
