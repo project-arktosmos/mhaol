@@ -56,17 +56,16 @@
 					<span class="h-3 w-3 rounded-full bg-error/70"></span>
 					<span class="h-3 w-3 rounded-full bg-warning/70"></span>
 					<span class="h-3 w-3 rounded-full bg-success/70"></span>
-					<span class="ml-3 font-mono text-xs text-base-content/60">
-						Mhaol Cloud — {slides[active].label}
-					</span>
+					<span class="ml-3 font-mono text-xs text-base-content/60">Mhaol Cloud</span>
 				</div>
-				<div class="relative aspect-[5/3] w-full bg-base-200">
+				<div class="relative w-full bg-base-200">
 					{#each slides as slide, i (slide.src)}
 						<img
 							src="{base}/{slide.src}"
 							alt={`Mhaol Cloud screenshot — ${slide.label}`}
 							class={[
-								'absolute inset-0 h-full w-full object-contain transition-opacity duration-700 ease-in-out',
+								'block h-auto w-full transition-opacity duration-700 ease-in-out',
+								i === 0 ? '' : 'absolute inset-0',
 								i === active ? 'opacity-100' : 'opacity-0'
 							]}
 							loading={i === 0 ? 'eager' : 'lazy'}
